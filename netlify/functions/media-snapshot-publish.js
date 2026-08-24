@@ -12,7 +12,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.12.1-coherent-selection-pipeline";
+const VERSION = "media-snapshot-publish-v1.13.0-content-ready-section-safe";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 
@@ -107,16 +107,24 @@ function managedCounts(snapshot){
 }
 function stampReleaseControl(snapshot, action, sectionKey, sectionKeys, actor, publicationRequested){
   const next=clone(snapshot),counts=managedCounts(next);
+  const contentReady=counts.total>0;
   next.meta=Object.assign({},next.meta||{}, {
     generatedAt:MediaStore.nowIso(),
     generatedBy:"media-snapshot-publish",
+    validated:true,crossChecked:true,pipelineReady:true,contentReady,sampleOnly:!contentReady,ready:contentReady,
     filled:counts.sections,
+    supplyState:{contentReady,sampleOnly:!contentReady,totalManagedSlots:counts.total,manualSections:MANUAL_SECTIONS.length,frontVisiblePerSection:50,snapshotCapacityPerSection:MediaStore.FRONT_CAPACITY||100},
     releaseControl:{
       action,sectionKey:sectionKey||null,sectionKeys:Array.isArray(sectionKeys)?sectionKeys:[],
       requestedAt:MediaStore.nowIso(),
       requestedBy:MediaStore.compact(actor&&actor.email||actor&&actor.memberId||"admin",200),
       publicationRequested:publicationRequested===true
     }
+  });
+  next.hero=Object.assign({},plain(next.hero),{
+    enabled:true,
+    source:["media-movie","media-drama"],
+    rotateFrom:["media-movie","media-drama"]
   });
   return next;
 }
@@ -136,7 +144,7 @@ function statusPayload(release){
   const control=snapshot.meta&&snapshot.meta.releaseControl||{};
   const pipeline=snapshot.meta&&snapshot.meta.releasePipeline||{};
   return{
-    ok:true,version:VERSION,hasRelease:true,
+    ok:true,version:VERSION,hasRelease:true,contentReady:counts.total>0,sampleOnly:counts.total===0,
     releaseId:MediaStore.text(release.release_id),createdAt:MediaStore.text(release.created_at),
     releaseStatus:MediaStore.text(release.status)||"stored",
     action:MediaStore.text(control.action)||"legacy_release",sectionKey:MediaStore.text(control.sectionKey)||null,sectionKeys:Array.isArray(control.sectionKeys)?control.sectionKeys:[],
@@ -239,7 +247,7 @@ async function pipelineStatusDocument(release,rows,probePublic){
   else if(probePublic&&(!publicReleaseMatches||!publicSectionsMatch)){firstFailureStage="public_media_deploy";failureReason="공개 media.snapshot.json의 release 또는 섹션 콘텐츠가 빌드 결과와 일치하지 않습니다.";nextAction="Netlify 배포 완료 후 공개 media snapshot 치환 여부를 확인하십시오.";}
   return{
     ok:true,reportType:"igdc-media-front-pipeline-status",version:VERSION,adapterVersion:MediaReleaseAdapter.VERSION,components:componentStatus(),generatedAt:MediaStore.nowIso(),
-    pipelineComplete:releaseApplied&&(!probePublic||publicMatches),firstFailureStage,failureReason,nextAction,publicOrigin:probePublic?publicOrigin():null,
+    pipelineComplete:releaseApplied&&(!probePublic||publicMatches),contentReady:releaseState.totalManaged>0,sampleOnly:releaseState.totalManaged===0,firstFailureStage,failureReason,nextAction,publicOrigin:probePublic?publicOrigin():null,
     stages:{
       releaseStorage:Object.assign({readable:true,latestReleasePresent:!!release,contract:"media-release-row-v1-canonical-columns-only"},componentStatus().releaseStorage||{}),
       candidates:{source:"supabase.media_candidates",approvedRows,eligibleRows,frontDisabledRows,policyBlockedRows,sections:candidateSections},
@@ -326,9 +334,18 @@ exports.handler = async function(event){
     const eligible=Array.isArray(rows)?rows.filter(MediaStore.snapshotEligible).length:0;
     const blocked=Array.isArray(rows)?rows.filter((row)=>!MediaStore.snapshotEligible(row)).map((row)=>({id:MediaStore.text(row&&row.id),reasons:MediaStore.MediaPolicy.releaseEligibility(row).reasons})):[]; 
     const allowEmptySection=params.allowEmptySection===true||params.allowEmptySection==="true";
-    if(publishFront&&needsCandidates&&eligible===0&&!(frontAction==="publish_section"&&allowEmptySection&&scopedApprovedRows.length>0)){
+    if(publishFront&&needsCandidates&&eligible===0&&!allowEmptySection){
       const error=new Error("프론트에 반영할 승인·권리확인·공개검증 완료 후보가 없습니다.");
       error.statusCode=409;error.code="no_verified_promotable_media";throw error;
+    }
+    if(publishFront&&needsCandidates&&!allowEmptySection&&(frontAction==="publish_section"||frontAction==="publish_sections")){
+      const targets=frontAction==="publish_section"?[sectionKey]:sectionKeys;
+      const eligibleBySection=Object.fromEntries(targets.map((key)=>[key,rows.filter((row)=>MediaStore.normalizeSection(row&&row.section_key)===key&&MediaStore.snapshotEligible(row)).length]));
+      const emptyTargets=targets.filter((key)=>eligibleBySection[key]===0);
+      if(emptyTargets.length){
+        const error=new Error("대상 섹션에 프론트 반영 가능한 승인 콘텐츠가 없습니다: "+emptyTargets.join(", "));
+        error.statusCode=409;error.code="media_release_target_section_empty";error.sections=emptyTargets;throw error;
+      }
     }
     const release={
       release_id:"media_snapshot_"+MediaStore.shortHash({hash,at:MediaStore.nowIso()}),

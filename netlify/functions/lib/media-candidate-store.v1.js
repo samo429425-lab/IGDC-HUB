@@ -10,7 +10,7 @@
 const crypto = require("crypto");
 const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.5.0-thumb-required-front-safe";
+const VERSION = "media-candidate-store-v1.6.0-dimension-aware-front-hero";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
@@ -224,16 +224,30 @@ function usableThumbnailUrl(value){
   if(!url||isPlaceholderThumbnail(url))return "";
   return /^https:\/\//i.test(url)?url:"";
 }
+
+function thumbnailMeta(row){
+  const raw=plain(row&&row.raw),source=plain(raw.sourceMetadata);
+  const generation=plain(source.thumbnailGeneration||raw.thumbnailGeneration);
+  const probe=plain(generation.probe||source.thumbnailProbe||raw.thumbnailProbe);
+  const width=Number(raw.thumbnailWidth||source.thumbnailWidth||generation.width||probe.width||0)||0;
+  const height=Number(raw.thumbnailHeight||source.thumbnailHeight||generation.height||probe.height||0)||0;
+  const known=width>0&&height>0;
+  const frontReady=(generation.frontReady===true||probe.frontReady===true||raw.thumbnailReady===true)||(known&&width>=320&&height>=180);
+  const heroReady=(generation.heroReady===true||probe.heroReady===true||raw.heroThumbnailReady===true)||(known&&width>=1280&&height>=720);
+  return{width,height,known,frontReady,heroReady,probe,generation};
+}
 function snapshotEligible(row){
   const urls=[row.source_url,row.video_url,row.embed_url].map(normalizeUrl).filter(Boolean);
-  const thumbnail=usableThumbnailUrl(row&&row.thumb_url);
-  return MediaPolicy.releaseEligibility(row).ok && !!row.title && urls.length>0 && !!thumbnail;
+  const thumbnail=usableThumbnailUrl(row&&row.thumb_url),meta=thumbnailMeta(row);
+  const dimensionsOk=!meta.known||meta.frontReady;
+  return MediaPolicy.releaseEligibility(row).ok && !!row.title && urls.length>0 && !!thumbnail && dimensionsOk;
 }
 function publicSlot(row, slotId, defaults){
   const base=plain(defaults);
   const raw=plain(row.raw);
   const source=plain(raw.sourceMetadata);
   const policy=MediaPolicy.releaseEligibility(row);
+  const thumbMeta=thumbnailMeta(row),thumbUrl=usableThumbnailUrl(row.thumb_url);
   const sourceUrl=normalizeUrl(row.source_url || row.embed_url || row.video_url);
   const videoUrl=normalizeUrl(row.video_url);
   const embedUrl=normalizeUrl(row.embed_url);
@@ -247,7 +261,17 @@ function publicSlot(row, slotId, defaults){
     contentId: text(row.id),
     id: text(row.id),
     title: text(row.title),
-    thumb: usableThumbnailUrl(row.thumb_url),
+    thumb: thumbUrl,
+    thumbnail: thumbUrl,
+    image: thumbUrl,
+    thumbnailWidth:thumbMeta.width||null,
+    thumbnailHeight:thumbMeta.height||null,
+    thumbnailReady:thumbMeta.known?thumbMeta.frontReady:true,
+    thumbnailStatus:thumbMeta.known?(thumbMeta.frontReady?"verified":"below_front_floor"):"verified_url",
+    heroImage:thumbMeta.heroReady?thumbUrl:undefined,
+    heroWidth:thumbMeta.heroReady?thumbMeta.width:null,
+    heroHeight:thumbMeta.heroReady?thumbMeta.height:null,
+    heroThumbnailReady:thumbMeta.heroReady,
     provider: text(row.provider || row.source_host),
     url: sourceUrl,
     link: sourceUrl,
@@ -255,7 +279,7 @@ function publicSlot(row, slotId, defaults){
     embedUrl: embedUrl || undefined,
     quality: text(row.quality_hint),
     year: Number(raw.year || source.year || 0) || null,
-    publishedAt: text(raw.publishedAt || source.publicdate || source.date) || null,
+    publishedAt: text(raw.publishedAt || source.publishedAt || source.publicdate || source.date) || null,
     durationSeconds: Number(raw.durationSeconds || source.durationSeconds || 0) || null,
     captions,
     subtitleLanguages:array(raw.subtitleLanguages).map(text).filter(Boolean),
@@ -263,8 +287,14 @@ function publicSlot(row, slotId, defaults){
     contentWarnings:array(raw.contentWarnings).map(text).filter(Boolean),
     requestedSection:text(raw.requestedSection || source.requestedSection),
     classifiedSection:text(raw.classifiedSection || source.classifiedSection || row.section_key),
-    rankingScore:Number(raw.rankingScore || 0),
-    rankingTier:text(raw.rankingTier || row.priority),
+    rankingScore:Number(raw.rankingScore || source.rankingScore || 0),
+    rankingTier:text(raw.rankingTier || source.rankingTier || row.priority),
+    views:Number(raw.views || raw.viewCount || source.views || source.downloads || raw.downloads || 0)||0,
+    rating:Number(raw.rating || source.rating || source.avgRating || 0)||0,
+    reviewCount:Number(raw.reviewCount || raw.reviews || source.numReviews || source.reviews || 0)||0,
+    playbackReady:plain(raw.playbackProbe||source.playbackProbe).ok===true,
+    playbackLatencyMs:Number(plain(raw.playbackProbe||source.playbackProbe).latencyMs||0)||0,
+    playbackStatus:plain(raw.playbackProbe||source.playbackProbe).ok===true?"verified":(plain(raw.playbackProbe||source.playbackProbe).present===true?"unverified":"unknown"),
     rights: {
       status: text(row.rights_status),
       allowedUse: text(row.allowed_use),
@@ -404,7 +434,7 @@ function buildSnapshot(baseSnapshot, rows, opts){
       releasePolicy:MediaPolicy.VERSION,
       capacities:{default:100},
       samplePolicy:"preserve-seed-and-external; replace-only-blank-seed-or-previous-managed",
-      thumbnailPolicy:"approved real content requires a verified non-placeholder HTTPS thumbnail before front release",
+      thumbnailPolicy:"approved real content requires a verified non-placeholder HTTPS thumbnail; known dimensions below 320x180 are blocked and 1280x720+ is marked hero-ready",
       filled
     })
   });
@@ -413,5 +443,5 @@ module.exports={
   VERSION, CANDIDATE_TABLE, RELEASE_TABLE, RELEASE_WRITE_COLUMNS, ALLOWED_SECTIONS,
   text, lower, compact, bool, plain, array, nowIso, sha256, shortHash, normalizeUrl, hostOf, normalizeSection, roleList, requireRole,
   response, parseBody, config, supabase, rest, encodeEq, encodeIn, selectCandidates, upsertCandidates, updateCandidates, deleteCandidates, canonicalReleaseRow, insertRelease, selectReleaseById, releaseStorageContract,
-  normalizeCandidate, validateCandidate, isPlaceholderThumbnail, usableThumbnailUrl, snapshotEligible, publicSlot, buildSnapshot, MediaPolicy
+  normalizeCandidate, validateCandidate, isPlaceholderThumbnail, usableThumbnailUrl, thumbnailMeta, snapshotEligible, publicSlot, buildSnapshot, MediaPolicy
 };

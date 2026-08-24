@@ -841,6 +841,9 @@
       show('1·3·6·10초 중 첫 성공 프레임을 HD 1280×720 썸네일로 저장합니다.','ok');
       var resolved=await post(THUMB,{action:'resolve',id:id});
       if(resolved.thumbUrl){show('원본 제공 썸네일을 후보에 연결했습니다.','ok');await refresh();return;}
+      if(resolved.heroCaptureRequired&&resolved.cardThumbUrl){
+        show('카드용 원본 이미지는 보존했습니다. 영화·드라마 히어로용 1280×720 프레임을 추가 생성합니다.','ok');
+      }
       var dataUrl=await captureFrameDataUrl(row);
       var stored=await post(THUMB,{action:'store_capture',id:id,dataUrl:dataUrl});
       show(stored.thumbUrl?'영상 프레임 썸네일을 생성해 저장했습니다.':'썸네일 생성 결과를 저장하지 못했습니다.',stored.thumbUrl?'ok':'warn');

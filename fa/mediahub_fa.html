@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="fa">
+<html class="prelayout" dir="ltr" lang="fa">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -69,7 +69,7 @@
     border-radius: 8px;
     text-align: center;
     font-weight: 700;
-    color: #17365D;
+    color: #fff;
     flex: 0 0 150px;
     cursor: pointer;
     transition:transform .12s;
@@ -322,7 +322,7 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 .section-blockchain 
 .section-blockchain .bc-tile:hover{
   background:#DDF2E6;
-  borderProviders(20,80,40,.28);
+  border-color:rgba(20,80,40,.28);
 }
 
 /* Responsive: keep gutters modest on small screens */
@@ -447,7 +447,6 @@ html, body {
     border-radius:8px; 
   }
 </style>
-
 <style id="edge-autohide-mobile">
 @media (pointer:coarse){
 :root{--edge:10px;--spd:.14s;--e:ease-out}
@@ -508,7 +507,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   .language-select { top:10px !important; right:12px !important; transform:none !important; }
 }
 </style>
-<!-- Mobile ارائه‌دهندگان Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
+<!-- Mobile Providers Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
 <style id="igdc-mobile-providers-drawer-left">
 @media (max-width:768px){
   :root{ --pvw: min(86vw, 320px); }
@@ -579,9 +578,9 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var drawer = document.createElement("aside"); drawer.id="providers-drawer-left";
   drawer.innerHTML = [
     '<div id="providers-header-left">',
-      '<div id="providers-title-left" >ارائه‌دهندگان</div>',
+      '<div id="providers-title-left">ارائه‌دهندگان</div>',
       '<input id="providers-search-left" type="search" placeholder="جست‌وجو..." aria-label="اجست‌وجو عن المزوّدين" />',
-      '<button id="providers-close-left" aria-label="بستن">✕</button>',
+      '<button id="providers-close-left" aria-label="Close">✕</button>',
     '</div>',
     '<div id="providers-body-left"></div>'
   ].join("");
@@ -646,12 +645,8 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 })();
 </script>
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
-
 <!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
-
-
 <!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
-
 <style id="igdc-mobile-mediahub-patch-v3">
 /* === Mobile Optimization Patch — MediaHub (KR/ZH/EN) === */
 @media (max-width:768px){
@@ -945,10 +940,7 @@ body {
   }
   /* Hover unaffected except border/bg from the base design */
 </style>
-
 <!-- BC ultra-tight adjust: shrink button width slightly, gap=5px -->
-
-
 <!-- BC tight correction: text-only narrow, keep font size, exact 5px gaps -->
 <style id="bc-tight-correct-20251013">
   /* Exact inter-button gap */
@@ -972,7 +964,6 @@ body {
     letter-spacing:normal;
   }
 </style>
-
 <!-- Hero overflow hotfix (2025-10-13) -->
 <style id="mediahub-hero-overflow-hotfix">
   @media (max-width: 1024px){
@@ -1017,8 +1008,6 @@ body {
     }
   });
 })();</script>
-
-
 <style id="bc-mobile-80-lock-20251113">
 /* Mobile (<=900px): lock ~20% shrink for both text and button, with stable gaps */
 @media (max-width: 900px){
@@ -1049,7 +1038,6 @@ body {
   }
 }
 </style>
-
 <style id="mobile-footer-guard">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -1075,43 +1063,45 @@ body {
     main, .content-area { overflow: visible !important; }
   }
 </style>
-
-<link rel="stylesheet" href="/assets/css/thumbs.standard.css">
-
+<link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
 <style id="media-placeholder-style">
 .media-card{position:relative;width:320px;height:180px;flex:0 0 320px;border-radius:12px;overflow:hidden;background:#111;margin-right:12px}
-.media-card .thumb.ph{width:100%;height:100%;background:linear-gradient(135deg,#222,#333)}
+.media-card .thumb.ph{width:100%;height:100%;background:#071a3a url('/assets/images/media-sample-card.png') center/cover no-repeat}
 .media-card .meta{position:absolute;left:0;right:0;bottom:0;padding:10px;color:#eee;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
 </style>
-
 <style id="mediahub-scroll-fix-2026-02">
 /* === MEDIA SCROLL BUTTON FINAL FIX === */
+.scroll-btn{ z-index:10000 !important; }
+.scroll-btn.left{ left:0px !important; }
+.scroll-btn.right{ right:0px !important; }
 
-.scroll-wrapper{
-  position:relative !important;
-  padding: 0 72px !important;
-  overflow: hidden !important;
+/* Desktop only: reserve space for the side arrow buttons. */
+@media (min-width:1025px){
+  .scroll-wrapper{
+    position:relative !important;
+    padding:0 72px !important;
+    overflow:hidden !important;
+  }
+  .scroll-content,
+  .thumb-line{
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:10px !important;
+    padding-right:5px !important;
+  }
 }
 
-.scroll-btn{
-  z-index:10000 !important;
-}
-
-.scroll-btn.left{
-  left:0px !important;
-}
-
-.scroll-btn.right{
-  right:0px !important;
-}
-
-/* content 영역은 버튼만큼 안쪽으로 */
-.scroll-content,
-.thumb-line{
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 10px !important;
-  padding-right: 5px !important;
+/* Mobile: never reserve desktop arrow-button space. */
+@media (max-width:1024px){
+  .scroll-wrapper,
+  .thumb-line,
+  .scroll-content{
+    box-sizing:border-box !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+  }
 }
 </style>
 <style id="mediahub-mobile-drag-fix">
@@ -1158,471 +1148,28 @@ html, body {
   overflow-y: auto;
 }
 </style>
-
-
 <style id="qa-label-contrast-fix">
 .igdc-qa-title,
 .igdc-qa-field label,
 .igdc-qa-body label{
-  color:#555555;
+  color:#555555 !important;
   opacity:1 !important;
-  font-weight: 500;
+  font-weight:500 !important;
 }
 </style>
-
-<style id="mediahub-ar-qna-rtl-only-fix">
-.igdc-qa-modal,
-.igdc-qa-panel,
-.igdc-qa-body,
-.igdc-qa-body label,
-.igdc-qa-text,
-.igdc-qa-note,
-.igdc-qa-threads,
-.igdc-qa-thread,
-.igdc-qa-thread-q,
-.igdc-qa-thread-a,
-.contact-email{
-  direction: rtl !important;
-  text-align: right !important;
+<style id="ko-sidebar-spacing-unified">
+/* KO sidebar spacing: unify only button-to-button vertical spacing */
+.sidebar{
+  padding-top: 20px !important;
 }
-.igdc-qa-actions{
-  justify-content: flex-start !important;
-}
-.igdc-qa-text::placeholder{
-  direction: rtl !important;
-  text-align: right !important;
+.sidebar a,
+.sidebar a#qnaOpenBtn,
+#qnaOpenBtn,
+.sidebar a[id*="qna"],
+a[id*="qna"]{
+  margin: 10px 12px !important;
 }
 </style>
-
-<style id="igdc-qa-style">
-:root{
-  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
-  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
-  --qa-left:260px;
-  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
-  --blue:#2563eb; --muted:#9ca3af;
-}
-/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
-#qnaOpenBtn{ display:block; text-decoration:none; }
-/* Modal near the left sidebar, with smooth transitions */
-.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
-.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
-.igdc-qa-panel{
-position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
-max-height:min(82vh,900px); display:flex; flex-direction:column;
-background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
-overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
-transition:opacity .18s ease, transform .18s ease;
-border:1px solid var(--old-border);
-}
-.igdc-qa-modal.open{pointer-events:auto}
-.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
-.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
-/* Old-style header tint */
-.igdc-qa-header{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 14px; border-bottom:1px solid var(--old-border);
-  background:var(--old-bg);
-}
-.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
-.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
-.igdc-qa-body{
-display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto
-}
-.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
-.igdc-qa-text{
-  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
-  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
-  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
-}
-.igdc-qa-text.q{ min-height: 96px; }
-.igdc-qa-text.a{ min-height: 128px; }
-.igdc-qa-actions{display:flex; gap:8px; align-items:center}
-.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
-.igdc-qa-btn.primary{background:var(--blue); color:#fff}
-.igdc-qa-btn.muted{background:var(--muted); color:#fff}
-.igdc-qa-threads{
-display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px
-}
-.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
-.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
-.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
-.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
-.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
-.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
-@media (max-width:900px){
-  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
-}
-.igdc-qa-threads{
-  display:flex; flex-direction:column; gap:10px; overflow:auto;
-  border-top:1px solid var(--old-border);
-  padding-top:10px;
-  padding-bottom:4px; }
-a[href^="mailto:"] {
-  color: #007bff;           /* 밝은 파란색 (Bootstrap 기본 블루톤) */
-  text-decoration: underline;
-}
-a[href^="mailto:"]:hover {
-  color: #0056b3;           /* hover 시 조금 더 짙은 파랑 */
-  text-decoration: underline;
-}
-
-.igdc-qa-threads:empty::before{
-  content:"لم يتم نشر أي إدخالات سؤال وجواب بعد";
-  display:block; padding:10px 12px; color:#666;
-  background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px;
-  margin-top:4px; font-size:.95rem;
-}
-.contact-email{
-  margin-top: 6px;
-  margin-bottom: 0;}
-</style>
-<style id="qna-brand-only">
-/* === Q&A sidebar link color only (no other changes) === */
-:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
-.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
-  display:block;
-  background: var(--qa-brand);
-  color:#fff !important;
-  border:1px solid var(--qa-brand-border);
-  border-radius:10px;
-}
-.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
-</style>
-<script id="igdc-qa-config">
-  (function () {
-    // 1) 민감정보 없는 기본 설정
-    const baseConfig = {
-      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
-      project: "IGDC",
-      pageId: null,
-      aiEndpoint: null
-    };
-
-    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
-    function applyConfig(env) {
-      const url =
-        (env && env.SUPABASE_URL) ||
-        baseConfig.url;
-
-      const anonKey =
-        (env && env.SUPABASE_ANON_KEY) ||
-        "";
-
-      if (!anonKey) {
-        console.warn("[IGDC] Supabase anonKey is not configured.");
-      }
-
-      window.SUPER_VARSAR = Object.assign(
-        window.SUPER_VARSAR || {},
-        baseConfig,
-        {
-          url: url,
-          anonKey: anonKey
-        }
-      );
-    }
-
-    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
-    if (window.IGDC_ENV &&
-        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
-      applyConfig(window.IGDC_ENV);
-      return;
-    }
-
-    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
-    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
-
-    fetch(endpoint, { cache: "no-store" })
-      .then(function (res) {
-        if (!res.ok) {
-          throw new Error("http " + res.status);
-        }
-        return res.json();
-      })
-      .then(function (data) {
-        var env = data && (data.env || data);
-        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
-        applyConfig(window.IGDC_ENV);
-        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
-      })
-      .catch(function (err) {
-        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
-        applyConfig(null);
-      });
-  })();
-</script>
-<script id="igdc-qa-script">
-(function(){
-  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
-  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
-  let isOpen=false, isAnimating=false;
-
-  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
-  const fmtDate = (s)=> new Date(s).toLocaleString();
-  const nowISO = ()=> new Date().toISOString();
-  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
-  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
-
-  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
-  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
-
-  async function ensureSupabase(){
-    if(STATE.sb) return STATE.sb;
-    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
-    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
-    if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
-      return null;
-    }
-    STATE.sb = window.supabase.createClient(url, key);
-    return STATE.sb;
-  }
-  async function ensureAuth(){
-    const sb = await ensureSupabase(); if(!sb) return;
-    let { data: { session } } = await sb.auth.getSession();
-    if(!session){
-      try{ await sb.auth.signInناشناسly(); }catch(e){}
-      ({ data: { session } } = await sb.auth.getSession());
-    }
-    if(session){
-      const uid = session.user.id;
-      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
-      STATE.user = session.user;
-      STATE.isAdmin = Array.isArray(data) && data.length>0;
-    }
-  }
-
-  function mountUI(){
-    const modal = el("div","igdc-qa-modal");
-    const backdrop = el("div","igdc-qa-backdrop");
-    const panel = el("div","igdc-qa-panel");
-    const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "پرسش و پاسخ";
-    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","بستن");
-    header.append(title, close);
-
-    const body = el("div","igdc-qa-body");
-    const lQ = el("label"); lQ.textContent="سؤال";
-    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="لطفاً سؤال خود را وارد کنید...";
-    const lA = el("label"); lA.textContent="پاسخ";
-    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="يرجى الانتظار قليلاً. سنرد عليك قريبًا.";
-    const actions = el("div","igdc-qa-actions");
-    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="ارسال";
-    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="پاک کردن";
-    const note = el("div","igdc-qa-note"); note.textContent="※ به پرسش‌های ساده، هوش مصنوعی فوراً پاسخ می‌دهد. موضوعات فنی، خطاها یا مسائل عملیاتی به‌صورت خودکار به بخش پرسش و پاسخ مدیر ارسال می‌شوند.";
-    const list = el("div","igdc-qa-threads");
-
-    body.append(lQ,tQ,lA,tA,actions,note,list);
-    actions.append(btnSubmit, btnClear);
-    panel.append(header, body);
-    modal.append(backdrop, panel);
-    document.body.append(modal);
-
-    // position near sidebar
-    function positionNearSidebar(){
-      try{
-        const sb = document.querySelector('.sidebar');
-        if(sb){
-          const rect = sb.getBoundingClientRect();
-          const left = Math.round(rect.right + 12);
-          panel.style.left = left + "px";
-        }
-      }catch(e){}
-    }
-    positionNearSidebar();
-    window.addEventListener('resize', positionNearSidebar);
-    window.addEventListener('scroll', positionNearSidebar, { passive:true });
-
-    function openModal(){
-      if(isAnimating || isOpen) return;
-      isAnimating = true;
-      modal.style.display = "block";
-      requestAnimationFrame(()=>{
-        modal.classList.add('open');
-        isOpen = true;
-        setTimeout(()=>{ isAnimating = false; }, 220);
-      });
-    }
-    function closeModal(){
-      if(isAnimating || !isOpen) return;
-      isAnimating = true;
-      modal.classList.remove('open');
-      setTimeout(()=>{
-        modal.style.display = "none";
-        isOpen = false;
-        isAnimating = false;
-      }, 220);
-    }
-
-    // Sidebar trigger
-    const sideBtn = document.querySelector('#qnaOpenBtn');
-    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
-    close.addEventListener("click", closeModal);
-    backdrop.addEventListener("click", closeModal);
-    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
-
-    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
-    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
-    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
-
-    async function fetchThreads(){
-      const sb = await ensureSupabase(); if(!sb) return;
-      const { data, error } = await sb.from("igdc_qna_threads")
-        .select("*")
-        .eq("project", STATE.project)
-        .eq("page_id", STATE.pageId)
-        .order("created_at", { ascending:false }).limit(100);
-      if(error){ console.error(error); return; }
-      renderList(data||[]);
-    }
-    function renderList(rows){
-      list.innerHTML="";
-      rows.forEach(row=>{
-        const box = el("div","igdc-qa-thread");
-        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"پاسخ در انتظار";
-        const meta = el("div","igdc-qa-thread-meta");
-        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
-        const tag = el("span"); tag.textContent = row.is_admin? "درخواست مدیریتی":"عمومی";
-        const actions = el("div","igdc-qa-thread-actions");
-        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
-        if(canDelete){
-          const del = el("button","igdc-qa-btn muted"); del.textContent="حذف";
-          del.addEventListener("click", async ()=>{
-            const sb = await ensureSupabase(); if(!sb) return;
-            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
-            if(error){ alert("حذف ناموفق بود (مجوز/سیاست)."); return; }
-            await fetchThreads();
-          });
-          actions.append(del);
-        }
-        meta.append(time, tag, actions);
-        box.append(q,a,meta);
-        list.append(box);
-      });
-    }
-
-    async function autoAnswerIfNeeded(text){
-      const technical = classifyTech(text);
-      let answer = null;
-      if(!technical){
-        const ep = getAIEndpoint();
-        if(ep){
-          try{
-            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
-            const j = await res.json(); answer = j && (j.answer||j.text||null);
-          }catch(e){}
-        }
-        if(!answer){
-          if(/시간|운영시간|오픈|문의/.test(text)) answer="پرسش‌های مربوط به عملیات توسط مدیر بررسی می‌شود و سپس پاسخ داده خواهد شد.";
-          else if(/가격|비용|요금/.test(text)) answer="برای قیمت‌ها و کارمزدها به اطلاعات این صفحه مراجعه کنید. در صورت نیاز پرسش دیگری ثبت کنید.";
-          else answer="از پرسش شما سپاسگزاریم. آن را سریع بررسی کرده و به شما کمک خواهیم کرد.";
-        }
-      }
-      return { technical, answer };
-    }
-
-    async function submit(){
-      const q = (tQ.value||"").trim();
-      let a = (tA.value||"").trim();
-      if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoAnswerIfNeeded(q);
-      if(!a && answer) a = answer;
-      const sb = await ensureSupabase();
-      if(!sb){
-        alert("ذخیره‌سازی سمت سرور غیرفعال است زیرا تنظیمات ذخیره‌سازی (Supabase url/key) هنوز متصل نیستند. در زمان استقرار روی وب، اگر SUPER_VARSAR.url/anonKey پیکربندی شود، به‌طور خودکار متصل خواهد شد.");
-        return;
-      }
-      const record = {
-        project: STATE.project, page_id: STATE.pageId,
-        user_id: (STATE.user && STATE.user.id) || null,
-        question: q, answer: a || null, is_admin: technical,
-        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
-      };
-      const { error } = await sb.from("igdc_qna_threads").insert(record);
-      if(error){ alert("ارسال ناموفق بود"); return; }
-      tQ.value=""; tA.value = a || "";
-      await fetchThreads();
-    }
-    btnSubmit.addEventListener("click", submit);
-
-    // realtime refresh
-    (async()=>{ try{
-      const sb = await ensureSupabase(); if(!sb) return;
-      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
-    }catch(e){} })();
-
-    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
-    fetchThreads();
-  }
-
-  async function boot(){
-  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
-  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
-  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
-  // 1) Always mount UI so the popup can open
-  mountUI();
-  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
-}
-if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
-})();
-</script>
-<script id="igdc-qa-safety-bootstrap">
-// Ensures the Q&A popup opens when clicking the sidebar link,
-// even if Supabase URL/Key are not configured yet.
-(function(){
-  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
-
-  function ensureButton(){
-    var btn = document.getElementById('qnaOpenBtn');
-    if(!btn) return;
-
-    btn.addEventListener('click', function(){
-      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
-        window.IGDC_QA.open();
-        return;
-      }
-
-      var modal = document.querySelector('.igdc-qa-modal');
-      if(!modal){
-        var m = document.createElement('div'); m.className='igdc-qa-modal';
-        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
-        var p = document.createElement('div'); p.className='igdc-qa-panel';
-        var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='پرسش‌وپاسخ';
-        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
-        h.appendChild(t); h.appendChild(x);
-
-        var body = document.createElement('div'); body.className='igdc-qa-body';
-        body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
-
-
-        p.appendChild(h); p.appendChild(body);
-        m.appendChild(b); m.appendChild(p);
-        document.body.appendChild(m);
-
-        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
-        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
-        x.addEventListener('click', close);
-        b.addEventListener('click', close);
-
-        window.IGDC_QA = window.IGDC_QA || {};
-        window.IGDC_QA.open = open;
-      }
-
-      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
-    }, { passive:false });
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ensureButton, { once:true });
-  } else {
-    ensureButton();
-  }
-})();
-</script>
 <style id="igdc-desktop-footer-bottom-space-v1">
 /* Footer-only desktop nano patch: keep mobile layout unchanged. */
 @media (min-width:1025px){
@@ -1631,19 +1178,53 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
 }
 </style>
-</head>
+<style id="mediahub-content-provider-tile-text-contrast-v1">
+/* Content provider horizontal rail ONLY: Netflix, Disney+, Amazon Prime, etc. */
+.platform-line a.platform-tile{
+  color:#17365D !important;
+}
+</style>
+<style id="igdc-mediahub-mobile-first-paint-v32">
+/* Mobile portrait first-paint geometry: must win over legacy fixed 320px card rules
+   before deferred player/automap scripts execute. */
+@media (max-width:1024px) and (orientation:portrait){
+  html,body{box-sizing:border-box!important;width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;overflow-x:hidden!important;}
+  .layout,main,.main,.main-content,.content,.content-area{box-sizing:border-box!important;width:100%!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;padding-left:0!important;padding-right:0!important;}
+  .thumb-line[data-psom-key^="media-"]{box-sizing:border-box!important;width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;gap:4px!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y!important;overscroll-behavior-x:contain!important;scroll-snap-type:x proximity!important;}
+  .thumb-line[data-psom-key^="media-"]>.scroll-content{box-sizing:border-box!important;display:flex!important;flex-wrap:nowrap!important;width:100%!important;min-width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;gap:4px!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y!important;overscroll-behavior-x:contain!important;scroll-snap-type:x proximity!important;}
+  .thumb-line[data-psom-key^="media-"]>a.card.media-card,
+  .thumb-line[data-psom-key^="media-"]>.scroll-content>a.card.media-card{box-sizing:border-box!important;width:100%!important;min-width:100%!important;max-width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;flex:0 0 100%!important;aspect-ratio:16/9!important;margin:0!important;border-radius:0!important;scroll-snap-align:start!important;}
+  .thumb-line[data-psom-key^="media-"] a.card.media-card>.thumb{box-sizing:border-box!important;width:100%!important;min-width:100%!important;max-width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;aspect-ratio:16/9!important;margin:0!important;border-radius:0!important;}
+  .thumb-line[data-psom-key^="media-"] a.card.media-card>.thumb>img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important;}
+}
+@media (max-width:1024px) and (orientation:landscape){
+  .thumb-line[data-psom-key^="media-"]{padding-left:max(0px,env(safe-area-inset-left))!important;padding-right:max(0px,env(safe-area-inset-right))!important;}
+}
+</style>
+<style id="igdc-mediahub-rtl-text-direction">
+/* IGDC RTL text-direction compatibility: preserve current MediaHub physical layout. */
+html[dir="ltr"] > body > :not(script):not(style) { direction: rtl; }
+html[dir="ltr"] > body > .layout { direction: ltr !important; }
+html[dir="ltr"] > body > .layout > .sidebar,
+html[dir="ltr"] > body > .layout > main { direction: rtl; }
+html[dir="ltr"] input:not([type="number"]):not([type="range"]),
+html[dir="ltr"] textarea, html[dir="ltr"] select, html[dir="ltr"] option { direction: rtl; text-align: right; }
+html[dir="ltr"] .igdc-qa-panel, html[dir="ltr"] .igdc-qa-body,
+html[dir="ltr"] .igdc-qa-field, html[dir="ltr"] .igdc-qa-field label,
+html[dir="ltr"] .igdc-qa-text, html[dir="ltr"] .igdc-qa-note,
+html[dir="ltr"] .igdc-qa-thread, html[dir="ltr"] .igdc-qa-thread-q,
+html[dir="ltr"] .igdc-qa-thread-a { direction: rtl; text-align: right; }
+</style></head>
 <body>
-<div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
-
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="layout">
 <aside class="sidebar">
-<a href="home_fa.html">🏠 خانه</a>
-<a href="networkhub_fa.html">🛒 مرکز بازار</a>
-<a href="distributionhub_fa.html">🏭 مرکز توزیع</a>
-<a href="socialnetwork_fa.html">📢 شبکه اجتماعی</a>
-<a href="mediahub_fa.html">🎬 مرکز رسانه</a>
-<a href="tour_fa.html">🧳 سفر · گردشگری · اقامت</a>
+<a href="home.html">🏠 خانه</a>
+<a href="networkhub.html">🛒 مرکز بازار</a>
+<a href="distributionhub.html">🏭 مرکز توزیع</a>
+<a href="socialnetwork.html">📢 شبکه اجتماعی</a>
+<a href="mediahub.html">🎬 مرکز رسانه</a>
+<a href="tour.html">🧳 سفر · گردشگری · اقامت</a>
 <a href="literature_academic.html">📚 تبادل ادبی و علمی</a>
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 پرسش و پاسخ</a></aside>
 <main>
@@ -1660,1805 +1241,1436 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 <div class="hero-overlay">
 <!-- BEGIN: Video Search UI (replaces title/desc, non-intrusive) -->
 <form class="video-search" onsubmit="return handleVideoSearch(event)" style="display:flex; gap:10px; align-items:center; background:rgba(0,0,0,0.45); padding:10px 12px; border-radius:12px; flex-wrap:wrap;">
-<input dir="rtl" name="q" placeholder="جست‌وجوی ویدئو (عنوان، هنرمند، کانال و غیره)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px; direction:rtl; text-align:right; unicode-bidi:plaintext;" type="text"/>
+<input name="q" placeholder="جست‌وجوی ویدئو (عنوان، هنرمند، کانال و غیره)" required="" style="flex:1 1 48%; min-width:260px; max-width:620px; padding:8px 10px; border-radius:10px; border:none; outline:none; background:#fff; color:#111; font-size:16px;" type="text"/>
 <select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">جست‌وجو</button>
 </form>
-<!-- provider link line -->
+<!-- 플랫폼 링크 라인 -->
 <div class="section-title">ارائه‌دهندگان محتوا</div>
 <div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_top">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_top">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_top">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_top">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_top">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_top">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_top">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_top">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_top">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_top">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_top">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_top">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_top">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_top">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_top">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_top">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_top">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_top">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_top">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_top">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_top">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_top">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_top">U-NEXT</a></div>
-
-<!-- Trending Now -->
+<!-- 지금 뜨는 콘텐츠 -->
 <div class="section-title">🔥 محتوای پرطرفدار</div>
 <div class="thumb-line" data-psom-key="media-trending">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
-
-<!-- Latest Movies -->
+<!-- 최신 영화 -->
 <div class="section-title">🎬 تازه‌ترین فیلم‌ها</div>
 <div class="thumb-line" data-psom-key="media-movie">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
-
-<!-- Latest Dramas -->
+<!-- 최신 드라마 -->
 <div class="section-title">📺 تازه‌ترین سریال‌ها</div>
 <div class="thumb-line" data-psom-key="media-drama">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
-
-<!-- Mystery / Thriller -->
+<!-- 미스터리/스릴러 -->
 <div class="section-title">🕵️‍♂️ رازآلود / هیجان‌انگیز</div>
 <div class="thumb-line" data-psom-key="media-thriller">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
-
-<!-- Romance -->
+<!-- 로멘스 -->
 <div class="section-title">💖 رومانسي</div>
 <div class="thumb-line" data-psom-key="media-romance">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
-
-<!-- Variety / Entertainment -->
+<!-- 예능/오락 -->
 <div class="section-title">😂 منوعات / ترفيه</div>
 <div class="thumb-line" data-psom-key="media-variety">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
-
-<!-- Documentary / Culture -->
+<!-- 다큐/교양 -->
 <div class="section-title">🎥 مستند / فرهنگ</div>
 <div class="thumb-line" data-psom-key="media-documentary">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
-
-<!-- Animation -->
+<!-- 애니메이션 -->
 <div class="section-title">🐱 انیمیشن</div>
 <div class="thumb-line" data-psom-key="media-animation">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
-
-<!-- Music Videos -->
+<!-- 뮤비 -->
 <div class="section-title">🎵 ویدئوهای موسیقی</div>
 <div class="thumb-line" data-psom-key="media-music">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
-
-<!-- Hot Shorts & Video Movies -->
+<!-- 핫한 쇼츠 영상무비 -->
 <div class="section-title">🔥 کلیپ‌های کوتاه و ویدئوهای پرطرفدار</div>
 <div class="thumb-line" data-psom-key="media-shorts">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">به‌زودی</div>
+<div class="thumb ph"></div>
+<div class="meta">به‌زودی</div>
 </a>
-
 </div>
 </div>
 </main>
 </div>
-
 <script>
 /**
  * MediaHub Unified Scroll Script (SAFE FULL BLOCK)
@@ -3714,16 +2926,23 @@ function end(dir) {
     document.querySelectorAll('.thumb-line, .platform-line').forEach(ensureLineWrapped);
   }
 
-  document.addEventListener('DOMContentLoaded', initAll);
+  let initQueued = false;
+  function scheduleInitAll(){
+    if(initQueued) return;
+    initQueued = true;
+    requestAnimationFrame(function(){
+      initQueued = false;
+      initAll();
+    });
+  }
+  document.addEventListener('DOMContentLoaded', scheduleInitAll);
 
-  // ✅ 공급사 목록/카드가 "나중에 렌더"되는 경우 재적용 (원본 노드 유지라 충돌 없음)
-  const mo = new MutationObserver(() => initAll());
+  // 공급사/카드가 뒤늦게 추가돼도 한 프레임에 한 번만 재점검한다.
+  const mo = new MutationObserver(scheduleInitAll);
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
 })();
 </script>
-
-
 <script>
 // Open provider search in a new tab, no backend dependency
 function handleVideoSearch(e){
@@ -3933,13 +3152,13 @@ function handleVideoSearch(e){
 
   let currentLang = (window.__IGDC_LANG__?.current || detectLang());
 
-  function renderProviders(){
+  function renderDropdown(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     if (!form || !sel) return;
     const ordered = orderProviders(currentLang);
     sel.innerHTML = "";
-    orderProviders(p => {
+    ordered.forEach(p => {
       const opt = document.createElement("option");
       opt.value = p.key;
       opt.textContent = labelOf(p, currentLang);
@@ -3973,12 +3192,12 @@ function handleVideoSearch(e){
     try{
       window.__IGDC_LANG__.onChange(function(langCode){
         currentLang = (langCode||'en').split('-')[0].toLowerCase();
-        renderProviders();
+        renderDropdown();
       });
     }catch(e){}
   }
 
-  renderProviders();
+  renderDropdown();
 })();
 </script>
 <script>
@@ -4072,12 +3291,403 @@ function handleVideoSearch(e){
 </script>
 <!-- Q&amp;A transplant (from distributionhub) START -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style id="igdc-qa-style">
+:root{
+  --igdc-z:2147483000; --igdc-radius:14px; --igdc-shadow:0 10px 30px rgba(0,0,0,.18);
+  --igdc-gap:10px; --igdc-font:system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,Roboto,sans-serif;
+  --qa-left:260px;
+  --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
+  --blue:#2563eb; --muted:#9ca3af;
+}
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
+#qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
+/* Modal near the left sidebar, with smooth transitions */
+.igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
+.igdc-qa-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;transition:opacity .18s ease}
+.igdc-qa-panel{
+  position:fixed; left:var(--qa-left); bottom:84px; width:min(560px,50vw);
+  max-height:min(82vh,900px); display:flex; flex-direction:column;
+  background:#fff; border-radius:var(--igdc-radius); box-shadow:var(--igdc-shadow);
+  overflow:hidden; opacity:0; transform:translateY(12px) scale(.98);
+  transition:opacity .18s ease, transform .18s ease;
+  border:1px solid var(--old-border);
+}
+.igdc-qa-modal.open{pointer-events:auto}
+.igdc-qa-modal.open .igdc-qa-backdrop{opacity:1}
+.igdc-qa-modal.open .igdc-qa-panel{opacity:1; transform:none}
+/* Old-style header tint */
+.igdc-qa-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--old-border);
+  background:var(--old-bg);
+}
+.igdc-qa-title{font:700 14px/1.2 var(--igdc-font); color:var(--old-text)}
+.igdc-qa-close{cursor:pointer; border:none; background:transparent; font-size:18px; color:#333}
+.igdc-qa-body{display:flex; flex-direction:column; gap:10px; padding:12px; overflow:auto}
+.igdc-qa-field label{display:block; font:700 12px/1.2 var(--igdc-font); margin-bottom:6px; color:#333}
+.igdc-qa-text{
+  width:100%; max-width:100%; box-sizing:border-box; resize:vertical;
+  border:1px solid var(--old-border); border-radius:10px; padding:10px 12px;
+  font:500 14px var(--igdc-font); min-height:44px; background:#fffdf8;
+}
+.igdc-qa-text.q{ min-height: 96px; }
+.igdc-qa-text.a{ min-height: 128px; }
+.igdc-qa-actions{display:flex; gap:8px; align-items:center}
+.igdc-qa-btn{border:none; border-radius:10px; padding:10px 14px; font:700 14px; cursor:pointer}
+.igdc-qa-btn.primary{background:var(--blue); color:#fff}
+.igdc-qa-btn.muted{background:var(--muted); color:#fff}
+.igdc-qa-threads{display:flex; flex-direction:column; gap:10px; overflow:auto; border-top:1px solid var(--old-border); padding-top:10px}
+.igdc-qa-thread{border:1px solid var(--old-border); border-radius:12px; padding:10px 12px; background:#fffdf8}
+.igdc-qa-thread-q{font:700 13px/1.5 var(--igdc-font); color:#222}
+.igdc-qa-thread-a{font:13px/1.5 var(--igdc-font); color:#333; margin-top:6px}
+.igdc-qa-thread-meta{display:flex; gap:8px; align-items:center; color:#775; font:12px/1.2 var(--igdc-font); margin-top:8px}
+.igdc-qa-thread-actions{margin-left:auto; display:flex; gap:6px}
+.igdc-qa-note{font:12px/1.4 var(--igdc-font); color:#666}
+@media (max-width:900px){
+  .igdc-qa-panel{ left:calc(12px + var(--qa-left,0px)); width:min(92vw,560px) }
+}
 
+.contact-email{font:700 14px/1.45 var(--igdc-font); color:#555 !important; opacity:1 !important;}
+.contact-email a{color:#1d4ed8 !important; font-weight:700; text-decoration:underline;}
+</style>
+<style id="qna-brand-only">
+/* === Q&A sidebar link color only (no other changes) === */
+:root{ --qa-brand:#0b2a6f; --qa-brand-border:#004080; }
+.sidebar a#qnaOpenBtn, a#qnaOpenBtn.sidebar-item, #qnaOpenBtn {
+  display:block;
+  background: var(--qa-brand);
+  color:#fff !important;
+  border:1px solid var(--qa-brand-border);
+  border-radius:10px;
+}
+.sidebar a#qnaOpenBtn:hover, #qnaOpenBtn:hover { background:#004080; }
+</style>
+<script id="igdc-qa-safety-bootstrap">
+// Ensures the Q&A popup opens when clicking the sidebar link,
+// even if Supabase URL/Key are not configured yet.
+(function(){
+  if (window.__IGDC_QA_SAFETY__) return; window.__IGDC_QA_SAFETY__ = true;
+  function ensureButton(){
+    var btn = document.getElementById('qnaOpenBtn');
+    if(!btn) return;
+    // If the main script exposed IGDC_QA, use it
+    btn.addEventListener('click', function(){
+      if (window.IGDC_QA && typeof window.IGDC_QA.open === 'function'){
+        window.IGDC_QA.open();
+        return;
+      }
+      // Fallback: if modal not in DOM, create a very small stub so user sees something
+      var modal = document.querySelector('.igdc-qa-modal');
+      if(!modal){
+        // create minimal skeleton matching the CSS already present
+        var m = document.createElement('div'); m.className='igdc-qa-modal';
+        var b = document.createElement('div'); b.className='igdc-qa-backdrop';
+        var p = document.createElement('div'); p.className='igdc-qa-panel';
+        var h = document.createElement('div'); h.className='igdc-qa-header';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
+        var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
+        h.appendChild(t); h.appendChild(x);
+        var body = document.createElement('div'); body.className='igdc-qa-body';
+        body.innerHTML = '<div class="igdc-qa-note">All features will be enabled after the save settings (Supabase url/key) are connected.</div>';
+        p.appendChild(h); p.appendChild(body);
+        m.appendChild(b); m.appendChild(p);
+        document.body.appendChild(m);
+        function close(){ m.classList.remove('open'); setTimeout(function(){ m.style.display='none'; }, 180); }
+        function open(){ m.style.display='block'; requestAnimationFrame(function(){ m.classList.add('open'); }); }
+        x.addEventListener('click', close);
+        b.addEventListener('click', close);
+        // expose temporary open so later main script can reuse
+        window.IGDC_QA = window.IGDC_QA || {};
+        window.IGDC_QA.open = open;
+      }
+      // open (either stub or full impl)
+      if (window.IGDC_QA && typeof window.IGDC_QA.open==='function'){ window.IGDC_QA.open(); }
+    }, { passive:false });
+  }
+  if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', ensureButton, { once:true }); }
+  else { ensureButton(); }
+})();
+</script>
+<script id="igdc-qa-config">
+  (function () {
+    // 1) 민감정보 없는 기본 설정
+    const baseConfig = {
+      url: (window.IGDC_ENV && window.IGDC_ENV.SUPABASE_URL) || "",
+      project: "IGDC",
+      pageId: null,
+      aiEndpoint: null
+    };
 
+    // Supabase 환경을 SUPER_VARSAR에 적용하는 함수
+    function applyConfig(env) {
+      const url =
+        (env && env.SUPABASE_URL) ||
+        baseConfig.url;
 
+      const anonKey =
+        (env && env.SUPABASE_ANON_KEY) ||
+        "";
 
+      if (!anonKey) {
+        console.warn("[IGDC] Supabase anonKey is not configured.");
+      }
 
+      window.SUPER_VARSAR = Object.assign(
+        window.SUPER_VARSAR || {},
+        baseConfig,
+        {
+          url: url,
+          anonKey: anonKey
+        }
+      );
+    }
 
+    // 2) 이미 window.IGDC_ENV가 있다면(로컬 테스트 등) 그걸 우선 사용
+    if (window.IGDC_ENV &&
+        (window.IGDC_ENV.SUPABASE_ANON_KEY || window.IGDC_ENV.SUPABASE_URL)) {
+      applyConfig(window.IGDC_ENV);
+      return;
+    }
+
+    // 3) 없으면 Netlify Functions에서 환경변수 읽어오기
+    var endpoint = "/.netlify/functions/secureEnvBridge?public=supabase";
+
+    fetch(endpoint, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("http " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var env = data && (data.env || data);
+        window.IGDC_ENV = Object.assign(window.IGDC_ENV || {}, env || {});
+        applyConfig(window.IGDC_ENV);
+        console.log("[IGDC] Supabase env loaded from secureEnvBridge.");
+      })
+      .catch(function (err) {
+        console.warn("[IGDC] Failed to load Supabase env:", err && err.message);
+        applyConfig(null);
+      });
+  })();
+</script>
+<script id="igdc-qa-script">
+(function(){
+  if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
+  const STATE = { sb:null, project:null, pageId:null, user:null, isAdmin:false };
+  let isOpen=false, isAnimating=false;
+
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  const fmtDate = (s)=> new Date(s).toLocaleString();
+  const nowISO = ()=> new Date().toISOString();
+  const getAIEndpoint = ()=> (window.SUPER_VARSAR && window.SUPER_VARSAR.aiEndpoint) || null;
+  const classifyTech = (t)=> /관리자|운영|설정|배포|에러|오류|버그|로딩|API|연동|서버|데이터베이스|DB|권한|정책|로그인|토큰|키|결제|보안|CORS|네트워크|타임아웃|응답코드|빌드|컴파일|깨짐|안됨|멈춤|페이지|링크|오작동/i.test(t||'');
+
+  function getPageId(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.pageId) || (location.pathname + (location.hash||"")); }
+  function getProject(){ return (window.SUPER_VARSAR && window.SUPER_VARSAR.project) || "IGDC"; }
+
+  async function ensureSupabase(){
+    if(STATE.sb) return STATE.sb;
+    const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
+    const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
+    if(!url || !key || !window.supabase || !window.supabase.createClient){
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
+      return null;
+    }
+    STATE.sb = window.supabase.createClient(url, key);
+    return STATE.sb;
+  }
+  async function ensureAuth(){
+    const sb = await ensureSupabase(); if(!sb) return;
+    let { data: { session } } = await sb.auth.getSession();
+    if(!session){
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
+      ({ data: { session } } = await sb.auth.getSession());
+    }
+    if(session){
+      const uid = session.user.id;
+      const { data } = await sb.from("igdc_admins").select("uid").eq("uid", uid).limit(1);
+      STATE.user = session.user;
+      STATE.isAdmin = Array.isArray(data) && data.length>0;
+    }
+  }
+
+  function mountUI(){
+    const modal = el("div","igdc-qa-modal");
+    const backdrop = el("div","igdc-qa-backdrop");
+    const panel = el("div","igdc-qa-panel");
+    const header = el("div","igdc-qa-header");
+    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
+    const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","بستن");
+    header.append(title, close);
+
+    const body = el("div","igdc-qa-body");
+    const lQ = el("label"); lQ.textContent="سؤال";
+    const tQ = el("textarea","igdc-qa-text q"); tQ.placeholder="لطفاً سؤال خود را وارد کنید...";
+    const lA = el("label"); lA.textContent="پاسخ";
+    const tA = el("textarea","igdc-qa-text a"); tA.placeholder="يرجى الانتظار قليلاً. سنرد عليك قريبًا.";
+    const actions = el("div","igdc-qa-actions");
+    const btnSubmit = el("button","igdc-qa-btn primary"); btnSubmit.textContent="ارسال";
+    const btnClear = el("button","igdc-qa-btn muted"); btnClear.textContent="پاک کردن";
+    const note = el("div","igdc-qa-note"); note.textContent="※ به پرسش‌های ساده، هوش مصنوعی فوراً پاسخ می‌دهد. موضوعات فنی، خطاها یا مسائل عملیاتی به‌صورت خودکار به بخش پرسش و پاسخ مدیر ارسال می‌شوند.";
+    const list = el("div","igdc-qa-threads");
+
+    body.append(lQ,tQ,lA,tA,actions,note,list);
+    actions.append(btnSubmit, btnClear);
+    panel.append(header, body);
+    modal.append(backdrop, panel);
+    document.body.append(modal);
+
+    // position near sidebar
+    function positionNearSidebar(){
+      try{
+        const sb = document.querySelector('.sidebar');
+        if(sb){
+          const rect = sb.getBoundingClientRect();
+          const left = Math.round(rect.right + 12);
+          panel.style.left = left + "px";
+        }
+      }catch(e){}
+    }
+    positionNearSidebar();
+    window.addEventListener('resize', positionNearSidebar);
+    window.addEventListener('scroll', positionNearSidebar, { passive:true });
+
+    function openModal(){
+      if(isAnimating || isOpen) return;
+      isAnimating = true;
+      modal.style.display = "block";
+      requestAnimationFrame(()=>{
+        modal.classList.add('open');
+        isOpen = true;
+        setTimeout(()=>{ isAnimating = false; }, 220);
+      });
+    }
+    function closeModal(){
+      if(isAnimating || !isOpen) return;
+      isAnimating = true;
+      modal.classList.remove('open');
+      setTimeout(()=>{
+        modal.style.display = "none";
+        isOpen = false;
+        isAnimating = false;
+      }, 220);
+    }
+
+    // Sidebar trigger
+    const sideBtn = document.querySelector('#qnaOpenBtn');
+    if(sideBtn){ sideBtn.addEventListener('click', openModal); }
+    close.addEventListener("click", closeModal);
+    backdrop.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") closeModal(); });
+
+    btnClear.addEventListener("click", ()=>{ tQ.value=""; tA.value=""; });
+    tQ.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+    tA.addEventListener("keydown", (e)=>{ if(e.key==="Enter" && e.ctrlKey){ e.preventDefault(); btnSubmit.click(); }});
+
+    async function fetchThreads(){
+      const sb = await ensureSupabase(); if(!sb) return;
+      const { data, error } = await sb.from("igdc_qna_threads")
+        .select("*")
+        .eq("project", STATE.project)
+        .eq("page_id", STATE.pageId)
+        .order("created_at", { ascending:false }).limit(100);
+      if(error){ console.error(error); return; }
+      renderList(data||[]);
+    }
+    function renderList(rows){
+      list.innerHTML="";
+      rows.forEach(row=>{
+        const box = el("div","igdc-qa-thread");
+        const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"پاسخ در انتظار";
+        const meta = el("div","igdc-qa-thread-meta");
+        const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
+        const tag = el("span"); tag.textContent = row.is_admin? "درخواست مدیریتی":"عمومی";
+        const actions = el("div","igdc-qa-thread-actions");
+        const canDelete = (STATE.user && (row.user_id === STATE.user.id || STATE.isAdmin));
+        if(canDelete){
+          const del = el("button","igdc-qa-btn muted"); del.textContent="حذف";
+          del.addEventListener("click", async ()=>{
+            const sb = await ensureSupabase(); if(!sb) return;
+            const { error } = await sb.from("igdc_qna_threads").delete().eq("id", row.id);
+            if(error){ alert("حذف ناموفق بود (مجوز/سیاست)."); return; }
+            await fetchThreads();
+          });
+          actions.append(del);
+        }
+        meta.append(time, tag, actions);
+        box.append(q,a,meta);
+        list.append(box);
+      });
+    }
+
+    async function autoAnswerIfNeeded(text){
+      const technical = classifyTech(text);
+      let answer = null;
+      if(!technical){
+        const ep = getAIEndpoint();
+        if(ep){
+          try{
+            const res = await fetch(ep,{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:text, pageId: STATE.pageId})});
+            const j = await res.json(); answer = j && (j.answer||j.text||null);
+          }catch(e){}
+        }
+        if(!answer){
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="پرسش‌های مربوط به عملیات توسط مدیر بررسی می‌شود و سپس پاسخ داده خواهد شد.";
+          else if(/가격|비용|요금/.test(text)) answer="برای قیمت‌ها و کارمزدها به اطلاعات این صفحه مراجعه کنید. در صورت نیاز پرسش دیگری ثبت کنید.";
+          else answer="از پرسش شما سپاسگزاریم. آن را سریع بررسی کرده و به شما کمک خواهیم کرد.";
+        }
+      }
+      return { technical, answer };
+    }
+
+    async function submit(){
+      const q = (tQ.value||"").trim();
+      let a = (tA.value||"").trim();
+      if(!q){ tQ.focus(); return; }
+      const { technical, answer } = await autoAnswerIfNeeded(q);
+      if(!a && answer) a = answer;
+      const sb = await ensureSupabase();
+      if(!sb){
+        alert("ذخیره‌سازی سمت سرور غیرفعال است زیرا تنظیمات ذخیره‌سازی (Supabase url/key) هنوز متصل نیستند. در زمان استقرار روی وب، اگر SUPER_VARSAR.url/anonKey پیکربندی شود، به‌طور خودکار متصل خواهد شد.");
+        return;
+      }
+      const record = {
+        project: STATE.project, page_id: STATE.pageId,
+        user_id: (STATE.user && STATE.user.id) || null,
+        question: q, answer: a || null, is_admin: technical,
+        created_at: nowISO(), meta: { ua: navigator.userAgent||"", lang: navigator.language||"" }
+      };
+      const { error } = await sb.from("igdc_qna_threads").insert(record);
+      if(error){ alert("ارسال ناموفق بود"); return; }
+      tQ.value=""; tA.value = a || "";
+      await fetchThreads();
+    }
+    btnSubmit.addEventListener("click", submit);
+
+    // realtime refresh
+    (async()=>{ try{
+      const sb = await ensureSupabase(); if(!sb) return;
+      sb.channel('igdc_qna_changes').on('postgres_changes',{event:'*',schema:'public',table:'igdc_qna_threads'}, fetchThreads).subscribe();
+    }catch(e){} })();
+
+    window.IGDC_QA = { open: openModal, close: closeModal, refresh: ()=> fetchThreads() };
+    fetchThreads();
+  }
+
+  async function boot(){
+  window.SUPER_VARSAR = window.SUPER_VARSAR || {};
+  STATE.project = (window.SUPER_VARSAR.project || "IGDC");
+  STATE.pageId = (window.SUPER_VARSAR.pageId || (location.pathname + (location.hash||"")));
+  // 1) Always mount UI so the popup can open
+  mountUI();
+  // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
+}
+if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
+})();
+</script>
 <!-- Q&amp;A transplant (from distributionhub) END -->
 <script src="/assets/js/igdc-core.min.js"></script>
 <!-- IGDC: Media events (click/like/recommend) delegation -->
@@ -4174,7 +3784,6 @@ function handleVideoSearch(e){
   });
 })();
 </script>
-<script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.mediahub.json" data-interval="30000" src="/assets/js/hero.rotator.js"></script>
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
     50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea, <br/>
@@ -4205,7 +3814,7 @@ function handleVideoSearch(e){
 
   let activeKey = (PROVIDERS[0] && PROVIDERS[0].key) || 'youtube';
 
-  function renderProviders(){
+  function render(){
     const form = document.querySelector('form.video-search');
     const sel  = form && form.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -4233,7 +3842,7 @@ function handleVideoSearch(e){
       btn.style.cursor = "pointer";
       btn.style.background = p.key===activeKey ? "#2e6bff" : "#fff";
       btn.style.color = p.key===activeKey ? "#fff" : "#111";
-      btn.addEventListener('click', () => { activeKey = p.key; renderProviders(); });
+      btn.addEventListener('click', () => { activeKey = p.key; render(); });
       btn.addEventListener('click', (ev) => {
         if (ev.ctrlKey || ev.metaKey) window.open(PROVIDERS.find(x=>x.key===p.key)?.href || '#', '_blank', 'noopener');
       });
@@ -4242,7 +3851,7 @@ function handleVideoSearch(e){
   }
 
   document.addEventListener('change', (e)=>{
-    if(e.target && e.target.matches('select[name="provider"]')){ activeKey = e.target.value; renderProviders(); }
+    if(e.target && e.target.matches('select[name="provider"]')){ activeKey = e.target.value; render(); }
   });
 
   const orig = window.handleVideoSearch;
@@ -4255,7 +3864,7 @@ function handleVideoSearch(e){
     return false;
   };
 
-  renderProviders();
+  render();
 })();
 </script>
 <!-- stray text suppressed: <! patch: sync dropdown to platform tiles; remove stamp buttons > -->
@@ -4365,7 +3974,6 @@ function handleVideoSearch(e){
 })();
 </script>
 
-</script>
 <script id="sidebar-active-script-ko">
 (function(){
   function norm(n){
@@ -4397,7 +4005,6 @@ function handleVideoSearch(e){
   window.addEventListener("popstate", applyActive);
 })();
 </script>
-
 <script id="edge-autohide-mobile-js">
 (function(){
   "use strict";
@@ -4475,8 +4082,6 @@ function handleVideoSearch(e){
   bindEdge('.edge-right', 'right', 'show-right');
 })();
 </script>
-
-
 <script id="thumbline-drag-script">
 /*
   MediaHub row drag (safe version)
@@ -4491,6 +4096,7 @@ function handleVideoSearch(e){
 
   function enableDrag(scroller){
     if(!scroller) return;
+    if(('ontouchstart' in window) || (navigator.maxTouchPoints||0)>0 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) return;
 
     let isDown = false;
     let isDraggingX = false;
@@ -4570,7 +4176,7 @@ function handleVideoSearch(e){
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = "پرسش و پاسخ";
+    title.textContent = 'Q&A';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4584,7 +4190,7 @@ function handleVideoSearch(e){
 
     body.innerHTML =
       '<div class="igdc-qa-note">' +
-      'بعد ربط الإعدادات المحفوظة (Supabase url/key)، سيتم تفعيل جميع الوظائف.' +
+      'پس از اتصال تنظیمات ذخیره‌سازی (Supabase url/key)، همه قابلیت‌ها فعال خواهند شد.' +
       '</div>';
 
 
@@ -4659,15 +4265,7 @@ function handleVideoSearch(e){
   else apply();
 })();
 </script>
-
-<!-- MediaHub: legacy immediate-card-fullscreen handler retired; playback is handled by mediahub-playback-controller.v2.js. -->
-<!-- stray text suppressed: eleton matching the site's QnA structure
-      var m = document.createElement('div'); m.className='igdc-qa-modal';
-      var b = document.createElement('div');  -->
-<script>document.addEventListener("DOMContentLoaded",()=>{if(matchMedia("(max-width:768px)").matches){const p=document.querySelector(".platform-line");if(p)p.setAttribute("data-providers","");}});</script>
-
 <!-- thumbnail automapping -->
-
 <script>
 window.IGDC_QA=window.IGDC_QA||{};
 if(typeof window.IGDC_QA.open!=="function"){
@@ -4680,7 +4278,6 @@ window.addEventListener("message",function(ev){
   try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
 });
 </script>
-
 <script>
 (()=> {
   const form=document.querySelector('#qnaForm,[data-qna-form]');
@@ -4692,11 +4289,10 @@ window.addEventListener("message",function(ev){
     ta.value=''; alert('با موفقیت ارسال شد.');
   }
   if(form) form.addEventListener('submit',e=>{e.preventDefault();postQ().catch(()=>alert('ارسال ناموفق بود'));});
-  const btn=document.querySelector('#qnaOpenBtn,[data-qna-submit], form [type="submit"]');
+  const btn=document.querySelector('#qnaSubmitBtn,[data-qna-submit], form [type="submit"]');
   if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('ارسال ناموفق بود'));});
 })();
 </script>
-
 <style id="mobile-footer-guard-final">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -4718,7 +4314,6 @@ window.addEventListener("message",function(ev){
   footer { padding-bottom: max(28px, env(safe-area-inset-bottom)) !important; position: static !important; }
   /* MOBILE-FOOTER-GUARD: final */
 </style>
-
 <script id="media-lazy-reveal-v2">
 (function(){
   const INITIAL = 7;
@@ -4824,19 +4419,13 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-
-<script defer src="/assets/js/auto-embed.instagram.js"></script>
-
-<script defer src="/assets/js/media-hero-engine.js"></script>
-<script defer src="/assets/js/media-empty-handler.js"></script>
-
-
+<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
+<script defer="" src="/assets/js/media-empty-handler.js"></script>
 <!-- Media Hub AutoMap (정본) -->
-<script defer src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
-<script defer src="/assets/js/mediahub-automap-v3.js?v=20260629-media-v2"></script>
-<script defer src="/assets/js/mediahub-ott-inline.v1.js?v=20260701-ott-stage7-10"></script>
-<script defer src="/assets/js/mediahub-playback-controller.v2.js?v=20260629-media-v2"></script>
-
+<script defer="" src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
+<script defer="" src="/assets/js/mediahub-automap-v3.js?v=20260824-v50-hero-movie-drama-hd-500"></script>
+<script defer="" src="/assets/js/mediahub-ott-inline.v1.js?v=20260820-mobile-immersive-resume-33"></script>
+<script defer="" src="/assets/js/mediahub-playback-controller.v2.js?v=20260821-v43-desktop-panel-tools-431"></script>
 <script id="igdc-media-10section-frame">
 (function(){
   const LIMIT = 50;
@@ -4852,7 +4441,7 @@ window.addEventListener("message",function(ev){
     thumb.className = 'thumb ph';
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = 'به‌زودی';
+    meta.textContent = 'Sample';
     a.appendChild(thumb);
     a.appendChild(meta);
     return a;
@@ -4891,6 +4480,134 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
+<style id="igdc-mediahub-mobile-card-layout-final-20260818-r2">
+/* Mobile media-card pin fix. */
+@media (max-width:1024px){
+  .thumb-line[data-psom-key^="media-"],
+  .thumb-line[data-psom-key^="media-"].scroll-wrapper,
+  .thumb-line[data-psom-key^="media-"] > .scroll-content{
+    box-sizing:border-box !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+    gap:4px !important;
+  }
 
+  .thumb-line[data-psom-key^="media-"] a.card.media-card{
+    box-sizing:border-box !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    scroll-snap-stop:normal !important;
+  }
+}
+
+/* Portrait: one card fills the complete visible row width. */
+@media (max-width:900px) and (orientation:portrait){
+  html,
+  body,
+  .container,
+  .layout,
+  main,
+  .main,
+  .main-content,
+  .content,
+  .content-area{
+    box-sizing:border-box !important;
+    width:100% !important;
+    max-width:100% !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"],
+  .thumb-line[data-psom-key^="media-"].scroll-wrapper{
+    box-sizing:border-box !important;
+    width:100% !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content{
+    box-sizing:border-box !important;
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    gap:4px !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action:pan-x pan-y !important;
+    /* Portrait keeps full-width cards, but native velocity must remain free.
+       proximity settles gentle swipes near a card without limiting hard flicks to one card. */
+    scroll-snap-type:x proximity !important;
+    scroll-behavior:auto !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card{
+    box-sizing:border-box !important;
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    flex:0 0 100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:16 / 9 !important;
+    margin:0 !important;
+    scroll-snap-align:start !important;
+    scroll-snap-stop:normal !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card > .thumb{
+    box-sizing:border-box !important;
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:16 / 9 !important;
+    margin:0 !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card > .thumb > img{
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    display:block !important;
+  }
+}
+
+/* Landscape: keep compact gaps and native multi-card fling. */
+@media (max-width:1024px) and (orientation:landscape){
+  .thumb-line[data-psom-key^="media-"] > .scroll-content{
+    gap:4px !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action:pan-x pan-y !important;
+    scroll-snap-type:none !important;
+    scroll-behavior:auto !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card{
+    margin-left:0 !important;
+    margin-right:0 !important;
+    scroll-snap-align:none !important;
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
 </body>
 </html>

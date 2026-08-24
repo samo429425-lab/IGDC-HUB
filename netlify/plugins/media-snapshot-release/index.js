@@ -6,7 +6,7 @@ const os=require("os");
 const path=require("path");
 const Adapter=require("../../functions/lib/media-searchbank-release-adapter.v1");
 
-const VERSION="igdc-media-snapshot-release-build-plugin-v2.6.0-persistent-fast-media-stage";
+const VERSION="igdc-media-snapshot-release-build-plugin-v2.8.0-true-isolated-snapshot-engine";
 const DEFAULT_TABLE="media_snapshot_releases";
 
 function text(value){return value==null?"":String(value).trim();}
@@ -77,7 +77,7 @@ async function request(settings,resource,init){
 function isPublicationRequest(release){
   const control=release&&release.snapshot&&release.snapshot.meta&&release.snapshot.meta.releaseControl||{};
   const action=text(control.action);
-  return control.publicationRequested===true||["publish_all","publish_section","stop_section","stop_all"].includes(action);
+  return control.publicationRequested===true||["publish_all","publish_section","publish_sections","stop_section","stop_sections","stop_all"].includes(action);
 }
 async function loadRelease(settings,expected){
   const query=new URLSearchParams();
@@ -155,15 +155,44 @@ function assertMediaTemplate100(snapshot){
     throw error;
   }
 }
+function assertMediaPsomFiles(publishRoot){
+  const files=[
+    path.join(publishRoot,"data","psom.json"),
+    path.join(publishRoot,"netlify","functions","data","psom.json")
+  ];
+  const reports=[];
+  for(const file of files){
+    const doc=readJson(file);
+    if(!doc){const error=new Error("media_psom_missing:"+file);error.code="media_psom_missing";throw error;}
+    reports.push({file,report:Adapter.assertPsomContract(doc)});
+  }
+  const signatures=reports.map((row)=>row.report.order.join("|"));
+  if(new Set(signatures).size!==1){
+    const error=new Error("media_psom_duplicate_contract_mismatch");error.code="media_psom_duplicate_contract_mismatch";error.files=files;throw error;
+  }
+  return reports;
+}
 function runSnapshotEngineIsolated(publishRoot,bank,template,releaseId){
   const stage=fs.mkdtempSync(path.join(os.tmpdir(),"igdc-media-release-"));
-  const originalCwd=process.cwd(),enginePath=path.join(publishRoot,"netlify","functions","snapshot-engine.js");
+  const originalCwd=process.cwd();
+  const sourceFunctions=path.join(publishRoot,"netlify","functions");
+  const shadowFunctions=path.join(stage,"netlify","functions");
+  const shadowLib=path.join(shadowFunctions,"lib");
+  const enginePath=path.join(shadowFunctions,"snapshot-engine.js");
   try{
+    // Snapshot Engine writes every existing mirror it can see. Requiring the engine
+    // from publishRoot therefore made the former "isolated" check capable of touching
+    // the real build output through __dirname/data. Shadow only the engine and its two
+    // direct local dependencies so every candidate path stays inside this temp stage.
+    fs.mkdirSync(shadowLib,{recursive:true});
+    fs.copyFileSync(path.join(sourceFunctions,"snapshot-engine.js"),enginePath);
+    fs.copyFileSync(path.join(sourceFunctions,"lib","nonpg-revenue-contract.core.v1.js"),path.join(shadowLib,"nonpg-revenue-contract.core.v1.js"));
+    fs.copyFileSync(path.join(sourceFunctions,"lib","public-snapshot-sanitizer.v1.js"),path.join(shadowLib,"public-snapshot-sanitizer.v1.js"));
     atomicWrite(path.join(stage,"data","search-bank.snapshot.json"),bank);
     atomicWrite(path.join(stage,"data","media.snapshot.json"),template);
     process.chdir(stage);
     delete require.cache[require.resolve(enginePath)];
-    const engine=require(enginePath),report=engine.run({canonicalReleaseId:releaseId,mediaReleasePipeline:true});
+    const engine=require(enginePath),report=engine.run({canonicalReleaseId:releaseId,mediaReleasePipeline:true,targetPage:"media"});
     if(!report||report.ok!==true||!Array.isArray(report.completedHandlers)||!report.completedHandlers.includes("media"))throw new Error("snapshot_engine_media_handler_not_completed");
     const snapshot=readJson(path.join(stage,"data","media.snapshot.json"));
     if(!snapshot)throw new Error("snapshot_engine_media_output_missing");
@@ -219,6 +248,7 @@ module.exports={
 
     try{
       const publishRoot=path.resolve(constants.PUBLISH_DIR||process.cwd());
+      const psomReports=assertMediaPsomFiles(publishRoot);
       safeManagedSlots(release.snapshot);
       const requestHash=sha256(release.snapshot);
       if(requestHash!==text(release.snapshot_hash))throw new Error("media_snapshot_release_hash_mismatch");
@@ -283,7 +313,7 @@ module.exports={
       utils.status.show({
         title:"IGDC 미디어 공개 파이프라인",
         summary:wasStored?"SearchBank → Snapshot Engine → Media Snapshot 신규 반영 완료":"기존 승인 프론트 매칭 재배포 유지 완료",
-        text:"release "+text(release.release_id)+" · "+report.output.totalManagedSlots+"개 · "+final.hash.slice(0,16)
+        text:"release "+text(release.release_id)+" · "+report.output.totalManagedSlots+"개 · PSOM "+psomReports[0].report.order.length+"섹션 · "+final.hash.slice(0,16)
       });
       console.log("["+VERSION+"]",JSON.stringify(report));
     }catch(error){

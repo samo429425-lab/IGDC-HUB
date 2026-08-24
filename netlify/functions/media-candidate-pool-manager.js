@@ -10,10 +10,10 @@ const MediaStore=require("./lib/media-candidate-store.v1");
 const MediaPolicy=require("./lib/media-candidate-policy.v2");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="media-candidate-pool-manager-v1.2.0-overflow-visible-and-recoverable";
+const VERSION="media-candidate-pool-manager-v1.3.0-unified-100-plus-20";
 const MANAGER_SOURCE="media-candidate-pool-manager";
 const RESERVE_CAPACITY=20;
-const SECTION_CAPACITY=Object.freeze({"media-music":50,"media-shorts":50});
+const SECTION_CAPACITY=Object.freeze({});
 const SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 
 function text(v){return MediaStore.text(v);}
@@ -135,7 +135,7 @@ function buildState(rows,release){
       overflow:overflow.slice(0,40).map((x)=>compactRow(x.row,x.score,"overflow",false))
     };
   }
-  return{ok:true,version:VERSION,generatedAt:now(),policy:{primaryDefault:100,musicShortsPrimary:50,reservePerSection:RESERVE_CAPACITY,automaticReplacement:"approved-and-verified-only",manualDisablePreserved:true,lifecycleOwner:"media-candidate-action"},release:{present:!!release,id:text(release&&release.release_id),status:text(release&&release.status),createdAt:text(release&&release.created_at)},sections};
+  return{ok:true,version:VERSION,generatedAt:now(),policy:{primaryDefault:100,primaryAllSections:100,frontVisiblePerSection:50,reservePerSection:RESERVE_CAPACITY,automaticReplacement:"approved-and-verified-only",manualDisablePreserved:true,lifecycleOwner:"media-candidate-action"},release:{present:!!release,id:text(release&&release.release_id),status:text(release&&release.status),createdAt:text(release&&release.created_at)},sections};
 }
 function poolRowObject(row,bucket,score,actor,enabled,extra){
   const raw=Object.assign({},rawOf(row));const previous=poolControl(row);const changedAt=now();

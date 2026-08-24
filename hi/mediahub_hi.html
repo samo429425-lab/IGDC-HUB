@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html class="prelayout" lang="hi">
+<html class="prelayout" dir="ltr" lang="hi">
 <head>
 <script src="/assets/js/igtc-language-role-bridge.min.js"></script>
 <meta charset="utf-8"/>
@@ -69,7 +69,7 @@
     border-radius: 8px;
     text-align: center;
     font-weight: 700;
-    color: #17365D;
+    color: #fff;
     flex: 0 0 150px;
     cursor: pointer;
     transition:transform .12s;
@@ -322,7 +322,7 @@ button svg, .btn svg, .button svg, .cta-button svg{ width:1em; height:1em; }
 .section-blockchain 
 .section-blockchain .bc-tile:hover{
   background:#DDF2E6;
-  borderProviders(20,80,40,.28);
+  border-color:rgba(20,80,40,.28);
 }
 
 /* Responsive: keep gutters modest on small screens */
@@ -447,7 +447,6 @@ html, body {
     border-radius:8px; 
   }
 </style>
-
 <style id="edge-autohide-mobile">
 @media (pointer:coarse){
 :root{--edge:10px;--spd:.14s;--e:ease-out}
@@ -508,7 +507,7 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   .language-select { top:10px !important; right:12px !important; transform:none !important; }
 }
 </style>
-<!-- Mobile प्रदाता Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
+<!-- Mobile Providers Drawer v2 (MediaHub: LEFT-side push drawer + top banner) -->
 <style id="igdc-mobile-providers-drawer-left">
 @media (max-width:768px){
   :root{ --pvw: min(86vw, 320px); }
@@ -579,9 +578,9 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
   var drawer = document.createElement("aside"); drawer.id="providers-drawer-left";
   drawer.innerHTML = [
     '<div id="providers-header-left">',
-      '<div id="providers-title-left" >प्रदाता</div>',
+      '<div id="providers-title-left">प्रदाता</div>',
       '<input id="providers-search-left" type="search" placeholder="खोजें..." aria-label="प्रदाता खोजें" />',
-      '<button id="providers-close-left" aria-label="बंद करें">✕</button>',
+      '<button id="providers-close-left" aria-label="Close">✕</button>',
     '</div>',
     '<div id="providers-body-left"></div>'
   ].join("");
@@ -646,12 +645,8 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 })();
 </script>
 <!-- Mobile Section Pager v1 (group sections into horizontal slides on mobile) -->
-
 <!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
-
-
 <!-- igdc-mobile-section-pager removed for MediaHub to preserve native scroll -->
-
 <style id="igdc-mobile-mediahub-patch-v3">
 /* === Mobile Optimization Patch — MediaHub (KR/ZH/EN) === */
 @media (max-width:768px){
@@ -945,10 +940,7 @@ body {
   }
   /* Hover unaffected except border/bg from the base design */
 </style>
-
 <!-- BC ultra-tight adjust: shrink button width slightly, gap=5px -->
-
-
 <!-- BC tight correction: text-only narrow, keep font size, exact 5px gaps -->
 <style id="bc-tight-correct-20251013">
   /* Exact inter-button gap */
@@ -972,7 +964,6 @@ body {
     letter-spacing:normal;
   }
 </style>
-
 <!-- Hero overflow hotfix (2025-10-13) -->
 <style id="mediahub-hero-overflow-hotfix">
   @media (max-width: 1024px){
@@ -1017,8 +1008,6 @@ body {
     }
   });
 })();</script>
-
-
 <style id="bc-mobile-80-lock-20251113">
 /* Mobile (<=900px): lock ~20% shrink for both text and button, with stable gaps */
 @media (max-width: 900px){
@@ -1049,7 +1038,6 @@ body {
   }
 }
 </style>
-
 <style id="mobile-footer-guard">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -1075,43 +1063,45 @@ body {
     main, .content-area { overflow: visible !important; }
   }
 </style>
-
-<link rel="stylesheet" href="/assets/css/thumbs.standard.css">
-
+<link href="/assets/css/thumbs.standard.css" rel="stylesheet"/>
 <style id="media-placeholder-style">
 .media-card{position:relative;width:320px;height:180px;flex:0 0 320px;border-radius:12px;overflow:hidden;background:#111;margin-right:12px}
-.media-card .thumb.ph{width:100%;height:100%;background:linear-gradient(135deg,#222,#333)}
+.media-card .thumb.ph{width:100%;height:100%;background:#071a3a url('/assets/images/media-sample-card.png') center/cover no-repeat}
 .media-card .meta{position:absolute;left:0;right:0;bottom:0;padding:10px;color:#eee;background:linear-gradient(to top,rgba(0,0,0,.6),transparent)}
 </style>
-
 <style id="mediahub-scroll-fix-2026-02">
 /* === MEDIA SCROLL BUTTON FINAL FIX === */
+.scroll-btn{ z-index:10000 !important; }
+.scroll-btn.left{ left:0px !important; }
+.scroll-btn.right{ right:0px !important; }
 
-.scroll-wrapper{
-  position:relative !important;
-  padding: 0 72px !important;
-  overflow: hidden !important;
+/* Desktop only: reserve space for the side arrow buttons. */
+@media (min-width:1025px){
+  .scroll-wrapper{
+    position:relative !important;
+    padding:0 72px !important;
+    overflow:hidden !important;
+  }
+  .scroll-content,
+  .thumb-line{
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:10px !important;
+    padding-right:5px !important;
+  }
 }
 
-.scroll-btn{
-  z-index:10000 !important;
-}
-
-.scroll-btn.left{
-  left:0px !important;
-}
-
-.scroll-btn.right{
-  right:0px !important;
-}
-
-/* content 영역은 버튼만큼 안쪽으로 */
-.scroll-content,
-.thumb-line{
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 10px !important;
-  padding-right: 5px !important;
+/* Mobile: never reserve desktop arrow-button space. */
+@media (max-width:1024px){
+  .scroll-wrapper,
+  .thumb-line,
+  .scroll-content{
+    box-sizing:border-box !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+  }
 }
 </style>
 <style id="mediahub-mobile-drag-fix">
@@ -1158,21 +1148,27 @@ html, body {
   overflow-y: auto;
 }
 </style>
-
-
 <style id="qa-label-contrast-fix">
 .igdc-qa-title,
 .igdc-qa-field label,
 .igdc-qa-body label{
-  color:#555555;
+  color:#555555 !important;
   opacity:1 !important;
-  font-weight: 500;
+  font-weight:500 !important;
 }
 </style>
-
-<style id="igdc-sidebar-spacing-unify-v1">
-.sidebar{padding-top:30px !important;}
-.sidebar a{padding:12px 12px !important;margin:10px 12px !important;}
+<style id="ko-sidebar-spacing-unified">
+/* KO sidebar spacing: unify only button-to-button vertical spacing */
+.sidebar{
+  padding-top: 20px !important;
+}
+.sidebar a,
+.sidebar a#qnaOpenBtn,
+#qnaOpenBtn,
+.sidebar a[id*="qna"],
+a[id*="qna"]{
+  margin: 10px 12px !important;
+}
 </style>
 <style id="igdc-desktop-footer-bottom-space-v1">
 /* Footer-only desktop nano patch: keep mobile layout unchanged. */
@@ -1182,19 +1178,40 @@ html, body {
   }
 }
 </style>
+<style id="mediahub-content-provider-tile-text-contrast-v1">
+/* Content provider horizontal rail ONLY: Netflix, Disney+, Amazon Prime, etc. */
+.platform-line a.platform-tile{
+  color:#17365D !important;
+}
+</style>
+<style id="igdc-mediahub-mobile-first-paint-v32">
+/* Mobile portrait first-paint geometry: must win over legacy fixed 320px card rules
+   before deferred player/automap scripts execute. */
+@media (max-width:1024px) and (orientation:portrait){
+  html,body{box-sizing:border-box!important;width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;overflow-x:hidden!important;}
+  .layout,main,.main,.main-content,.content,.content-area{box-sizing:border-box!important;width:100%!important;max-width:100%!important;margin-left:0!important;margin-right:0!important;padding-left:0!important;padding-right:0!important;}
+  .thumb-line[data-psom-key^="media-"]{box-sizing:border-box!important;width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;gap:4px!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y!important;overscroll-behavior-x:contain!important;scroll-snap-type:x proximity!important;}
+  .thumb-line[data-psom-key^="media-"]>.scroll-content{box-sizing:border-box!important;display:flex!important;flex-wrap:nowrap!important;width:100%!important;min-width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;gap:4px!important;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-x pan-y!important;overscroll-behavior-x:contain!important;scroll-snap-type:x proximity!important;}
+  .thumb-line[data-psom-key^="media-"]>a.card.media-card,
+  .thumb-line[data-psom-key^="media-"]>.scroll-content>a.card.media-card{box-sizing:border-box!important;width:100%!important;min-width:100%!important;max-width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;flex:0 0 100%!important;aspect-ratio:16/9!important;margin:0!important;border-radius:0!important;scroll-snap-align:start!important;}
+  .thumb-line[data-psom-key^="media-"] a.card.media-card>.thumb{box-sizing:border-box!important;width:100%!important;min-width:100%!important;max-width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;aspect-ratio:16/9!important;margin:0!important;border-radius:0!important;}
+  .thumb-line[data-psom-key^="media-"] a.card.media-card>.thumb>img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important;}
+}
+@media (max-width:1024px) and (orientation:landscape){
+  .thumb-line[data-psom-key^="media-"]{padding-left:max(0px,env(safe-area-inset-left))!important;padding-right:max(0px,env(safe-area-inset-right))!important;}
+}
+</style>
 </head>
 <body>
-<div id="hero" data-psom-key="media-hero"><div class="hero-title"></div></div>
-
 <script>(function(){document.addEventListener("DOMContentLoaded",function(){document.documentElement.classList.remove("prelayout");var s=document.getElementById("prelayout-guard");if(s&&s.parentNode){s.parentNode.removeChild(s);}});})();</script>
 <div class="layout">
 <aside class="sidebar">
-<a href="home_hi.html">🏠 होम</a>
-<a href="networkhub_hi.html">🛒 मार्केट हब</a>
-<a href="distributionhub_hi.html">🏭 वितरण हब</a>
-<a href="socialnetwork_hi.html">📢 सोशल नेटवर्क</a>
-<a href="mediahub_hi.html">🎬 मीडिया हब</a>
-<a href="tour_hi.html">🧳 यात्रा · पर्यटन · आवास</a>
+<a href="home.html">🏠 होम</a>
+<a href="networkhub.html">🛒 मार्केट हब</a>
+<a href="distributionhub.html">🏭 वितरण हब</a>
+<a href="socialnetwork.html">📢 सोशल नेटवर्क</a>
+<a href="mediahub.html">🎬 मीडिया हब</a>
+<a href="tour.html">🧳 यात्रा · पर्यटन · आवास</a>
 <a href="literature_academic.html">📚 साहित्य एवं शैक्षणिक आदान-प्रदान</a>
 <a href="javascript:void(0)" id="qnaOpenBtn">💬 प्रश्नोत्तर संपर्क</a></aside>
 <main>
@@ -1215,1801 +1232,1432 @@ html, body {
 <select name="provider" style="padding:8px 10px; border-radius:10px; border:none; outline:none;"></select>
 <button style="padding:10px 16px; border-radius:10px; border:none; background:#2e6bff; color:#fff; font-weight:700; cursor:pointer;" type="submit">खोजें</button>
 </form>
-<!-- provider link line -->
+<!-- 플랫폼 링크 라인 -->
 <div class="section-title">सामग्री प्रदाता</div>
 <div class="platform-line"><a class="platform-tile" href="https://www.netflix.com" target="_top">Netflix</a><a class="platform-tile" href="https://www.disneyplus.com" target="_top">Disney+</a><a class="platform-tile" href="https://www.amazon.com/primevideo" target="_top">Amazon Prime</a><a class="platform-tile" href="https://tv.apple.com" target="_top">Apple TV+</a><a class="platform-tile" href="https://www.youtube.com" target="_top">YouTube</a><a class="platform-tile" href="https://spotify.com" target="_top">Spotify</a><a class="platform-tile" href="https://www.melon.com" target="_top">Melon</a><a class="platform-tile" href="https://www.wavve.com" target="_top">Wavve</a><a class="platform-tile" href="https://www.hulu.com" target="_top">Hulu</a><a class="platform-tile" href="https://www.paramountplus.com" target="_top">Paramount+</a><a class="platform-tile" href="https://www.peacocktv.com" target="_top">Peacock</a><a class="platform-tile" href="https://www.tving.com" target="_top">Tving</a><a class="platform-tile" href="https://www.coupangplay.com" target="_top">Coupang Play</a><a class="platform-tile" href="https://music.youtube.com" target="_top">YouTube Music</a><a class="platform-tile" href="https://tidal.com" target="_top">Tidal</a><a class="platform-tile" href="https://www.deezer.com" target="_top">Deezer</a><a class="platform-tile" href="https://music.amazon.com" target="_top">Amazon Music</a><a class="platform-tile" href="https://www.bbc.co.uk/iplayer" target="_top">BBC iPlayer</a><a class="platform-tile" href="https://www.viki.com" target="_top">Rakuten Viki</a><a class="platform-tile" href="https://mubi.com" target="_top">Mubi</a><a class="platform-tile" href="https://www.crunchyroll.com" target="_top">Crunchyroll</a><a class="platform-tile" href="https://tv.kakao.com" target="_top">Kakao TV</a><a class="platform-tile" href="https://video.unext.jp" target="_top">U-NEXT</a></div>
-
-<!-- Trending Now -->
+<!-- 지금 뜨는 콘텐츠 -->
 <div class="section-title">🔥 ट्रेंडिंग कंटेंट</div>
 <div class="thumb-line" data-psom-key="media-trending">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
-
-<!-- Latest Movies -->
+<!-- 최신 영화 -->
 <div class="section-title">🎬 नवीनतम फ़िल्में</div>
 <div class="thumb-line" data-psom-key="media-movie">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
-
-<!-- Latest Dramas -->
+<!-- 최신 드라마 -->
 <div class="section-title">📺 नवीनतम ड्रामा</div>
 <div class="thumb-line" data-psom-key="media-drama">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
-
-<!-- Mystery / Thriller -->
+<!-- 미스터리/스릴러 -->
 <div class="section-title">🕵️‍♂️ मिस्ट्री / थ्रिलर</div>
 <div class="thumb-line" data-psom-key="media-thriller">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
-
-<!-- Romance -->
+<!-- 로멘스 -->
 <div class="section-title">💖 रोमांस</div>
 <div class="thumb-line" data-psom-key="media-romance">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
-
-<!-- Variety / Entertainment -->
+<!-- 예능/오락 -->
 <div class="section-title">😂 विविध / मनोरंजन</div>
 <div class="thumb-line" data-psom-key="media-variety">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
-
-<!-- Documentary / Culture -->
+<!-- 다큐/교양 -->
 <div class="section-title">🎥 डॉक्यूमेंट्री / संस्कृति</div>
 <div class="thumb-line" data-psom-key="media-documentary">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
-
-<!-- Animation -->
+<!-- 애니메이션 -->
 <div class="section-title">🐱 एनीमेशन</div>
 <div class="thumb-line" data-psom-key="media-animation">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
-
-<!-- Music Videos -->
+<!-- 뮤비 -->
 <div class="section-title">🎵 म्यूज़िक वीडियो</div>
 <div class="thumb-line" data-psom-key="media-music">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
-
-<!-- Hot Shorts & Video Movies -->
+<!-- 핫한 쇼츠 영상무비 -->
 <div class="section-title">🔥 हॉट शॉर्ट्स और वीडियो मूवीज़</div>
 <div class="thumb-line" data-psom-key="media-shorts">
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 <a class="card media-card" data-placeholder="true" href="javascript:void(0)">
-  <div class="thumb ph"></div>
-  <div class="meta">जल्द आ रहा है</div>
+<div class="thumb ph"></div>
+<div class="meta">जल्द आ रहा है</div>
 </a>
-
 </div>
 </div>
 </main>
 </div>
-
 <script>
 /**
  * MediaHub Unified Scroll Script (SAFE FULL BLOCK)
@@ -3265,16 +2913,23 @@ function end(dir) {
     document.querySelectorAll('.thumb-line, .platform-line').forEach(ensureLineWrapped);
   }
 
-  document.addEventListener('DOMContentLoaded', initAll);
+  let initQueued = false;
+  function scheduleInitAll(){
+    if(initQueued) return;
+    initQueued = true;
+    requestAnimationFrame(function(){
+      initQueued = false;
+      initAll();
+    });
+  }
+  document.addEventListener('DOMContentLoaded', scheduleInitAll);
 
-  // ✅ 공급사 목록/카드가 "나중에 렌더"되는 경우 재적용 (원본 노드 유지라 충돌 없음)
-  const mo = new MutationObserver(() => initAll());
+  // 공급사/카드가 뒤늦게 추가돼도 한 프레임에 한 번만 재점검한다.
+  const mo = new MutationObserver(scheduleInitAll);
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
 })();
 </script>
-
-
 <script>
 // Open provider search in a new tab, no backend dependency
 function handleVideoSearch(e){
@@ -3484,13 +3139,13 @@ function handleVideoSearch(e){
 
   let currentLang = (window.__IGDC_LANG__?.current || detectLang());
 
-  function renderProviders(){
+  function renderDropdown(){
     const form = document.querySelector('form.video-search');
     const sel  = form?.querySelector('select[name="provider"]');
     if (!form || !sel) return;
     const ordered = orderProviders(currentLang);
     sel.innerHTML = "";
-    orderProviders(p => {
+    ordered.forEach(p => {
       const opt = document.createElement("option");
       opt.value = p.key;
       opt.textContent = labelOf(p, currentLang);
@@ -3524,12 +3179,12 @@ function handleVideoSearch(e){
     try{
       window.__IGDC_LANG__.onChange(function(langCode){
         currentLang = (langCode||'en').split('-')[0].toLowerCase();
-        renderProviders();
+        renderDropdown();
       });
     }catch(e){}
   }
 
-  renderProviders();
+  renderDropdown();
 })();
 </script>
 <script>
@@ -3631,7 +3286,7 @@ function handleVideoSearch(e){
   --old-bg:#fff4e0; --old-border:#f3d9b0; --old-text:#804000;
   --blue:#2563eb; --muted:#9ca3af;
 }
-/* Sidebar प्रश्नोत्तर link follows existing .sidebar a style; this extra ensures visibility if needed */
+/* Sidebar Q&A link follows existing .sidebar a style; this extra ensures visibility if needed */
 #qnaOpenBtn{ background-color:#001f4d; color:#ffffff;  color:#001f4d;  display:block; text-decoration:none; }
 /* Modal near the left sidebar, with smooth transitions */
 .igdc-qa-modal{position:fixed;inset:0;z-index:var(--igdc-z);pointer-events:none}
@@ -3716,7 +3371,7 @@ function handleVideoSearch(e){
         var b = document.createElement('div'); b.className='igdc-qa-backdrop';
         var p = document.createElement('div'); p.className='igdc-qa-panel';
         var h = document.createElement('div'); h.className='igdc-qa-header';
-        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='प्रश्नोत्तर';
+        var t = document.createElement('div'); t.className='igdc-qa-title'; t.textContent='Q&A';
         var x = document.createElement('button'); x.className='igdc-qa-close'; x.innerHTML='&#10005;';
         h.appendChild(t); h.appendChild(x);
         var body = document.createElement('div'); body.className='igdc-qa-body';
@@ -3803,7 +3458,6 @@ function handleVideoSearch(e){
       });
   })();
 </script>
-
 <script id="igdc-qa-script">
 (function(){
   if (window.__IGDC_QA_INIT__) return; window.__IGDC_QA_INIT__ = true;
@@ -3824,7 +3478,7 @@ function handleVideoSearch(e){
     const url = window.SUPER_VARSAR && window.SUPER_VARSAR.url;
     const key = window.SUPER_VARSAR && window.SUPER_VARSAR.anonKey;
     if(!url || !key || !window.supabase || !window.supabase.createClient){
-      console.warn("[प्रश्नोत्तर] Supabase credentials/library not configured: the UI is visible, but saving is disabled.");
+      console.warn("[Q&A] Supabase 자격/라이브러리 미설정: UI는 표시되지만 저장은 비활성화됩니다.");
       return null;
     }
     STATE.sb = window.supabase.createClient(url, key);
@@ -3834,7 +3488,7 @@ function handleVideoSearch(e){
     const sb = await ensureSupabase(); if(!sb) return;
     let { data: { session } } = await sb.auth.getSession();
     if(!session){
-      try{ await sb.auth.signInअनामly(); }catch(e){}
+      try{ await sb.auth.signInAnonymously(); }catch(e){}
       ({ data: { session } } = await sb.auth.getSession());
     }
     if(session){
@@ -3850,7 +3504,7 @@ function handleVideoSearch(e){
     const backdrop = el("div","igdc-qa-backdrop");
     const panel = el("div","igdc-qa-panel");
     const header = el("div","igdc-qa-header");
-    const title = el("div","igdc-qa-title"); title.textContent = "प्रश्नोत्तर";
+    const title = el("div","igdc-qa-title"); title.textContent = "Q&A";
     const close = el("button","igdc-qa-close"); close.innerHTML="&#10005;"; close.setAttribute("aria-label","बंद करें");
     header.append(title, close);
 
@@ -3933,7 +3587,7 @@ function handleVideoSearch(e){
       rows.forEach(row=>{
         const box = el("div","igdc-qa-thread");
         const q = el("div","igdc-qa-thread-q"); q.textContent="Q. "+(row.question||"");
-        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("उ. "+row.answer):"उ. (प्रतीक्षारत)";
+        const a = el("div","igdc-qa-thread-a"); a.textContent=row.answer?("A. "+row.answer):"उ. (प्रतीक्षारत)";
         const meta = el("div","igdc-qa-thread-meta");
         const time = el("span"); time.textContent = new Date(row.created_at).toLocaleString();
         const tag = el("span"); tag.textContent = row.is_admin? "प्रशासक अनुरोध":"सामान्य";
@@ -3955,7 +3609,7 @@ function handleVideoSearch(e){
       });
     }
 
-    async function autoउत्तरIfNeeded(text){
+    async function autoAnswerIfNeeded(text){
       const technical = classifyTech(text);
       let answer = null;
       if(!technical){
@@ -3967,7 +3621,7 @@ function handleVideoSearch(e){
           }catch(e){}
         }
         if(!answer){
-          if(/시간|운영시간|오픈|Contact/.test(text)) answer="संचालन संबंधी पूछताछ की समीक्षा प्रशासक द्वारा की जाएगी और बाद में उत्तर दिया जाएगा।";
+          if(/시간|운영시간|오픈|문의/.test(text)) answer="संचालन संबंधी पूछताछ की समीक्षा प्रशासक द्वारा की जाएगी और बाद में उत्तर दिया जाएगा।";
           else if(/가격|비용|요금/.test(text)) answer="मूल्य/शुल्क की जानकारी के लिए कृपया इस पृष्ठ पर दिए गए मार्गदर्शन को देखें और अतिरिक्त प्रश्न छोड़ें।";
           else answer="संपर्क करने के लिए धन्यवाद। हम शीघ्र जाँच कर आपकी सहायता करेंगे।";
         }
@@ -3979,7 +3633,7 @@ function handleVideoSearch(e){
       const q = (tQ.value||"").trim();
       let a = (tA.value||"").trim();
       if(!q){ tQ.focus(); return; }
-      const { technical, answer } = await autoउत्तरIfNeeded(q);
+      const { technical, answer } = await autoAnswerIfNeeded(q);
       if(!a && answer) a = answer;
       const sb = await ensureSupabase();
       if(!sb){
@@ -4016,7 +3670,7 @@ function handleVideoSearch(e){
   // 1) Always mount UI so the popup can open
   mountUI();
   // 2) Then, try to init Supabase/auth asynchronously (non-blocking)
-  try { await ensureAuth(); } catch(e){ console.warn("[प्रश्नोत्तर] auth initialization failed:", e); }
+  try { await ensureAuth(); } catch(e){ console.warn("[Q&A] auth 초기화 실패:", e); }
 }
 if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded", boot); } else { boot(); }
 })();
@@ -4117,7 +3771,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   });
 })();
 </script>
-<script data-hero-sel="#hero" data-hero-src="/assets/hero/hero.mediahub.json" data-interval="30000" src="/assets/js/hero.rotator.js"></script>
 <footer>
     IGDC Global Hub © 2025 | International General Distribution Company<br/>
     50, Godeokgalpyeong 3-ro, Pyeongtaek-si, Gyeonggi-do, Republic of Korea, <br/>
@@ -4148,7 +3801,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   let activeKey = (PROVIDERS[0] && PROVIDERS[0].key) || 'youtube';
 
-  function renderProviders(){
+  function render(){
     const form = document.querySelector('form.video-search');
     const sel  = form && form.querySelector('select[name="provider"]');
     const bar  = document.querySelector('.provider-bar');
@@ -4176,7 +3829,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
       btn.style.cursor = "pointer";
       btn.style.background = p.key===activeKey ? "#2e6bff" : "#fff";
       btn.style.color = p.key===activeKey ? "#fff" : "#111";
-      btn.addEventListener('click', () => { activeKey = p.key; renderProviders(); });
+      btn.addEventListener('click', () => { activeKey = p.key; render(); });
       btn.addEventListener('click', (ev) => {
         if (ev.ctrlKey || ev.metaKey) window.open(PROVIDERS.find(x=>x.key===p.key)?.href || '#', '_blank', 'noopener');
       });
@@ -4185,7 +3838,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   }
 
   document.addEventListener('change', (e)=>{
-    if(e.target && e.target.matches('select[name="provider"]')){ activeKey = e.target.value; renderProviders(); }
+    if(e.target && e.target.matches('select[name="provider"]')){ activeKey = e.target.value; render(); }
   });
 
   const orig = window.handleVideoSearch;
@@ -4198,7 +3851,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     return false;
   };
 
-  renderProviders();
+  render();
 })();
 </script>
 <!-- stray text suppressed: <! patch: sync dropdown to platform tiles; remove stamp buttons > -->
@@ -4308,7 +3961,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 })();
 </script>
 
-</script>
 <script id="sidebar-active-script-ko">
 (function(){
   function norm(n){
@@ -4340,7 +3992,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   window.addEventListener("popstate", applyActive);
 })();
 </script>
-
 <script id="edge-autohide-mobile-js">
 (function(){
   "use strict";
@@ -4418,8 +4069,6 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   bindEdge('.edge-right', 'right', 'show-right');
 })();
 </script>
-
-
 <script id="thumbline-drag-script">
 /*
   MediaHub row drag (safe version)
@@ -4434,6 +4083,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
   function enableDrag(scroller){
     if(!scroller) return;
+    if(('ontouchstart' in window) || (navigator.maxTouchPoints||0)>0 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) return;
 
     let isDown = false;
     let isDraggingX = false;
@@ -4513,7 +4163,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 
     var title = document.createElement('div');
     title.className = 'igdc-qa-title';
-    title.textContent = "प्रश्नोत्तर";
+    title.textContent = 'Q&A';
 
     var closeBtn = document.createElement('button');
     closeBtn.className = 'igdc-qa-close';
@@ -4526,7 +4176,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     body.className = 'igdc-qa-body';
 
     body.innerHTML =
-      '<div class="igdc-qa-note">※ सरल प्रश्नों का उत्तर AI तुरंत देता है। तकनीकी, त्रुटि या संचालन संबंधी मुद्दे स्वचालित रूप से प्रशासक प्रश्नोत्तर को भेजे जाते हैं।</div>';
+      '<div class="igdc-qa-note">' +
+      'सेव सेटिंग्स (Supabase url/key) कनेक्ट होने के बाद सभी सुविधाएँ सक्रिय हो जाएँगी।' +
+      '</div>';
 
 
     panel.appendChild(header);
@@ -4600,15 +4252,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
   else apply();
 })();
 </script>
-
-<!-- MediaHub: legacy immediate-card-fullscreen handler retired; playback is handled by mediahub-playback-controller.v2.js. -->
-<!-- stray text suppressed: eleton matching the site's QnA structure
-      var m = document.createElement('div'); m.className='igdc-qa-modal';
-      var b = document.createElement('div');  -->
-<script>document.addEventListener("DOMContentLoaded",()=>{if(matchMedia("(max-width:768px)").matches){const p=document.querySelector(".platform-line");if(p)p.setAttribute("data-providers","");}});</script>
-
 <!-- thumbnail automapping -->
-
 <script>
 window.IGDC_QA=window.IGDC_QA||{};
 if(typeof window.IGDC_QA.open!=="function"){
@@ -4621,7 +4265,6 @@ window.addEventListener("message",function(ev){
   try{if(ev&&ev.data&&ev.data.type==="IGTC_OPEN_QNA"&&typeof IGDC_QA.open==="function"){IGDC_QA.open();}}catch(e){}
 });
 </script>
-
 <script>
 (()=> {
   const form=document.querySelector('#qnaForm,[data-qna-form]');
@@ -4637,7 +4280,6 @@ window.addEventListener("message",function(ev){
   if(btn && !form) btn.addEventListener('click',e=>{e.preventDefault?.();postQ().catch(()=>alert('भेजना विफल रहा'));});
 })();
 </script>
-
 <style id="mobile-footer-guard-final">
   html, body { height: auto; min-height: 100% !important; }
   @supports (height: 100dvh) {
@@ -4659,7 +4301,6 @@ window.addEventListener("message",function(ev){
   footer { padding-bottom: max(28px, env(safe-area-inset-bottom)) !important; position: static !important; }
   /* MOBILE-FOOTER-GUARD: final */
 </style>
-
 <script id="media-lazy-reveal-v2">
 (function(){
   const INITIAL = 7;
@@ -4765,19 +4406,13 @@ window.addEventListener("message",function(ev){
   window.addEventListener("orientationchange", function(){ setTimeout(sendHeight, 500); });
 })();
 </script>
-
-<script defer src="/assets/js/auto-embed.instagram.js"></script>
-
-<script defer src="/assets/js/media-hero-engine.js"></script>
-<script defer src="/assets/js/media-empty-handler.js"></script>
-
-
+<script defer="" src="/assets/js/auto-embed.instagram.js"></script>
+<script defer="" src="/assets/js/media-empty-handler.js"></script>
 <!-- Media Hub AutoMap (정본) -->
-<script defer src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
-<script defer src="/assets/js/mediahub-automap-v3.js?v=20260629-media-v2"></script>
-<script defer src="/assets/js/mediahub-ott-inline.v1.js?v=20260701-ott-stage7-10"></script>
-<script defer src="/assets/js/mediahub-playback-controller.v2.js?v=20260629-media-v2"></script>
-
+<script defer="" src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
+<script defer="" src="/assets/js/mediahub-automap-v3.js?v=20260824-v50-hero-movie-drama-hd-500"></script>
+<script defer="" src="/assets/js/mediahub-ott-inline.v1.js?v=20260820-mobile-immersive-resume-33"></script>
+<script defer="" src="/assets/js/mediahub-playback-controller.v2.js?v=20260821-v43-desktop-panel-tools-431"></script>
 <script id="igdc-media-10section-frame">
 (function(){
   const LIMIT = 50;
@@ -4793,7 +4428,7 @@ window.addEventListener("message",function(ev){
     thumb.className = 'thumb ph';
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = 'जल्द आ रहा है';
+    meta.textContent = 'Sample';
     a.appendChild(thumb);
     a.appendChild(meta);
     return a;
@@ -4832,6 +4467,134 @@ window.addEventListener("message",function(ev){
   }
 })();
 </script>
+<style id="igdc-mediahub-mobile-card-layout-final-20260818-r2">
+/* Mobile media-card pin fix. */
+@media (max-width:1024px){
+  .thumb-line[data-psom-key^="media-"],
+  .thumb-line[data-psom-key^="media-"].scroll-wrapper,
+  .thumb-line[data-psom-key^="media-"] > .scroll-content{
+    box-sizing:border-box !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+    gap:4px !important;
+  }
 
+  .thumb-line[data-psom-key^="media-"] a.card.media-card{
+    box-sizing:border-box !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    scroll-snap-stop:normal !important;
+  }
+}
+
+/* Portrait: one card fills the complete visible row width. */
+@media (max-width:900px) and (orientation:portrait){
+  html,
+  body,
+  .container,
+  .layout,
+  main,
+  .main,
+  .main-content,
+  .content,
+  .content-area{
+    box-sizing:border-box !important;
+    width:100% !important;
+    max-width:100% !important;
+    margin-left:0 !important;
+    margin-right:0 !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"],
+  .thumb-line[data-psom-key^="media-"].scroll-wrapper{
+    box-sizing:border-box !important;
+    width:100% !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    overflow:hidden !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content{
+    box-sizing:border-box !important;
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    margin:0 !important;
+    padding:0 !important;
+    gap:4px !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action:pan-x pan-y !important;
+    /* Portrait keeps full-width cards, but native velocity must remain free.
+       proximity settles gentle swipes near a card without limiting hard flicks to one card. */
+    scroll-snap-type:x proximity !important;
+    scroll-behavior:auto !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card{
+    box-sizing:border-box !important;
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    flex:0 0 100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:16 / 9 !important;
+    margin:0 !important;
+    scroll-snap-align:start !important;
+    scroll-snap-stop:normal !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card > .thumb{
+    box-sizing:border-box !important;
+    width:100% !important;
+    min-width:100% !important;
+    max-width:100% !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    aspect-ratio:16 / 9 !important;
+    margin:0 !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card > .thumb > img{
+    width:100% !important;
+    height:100% !important;
+    object-fit:cover !important;
+    display:block !important;
+  }
+}
+
+/* Landscape: keep compact gaps and native multi-card fling. */
+@media (max-width:1024px) and (orientation:landscape){
+  .thumb-line[data-psom-key^="media-"] > .scroll-content{
+    gap:4px !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    touch-action:pan-x pan-y !important;
+    scroll-snap-type:none !important;
+    scroll-behavior:auto !important;
+    overscroll-behavior-x:contain !important;
+  }
+
+  .thumb-line[data-psom-key^="media-"] > .scroll-content > a.card.media-card{
+    margin-left:0 !important;
+    margin-right:0 !important;
+    scroll-snap-align:none !important;
+    scroll-snap-stop:normal !important;
+  }
+}
+</style>
 </body>
 </html>

@@ -640,9 +640,9 @@
     return 0;
   }
 
-  // V49 hero policy: select only from content already rendered on the front rails.
-  // Priority: 1) ranking/popularity, 2) verified image quality, 3) freshness.
-  // Hero image floor is a hard 1280x720. Automap never invents a hero card.
+  // V50 hero policy: select only from movie/drama content already rendered
+  // successfully on the front rails. Priority: 1) freshness, 2) ranking/hotness,
+  // 3) verified image quality. Hero image floor is a hard 1280x720.
   function heroFreshnessDay(item){
     if(!item)return 0;
     const raw=item.publishedAt||item.published_at||item.releaseDate||item.release_date||item.createdAt||item.created_at||item.updatedAt||item.updated_at||item.premiereDate||item.premieredAt||item.date;
@@ -677,21 +677,21 @@
     return Math.min(40000000,w*h);
   }
   function heroPreProbeCompare(a,b){
+    const ad=heroFreshnessDay(a&&a.item),bd=heroFreshnessDay(b&&b.item);
+    if(ad!==bd)return bd-ad;
     const ar=heroPopularityMetric(a&&a.item),br=heroPopularityMetric(b&&b.item);
     if(ar!==br)return br-ar;
     const ah=Number(a&&a.hint||0),bh=Number(b&&b.hint||0);
     if(ah!==bh)return bh-ah;
-    const ad=heroFreshnessDay(a&&a.item),bd=heroFreshnessDay(b&&b.item);
-    if(ad!==bd)return bd-ad;
     return Number(b&&b.score||0)-Number(a&&a.score||0);
   }
   function heroResolvedCompare(a,b){
+    const ad=Number(a&&a.freshnessDay||heroFreshnessDay(a&&a.item)),bd=Number(b&&b.freshnessDay||heroFreshnessDay(b&&b.item));
+    if(ad!==bd)return bd-ad;
     const ar=Number(a&&a.popularityMetric||heroPopularityMetric(a&&a.item)),br=Number(b&&b.popularityMetric||heroPopularityMetric(b&&b.item));
     if(ar!==br)return br-ar;
     const aq=Number(a&&a.qualityMetric||heroQualityMetric(a&&a.w,a&&a.h)),bq=Number(b&&b.qualityMetric||heroQualityMetric(b&&b.w,b&&b.h));
     if(aq!==bq)return bq-aq;
-    const ad=Number(a&&a.freshnessDay||heroFreshnessDay(a&&a.item)),bd=Number(b&&b.freshnessDay||heroFreshnessDay(b&&b.item));
-    if(ad!==bd)return bd-ad;
     return Number(b&&b.finalScore||0)-Number(a&&a.finalScore||0);
   }
   function heroResolutionHint(item,url,index){
@@ -767,11 +767,9 @@
       function finish(value){if(done)return;done=true;clearTimeout(timer);img.onload=null;img.onerror=null;resolve(value);}
       img.onload=function(){
         const w=Number(img.naturalWidth||0),h=Number(img.naturalHeight||0);
-        // V46: quality is a ranking tier, not a hard rejection gate. A valid
-        // lower-resolution image may be used only as a temporary/last-resort
-        // hero so the hero never goes blank while 1080p/720p assets are absent
-        // or still being generated.
-        finish(w>=320&&h>=180?{url,w,h}:null);
+        // V50: hero images have a hard HD floor. Rail thumbnails may be
+        // smaller, but the expanded hero must never upscale a card thumbnail.
+        finish(w>=1280&&h>=720?{url,w,h}:null);
       };
       img.onerror=function(){finish(null);};
       img.decoding='async';
@@ -920,11 +918,9 @@
     return thumbnailExplicitlyPending(item)?260:0;
   }
 
-  // V47 hero runtime: the hero is selected from the same content that actually
-  // reaches the front rails. Snapshot candidates are still considered, but a
-  // successfully rendered rail card is the strongest source of truth. This
-  // removes the V45/V46 failure mode where the hero pool could be empty even
-  // while valid cards were already visible on the page.
+  // Hero is the expanded playback surface for an actual movie/drama card.
+  // Trending is deliberately excluded because that rail also mixes variety/music.
+  const HERO_ALLOWED_SECTIONS=new Set(['media-movie','media-drama']);
   const heroRuntime={
     rotateKeys:[],sectionMap:null,timer:null,running:false,rerun:false,
     currentItem:null,currentUrl:'',currentTier:-1,currentScore:-Infinity,
@@ -967,6 +963,7 @@
       if(!card||card.getAttribute('data-placeholder')==='true')return;
       const line=card.closest&&card.closest('[data-psom-key^="media-"]');
       const section=canonKey(line&&line.getAttribute('data-psom-key')||'');
+      if(!HERO_ALLOWED_SECTIONS.has(section))return;
       const img=q('img',card);
       if(!img||!img.naturalWidth||!img.naturalHeight)return;
       let item=card.__igdcMediaItem;
@@ -989,6 +986,7 @@
     const rows=[];
     const sectionKeys=Object.keys(sectionMap||{}).map(canonKey).filter((key)=>/^media-/.test(key));
     for(const key of sectionKeys){
+      if(!HERO_ALLOWED_SECTIONS.has(key))continue;
       const items=extractItems(sectionMap[key]);
       for(const item of items.slice(0,120)){
         if(!heroItemEligible(item,null))continue;
@@ -1014,8 +1012,8 @@
 
   function commitHeroChoice(heroImg,best){
     if(!heroImg||!best||!best.item||!best.url||best.tier<2)return false;
-    // Compare with the same policy used for selection: ranking/popularity first,
-    // verified resolution second, freshness third. The 1280x720 floor is hard.
+    // Compare with the same policy used for selection: freshness first,
+    // ranking/hotness second, verified resolution third. The 1280x720 floor is hard.
     const currentItem=heroRuntime.currentItem;
     if(currentItem&&heroRuntime.currentUrl){
       const current={
@@ -1062,19 +1060,20 @@
     const heroImg=q('.hero img');
     if(!heroImg)return false;
 
-    const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey));
+    const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey).filter((key)=>HERO_ALLOWED_SECTIONS.has(key)));
+    HERO_ALLOWED_SECTIONS.forEach((key)=>preferred.add(key));
     const pool=mergeHeroRows(preferred,sectionMap);
     if(!pool.length)return false;
 
     pool.sort((a,b)=>{
-      // Pre-probe ordering mirrors the requested hero policy as closely as possible:
-      // ranking/popularity first, known HD hint second, freshness third.
+      // Requested hero policy: newest movie/drama first, then hot/ranked,
+      // then verified image quality. Image quality still has a 1280x720 floor.
+      const ad=heroFreshnessDay(a.item),bd=heroFreshnessDay(b.item);
+      if(ad!==bd)return bd-ad;
       const ar=heroPopularityMetric(a.item),br=heroPopularityMetric(b.item);
       if(ar!==br)return br-ar;
       const aq=heroResolutionTier(a.renderedW,a.renderedH),bq=heroResolutionTier(b.renderedW,b.renderedH);
       if(aq!==bq)return bq-aq;
-      const ad=heroFreshnessDay(a.item),bd=heroFreshnessDay(b.item);
-      if(ad!==bd)return bd-ad;
       const as=heroRankScore(a.item)+(a.preferred?80:0)+(a.domReady?140:0)-heroPendingPenalty(a.item);
       const bs=heroRankScore(b.item)+(b.preferred?80:0)+(b.domReady?140:0)-heroPendingPenalty(b.item);
       return bs-as;
@@ -1114,7 +1113,7 @@
     function chooseBest(rows){
       const valid=rows.filter((row)=>row&&row.tier>=2);
       if(!valid.length)return null;
-      // Ranking/popularity > actual resolution > freshness (720p minimum).
+      // Freshness > ranking/hotness > actual resolution (720p minimum).
       return valid.slice().sort(heroResolvedCompare)[0]||null;
     }
     async function checkedCandidate(candidate,timeoutMs){
@@ -1265,11 +1264,6 @@
   sectionMap['media-trending']={items:mixed.slice(0,50)};
 })();
 
-    // Hero quality probing runs independently. It must never hold back the
-    // section rails while high-resolution candidates are being verified.
-    const heroRotateFrom=snapshot&&snapshot.hero&&(snapshot.hero.rotateFrom||snapshot.hero.source);
-    scheduleHeroRefresh(heroRotateFrom,sectionMap);
-
     // Apply every snapshot-backed rail immediately. Any optional feed fallback
     // is scheduled independently instead of serially blocking the following
     // sections. (Fallback is currently disabled in production.)
@@ -1285,6 +1279,12 @@
       }
     }
     if(fallbackJobs.length)Promise.allSettled(fallbackJobs).then(()=>lines.forEach(compactLine));
+
+    // Start hero selection only after the rail bind pass. The hero is therefore
+    // guaranteed to be an expansion of a successfully rendered movie/drama card.
+    const heroRotateFrom=snapshot&&snapshot.hero&&(snapshot.hero.rotateFrom||snapshot.hero.source);
+    scheduleHeroRefresh(heroRotateFrom,sectionMap);
+
     // Async image decode/recovery and any later renderer must not be allowed to
     // reintroduce Sample/real interleaving. Re-compact a few times after the
     // initial mapping as an additional deterministic safety net.
@@ -1294,7 +1294,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='4.8.0-hero-latest-rank-quality';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.0.0-hero-movie-drama-latest-hot-hd';
 })();
 
 

@@ -10,13 +10,14 @@
 const crypto=require("crypto");
 const SearchBankEngine=require("../search-bank-engine.js");
 
-const VERSION="media-searchbank-release-adapter-v1.5.0-thumb-required-front-safe";
+const VERSION="media-searchbank-release-adapter-v1.6.0-psom-contract-content-ready";
 const OWNER="media-release-searchbank-adapter";
 const SLOT_OWNER="media-snapshot-publish";
 const MANUAL_SECTIONS=Object.freeze([
   "media-movie","media-drama","media-thriller","media-romance","media-variety",
   "media-documentary","media-animation","media-music","media-shorts"
 ]);
+const CANONICAL_MEDIA_ORDER=Object.freeze(["media-trending"].concat(MANUAL_SECTIONS));
 
 function text(value){return value==null?"":String(value).trim();}
 function plain(value){return value&&typeof value==="object"&&!Array.isArray(value)?value:{};}
@@ -48,6 +49,37 @@ function isPlaceholderThumbnail(value){
 function usableThumbnail(slot){
   const thumb=text(slot&&(slot.thumb||slot.thumbnail||slot.image));
   return /^https:\/\//i.test(thumb)&&!isPlaceholderThumbnail(thumb)?thumb:"";
+}
+function assertPsomContract(psom){
+  const doc=plain(psom),sectionOrder=plain(doc.sectionOrder);
+  const media=Array.isArray(sectionOrder.media)?sectionOrder.media.map(text).filter(Boolean):[];
+  const expected=CANONICAL_MEDIA_ORDER.slice();
+  if(stableStringify(media)!==stableStringify(expected)){
+    const error=new Error("media_psom_section_order_mismatch:expected="+expected.join("|")+":actual="+media.join("|"));
+    error.code="media_psom_section_order_mismatch";error.expected=expected;error.actual=media;throw error;
+  }
+  const labels=plain(plain(doc.sectionLabels).media);
+  const missingLabels=expected.filter((key)=>!text(labels[key]));
+  if(missingLabels.length){
+    const error=new Error("media_psom_section_labels_missing:"+missingLabels.join(","));
+    error.code="media_psom_section_labels_missing";error.missing=missingLabels;throw error;
+  }
+  return{ok:true,order:expected,manualSections:MANUAL_SECTIONS.slice(),trendingSection:"media-trending"};
+}
+function assertReleaseSectionContract(snapshot){
+  const sections=plain(snapshot&&snapshot.sections),unknown=[];
+  Object.entries(sections).forEach(([key,section])=>{
+    if(!/^media-/i.test(key)||CANONICAL_MEDIA_ORDER.includes(key))return;
+    if(slotsOf(section).some((slot)=>slot&&slot.managedBy===SLOT_OWNER))unknown.push(key);
+  });
+  const trendingManaged=slotsOf(sections["media-trending"]).filter((slot)=>slot&&slot.managedBy===SLOT_OWNER);
+  if(trendingManaged.length){
+    const error=new Error("media_trending_must_be_automatic");error.code="media_trending_must_be_automatic";throw error;
+  }
+  if(unknown.length){
+    const error=new Error("media_release_unknown_sections:"+unknown.join(","));error.code="media_release_unknown_sections";error.sections=unknown;throw error;
+  }
+  return true;
 }
 
 function releaseInfo(release){
@@ -152,6 +184,7 @@ function buildSearchBankDocument(existingBank,release){
   const coreApi=assertSearchBankCoreApi();
   const info=releaseInfo(release),snapshot=plain(release&&release.snapshot);
   if(!info.releaseId||!info.requestHash)throw new Error("media_release_identity_missing");
+  assertReleaseSectionContract(snapshot);
   const desired=desiredBySection(snapshot),items=[];
   MANUAL_SECTIONS.forEach((sectionKey)=>{
     desired[sectionKey].forEach((slot,index)=>{
@@ -263,9 +296,17 @@ function decorateEngineSnapshot(engineSnapshot,release,engineReport,searchBankHa
   });
   if(problems.length){const error=new Error(problems.join(","));error.code="media_snapshot_engine_verification_failed";error.problems=problems;throw error;}
   const state=sectionState(next);
+  const contentReady=state.totalManaged>0;
+  next.hero=Object.assign({},plain(next.hero),{
+    enabled:true,
+    source:["media-movie","media-drama"],
+    rotateFrom:["media-movie","media-drama"]
+  });
   next.meta=Object.assign({},plain(next.meta),{
     generatedAt:new Date().toISOString(),generatedBy:"snapshot-engine+media-release-adapter",
+    validated:true,crossChecked:true,pipelineReady:true,contentReady,sampleOnly:!contentReady,ready:contentReady,
     filled:Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,state.sections[key].managedCount])),
+    supplyState:{contentReady,sampleOnly:!contentReady,totalManagedSlots:state.totalManaged,manualSections:MANUAL_SECTIONS.length,frontVisiblePerSection:50,snapshotCapacityPerSection:100},
     releasePipeline:{
       version:VERSION,status:"applied",releaseId:info.releaseId,requestHash:info.requestHash,
       action:info.action,sectionKey:info.sectionKey,requestedAt:info.requestedAt,requestedBy:info.requestedBy,
@@ -295,7 +336,7 @@ function buildPipelineReport(input){
 }
 
 module.exports={
-  VERSION,OWNER,SLOT_OWNER,MANUAL_SECTIONS,text,plain,clone,sha256,slotsOf,managedSlot,slotIdOf,
-  releaseInfo,desiredBySection,assertSearchBankCoreApi,buildEngineTemplate,buildSearchBankDocument,ownedItems,sectionState,
+  VERSION,OWNER,SLOT_OWNER,MANUAL_SECTIONS,CANONICAL_MEDIA_ORDER,text,plain,clone,sha256,slotsOf,managedSlot,slotIdOf,
+  assertPsomContract,assertReleaseSectionContract,releaseInfo,desiredBySection,assertSearchBankCoreApi,buildEngineTemplate,buildSearchBankDocument,ownedItems,sectionState,
   decorateEngineSnapshot,buildPipelineReport
 };

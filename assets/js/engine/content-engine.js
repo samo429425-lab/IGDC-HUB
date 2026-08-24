@@ -359,7 +359,8 @@
           returning:false,
           returnHref:'',
           frame:null,
-          sentinel:null
+          sentinel:null,
+          focusTimer:0
         };
       }
 
@@ -383,13 +384,63 @@
         return s;
       }
 
+      function stopFocusGuard(){
+        if (state.focusTimer){
+          try{ p.clearInterval(state.focusTimer); }catch(_){}
+          state.focusTimer = 0;
+        }
+      }
+
       function focusParentShell(){
         if (!state.active || state.returning) return;
-        try{ p.focus(); }catch(_){}
+        try{
+          if (typeof pd.hasFocus === 'function' && !pd.hasFocus()) return;
+        }catch(_){}
         try{
           const s = ensureSentinel();
-          if (s && s.focus) s.focus({preventScroll:true});
+          if (pd.activeElement === state.frame || pd.activeElement === pd.body || !pd.activeElement){
+            if (s && s.focus) s.focus({preventScroll:true});
+          }
         }catch(_){}
+      }
+
+      function startFocusGuard(){
+        stopFocusGuard();
+        state.focusTimer = p.setInterval(function(){
+          if (!state.active || state.returning){
+            stopFocusGuard();
+            return;
+          }
+          try{
+            if (pd.activeElement === state.frame) focusParentShell();
+          }catch(_){}
+        }, 100);
+      }
+
+      function goBackLikeBrowser(){
+        if (!state.active || state.returning) return;
+        state.returning = true;
+        state.active = false;
+        stopFocusGuard();
+
+        // Use the joint browser history. This is the same navigation action
+        // as clicking the browser's upper-left Back arrow.
+        let moved = false;
+        try{
+          if (p.history && typeof p.history.back === 'function'){
+            p.history.back();
+            moved = true;
+          }
+        }catch(_){}
+
+        // Fallback only when browser history cannot be used.
+        if (!moved && state.frame && state.returnHref){
+          try{ state.frame.src = state.returnHref; }catch(_){}
+        }
+
+        p.setTimeout(function(){
+          state.returning = false;
+        }, 500);
       }
 
       if (!state.installed){
@@ -397,56 +448,56 @@
 
         p.addEventListener('keydown', function(ev){
           if (!state.active || state.returning || ev.key !== 'Escape') return;
-          state.returning = true;
-          state.active = false;
           try{ ev.preventDefault(); }catch(_){}
           try{ ev.stopPropagation(); }catch(_){}
+          goBackLikeBrowser();
+        }, true);
 
-          // Match the browser Back button: one Escape returns the mainFrame
-          // from the seller product page to the exact product-list history entry.
-          let moved = false;
-          try{
-            if (p.history && typeof p.history.back === 'function'){
-              p.history.back();
-              moved = true;
-            }
-          }catch(_){}
+        // A cross-origin seller page inside mainFrame owns keyboard focus after
+        // navigation/clicks. Reclaim only keyboard focus (not mouse behavior)
+        // so Escape always reaches the IGDC shell.
+        p.addEventListener('blur', function(){
+          if (!state.active || state.returning) return;
+          p.setTimeout(focusParentShell, 0);
+          p.setTimeout(focusParentShell, 60);
+        }, true);
 
-          // Defensive fallback only if browser history is unavailable.
-          if (!moved && state.frame && state.returnHref){
-            try{ state.frame.src = state.returnHref; }catch(_){}
-          }
-
-          p.setTimeout(function(){
-            state.returning = false;
-          }, 500);
+        pd.addEventListener('focusout', function(){
+          if (!state.active || state.returning) return;
+          p.setTimeout(focusParentShell, 0);
         }, true);
 
         frame.addEventListener('load', function(){
           if (!state.active || state.returning) return;
 
-          // Same-origin list page means the return already completed.
+          // If the frame is readable and is back on an IGDC page, the return
+          // has completed; disable the Escape guard.
           try{
             const href = frame.contentWindow && frame.contentWindow.location
               ? String(frame.contentWindow.location.href || '')
               : '';
             if (href && !/\/content\.html(?:[?#]|$)/i.test(href)){
-              state.active = false;
-              return;
+              const u = new URL(href, p.location.href);
+              if (u.origin === p.location.origin){
+                state.active = false;
+                stopFocusGuard();
+                return;
+              }
             }
           }catch(_){
-            // Cross-origin seller page: reclaim keyboard focus in the IGDC shell
-            // so Escape is available immediately without clicking the browser UI.
+            // Cross-origin seller page: keep the Escape guard active.
           }
 
           p.setTimeout(focusParentShell, 0);
-          p.setTimeout(focusParentShell, 120);
+          p.setTimeout(focusParentShell, 80);
+          p.setTimeout(focusParentShell, 250);
+          startFocusGuard();
         }, true);
       }
 
-      // The product click originated inside mainFrame; once the seller page replaces
-      // content.html, its load event will focus the shell sentinel for Escape.
+      // Arm the guard before content.html is replaced by the seller page.
       p.setTimeout(focusParentShell, 0);
+      startFocusGuard();
     }catch(_){}
   }
 

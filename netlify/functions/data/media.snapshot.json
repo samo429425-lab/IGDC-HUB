@@ -5,13 +5,11 @@
     "enabled": true,
     "rotation": true,
     "source": [
-      "trending_now",
-      "latest_movie",
-      "latest_drama"
+      "media-movie",
+      "media-drama"
     ],
     "current": null,
     "rotateFrom": [
-      "media-trending",
       "media-movie",
       "media-drama"
     ],
@@ -65787,9 +65785,20 @@
   "meta": {
     "validated": true,
     "crossChecked": true,
-    "ready": true,
-    "version": "v6.keys",
-    "generatedAt": "2026-02-16T23:31:13.104657Z"
+    "ready": false,
+    "version": "v7.content-state",
+    "generatedAt": "2026-02-16T23:31:13.104657Z",
+    "pipelineReady": true,
+    "contentReady": false,
+    "sampleOnly": true,
+    "supplyState": {
+      "contentReady": false,
+      "sampleOnly": true,
+      "totalManagedSlots": 0,
+      "manualSections": 9,
+      "frontVisiblePerSection": 50,
+      "snapshotCapacityPerSection": 100
+    }
   },
   "engine_layer": {
     "cs_version": "CS1",
