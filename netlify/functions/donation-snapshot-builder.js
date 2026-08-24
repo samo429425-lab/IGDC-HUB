@@ -357,10 +357,6 @@ function categoryFromSection(sectionKey){
    - semantic category only
 ========================= */
 function classifyCategory(rec){
-  if(DonationResearchPolicy){
-    const inferred = DonationResearchPolicy.inferSection(rec, pickFirst(rec.psom_key, rec.bind?.section, rec.section));
-    if(inferred) return DonationResearchPolicy.categoryForSection(inferred);
-  }
   const explicitCategory = pickFirst(rec.semantic_category, rec.taxonomy?.category);
   if(isValidCategoryKey(explicitCategory)) return explicitCategory;
 
@@ -465,13 +461,6 @@ function verifyHeuristic(rec){
     score -= 10;
   }
 
-  const thumb = safeUrl(pickFirst(rec.media?.thumb, rec.thumbnail, rec.thumb, rec.image, rec.og_image, rec.logo, rec.logo_url));
-  if(thumb && !/placeholder|sample/i.test(thumb)) score += 8;
-
-  const sourceAuthority = Number(rec.source?.authority || rec.authority || rec.trustScore || rec.trust_score || 0);
-  if(Number.isFinite(sourceAuthority) && sourceAuthority > 0) score += Math.min(12, Math.max(0, sourceAuthority <= 1 ? sourceAuthority * 12 : sourceAuthority / 10));
-  if(rec.officialSource === true || rec.institutionVerified === true || rec.producerVerified === true || rec.org?.verified === true) score += 15;
-
   const name = cleanName(pickFirst(rec.org_name, rec.name, rec.title));
   if(name){
     score += 10;
@@ -524,11 +513,9 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     youtubeThumb
   )) || "/assets/img/placeholder.png";
 
-  const sourceNameRaw = pickFirst(rec.source?.name, rec.source, rec.collector?.engine, rec.engine, "bank");
-  const sourceLooksSeed = /seed|sample|placeholder|demo|mock/i.test(sourceNameRaw);
-  const explicitBankId = pickFirst(rec.bank_ref?.record_id, rec.record_id, rec.searchBankId, rec.search_bank_id);
-  const bankId = (!sourceLooksSeed && explicitBankId) ? explicitBankId : null;
-  const sourceName = sourceNameRaw;
+  const sourceName = pickFirst(rec.source?.name, rec.source, rec.collector?.engine, rec.engine, "bank");
+  const sourceLooksSeed = /seed|sample|placeholder|demo|mock/i.test(String(sourceName || ""));
+  const bankId = sourceLooksSeed ? null : pickFirst(rec.bank_ref?.record_id, rec.record_id, rec.searchBankId, rec.search_bank_id, rec.id);
   const tags = Array.isArray(rec.tags) ? rec.tags : (Array.isArray(rec.keywords) ? rec.keywords : []);
   const vh = verifyHeuristic({ ...rec, org_name, homepage });
 
@@ -536,13 +523,15 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
   const uid = `donation:${sectionKey}:${sha1(uidBase).slice(0,12)}`;
 
   const managedPublished = rec.__donationManagedPublished === true || rec.frontApproved === true || rec.donationQueue?.stage === "published";
+  const videoLike = sectionKey === "donation-global" && DonationResearchPolicy && DonationResearchPolicy.looksLikeVideo(rec);
+  const mediaUrl = videoLike && DonationResearchPolicy ? (DonationResearchPolicy.candidateUrls(rec)[0] || homepage || null) : null;
+
+  const sourceRankScore = sourceLooksSeed ? 0 : (rec.rank?.score ? Number(rec.rank.score) : 0);
   const rankScore =
     (vh.score * 10) +
     (bankId ? 500 : 0) +
     (managedPublished ? 2000000 : 0) +
-    (rec.rank?.score ? Number(rec.rank.score) : 0);
-  const videoLike = sectionKey === "donation-global" && DonationResearchPolicy && DonationResearchPolicy.looksLikeVideo(rec);
-  const mediaUrl = videoLike && DonationResearchPolicy ? (DonationResearchPolicy.candidateUrls(rec)[0] || homepage || null) : null;
+    sourceRankScore;
 
   const i18n = {
     lang: rec.i18n?.lang || rec.lang || rec.language || null,
@@ -705,7 +694,7 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
       schema_version: 8,
       source: sourceName || "bank",
       managed_published: managedPublished,
-      replaceable: !managedPublished,
+      replaceable: true,
       created_at: nowIso(),
       updated_at: nowIso()
     }
@@ -719,14 +708,12 @@ function dedupe(items){
   const best = new Map();
 
   for(const it of items){
-    const sectionKey = toStr(it?.psom_key || it?.section_category || it?.section || DEFAULT_SECTION_KEY).trim() || DEFAULT_SECTION_KEY;
     const keyHost = hostOf(it?.org?.homepage || it?.link?.url || "");
     const keyName = normalizeKey(it?.org?.name || it?.title || "");
 
-    // De-duplicate inside a lane, not across all donation lanes.  One
-    // organization may legitimately serve both relief and education, etc.
+    const sectionKey = toStr(it?.psom_key || it?.section_category || it?.section || DEFAULT_SECTION_KEY).trim() || DEFAULT_SECTION_KEY;
     const k = keyHost ? `${sectionKey}|h:${keyHost}` : `${sectionKey}|n:${keyName}`;
-    if(!k || k === "n:") continue;
+    if(!k || k.endsWith("|n:")) continue;
 
     const prev = best.get(k);
     if(!prev){
@@ -751,20 +738,8 @@ function dedupe(items){
   return Array.from(best.values());
 }
 
-function explicitPublicApproval(rec){
-  const stage = toStr(rec?.donationQueue?.stage || rec?.adminStage || rec?.front_stage).trim().toLowerCase();
-  return rec?.__donationManagedPublished === true || rec?.frontApproved === true || rec?.adminReview?.approved === true || stage === "published";
-}
-
-function usablePublicRecord(rec, sectionKey){
-  if(!rec || !explicitPublicApproval(rec)) return false;
-  if(DonationResearchPolicy){
-    if(DonationResearchPolicy.isPlaceholder(rec)) return false;
-    if(sectionKey === "donation-mission" && DonationResearchPolicy.missionExcluded(rec)) return false;
-    return DonationResearchPolicy.usablePublicCandidate(rec, sectionKey);
-  }
-  const u = safeUrl(pickFirst(rec.url, rec.link?.url, rec.org?.homepage, rec.homepage, rec.website));
-  return /^https:\/\//i.test(u) && !/placeholder|sample/i.test(toStr(rec.title));
+function isMissionExcludedRecord(rec, sectionKey){
+  return Boolean(DonationResearchPolicy && sectionKey === "donation-mission" && DonationResearchPolicy.missionExcluded(rec));
 }
 
 async function loadManagedPublishedCandidates(){
@@ -806,40 +781,45 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
 
   const seedSectionDefs = normalizeSeedSectionDefs(seed || {});
   const limits = {};
-  // Canonical front capacity is shared with the donation admin policy.  The
-  // legacy seed metadata still says 100 for every lane even though the actual
-  // HTML and seed item counts are 100 for global and 80 for the other lanes.
-  // Do not let that stale metadata overfill the builder output.
+  seedSectionDefs.forEach(s=>{
+    if(s && s.psom_key && SECTION_KEYS.includes(s.psom_key)){
+      limits[s.psom_key] = Number(s.slot_limit || s.slotLimit || 100);
+    }
+  });
+
   SECTION_KEYS.forEach(k=>{
-    limits[k] = Number(DonationResearchPolicy?.SECTION_CAPACITY?.[k] || (k === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 80));
+    if(!limits[k]) limits[k] = (k === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 100);
   });
 
   const psomDonation = getPsomDonationInfo(psomList);
 
   const candidates = [];
 
+  // Manual/admin final matching is a priority overlay only. It never disables
+  // SearchBank's normal bank-first automatic replacement flow.
   const managedList = managed && Array.isArray(managed.items) ? managed.items : [];
   managedList.forEach((rec, i)=>{
     const semanticCategory = classifyCategory(rec);
     const sectionKey = resolveSection(rec, semanticCategory);
-    if(!usablePublicRecord(rec, sectionKey)) return;
+    if(isMissionExcludedRecord(rec, sectionKey)) return;
     candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i, psomDonation));
   });
 
-  // Raw SearchBank results remain research material until an administrator or
-  // the donation AI workflow explicitly promotes them to the published stage.
   const src = bank && Array.isArray(bank.items) ? bank.items : [];
   const donationList = src.filter(x => {
     const channel = String(x?.channel || x?.bank_ref?.channel || "").toLowerCase();
+    if(channel === "donation") return true;
+
     const sec = pickFirst(x?.psom_key, x?.bind?.section, x?.section);
-    if(channel !== "donation" && !isValidSectionKey(sec)) return false;
-    const sectionKey = isValidSectionKey(sec) ? sec : resolveSection(x, classifyCategory(x));
-    return usablePublicRecord(x, sectionKey);
+    if(isValidSectionKey(sec)) return true;
+
+    return false;
   });
 
   donationList.forEach((rec, i)=>{
     const semanticCategory = classifyCategory(rec);
     const sectionKey = resolveSection(rec, semanticCategory);
+    if(isMissionExcludedRecord(rec, sectionKey)) return;
     candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i + managedList.length, psomDonation));
   });
 
@@ -856,7 +836,7 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
   optItems.forEach((rec, i)=>{
     const semanticCategory = classifyCategory(rec);
     const sectionKey = resolveSection(rec, semanticCategory);
-    if(!usablePublicRecord(rec, sectionKey)) return;
+    if(isMissionExcludedRecord(rec, sectionKey)) return;
     candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i + managedList.length + donationList.length, psomDonation));
   });
 
@@ -920,7 +900,7 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
         copy.meta.source = copy.meta.source || "seed";
         copy.meta.replaceable = true;
         copy.meta.updated_at = generatedAt;
-        copy.bank_ref = { source:"seed", channel:"donation", record_id:null };
+        if(!copy.bank_ref) copy.bank_ref = { source:"search-bank", channel:"donation", record_id:null };
         if(!copy.rank) copy.rank = { global:0, section:0, score:0 };
         if(!copy.verify) copy.verify = { status:"pending", score:0, engine:"seed", checked_at: generatedAt };
         if(!copy.org) copy.org = { id:null, name: copy.title || null, legal_name:null, homepage: copy.link?.url || null, country:null, verified:false };
@@ -966,13 +946,13 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
       schema:"donation.snapshot.enterprise.v7",
       generated_at: generatedAt,
       producer:"donation-snapshot-builder.enterprise.v8.upgraded",
-      mode:"managed-published-first-seed-fallback",
+      mode:"bank-first-seed-fallback",
       version: 7,
       builder_version: 8.5,
       input_sources:{
-        managed_publication: Boolean(managed && Array.isArray(managed.items)),
-        managed_publication_count: managed && Array.isArray(managed.items) ? managed.items.length : 0,
         search_bank: Boolean(bank),
+        managed_priority_overlay: Boolean(managed && Array.isArray(managed.items)),
+        managed_priority_count: managed && Array.isArray(managed.items) ? managed.items.length : 0,
         optional: Object.keys(optional||{})
       }
     },
@@ -1018,10 +998,6 @@ exports.handler = async function(){
   const managed = await loadManagedPublishedCandidates();
 
   const optional = {
-    // Curated official-homepage baseline is donation-only and remains fully
-    // replaceable by approved SearchBank/admin candidates.  Global news is not
-    // statically seeded here; that lane stays dynamic and video-first.
-    "donation.directory.curated.json": loadOptional("donation.directory.curated.json"),
     "maru-global-insight.snapshot.json": loadOptional("maru-global-insight.snapshot.json"),
     "maru-search.snapshot.json": loadOptional("maru-search.snapshot.json")
   };
@@ -1036,8 +1012,5 @@ exports.handler = async function(){
   return ok(snap);
 };
 
-// Test/diagnostic exports; Netlify handler behavior is unchanged.
 exports.buildSnapshot = buildSnapshot;
 exports.normalizeRecord = normalizeRecord;
-exports.usablePublicRecord = usablePublicRecord;
-exports.explicitPublicApproval = explicitPublicApproval;

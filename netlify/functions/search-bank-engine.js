@@ -726,7 +726,7 @@ function slotAcceptsItem(item, ctx){
     if(DonationResearchPolicy){
       const relevance = DonationResearchPolicy.sectionRelevance(item, donationSection);
       if(donationSection === "donation-mission" && DonationResearchPolicy.missionExcluded(item)) return false;
-      if(donationSection === "donation-global") return relevance > 0 || DonationResearchPolicy.looksLikeVideo(item);
+      if(donationSection === "donation-global") return relevance > 2;
       return relevance > -10 || ["organization","institution","campaign","article"].includes(entityType) || ["ngo","religious_org","donation","public_institution"].includes(sector);
     }
     if(!slot.isGlobalNews) return ["organization","institution","campaign"].includes(entityType) || ["ngo","religious_org","donation","public_institution"].includes(sector) || /ngo|charity|relief|foundation|mission|church|organization|official/.test(text);
