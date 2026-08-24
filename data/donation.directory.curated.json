@@ -1,0 +1,5267 @@
+{
+  "schema": "igdc.donation.directory.curated.v1",
+  "generated_at": "2026-08-24T08:30:00Z",
+  "purpose": "Stable official-homepage baseline for institutional donation lanes. Global news remains dynamic/video-first and is intentionally not statically populated here.",
+  "live_verification": "required_by_runtime_research_pipeline",
+  "sections": {
+    "donation-ngo": 18,
+    "donation-mission": 22,
+    "donation-service": 14,
+    "donation-relief": 15,
+    "donation-education": 14,
+    "donation-environment": 9,
+    "donation-others": 13
+  },
+  "items": [
+    {
+      "id": "curated:donation-ngo:e826d288a45e",
+      "title": "UNICEF",
+      "name": "UNICEF",
+      "summary": "United Nations children and humanitarian support.",
+      "url": "https://www.unicef.org/",
+      "homepage": "https://www.unicef.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "UNICEF",
+        "homepage": "https://www.unicef.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/unicef-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 99
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:06d5a05e7cf6",
+      "title": "UNHCR",
+      "name": "UNHCR",
+      "summary": "United Nations refugee protection and emergency support.",
+      "url": "https://www.unhcr.org/",
+      "homepage": "https://www.unhcr.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "UNHCR",
+        "homepage": "https://www.unhcr.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/unhcr-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 98
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:f4939152171f",
+      "title": "World Food Programme",
+      "name": "World Food Programme",
+      "summary": "Global food assistance and hunger response.",
+      "url": "https://www.wfp.org/",
+      "homepage": "https://www.wfp.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "World Food Programme",
+        "homepage": "https://www.wfp.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/wfp-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 97
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:243ad1bdfce1",
+      "title": "UN OCHA",
+      "name": "UN OCHA",
+      "summary": "United Nations humanitarian coordination and emergency response.",
+      "url": "https://www.unocha.org/",
+      "homepage": "https://www.unocha.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "UN OCHA",
+        "homepage": "https://www.unocha.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/unocha-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 96
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:72f49a0bb523",
+      "title": "IFRC",
+      "name": "IFRC",
+      "summary": "International Red Cross and Red Crescent humanitarian network.",
+      "url": "https://www.ifrc.org/",
+      "homepage": "https://www.ifrc.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "IFRC",
+        "homepage": "https://www.ifrc.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/ifrc-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 95
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:6accfb63c1c6",
+      "title": "ICRC",
+      "name": "ICRC",
+      "summary": "Humanitarian protection and assistance in armed conflict.",
+      "url": "https://www.icrc.org/",
+      "homepage": "https://www.icrc.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "ICRC",
+        "homepage": "https://www.icrc.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/icrc-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 94
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:ce63aa8cba90",
+      "title": "Médecins Sans Frontières",
+      "name": "Médecins Sans Frontières",
+      "summary": "Independent international medical humanitarian organization.",
+      "url": "https://www.msf.org/",
+      "homepage": "https://www.msf.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Médecins Sans Frontières",
+        "homepage": "https://www.msf.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/msf-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 93
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:fb46233bc73f",
+      "title": "Save the Children International",
+      "name": "Save the Children International",
+      "summary": "International child protection, health and education support.",
+      "url": "https://www.savethechildren.net/",
+      "homepage": "https://www.savethechildren.net/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Save the Children International",
+        "homepage": "https://www.savethechildren.net/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/savethechildren-net.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 92
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:b366199bc031",
+      "title": "CARE International",
+      "name": "CARE International",
+      "summary": "International humanitarian and development organization.",
+      "url": "https://www.care-international.org/",
+      "homepage": "https://www.care-international.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "CARE International",
+        "homepage": "https://www.care-international.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/care-international-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 91
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:40277a978327",
+      "title": "Oxfam International",
+      "name": "Oxfam International",
+      "summary": "International humanitarian and poverty-focused confederation.",
+      "url": "https://www.oxfam.org/",
+      "homepage": "https://www.oxfam.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Oxfam International",
+        "homepage": "https://www.oxfam.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/oxfam-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 90
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:2530792f7305",
+      "title": "International Rescue Committee",
+      "name": "International Rescue Committee",
+      "summary": "Refugee, displacement and crisis recovery support.",
+      "url": "https://www.rescue.org/",
+      "homepage": "https://www.rescue.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "International Rescue Committee",
+        "homepage": "https://www.rescue.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/rescue-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 89
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:cf057a0c14ca",
+      "title": "Mercy Corps",
+      "name": "Mercy Corps",
+      "summary": "Humanitarian aid and community resilience in crisis regions.",
+      "url": "https://www.mercycorps.org/",
+      "homepage": "https://www.mercycorps.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Mercy Corps",
+        "homepage": "https://www.mercycorps.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/mercycorps-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 88
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:3e77af559e47",
+      "title": "Action Against Hunger",
+      "name": "Action Against Hunger",
+      "summary": "Hunger, nutrition and emergency humanitarian response.",
+      "url": "https://www.actionagainsthunger.org/",
+      "homepage": "https://www.actionagainsthunger.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Action Against Hunger",
+        "homepage": "https://www.actionagainsthunger.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/actionagainsthunger-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 87
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:d4d7a05f3a20",
+      "title": "Plan International",
+      "name": "Plan International",
+      "summary": "Children and girls focused international development organization.",
+      "url": "https://plan-international.org/",
+      "homepage": "https://plan-international.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Plan International",
+        "homepage": "https://plan-international.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/plan-international-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 86
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:ea3e3beb5e9d",
+      "title": "SOS Children's Villages International",
+      "name": "SOS Children's Villages International",
+      "summary": "Family-based care and support for vulnerable children.",
+      "url": "https://www.sos-childrensvillages.org/",
+      "homepage": "https://www.sos-childrensvillages.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "SOS Children's Villages International",
+        "homepage": "https://www.sos-childrensvillages.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/sos-childrensvillages-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 85
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:e75e684742cc",
+      "title": "Concern Worldwide",
+      "name": "Concern Worldwide",
+      "summary": "Humanitarian relief and extreme-poverty response.",
+      "url": "https://www.concern.net/",
+      "homepage": "https://www.concern.net/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Concern Worldwide",
+        "homepage": "https://www.concern.net/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/concern-net.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 84
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:f979b57748f8",
+      "title": "Habitat for Humanity",
+      "name": "Habitat for Humanity",
+      "summary": "Global housing and community development organization.",
+      "url": "https://www.habitat.org/",
+      "homepage": "https://www.habitat.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Habitat for Humanity",
+        "homepage": "https://www.habitat.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/habitat-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 83
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-ngo:f0b7507ed66d",
+      "title": "World Vision International",
+      "name": "World Vision International",
+      "summary": "Christian humanitarian, development and advocacy organization.",
+      "url": "https://www.wvi.org/",
+      "homepage": "https://www.wvi.org/",
+      "section": "donation-ngo",
+      "psom_key": "donation-ngo",
+      "category": "ngo",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "World Vision International",
+        "homepage": "https://www.wvi.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/wvi-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 82
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "ngo"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:b1b8cee858dd",
+      "title": "OMF International",
+      "name": "OMF International",
+      "summary": "International evangelical mission serving East Asia and diaspora communities.",
+      "url": "https://omf.org/",
+      "homepage": "https://omf.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "OMF International",
+        "homepage": "https://omf.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/omf-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 99
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:b41ecf75a5f5",
+      "title": "SIM International",
+      "name": "SIM International",
+      "summary": "International evangelical mission movement and sending organization.",
+      "url": "https://www.sim.org/",
+      "homepage": "https://www.sim.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "SIM International",
+        "homepage": "https://www.sim.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/sim-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 98
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:40cb3e9ad549",
+      "title": "WEC International",
+      "name": "WEC International",
+      "summary": "International evangelical mission movement.",
+      "url": "https://wecinternational.org/",
+      "homepage": "https://wecinternational.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "WEC International",
+        "homepage": "https://wecinternational.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/wecinternational-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 97
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:6aceb01ec604",
+      "title": "Operation Mobilisation",
+      "name": "Operation Mobilisation",
+      "summary": "International Christian mission and mobilization movement.",
+      "url": "https://www.om.org/",
+      "homepage": "https://www.om.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Operation Mobilisation",
+        "homepage": "https://www.om.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/om-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 96
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:235943723f0c",
+      "title": "Youth With A Mission",
+      "name": "Youth With A Mission",
+      "summary": "International interdenominational evangelical mission movement.",
+      "url": "https://ywam.org/",
+      "homepage": "https://ywam.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Youth With A Mission",
+        "homepage": "https://ywam.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/ywam-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 95
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:c5ad047bd9f0",
+      "title": "Cru",
+      "name": "Cru",
+      "summary": "International evangelical campus and mission movement.",
+      "url": "https://www.cru.org/",
+      "homepage": "https://www.cru.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Cru",
+        "homepage": "https://www.cru.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/cru-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 94
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:b2ffbbffae43",
+      "title": "Child Evangelism Fellowship",
+      "name": "Child Evangelism Fellowship",
+      "summary": "International evangelical ministry focused on children.",
+      "url": "https://www.cefonline.com/",
+      "homepage": "https://www.cefonline.com/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Child Evangelism Fellowship",
+        "homepage": "https://www.cefonline.com/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/cefonline-com.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 93
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:5671afd8947d",
+      "title": "Wycliffe Global Alliance",
+      "name": "Wycliffe Global Alliance",
+      "summary": "Global alliance supporting Bible translation movements.",
+      "url": "https://www.wycliffe.net/",
+      "homepage": "https://www.wycliffe.net/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Wycliffe Global Alliance",
+        "homepage": "https://www.wycliffe.net/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/wycliffe-net.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 92
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:8181879222c2",
+      "title": "Mission Aviation Fellowship",
+      "name": "Mission Aviation Fellowship",
+      "summary": "Christian aviation mission supporting remote communities and ministries.",
+      "url": "https://maf.org/",
+      "homepage": "https://maf.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Mission Aviation Fellowship",
+        "homepage": "https://maf.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/maf-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 91
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:b04503401d24",
+      "title": "Pioneers",
+      "name": "Pioneers",
+      "summary": "International evangelical mission agency serving unreached peoples.",
+      "url": "https://pioneers.org/",
+      "homepage": "https://pioneers.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Pioneers",
+        "homepage": "https://pioneers.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/pioneers-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 90
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:8a16602595cf",
+      "title": "SEND International",
+      "name": "SEND International",
+      "summary": "Evangelical mission agency serving cross-cultural ministry.",
+      "url": "https://send.org/",
+      "homepage": "https://send.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "SEND International",
+        "homepage": "https://send.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/send-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 89
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:0311338efda4",
+      "title": "TEAM",
+      "name": "TEAM",
+      "summary": "Global evangelical mission agency.",
+      "url": "https://team.org/",
+      "homepage": "https://team.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "TEAM",
+        "homepage": "https://team.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/team-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 88
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:755614035a29",
+      "title": "Ethnos360",
+      "name": "Ethnos360",
+      "summary": "Evangelical mission focused on unreached people groups.",
+      "url": "https://ethnos360.org/",
+      "homepage": "https://ethnos360.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Ethnos360",
+        "homepage": "https://ethnos360.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/ethnos360-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 87
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:84c26481afc6",
+      "title": "International Mission Board",
+      "name": "International Mission Board",
+      "summary": "Southern Baptist international mission organization.",
+      "url": "https://www.imb.org/",
+      "homepage": "https://www.imb.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "International Mission Board",
+        "homepage": "https://www.imb.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/imb-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 86
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:dcca0ea2a043",
+      "title": "Interserve",
+      "name": "Interserve",
+      "summary": "International evangelical mission fellowship serving Asia and the Arab world.",
+      "url": "https://www.interserve.org/",
+      "homepage": "https://www.interserve.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Interserve",
+        "homepage": "https://www.interserve.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/interserve-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 85
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:612febbf9184",
+      "title": "Mission to the World",
+      "name": "Mission to the World",
+      "summary": "Presbyterian Church in America international mission agency.",
+      "url": "https://mtw.org/",
+      "homepage": "https://mtw.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Mission to the World",
+        "homepage": "https://mtw.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/mtw-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 84
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:7d8cb2b378fa",
+      "title": "Crossworld",
+      "name": "Crossworld",
+      "summary": "Evangelical cross-cultural mission organization.",
+      "url": "https://crossworld.org/",
+      "homepage": "https://crossworld.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Crossworld",
+        "homepage": "https://crossworld.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/crossworld-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 83
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:568baf8cea42",
+      "title": "Serge",
+      "name": "Serge",
+      "summary": "Evangelical mission-sending and church-planting organization.",
+      "url": "https://serge.org/",
+      "homepage": "https://serge.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Serge",
+        "homepage": "https://serge.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/serge-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 82
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:dd9bb4b29dfe",
+      "title": "KWMA",
+      "name": "KWMA",
+      "summary": "Korea World Missions Association.",
+      "url": "https://kwma.org/",
+      "homepage": "https://kwma.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "KWMA",
+        "homepage": "https://kwma.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/kwma-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 81
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:dfae48bf8667",
+      "title": "GMS",
+      "name": "GMS",
+      "summary": "Presbyterian international mission organization in Korea.",
+      "url": "https://www.gms.or.kr/",
+      "homepage": "https://www.gms.or.kr/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "GMS",
+        "homepage": "https://www.gms.or.kr/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/gms-or-kr.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 80
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:2c86ec34f8eb",
+      "title": "Korea Campus Crusade for Christ",
+      "name": "Korea Campus Crusade for Christ",
+      "summary": "Korean evangelical campus mission movement.",
+      "url": "https://kccc.org/",
+      "homepage": "https://kccc.org/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Korea Campus Crusade for Christ",
+        "homepage": "https://kccc.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/kccc-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 79
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-mission:ae497e642755",
+      "title": "IVF Korea",
+      "name": "IVF Korea",
+      "summary": "Korean evangelical student mission movement.",
+      "url": "https://ivf.or.kr/",
+      "homepage": "https://ivf.or.kr/",
+      "section": "donation-mission",
+      "psom_key": "donation-mission",
+      "category": "mission",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "IVF Korea",
+        "homepage": "https://ivf.or.kr/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/ivf-or-kr.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 78
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "mission"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:f979b57748f8",
+      "title": "Habitat for Humanity",
+      "name": "Habitat for Humanity",
+      "summary": "Volunteer-led housing and community development.",
+      "url": "https://www.habitat.org/",
+      "homepage": "https://www.habitat.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Habitat for Humanity",
+        "homepage": "https://www.habitat.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/habitat-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 99
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:173fc460014a",
+      "title": "Mercy Ships",
+      "name": "Mercy Ships",
+      "summary": "Hospital ship medical service and surgical care.",
+      "url": "https://www.mercyships.org/",
+      "homepage": "https://www.mercyships.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Mercy Ships",
+        "homepage": "https://www.mercyships.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/mercyships-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 98
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:3ff95842b53d",
+      "title": "CURE International",
+      "name": "CURE International",
+      "summary": "Christian pediatric surgical hospitals and medical care.",
+      "url": "https://cure.org/",
+      "homepage": "https://cure.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "CURE International",
+        "homepage": "https://cure.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/cure-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 97
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:99858517036a",
+      "title": "Medical Teams International",
+      "name": "Medical Teams International",
+      "summary": "Medical and humanitarian volunteer response.",
+      "url": "https://www.medicalteams.org/",
+      "homepage": "https://www.medicalteams.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Medical Teams International",
+        "homepage": "https://www.medicalteams.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/medicalteams-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 96
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:8ecd0eafbd37",
+      "title": "Water Mission",
+      "name": "Water Mission",
+      "summary": "Christian engineering and safe-water service organization.",
+      "url": "https://watermission.org/",
+      "homepage": "https://watermission.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Water Mission",
+        "homepage": "https://watermission.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/watermission-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 95
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:2804da021044",
+      "title": "Living Water International",
+      "name": "Living Water International",
+      "summary": "Christian clean-water and community service ministry.",
+      "url": "https://water.cc/",
+      "homepage": "https://water.cc/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Living Water International",
+        "homepage": "https://water.cc/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/water-cc.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 94
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:f0b7507ed66d",
+      "title": "World Vision International",
+      "name": "World Vision International",
+      "summary": "Christian community development and humanitarian service.",
+      "url": "https://www.wvi.org/",
+      "homepage": "https://www.wvi.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "World Vision International",
+        "homepage": "https://www.wvi.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/wvi-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 93
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:1797384b70b5",
+      "title": "Compassion International",
+      "name": "Compassion International",
+      "summary": "Christian child development and local church partnership.",
+      "url": "https://www.compassion.com/",
+      "homepage": "https://www.compassion.com/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Compassion International",
+        "homepage": "https://www.compassion.com/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/compassion-com.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 92
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:0ca204cc0abf",
+      "title": "Food for the Hungry",
+      "name": "Food for the Hungry",
+      "summary": "Christian community development and poverty response.",
+      "url": "https://www.fh.org/",
+      "homepage": "https://www.fh.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Food for the Hungry",
+        "homepage": "https://www.fh.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/fh-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 91
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:984f9b8bff88",
+      "title": "Convoy of Hope",
+      "name": "Convoy of Hope",
+      "summary": "Faith-based humanitarian service and disaster response.",
+      "url": "https://convoyofhope.org/",
+      "homepage": "https://convoyofhope.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Convoy of Hope",
+        "homepage": "https://convoyofhope.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/convoyofhope-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 90
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:f72d366b132a",
+      "title": "World Relief",
+      "name": "World Relief",
+      "summary": "Christian humanitarian and refugee community services.",
+      "url": "https://worldrelief.org/",
+      "homepage": "https://worldrelief.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "World Relief",
+        "homepage": "https://worldrelief.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/worldrelief-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 89
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:30903e34699f",
+      "title": "Samaritan's Purse",
+      "name": "Samaritan's Purse",
+      "summary": "Evangelical Christian humanitarian and disaster service.",
+      "url": "https://www.samaritanspurse.org/",
+      "homepage": "https://www.samaritanspurse.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Samaritan's Purse",
+        "homepage": "https://www.samaritanspurse.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/samaritanspurse-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 88
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:48681bfd1345",
+      "title": "Engineering Ministries International",
+      "name": "Engineering Ministries International",
+      "summary": "Christian engineering and design service for nonprofit ministries.",
+      "url": "https://emiworld.org/",
+      "homepage": "https://emiworld.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Engineering Ministries International",
+        "homepage": "https://emiworld.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/emiworld-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 87
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-service:76d152a62d7c",
+      "title": "HOPE International",
+      "name": "HOPE International",
+      "summary": "Christ-centered economic development and financial inclusion.",
+      "url": "https://www.hopeinternational.org/",
+      "homepage": "https://www.hopeinternational.org/",
+      "section": "donation-service",
+      "psom_key": "donation-service",
+      "category": "service",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "HOPE International",
+        "homepage": "https://www.hopeinternational.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/hopeinternational-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 86
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "service"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:f0b7507ed66d",
+      "title": "World Vision International",
+      "name": "World Vision International",
+      "summary": "Christian emergency relief and long-term recovery.",
+      "url": "https://www.wvi.org/",
+      "homepage": "https://www.wvi.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "World Vision International",
+        "homepage": "https://www.wvi.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/wvi-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 99
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:30903e34699f",
+      "title": "Samaritan's Purse",
+      "name": "Samaritan's Purse",
+      "summary": "Evangelical disaster relief and humanitarian assistance.",
+      "url": "https://www.samaritanspurse.org/",
+      "homepage": "https://www.samaritanspurse.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Samaritan's Purse",
+        "homepage": "https://www.samaritanspurse.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/samaritanspurse-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 98
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:f72d366b132a",
+      "title": "World Relief",
+      "name": "World Relief",
+      "summary": "Christian refugee, disaster and humanitarian relief.",
+      "url": "https://worldrelief.org/",
+      "homepage": "https://worldrelief.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "World Relief",
+        "homepage": "https://worldrelief.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/worldrelief-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 97
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:0ca204cc0abf",
+      "title": "Food for the Hungry",
+      "name": "Food for the Hungry",
+      "summary": "Christian hunger relief and community resilience.",
+      "url": "https://www.fh.org/",
+      "homepage": "https://www.fh.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Food for the Hungry",
+        "homepage": "https://www.fh.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/fh-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 96
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:984f9b8bff88",
+      "title": "Convoy of Hope",
+      "name": "Convoy of Hope",
+      "summary": "Faith-based disaster response and food assistance.",
+      "url": "https://convoyofhope.org/",
+      "homepage": "https://convoyofhope.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Convoy of Hope",
+        "homepage": "https://convoyofhope.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/convoyofhope-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 95
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:125dd585ac8e",
+      "title": "Tearfund",
+      "name": "Tearfund",
+      "summary": "Christian relief and development organization.",
+      "url": "https://www.tearfund.org/",
+      "homepage": "https://www.tearfund.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Tearfund",
+        "homepage": "https://www.tearfund.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/tearfund-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 94
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:34800c868211",
+      "title": "Medair",
+      "name": "Medair",
+      "summary": "International Christian humanitarian emergency relief.",
+      "url": "https://www.medair.org/",
+      "homepage": "https://www.medair.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Medair",
+        "homepage": "https://www.medair.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/medair-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 93
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:dc6c6894f18a",
+      "title": "MAP International",
+      "name": "MAP International",
+      "summary": "Christian global health and medical relief organization.",
+      "url": "https://www.map.org/",
+      "homepage": "https://www.map.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "MAP International",
+        "homepage": "https://www.map.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/map-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 92
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:a140219a9ca2",
+      "title": "World Renew",
+      "name": "World Renew",
+      "summary": "Christian disaster response and community development.",
+      "url": "https://worldrenew.net/",
+      "homepage": "https://worldrenew.net/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "World Renew",
+        "homepage": "https://worldrenew.net/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/worldrenew-net.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 91
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:c5d40534c407",
+      "title": "Operation Blessing",
+      "name": "Operation Blessing",
+      "summary": "Christian humanitarian aid and disaster response.",
+      "url": "https://ob.org/",
+      "homepage": "https://ob.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Operation Blessing",
+        "homepage": "https://ob.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/ob-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 90
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:595b4a49921b",
+      "title": "Lutheran World Relief",
+      "name": "Lutheran World Relief",
+      "summary": "Lutheran international relief and development organization.",
+      "url": "https://lwr.org/",
+      "homepage": "https://lwr.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Lutheran World Relief",
+        "homepage": "https://lwr.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/lwr-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 89
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:5d9e8b1c52ea",
+      "title": "Good Neighbors International",
+      "name": "Good Neighbors International",
+      "summary": "International humanitarian and community development organization.",
+      "url": "https://www.goodneighbors.org/",
+      "homepage": "https://www.goodneighbors.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Good Neighbors International",
+        "homepage": "https://www.goodneighbors.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/goodneighbors-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 88
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:706a57d58657",
+      "title": "Korea Food for the Hungry International",
+      "name": "Korea Food for the Hungry International",
+      "summary": "Korean Christian hunger relief and development organization.",
+      "url": "https://www.kfhi.or.kr/",
+      "homepage": "https://www.kfhi.or.kr/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Korea Food for the Hungry International",
+        "homepage": "https://www.kfhi.or.kr/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/kfhi-or-kr.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 87
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:cf057a0c14ca",
+      "title": "Mercy Corps",
+      "name": "Mercy Corps",
+      "summary": "Emergency humanitarian response and recovery.",
+      "url": "https://www.mercycorps.org/",
+      "homepage": "https://www.mercycorps.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Mercy Corps",
+        "homepage": "https://www.mercycorps.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/mercycorps-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 86
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-relief:3e77af559e47",
+      "title": "Action Against Hunger",
+      "name": "Action Against Hunger",
+      "summary": "Emergency nutrition, food security and hunger relief.",
+      "url": "https://www.actionagainsthunger.org/",
+      "homepage": "https://www.actionagainsthunger.org/",
+      "section": "donation-relief",
+      "psom_key": "donation-relief",
+      "category": "relief",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Action Against Hunger",
+        "homepage": "https://www.actionagainsthunger.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/actionagainsthunger-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 85
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "relief"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:25e1b2138a5c",
+      "title": "International Fellowship of Evangelical Students",
+      "name": "International Fellowship of Evangelical Students",
+      "summary": "Global evangelical student movement and campus ministry.",
+      "url": "https://ifesworld.org/",
+      "homepage": "https://ifesworld.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "International Fellowship of Evangelical Students",
+        "homepage": "https://ifesworld.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/ifesworld-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 99
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:c5ad047bd9f0",
+      "title": "Cru",
+      "name": "Cru",
+      "summary": "International evangelical campus ministry and leadership development.",
+      "url": "https://www.cru.org/",
+      "homepage": "https://www.cru.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Cru",
+        "homepage": "https://www.cru.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/cru-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 98
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:b2ffbbffae43",
+      "title": "Child Evangelism Fellowship",
+      "name": "Child Evangelism Fellowship",
+      "summary": "International Christian ministry and teaching resources for children.",
+      "url": "https://www.cefonline.com/",
+      "homepage": "https://www.cefonline.com/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Child Evangelism Fellowship",
+        "homepage": "https://www.cefonline.com/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/cefonline-com.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 97
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:841ae790890c",
+      "title": "Association of Christian Schools International",
+      "name": "Association of Christian Schools International",
+      "summary": "Global network supporting Christian schools and educators.",
+      "url": "https://www.acsi.org/",
+      "homepage": "https://www.acsi.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Association of Christian Schools International",
+        "homepage": "https://www.acsi.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/acsi-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 96
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:fdbc1a49cdb2",
+      "title": "TeachBeyond",
+      "name": "TeachBeyond",
+      "summary": "Christian education and teaching mission organization.",
+      "url": "https://teachbeyond.org/",
+      "homepage": "https://teachbeyond.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "TeachBeyond",
+        "homepage": "https://teachbeyond.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/teachbeyond-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 95
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:f5a0c1fb9ca4",
+      "title": "SIL International",
+      "name": "SIL International",
+      "summary": "Language development, literacy and translation services.",
+      "url": "https://www.sil.org/",
+      "homepage": "https://www.sil.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "SIL International",
+        "homepage": "https://www.sil.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/sil-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 94
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:5671afd8947d",
+      "title": "Wycliffe Global Alliance",
+      "name": "Wycliffe Global Alliance",
+      "summary": "Bible translation, literacy and language-development alliance.",
+      "url": "https://www.wycliffe.net/",
+      "homepage": "https://www.wycliffe.net/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Wycliffe Global Alliance",
+        "homepage": "https://www.wycliffe.net/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/wycliffe-net.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 93
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:1797384b70b5",
+      "title": "Compassion International",
+      "name": "Compassion International",
+      "summary": "Christian child development including education support.",
+      "url": "https://www.compassion.com/",
+      "homepage": "https://www.compassion.com/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Compassion International",
+        "homepage": "https://www.compassion.com/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/compassion-com.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 92
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:2532b374adb2",
+      "title": "ScholarLeaders International",
+      "name": "ScholarLeaders International",
+      "summary": "Christian theological education and leadership development.",
+      "url": "https://www.scholarleaders.org/",
+      "homepage": "https://www.scholarleaders.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "ScholarLeaders International",
+        "homepage": "https://www.scholarleaders.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/scholarleaders-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 91
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:1f4e1d28ceac",
+      "title": "Langham Partnership",
+      "name": "Langham Partnership",
+      "summary": "Global Christian preaching, publishing and scholar development.",
+      "url": "https://langham.org/",
+      "homepage": "https://langham.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Langham Partnership",
+        "homepage": "https://langham.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/langham-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 90
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:36069de449cd",
+      "title": "Overseas Council",
+      "name": "Overseas Council",
+      "summary": "Christian theological education and leadership support.",
+      "url": "https://www.overseas.org/",
+      "homepage": "https://www.overseas.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Overseas Council",
+        "homepage": "https://www.overseas.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/overseas-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 89
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:2ba3bf262008",
+      "title": "Bible Study Fellowship",
+      "name": "Bible Study Fellowship",
+      "summary": "International Bible education and discipleship organization.",
+      "url": "https://www.bsfinternational.org/",
+      "homepage": "https://www.bsfinternational.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Bible Study Fellowship",
+        "homepage": "https://www.bsfinternational.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/bsfinternational-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 88
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:2c86ec34f8eb",
+      "title": "Korea Campus Crusade for Christ",
+      "name": "Korea Campus Crusade for Christ",
+      "summary": "Korean evangelical campus mission and student leadership.",
+      "url": "https://kccc.org/",
+      "homepage": "https://kccc.org/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Korea Campus Crusade for Christ",
+        "homepage": "https://kccc.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/kccc-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 87
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-education:ae497e642755",
+      "title": "IVF Korea",
+      "name": "IVF Korea",
+      "summary": "Korean evangelical student fellowship and campus ministry.",
+      "url": "https://ivf.or.kr/",
+      "homepage": "https://ivf.or.kr/",
+      "section": "donation-education",
+      "psom_key": "donation-education",
+      "category": "education",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "IVF Korea",
+        "homepage": "https://ivf.or.kr/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/ivf-or-kr.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 86
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "education"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-environment:0ff4d11c41aa",
+      "title": "A Rocha International",
+      "name": "A Rocha International",
+      "summary": "Christian conservation organization focused on practical care for creation.",
+      "url": "https://arocha.org/",
+      "homepage": "https://arocha.org/",
+      "section": "donation-environment",
+      "psom_key": "donation-environment",
+      "category": "environment",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "A Rocha International",
+        "homepage": "https://arocha.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/arocha-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 99
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "environment"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-environment:84b2f598f2fc",
+      "title": "Plant With Purpose",
+      "name": "Plant With Purpose",
+      "summary": "Christian environmental restoration and poverty reduction through community development.",
+      "url": "https://plantwithpurpose.org/",
+      "homepage": "https://plantwithpurpose.org/",
+      "section": "donation-environment",
+      "psom_key": "donation-environment",
+      "category": "environment",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Plant With Purpose",
+        "homepage": "https://plantwithpurpose.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/plantwithpurpose-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 98
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "environment"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-environment:b9933dde2989",
+      "title": "Climate Stewards",
+      "name": "Climate Stewards",
+      "summary": "Christian climate action organization focused on practical carbon reduction and restoration.",
+      "url": "https://www.climatestewards.org/",
+      "homepage": "https://www.climatestewards.org/",
+      "section": "donation-environment",
+      "psom_key": "donation-environment",
+      "category": "environment",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Climate Stewards",
+        "homepage": "https://www.climatestewards.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/climatestewards-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 97
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "environment"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-environment:8799ff7cc7d7",
+      "title": "Restoring Eden",
+      "name": "Restoring Eden",
+      "summary": "Christian environmental stewardship and conservation organization.",
+      "url": "https://restoringeden.org/",
+      "homepage": "https://restoringeden.org/",
+      "section": "donation-environment",
+      "psom_key": "donation-environment",
+      "category": "environment",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Restoring Eden",
+        "homepage": "https://restoringeden.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/restoringeden-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 96
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "environment"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-environment:2729c6cb1dc5",
+      "title": "Evangelical Environmental Network",
+      "name": "Evangelical Environmental Network",
+      "summary": "Evangelical creation-care network and environmental stewardship organization.",
+      "url": "https://creationcare.org/",
+      "homepage": "https://creationcare.org/",
+      "section": "donation-environment",
+      "psom_key": "donation-environment",
+      "category": "environment",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Evangelical Environmental Network",
+        "homepage": "https://creationcare.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/creationcare-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 95
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "environment"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-environment:b7593363ab2f",
+      "title": "Blessed Earth",
+      "name": "Blessed Earth",
+      "summary": "Christian creation-care education and stewardship ministry.",
+      "url": "https://www.blessedearth.org/",
+      "homepage": "https://www.blessedearth.org/",
+      "section": "donation-environment",
+      "psom_key": "donation-environment",
+      "category": "environment",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Blessed Earth",
+        "homepage": "https://www.blessedearth.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/blessedearth-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 94
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "environment"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-environment:606b757a4337",
+      "title": "Care of Creation",
+      "name": "Care of Creation",
+      "summary": "Christian environmental stewardship and creation-care ministry.",
+      "url": "https://www.careofcreation.net/",
+      "homepage": "https://www.careofcreation.net/",
+      "section": "donation-environment",
+      "psom_key": "donation-environment",
+      "category": "environment",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Care of Creation",
+        "homepage": "https://www.careofcreation.net/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/careofcreation-net.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 93
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "environment"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-environment:8ecd0eafbd37",
+      "title": "Water Mission",
+      "name": "Water Mission",
+      "summary": "Christian safe-water engineering and sustainable community service.",
+      "url": "https://watermission.org/",
+      "homepage": "https://watermission.org/",
+      "section": "donation-environment",
+      "psom_key": "donation-environment",
+      "category": "environment",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Water Mission",
+        "homepage": "https://watermission.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/watermission-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 92
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "environment"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-environment:2804da021044",
+      "title": "Living Water International",
+      "name": "Living Water International",
+      "summary": "Christian clean-water and sanitation ministry.",
+      "url": "https://water.cc/",
+      "homepage": "https://water.cc/",
+      "section": "donation-environment",
+      "psom_key": "donation-environment",
+      "category": "environment",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Living Water International",
+        "homepage": "https://water.cc/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/water-cc.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 91
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "environment"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:c8ed590a2556",
+      "title": "International Justice Mission",
+      "name": "International Justice Mission",
+      "summary": "Christian organization combating trafficking, slavery and violence against vulnerable people.",
+      "url": "https://www.ijm.org/",
+      "homepage": "https://www.ijm.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "International Justice Mission",
+        "homepage": "https://www.ijm.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/ijm-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 99
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:291db606bf2a",
+      "title": "Prison Fellowship International",
+      "name": "Prison Fellowship International",
+      "summary": "Global Christian prison ministry and restorative justice network.",
+      "url": "https://pfi.org/",
+      "homepage": "https://pfi.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Prison Fellowship International",
+        "homepage": "https://pfi.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/pfi-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 98
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:86d7a84a779e",
+      "title": "Open Doors",
+      "name": "Open Doors",
+      "summary": "International Christian support for persecuted Christians.",
+      "url": "https://www.opendoors.org/",
+      "homepage": "https://www.opendoors.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Open Doors",
+        "homepage": "https://www.opendoors.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/opendoors-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 97
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:896640038b4d",
+      "title": "Christian Solidarity Worldwide",
+      "name": "Christian Solidarity Worldwide",
+      "summary": "Christian human-rights organization focused on freedom of religion or belief.",
+      "url": "https://www.csw.org.uk/",
+      "homepage": "https://www.csw.org.uk/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Christian Solidarity Worldwide",
+        "homepage": "https://www.csw.org.uk/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/csw-org-uk.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 96
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:0611c3034863",
+      "title": "Barnabas Aid",
+      "name": "Barnabas Aid",
+      "summary": "Support for persecuted and suffering Christians.",
+      "url": "https://www.barnabasaid.org/",
+      "homepage": "https://www.barnabasaid.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Barnabas Aid",
+        "homepage": "https://www.barnabasaid.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/barnabasaid-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 95
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:d21c5f1439c7",
+      "title": "Joni and Friends",
+      "name": "Joni and Friends",
+      "summary": "Christian disability ministry and family support.",
+      "url": "https://joniandfriends.org/",
+      "homepage": "https://joniandfriends.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Joni and Friends",
+        "homepage": "https://joniandfriends.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/joniandfriends-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 94
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:a44cf5b90537",
+      "title": "The Leprosy Mission International",
+      "name": "The Leprosy Mission International",
+      "summary": "Christian organization serving people affected by leprosy and disability.",
+      "url": "https://www.leprosymission.org/",
+      "homepage": "https://www.leprosymission.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "The Leprosy Mission International",
+        "homepage": "https://www.leprosymission.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/leprosymission-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 93
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:3e3ff2bdcd18",
+      "title": "Bethany Christian Services",
+      "name": "Bethany Christian Services",
+      "summary": "Christian family, adoption, refugee and child welfare services.",
+      "url": "https://bethany.org/",
+      "homepage": "https://bethany.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Bethany Christian Services",
+        "homepage": "https://bethany.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/bethany-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 92
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:fa39b0e715a6",
+      "title": "Love Justice International",
+      "name": "Love Justice International",
+      "summary": "Christian anti-trafficking and justice organization.",
+      "url": "https://www.lovejustice.ngo/",
+      "homepage": "https://www.lovejustice.ngo/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Love Justice International",
+        "homepage": "https://www.lovejustice.ngo/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/lovejustice-ngo.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 91
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:6b0ee9977485",
+      "title": "Advocates International",
+      "name": "Advocates International",
+      "summary": "Global network of Christian lawyers supporting justice and religious freedom.",
+      "url": "https://www.advocatesinternational.org/",
+      "homepage": "https://www.advocatesinternational.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Advocates International",
+        "homepage": "https://www.advocatesinternational.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/advocatesinternational-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 90
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:0d460026b2f4",
+      "title": "CBM Global Disability Inclusion",
+      "name": "CBM Global Disability Inclusion",
+      "summary": "International disability-inclusive development and humanitarian organization.",
+      "url": "https://www.cbm.org/",
+      "homepage": "https://www.cbm.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "CBM Global Disability Inclusion",
+        "homepage": "https://www.cbm.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/cbm-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 89
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:b7c82f6a9f00",
+      "title": "Mission Without Borders",
+      "name": "Mission Without Borders",
+      "summary": "Christian support for families and vulnerable communities in Eastern Europe.",
+      "url": "https://www.mwb.org/",
+      "homepage": "https://www.mwb.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Mission Without Borders",
+        "homepage": "https://www.mwb.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/mwb-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 88
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    },
+    {
+      "id": "curated:donation-others:a8c23a04c607",
+      "title": "Release International",
+      "name": "Release International",
+      "summary": "Christian ministry supporting persecuted Christians.",
+      "url": "https://releaseinternational.org/",
+      "homepage": "https://releaseinternational.org/",
+      "section": "donation-others",
+      "psom_key": "donation-others",
+      "category": "others",
+      "channel": "donation",
+      "type": "organization",
+      "org": {
+        "name": "Release International",
+        "homepage": "https://releaseinternational.org/",
+        "verified": false
+      },
+      "media": {
+        "kind": "image",
+        "thumb": "/assets/donation/thumbs/releaseinternational-org.svg",
+        "ratio": "16:9"
+      },
+      "source": {
+        "name": "curated-official-directory"
+      },
+      "adminReview": {
+        "approved": true,
+        "source": "curated-baseline"
+      },
+      "verify": {
+        "status": "curated_pending_live_check",
+        "score": 55,
+        "engine": "curated-directory-v1",
+        "checked_at": "2026-08-24T08:30:00Z"
+      },
+      "replace_policy": {
+        "locked": false
+      },
+      "rank": {
+        "score": 87
+      },
+      "tags": [
+        "official-homepage",
+        "curated-baseline",
+        "others"
+      ],
+      "meta": {
+        "verification_note": "Known official-domain baseline; live availability and current organization status should be rechecked by the donation research pipeline."
+      }
+    }
+  ]
+}

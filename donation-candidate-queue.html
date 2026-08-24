@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IGDC 도네이션 후보·프론트 매칭 관리</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#111c2d;--line:#28405f;--text:#e6eef8;--muted:#9eb2cb;--accent:#efb85f;--good:#4ed18b;--warn:#ffd070;--bad:#ff8794}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1440px;margin:0 auto;padding:24px 18px 72px}h1{font-size:25px;margin:0 0 7px}.lead{margin:0;color:#b9c8db;line-height:1.55;max-width:1100px}.toolbar,.actionbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0}.toolbar button,.actionbar button,.section-actions button,.card-actions button{border:0;border-radius:8px;padding:9px 11px;font-weight:800;cursor:pointer;background:#dbe5f0;color:#172033}.toolbar button.primary,.actionbar button.primary{background:var(--accent);color:#342005}.toolbar button.good,.actionbar button.good{background:var(--good);color:#062619}.toolbar button.warn,.actionbar button.warn{background:var(--warn);color:#352704}.toolbar button.danger,.actionbar button.danger,.card-actions button.danger{background:var(--bad);color:#3b0810}button:disabled{opacity:.5;cursor:not-allowed}select,input{border:1px solid #365273;border-radius:8px;background:#08111f;color:var(--text);padding:9px}input.query{min-width:320px;flex:1}.state{font-size:12px;color:var(--muted)}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin:14px 0}.stat{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px}.stat b{display:block;font-size:23px}.stat span{font-size:11px;color:var(--muted)}.stage-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0}.stage-tabs button{background:#192a40;color:#cfe5ff;border:1px solid #365273}.stage-tabs button.active{background:#244b70;border-color:#5e92c4}.notice{padding:11px 12px;border-left:4px solid var(--accent);border-radius:8px;background:#2b210e;color:#ffe9c6;line-height:1.45;margin:12px 0}.section{border:1px solid var(--line);border-radius:13px;background:var(--panel);margin:11px 0;overflow:hidden}.section-head{display:flex;align-items:center;gap:9px;padding:12px 13px;background:#0d1929}.section-head h2{font-size:15px;margin:0;flex:1}.badge{display:inline-block;border-radius:999px;padding:2px 8px;background:#213a57;color:#d7eaff;font-size:11px}.section-actions{display:flex;gap:6px;flex-wrap:wrap;padding:9px 12px;border-top:1px solid #203650;border-bottom:1px solid #203650}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:10px;padding:12px}.candidate{border:1px solid #2d4666;border-radius:11px;background:#0a1524;overflow:hidden}.thumb{aspect-ratio:16/9;background:#050a12;display:flex;align-items:center;justify-content:center;position:relative}.thumb img{width:100%;height:100%;object-fit:cover}.thumb .fallback{font-weight:900;font-size:26px;color:#8096ad}.video-mark{position:absolute;left:8px;bottom:8px;background:#000b;color:#fff;border-radius:6px;padding:3px 7px;font-size:11px}.candidate-body{padding:10px}.candidate-title{font-weight:850;font-size:13px;line-height:1.35;min-height:35px}.candidate-meta{font-size:11px;color:#9eb2cb;margin:5px 0;line-height:1.4}.candidate-summary{font-size:11px;color:#c2cfdd;line-height:1.4;min-height:31px}.candidate a{color:#8bd8ff;word-break:break-all;font-size:11px}.issue{color:#ffd070}.card-actions{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}.card-actions button{padding:6px 7px;font-size:10px}.empty{padding:18px;color:#8fa3ba}.check{display:flex;gap:6px;align-items:center;font-size:11px;color:#bcd0e5}.busy{pointer-events:none;opacity:.65}@media(max-width:700px){main{padding:16px 10px 54px}input.query{min-width:100%;width:100%}.grid{grid-template-columns:1fr}.toolbar>*{width:100%}.toolbar button,.toolbar select{width:auto}}
+</style>
+</head>
+<body>
+<main>
+  <h1>💝 도네이션 후보·프론트 매칭 관리</h1>
+  <p class="lead">SearchBank 리서치 결과를 도네이션 전용 대기열에서 검토한 뒤 <b>리서치 → 섹션 대기열 → 프론트 후보 → 최종 프론트 매칭</b> 순서로 올립니다. 이 화면은 Distribution·Social·Media 후보 원장을 변경하지 않습니다.</p>
+  <div class="toolbar">
+    <button id="backBtn">← 관리자</button>
+    <button id="reloadBtn">새로고침</button>
+    <select id="researchSection"></select>
+    <input id="researchQuery" class="query" placeholder="추가 검색어(비우면 섹션 의미 기반 기본 리서치)">
+    <button id="researchBtn" class="primary">선택 섹션 리서치</button>
+    <button id="researchAllBtn">8개 섹션 기본 리서치</button>
+  </div>
+  <div id="state" class="state">준비 중…</div>
+  <div id="summary" class="summary"></div>
+  <div class="notice">글로벌 뉴스는 ‘news’라는 단어가 정확히 없어도 재난·전쟁 피해·난민·기아·아동·교육·보건·기후·환경 등 <b>실질적 인도주의 이슈</b>이면 후보로 수집합니다. 동영상은 우선하지만 리서치 단계에서는 형식 때문에 유효한 후보를 버리지 않습니다.</div>
+  <div class="stage-tabs" id="stageTabs"></div>
+  <div class="actionbar">
+    <button id="selectAllVisibleBtn">현재 화면 전체 선택</button>
+    <button data-bulk="move_to_queue">대기열로 이동</button>
+    <button data-bulk="move_to_front">프론트 후보로 이동</button>
+    <button data-bulk="publish" class="good">선택 최종 프론트 매칭</button>
+    <button data-bulk="hold" class="warn">보류</button>
+    <button data-bulk="exclude" class="danger">후보에서 제외</button>
+    <button data-bulk="remove" class="danger">목록 삭제</button>
+    <button data-bulk="restore">선택 복구</button>
+    <button id="aiFrontBtn" class="primary">AI 프론트 후보 선정</button>
+    <button id="aiPublishBtn" class="good">AI 최종 프론트 매칭</button>
+  </div>
+  <div id="sections"></div>
+</main>
+<script src="/assets/js/admin-donation-candidate-queue.js?v=1"></script>
+</body>
+</html>

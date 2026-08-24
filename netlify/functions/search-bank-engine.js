@@ -31,6 +31,8 @@ const crypto = require("crypto");
 const https = require("https");
 const http = require("http");
 const PublicSnapshot = require("./lib/public-snapshot-sanitizer.v1");
+let DonationResearchPolicy = null;
+try { DonationResearchPolicy = require("./lib/donation-research-policy.v1"); } catch (e) { DonationResearchPolicy = null; }
 
 let Core = null;
 try { Core = require("./core"); } catch (e) { Core = null; }
@@ -71,7 +73,7 @@ try { CentralCollector = require("./collector"); } catch (e) { CentralCollector 
 let MaruSearch = null;
 try { MaruSearch = require("./maru-search"); } catch (e) { MaruSearch = null; }
 
-const SEARCH_BANK_ENGINE_VERSION = "search-bank-engine-v10.7.1.1-front-section-strict-regional-brokerage-contract";
+const SEARCH_BANK_ENGINE_VERSION = "search-bank-engine-v10.7.2-donation-semantic-research-isolated";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 
 // ---------- small utils ----------
@@ -614,7 +616,13 @@ function resolveSlotPolicy(params={}, queryIntent={}){
   if(channel === "socialnetwork" || channel === "social-network" || channel === "socialhub" || channel === "social-hub") channel = "social";
   if(channel === "literature_academic" || channel === "literature-academic") channel = "academic";
   const policy = FRONT_SLOT_POLICIES[channel] || null;
-  const isGlobalNews = channel === "donation" && /global.*news|news.*global|global-news|글로벌.*뉴스|뉴스/.test(joined);
+  const normalizedDonationSection = channel === "donation" && DonationResearchPolicy
+    ? DonationResearchPolicy.normalizeSection(params.section || params.bind_section || params.psom_key || params.slotKey || params.slot || section)
+    : "";
+  const isGlobalNews = channel === "donation" && (
+    normalizedDonationSection === "donation-global" ||
+    /global.*news|news.*global|global-news|글로벌.*뉴스|뉴스/.test(joined)
+  );
   const action = low(params.action || params.mode || params.fn || "");
   const frontSupplyAction = ["front-supply","front_supply","slot-supply","slot_supply","front","slot"].includes(action);
   const autoFill = truthy(params.autoFill || params.autofill || params.slotFill || params.frontFill || params.pageFill || params.snapshotFill || params.frontSupply || params.slotSupply) || frontSupplyAction || !!policy;
@@ -637,8 +645,15 @@ function buildSlotQuery(ctx, adapterName){
   const term = (policy.queryTerms || [])[0] || adapterName || "";
   let q;
   if(slot.channel === "media") q = compactTokens([base, geo, sector, "video"]);
-  else if(slot.channel === "donation" && !slot.isGlobalNews) q = compactTokens([base, geo, "NGO charity official homepage organization"]);
-  else if(slot.channel === "donation" && slot.isGlobalNews) q = compactTokens([base, geo, "global charity news relief"]);
+  else if(slot.channel === "donation") {
+    const donationSection = DonationResearchPolicy
+      ? (DonationResearchPolicy.normalizeSection(slot.psom_key || slot.section) || (slot.isGlobalNews ? "donation-global" : "donation-ngo"))
+      : (slot.isGlobalNews ? "donation-global" : "donation-ngo");
+    const terms = DonationResearchPolicy
+      ? DonationResearchPolicy.queryTerms(donationSection, base)
+      : [slot.isGlobalNews ? "humanitarian crisis relief video" : "NGO charity official organization"];
+    q = compactTokens([base, geo, terms[0] || ""]);
+  }
   else if(slot.channel === "distribution") q = compactTokens([base, geo, sector, "supplier manufacturer product distribution"]);
   else if(slot.channel === "tour") q = compactTokens([base, geo, "tourism destination travel"]);
   else if(slot.channel === "social") q = compactTokens([base, geo, "social video creator feed"]);
@@ -667,11 +682,24 @@ function applySlotContract(item, ctx){
     if(!item.entity) item.entity = { type:item.type === "video" ? "video" : "article", subtype:"media" };
   }
   if(slot.channel === "donation"){
+    const donationSection = DonationResearchPolicy
+      ? (DonationResearchPolicy.normalizeSection(slot.psom_key || slot.section) || (slot.isGlobalNews ? "donation-global" : "donation-ngo"))
+      : (slot.isGlobalNews ? "donation-global" : "donation-ngo");
+    if(donationSection && !item.psom_key) item.psom_key = donationSection;
+    if(donationSection && !item.section) item.section = donationSection;
+    if(item.bind && donationSection && !item.bind.section) item.bind.section = donationSection;
     if(slot.isGlobalNews){
-      if(!item.entity) item.entity = { type:"article", subtype:"global_news" };
+      const videoLike = DonationResearchPolicy ? DonationResearchPolicy.looksLikeVideo(item) : /youtube|youtu\.be|vimeo|video|mp4|webm/i.test([item.url,item.source,item.title,item.summary].filter(Boolean).join(" "));
+      if(videoLike){
+        item.type = "video";
+        if(!item.entity) item.entity = { type:"video", subtype:"humanitarian_issue" };
+        if(!item.media) item.media = { type:"video", kind:"video", url:item.url || item.link?.url || undefined, thumb:item.thumbnail || item.thumb || item.image || undefined };
+      }else if(!item.entity){
+        item.entity = { type:"article", subtype:"humanitarian_issue" };
+      }
     }else{
       if(!item.entity) item.entity = { type:"organization", subtype:item.sector?.major === "religious_org" ? "religious_org" : "ngo" };
-      if(!item.org) item.org = { name:item.title || item.name || undefined, home:item.url || item.link?.url || undefined, country:item.geo?.country || undefined };
+      if(!item.org) item.org = { name:item.title || item.name || undefined, homepage:item.url || item.link?.url || undefined, country:item.geo?.country || undefined };
       if(!item.donation) item.donation = { enabled:true, kind:"organization_profile", target:item.org?.name || item.title || undefined };
     }
   }
@@ -689,8 +717,21 @@ function slotAcceptsItem(item, ctx){
   const sector = low(item.sector?.major || "");
   const text = low([item.title,item.summary,item.description,item.url,item.source,Array.isArray(item.tags)?item.tags.join(" "):""].filter(Boolean).join(" "));
   if(slot.channel === "media") return type === "video" || entityType === "video" || /youtube|youtu\.be|vimeo|video|mp4|webm/.test(text);
-  if(slot.channel === "donation" && !slot.isGlobalNews) return ["organization","institution","campaign"].includes(entityType) || ["ngo","religious_org","donation","public_institution"].includes(sector) || /ngo|charity|relief|foundation|mission|church|organization|official/.test(text);
-  if(slot.channel === "donation" && slot.isGlobalNews) return type === "article" || entityType === "article" || /news|article|relief|humanitarian/.test(text);
+  if(slot.channel === "donation") {
+    const donationSection = DonationResearchPolicy
+      ? (DonationResearchPolicy.normalizeSection(slot.psom_key || slot.section) || (slot.isGlobalNews ? "donation-global" : "donation-ngo"))
+      : (slot.isGlobalNews ? "donation-global" : "donation-ngo");
+    // Donation discovery is deliberately broad: section labels are hints, not
+    // brittle gates.  Final public matching applies the stricter policy.
+    if(DonationResearchPolicy){
+      const relevance = DonationResearchPolicy.sectionRelevance(item, donationSection);
+      if(donationSection === "donation-mission" && DonationResearchPolicy.missionExcluded(item)) return false;
+      if(donationSection === "donation-global") return relevance > 0 || DonationResearchPolicy.looksLikeVideo(item);
+      return relevance > -10 || ["organization","institution","campaign","article"].includes(entityType) || ["ngo","religious_org","donation","public_institution"].includes(sector);
+    }
+    if(!slot.isGlobalNews) return ["organization","institution","campaign"].includes(entityType) || ["ngo","religious_org","donation","public_institution"].includes(sector) || /ngo|charity|relief|foundation|mission|church|organization|official/.test(text);
+    return type === "article" || type === "video" || entityType === "article" || entityType === "video" || /relief|humanitarian|crisis|disaster|refugee|hunger|children|climate/.test(text);
+  }
   const allowed = new Set([...(policy.acceptTypes||[]), ...(policy.acceptEntities||[])].map(low));
   if(!allowed.size) return true;
   return allowed.has(type) || allowed.has(entityType) || allowed.has(sector);

@@ -343,11 +343,120 @@
     return !data.externalUrl;
   }
 
+  function armProductEscapeReturn(){
+    try{
+      if (!window.parent || window.parent === window) return;
+      const p = window.parent;
+      const pd = p.document;
+      const frame = pd && pd.getElementById ? pd.getElementById('mainFrame') : null;
+      if (!frame || frame.contentWindow !== window) return;
+
+      let state = p.__IGDC_PRODUCT_ESCAPE_RETURN__;
+      if (!state || typeof state !== 'object'){
+        state = p.__IGDC_PRODUCT_ESCAPE_RETURN__ = {
+          active:false,
+          installed:false,
+          returning:false,
+          returnHref:'',
+          frame:null,
+          sentinel:null
+        };
+      }
+
+      state.active = true;
+      state.returning = false;
+      state.returnHref = document.referrer || state.returnHref || '';
+      state.frame = frame;
+
+      function ensureSentinel(){
+        let s = pd.getElementById('igdcProductEscapeSentinel');
+        if (!s){
+          s = pd.createElement('button');
+          s.id = 'igdcProductEscapeSentinel';
+          s.type = 'button';
+          s.tabIndex = -1;
+          s.setAttribute('aria-hidden','true');
+          s.style.cssText = 'position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0;';
+          (pd.body || pd.documentElement).appendChild(s);
+        }
+        state.sentinel = s;
+        return s;
+      }
+
+      function focusParentShell(){
+        if (!state.active || state.returning) return;
+        try{ p.focus(); }catch(_){}
+        try{
+          const s = ensureSentinel();
+          if (s && s.focus) s.focus({preventScroll:true});
+        }catch(_){}
+      }
+
+      if (!state.installed){
+        state.installed = true;
+
+        p.addEventListener('keydown', function(ev){
+          if (!state.active || state.returning || ev.key !== 'Escape') return;
+          state.returning = true;
+          state.active = false;
+          try{ ev.preventDefault(); }catch(_){}
+          try{ ev.stopPropagation(); }catch(_){}
+
+          // Match the browser Back button: one Escape returns the mainFrame
+          // from the seller product page to the exact product-list history entry.
+          let moved = false;
+          try{
+            if (p.history && typeof p.history.back === 'function'){
+              p.history.back();
+              moved = true;
+            }
+          }catch(_){}
+
+          // Defensive fallback only if browser history is unavailable.
+          if (!moved && state.frame && state.returnHref){
+            try{ state.frame.src = state.returnHref; }catch(_){}
+          }
+
+          p.setTimeout(function(){
+            state.returning = false;
+          }, 500);
+        }, true);
+
+        frame.addEventListener('load', function(){
+          if (!state.active || state.returning) return;
+
+          // Same-origin list page means the return already completed.
+          try{
+            const href = frame.contentWindow && frame.contentWindow.location
+              ? String(frame.contentWindow.location.href || '')
+              : '';
+            if (href && !/\/content\.html(?:[?#]|$)/i.test(href)){
+              state.active = false;
+              return;
+            }
+          }catch(_){
+            // Cross-origin seller page: reclaim keyboard focus in the IGDC shell
+            // so Escape is available immediately without clicking the browser UI.
+          }
+
+          p.setTimeout(focusParentShell, 0);
+          p.setTimeout(focusParentShell, 120);
+        }, true);
+      }
+
+      // The product click originated inside mainFrame; once the seller page replaces
+      // content.html, its load event will focus the shell sentinel for Escape.
+      p.setTimeout(focusParentShell, 0);
+    }catch(_){}
+  }
+
   function openResolvedOriginalInsideIgdc(data){
     if (!data || !data.externalUrl || isPreparationOnlyContent(data)) return false;
     try {
       const target = new URL(String(data.externalUrl), window.location.href);
       if (!/^https?:$/.test(target.protocol)) return false;
+      // Arm one-step Escape return before content.html is replaced by the seller page.
+      armProductEscapeReturn();
       // content.html itself is loaded in the IGDC mainFrame. Replacing THIS frame
       // preserves the IGDC shell/header and removes the preparation-page hop.
       window.location.replace(target.href);

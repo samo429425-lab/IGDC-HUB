@@ -3,7 +3,7 @@
  * ------------------------------------------------------------
  * 목적:
  * - 기존 donation-automap.v7.enterprise.js 구조/역할 유지
- * - feed 없이도 동작하도록 builder/feed 역할을 오토맵에 흡수
+ * - legacy donation-feed 없이 builder를 단일 실시간 소스로 사용
  * - donation HTML + donation.snapshot.json + donation builder 구조 모두 대응
  * - data-psom-key 기반 DOM 매핑 유지
  * - snapshot.items 기반 groupBySection 유지
@@ -14,15 +14,11 @@
   'use strict';
 
   const SNAPSHOT_PATHS = [
-    // 1) direct builder (feed integrated)
+    // 1) canonical donation builder
     '/.netlify/functions/donation-snapshot-builder',
     '/netlify/functions/donation-snapshot-builder',
 
-    // 2) legacy thin feed wrapper (still accepted if present)
-    '/.netlify/functions/donation-feed',
-    '/netlify/functions/donation-feed',
-
-    // 3) static snapshot fallback
+    // 2) static snapshot fallback
     '/data/donation.snapshot.json',
     '/netlify/functions/data/donation.snapshot.json'
   ];
@@ -207,33 +203,31 @@
     return score;
   }
 
+function itemUrl(it){
+  return safeUrl(it?.link?.url) || safeUrl(it?.media?.src) || safeUrl(it?.donation?.checkout_url) || safeUrl(it?.org?.homepage) || '';
+}
+
+function isUsableItem(it){
+  if(!it || typeof it !== 'object') return false;
+  const title = String(it?.title || it?.org?.name || '').trim();
+  const url = itemUrl(it);
+  const source = String(it?.meta?.source || it?.source?.name || '').toLowerCase();
+  const text = (title + ' ' + String(it?.summary || '')).toLowerCase();
+  if(!title || !/^https:\/\//i.test(url)) return false;
+  if(/seed|sample|placeholder|automap-sample|demo|mock/.test(source)) return false;
+  if(/\b(donation partner|global donation news|global news partner|ngo partner|mission partner|service partner|relief partner|education partner|environment partner|others partner)\s+\d+\b/i.test(text)) return false;
+  if(/placeholder|sample-card/.test(String(it?.media?.thumb || it?.image || '').toLowerCase()) && !it?.meta?.managed_published) return false;
+  return true;
+}
+
 function groupBySection(items){
   const map = {};
-  let globalSeedSkipped = false;
-
   (Array.isArray(items) ? items : []).forEach((it)=>{
-
-    const isSeed =
-      it?.meta?.source === 'seed' &&
-      !it?.bank_ref?.record_id;
-
-    // 👉 donation-global 첫 더미 1개만 제거
-    if(
-      !globalSeedSkipped &&
-      isSeed &&
-      it?.psom_key === 'donation-global'
-    ){
-      globalSeedSkipped = true;
-      return;
-    }
-
     const k = it?.psom_key;
-    if(!k) return;
-
+    if(!k || !isUsableItem(it)) return;
     if(!map[k]) map[k] = [];
     map[k].push(it);
   });
-
   return map;
 }
 
@@ -271,27 +265,26 @@ function groupBySection(items){
 
   function safeUrl(u){
     const s = String(u ?? '').trim();
-    if(!s) return '';
+    if(!s || s === '#' || s === '/') return '';
     if(/^javascript:/i.test(s)) return '';
-    return s;
+    if(/^https:\/\//i.test(s) || /^\/(?!\/)/.test(s)) return s;
+    return '';
   }
 
   function renderCard(it){
-    const img = safeUrl(it?.media?.thumb) || '';
-    const title = escHtml(it?.org?.name || it?.title || '');
+    const img = safeUrl(it?.media?.thumb) || safeUrl(it?.image) || '';
+    const title = escHtml(it?.title || it?.org?.name || '');
+    const isVideo = String(it?.media?.kind || it?.type || '').toLowerCase() === 'video';
     const meta = escHtml(
-      it?.org?.country ||
-      it?.donation?.currency ||
-      it?.category ||
-      ''
+      (isVideo ? 'VIDEO · ' : '') + (it?.org?.country || it?.category || '')
     );
     const summary = escHtml(it?.summary || it?.org?.legal_name || '');
-    const url = safeUrl(it?.donation?.checkout_url) || safeUrl(it?.link?.url) || safeUrl(it?.org?.homepage) || '';
+    const url = itemUrl(it);
     const uid = escAttr(it?.uid || it?.id || '');
 
     return `
-      <div class="card donation-card" data-uid="${uid}" data-url="${escAttr(url)}" role="link" tabindex="0" aria-label="${title}">
-        <div class="thumb">${img ? `<img src="${img}" loading="lazy" alt="">` : ''}</div>
+      <div class="card donation-card${isVideo ? ' donation-video-card' : ''}" data-uid="${uid}" data-url="${escAttr(url)}" data-media-kind="${isVideo ? 'video' : 'link'}" role="link" tabindex="0" aria-label="${title}">
+        <div class="thumb">${img ? `<img src="${img}" loading="lazy" alt="">` : ''}${isVideo ? '<span class="donation-video-badge" aria-hidden="true">▶</span>' : ''}</div>
         <div class="card-body">
           <div class="card-title">${title || '-'}</div>
           <div class="card-meta">${meta || '-'}</div>
@@ -308,24 +301,24 @@ function mountSection(key, items, limit){
   const row = box.closest?.('.feed-row');
   const htmlCount = row ? Number(row.dataset.count || 0) : 0;
   const finalLimit = clampLimit(htmlCount || limit || 80);
+  const list = (Array.isArray(items) ? items : []).filter(isUsableItem);
 
-  const list = (Array.isArray(items) ? items : []);
-
-  // 🔴 핵심: 데이터 없으면 기존 HTML 유지
-  if(list.length === 0){
-    return;
-  }
+  // Never manufacture fake front content.  When there is no approved data,
+  // preserve the page's existing state until a later publication arrives.
+  if(list.length === 0) return;
 
   box.innerHTML = '';
-
   const slice = list.slice(0, finalLimit);
-  for(const it of slice){
-    box.insertAdjacentHTML('beforeend', renderCard(it));
-  }
+  for(const it of slice) box.insertAdjacentHTML('beforeend', renderCard(it));
+  box.setAttribute('data-donation-mounted', '1');
 }
 
   async function main(){
-    const snapshot = await loadSnapshot();
+    let snapshot;
+    try{ snapshot = await loadSnapshot(); }catch(error){
+      console.warn('[IGDC Donation] snapshot unavailable:', error && error.message || error);
+      return;
+    }
 
     if(!snapshot?.sections || !snapshot?.items){
       console.error('Invalid donation snapshot');
