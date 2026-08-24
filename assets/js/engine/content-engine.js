@@ -328,7 +328,37 @@
     document.head.appendChild(style);
   }
 
+  function isPreparationOnlyContent(data){
+    const raw = data && data.raw && typeof data.raw === 'object' ? data.raw : {};
+    const marker = [
+      raw.placeholder, raw.isPlaceholder, raw.replaceableSlot, raw.isLayerPointer,
+      raw.type, raw.kind, raw.title, raw.name, raw.summary, raw.description,
+      raw.url, raw.href, raw.link
+    ].map(function(v){ return String(v == null ? '' : v); }).join(' ').toLowerCase();
+
+    if (raw.placeholder === true || raw.isPlaceholder === true || raw.replaceableSlot === true || raw.isLayerPointer === true) return true;
+    if (/(^|\W)(sample|placeholder|dummy|seed\s*slot|replaceable-front-slot)(\W|$)/i.test(marker)) return true;
+    if (/example\.(com|org|net|edu)/i.test(marker)) return true;
+    if (/준비\s*중|prepar(?:ing|ation)|coming\s*soon/i.test(marker) && !data.externalUrl) return true;
+    return !data.externalUrl;
+  }
+
+  function openResolvedOriginalInsideIgdc(data){
+    if (!data || !data.externalUrl || isPreparationOnlyContent(data)) return false;
+    try {
+      const target = new URL(String(data.externalUrl), window.location.href);
+      if (!/^https?:$/.test(target.protocol)) return false;
+      // content.html itself is loaded in the IGDC mainFrame. Replacing THIS frame
+      // preserves the IGDC shell/header and removes the preparation-page hop.
+      window.location.replace(target.href);
+      return true;
+    } catch(e) {
+      return false;
+    }
+  }
+
   function renderContent(data){
+    if (openResolvedOriginalInsideIgdc(data)) return;
     installBaseStyle();
     const root = rootEl();
     const img = data.image ? `<img src="${esc(data.image)}" alt="${esc(data.title)}" loading="lazy" decoding="async">` : '';
@@ -336,7 +366,7 @@
     const media = video || img || `<div class="igdc-content-placeholder">${esc(tr('imageReady'))}</div>`;
     const price = data.price ? `<div class="igdc-price">${esc(data.price)} ${esc(data.currency)}</div>` : '';
     const visit = data.externalUrl
-      ? `<a class="igdc-btn" href="${esc(data.externalUrl)}" target="_top" rel="noopener" data-igdc-external="top" data-maru-revenue="1" data-item-id="${esc(data.id)}" data-revenue-line="${data.affiliateOutbound ? 'product_affiliate' : 'content_visit'}"${data.affiliateOutbound ? ' data-affiliate-outbound="1"' : ''}${data.affiliateProviderId ? ' data-affiliate-provider="' + esc(data.affiliateProviderId) + '"' : ''}>${esc(data.cta || tr('details'))}</a>`
+      ? `<a class="igdc-btn" href="${esc(data.externalUrl)}" target="_self" rel="noopener" data-igdc-external="frame" data-maru-revenue="1" data-item-id="${esc(data.id)}" data-revenue-line="${data.affiliateOutbound ? 'product_affiliate' : 'content_visit'}"${data.affiliateOutbound ? ' data-affiliate-outbound="1"' : ''}${data.affiliateProviderId ? ' data-affiliate-provider="' + esc(data.affiliateProviderId) + '"' : ''}>${esc(data.cta || tr('details'))}</a>`
       : `<span class="igdc-btn secondary" aria-disabled="true">${esc(tr('connectionReady'))}</span>`;
 
     root.innerHTML = `
