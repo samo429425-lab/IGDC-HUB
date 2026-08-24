@@ -32,17 +32,17 @@ function normalizeGeo(event){
 }
 
 function policyScopeFromInput(raw){
-  const input=plain(raw),scopeType=lower(input.scopeType||input.type||"global");
-  if(scopeType==="global")return{scopeType:"global",scopeLabel:"전 세계 통합"};
+  const input=plain(raw),scopeType=lower(input.scopeType||input.type||"global"),workspaceKey=text(input.workspaceKey||input.topicKey||"policy"),workspaceLabel=text(input.workspaceLabel||input.topicLabel||"");
+  if(scopeType==="global")return{scopeType:"global",scopeLabel:"전 세계 통합",workspaceKey,workspaceLabel};
   if(scopeType==="regional"){
     const regionGroup=text(input.regionGroup),region=Automation.regionRow(regionGroup);if(!region){const error=new Error("선택 권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}
-    return{scopeType:"regional",regionGroup,scopeLabel:(region.nameKo||region.nameEn||regionGroup)+" 권역"};
+    return{scopeType:"regional",regionGroup,scopeLabel:(region.nameKo||region.nameEn||regionGroup)+" 권역",workspaceKey,workspaceLabel};
   }
   if(scopeType==="country"){
     const countryCode=text(input.countryCode||input.country).toUpperCase(),country=Automation.countryRow(countryCode);if(!country){const error=new Error("지원되는 국가 정책 범위를 찾을 수 없습니다.");error.statusCode=400;throw error;}
     const subdivisionCode=text(input.subdivisionCode||input.regionCode||input.region||"NATIONWIDE").toUpperCase()||"NATIONWIDE";
     if(subdivisionCode!=="NATIONWIDE"){const valid=Array.isArray(country.subdivisions)&&country.subdivisions.some((item)=>text(item&&item.code).toUpperCase()===subdivisionCode);if(!valid){const error=new Error("선택 국가의 공식 주·성·지역 정책 범위를 찾을 수 없습니다.");error.statusCode=400;throw error;}}
-    return{scopeType:"country",regionGroup:country.regionGroup,countryCode,subdivisionCode,scopeLabel:(country.nameKo||country.nameEn||countryCode)+" · "+countryCode+" / "+(subdivisionCode==="NATIONWIDE"?"전국":subdivisionCode)};
+    return{scopeType:"country",regionGroup:country.regionGroup,countryCode,subdivisionCode,scopeLabel:(country.nameKo||country.nameEn||countryCode)+" · "+countryCode+" / "+(subdivisionCode==="NATIONWIDE"?"전국":subdivisionCode),workspaceKey,workspaceLabel};
   }
   const error=new Error("정책 협의 범위가 올바르지 않습니다.");error.statusCode=400;throw error;
 }
@@ -58,7 +58,7 @@ exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();if(method==="OPTIONS")return json(204,{});
     const body=method==="GET"?{}:parse(event),query=event&&event.queryStringParameters||{},action=lower(query.action||body.action||"catalog");
-    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_research_pause_control","product_research_stage_current","product_candidate_action","product_candidate_ledger_action","product_candidate_ai_recover","product_ai_automation","product_front_match","product_front_unmatch","product_front_finalize","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
+    const actor=await AdminSession.resolveUser(event);const write=method!=="GET"||["run_now","research_begin","research_step","research_commit","supplier_manual_register","product_research_begin","product_research_step","product_research_pause_control","product_research_stage_current","product_candidate_action","product_candidate_ledger_action","product_candidate_ledger_bulk_action","product_candidate_ai_recover","product_ai_automation","product_front_match","product_front_unmatch","product_front_finalize","commit_preview","setting_save","candidate_action","research_candidate_action","operating_preset_apply"].includes(action);requireRole(actor,write);
     const actorId=text(actor&&actor.sub);
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
@@ -108,6 +108,7 @@ exports.handler=async function(event){
     if(action==="product_research_stage_current")return json(200,await Automation.stageCurrentProductResearchQueue(actorId,body));
     if(action==="product_candidate_action")return json(200,await Automation.productCandidateAction(actorId,body));
     if(action==="product_candidate_ledger_action")return json(200,await Automation.productCandidateLedgerAction(actorId,body));
+    if(action==="product_candidate_ledger_bulk_action")return json(200,await Automation.productCandidateLedgerBulkAction(actorId,body));
     if(action==="product_candidate_ai_recover")return json(200,await Automation.productCandidateAiRecover(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
     if(action==="product_front_finalize"){
@@ -213,6 +214,26 @@ exports.handler=async function(event){
     if(action==="policy_decision_save"){
       const scope=policyScopeFromInput(body.scope||body);
       return json(200,await PolicyDiscussion.saveDecision(actorId,Object.assign({},body,{scope})));
+    }
+    if(action==="policy_messages_delete"){
+      const scope=policyScopeFromInput(body.scope||body);
+      return json(200,await PolicyDiscussion.deleteMessages(actorId,Object.assign({},body,{scope})));
+    }
+    if(action==="policy_decision_clear"){
+      const scope=policyScopeFromInput(body.scope||body);
+      return json(200,await PolicyDiscussion.clearDecision(actorId,{scope}));
+    }
+    if(action==="policy_workspace_delete"){
+      const scope=policyScopeFromInput(body.scope||body);
+      return json(200,await PolicyDiscussion.deleteWorkspace(actorId,{scope}));
+    }
+    if(action==="policy_promote"){
+      const scope=policyScopeFromInput(body.scope||body);
+      return json(200,await PolicyDiscussion.promoteToPolicy(actorId,Object.assign({},body,{scope})));
+    }
+    if(action==="policy_execution_log"){
+      const scope=policyScopeFromInput(body.scope||body);
+      return json(200,await PolicyDiscussion.appendExecutionLog(actorId,Object.assign({},body,{scope})));
     }
     if(action==="run_now")return json(200,await Automation.runScope({event,countryCode:body.countryCode,subdivisionCode:body.subdivisionCode||body.regionCode||"NATIONWIDE",actorId,trigger:"administrator-supplier-discovery",force:body.force===true,dryRun:body.dryRun===true}));
     if(action==="commit_preview")return json(200,await Automation.commitPreviewCandidates(actorId,body));

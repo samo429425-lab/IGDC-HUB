@@ -1,4 +1,4 @@
-/* IGDC administrator policy discussion workspace v1.2.0
+/* IGDC administrator policy discussion workspace v1.4.0-admin-execution-preview
  * - global/region/country policy drafting and AI discussion
  * - administrator decision preview before persistence
  * - manual country priority/blocked targets remain above normal automation
@@ -22,6 +22,7 @@
   var currentResponse = null;
   var pendingSavePayload = null;
   var currentWorkspaceType = 'global';
+  var pendingExecutionPreview = null;
   var TOKEN_KEYS = [
     'osauth.tokens.v2', 'osauth.tokens.v1', 'igdc.tokens', 'igdc_auth_tokens',
     'auth0_tokens', 'auth0spa', 'igdc_id_token', 'id_token', 'auth0_id_token'
@@ -202,6 +203,67 @@
     return detectLanguage($('policyInstruction') && $('policyInstruction').value);
   }
 
+  function executionActions(proposal) {
+    return proposal && Array.isArray(proposal.managementActions) ? proposal.managementActions : [];
+  }
+
+  function managementBridge() {
+    return window.IGDCCommerceManagementBridge && typeof window.IGDCCommerceManagementBridge === 'object' ? window.IGDCCommerceManagementBridge : null;
+  }
+
+  function renderExecutionProposal(proposal) {
+    pendingExecutionPreview = null;
+    var actions = executionActions(proposal), plan = $('policyExecutionPlan'), state = $('policyExecutionState'), previewBtn = $('policyExecutionPreviewBtn'), applyBtn = $('policyExecutionApplyBtn');
+    if (plan) plan.textContent = actions.length ? JSON.stringify(actions, null, 2) : '실행 제안이 없습니다.';
+    if (previewBtn) previewBtn.disabled = !actions.length || !managementBridge();
+    if (applyBtn) applyBtn.disabled = true;
+    if (state) state.textContent = actions.length ? (managementBridge() ? '실행안을 현재 목록 기준으로 다시 계산한 뒤 승인할 수 있습니다.' : '관리 실행 연결을 찾지 못했습니다. 대화·정책 저장 기능만 사용할 수 있습니다.') : '먼저 AI와 대화해 실행안을 만드세요.';
+  }
+
+  function managementContextForCurrentWorkspace() {
+    var bridge = managementBridge();
+    if (!bridge || !currentScope || typeof bridge.getContext !== 'function') return null;
+    try { return bridge.getContext(text(currentScope.workspaceKey || 'policy')); } catch (_error) { return null; }
+  }
+
+  async function previewExecutionPlan() {
+    clearModalNotice();
+    var proposal = proposalData(currentWorkspace), actions = executionActions(proposal), bridge = managementBridge();
+    if (!actions.length) { modalNotice('AI가 제안한 관리 실행안이 없습니다. 먼저 대화로 정리 작업을 요청해 주세요.', 'warn'); return null; }
+    if (!bridge || typeof bridge.preview !== 'function') { modalNotice('현재 관리 화면의 실행 연결을 찾지 못했습니다.', 'fail'); return null; }
+    try {
+      pendingExecutionPreview = await Promise.resolve(bridge.preview(text(currentScope && currentScope.workspaceKey), actions));
+      var preview = pendingExecutionPreview || {}, rows = Array.isArray(preview.actions) ? preview.actions : [];
+      if ($('policyExecutionPlan')) $('policyExecutionPlan').textContent = rows.length ? rows.map(function (row, index) { return (index + 1) + '. ' + row.operation + ' · ' + row.filter + ' · 대상 ' + row.count + '건' + (row.sectionKey ? ' · 섹션 ' + row.sectionKey : '') + (row.query ? ' · 검색 ' + row.query : '') + (row.note ? '\n   ' + row.note : ''); }).join('\n') : '현재 데이터에서 실행 대상으로 확정된 항목이 없습니다.';
+      if ($('policyExecutionState')) $('policyExecutionState').textContent = '현재 목록 기준 실행 대상 ' + Number(preview.totalTargets || 0) + '건 · 프론트 공개 작업 없음';
+      if ($('policyExecutionApplyBtn')) $('policyExecutionApplyBtn').disabled = Number(preview.totalTargets || 0) <= 0;
+      modalNotice(Number(preview.totalTargets || 0) > 0 ? '실행 대상을 현재 목록에서 다시 계산했습니다. 내용을 확인한 뒤 관리자 승인·실행을 누르세요.' : '현재 조건에 맞는 실행 대상이 없습니다.', Number(preview.totalTargets || 0) > 0 ? 'ok' : 'warn');
+      return preview;
+    } catch (error) { pendingExecutionPreview = null; modalNotice(error.message || '실행 대상을 계산하지 못했습니다.', 'fail'); return null; }
+  }
+
+  async function applyExecutionPlan() {
+    var bridge = managementBridge();
+    if (!pendingExecutionPreview) { var preview = await previewExecutionPlan(); if (!preview || !Number(preview.totalTargets || 0)) return false; }
+    if (!bridge || typeof bridge.execute !== 'function') { modalNotice('현재 관리 화면의 실행 연결을 찾지 못했습니다.', 'fail'); return false; }
+    var targetCount = Number(pendingExecutionPreview.totalTargets || 0);
+    if (!window.confirm('AI가 제안한 관리 작업을 현재 목록의 ' + targetCount + '건에 적용하시겠습니까?\n\n이 단계는 기존 관리자 관리 기능만 실행하며 프론트 공개·결제는 실행하지 않습니다.')) return false;
+    setBusy(true);
+    try {
+      var result = await Promise.resolve(bridge.execute(pendingExecutionPreview));
+      var summary = text(result && result.summary) || ('AI 승인 관리 실행 · 대상 ' + targetCount + '건');
+      try {
+        var logged = await api('policy_execution_log', 'POST', {}, { scope: currentScope, summary: summary, language: responseLanguage() });
+        if (logged && logged.workspace) { currentResponse = logged; renderWorkspace(logged.workspace); }
+      } catch (_logError) {}
+      if ($('policyExecutionState')) $('policyExecutionState').textContent = summary;
+      pendingExecutionPreview = null;
+      modalNotice(summary, result && result.ok === false ? 'warn' : 'ok');
+      return !(result && result.ok === false);
+    } catch (error) { modalNotice(error.message || 'AI 승인 관리 작업을 실행하지 못했습니다.', 'fail'); return false; }
+    finally { setBusy(false); }
+  }
+
   function modalNotice(message, kind) {
     var element = $('policyModalNotice');
     element.className = 'notice ' + (kind === 'ok' ? 'ok' : kind === 'warn' ? 'warn' : kind === 'fail' ? 'fail' : '');
@@ -327,6 +389,7 @@
     $('policyPriorityTargets').value = (workspace.manualPriorityTargets && workspace.manualPriorityTargets.length ? workspace.manualPriorityTargets : (proposal.manualPriorityTargets || [])).join('\n');
     $('policyBlockedTargets').value = (workspace.manualBlockedTargets && workspace.manualBlockedTargets.length ? workspace.manualBlockedTargets : (proposal.manualBlockedTargets || [])).join('\n');
     $('policyProposal').textContent = Object.keys(proposal).length ? JSON.stringify(proposal, null, 2) : 'AI와 대화하면 운영 의견과 구조화된 제안이 표시됩니다.';
+    renderExecutionProposal(proposal);
     renderMessages(workspace.messages || []);
     var isCountry = scope.scopeType === 'country';
     $('policyCountryFields').classList.toggle('hidden', !isCountry);
@@ -383,6 +446,7 @@
     closeConfirm();
     stopVoice();
     $('policyModal').classList.add('hidden');
+    pendingExecutionPreview = null;
     clearModalNotice();
   }
 
@@ -404,7 +468,7 @@
     setBusy(true);
     try {
       var language = responseLanguage();
-      var data = await api('policy_ai_discuss', 'POST', {}, { scope: currentScope, instruction: instruction, language: language });
+      var data = await api('policy_ai_discuss', 'POST', {}, { scope: currentScope, instruction: instruction, language: language, managementContext: managementContextForCurrentWorkspace() });
       currentResponse = data;
       renderWorkspace(data.workspace);
       var proposal = data.ai && data.ai.proposal || {};
@@ -416,6 +480,7 @@
         $('policyBlockedTargets').value = (proposal.manualBlockedTargets || []).join('\n');
       }
       $('policyProposal').textContent = JSON.stringify(proposal, null, 2);
+      renderExecutionProposal(proposal);
       modalNotice(
         data.ai && data.ai.error
           ? 'AI 대화는 제한 모드로 저장됐습니다: ' + data.ai.error
@@ -688,6 +753,8 @@
     if ($('policyDecisionClearBtn')) $('policyDecisionClearBtn').addEventListener('click', clearSavedDecision);
     if ($('policyWorkspaceDeleteBtn')) $('policyWorkspaceDeleteBtn').addEventListener('click', deleteCurrentWorkspace);
     if ($('policyPromoteBtn')) $('policyPromoteBtn').addEventListener('click', promoteCurrentToPolicy);
+    if ($('policyExecutionPreviewBtn')) $('policyExecutionPreviewBtn').addEventListener('click', previewExecutionPlan);
+    if ($('policyExecutionApplyBtn')) $('policyExecutionApplyBtn').addEventListener('click', applyExecutionPlan);
     $('policyConfirmSaveBtn').addEventListener('click', commitSave);
     $('policyConfirmEditBtn').addEventListener('click', function () {
       closeConfirm();
@@ -730,6 +797,8 @@
     },
     close: closePolicy,
     discuss: discuss,
+    previewExecutionPlan: previewExecutionPlan,
+    applyExecutionPlan: applyExecutionPlan,
     getCurrentScope: function () { return currentScope; },
     getCurrentWorkspace: function () { return currentWorkspace; }
   };

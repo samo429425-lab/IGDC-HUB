@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.9.3-large-ledger-scoped-read";
+const VERSION = "commerce-candidate-review-api-v1.10.0-3000-ledger";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -112,7 +112,7 @@ function marketScopeQuery(country,region,limit){
     "&order=updated_at.desc&limit="+Math.max(1,Number(limit)||600);
 }
 async function fallbackPagedScopeRows(country,region,maxRows){
-  const out=[],seen=new Set(),pageSize=120,maxPages=20;
+  const out=[],seen=new Set(),pageSize=150,maxPages=20;
   for(let offset=0,page=0;page<maxPages&&out.length<maxRows;page+=1,offset+=pageSize){
     const rows=await lightSelect("gslot_candidates","select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at&source_ref=eq."+encodeURIComponent(ProductPipeline.SOURCE_REF)+"&order=updated_at.desc&limit="+pageSize+"&offset="+offset);
     const pageRows=Array.isArray(rows)?rows:[];
@@ -127,7 +127,7 @@ async function fallbackPagedScopeRows(country,region,maxRows){
 }
 async function scopedProductCandidateRows(countryInput,regionInput,limitInput){
   const country=normalizeCountry(countryInput),region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE";
-  const limit=Math.max(50,Math.min(650,Number(limitInput)||550));
+  const limit=Math.max(50,Math.min(3000,Number(limitInput)||3000));
   if(!country||country==="GLOBAL")return [];
   const seen=new Map(),regions=scopedRegionValues(country,region);
   // Current product candidates always carry marketScope. Older rows may only
@@ -188,7 +188,7 @@ async function scopedLiveProductResearchQueue(country,region,limit){
 }
 async function scopedStage(root,country,region){
   const stored=CommerceIntake.readStage(root)||{schema:"commerce-candidate-staging.snapshot.v1",summary:{considered:0},candidates:[]};
-  const storedScoped=filteredStage(stored,country,region),live=await scopedLiveProductResearchQueue(country,region,550),merged=new Map();
+  const storedScoped=filteredStage(stored,country,region),live=await scopedLiveProductResearchQueue(country,region,3000),merged=new Map();
   for(const row of Array.isArray(storedScoped.candidates)?storedScoped.candidates:[])merged.set(text(row&&row.candidateId),row);
   for(const row of live.rows||[])merged.set(text(row&&row.candidateId),row);
   const candidates=Array.from(merged.values()).filter(Boolean),eligible=candidates.filter((row)=>row&&row.releaseEligible===true).length,registrySyncReady=candidates.filter((row)=>text(row&&row.stageStatus)==="registry_sync_ready"||text(row&&row.lifecycle&&row.lifecycle.stage)==="registry_sync_ready").length;
@@ -643,12 +643,12 @@ exports.handler=async function(event){
       const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
       const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion);
       if(action==="dashboard"){
-        const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,500)};
+        const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,3000)};
         if(!["1","true","yes"].includes(lower(query.compact)))response.diagnostic=diagnosticDoc(doc,member);
         return json(200,response);
       }
       if(action==="summary")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc)});
-      if(action==="candidates")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,500)});
+      if(action==="candidates")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,3000)});
       if(action==="diagnostic")return json(200,diagnosticDoc(doc,member));
       return json(404,{ok:false,error:"지원하지 않는 조회 요청입니다."});
     }

@@ -9,9 +9,9 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.0.0";
+const VERSION = "commerce-candidate-queue-control-v1.1.0-3000-admin-list-state";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
-const ACTIONS = new Set(["dismiss","purge","remove_from_list"]);
+const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject"]);
 const RELATION_TABLES = Object.freeze([
   "gslot_slot_assignments",
   "gslot_candidate_availability",
@@ -28,7 +28,7 @@ function roles(actor){ return Array.from(new Set((actor&&actor.roles||[]).map(lo
 function requireWriteRole(actor){ if(!roles(actor).some((role)=>WRITE_ROLES.has(role))){const error=new Error("상품 후보 대기열 정리 권한이 없습니다.");error.statusCode=403;throw error;} }
 function candidateIds(value){
   const input=Array.isArray(value)?value:[value],seen=new Set(),out=[];
-  for(const raw of input){const id=text(raw);if(!/^[A-Za-z0-9_-]{3,180}$/.test(id)||seen.has(id))continue;seen.add(id);out.push(id);if(out.length>=200)break;}
+  for(const raw of input){const id=text(raw);if(!/^[A-Za-z0-9_-]{3,180}$/.test(id)||seen.has(id))continue;seen.add(id);out.push(id);if(out.length>=3000)break;}
   return out;
 }
 async function readCandidate(id){
@@ -57,7 +57,7 @@ async function applyAction(actorId,row,action){
     previousStatus,
     hiddenFromCountryQueue:true,
     permanentExcluded:action==="purge",
-    rediscoveryAllowed:false,
+    rediscoveryAllowed:action==="dismiss",
     decidedAt:now,
     decidedBy:text(actorId)||"administrator"
   });
@@ -67,10 +67,12 @@ async function applyAction(actorId,row,action){
     decidedAt:now,
     decidedBy:text(actorId)||"administrator"
   });
-  const status=action==="purge"?"suppressed":"hold";
+  const status=action==="purge"?"suppressed":action==="reject"?"reject":"hold";
   const note=action==="purge"
-    ?"관리자가 이 상품 후보를 영구 제외했습니다. 자동 상품 리서치가 같은 후보를 다시 승격하지 않도록 원장 기록을 보존합니다."
-    :"관리자가 이 상품 후보를 현재 국가 관제 목록에서만 숨겼습니다. 원장과 기존 검토 기록은 보존합니다.";
+    ?"관리자가 이 상품 후보를 보류·제외 관리에서 영구 제외했습니다. 자동 상품 리서치가 같은 후보를 다시 승격하지 않도록 원장 기록을 보존합니다."
+    :action==="reject"
+      ?"관리자가 이 상품 후보를 현재 후보·배치 목록에서 제외하고 보류·제외 관리로 이동했습니다. 영구 삭제는 수행하지 않았습니다."
+      :"관리자가 이 상품 후보를 현재 국가 관제 목록에서 숨기거나 보류했습니다. 원장과 기존 검토 기록은 보존합니다.";
   await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status,source_payload:payload,owner_note:note,updated_at:now});
   return {id,action,status};
 }

@@ -1,4 +1,4 @@
-/* IGDC policy voice console v1.0.0
+/* IGDC policy voice console v1.1.1-language-tts-conversation
  * Upgraded, isolated reuse of the MARU Global Insight voice pattern.
  * Keeps MARU Global Insight unchanged while adding scoped dictation, one-shot voice Q&A,
  * interim transcript, language selection, error recovery, and AI response speech.
@@ -137,6 +137,13 @@
     if (askSubmitted || !transcript) return;
     askSubmitted = true;
     shouldRestart = false;
+    var executionCommand = /^(?:실행(?:해|하세요)?|적용(?:해|하세요)?|execute|apply)[\s.!?]*$/i.test(transcript.trim());
+    if (executionCommand && window.IGDCPolicyDiscussion && typeof window.IGDCPolicyDiscussion.applyExecutionPlan === 'function') {
+      state('관리 실행 확인', '저장된 AI 실행안을 관리자 확인 단계로 엽니다.');
+      if (recognition) { try { recognition.stop(); } catch (_error) {} }
+      setTimeout(function () { Promise.resolve(window.IGDCPolicyDiscussion.applyExecutionPlan()).then(function (ok) { if (!ok) state('실행 보류', '실행안 또는 관리자 확인 상태를 확인해 주세요.'); }); }, 120);
+      return;
+    }
     var instruction = $('policyInstruction');
     appendTranscript(instruction, transcript);
     if ($('policyVoiceTarget')) $('policyVoiceTarget').value = 'policyInstruction';
