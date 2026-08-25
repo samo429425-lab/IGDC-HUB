@@ -27,7 +27,8 @@ const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
 const VERSION = "canonical-snapshot-publisher-v1.6.1-exact-product-destination-contract";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
-const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
+// Backward-compatible export name; the actual durable source is the Commerce review queue.
+const UPSTREAM_FILE = "commerce-candidate-review-queue.v1.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
 const POLICY_FILE = "canonical-snapshot-policy.v1.json";
 const RELEASE_DIR = "canonical-snapshot";
@@ -166,10 +167,11 @@ function arrayOf(v) { return Array.isArray(v) ? v : (v == null ? [] : [v]); }
 function limitText(value, max) { const text = str(value); return text.length <= max ? text : text.slice(0, max); }
 
 function upstreamPaths(root) {
+  // Diagnostic compatibility only. Canonical publication in this system is fed
+  // an explicit in-memory release bank by build-regional-brokerage-snapshots.js.
+  // The durable source on disk is the actual Global Slot review queue.
   return [
-    path.join(root, "data", UPSTREAM_FILE),
-    path.join(root, "netlify", "functions", "data", UPSTREAM_FILE),
-    path.join(root, "netlify", "functions", UPSTREAM_FILE)
+    path.join(root, "netlify", "functions", "data", "commerce-candidate-review-queue.v1.json")
   ];
 }
 function publicPaths(root) {
@@ -276,24 +278,20 @@ function loadTrustResources(root) {
 function sourceSnapshot(root, options) {
   if (options && options.bank && Array.isArray(options.bank.items)) {
     const doc = clone(options.bank);
-    return { ok: true, doc, digest: sha256(doc), mirrors: [{ path: "[input.bank]", sha256: sha256(doc), count: doc.items.length }], source: "input.bank" };
+    const digest = sha256(doc);
+    return { ok: true, doc, digest, mirrors: [{ path: "[input.bank]", sha256: digest, count: doc.items.length }], source: "input.bank" };
   }
-  const files = upstreamPaths(root);
-  const existing = files.filter(fileExists);
-  const strict = !(options && options.requireMirrorConsensus === false);
-  if (!existing.length) return { ok: false, code: "UPSTREAM_SOURCE_MISSING", mirrors: files.map(file => ({ path: file, present: false })) };
-  if (strict && existing.length !== files.length) return { ok: false, code: "UPSTREAM_MIRROR_MISSING", mirrors: files.map(file => ({ path: file, present: fileExists(file) })) };
-  const docs = existing.map(file => ({ file, doc: safeReadJson(file), hash: fileHash(file) }));
-  if (docs.some(entry => !entry.doc || !Array.isArray(entry.doc.items))) return { ok: false, code: "UPSTREAM_SOURCE_INVALID", mirrors: docs.map(entry => ({ path: entry.file, sha256: entry.hash })) };
-  const hashes = new Set(docs.map(entry => entry.hash));
-  if (strict && hashes.size !== 1) return { ok: false, code: "UPSTREAM_MIRROR_DIVERGED", mirrors: docs.map(entry => ({ path: entry.file, sha256: entry.hash, count: entry.doc.items.length })) };
-  const selected = docs[0];
+
+  // Current IGDC publication never reads a synthetic
+  // SearchBank upstream mirror file. The build bridge must validate the
+  // real Commerce review queue, run Candidate Intake, and pass the resulting
+  // release bank explicitly. Failing here is safer than silently treating a
+  // public SearchBank snapshot or an empty queue as a new publication source.
   return {
-    ok: true,
-    doc: selected.doc,
-    digest: selected.hash,
-    source: selected.file,
-    mirrors: docs.map(entry => ({ path: entry.file, sha256: entry.hash, count: entry.doc.items.length }))
+    ok: false,
+    code: "EXPLICIT_RELEASE_BANK_REQUIRED",
+    source: null,
+    mirrors: upstreamPaths(root).map(file => ({ path: file, present: fileExists(file) }))
   };
 }
 
