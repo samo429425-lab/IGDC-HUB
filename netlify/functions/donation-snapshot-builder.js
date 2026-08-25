@@ -781,14 +781,21 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
 
   const seedSectionDefs = normalizeSeedSectionDefs(seed || {});
   const limits = {};
+  const policyCapacity = DonationResearchPolicy && DonationResearchPolicy.SECTION_CAPACITY
+    ? DonationResearchPolicy.SECTION_CAPACITY
+    : {};
   seedSectionDefs.forEach(s=>{
     if(s && s.psom_key && SECTION_KEYS.includes(s.psom_key)){
-      limits[s.psom_key] = Number(s.slot_limit || s.slotLimit || 100);
+      // Front HTML and Donation admin use 100 for Global News and 80 for the
+      // remaining seven sections.  Prefer the Donation-only policy capacity so
+      // stale seed metadata (historically 100 for every lane) cannot widen a
+      // section behind the front page.
+      limits[s.psom_key] = Number(policyCapacity[s.psom_key] || s.slot_limit || s.slotLimit || (s.psom_key === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 80));
     }
   });
 
   SECTION_KEYS.forEach(k=>{
-    if(!limits[k]) limits[k] = (k === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 100);
+    if(!limits[k]) limits[k] = Number(policyCapacity[k] || (k === DEFAULT_GLOBAL_SECTION_KEY ? 100 : 80));
   });
 
   const psomDonation = getPsomDonationInfo(psomList);

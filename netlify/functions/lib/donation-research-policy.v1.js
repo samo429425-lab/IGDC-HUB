@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.0.0";
+const VERSION = "donation-research-policy-v1.1.0-admin-directed-research";
 
 const SECTIONS = Object.freeze([
   "donation-global",
@@ -56,83 +56,113 @@ const POLICY = Object.freeze({
   "donation-global": {
     category:"global",
     researchTerms:[
-      "humanitarian crisis disaster conflict displacement hunger children climate emergency video",
-      "earthquake flood wildfire famine refugee civilian aid field report video",
-      "humanitarian response children health education water sanitation climate impact footage"
+      "latest humanitarian disaster earthquake flood wildfire conflict refugee hunger children health climate emergency video field report",
+      "breaking earthquake flood wildfire famine refugee civilian aid humanitarian response video official news",
+      "humanitarian crisis environment climate disaster relief children water sanitation health education current video"
     ],
     semanticHints:[
       "humanitarian","crisis","disaster","earthquake","flood","wildfire","drought","famine","hunger","food insecurity",
       "refugee","displacement","displaced","civilian","conflict","war","children","child","orphan","health","hospital",
       "education","school","water","sanitation","climate","environment","emergency","relief","aid","response","field report",
-      "video","footage","broadcast","report","update"
+      "video","footage","broadcast","report","update","breaking","latest"
     ],
-    preferredKinds:["video","article","feed_item"],
-    videoPreferred:true
+    preferredKinds:["video","broadcast","article","feed_item"],
+    videoPreferred:true,
+    freshnessHours:48
   },
   "donation-ngo": {
     category:"ngo",
     researchTerms:[
-      "international NGO nonprofit humanitarian development official organization",
-      "UN agency international humanitarian organization charity development official",
-      "global nonprofit aid development organization official website"
+      "KOICA United Nations UNDP UNICEF international development aid NGO official website",
+      "Good Neighbors international NGO humanitarian development poverty official organization",
+      "international NGO public aid agency nonprofit humanitarian development global official website"
     ],
-    semanticHints:["ngo","nonprofit","non-profit","charity","foundation","association","humanitarian","development","international","united nations","un agency","aid organization"]
+    semanticHints:[
+      "ngo","nonprofit","non-profit","charity","foundation","association","humanitarian","development","international",
+      "united nations","un agency","public aid","development agency","official organization","poverty","food security","global aid",
+      "koica","good neighbors","undp","unicef","unhcr"
+    ],
+    preferredKinds:["organization","institution","official_site"]
   },
   "donation-mission": {
     category:"mission",
     researchTerms:[
-      "Protestant evangelical Christian mission organization international official",
-      "evangelical mission agency missions ministry Protestant official",
-      "Christian medical mission campus mission Bible mission Protestant organization"
+      "Lausanne Movement PAUA Pan Asia Africa Universities Association Protestant evangelical mission official",
+      "Campus Crusade for Christ CCC InterVarsity IVF Child Evangelism Fellowship mission official",
+      "Protestant evangelical Christian mission organization campus ministry Bible mission official local country"
     ],
-    semanticHints:["protestant","evangelical","christian mission","missions","mission agency","gospel","evangelism","missionary","campus ministry","bible translation","medical mission","church mission"],
-    excludedHints:["catholic","roman catholic","orthodox church","mosque","islamic mission","temple","hindu mission","new religious movement","cult"]
+    semanticHints:[
+      "protestant","evangelical","christian mission","missions","mission agency","gospel","evangelism","missionary","campus ministry",
+      "bible translation","medical mission","church mission","lausanne","paua","campus crusade","ccc","intervarsity","ivf","child evangelism fellowship"
+    ],
+    excludedHints:["catholic","roman catholic","orthodox church","mosque","islamic mission","temple","hindu mission","new religious movement","cult"],
+    preferredKinds:["organization","institution","official_site"],
+    ipLocalized:true
   },
   "donation-service": {
     category:"service",
     researchTerms:[
-      "Christian volunteer service organization housing wells medical community official",
-      "faith based volunteer humanitarian service organization official",
-      "volunteer medical housing clean water community development organization"
+      "Christian volunteer service organization community medical housing clean water official website",
+      "Habitat for Humanity Christian volunteer community service official organization",
+      "faith based volunteer service medical housing wells community development organization official"
     ],
-    semanticHints:["volunteer","service","community","medical","health","housing","habitat","well","clean water","water project","community development","welfare","support","shelter"]
+    semanticHints:[
+      "volunteer","service","community","medical","health","housing","habitat","well","clean water","water project","community development",
+      "welfare","support","shelter","volunteer corps","service organization","faith based"
+    ],
+    preferredKinds:["organization","institution","official_site"]
   },
   "donation-relief": {
     category:"relief",
     researchTerms:[
-      "humanitarian relief disaster emergency hunger refugee organization official",
-      "Christian relief organization disaster response food aid refugee official",
-      "emergency relief famine food security disaster response organization"
+      "World Vision Food for the Hungry Samaritan's Purse humanitarian relief official website",
+      "Christian relief disaster emergency hunger refugee organization official",
+      "emergency relief famine food security disaster response refugee aid official organization"
     ],
-    semanticHints:["relief","disaster","emergency","humanitarian","rescue","famine","hunger","food aid","food security","refugee","displacement","earthquake","flood","war relief","disaster response"]
+    semanticHints:[
+      "relief","disaster","emergency","humanitarian","rescue","famine","hunger","food aid","food security","refugee","displacement",
+      "earthquake","flood","war relief","disaster response","world vision","food for the hungry","samaritan's purse"
+    ],
+    preferredKinds:["organization","institution","official_site"]
   },
   "donation-education": {
     category:"education",
     researchTerms:[
-      "Christian education mission university children literacy organization official",
-      "international education nonprofit school youth student training official",
-      "campus ministry education literacy university mission organization"
+      "4/14 Window Christian education children youth mission official organization",
+      "Christian education mission university children literacy scholarship training official",
+      "international Christian education nonprofit school youth student campus training official"
     ],
-    semanticHints:["education","school","student","youth","child","children","scholarship","university","college","training","literacy","campus","teacher","learning"]
+    semanticHints:[
+      "education","school","student","youth","child","children","scholarship","university","college","training","literacy","campus","teacher","learning",
+      "4/14 window","four fourteen window","christian education"
+    ],
+    preferredKinds:["organization","institution","official_site"]
   },
   "donation-environment": {
     category:"environment",
     researchTerms:[
-      "Christian environmental stewardship conservation reforestation organization official",
-      "faith based creation care climate conservation tree planting nonprofit",
-      "Christian conservation reforestation biodiversity clean water stewardship organization"
+      "A Rocha Christian environmental conservation creation care official organization",
+      "Plant With Purpose Christian reforestation poverty environment official organization",
+      "Christian environmental stewardship conservation reforestation clean water biodiversity official"
     ],
-    semanticHints:["environment","creation care","stewardship","climate","forest","reforestation","tree planting","ocean","wildlife","conservation","biodiversity","sustainability","clean water"],
-    excludedHints:["political campaign","party campaign","election campaign","partisan"]
+    semanticHints:[
+      "environment","creation care","stewardship","climate","forest","reforestation","tree planting","ocean","wildlife","conservation","biodiversity",
+      "sustainability","clean water","a rocha","plant with purpose"
+    ],
+    excludedHints:["political campaign","party campaign","election campaign","partisan"],
+    preferredKinds:["organization","institution","official_site"]
   },
   "donation-others": {
     category:"others",
     researchTerms:[
-      "Christian nonprofit vulnerable people justice prison disability official organization",
-      "faith based nonprofit legal aid human rights trafficking prison ministry official",
-      "international charity vulnerable community disability justice organization official"
+      "Christian nonprofit vulnerable people disability anti trafficking prison ministry official organization",
+      "faith based nonprofit legal aid human rights persecution family support official organization",
+      "international Christian charity vulnerable community disability justice elderly widow orphan official"
     ],
-    semanticHints:["justice","legal aid","prison","prisoner","trafficking","disability","vulnerable","human rights","persecution","family support","elderly","widow","orphan"]
+    semanticHints:[
+      "justice","legal aid","prison","prisoner","trafficking","disability","vulnerable","human rights","persecution","family support","elderly","widow","orphan","faith based","christian nonprofit"
+    ],
+    preferredKinds:["organization","institution","official_site"]
   }
 });
 

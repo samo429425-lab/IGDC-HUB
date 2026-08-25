@@ -14,10 +14,11 @@ const crypto = require("crypto");
 const AdminAuth = require("./lib/global-slot-console-auth");
 const Store = require("./lib/global-slot-console-supabase");
 const Policy = require("./lib/donation-research-policy.v1");
+const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.0.0";
+const VERSION = "donation-candidate-admin-v1.1.0-policy-voice-front-control";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -57,6 +58,16 @@ function normalizeCandidate(item,section,query){
   const raw=plain(item), org=plain(raw.org), media=plain(raw.media), source=plain(raw.source);
   const resolved=sectionOf(raw,section), url=candidateUrl(raw), title=limitText(raw.title||raw.name||org.name||url,300), thumb=candidateThumb(raw);
   const isVideo=Policy.looksLikeVideo(raw), relevance=Policy.sectionRelevance(raw,resolved);
+  const publishedAt=raw.published_at||raw.publishedAt||raw.datePublished||null;
+  let freshnessBonus=0;
+  if(resolved==="donation-global"&&publishedAt){
+    const ts=Date.parse(publishedAt);
+    if(Number.isFinite(ts)){
+      const ageHours=Math.max(0,(Date.now()-ts)/3600000);
+      freshnessBonus=ageHours<=24?100:ageHours<=48?70:ageHours<=72?30:ageHours<=168?5:-40;
+    }
+  }
+  const frontRank=relevance+(thumb?20:0)+(resolved==="donation-global"&&isVideo?50:0)+freshnessBonus;
   const id=idFor(resolved,url,title);
   const candidate={
     id,title,
@@ -69,7 +80,8 @@ function normalizeCandidate(item,section,query){
     media:{kind:isVideo?"video":"image",src:isVideo?url:null,thumb:thumb||null,ratio:isVideo?"16:9":"1:1"},
     org:{name:limitText(org.name||raw.name||title,300)||null,legal_name:limitText(org.legal_name||raw.legal_name||"",300)||null,homepage:(!isVideo?url:safeHttps(org.homepage||raw.homepage||raw.website))||null,country:text(org.country||raw.country)||null},
     source:{name:sourceName(raw),url:safeHttps(source.url||raw.sourceUrl||raw.source_url||url)||url,authority:Number(source.authority||raw.authority||0)||0},
-    published_at:raw.published_at||raw.publishedAt||raw.datePublished||null,
+    published_at:publishedAt,
+    rank:{score:Math.round(frontRank*100)/100},
     tags:Array.isArray(raw.tags)?raw.tags.slice(0,30):[],
     searchBankId:text(raw.id||raw.uid||raw.indexId||raw.originalId)||null,
     searchBankContract:plain(raw.searchBankContract||raw.sanmaruSearchBankContract),
@@ -106,7 +118,10 @@ async function upsertRows(rows){
 }
 function researchParams(section,query,limit){
   const q=text(query)||Policy.queryTerms(section)[0]||Policy.SECTION_LABELS[section]||"donation";
-  return {q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview"};
+  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred"};
+  if(section==="donation-global"){params.freshnessHours="48";params.mediaPreference="video";}
+  if(section==="donation-mission"){params.localizeByIp="1";params.geoPreference="ip-preferred";}
+  return params;
 }
 async function performResearch(event,section,customQuery,limit){
   if(!SearchBank||typeof SearchBank.runEngine!=="function"){const e=new Error("SearchBank Engine을 불러오지 못했습니다.");e.statusCode=503;throw e;}
@@ -115,7 +130,10 @@ async function performResearch(event,section,customQuery,limit){
   const existing=await readRows(), existingMap=new Map(existing.map(r=>[text(r.id),r]));
   const writes=[], reports=[];
   for(const sec of sections){
-    const queries=customQuery&&sections.length===1?[text(customQuery)]:Policy.queryTerms(sec).slice(0, section==="all"?1:2);
+    const baseTerms=Policy.queryTerms(sec);
+    const queries=customQuery
+      ? (sections.length===1 ? [text(customQuery)] : [text([baseTerms[0]||"",customQuery].filter(Boolean).join(" "))])
+      : baseTerms.slice(0, section==="all"?1:2);
     const seen=new Set(); let accepted=0, skippedExcluded=0;
     for(const q of queries){
       const result=await SearchBank.runEngine(event,researchParams(sec,q,limit));
@@ -164,6 +182,16 @@ function rankForAuto(view){
   if(view.url&&/^https:\/\//i.test(view.url)) score+=30;
   if(view.thumbnail&&/^https:\/\//i.test(view.thumbnail)) score+=15;
   if(view.mediaKind==="video"&&view.section==="donation-global") score+=25;
+  if(view.section==="donation-global"){
+    const published = Date.parse(view.candidate&&view.candidate.published_at||"");
+    if(Number.isFinite(published)){
+      const ageHours = Math.max(0,(Date.now()-published)/3600000);
+      if(ageHours<=24) score+=45;
+      else if(ageHours<=48) score+=30;
+      else if(ageHours<=72) score+=12;
+      else if(ageHours>168) score-=30;
+    }
+  }
   if((view.issues||[]).includes("mission_policy_excluded")) score-=1000;
   if((view.issues||[]).includes("placeholder_or_seed")) score-=1000;
   return score;
@@ -184,6 +212,18 @@ async function autoStage(section,targetStage,actor){
   const results=await updateStage(selected.map(v=>v.id),targetStage,actor,"AI 자동 선별");
   return {selected:selected.length,results};
 }
+async function executePolicyAgenda(event,body,actor){
+  const scope=PolicyDiscussion.normalizeScope(body.scope||body.section||"all");
+  const agenda=await PolicyDiscussion.getAgenda(scope,body.agendaId);
+  const destination=lower(body.destination||agenda.destination||"admin");
+  if(!["admin","front_candidate","front"].includes(destination)){const e=new Error("정책 실행 대상이 올바르지 않습니다.");e.statusCode=400;throw e;}
+  const query=PolicyDiscussion.executionQuery(agenda);
+  const research=await performResearch(event,scope,query,body.limit||80);
+  let stageResult=null;
+  if(destination==="front_candidate") stageResult=await autoStage(scope,"front_candidate",actor);
+  if(destination==="front") stageResult=await autoStage(scope,"published",actor);
+  return {scope,agendaId:agenda.id,destination,query,research,stageResult,publicPublication:destination==="front"};
+}
 function summary(rows){
   const out={total:rows.length,stages:{},sections:{}};
   Policy.SECTIONS.forEach(sec=>out.sections[sec]={total:0,research:0,queue:0,front_candidate:0,published:0,hold:0,excluded:0,capacity:CAPACITY[sec]||80});
@@ -199,6 +239,23 @@ exports.handler=async function(event){
     }
     if(method!=="POST")return json(405,{ok:false,error:"method_not_allowed"});
     const body=parse(event),action=lower(body.action||body.decision);
+    if(action==="policy_workspace"){
+      const scope=PolicyDiscussion.normalizeScope(body.scope||body.section||"all");
+      return json(200,await PolicyDiscussion.getWorkspace(scope));
+    }
+    if(action==="policy_ai_discuss"){
+      return json(200,await PolicyDiscussion.discuss(text(actor&&actor.sub),body));
+    }
+    if(action==="policy_agenda_delete"){
+      return json(200,await PolicyDiscussion.deleteAgenda(text(actor&&actor.sub),body));
+    }
+    if(action==="policy_workspace_clear"){
+      return json(200,await PolicyDiscussion.clearWorkspace(text(actor&&actor.sub),body));
+    }
+    if(action==="policy_execute"){
+      const result=await executePolicyAgenda(event,body,actor);
+      return json(200,{ok:true,version:VERSION,action,result,publicPublication:result.publicPublication===true});
+    }
     if(action==="research"){
       const section=Policy.normalizeSection(body.section)|| (lower(body.section)==="all"?"all":"");
       const result=await performResearch(event,section,text(body.query),body.limit); return json(200,{ok:true,version:VERSION,action,result,publicPublication:false});
