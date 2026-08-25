@@ -2,7 +2,6 @@
 
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const os = require("os");
 const root = path.resolve(__dirname, "..");
 const canonical = require(path.join(root, "netlify", "functions", "lib", "canonical-snapshot-publisher.v1"));
@@ -334,17 +333,11 @@ function currentReviewQueueFile(commerceRegistrySync) {
 }
 
 /*
- * Commerce/Distribution rebuild source policy
- * -------------------------------------------
- * The repository does not contain a durable search-bank.upstream.snapshot.json
- * mirror set.  The only authoritative rebuild source is the actual Global Slot
- * publication queue refreshed from the management DB by
- * commerce-candidate-registry-sync.v1.js.
- *
- * IMPORTANT: when that authoritative source is unavailable, do not fabricate an
- * empty release and do not let a fresh production deploy replace the currently
- * live scoped snapshots.  The caller's existing production fail-closed guard
- * will stop the deploy and preserve the previous live deployment.
+ * Publication input is the real administrator review queue. There is no
+ * search-bank.upstream.snapshot.json contract in the current repository.
+ * Without an authoritative explicit admin request we preserve the committed
+ * snapshots; we never synthesize an empty release and never search phantom
+ * upstream mirror paths.
  */
 function loadConfirmedUpstream(commerceRegistrySync) {
   const authorization = commerceRegistrySync && commerceRegistrySync.releaseAuthorization || {};
@@ -384,9 +377,7 @@ function loadConfirmedUpstream(commerceRegistrySync) {
       reason: "authoritative-commerce-publication-source-unavailable",
       queueAuthoritative: false,
       queue: queueMeta,
-      queueFile: queueInfo,
-      syncStatus: commerceRegistrySync && commerceRegistrySync.status || null,
-      syncReason: commerceRegistrySync && commerceRegistrySync.reason || null
+      queueFile: queueInfo
     };
   }
 
@@ -412,14 +403,7 @@ function loadConfirmedUpstream(commerceRegistrySync) {
       queueFile: queueInfo
     };
   } catch (error) {
-    return {
-      ok: false,
-      reason: "authoritative-admin-queue-invalid",
-      queueAuthoritative,
-      queue: queueMeta,
-      queueFile: queueInfo,
-      error: String(error && error.message || error)
-    };
+    return { ok: false, reason: "authoritative-admin-queue-invalid", queueAuthoritative, queue: queueMeta, queueFile: queueInfo, error: String(error && error.message || error) };
   }
 }
 
@@ -527,10 +511,6 @@ function writePreservedBuild(reason, details) {
   }, null, 2) + "\n");
 }
 
-function productionDeployBuild() {
-  return String(process.env.CONTEXT || "").trim().toLowerCase() === "production";
-}
-
 function compactSocialReport(report) {
   if (!report || typeof report !== "object") return report || null;
   const gate = report.policyGate && typeof report.policyGate === "object" ? report.policyGate : null;
@@ -585,8 +565,22 @@ async function main() {
   const incomingSocialIntent = incomingSocialHookIntent();
   const explicitAdminPublicationInBuild = incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish";
   const explicitSocialPublicationInBuild = incomingSocialIntent.explicit === true;
-  const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild || productionDeployBuild();
+  const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild;
   let explicitSocialPublication = null;
+
+  // Ordinary code/config deployments must never reinterpret "no fresh admin queue"
+  // as an empty Commerce release. The repository already contains the last
+  // committed front snapshots, so keep them byte-for-byte and do not run the
+  // Commerce/Distribution publication pipeline unless an explicit publication
+  // hook is present. This also prevents normal Netlify deploys from depending on
+  // non-existent search-bank.upstream.snapshot.json mirror files.
+  if (!explicitAdminPublicationInBuild && !explicitSocialPublicationInBuild) {
+    writePreservedBuild("ordinary-deploy-preserve-committed-snapshots", {
+      incomingCommerceIntent,
+      incomingSocialIntent
+    });
+    return;
+  }
 
   function preserveOrFail(reason, details) {
     // data/auto is build output, not a committed source tree. On a fresh Netlify
