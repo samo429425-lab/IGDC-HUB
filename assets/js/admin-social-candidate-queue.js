@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.4.0 - durable front-state recovery / eight-platform continuity */
+/* IGDC Social Hub Content Operations v3.4.1 - administrator thumbnail continuity */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -717,15 +717,44 @@
     if (/hold|replacement|search_excluded/i.test(r.reviewStatus)) return "hold";
     return "risk";
   }
+  function youtubeThumbFromRow(r) {
+    var raw = (r && r.raw) || {},
+      value = text(
+        (r && (r.latestContentUrl || r.sourceUrl || r.channelEvidenceUrl)) ||
+          raw.latestContentUrl || raw.latest_content_url ||
+          raw.sourceContentUrl || raw.source_content_url || raw.url || "",
+      ),
+      match = value.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|embed\/))([A-Za-z0-9_-]{6,})/i);
+    return match ? "https://i.ytimg.com/vi/" + match[1] + "/hqdefault.jpg" : "";
+  }
+  function thumbnailOf(r, mode) {
+    var raw = (r && r.raw) || {},
+      social = (r && r.social) || raw.social || {},
+      source = (r && r.source) || raw.source || {},
+      values = mode === "registry"
+        ? [
+            r && r.channelThumbnailUrl, raw.channelThumbnailUrl, raw.channel_thumbnail_url,
+            r && r.thumbnailUrl, r && r.thumbnail_url, raw.thumbnailUrl, raw.thumbnail_url,
+            raw.thumbnail, raw.thumb, raw.image, raw.imageUrl, raw.image_url, raw.poster, raw.cover,
+            social.thumbnailUrl, social.thumbnail, social.image, source.thumbnailUrl, source.thumbnail, source.image
+          ]
+        : [
+            r && r.thumbnailUrl, r && r.thumbnail_url, raw.thumbnailUrl, raw.thumbnail_url,
+            raw.thumbnail, raw.thumb, raw.image, raw.imageUrl, raw.image_url, raw.poster, raw.cover,
+            social.thumbnailUrl, social.thumbnail, social.image, source.thumbnailUrl, source.thumbnail, source.image,
+            r && r.channelThumbnailUrl, raw.channelThumbnailUrl, raw.channel_thumbnail_url
+          ];
+    for (var i = 0; i < values.length; i += 1) {
+      var value = text(values[i]);
+      if (/^https:\/\//i.test(value)) return value;
+    }
+    if (lower(r && r.platform).replace(/^social-/, "") === "youtube" || text(r && r.sectionKey) === "social-youtube") {
+      return youtubeThumbFromRow(r);
+    }
+    return "";
+  }
   function thumb(r, mode) {
-    var raw = r.raw || {},
-      url = text(
-        mode === "registry"
-          ? r.channelThumbnailUrl ||
-              raw.channelThumbnailUrl ||
-              r.thumbnailUrl
-          : r.thumbnailUrl,
-      );
+    var url = thumbnailOf(r, mode);
     return /^https:\/\//i.test(url)
       ? '<img loading="lazy" referrerpolicy="no-referrer" src="' +
           esc(url) +

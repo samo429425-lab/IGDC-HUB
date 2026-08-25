@@ -17,7 +17,7 @@ let SocialStore = null;
 try { SocialStore = require("./lib/social-candidate-store.v1"); } catch (_error) { SocialStore = null; }
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-candidate-review-api-v1.2.0-durable-nonempty-fallback";
+const VERSION = "social-candidate-review-api-v1.2.1-thumbnail-preservation";
 const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager", "media_manager", "commerce_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -71,15 +71,42 @@ function first(obj, keys) {
   for (const key of keys) if (obj && obj[key] != null && text(obj[key])) return obj[key];
   return "";
 }
+function youtubeThumbnailFromUrl(value) {
+  const match = text(value).match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|embed\/))([A-Za-z0-9_-]{6,})/i);
+  return match ? "https://i.ytimg.com/vi/" + match[1] + "/hqdefault.jpg" : "";
+}
+function thumbnailFrom(value, platformHint) {
+  const obj = value && typeof value === "object" ? value : {};
+  const raw = obj.raw && typeof obj.raw === "object" ? obj.raw : {};
+  const social = obj.social && typeof obj.social === "object" ? obj.social : {};
+  const source = obj.source && typeof obj.source === "object" ? obj.source : {};
+  const media = obj.media && typeof obj.media === "object" ? obj.media : {};
+  const groups = [obj, raw, social, source, media];
+  const keys = ["thumbnail_url","thumbnailUrl","thumbnail","thumb","image","imageUrl","image_url","poster","posterUrl","cover","coverUrl","previewImage","preview_image"];
+  for (const group of groups) {
+    const found = text(first(group, keys));
+    if (/^https:\/\//i.test(found)) return found;
+  }
+  const platform = lower(platformHint || first(obj,["platform","provider","network"]) || first(source,["platform","provider"])).replace(/^social-/, "");
+  if (platform === "youtube") {
+    return youtubeThumbnailFromUrl(first(obj,["latestContentUrl","latest_content_url","sourceUrl","source_url","url","link","href","permalink"]) || first(raw,["latestContentUrl","latest_content_url","sourceContentUrl","source_content_url","url"]));
+  }
+  return "";
+}
+function snapshotIdentity(item) {
+  const raw = item && typeof item === "object" ? item : {};
+  const audit = raw.audit && typeof raw.audit === "object" ? raw.audit : {};
+  return text(first(audit,["candidate_id","candidateId"]) || first(raw,["candidateId","candidate_id","contentId","content_id","id","sourceUrl","source_url","url","link","href"]));
+}
 function recoveredRow(item, sectionKey, index, assetClass) {
   const raw = item && typeof item === "object" ? item : {};
   const id = text(first(raw, ["id","candidateId","candidate_id","contentId","content_id","uuid"])) ||
     "recovered:" + sectionKey + ":" + index + ":" + Buffer.from(text(first(raw,["url","sourceUrl","source_url","link","href","title"])) || String(index)).toString("base64url").slice(0,32);
   const sourceUrl = text(first(raw, ["source_url","sourceUrl","url","link","href","permalink"]));
-  const thumbnail = text(first(raw, ["thumbnail_url","thumbnailUrl","thumbnail","image","imageUrl","image_url","thumb"]));
+  const platform = lower(first(raw, ["platform","provider","network"]) || sectionKey).replace(/^social-/, "");
+  const thumbnail = thumbnailFrom(raw, platform) || (platform === "youtube" ? youtubeThumbnailFromUrl(sourceUrl) : "");
   const title = text(first(raw, ["title","name","label","channelName","author"]));
   const description = text(first(raw, ["description","desc","summary","caption"]));
-  const platform = lower(first(raw, ["platform","provider","network"]) || sectionKey);
   return Object.assign({}, raw, {
     id,
     section_key: text(first(raw,["section_key","sectionKey"])) || sectionKey,
@@ -117,13 +144,26 @@ function rowsFromPublishedSnapshot(doc) {
     const pool = Array.isArray(candidatePool && candidatePool[sectionKey]) ? candidatePool[sectionKey] : [];
     const visibleRaw = sections && sections[sectionKey];
     const visible = Array.isArray(visibleRaw) ? visibleRaw : (Array.isArray(visibleRaw && visibleRaw.items) ? visibleRaw.items : []);
-    const sources = pool.length ? [{items: pool, cls: "latest_content"}] : [{items: visible, cls: "latest_content"}];
-    sources.forEach((source) => source.items.forEach((item, index) => {
-      const row = recoveredRow(item, sectionKey, index, source.cls);
+    const visibleByIdentity = new Map();
+    visible.forEach((item) => {
+      const key = snapshotIdentity(item);
+      if (key) visibleByIdentity.set(key, item);
+    });
+    const items = pool.length ? pool.map((item) => {
+      const visibleItem = visibleByIdentity.get(snapshotIdentity(item)) || {};
+      const poolThumb = thumbnailFrom(item, sectionKey);
+      const visibleThumb = thumbnailFrom(visibleItem, sectionKey);
+      return Object.assign({}, visibleItem, item, {
+        thumbnail_url: poolThumb || visibleThumb || undefined,
+        thumbnailUrl: poolThumb || visibleThumb || undefined
+      });
+    }) : visible.slice();
+    items.forEach((item, index) => {
+      const row = recoveredRow(item, sectionKey, index, "latest_content");
       const key = text(row.id) || text(row.source_url);
       if (!key || seen.has(key)) return;
       seen.add(key); out.push(row);
-    }));
+    });
   });
   return out;
 }
@@ -177,7 +217,21 @@ async function candidateSnapshot(root) {
 
   return { file: "", sourceMode: stage && stage.sourceMode || "missing", storeError: stage && stage.storeError || null, rows: [] };
 }
-function normalizeRows(rows) { return rows.map((row) => SocialStore && SocialStore.normalizeDbRow ? SocialStore.normalizeDbRow(row) : row); }
+function normalizeRows(rows) {
+  return rows.map((row) => {
+    const normalized = SocialStore && SocialStore.normalizeDbRow ? SocialStore.normalizeDbRow(row) : Object.assign({}, row);
+    const platform = lower(normalized && normalized.platform || row && row.platform);
+    const thumb = text(normalized && normalized.thumbnailUrl) || thumbnailFrom(row, platform);
+    const channelThumb = text(normalized && normalized.channelThumbnailUrl) || text(first(row && row.raw || {}, ["channelThumbnailUrl","channel_thumbnail_url"]));
+    if (thumb) { normalized.thumbnailUrl = thumb; normalized.thumbnail_url = thumb; }
+    if (channelThumb) normalized.channelThumbnailUrl = channelThumb;
+    if (!thumb && platform === "youtube") {
+      const yt = youtubeThumbnailFromUrl(normalized.latestContentUrl || normalized.sourceUrl || row && (row.latestContentUrl || row.sourceUrl || row.source_url));
+      if (yt) { normalized.thumbnailUrl = yt; normalized.thumbnail_url = yt; }
+    }
+    return normalized;
+  });
+}
 function assetClass(row) {
   const raw = row && row.raw || {};
   return text(row && (row.assetClass || row.asset_class) || raw.assetClass || (raw.latestContentAsset === true ? "latest_content" : "influencer_registry"));
