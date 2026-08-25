@@ -2095,7 +2095,7 @@
           "SearchBank 실후보를 관리자 후보 목록으로 반입하고 있습니다.",
         "warn",
       );
-      var body = { action: "import_searchbank", limit: 5000 };
+      var body = { action: "import_searchbank", limit: 3000 };
       if (sectionKey) body.sectionKey = sectionKey;
       var d = await post(PIPELINE, body);
       diagnostic(d);

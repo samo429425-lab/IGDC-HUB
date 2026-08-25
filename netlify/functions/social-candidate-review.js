@@ -18,7 +18,7 @@ try { SocialStore = require("./lib/social-candidate-store.v1"); } catch (_error)
 const CountryRouting = require("./lib/social-country-routing.v1");
 
 const VERSION = "social-candidate-review-api-v1.2.1-thumbnail-preservation";
-const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager", "media_manager", "commerce_manager"]);
+const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
 function lower(value) { return text(value).toLowerCase().replace(/\s+/g, "_"); }
@@ -199,7 +199,7 @@ async function candidateSnapshot(root) {
   if (SocialStore && typeof SocialStore.selectCandidates === "function") {
     try {
       SocialStore.config();
-      const rows = await SocialStore.selectCandidates("select=*&order=updated_at.desc&limit=10000");
+      const rows = await SocialStore.selectCandidates("select=*&order=updated_at.desc&limit=3000");
       if (Array.isArray(rows) && rows.length) {
         return { file: "supabase:" + (SocialStore.CANDIDATE_TABLE || "social_candidates"), sourceMode: "supabase", storeError: null, rows };
       }
