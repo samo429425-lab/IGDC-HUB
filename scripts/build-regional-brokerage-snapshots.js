@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const os = require("os");
 const root = path.resolve(__dirname, "..");
 const canonical = require(path.join(root, "netlify", "functions", "lib", "canonical-snapshot-publisher.v1"));
@@ -327,150 +328,99 @@ function validateExplicitCommerceSelection(upstream, intent) {
   };
 }
 
-function durableReviewQueueFile(commerceRegistrySync) {
+function currentReviewQueueFile(commerceRegistrySync) {
   const reported = String(commerceRegistrySync && commerceRegistrySync.file || "").trim();
-  if (reported) return path.resolve(reported);
-  return path.join(root, "netlify", "functions", "data", "commerce-candidate-review-queue.v1.json");
-}
-
-function normalizeQueueAuthorization(doc, commerceRegistrySync) {
-  const syncAuthorization = commerceRegistrySync && commerceRegistrySync.releaseAuthorization || {};
-  const docAuthorization = doc && doc.releaseAuthorization || {};
-  const authorization = Object.assign({}, docAuthorization, syncAuthorization);
-  const requestedCount = Number(
-    commerceRegistrySync && commerceRegistrySync.requestedCount != null
-      ? commerceRegistrySync.requestedCount
-      : (doc && doc.requestedCount != null ? doc.requestedCount : authorization.requestedCount || 0)
-  );
-  const withdrawnCount = Number(
-    commerceRegistrySync && commerceRegistrySync.withdrawnCount != null
-      ? commerceRegistrySync.withdrawnCount
-      : (doc && doc.withdrawnCount != null ? doc.withdrawnCount : authorization.withdrawnCount || 0)
-  );
-  const explicitAdminRequest = authorization.explicitAdminRequest === true && requestedCount > 0;
-  const explicitAdminWithdrawal = authorization.explicitAdminWithdrawal === true && withdrawnCount > 0;
-  const mode = String(authorization.mode || doc && doc.mode || "").toLowerCase();
-  const recognizedMode = ["explicit-admin-publication-request", "explicit-admin-unpublication-request"].includes(mode);
-  const authoritative = !!(
-    recognizedMode &&
-    (authorization.authoritative === true || doc && doc.authoritative === true) &&
-    (explicitAdminRequest || explicitAdminWithdrawal)
-  );
-  return {
-    authoritative,
-    mode,
-    requestedCount,
-    withdrawnCount,
-    explicitAdminRequest,
-    explicitAdminWithdrawal,
-    scopeKeys: Array.isArray(authorization.scopeKeys) ? authorization.scopeKeys.slice() : (Array.isArray(doc && doc.scopeKeys) ? doc.scopeKeys.slice() : []),
-    withdrawalScopeKeys: Array.isArray(authorization.withdrawalScopeKeys) ? authorization.withdrawalScopeKeys.slice() : (Array.isArray(doc && doc.withdrawalScopeKeys) ? doc.withdrawalScopeKeys.slice() : []),
-    releaseAuthorization: authorization
-  };
+  return reported ? path.resolve(reported) : path.join(root, "netlify", "functions", "data", "commerce-candidate-review-queue.v1.json");
 }
 
 /*
- * The current IGDC tree does not use a synthetic SearchBank upstream mirror.
- * Commerce publication is sourced from the actual durable Global Slot review
- * queue written by commerce-candidate-registry-sync.v1.js.  A fresh live sync
- * is preferred; when that sync is unavailable, a previously written queue may
- * be reused only when its own authorization metadata proves that it is an
- * explicit administrator publication/unpublication state.
+ * Commerce/Distribution rebuild source policy
+ * -------------------------------------------
+ * The repository does not contain a durable search-bank.upstream.snapshot.json
+ * mirror set.  The only authoritative rebuild source is the actual Global Slot
+ * publication queue refreshed from the management DB by
+ * commerce-candidate-registry-sync.v1.js.
  *
- * An ordinary empty/non-authoritative queue means "nothing to publish now".
- * It must never be converted into an implicit deletion and it must never force
- * the build to look for phantom SearchBank upstream mirror files.
+ * IMPORTANT: when that authoritative source is unavailable, do not fabricate an
+ * empty release and do not let a fresh production deploy replace the currently
+ * live scoped snapshots.  The caller's existing production fail-closed guard
+ * will stop the deploy and preserve the previous live deployment.
  */
 function loadConfirmedUpstream(commerceRegistrySync) {
-  const queueFile = durableReviewQueueFile(commerceRegistrySync);
-  const queueRelative = path.relative(root, queueFile).replace(/\\/g, "/");
-  let queueDoc = null;
-  let queueReadError = null;
-
-  if (fileExists(queueFile)) {
-    try {
-      queueDoc = readJson(queueFile);
-    } catch (error) {
-      queueReadError = String(error && error.message || error);
-    }
-  }
-
-  const freshSyncAuthoritative = !!(
+  const authorization = commerceRegistrySync && commerceRegistrySync.releaseAuthorization || {};
+  const requestedCount = Number(commerceRegistrySync && commerceRegistrySync.requestedCount || authorization.requestedCount || 0);
+  const withdrawnCount = Number(commerceRegistrySync && commerceRegistrySync.withdrawnCount || authorization.withdrawnCount || 0);
+  const explicitAdminRequest = authorization.explicitAdminRequest === true && requestedCount > 0;
+  const explicitAdminWithdrawal = authorization.explicitAdminWithdrawal === true && withdrawnCount > 0;
+  const recognizedMode = ["explicit-admin-publication-request", "explicit-admin-unpublication-request"].includes(String(authorization.mode || "").toLowerCase());
+  const queueAuthoritative = !!(
     commerceRegistrySync &&
     commerceRegistrySync.ok === true &&
     commerceRegistrySync.status === "synchronized" &&
     commerceRegistrySync.authoritative === true &&
-    commerceRegistrySync.releaseAuthorization &&
-    commerceRegistrySync.releaseAuthorization.authoritative === true
+    authorization.authoritative === true &&
+    recognizedMode &&
+    (explicitAdminRequest || explicitAdminWithdrawal)
   );
-
-  if (!queueDoc || !Array.isArray(queueDoc.items)) {
-    return {
-      ok: false,
-      reason: queueReadError ? "commerce-publication-queue-invalid" : "commerce-publication-queue-unavailable",
-      sourceMode: null,
-      queueAuthoritative: false,
-      queueFile: queueRelative,
-      queuePresent: fileExists(queueFile),
-      queueReadError
-    };
-  }
-
-  const queueMeta = normalizeQueueAuthorization(queueDoc, freshSyncAuthoritative ? commerceRegistrySync : null);
-  const requestedItems = queueDoc.items.filter(item => item && item.publicationRequest && item.publicationRequest.requested === true);
-
-  if (!queueMeta.authoritative) {
-    return {
-      ok: false,
-      reason: "no-authoritative-commerce-publication-queue",
-      sourceMode: "commerce-candidate-review-queue",
-      queueAuthoritative: false,
-      queueFile: queueRelative,
-      queuePresent: true,
-      candidateCount: requestedItems.length,
-      queue: queueMeta
-    };
-  }
-
-  if (requestedItems.length !== queueMeta.requestedCount) {
-    return {
-      ok: false,
-      reason: "authoritative-admin-queue-count-mismatch",
-      sourceMode: "commerce-candidate-review-queue",
-      queueAuthoritative: true,
-      queueFile: queueRelative,
-      queuePresent: true,
-      candidateCount: requestedItems.length,
-      queue: queueMeta
-    };
-  }
-
-  if (requestedItems.length === 0 && !queueMeta.explicitAdminWithdrawal) {
-    return {
-      ok: false,
-      reason: "authoritative-admin-queue-empty-without-withdrawal",
-      sourceMode: "commerce-candidate-review-queue",
-      queueAuthoritative: true,
-      queueFile: queueRelative,
-      queuePresent: true,
-      candidateCount: 0,
-      queue: queueMeta
-    };
-  }
-
-  return {
-    ok: true,
-    sourceMode: freshSyncAuthoritative
-      ? (requestedItems.length ? "authoritative-live-admin-review-queue" : "authoritative-live-admin-withdrawal-empty-queue")
-      : (requestedItems.length ? "authoritative-durable-admin-review-queue" : "authoritative-durable-admin-withdrawal-empty-queue"),
-    doc: Object.assign({}, queueDoc, { queue: queueMeta, items: requestedItems }),
-    candidateCount: requestedItems.length,
-    queueAuthoritative: true,
-    authoritativeWithdrawal: requestedItems.length === 0 && queueMeta.explicitAdminWithdrawal,
-    queueFile: queueRelative,
-    queuePresent: true,
-    queue: queueMeta
+  const queueMeta = {
+    authoritative: queueAuthoritative,
+    requestedCount,
+    withdrawnCount,
+    explicitAdminRequest,
+    explicitAdminWithdrawal,
+    scopeKeys: Array.isArray(commerceRegistrySync && commerceRegistrySync.scopeKeys) ? commerceRegistrySync.scopeKeys.slice() : [],
+    withdrawalScopeKeys: Array.isArray(commerceRegistrySync && commerceRegistrySync.withdrawalScopeKeys) ? commerceRegistrySync.withdrawalScopeKeys.slice() : [],
+    releaseAuthorization: authorization
   };
+  const queueFile = currentReviewQueueFile(commerceRegistrySync);
+  const queueInfo = {
+    path: path.relative(root, queueFile).replace(/\\/g, "/"),
+    present: fileExists(queueFile)
+  };
+
+  if (!queueAuthoritative) {
+    return {
+      ok: false,
+      reason: "authoritative-commerce-publication-source-unavailable",
+      queueAuthoritative: false,
+      queue: queueMeta,
+      queueFile: queueInfo,
+      syncStatus: commerceRegistrySync && commerceRegistrySync.status || null,
+      syncReason: commerceRegistrySync && commerceRegistrySync.reason || null
+    };
+  }
+
+  try {
+    const queueDoc = readJson(queueFile);
+    const requestedItems = Array.isArray(queueDoc && queueDoc.items)
+      ? queueDoc.items.filter(item => item && item.publicationRequest && item.publicationRequest.requested === true)
+      : [];
+    if (requestedItems.length !== queueMeta.requestedCount) {
+      return { ok: false, reason: "authoritative-admin-queue-count-mismatch", queueAuthoritative, queue: queueMeta, queueFile: queueInfo };
+    }
+    if (requestedItems.length === 0 && !explicitAdminWithdrawal) {
+      return { ok: false, reason: "authoritative-admin-queue-empty-without-withdrawal", queueAuthoritative, queue: queueMeta, queueFile: queueInfo };
+    }
+    return {
+      ok: true,
+      sourceMode: requestedItems.length ? "authoritative-admin-review-queue" : "authoritative-admin-withdrawal-empty-queue",
+      doc: Object.assign({}, queueDoc, { queue: queueMeta, items: requestedItems }),
+      candidateCount: requestedItems.length,
+      queueAuthoritative,
+      authoritativeWithdrawal: requestedItems.length === 0 && explicitAdminWithdrawal,
+      queue: queueMeta,
+      queueFile: queueInfo
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "authoritative-admin-queue-invalid",
+      queueAuthoritative,
+      queue: queueMeta,
+      queueFile: queueInfo,
+      error: String(error && error.message || error)
+    };
+  }
 }
 
 const ROOT_GATE_PAGE_BY_FILE = Object.freeze({
@@ -577,6 +527,10 @@ function writePreservedBuild(reason, details) {
   }, null, 2) + "\n");
 }
 
+function productionDeployBuild() {
+  return String(process.env.CONTEXT || "").trim().toLowerCase() === "production";
+}
+
 function compactSocialReport(report) {
   if (!report || typeof report !== "object") return report || null;
   const gate = report.policyGate && typeof report.policyGate === "object" ? report.policyGate : null;
@@ -631,14 +585,14 @@ async function main() {
   const incomingSocialIntent = incomingSocialHookIntent();
   const explicitAdminPublicationInBuild = incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish";
   const explicitSocialPublicationInBuild = incomingSocialIntent.explicit === true;
-  const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild;
+  const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild || productionDeployBuild();
   let explicitSocialPublication = null;
 
   function preserveOrFail(reason, details) {
-    // Only an explicit Commerce/Social publication build is required to
-    // materialize Distribution scoped output. Ordinary code/admin deploys do
-    // not invent a publication source and do not fail just because there is no
-    // active administrator publication queue.
+    // data/auto is build output, not a committed source tree. On a fresh Netlify
+    // production build, returning before the regional/IP publishers would deploy
+    // root sample fallbacks without the Distribution-owned scoped snapshots.
+    // Fail closed so the previous production deploy stays live instead.
     const manifest = path.join(root, "data", "auto", "ip-slot-manifest.json");
     if (mustMaterializeDistribution && !fileExists(manifest)) {
       const error = new Error("Distribution scoped outputs were not materialized in this fresh build: " + reason);
