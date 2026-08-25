@@ -10,7 +10,7 @@
 const crypto = require("crypto");
 const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.7.0-hero-backdrop-pass-through";
+const VERSION = "media-candidate-store-v1.9.0-slot-720-ranked-hero-hd-intro";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
@@ -232,15 +232,21 @@ function thumbnailMeta(row){
   const width=Number(raw.thumbnailWidth||source.thumbnailWidth||generation.width||probe.width||0)||0;
   const height=Number(raw.thumbnailHeight||source.thumbnailHeight||generation.height||probe.height||0)||0;
   const known=width>0&&height>0;
-  const frontReady=(generation.frontReady===true||probe.frontReady===true||raw.thumbnailReady===true)||(known&&width>=320&&height>=180);
+  // Known dimensions are authoritative: stale legacy ready flags cannot promote
+  // a low-resolution or oversized image into a small public slot.
+  const frontReady=known
+    ?(width>=640&&height>=360&&width<=1280&&height<=720)
+    :(generation.frontReady===true||probe.frontReady===true||raw.thumbnailReady===true);
   const frameCapture=lower(generation.mode)==="administrator_video_frame";
   const sourceWidth=Number(generation.sourceWidth||0)||0,sourceHeight=Number(generation.sourceHeight||0)||0;
   const edgeMean=Number(generation.edgeMean||0)||0,edgeP90=Number(generation.edgeP90||0)||0;
   const captureSharp=generation.sharp===true||edgeMean>=4.8||edgeP90>=15;
-  // Legacy administrator captures could be 1280x720 canvases made from SD video.
-  // Such rows remain valid card thumbnails but must never be advertised as Hero HD.
+  // Hero admission is based on a real 1280x720-or-better source. Administrator
+  // captures still require a sharp frame; 1920x1080+ is a preference, not a gate.
   const frameHeroReady=!frameCapture||(sourceWidth>=1280&&sourceHeight>=720&&captureSharp);
-  const heroReady=frameHeroReady&&((generation.heroReady===true||probe.heroReady===true)||(known&&width>=1280&&height>=720));
+  const heroReady=frameHeroReady&&(known
+    ?(width>=1280&&height>=720)
+    :(generation.heroReady===true||probe.heroReady===true));
   return{width,height,known,frontReady,heroReady,probe,generation,sourceWidth,sourceHeight,captureSharp};
 }
 function snapshotEligible(row){
@@ -268,9 +274,11 @@ function publicSlot(row, slotId, defaults){
   const heroSourceWidth=Number(heroGeneration.sourceWidth||0)||0,heroSourceHeight=Number(heroGeneration.sourceHeight||0)||0;
   const heroEdgeMean=Number(heroGeneration.edgeMean||0)||0,heroEdgeP90=Number(heroGeneration.edgeP90||0)||0;
   const heroSharpVerified=lower(heroGeneration.mode)==="administrator_video_frame"&&heroSourceWidth>=1280&&heroSourceHeight>=720&&(heroGeneration.sharp===true||heroEdgeMean>=4.8||heroEdgeP90>=15);
-  // A separately captured, source-HD + sharp-verified Hero frame outranks the card
-  // thumbnail even when the card image itself happens to be 1280x720.
-  const useAlternateHero=!!alternateHeroUrl&&(heroSharpVerified||!thumbMeta.heroReady);
+  // A verified 1280x720 slot image is already usable in Hero. A larger dedicated
+  // Hero asset still wins when available. Provider images are verified non-blockingly
+  // by the front before display.
+  const alternateHeroReady=!!alternateHeroUrl&&alternateHeroWidth>=1280&&alternateHeroHeight>=720;
+  const useAlternateHero=!!alternateHeroUrl&&(alternateHeroReady||heroSharpVerified||!thumbMeta.heroReady);
   const heroUrl=useAlternateHero?alternateHeroUrl:(thumbMeta.heroReady?thumbUrl:alternateHeroUrl);
   const heroWidth=useAlternateHero?alternateHeroWidth:(thumbMeta.heroReady?thumbMeta.width:alternateHeroWidth);
   const heroHeight=useAlternateHero?alternateHeroHeight:(thumbMeta.heroReady?thumbMeta.height:alternateHeroHeight);
@@ -289,6 +297,8 @@ function publicSlot(row, slotId, defaults){
     contentId: text(row.id),
     id: text(row.id),
     title: text(row.title),
+    summary: compact(raw.summary || raw.description || raw.shortDescription || source.summary || source.description || source.shortDescription || source.overview || source.synopsis || source.tagline || "", 500),
+    description: compact(raw.description || raw.summary || raw.shortDescription || source.description || source.summary || source.shortDescription || source.overview || source.synopsis || source.tagline || "", 500),
     thumb: thumbUrl,
     thumbnail: thumbUrl,
     image: thumbUrl,
@@ -467,7 +477,7 @@ function buildSnapshot(baseSnapshot, rows, opts){
       releasePolicy:MediaPolicy.VERSION,
       capacities:{default:100},
       samplePolicy:"preserve-seed-and-external; replace-only-blank-seed-or-previous-managed",
-      thumbnailPolicy:"approved real content requires a verified non-placeholder HTTPS thumbnail; known dimensions below 320x180 are blocked and 1280x720+ is marked hero-ready",
+      thumbnailPolicy:"approved real content uses a verified non-placeholder HTTPS slot thumbnail in the 640x360 to 1280x720 range; Hero accepts a real 1280x720-or-better image and prefers larger sources when available",
       filled
     })
   });

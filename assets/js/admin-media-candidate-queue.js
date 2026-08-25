@@ -789,11 +789,13 @@
     }catch(error){show('공개 파이프라인 JSON 생성 실패: '+error.message,'warn');}
     finally{if(button)button.disabled=false;}
   }
-  function captureFrameDataUrl(row,requireHd){
+  function captureFrameDataUrl(row,purpose){
     return new Promise(function(resolve,reject){
+      purpose=text(purpose||'card').toLowerCase();
+      var heroMode=purpose==='hero';
       var sources=candidateSources(row);if(!sources.length){reject(new Error('직접 재생 주소가 없습니다.'));return;}
       var video=document.createElement('video'),sourceIndex=0,targetIndex=0,finished=false,targets=[],best=null;
-      var timer=setTimeout(function(){finish(best?null:new Error(requireHd?'선명한 HD 프레임 캡처 시간이 초과되었습니다.':'프레임 캡처 시간이 초과되었습니다.'),best);},14000);
+      var timer=setTimeout(function(){finish(best?null:new Error(heroMode?'선명한 1280×720 이상 히어로 프레임 캡처 시간이 초과되었습니다.':'슬롯용 프레임 캡처 시간이 초과되었습니다.'),best);},14000);
       function clean(){clearTimeout(timer);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
       function finish(err,data){if(finished)return;finished=true;clean();err?reject(err):resolve(data);}
       function buildTargets(){
@@ -801,7 +803,11 @@
         if(isFinite(d)&&d>12)raw.push(d*.12,d*.28,d*.45,d*.62,d*.78,d*.88);
         var seen={};targets=raw.map(Number).filter(function(t){return isFinite(t)&&t>=.05;}).map(function(t){return isFinite(d)&&d>0?Math.min(t,Math.max(.2,d-.25)):t;}).filter(function(t){var k=t.toFixed(2);if(seen[k])return false;seen[k]=1;return true;}).slice(0,8);
       }
-      function load(){if(sourceIndex>=sources.length){finish(best?null:new Error(requireHd?'1280×720 이상의 선명한 원본 프레임을 찾지 못했습니다.':'사용 가능한 프레임을 캡처하지 못했습니다.'),best);return;}targetIndex=0;targets=[];video.src=sources[sourceIndex].url;video.load();}
+      function sourceUsable(){
+        if(heroMode)return video.videoWidth>=1280&&video.videoHeight>=720;
+        return video.videoWidth>=640&&video.videoHeight>=360;
+      }
+      function load(){if(sourceIndex>=sources.length){finish(best?null:new Error(heroMode?'1280×720 이상의 선명한 원본 프레임을 찾지 못했습니다.':'640×360 이상의 사용 가능한 슬롯 프레임을 찾지 못했습니다.'),best);return;}targetIndex=0;targets=[];video.src=sources[sourceIndex].url;video.load();}
       function nextSource(){sourceIndex+=1;load();}
       function seek(){if(targetIndex>=targets.length){nextSource();return;}var t=targets[targetIndex++];try{video.currentTime=Math.max(.05,t);}catch(_e){nextSource();}}
       function frameQuality(){
@@ -822,26 +828,38 @@
       }
       function shot(){
         if(!video.videoWidth||!video.videoHeight){seek();return;}
-        if(requireHd&&(video.videoWidth<1280||video.videoHeight<720)){nextSource();return;}
+        if(!sourceUsable()){nextSource();return;}
         var quality=frameQuality();if(!quality||!quality.usable){seek();return;}
         try{
-          var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false}),CW=1280,CH=720;c.width=CW;c.height=CH;
-          x.fillStyle='#000';x.fillRect(0,0,CW,CH);
-          // Hero capture never upscales an SD source. Non-hero card capture keeps the previous behaviour.
-          var r=requireHd?Math.max(CW/video.videoWidth,CH/video.videoHeight):Math.min(CW/video.videoWidth,CH/video.videoHeight);
-          var sw=CW/r,sh=CH/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
-          if(requireHd){x.imageSmoothingEnabled=true;if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';x.drawImage(video,sx,sy,sw,sh,0,0,CW,CH);}
-          else{var w=video.videoWidth*r,h=video.videoHeight*r;x.imageSmoothingEnabled=true;if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';x.drawImage(video,(CW-w)/2,(CH-h)/2,w,h);}
-          var data=c.toDataURL('image/jpeg',.94);if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.90);if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.86);
+          var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false});
+          var CW,CH;
+          if(heroMode){CW=1280;CH=720;}
+          else{
+            var scale=Math.min(1,1280/video.videoWidth,720/video.videoHeight);
+            CW=Math.max(640,Math.round(video.videoWidth*scale));
+            CH=Math.max(360,Math.round(video.videoHeight*scale));
+            // Keep a 16:9 slot surface without ever exceeding 1280x720.
+            if(CW/CH>16/9)CW=Math.round(CH*16/9);else if(CW/CH<16/9)CH=Math.round(CW*9/16);
+            CW=Math.min(1280,CW);CH=Math.min(720,CH);
+          }
+          c.width=CW;c.height=CH;x.fillStyle='#000';x.fillRect(0,0,CW,CH);
+          var r=Math.max(CW/video.videoWidth,CH/video.videoHeight),sw=CW/r,sh=CH/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
+          x.imageSmoothingEnabled=true;if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';
+          x.drawImage(video,sx,sy,sw,sh,0,0,CW,CH);
+          var data=c.toDataURL('image/jpeg',heroMode ? .92 : .90);
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.86);
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.80);
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.74);
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.68);
           if(data&&data.length>1000){
-            var candidate={dataUrl:data,sourceWidth:Number(video.videoWidth||0),sourceHeight:Number(video.videoHeight||0),edgeMean:Number(quality.edgeMean||0),edgeP90:Number(quality.edgeP90||0),variance:Number(quality.variance||0),sharp:quality.sharp===true,score:Number(quality.score||0)};
-            if((!requireHd||candidate.sharp)&&(!best||candidate.score>best.score))best=candidate;
+            var candidate={dataUrl:data,sourceWidth:Number(video.videoWidth||0),sourceHeight:Number(video.videoHeight||0),outputWidth:CW,outputHeight:CH,edgeMean:Number(quality.edgeMean||0),edgeP90:Number(quality.edgeP90||0),variance:Number(quality.variance||0),sharp:quality.sharp===true,score:Number(quality.score||0)};
+            if((!heroMode||candidate.sharp)&&(!best||candidate.score>best.score))best=candidate;
           }
         }catch(_e){}
         seek();
       }
       video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';
-      video.onerror=nextSource;video.onloadedmetadata=function(){if(requireHd&&(video.videoWidth<1280||video.videoHeight<720)){nextSource();return;}buildTargets();seek();};video.onseeked=shot;document.body.appendChild(video);load();
+      video.onerror=nextSource;video.onloadedmetadata=function(){if(!sourceUsable()){nextSource();return;}buildTargets();seek();};video.onseeked=shot;document.body.appendChild(video);load();
     });
   }
   async function generateThumbnail(id,button){
@@ -849,16 +867,23 @@
     if(!row)return;
     button.disabled=true;
     try{
-      show('여러 구간을 비교해 가장 선명한 프레임을 선택합니다. 영화·드라마 히어로는 실제 HD 원본만 허용합니다.','ok');
+      show('슬롯은 최대 1280×720, 히어로는 1280×720 이상이면 사용하고 더 큰 원본은 우대합니다.','ok');
       var resolved=await post(THUMB,{action:'resolve',id:id});
-      if(resolved.thumbUrl){show('원본 제공 썸네일을 후보에 연결했습니다.','ok');await refresh();return;}
-      if(resolved.heroCaptureRequired&&resolved.cardThumbUrl){
-        show('카드용 원본 이미지는 보존했습니다. 영화·드라마 히어로용 1280×720 프레임을 추가 생성합니다.','ok');
+      var storedAny=!!resolved.cardThumbUrl||!!resolved.heroThumbUrl;
+
+      if(resolved.cardCaptureRequired===true){
+        var cardCapture=await captureFrameDataUrl(row,'card');
+        var cardStored=await post(THUMB,{action:'store_capture',id:id,dataUrl:cardCapture.dataUrl,sourceWidth:cardCapture.sourceWidth,sourceHeight:cardCapture.sourceHeight,edgeMean:cardCapture.edgeMean,edgeP90:cardCapture.edgeP90,variance:cardCapture.variance,sharp:cardCapture.sharp,capturePurpose:'card_720'});
+        if(cardStored.thumbUrl)storedAny=true;
       }
-      var heroSection=text(row.sectionKey)==='media-movie'||text(row.sectionKey)==='media-drama';
-      var capture=await captureFrameDataUrl(row,heroSection||resolved.heroCaptureRequired===true);
-      var stored=await post(THUMB,{action:'store_capture',id:id,dataUrl:capture.dataUrl,sourceWidth:capture.sourceWidth,sourceHeight:capture.sourceHeight,edgeMean:capture.edgeMean,edgeP90:capture.edgeP90,variance:capture.variance,sharp:capture.sharp,capturePurpose:(heroSection||resolved.heroCaptureRequired===true)?'hero_hd':'card'});
-      show(stored.thumbUrl?'영상 프레임 썸네일을 생성해 저장했습니다.':'썸네일 생성 결과를 저장하지 못했습니다.',stored.thumbUrl?'ok':'warn');
+
+      if(resolved.heroCaptureRequired===true){
+        var heroCapture=await captureFrameDataUrl(row,'hero');
+        var heroStored=await post(THUMB,{action:'store_capture',id:id,dataUrl:heroCapture.dataUrl,sourceWidth:heroCapture.sourceWidth,sourceHeight:heroCapture.sourceHeight,edgeMean:heroCapture.edgeMean,edgeP90:heroCapture.edgeP90,variance:heroCapture.variance,sharp:heroCapture.sharp,capturePurpose:'hero_hd'});
+        if(heroStored.thumbUrl)storedAny=true;
+      }
+
+      show(storedAny?'슬롯/히어로 썸네일 품질 준비가 완료되었습니다.':'사용 가능한 썸네일을 준비하지 못했습니다.',storedAny?'ok':'warn');
       await refresh();
     }catch(error){show(error.message,'warn');}
     finally{button.disabled=false;}

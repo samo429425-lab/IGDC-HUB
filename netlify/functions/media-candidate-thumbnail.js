@@ -9,17 +9,28 @@
 const MediaStore=require("./lib/media-candidate-store.v1");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="media-candidate-thumbnail-v1.5.0-hero-source-hd-sharp";
+const VERSION="media-candidate-thumbnail-v1.7.0-slot-720-hero-hd";
 const DEFAULT_BUCKET="media-candidate-thumbnails";
 const MAX_IMAGE_BYTES=1572864;
 const PROBE_TIMEOUT_MS=1600;
 const PROBE_MAX_BYTES=65536;
-const FRONT_MIN_WIDTH=320;
-const FRONT_MIN_HEIGHT=180;
+const SLOT_TARGET_WIDTH=1280;
+const SLOT_TARGET_HEIGHT=720;
+const FRONT_MIN_WIDTH=640;
+const FRONT_MIN_HEIGHT=360;
 const HERO_MIN_WIDTH=1280;
 const HERO_MIN_HEIGHT=720;
 const HERO_MIN_EDGE_MEAN=4.8;
 const HERO_MIN_EDGE_P90=15;
+
+function slotReadyDimensions(width,height){
+  width=Number(width||0)||0;height=Number(height||0)||0;
+  return width>=FRONT_MIN_WIDTH&&height>=FRONT_MIN_HEIGHT&&width<=SLOT_TARGET_WIDTH&&height<=SLOT_TARGET_HEIGHT;
+}
+function heroReadyDimensions(width,height){
+  width=Number(width||0)||0;height=Number(height||0)||0;
+  return width>=HERO_MIN_WIDTH&&height>=HERO_MIN_HEIGHT;
+}
 
 function plain(value){return value&&typeof value==="object"&&!Array.isArray(value)?value:{};}
 function imageHeaders(){return{"accept":"image/*","user-agent":"IGDC-MARU-MediaThumbnail/1.0 (+https://igdc.info)"};}
@@ -127,14 +138,14 @@ async function probeImage(url){
     const dimensions=imageDimensions(prefix,contentType);
     const bytesRead=prefix.length;
     const dimensionKnown=dimensions.width>0&&dimensions.height>0;
-    const frontReady=!dimensionKnown||(dimensions.width>=FRONT_MIN_WIDTH&&dimensions.height>=FRONT_MIN_HEIGHT);
-    const heroReady=dimensionKnown&&dimensions.width>=HERO_MIN_WIDTH&&dimensions.height>=HERO_MIN_HEIGHT;
+    const frontReady=dimensionKnown&&slotReadyDimensions(dimensions.width,dimensions.height);
+    const heroReady=dimensionKnown&&heroReadyDimensions(dimensions.width,dimensions.height);
+    const imageOk=response.ok&&/^image\//.test(contentType)&&bytesRead>0;
     return{
-      ok:response.ok&&/^image\//.test(contentType)&&bytesRead>0&&frontReady,
-      status:response.status,contentType,bytesRead,latencyMs:Date.now()-started,
+      ok:imageOk,status:response.status,contentType,bytesRead,latencyMs:Date.now()-started,
       width:dimensions.width,height:dimensions.height,format:dimensions.format,dimensionKnown,frontReady,heroReady,
       url:MediaStore.normalizeUrl(response.url||url),
-      reason:dimensionKnown&&!frontReady?"thumbnail_resolution_below_front_floor":undefined
+      reason:dimensionKnown&&!frontReady&&!heroReady?"thumbnail_resolution_outside_slot_or_hero_target":undefined
     };
   }catch(error){
     return{
@@ -154,8 +165,8 @@ function generationPatch(row,url,generation,actor){
   const probe=plain(record.probe);
   const width=Number(record.width||probe.width||0)||0,height=Number(record.height||probe.height||0)||0;
   record.width=width;record.height=height;
-  record.frontReady=record.frontReady===true||probe.frontReady===true||(width>=FRONT_MIN_WIDTH&&height>=FRONT_MIN_HEIGHT);
-  record.heroReady=record.heroReady===true||probe.heroReady===true||(width>=HERO_MIN_WIDTH&&height>=HERO_MIN_HEIGHT);
+  record.frontReady=record.frontReady===true||probe.frontReady===true||slotReadyDimensions(width,height);
+  record.heroReady=record.heroReady===true||probe.heroReady===true||heroReadyDimensions(width,height);
   sourceMetadata.thumbnailGeneration=record;
   sourceMetadata.thumbnailProbe=Object.assign({},plain(sourceMetadata.thumbnailProbe),probe,{url,width,height,frontReady:record.frontReady,heroReady:record.heroReady,verifiedAt:record.updatedAt});
   sourceMetadata.thumbnailWidth=width;sourceMetadata.thumbnailHeight=height;
@@ -180,10 +191,13 @@ function heroGenerationPatch(row,url,generation,actor){
   const width=Number(record.width||0)||0,height=Number(record.height||0)||0;
   sourceMetadata.heroImage=url;sourceMetadata.heroImageUrl=url;
   sourceMetadata.heroWidth=width;sourceMetadata.heroHeight=height;
-  sourceMetadata.heroThumbnailReady=true;sourceMetadata.heroThumbnailGeneration=record;
+  sourceMetadata.heroThumbnailReady=heroReadyDimensions(width,height);sourceMetadata.heroThumbnailGeneration=record;
+  sourceMetadata.heroSharpVerified=record.sharp===true;
+  sourceMetadata.heroEdgeMean=Number(record.edgeMean||0)||0;sourceMetadata.heroEdgeP90=Number(record.edgeP90||0)||0;
   raw.sourceMetadata=sourceMetadata;
   raw.heroImage=url;raw.heroImageUrl=url;raw.heroWidth=width;raw.heroHeight=height;
-  raw.heroThumbnailReady=true;raw.heroThumbnailGeneration=record;
+  raw.heroThumbnailReady=heroReadyDimensions(width,height);raw.heroThumbnailGeneration=record;
+  raw.heroSharpVerified=record.sharp===true;raw.heroEdgeMean=Number(record.edgeMean||0)||0;raw.heroEdgeP90=Number(record.edgeP90||0)||0;
   return{raw,updated_by:record.updatedBy,updated_at:record.updatedAt};
 }
 async function storeHeroResolved(row,url,generation,actor){
@@ -258,17 +272,28 @@ async function uploadCapture(row,dataUrl,actor,meta){
   meta=plain(meta);
   const section=MediaStore.normalizeSection(row.section_key||plain(row.raw).sectionKey);
   const heroSection=section==="media-movie"||section==="media-drama";
+  const purpose=MediaStore.text(meta.capturePurpose||"card").toLowerCase();
+  const heroCapture=purpose.indexOf("hero")===0;
   const sourceWidth=Number(meta.sourceWidth||0)||0,sourceHeight=Number(meta.sourceHeight||0)||0;
   const edgeMean=Number(meta.edgeMean||0)||0,edgeP90=Number(meta.edgeP90||0)||0,variance=Number(meta.variance||0)||0;
   const sharp=meta.sharp===true||(edgeMean>=HERO_MIN_EDGE_MEAN||edgeP90>=HERO_MIN_EDGE_P90);
-  if(heroSection){
-    if(sourceWidth<HERO_MIN_WIDTH||sourceHeight<HERO_MIN_HEIGHT){
-      const error=new Error("히어로용 캡처는 실제 원본 영상이 최소 1280×720이어야 합니다. 저해상도 원본 확대 저장은 허용하지 않습니다.");
+  if(heroCapture){
+    if(!heroSection){
+      const error=new Error("히어로 캡처는 영화·드라마 후보에서만 저장할 수 있습니다.");
+      error.statusCode=400;error.code="media_hero_capture_section_invalid";throw error;
+    }
+    if(sourceWidth<HERO_MIN_WIDTH||sourceHeight<HERO_MIN_HEIGHT||image.width<HERO_MIN_WIDTH||image.height<HERO_MIN_HEIGHT){
+      const error=new Error("히어로용 캡처는 실제 원본과 저장 이미지가 최소 1280×720이어야 합니다. 저해상도 확대 저장은 허용하지 않습니다.");
       error.statusCode=400;error.code="media_hero_capture_source_below_hd_floor";throw error;
     }
     if(!sharp){
       const error=new Error("히어로용 프레임이 충분히 선명하지 않습니다. 다른 구간 또는 다른 콘텐츠를 선택해 주세요.");
       error.statusCode=400;error.code="media_hero_capture_not_sharp";throw error;
+    }
+  }else{
+    if(!slotReadyDimensions(image.width,image.height)){
+      const error=new Error("슬롯용 캡처는 640×360 이상, 최대 1280×720 범위여야 합니다.");
+      error.statusCode=400;error.code="media_slot_capture_resolution_invalid";throw error;
     }
   }
   const cfg=MediaStore.config();
@@ -293,14 +318,14 @@ async function uploadCapture(row,dataUrl,actor,meta){
   const generation={
     version:VERSION,mode:"administrator_video_frame",mime:image.mime,bytes:image.buffer.length,
     width:image.width,height:image.height,sourceWidth,sourceHeight,edgeMean,edgeP90,variance,sharp,
-    capturePurpose:MediaStore.text(meta.capturePurpose||"card"),
-    frontReady:image.width>=FRONT_MIN_WIDTH&&image.height>=FRONT_MIN_HEIGHT,
-    heroReady:heroSection&&sourceWidth>=HERO_MIN_WIDTH&&sourceHeight>=HERO_MIN_HEIGHT&&sharp&&image.width>=HERO_MIN_WIDTH&&image.height>=HERO_MIN_HEIGHT,
+    capturePurpose:purpose,
+    frontReady:!heroCapture&&slotReadyDimensions(image.width,image.height),
+    heroReady:heroCapture&&heroReadyDimensions(image.width,image.height)&&heroReadyDimensions(sourceWidth,sourceHeight)&&sharp,
     bucket,objectName
   };
-  // Keep a good card thumbnail in place. Hero captures are stored separately so
-  // the large representative image never becomes the rail thumbnail by accident.
-  if(heroSection&&MediaStore.normalizeUrl(row.thumb_url))await storeHeroResolved(row,publicUrl,generation,actor);
+  // Slot and Hero assets are always stored separately. A dedicated Hero HD image can
+  // never overwrite the rail thumbnail, even when the slot image is absent.
+  if(heroCapture)await storeHeroResolved(row,publicUrl,generation,actor);
   else await storeResolved(row,publicUrl,generation,actor);
   return publicUrl;
 }
@@ -319,36 +344,61 @@ exports.handler=async function(event){
     }
     const row=await loadRow(id);
     if(action==="resolve"){
-      const candidates=providerCandidates(row).slice(0,3);
-      // 공급사 썸네일 확인은 순차 대기하지 않고 동시에 짧게 검사한다.
+      const candidates=providerCandidates(row).slice(0,5);
+      // Provider images are probed concurrently. Slot and Hero assets are selected
+      // independently so a large Hero image never becomes a rail-card download.
       const attempts=await Promise.all(candidates.map(async(candidate)=>{
         const probe=await probeImage(candidate.url);
-        return Object.assign({mode:candidate.mode},probe);
+        return Object.assign({mode:candidate.mode,requestedUrl:candidate.url},probe);
       }));
-      const firstOkIndex=attempts.findIndex((probe)=>probe&&probe.ok);
-      if(firstOkIndex>=0){
-        const candidate=candidates[firstOkIndex],probe=attempts[firstOkIndex];
-        const url=probe.url||candidate.url;
-        await storeResolved(row,url,{version:VERSION,mode:"provider_thumbnail",providerMode:candidate.mode,probe},actor);
-        const section=MediaStore.normalizeSection(row.section_key||plain(row.raw).sectionKey);
-        const heroSection=section==="media-movie"||section==="media-drama";
-        // A provider image can be perfectly adequate for a 320x180 rail card but
-        // still be too small for the expanded hero. Preserve that card thumbnail,
-        // then ask the administrator browser to capture a 1280x720 video frame only
-        // for the two hero-source sections. If capture fails, the stored card image
-        // remains valid and the item simply stays out of the hero pool.
-        if(heroSection&&probe.heroReady!==true){
-          return MediaStore.response(200,{ok:true,version:VERSION,id,thumbUrl:"",cardThumbUrl:url,captureRequired:true,heroCaptureRequired:true,attempts,reason:"provider_thumbnail_below_hero_floor_capture_hd_frame"});
-        }
-        return MediaStore.response(200,{ok:true,version:VERSION,id,thumbUrl:url,cardThumbUrl:url,captureRequired:false,heroCaptureRequired:false,attempts});
+      const section=MediaStore.normalizeSection(row.section_key||plain(row.raw).sectionKey);
+      const heroSection=section==="media-movie"||section==="media-drama";
+      const usable=attempts.map((probe,index)=>({probe,candidate:candidates[index]})).filter((entry)=>entry.probe&&entry.probe.ok);
+
+      const slotEntry=usable.filter((entry)=>entry.probe.frontReady===true).sort((a,b)=>{
+        const aa=(Number(a.probe.width||0)*Number(a.probe.height||0));
+        const ba=(Number(b.probe.width||0)*Number(b.probe.height||0));
+        return ba-aa;
+      })[0]||null;
+      const heroEntry=heroSection?(usable.filter((entry)=>entry.probe.heroReady===true).sort((a,b)=>{
+        const aa=(Number(a.probe.width||0)*Number(a.probe.height||0));
+        const ba=(Number(b.probe.width||0)*Number(b.probe.height||0));
+        return ba-aa;
+      })[0]||null):null;
+
+      let cardThumbUrl="",heroThumbUrl="";
+      if(slotEntry){
+        cardThumbUrl=slotEntry.probe.url||slotEntry.candidate.url;
+        await storeResolved(row,cardThumbUrl,{
+          version:VERSION,mode:"provider_slot_thumbnail",providerMode:slotEntry.candidate.mode,
+          width:Number(slotEntry.probe.width||0),height:Number(slotEntry.probe.height||0),
+          probe:slotEntry.probe,frontReady:true
+        },actor);
       }
+      if(heroEntry){
+        heroThumbUrl=heroEntry.probe.url||heroEntry.candidate.url;
+        const heroBase=slotEntry?await loadRow(id):row;
+        await storeHeroResolved(heroBase,heroThumbUrl,{
+          version:VERSION,mode:"provider_hero_image",providerMode:heroEntry.candidate.mode,
+          width:Number(heroEntry.probe.width||0),height:Number(heroEntry.probe.height||0),
+          probe:heroEntry.probe,sharp:false
+        },actor);
+      }
+
       const raw=plain(row.raw),source=plain(raw.sourceMetadata);
       const directVideo=MediaStore.normalizeUrl(row.video_url||raw.video_url)||
         (Array.isArray(source.playbackCandidates)&&source.playbackCandidates.map((item)=>MediaStore.normalizeUrl(item&&item.url)).find(Boolean))||"";
+      const cardCaptureRequired=!cardThumbUrl;
+      const heroCaptureRequired=heroSection&&!heroThumbUrl;
+      const captureRequired=cardCaptureRequired||heroCaptureRequired;
       return MediaStore.response(200,{
-        ok:true,version:VERSION,id,thumbUrl:"",captureRequired:true,
+        ok:true,version:VERSION,id,
+        thumbUrl:cardThumbUrl,cardThumbUrl,heroThumbUrl,
+        captureRequired,cardCaptureRequired,heroCaptureRequired,
         directVideoAvailable:!!directVideo,attempts,
-        reason:directVideo?"provider_thumbnail_unavailable_use_admin_frame":"provider_thumbnail_and_direct_video_unavailable"
+        reason:captureRequired
+          ?(directVideo?"prepared_asset_missing_use_admin_frame":"prepared_asset_missing_no_direct_video")
+          :"provider_assets_ready"
       });
     }
     if(action==="store_capture"){

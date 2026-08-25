@@ -16,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.13.2-idempotent-plan";
+  "social-snapshot-publish-v1.15.0-durable-state-recovery";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -125,10 +125,11 @@ function fullStructuralBase(storedSnapshot) {
 }
 
 async function latestStoredBase(route) {
+  const countryCode = text(route && route.countryCode).toUpperCase();
+  const regionId = text(route && (route.worldRegion || route.regionId));
+  let exactRows;
   try {
-    const countryCode = text(route && route.countryCode).toUpperCase();
-    const regionId = text(route && (route.worldRegion || route.regionId));
-    const exactRows = await SocialStore.selectReleases(
+    exactRows = await SocialStore.selectReleases(
       "select=release_id,snapshot,created_at,notes&status=eq.stored&notes=like." +
         encodeURIComponent("scope=" + scopeToken(route) + ";%") +
         "&order=created_at.desc&limit=1",
@@ -158,8 +159,17 @@ async function latestStoredBase(route) {
         doc: structural.doc,
       };
     }
-  } catch (_error) {
-    /* Static snapshot remains the safe fallback. */
+  } catch (error) {
+    // Never turn a temporary release-store read failure into a new static-base
+    // publication. That could replace a valid persistent front with an older
+    // repository snapshot. Abort this publication and leave the live front as-is.
+    const wrapped = new Error(
+      "마지막 Social Release를 읽지 못해 기존 프론트를 보존했습니다. 저장소 연결이 복구된 뒤 다시 실행해 주세요.",
+    );
+    wrapped.code = "social_release_base_unavailable";
+    wrapped.statusCode = 503;
+    wrapped.cause = error;
+    throw wrapped;
   }
   return baseSnapshot();
 }
@@ -337,28 +347,89 @@ async function triggerCanonicalBuild(release, operation, route, handoff) {
   }
 }
 
-async function storeReleaseCompat(release) {
-  // The original release contract includes audit/rotation columns. Keep that
-  // canonical shape first. Some older deployments used a reduced table shape,
-  // so retry only when PostgREST explicitly reports an unknown-column/schema
-  // mismatch. A failed POST is atomic, therefore this cannot duplicate a row.
+function releaseSchemaMismatch(error) {
+  const message = text(error && error.message).toLowerCase();
+  return !!(
+    error &&
+    error.code === "social_supabase_http_error" &&
+    /column|schema cache|could not find/.test(message)
+  );
+}
+function releaseSequencePermissionError(error) {
+  const message = text(error && error.message).toLowerCase();
+  return !!(
+    error &&
+    error.code === "social_supabase_http_error" &&
+    /permission denied for sequence/.test(message) &&
+    /social_snapshot_releases_id_seq|_id_seq/.test(message)
+  );
+}
+function releaseDuplicateIdError(error) {
+  const message = text(error && error.message).toLowerCase();
+  return !!(
+    error &&
+    (String(error.statusCode || "") === "409" || /duplicate key|unique constraint|already exists/.test(message))
+  );
+}
+function minimalReleaseShape(release) {
+  const minimal = {
+    release_id: release.release_id,
+    status: release.status,
+    snapshot_hash: release.snapshot_hash,
+    snapshot: release.snapshot,
+    notes: release.notes,
+    created_at: release.created_at,
+  };
+  if (release.id != null) minimal.id = release.id;
+  return minimal;
+}
+async function insertReleaseShapeCompat(release) {
   try {
     return await SocialStore.insertRelease(release);
   } catch (error) {
-    const message = text(error && error.message).toLowerCase();
-    const schemaMismatch =
-      error && error.code === "social_supabase_http_error" &&
-      (/column|schema cache|could not find/.test(message));
-    if (!schemaMismatch) throw error;
-    const minimal = {
-      release_id: release.release_id,
-      status: release.status,
-      snapshot_hash: release.snapshot_hash,
-      snapshot: release.snapshot,
-      notes: release.notes,
-      created_at: release.created_at,
-    };
-    return SocialStore.insertRelease(minimal);
+    if (!releaseSchemaMismatch(error)) throw error;
+    return SocialStore.insertRelease(minimalReleaseShape(release));
+  }
+}
+async function nextExplicitReleaseId() {
+  // The production diagnostics showed table INSERT permission but no USAGE on
+  // social_snapshot_releases_id_seq. Reading the latest id and supplying the
+  // serial/bigserial id explicitly avoids nextval() without changing schema or
+  // weakening the release-table persistence contract.
+  try {
+    const rows = await SocialStore.selectReleases(
+      "select=id&order=id.desc&limit=1",
+    );
+    const latest = Array.isArray(rows) && rows[0] ? Number(rows[0].id) : 0;
+    if (Number.isFinite(latest) && latest >= 0) return Math.floor(latest) + 1;
+  } catch (_error) {
+    /* Epoch-second fallback stays within signed 32-bit range through 2038. */
+  }
+  return Math.floor(Date.now() / 1000);
+}
+async function storeReleaseCompat(release) {
+  // First preserve the canonical insert behavior.  The current Supabase role
+  // may legitimately insert the row but lack sequence USAGE; in that exact
+  // case retry with an explicit id.  This is still the same release table and
+  // the exact same snapshot/hash -- not a browser/session fallback.
+  try {
+    return await insertReleaseShapeCompat(release);
+  } catch (error) {
+    if (!releaseSequencePermissionError(error)) throw error;
+    let explicitId = await nextExplicitReleaseId();
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await insertReleaseShapeCompat(
+          Object.assign({}, release, { id: explicitId + attempt }),
+        );
+      } catch (retryError) {
+        if (!releaseDuplicateIdError(retryError)) throw retryError;
+      }
+    }
+    const finalError = new Error("social release explicit-id persistence retry exhausted");
+    finalError.code = "social_release_explicit_id_exhausted";
+    finalError.statusCode = 409;
+    throw finalError;
   }
 }
 
@@ -641,6 +712,60 @@ exports.handler = async function (event) {
       const report = await runtimePipelineDiagnostic(route);
       return SocialStore.response(200, report);
     }
+    if (
+      event.httpMethod === "GET" &&
+      (operation === "current_front_state" ||
+        operation === "published_state" ||
+        operation === "front_state")
+    ) {
+      const latest = await latestStoredReleaseForRoute(route);
+      if (latest && latest.snapshot) {
+        const calculatedHash = SocialStore.sha256(latest.snapshot);
+        if (text(latest.snapshot_hash) && calculatedHash !== text(latest.snapshot_hash)) {
+          return SocialStore.response(409, {
+            ok: false,
+            version: VERSION,
+            error: "stored_release_hash_mismatch",
+            message: "저장된 Social Release 해시가 일치하지 않아 현재 프론트 상태로 사용하지 않았습니다.",
+            preservedExistingFront: true,
+          });
+        }
+        const bySection = releasedIdsBySection(latest.snapshot);
+        const ids = Array.from(new Set(Object.values(bySection).flat()));
+        return SocialStore.response(200, {
+          ok: true,
+          version: VERSION,
+          operation: "current_front_state",
+          source: "supabase.social_snapshot_releases",
+          stored: true,
+          releaseId: text(latest.release_id),
+          snapshotHash: text(latest.snapshot_hash) || calculatedHash,
+          createdAt: text(latest.created_at) || null,
+          publishedIdsBySection: bySection,
+          publishedContentIds: ids,
+          publishedCount: ids.length,
+          readOnly: true,
+          buildQueued: false,
+        });
+      }
+      const fallback = baseSnapshot();
+      const bySection = releasedIdsBySection(fallback.doc);
+      const ids = Array.from(new Set(Object.values(bySection).flat()));
+      return SocialStore.response(200, {
+        ok: true,
+        version: VERSION,
+        operation: "current_front_state",
+        source: fallback.file,
+        stored: false,
+        releaseId: null,
+        snapshotHash: SocialStore.sha256(fallback.doc),
+        publishedIdsBySection: bySection,
+        publishedContentIds: ids,
+        publishedCount: ids.length,
+        readOnly: true,
+        buildQueued: false,
+      });
+    }
     const base = await latestStoredBase(route);
     let rows = [];
     let unpublish = null;
@@ -741,9 +866,6 @@ exports.handler = async function (event) {
       (sum, list) => sum + (Array.isArray(list) ? list.length : 0),
       0,
     );
-    const currentPublicationPlan = releasedIdsBySection(base.doc);
-    const currentPublicationPlanHash = SocialStore.sha256(currentPublicationPlan);
-    const idempotentNoop = storeRelease && publicationPlanHash === currentPublicationPlanHash;
 
     // Fail closed before writing a stored release or queuing Netlify when a
     // normal publish unexpectedly resolves to zero real candidates. This is
@@ -762,38 +884,11 @@ exports.handler = async function (event) {
       });
     }
 
-    if (idempotentNoop) {
-      return SocialStore.response(200, {
-        ok: true,
-        version: VERSION,
-        operation: unpublishSelected ? "selected_front_unpublish" : "actual_front_apply",
-        actualApplyRequested: actualApplyOperation,
-        storeReleaseRequested: storeRelease,
-        requestedCandidateIds: candidateIds.length,
-        exactCandidateSelectionApplied: candidateIds.length > 0,
-        resolvedCandidateRows: Array.isArray(rows) ? rows.length : 0,
-        resolvedCandidateIds: Array.isArray(rows) ? rows.map((row) => text(row && row.id)).filter(Boolean) : [],
-        releaseStored: false,
-        releaseStoredVerified: false,
-        actualFrontApplyStored: true,
-        actualFrontApplyQueued: false,
-        idempotentNoop: true,
-        duplicateBuildPrevented: true,
-        publicationPlanHash,
-        publicationPlanCount,
-        publicationPlanBySection: Object.fromEntries(
-          Object.entries(publicationPlan).map(([key, list]) => [key, Array.isArray(list) ? list.length : 0]),
-        ),
-        buildTrigger: { ok: true, status: "idempotent_noop", queued: false },
-        message: "현재 공개 상태와 동일한 콘텐츠 구성이므로 중복 저장·중복 빌드를 실행하지 않았습니다.",
-      });
-    }
-
-    // Release-table persistence remains an audit layer, but it is no longer a
-    // hard gate for the canonical build.  The uploaded diagnostics repeatedly
-    // showed 83 approved candidates while storedRelease stayed missing, which
-    // meant SearchBank was never even entered.  The authoritative build handoff
-    // is therefore the exact, hash-verified publication manifest above.
+    // Durable release persistence is a hard gate for the canonical build.
+    // Production diagnostics showed that Netlify could previously be queued
+    // even when the release-table insert failed; that made a publish appear to
+    // work temporarily but left no persistent source for a later browser visit.
+    // Store and read back the exact release/hash before any build is queued.
     let stored = null;
     let storedVerified = false;
     let releaseStoreWarning = null;
@@ -822,20 +917,16 @@ exports.handler = async function (event) {
           };
         }
       } catch (storeError) {
-        const storeMessage = text(storeError && storeError.message) || String(storeError);
         releaseStoreWarning = {
           code: (storeError && storeError.code) || "social_release_store_failed",
           statusCode: storeError && storeError.statusCode || null,
-          message: storeMessage,
-          remediation: /social_snapshot_releases_id_seq|permission denied for sequence/i.test(storeMessage)
-            ? "Apply supabase/social_snapshot_releases_sequence_grant.sql once; canonical publicationPlan build handoff remains independent."
-            : null,
+          message: text(storeError && storeError.message) || String(storeError),
         };
       }
     }
 
     let buildTrigger = null;
-    if (storeRelease) {
+    if (storeRelease && storedVerified) {
       buildTrigger = await triggerCanonicalBuild(
         release,
         unpublishSelected ? "unpublish" : "publish",
@@ -845,6 +936,19 @@ exports.handler = async function (event) {
           publicationPlanHash,
         },
       );
+    } else if (storeRelease) {
+      // A build without a durable stored release creates exactly the failure
+      // observed in production: the current browser can show the just-built
+      // artifact, but a later visit has no persistent release to read back.
+      // Never queue an ephemeral front publication. Keep the existing front
+      // unchanged until the release row is stored and hash-verified.
+      buildTrigger = {
+        ok: false,
+        status: "durable_release_required",
+        releaseId: text(release && release.release_id) || null,
+        message:
+          "승인 Social Release의 영구 저장·해시 검증이 완료되지 않아 기존 프론트를 보존하고 Netlify 배포를 시작하지 않았습니다.",
+      };
     }
     if (
       params.download === "1" ||
@@ -927,6 +1031,7 @@ exports.handler = async function (event) {
         runtimeFileWrite: false,
         socialSnapshotMutation: false,
         frontReadsLatestStoredSnapshot: false,
+        adminReadsLatestStoredReleaseState: true,
         canonicalBuildPipeline: true,
         socialSearchBankIsolated: true,
         sharedCommerceSearchBankMutation: false,

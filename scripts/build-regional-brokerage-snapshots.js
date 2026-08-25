@@ -546,20 +546,212 @@ function productionDeployBuild() {
   return String(process.env.CONTEXT || "").trim().toLowerCase() === "production";
 }
 
-function nonPublishingTestProjectBuild() {
-  // igdc-test is a staging Netlify project. A normal code deploy there must not
-  // become a hard Distribution publication just because CONTEXT=production.
-  // Explicit administrator Commerce/Social publication requests still retain
-  // the normal fail-closed materialization requirement below.
-  const siteName = String(process.env.SITE_NAME || "").trim().toLowerCase();
-  if (siteName === "igdc-test") return true;
-  for (const raw of [process.env.URL, process.env.DEPLOY_PRIME_URL]) {
+function liveCarrySourceUrls() {
+  const values = [];
+  const add = (raw) => {
     try {
-      const host = new URL(String(raw || "")).hostname.toLowerCase();
-      if (host === "igdc-test.netlify.app") return true;
+      const url = new URL(String(raw || "").trim());
+      if (!/^https?:$/.test(url.protocol)) return;
+      url.pathname = "/";
+      url.search = "";
+      url.hash = "";
+      const normalized = url.toString().replace(/\/$/, "");
+      if (normalized && !values.includes(normalized)) values.push(normalized);
     } catch (_error) {}
+  };
+  const siteName = String(process.env.SITE_NAME || "").trim().toLowerCase();
+
+  // An explicit operator source always wins.
+  add(process.env.IGDC_DISTRIBUTION_CARRY_SOURCE_URL);
+
+  // igdc-test must inherit the currently published production product scopes
+  // BEFORE considering its own previous deploy.  A previous test deploy may be
+  // structurally valid but contain only placeholder/root fallback cards.
+  if (siteName === "igdc-test") {
+    add(process.env.IGDC_PRODUCTION_SITE_URL);
+    add("https://igdc-platform.netlify.app");
+  }
+
+  // For the production project, URL/SITE_URL still point at the deploy that is
+  // currently live while this fresh build is running, which is the correct
+  // source for byte-for-byte carry-forward.
+  add(process.env.URL);
+  add(process.env.SITE_URL);
+  if (siteName) add("https://" + siteName + ".netlify.app");
+  return values;
+}
+
+function scopedCarryPath(relative) {
+  const raw = String(relative || "").trim();
+  if (!raw.startsWith("/data/auto/") || raw.includes("..") || raw.includes("\\")) return null;
+  const autoRoot = path.resolve(root, "data", "auto");
+  const absolute = path.resolve(root, raw.replace(/^\/+/, ""));
+  if (absolute !== autoRoot && !absolute.startsWith(autoRoot + path.sep)) return null;
+  return absolute;
+}
+
+function rootCarryPath(relative) {
+  const raw = String(relative || "").trim();
+  const allowed = new Set([
+    "/data/front.snapshot.json",
+    "/data/distribution.snapshot.json",
+    "/data/networkhub-snapshot.json",
+    "/data/tour-snapshot.json",
+    "/data/social.snapshot.json"
+  ]);
+  if (!allowed.has(raw)) return null;
+  return path.resolve(root, raw.replace(/^\/+/, ""));
+}
+
+async function fetchJsonArtifact(base, relative) {
+  const target = new URL(String(relative || ""), base + "/");
+  target.searchParams.set("igdc_carry", String(Date.now()));
+  const response = await fetch(target.toString(), { method: "GET", headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error("HTTP_" + response.status + ":" + relative);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  let doc;
+  try { doc = JSON.parse(bytes.toString("utf8")); }
+  catch (_error) { throw new Error("INVALID_JSON:" + relative); }
+  return { bytes, doc };
+}
+
+function carriedScopedSnapshotHasPublishedProducts(doc, row, manifest) {
+  const page = String(row && row.page || "").trim();
+  const country = String(row && row.country || "").trim().toUpperCase();
+  const region = String(row && row.region || "").trim().toUpperCase();
+  const meta = doc && doc.meta && typeof doc.meta === "object" ? doc.meta : {};
+  if (!doc || !page || !country) return false;
+
+  if (page === "distribution") {
+    if (meta.regionalBrokerageSnapshot !== true || String(meta.targetMarket || "").toUpperCase() !== country) return false;
+    if (String(meta.targetRegion || "").toUpperCase() !== region) return false;
+  } else {
+    if (meta.ipSlotSnapshot !== true || meta.geoMatched !== true) return false;
+    if (String(meta.targetCountry || "").toUpperCase() !== country) return false;
+    if (String(meta.targetRegion || "").toUpperCase() !== region) return false;
+    if (String(meta.canonicalReleaseId || "") !== String(manifest && manifest.canonicalReleaseId || "")) return false;
+    if (String(meta.ipSlotPolicyDigest || "") !== String(manifest && manifest.ipSlotPolicyDigest || "")) return false;
+  }
+
+  const cards = rootGateRows(doc, page);
+  let realCount = 0;
+  for (const card of cards) {
+    if (!card || typeof card !== "object") continue;
+    const publication = card.canonicalPublication && typeof card.canonicalPublication === "object" ? card.canonicalPublication : null;
+    const placement = card.placement && typeof card.placement === "object" ? card.placement : null;
+    if (!publication || publication.status !== "published") continue;
+    if (String(publication.releaseId || "") !== String(manifest && manifest.canonicalReleaseId || "")) continue;
+    if (!publication.candidateId || !publication.mappingDigest) continue;
+    if (!placement || String(placement.page || "") !== page || String(placement.country || "").toUpperCase() !== country) continue;
+    const url = String(card.affiliateOutboundUrl || card.externalOutboundUrl || card.url || card.link || "").trim();
+    if (!/^https?:\/\//i.test(url) || /(^|\.)example\.(com|org|net)(?:[\/:]|$)/i.test(url)) continue;
+    realCount += 1;
+    if (realCount > 0) return true;
   }
   return false;
+}
+
+async function carryForwardPublishedScopedOutputs() {
+  const attempts = [];
+  const allowedFiles = new Set([
+    "front.snapshot.json",
+    "distribution.snapshot.json",
+    "networkhub-snapshot.json",
+    "tour-snapshot.json",
+    "social.snapshot.json"
+  ]);
+  for (const base of liveCarrySourceUrls()) {
+    let stageRoot = null;
+    try {
+      const manifestArtifact = await fetchJsonArtifact(base, "/data/auto/ip-slot-manifest.json");
+      const manifest = manifestArtifact.doc;
+      const rows = Array.isArray(manifest && manifest.snapshots) ? manifest.snapshots : [];
+      if (!manifest || manifest.schema !== "canonical-ip-slot-release-manifest-v1" || !manifest.canonicalReleaseId || !rows.length || rows.length > 2500) {
+        throw new Error("INVALID_OR_EMPTY_LIVE_IP_SLOT_MANIFEST");
+      }
+      stageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "igdc-live-distribution-"));
+      let totalBytes = manifestArtifact.bytes.length;
+      const written = [];
+      for (const row of rows) {
+        const relative = String(row && row.path || "").trim();
+        const expectedHash = String(row && row.sha256 || "").trim().toLowerCase();
+        const expectedFile = String(row && row.file || "").trim();
+        const absolute = scopedCarryPath(relative);
+        if (!absolute || !allowedFiles.has(expectedFile) || path.basename(relative) !== expectedFile || !/^[a-f0-9]{64}$/.test(expectedHash)) {
+          throw new Error("INVALID_LIVE_SCOPED_ROW:" + relative);
+        }
+        const artifact = await fetchJsonArtifact(base, relative);
+        const actualHash = crypto.createHash("sha256").update(artifact.bytes).digest("hex");
+        if (actualHash !== expectedHash) throw new Error("LIVE_SCOPED_HASH_MISMATCH:" + relative);
+        if (!carriedScopedSnapshotHasPublishedProducts(artifact.doc, row, manifest)) {
+          throw new Error("LIVE_SCOPED_REAL_PRODUCTS_MISSING:" + relative);
+        }
+        totalBytes += artifact.bytes.length;
+        if (totalBytes > 512 * 1024 * 1024) throw new Error("LIVE_SCOPED_CARRY_TOO_LARGE");
+        const staged = path.join(stageRoot, relative.replace(/^\/+/, ""));
+        fs.mkdirSync(path.dirname(staged), { recursive: true });
+        fs.writeFileSync(staged, artifact.bytes);
+        written.push(relative);
+      }
+      const rootFallbacks = Array.isArray(manifest.rootFallbacks) ? manifest.rootFallbacks : [];
+      const rootWrites = [];
+      for (const row of rootFallbacks) {
+        const relative = String(row && row.path || "").trim();
+        const expectedHash = String(row && row.sha256 || "").trim().toLowerCase();
+        const absolute = rootCarryPath(relative);
+        if (!absolute || !/^[a-f0-9]{64}$/.test(expectedHash)) continue;
+        const artifact = await fetchJsonArtifact(base, relative);
+        const actualHash = crypto.createHash("sha256").update(artifact.bytes).digest("hex");
+        if (actualHash !== expectedHash) throw new Error("LIVE_ROOT_FALLBACK_HASH_MISMATCH:" + relative);
+        const staged = path.join(stageRoot, relative.replace(/^\/+/, ""));
+        fs.mkdirSync(path.dirname(staged), { recursive: true });
+        fs.writeFileSync(staged, artifact.bytes);
+        rootWrites.push(relative);
+      }
+      const stagedManifest = path.join(stageRoot, "data", "auto", "ip-slot-manifest.json");
+      fs.mkdirSync(path.dirname(stagedManifest), { recursive: true });
+      fs.writeFileSync(stagedManifest, manifestArtifact.bytes);
+
+      const targetAuto = path.join(root, "data", "auto");
+      const stagedAuto = path.join(stageRoot, "data", "auto");
+      fs.rmSync(targetAuto, { recursive: true, force: true });
+      fs.mkdirSync(path.dirname(targetAuto), { recursive: true });
+      fs.cpSync(stagedAuto, targetAuto, { recursive: true, force: true });
+      for (const relative of rootWrites) {
+        const source = path.join(stageRoot, relative.replace(/^\/+/, ""));
+        const target = rootCarryPath(relative);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.copyFileSync(source, target);
+      }
+      // Re-check the final build workspace after the atomic-ish directory copy.
+      // This catches partial/corrupt carries before Netlify is allowed to publish.
+      const copiedManifest = readJson(path.join(root, "data", "auto", "ip-slot-manifest.json"));
+      if (String(copiedManifest && copiedManifest.canonicalReleaseId || "") !== String(manifest.canonicalReleaseId || "")) {
+        throw new Error("LIVE_CARRY_FINAL_MANIFEST_MISMATCH");
+      }
+      for (const row of rows) {
+        const relative = String(row && row.path || "").trim();
+        const expectedHash = String(row && row.sha256 || "").trim().toLowerCase();
+        const target = scopedCarryPath(relative);
+        if (!target || !fileExists(target) || sha256File(target) !== expectedHash) {
+          throw new Error("LIVE_CARRY_FINAL_HASH_MISMATCH:" + relative);
+        }
+      }
+      fs.rmSync(stageRoot, { recursive: true, force: true });
+      return {
+        ok: true,
+        source: base,
+        canonicalReleaseId: manifest.canonicalReleaseId,
+        scopedOutputCount: written.length,
+        rootFallbackCount: rootWrites.length,
+        totalBytes
+      };
+    } catch (error) {
+      if (stageRoot) fs.rmSync(stageRoot, { recursive: true, force: true });
+      attempts.push({ source: base, error: String(error && error.message || error) });
+    }
+  }
+  return { ok: false, attempts };
 }
 
 function compactSocialReport(report) {
@@ -616,9 +808,20 @@ async function main() {
   const incomingSocialIntent = incomingSocialHookIntent();
   const explicitAdminPublicationInBuild = incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish";
   const explicitSocialPublicationInBuild = incomingSocialIntent.explicit === true;
-  const ordinaryTestDeploy = productionDeployBuild() && nonPublishingTestProjectBuild() && !explicitAdminPublicationInBuild && !explicitSocialPublicationInBuild;
-  const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild || (productionDeployBuild() && !ordinaryTestDeploy);
+  const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild || productionDeployBuild();
   let explicitSocialPublication = null;
+
+  // A normal code deploy must carry the currently published scoped product
+  // artifacts into the fresh Netlify filesystem.  Publication changes are the
+  // only builds allowed to replace them from the administrator pipeline.
+  if (productionDeployBuild() && !explicitAdminPublicationInBuild && !explicitSocialPublicationInBuild) {
+    const carried = await carryForwardPublishedScopedOutputs();
+    if (carried.ok) {
+      writePreservedBuild("ordinary-production-live-scoped-output-carried-forward", carried);
+      return;
+    }
+    process.stderr.write("Distribution live carry-forward unavailable; attempting authoritative rebuild: " + JSON.stringify(carried) + "\n");
+  }
 
   function preserveOrFail(reason, details) {
     // data/auto is build output, not a committed source tree. On a fresh Netlify

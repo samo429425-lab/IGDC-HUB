@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.9.1-multiplatform-link-thumbnail";
+const VERSION = "sanmaru-social-live-collector-v1.10.0-eight-platform-pipeline-continuity";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -32,11 +32,8 @@ const PROVIDER_GROUP_NAMES = Object.freeze([
 ]);
 const CHANNEL_RESOLUTION_TIMEOUT_MS = 1500;
 const PUBLIC_METADATA_TIMEOUT_MS = 1500;
-const CHANNEL_RESOLUTION_BUDGET_MS = 8500;
-const CHANNEL_RESOLUTION_CONCURRENCY = 3;
-const CREATOR_LATEST_SEARCH_LIMIT = 5;
-const CREATOR_LATEST_CACHE_TTL_MS = 5 * 60 * 1000;
-const creatorLatestCache = new Map();
+const CHANNEL_RESOLUTION_BUDGET_MS = 4200;
+const CHANNEL_RESOLUTION_CONCURRENCY = 4;
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 
 /*
@@ -356,7 +353,7 @@ function providerReadiness(configValue) {
       ready: !!(cfg.googleKey && cfg.googleCx),
       googleApiKeyConfigured: !!cfg.googleKey,
       cseIdConfigured: !!cfg.googleCx,
-      role: "Instagram·TikTok·Facebook·WeChat·Weibo·Pinterest·Reddit·X 공개 최신 게시물 정밀 검색(산마루 공개검색 보강 가능)"
+      role: "Instagram·TikTok·Facebook·WeChat·Weibo·Pinterest·Reddit·X 공개 최신 게시물 검색"
     },
     youtubeDataApi: {
       ready: !!cfg.youtubeKey,
@@ -373,7 +370,7 @@ function providerReadiness(configValue) {
       ready: true,
       apiKeyRequired: false,
       provider: "Wikidata Query Service",
-      role: "API 키 없이 공개 등록된 크리에이터를 찾고, 각 플랫폼은 산마루 공개검색으로 최신 게시물 재확인"
+      role: "API 키 없이 공개 등록된 크리에이터를 찾고, YouTube는 공개 RSS로 최신 영상 확인"
     },
     searchBankImport: { ready: true, role: "SearchBank의 실제 최신 SNS 영상·게시물 주소를 후보로 반입" },
     countryLanguageRouting: { ready: true, role: "국가 단위와 언어 우선순위 적용; 원 IP는 저장하지 않음" },
@@ -382,8 +379,8 @@ function providerReadiness(configValue) {
     collectionCanRun: true,
     keyFreeAutomaticDiscovery: true,
     requirements: [
-      { key: "필수 키 없음", neededFor: "공개 디렉터리 크리에이터 탐색 + 산마루 공개검색을 통한 최신 게시물 확인(플랫폼 공개성에 따라 결과 차이)", cost: "무료 공개 데이터; 관리자 검증 후 사용" },
-      { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "8개 비YouTube 플랫폼의 최신 공개 게시물 정밀 탐색 보강(필수 아님)", cost: "Google 무료 할당량 및 서비스 약관 범위" },
+      { key: "필수 키 없음", neededFor: "공개 디렉터리의 YouTube 크리에이터별 최신 영상 RSS 수집", cost: "무료 공개 데이터; 관리자 검증 후 사용" },
+      { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "8개 비YouTube 플랫폼의 최신 공개 게시물 발견", cost: "Google 무료 할당량 및 서비스 약관 범위" },
       { key: "YOUTUBE_API_KEY", neededFor: "국가·언어별 YouTube 크리에이터 직접 검색", cost: "Google Cloud에서 YouTube Data API v3 활성화" },
       { key: "NAVER_CLIENT_ID + NAVER_CLIENT_SECRET", neededFor: "한국어 최신 공개 영상·게시물 검색 보조", cost: "Naver Developers 애플리케이션 등록" },
       { key: "공개 최신 콘텐츠 URL 직접 반입", neededFor: "키가 없거나 검색 API가 제한된 플랫폼의 후보 확보", cost: "무료; 관리자 공개성·안전성 검토 필요" }
@@ -437,7 +434,9 @@ async function withDeadline(promise, timeoutMs, fallback) {
   }
 }
 function stripHtml(value) {
-  return SocialStore.text(value).replace(/<[^>]+>/g, " ").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
+  return decodeXml(
+    SocialStore.text(value).replace(/<[^>]+>/g, " "),
+  ).replace(/\s+/g, " ").trim();
 }
 function pageMapValue(page, names) {
   const source = page && typeof page === "object" ? page : {};
@@ -476,6 +475,109 @@ function scopedQueries(plan, cursor, passes, route) {
   }
   return Array.from(new Set(queries));
 }
+function registryRowActive(row) {
+  const status = SocialStore.text(row && (row.review_status || row.reviewStatus)).toLowerCase();
+  return !/^(search_excluded|permanent_blocked|blocked|rejected)$/.test(status);
+}
+function registryChannelUrl(row) {
+  const raw = row && row.raw && typeof row.raw === "object" ? row.raw : {};
+  return Policy.normalizeUrl(
+    raw.channelUrl || raw.channel_url || row && (row.channel_url || row.channelUrl) ||
+      row && (row.source_url || row.sourceUrl) || ""
+  );
+}
+function registryHandleFromUrl(value, platform) {
+  try {
+    const url = new URL(value);
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (platform === "reddit") {
+      const index = parts.findIndex((part) => String(part).toLowerCase() === "r");
+      if (index >= 0 && parts[index + 1]) return "r/" + parts[index + 1];
+    }
+    if (platform === "youtube") {
+      const token = parts.find((part) => /^@/.test(part));
+      return token || "";
+    }
+    const token = parts.find((part) =>
+      part && !/^(u|user|users|profile|people|channel|official)$/i.test(part)
+    );
+    return token ? decodeURIComponent(token) : "";
+  } catch (_error) { return ""; }
+}
+function registryIdentity(row, platform) {
+  const raw = row && row.raw && typeof row.raw === "object" ? row.raw : {};
+  const url = registryChannelUrl(row);
+  const title = firstText([
+    row && (row.creator_name || row.creatorName),
+    raw.creatorName,
+    row && row.title,
+    raw.title,
+  ]).replace(/^(false|null|undefined)$/i, "");
+  const handle = registryHandleFromUrl(url, platform).replace(/^@/, "");
+  const thumbnail = firstText([
+    row && (row.thumbnail_url || row.thumbnailUrl),
+    raw.channelThumbnailUrl,
+    raw.channel_thumbnail_url,
+    raw.thumbnailUrl,
+    raw.thumbnail,
+    raw.image,
+  ]);
+  return { row, url, title, handle, thumbnail };
+}
+async function influencerRegistrySeeds(sectionKey, platform) {
+  try {
+    const rows = await SocialStore.selectCandidates(
+      "select=*&section_key=eq." + encodeURIComponent(sectionKey) +
+        "&order=rotation_score.desc,updated_at.desc&limit=350",
+    );
+    const seen = new Set();
+    return (Array.isArray(rows) ? rows : [])
+      .filter((row) => SocialStore.assetClassOf(row) === "influencer_registry" && registryRowActive(row))
+      .map((row) => registryIdentity(row, platform))
+      .filter((seed) => {
+        const key = String(seed.url || (seed.title + "|" + seed.handle)).toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return !!(seed.url || seed.title || seed.handle);
+      });
+  } catch (_error) { return []; }
+}
+function registryLatestQuery(seed, route) {
+  if (!seed) return "";
+  const identity = [
+    seed.handle ? '"' + seed.handle.replace(/"/g, "") + '"' : "",
+    seed.title ? '"' + seed.title.replace(/"/g, "") + '"' : "",
+  ].filter(Boolean).join(" ");
+  return [identity, languageQueryTerm(route), "latest recent public"].filter(Boolean).join(" ");
+}
+function scopedQueriesWithRegistry(plan, cursor, passes, route, registrySeeds) {
+  const seeds = Array.isArray(registrySeeds) ? registrySeeds : [];
+  if (!seeds.length) {
+    return { queries: scopedQueries(plan, cursor, passes, route), targeted: false, seed: null, seedByQuery: {} };
+  }
+  const offset = Math.max(0, Number(cursor || 0) || 0);
+  const count = Math.max(1, Math.min(MAX_QUERY_PASSES, Number(passes || DEFAULT_QUERY_PASSES) || DEFAULT_QUERY_PASSES));
+  const queries = [];
+  const seedByQuery = {};
+  let selectedSeed = null;
+  for (let index = 0; index < count; index += 1) {
+    const seed = seeds[(offset + index) % seeds.length];
+    if (!selectedSeed) selectedSeed = seed;
+    const q = registryLatestQuery(seed, route);
+    if (q) {
+      queries.push(q);
+      if (!seedByQuery[q]) seedByQuery[q] = seed;
+    }
+  }
+  const finalQueries = Array.from(new Set(queries.length ? queries : scopedQueries(plan, cursor, passes, route)));
+  return {
+    queries: finalQueries,
+    targeted: queries.length > 0,
+    seed: selectedSeed,
+    seedByQuery,
+  };
+}
+
 function sparqlLiteral(value) {
   return '"' + String(value == null ? "" : value)
     .replace(/\\/g, "\\\\")
@@ -565,42 +667,21 @@ async function publicDirectoryRequest(plan, route, limit, offset, countryStrict)
   }
 }
 async function publicDirectorySearch(plan, route, limit, offset) {
-  const hasCountryPreference = !!SocialStore.text(route && route.countryCode);
-  if (!hasCountryPreference) return publicDirectoryRequest(plan, route, limit, offset, false);
-
-  // Country/IP is a preference signal only.  Search both country-associated
-  // creators and the global directory on every pass, keeping local rows first
-  // without excluding creators/content produced elsewhere.
+  const countryStrict = !!SocialStore.text(route && route.countryCode);
+  if (!countryStrict) return publicDirectoryRequest(plan, route, limit, offset, false);
   const results = await Promise.all([
     publicDirectoryRequest(plan, route, limit, offset, true),
     publicDirectoryRequest(plan, route, limit, offset, false)
   ]);
-  const primary = results[0] || { items: [] };
-  const globalFallback = results[1] || { items: [] };
-  const seen = new Set();
-  const items = [];
-  function push(row, localPreference) {
-    const urls = candidateUrls(row);
-    const key = firstText([row && row.url, row && row.channelUrl, urls[0], row && row.title]).toLowerCase();
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    const copy = Object.assign({}, row, {
-      audiencePreferenceCountryMatch: !!localPreference,
-      publicDirectoryCountryFallback: !localPreference
-    });
-    items.push(copy);
-  }
-  (primary.items || []).forEach((row) => push(row, true));
-  (globalFallback.items || []).forEach((row) => push(row, false));
-  return {
-    provider: "wikidata-public-directory",
-    status: (primary.status === "ok" || globalFallback.status === "ok") ? "ok" : (primary.status || globalFallback.status),
-    items: items.slice(0, Math.max(limit, Math.min(MAX_BATCH_SIZE * 2, limit * 2))),
-    countryPreference: true,
-    countryPrimaryCount: (primary.items || []).length,
-    globalSupplementCount: (globalFallback.items || []).length,
-    error: primary.error || globalFallback.error || null
-  };
+  const primary = results[0];
+  const globalFallback = results[1];
+  if (primary.items.length) return primary;
+  globalFallback.countryFallback = true;
+  globalFallback.countryPrimaryCount = 0;
+  globalFallback.countryPrimaryStatus = primary.status;
+  globalFallback.countryPrimaryError = primary.error || null;
+  globalFallback.items.forEach((item) => { item.publicDirectoryCountryFallback = true; });
+  return globalFallback;
 }
 function youtubeLanguageCode(route) {
   const primary = CountryRouting.normalizeLanguages(route && route.languages)[0] || "";
@@ -750,16 +831,34 @@ async function maruSearchOne(event, plan, queryText, limit, language, start) {
     return { provider: "sanmaru-public-search", status: "error", error: error.message, items: [], trace: [] };
   }
 }
-async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup) {
+async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup, registryTargeted) {
   let tasks = [];
   if (providerGroup === 0) {
     tasks = [publicDirectorySearch(plan, route, limit, directoryOffset)];
+    // A public-directory row is a creator profile, not a post. When a known
+    // registry identity is being targeted, also ask the existing Maru/SearchBank
+    // public search in the same pass so keyless deployments can still discover
+    // a real latest post/video URL instead of repeatedly rejecting profiles.
+    if (registryTargeted || plan.platform !== "youtube") {
+      // Non-YouTube sections must never depend on a directory/profile result
+      // becoming a post by itself. Always pair the directory pass with the
+      // existing public Maru/SearchBank path so a real latest content URL can
+      // reach the candidate gateway even when external API keys are absent.
+      tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
+    }
   } else if (providerGroup === 1) {
     if (plan.platform === "youtube") {
       tasks.push(youtubeChannelSearch(queryText, limit, cfg, qualitySweep, route));
     }
     tasks.push(googleChannelSearch(plan, queryText, limit, start, cfg));
     tasks.push(naverChannelSearch(plan, queryText, limit, start, route, cfg));
+    if (plan.platform !== "youtube") {
+      // Configured search APIs are optional. Keep the canonical Maru public
+      // search as a same-pass fallback so Instagram/TikTok/Facebook/WeChat/
+      // Weibo/Pinterest/Reddit/X do not collapse to zero when keys, quotas or
+      // provider metadata are unavailable.
+      tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
+    }
   } else {
     tasks = [maruSearchOne(event, plan, queryText, limit, language, start)];
   }
@@ -804,6 +903,14 @@ async function youtubeOembed(value) {
 function decodeXml(value) {
   return SocialStore.text(value)
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&#x([0-9a-f]+);/gi, function (_m, hex) {
+      const code = parseInt(hex, 16);
+      try { return Number.isFinite(code) ? String.fromCodePoint(code) : _m; } catch (_e) { return _m; }
+    })
+    .replace(/&#([0-9]+);/g, function (_m, dec) {
+      const code = parseInt(dec, 10);
+      try { return Number.isFinite(code) ? String.fromCodePoint(code) : _m; } catch (_e) { return _m; }
+    })
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&lt;/g, "<")
@@ -901,6 +1008,49 @@ async function publicPageMetadata(platform, contentUrl) {
     });
   } catch (_error) { return oembed; }
 }
+function signedFacebookThumbnailExpiry(value) {
+  try {
+    const url = new URL(value);
+    if (!/(?:^|\.)fbcdn\.net$/i.test(url.hostname)) return 0;
+    const token = url.searchParams.get("oe");
+    if (!token || !/^[0-9a-f]+$/i.test(token)) return 0;
+    const seconds = parseInt(token, 16);
+    return Number.isFinite(seconds) ? seconds * 1000 : 0;
+  } catch (_error) { return 0; }
+}
+function usableThumbnail(value, contentUrl, platform) {
+  const normalized = Policy.normalizeUrl(value);
+  if (!normalized || !/^https:\/\//i.test(normalized)) return "";
+  if (contentUrl && normalized === Policy.normalizeUrl(contentUrl)) return "";
+  try {
+    const url = new URL(normalized);
+    const host = url.hostname.toLowerCase();
+    const platformHosts = {
+      facebook: /(^|\.)facebook\.com$/i,
+      instagram: /(^|\.)instagram\.com$/i,
+      tiktok: /(^|\.)tiktok\.com$/i,
+      twitter: /(^|\.)(x|twitter)\.com$/i,
+      reddit: /(^|\.)reddit\.com$/i,
+      pinterest: /(^|\.)pinterest\.com$/i,
+      weibo: /(^|\.)weibo\.(com|cn)$/i,
+      wechat: /(^|\.)mp\.weixin\.qq\.com$/i,
+    };
+    const pageHost = platformHosts[platform];
+    const imagePath = /\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(url.pathname + url.search);
+    if (pageHost && pageHost.test(host) && !imagePath) return "";
+    const expiry = signedFacebookThumbnailExpiry(normalized);
+    if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
+    return normalized;
+  } catch (_error) { return ""; }
+}
+async function stablePublicThumbnail(platform, contentUrl, supplied) {
+  let thumb = usableThumbnail(supplied, contentUrl, platform);
+  if (thumb) return { thumbnail: thumb, metadata: {} };
+  const metadata = await publicPageMetadata(platform, contentUrl);
+  thumb = usableThumbnail(metadata.thumbnail, contentUrl, platform);
+  return { thumbnail: thumb, metadata };
+}
+
 async function youtubeLatestFromFeed(channelId) {
   if (!/^UC[a-zA-Z0-9_-]{20,}$/.test(SocialStore.text(channelId))) return { ok: false };
   try {
@@ -931,232 +1081,74 @@ async function youtubeLatestFromFeed(channelId) {
     };
   } catch (_error) { return { ok: false }; }
 }
-
-function creatorIdentity(channelUrl, platform, title) {
-  const out = { token: "", label: SocialStore.text(title) };
-  try {
-    const url = new URL(Policy.normalizeUrl(channelUrl));
-    const parts = url.pathname.split("/").filter(Boolean).map((part) => decodeURIComponent(part));
-    if (platform === "wechat") out.token = SocialStore.text(url.searchParams.get("username"));
-    else if (platform === "reddit" && /^(r|user|u)$/i.test(parts[0] || "")) out.token = SocialStore.text(parts[1]);
-    else if (platform === "weibo" && /^u$/i.test(parts[0] || "")) out.token = SocialStore.text(parts[1]);
-    else out.token = SocialStore.text(parts[0]).replace(/^@/, "");
-  } catch (_error) {}
-  return out;
-}
-function creatorHitScore(platform, contentUrl, channelUrl, identity, item) {
-  let score = 0;
-  const token = SocialStore.text(identity && identity.token).toLowerCase();
-  try {
-    const url = new URL(Policy.normalizeUrl(contentUrl));
-    const path = decodeURIComponent(url.pathname || "").toLowerCase();
-    if (token && path.includes("/" + token + "/")) score += 80;
-    else if (token && path.includes("@" + token + "/")) score += 80;
-    else if (token && path.includes("/" + token)) score += 35;
-    if (platform === "reddit" && token && path.includes("/r/" + token + "/")) score += 90;
-    if (platform === "weibo" && token && /^\/\d+\//.test(path) && path.startsWith("/" + token + "/")) score += 90;
-  } catch (_error) {}
-  const published = Date.parse(firstText([
-    item && item.publishedAt, item && item.published_at, item && item.pubDate, item && item.date
-  ]));
-  if (Number.isFinite(published)) {
-    const ageDays = Math.max(0, (Date.now() - published) / 86400000);
-    if (ageDays <= 7) score += 45;
-    else if (ageDays <= 30) score += 30;
-    else if (ageDays <= 90) score += 15;
-  }
-  if (firstText([item && item.thumbnail, item && item.thumb, item && item.image, item && item.imageUrl])) score += 12;
-  score += Number(item && (item._finalScore || item.score || item.rank) || 0);
-  return score;
-}
-async function latestContentFromCreatorSearch(context, item, platform, resolved) {
-  if (!context || !resolved || !resolved.channelUrl || platform === "youtube") return { ok: false };
-  const plan = sectionPlan(context.sectionKey);
-  if (!plan) return { ok: false };
-  const identity = creatorIdentity(resolved.channelUrl, platform, firstText([
-    item && item.creatorName, item && item.channelName, item && item.title, item && item.name, resolved.suggestedTitle
-  ]));
-  const cacheKey = [platform, resolved.channelUrl, context.route && context.route.countryCode || ""].join("|").toLowerCase();
-  const cached = creatorLatestCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < CREATOR_LATEST_CACHE_TTL_MS) return cached.value;
-
-  const creatorTerm = firstText([identity.token ? '"' + identity.token + '"' : "", identity.label]);
-  if (!creatorTerm) return { ok: false };
-  const queryText = [
-    creatorTerm,
-    countryQueryTerm(context.route),
-    languageQueryTerm(context.route),
-    "latest recent public"
-  ].filter(Boolean).join(" ");
-
-  const results = [];
-  const cfg = context.cfg || {};
-  const tasks = [];
-  if (cfg.googleKey && cfg.googleCx) {
-    tasks.push(googleChannelSearch(plan, queryText, CREATOR_LATEST_SEARCH_LIMIT, 1, cfg));
-  } else {
-    tasks.push(maruSearchOne(
-      context.event || {},
-      plan,
-      queryText,
-      CREATOR_LATEST_SEARCH_LIMIT,
-      context.route && context.route.languages && context.route.languages[0],
-      1
-    ));
-  }
-  if (cfg.naverId && cfg.naverSecret) {
-    tasks.push(naverChannelSearch(
-      plan, queryText, CREATOR_LATEST_SEARCH_LIMIT, 1, context.route, cfg
-    ));
-  }
-  const settled = await Promise.allSettled(tasks);
-  settled.forEach((entry) => {
-    if (entry.status === "fulfilled" && entry.value && entry.value.status !== "route_skipped") {
-      results.push(entry.value);
-    }
-  });
-  // Google CSE is precise for direct post URLs, but when it is configured and
-  // yields no usable post, give the existing Sanmaru/SearchBank public search
-  // one bounded second chance for this known creator.
-  if (cfg.googleKey && cfg.googleCx) {
-    const hasDirect = results.some((provider) =>
-      (provider && Array.isArray(provider.items) ? provider.items : [])
-        .some((row) => candidateUrls(row).some((url) => !!contentKind(platform, url)))
-    );
-    if (!hasDirect) {
-      try {
-        results.push(await maruSearchOne(
-          context.event || {},
-          plan,
-          queryText,
-          CREATOR_LATEST_SEARCH_LIMIT,
-          context.route && context.route.languages && context.route.languages[0],
-          1
-        ));
-      } catch (_error) {}
-    }
-  }
-
-  const hits = [];
-  results.forEach((provider) => {
-    (provider && Array.isArray(provider.items) ? provider.items : []).forEach((row) => {
-      const urls = candidateUrls(row);
-      urls.forEach((url) => {
-        const kind = contentKind(platform, url);
-        if (!kind) return;
-        hits.push({
-          row,
-          url,
-          kind,
-          score: creatorHitScore(platform, url, resolved.channelUrl, identity, row)
-        });
-      });
-    });
-  });
-  hits.sort((a, b) => b.score - a.score);
-  for (const hit of hits.slice(0, 4)) {
-    let metadata = {};
-    try { metadata = await publicPageMetadata(platform, hit.url); } catch (_error) {}
-    const title = firstText([
-      metadata.title, hit.row && hit.row.title, hit.row && hit.row.name, resolved.suggestedTitle
-    ]);
-    const thumbnail = firstText([
-      metadata.thumbnail,
-      hit.row && hit.row.thumbnail, hit.row && hit.row.thumb,
-      hit.row && hit.row.image, hit.row && hit.row.imageUrl, hit.row && hit.row.cardImage
-    ]);
-    if (!title || syntheticTitle(title)) continue;
-    if (!/^https:\/\//i.test(Policy.normalizeUrl(hit.url))) continue;
-    const value = {
-      ok: true,
-      channelUrl: resolved.channelUrl,
-      contentUrl: Policy.normalizeUrl(hit.url),
-      title,
-      creatorName: firstText([
-        metadata.creatorName, hit.row && hit.row.creatorName,
-        hit.row && hit.row.channelName, identity.label, resolved.suggestedTitle
-      ]),
-      thumbnail,
-      publishedAt: firstText([
-        hit.row && hit.row.publishedAt, hit.row && hit.row.published_at,
-        hit.row && hit.row.pubDate, hit.row && hit.row.date
-      ]),
-      entityKind: hit.kind,
-      discoveryMode: "creator_targeted_latest_public_search"
-    };
-    creatorLatestCache.set(cacheKey, { at: Date.now(), value });
-    if (creatorLatestCache.size > 500) {
-      const firstKey = creatorLatestCache.keys().next().value;
-      creatorLatestCache.delete(firstKey);
-    }
-    return value;
-  }
-  const miss = { ok: false, reason: "creator_latest_public_content_not_found" };
-  creatorLatestCache.set(cacheKey, { at: Date.now(), value: miss });
-  return miss;
-}
-
-async function resolveChannelAsset(item, platform, context) {
+async function resolveChannelAsset(item, platform, registrySeed) {
   const title = firstText([item && item.title, item && item.name, item && item.label]);
   const urls = candidateUrls(item);
   let latestContentUrl = urls.find((url) => contentKind(platform, url)) || "";
   let latest = {};
-  let channelResolved = null;
 
-  const orderedForChannel = latestContentUrl
+  // A registry-targeted search already has the approved creator identity.
+  // Bind a discovered real latest post/video back to that known channel instead
+  // of trying to infer the creator from every platform's post URL shape/title.
+  // The searched URL still has to be a genuine content URL on the same platform.
+  if (latestContentUrl && registrySeed && registrySeed.url) {
+    const seedChannel = ChannelLink.resolve(registrySeed.url, {
+      platform,
+      title: firstText([registrySeed.title, registrySeed.handle, title]),
+    });
+    if (seedChannel.ok && seedChannel.channelUrl) {
+      seedChannel.latestContentUrl = latestContentUrl;
+      seedChannel.latestContentKind = contentKind(platform, latestContentUrl);
+      seedChannel.latest = latest;
+      seedChannel.registryBound = true;
+      seedChannel.enrichment = Object.assign({}, seedChannel.enrichment || {}, {
+        creatorName: firstText([registrySeed.title, registrySeed.handle, seedChannel.suggestedTitle]),
+        // A registered creator image is a valid continuity fallback when a
+        // platform blocks anonymous post-page metadata. The outbound URL still
+        // points to the verified latest post/video; only the visual preview
+        // falls back to the known creator image instead of dropping the row.
+        thumbnail: firstText([registrySeed.thumbnail]),
+      });
+      return seedChannel;
+    }
+  }
+  if (platform === "youtube" && !latestContentUrl) {
+    latest = await youtubeLatestFromFeed(channelIdFromItem(item));
+    if (latest.ok) latestContentUrl = latest.contentUrl;
+  }
+  if (latest.ok && latest.channelUrl) {
+    const channel = ChannelLink.resolve(latest.channelUrl, { platform, title: latest.creatorName });
+    if (channel.ok && channel.channelUrl) {
+      channel.latestContentUrl = latestContentUrl;
+      channel.latestContentKind = "latest_video";
+      channel.latest = latest;
+      return channel;
+    }
+  }
+  const ordered = latestContentUrl
     ? [latestContentUrl].concat(urls.filter((url) => url !== latestContentUrl))
     : urls;
-  for (const url of orderedForChannel) {
+  for (const url of ordered) {
     let resolved = ChannelLink.resolve(url, { platform, title });
     if (resolved.ok && resolved.needsEnrichment === "youtube_oembed_author") {
       const enriched = await youtubeOembed(resolved.evidenceUrl);
       if (enriched.ok) {
         resolved = ChannelLink.resolve(enriched.channelUrl, { platform, title: enriched.title });
-        if (resolved.ok) resolved.enrichment = enriched;
+        if (resolved.ok) resolved.enrichment = Object.assign({}, enriched, latest);
       }
     }
     if (resolved.ok && resolved.channelUrl) {
-      channelResolved = resolved;
-      break;
+      resolved.latestContentUrl = latestContentUrl;
+      resolved.latestContentKind = contentKind(platform, latestContentUrl);
+      resolved.latest = latest;
+      return resolved;
     }
   }
-
-  if (platform === "youtube" && !latestContentUrl) {
-    latest = await youtubeLatestFromFeed(channelIdFromItem(item));
-    if (latest.ok) latestContentUrl = latest.contentUrl;
-  } else if (platform !== "youtube" && !latestContentUrl && channelResolved) {
-    latest = await latestContentFromCreatorSearch(context || {}, item, platform, channelResolved);
-    if (latest.ok) latestContentUrl = latest.contentUrl;
-  }
-
-  if (latest.ok && latest.channelUrl && !channelResolved) {
-    const fromLatest = ChannelLink.resolve(latest.channelUrl, {
-      platform,
-      title: latest.creatorName || title
-    });
-    if (fromLatest.ok && fromLatest.channelUrl) channelResolved = fromLatest;
-  }
-
-  if (channelResolved && channelResolved.channelUrl) {
-    channelResolved.latestContentUrl = latestContentUrl;
-    channelResolved.latestContentKind = contentKind(platform, latestContentUrl);
-    channelResolved.latest = latest;
-    if (latest.ok) {
-      channelResolved.enrichment = Object.assign({}, channelResolved.enrichment || {}, {
-        title: latest.title,
-        creatorName: latest.creatorName,
-        thumbnail: latest.thumbnail
-      });
-    }
-    return channelResolved;
-  }
-
   const hasPlatformUrl = urls.some((url) => Policy.platformFromHost(url) === platform);
   return { ok: false, reason: hasPlatformUrl ? "channel_target_not_resolved" : "platform_host_mismatch" };
 }
-
-async function candidateFromItem(item, sectionKey, platform, queryText, route, context) {
-  const resolved = await resolveChannelAsset(item, platform, Object.assign({}, context || {}, { sectionKey, route }));
+async function candidateFromItem(item, sectionKey, platform, queryText, route, registrySeed) {
+  const resolved = await resolveChannelAsset(item, platform, registrySeed);
   if (!resolved.ok) return { ok: false, reason: resolved.reason };
   if (!resolved.latestContentUrl || !resolved.latestContentKind) {
     return { ok: false, reason: "latest_public_content_required" };
@@ -1181,10 +1173,14 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, c
     mediaPreview.poster,
     mediaPreview.image
   ]);
-  // Latest-content cards must prefer metadata from the actual post/video URL.
-  // A registry/profile thumbnail is only a last fallback and must never prevent
-  // us from attempting to read the real content thumbnail.
-  const publicMetadata = await publicPageMetadata(platform, resolved.latestContentUrl);
+  const thumbnailResolution = await stablePublicThumbnail(
+    platform,
+    resolved.latestContentUrl,
+    suppliedThumbnail,
+  );
+  const publicMetadata = thumbnailResolution.metadata || {};
+  const resolvedThumbnail = thumbnailResolution.thumbnail;
+  if (!resolvedThumbnail) return { ok: false, reason: "usable_thumbnail_required" };
   const title = firstText([
     latest.title,
     enrichment.title,
@@ -1200,12 +1196,12 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, c
     item && item.creatorName, item && item.channelName,
     item && item.channel, item && item.publisher, source && typeof source === "object" && source.name,
     resolved.suggestedTitle
-  ]);
+  ]).replace(/^(false|null|undefined)$/i, "") || firstText([resolved.suggestedTitle, title]);
   const routeLanguages = route && route.languages || [];
   const explicitCountry = SocialStore.text(item && item.country).toUpperCase();
-  // Creator origin is never a hard eligibility gate.  The selected/IP country
-  // expresses audience preference only; same-region/global healthy content may
-  // still rank when it is popular with that audience.
+  if (route && route.countryCode && explicitCountry && explicitCountry !== route.countryCode) {
+    return { ok: false, reason: "country_creator_mismatch" };
+  }
   const category = firstText([item && item.category, categoryFromQuery(platform, queryText)]);
   const itemLanguage = CountryRouting.normalizeLanguage(item && (item.lang || item.language));
   const language = itemLanguage && routeLanguages.includes(itemLanguage)
@@ -1226,7 +1222,7 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, c
     channelAsset: true,
     latestContentAsset: true,
     contentPublishedAt: firstText([latest.publishedAt, item && item.publishedAt, item && item.published_at, item && item.pubDate, item && item.date]),
-    thumbnailUrl: firstText([latest.thumbnail, publicMetadata.thumbnail, enrichment.thumbnail, suppliedThumbnail]),
+    thumbnailUrl: resolvedThumbnail,
     channelThumbnailUrl: firstText([
       item && item.channelThumbnail,
       item && item.channelThumbnailUrl,
@@ -1235,9 +1231,9 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, c
     description: firstText([item && item.description, item && item.summary, item && item.snippet]).slice(0, 1200),
     creatorName: creatorName.slice(0, 180),
     language,
-    // countryScopes describes the intended audience preference context, not
-    // the creator's production country.
-    countryScopes: route && route.countryCode ? [route.countryCode] : [],
+    countryScopes: item && item.publicDirectoryCountryFallback
+      ? []
+      : (route && route.countryCode ? [route.countryCode] : []),
     languageScopes: routeLanguages,
     category,
     publicAccess: true,
@@ -1247,12 +1243,6 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, c
     verificationStatus: "web_verification_required",
     discoveryQuery: queryText,
     engagement: item && item.engagement || {},
-    audiencePreference: {
-      mode: "consumer_preference_not_creator_origin",
-      countryCode: route && route.countryCode || "",
-      creatorCountry: explicitCountry || "",
-      worldRegion: route && (route.worldRegion || route.regionId) || ""
-    },
     source: {
       name: itemSourceName(item),
       platform,
@@ -1311,11 +1301,11 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, c
 function latestContentPriority(item, platform) {
   return candidateUrls(item).some((url) => contentKind(platform, url)) ? 0 : 1;
 }
-async function resolveSearchCandidates(searchResults, sectionKey, platform, route, target, context) {
+async function resolveSearchCandidates(searchResults, sectionKey, platform, route, target) {
   const inputs = [];
   (searchResults || []).forEach((result) => {
     (result.items || []).forEach((item) => {
-      inputs.push({ item, query: result.query, order: inputs.length });
+      inputs.push({ item, query: result.query, registrySeed: result.registrySeed || null, order: inputs.length });
     });
   });
   inputs.sort((left, right) =>
@@ -1339,7 +1329,7 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
           platform,
           input.query,
           route,
-          context
+          input.registrySeed
         );
       } catch (error) {
         converted[index] = {
@@ -1384,48 +1374,6 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
     deferredRows: Math.max(0, inputs.length - converted.filter(Boolean).length)
   };
 }
-
-async function existingInfluencerLatestSeeds(sectionKey, limit) {
-  try {
-    const query =
-      "select=*&section_key=eq." + encodeURIComponent(sectionKey) +
-      "&order=rotation_score.desc,updated_at.desc&limit=" +
-      Math.max(20, Math.min(220, Number(limit || 80)));
-    const rows = await SocialStore.selectCandidates(query);
-    return (Array.isArray(rows) ? rows : [])
-      .filter((row) => SocialStore.assetClassOf(row) === "influencer_registry")
-      .map((row) => {
-        const raw = SocialStore.plain(row && row.raw);
-        return {
-          provider: "social-influencer-registry-latest-resolver",
-          platform: row.platform,
-          channelUrl: firstText([row.channel_url, row.source_url, raw.channelUrl, raw.sourceUrl]),
-          url: firstText([row.channel_url, row.source_url, raw.channelUrl, raw.sourceUrl]),
-          title: firstText([row.title, row.creator_name, raw.title, raw.creatorName]),
-          creatorName: firstText([row.creator_name, row.title, raw.creatorName, raw.title]),
-          channelThumbnail: firstText([row.thumbnail_url, raw.thumbnailUrl, raw.channelThumbnailUrl]),
-          thumbnail: firstText([row.thumbnail_url, raw.thumbnailUrl]),
-          description: firstText([row.description, raw.description]),
-          country: firstText([raw.creatorCountry, raw.country]),
-          language: firstText([row.language, raw.language]),
-          engagement: raw.engagement || {
-            followers: Number(row.engagement_score || 0),
-            qualityScore: Number(row.quality_score || 0),
-            trustScore: Number(row.trust_score || 0)
-          },
-          _finalScore:
-            Number(row.rotation_score || 0) +
-            Number(row.engagement_score || 0) +
-            Number(row.quality_score || 0) +
-            Number(row.trust_score || 0)
-        };
-      })
-      .filter((row) => row.channelUrl);
-  } catch (_error) {
-    return [];
-  }
-}
-
 function gatewayEvent(event, candidates, sectionKey, dryRun, limit, source) {
   return Object.assign({}, event || {}, {
     httpMethod: "POST",
@@ -1453,7 +1401,7 @@ function previewItems(payload) {
     };
   });
 }
-async function intakeCandidates(body, plan, route, context) {
+async function intakeCandidates(body, plan, route) {
   // Policy.text intentionally removes control characters, so preserve line
   // breaks here before each individual line is normalized.
   const lines = String(body.rawText || body.urls || body.urlList || "").trim().split(/\r?\n/).slice(0, 500);
@@ -1470,7 +1418,7 @@ async function intakeCandidates(body, plan, route, context) {
       title: parsed.title,
       category: parsed.category,
       provider: "admin-public-url-intake"
-    }, plan.sectionKey, plan.platform, "admin_public_url_intake", route, context);
+    }, plan.sectionKey, plan.platform, "admin_public_url_intake", route);
     if (!converted.ok) { rejected.push({ index: index + 1, reason: converted.reason }); continue; }
     const key = converted.candidate.channelUrl.toLowerCase();
     if (seen.has(key)) { rejected.push({ index: index + 1, reason: "duplicate_creator_channel" }); continue; }
@@ -1521,7 +1469,7 @@ exports.handler = async function(event) {
     const aiPolicy = AIPolicy.normalize(body.aiPolicy || {});
 
     if (/^(intake_channels|intake_urls|direct_intake)$/i.test(SocialStore.text(body.action))) {
-      const intake = await intakeCandidates(body, plan, route, { event, cfg });
+      const intake = await intakeCandidates(body, plan, route);
       const selected = intake.candidates.slice(0, 500);
       const submitted = [];
       selected.forEach((candidate, index) => {
@@ -1564,45 +1512,36 @@ exports.handler = async function(event) {
     const providerGroup = queryCursor % PROVIDER_GROUP_COUNT;
     const researchCursor = Math.floor(queryCursor / PROVIDER_GROUP_COUNT);
     const qualitySweep = flag(body.qualitySweep || body.quality_sweep);
+    // Existing influencer registry is the primary identity source for latest
+    // content collection. Generic discovery remains the fallback. This closes
+    // the previous gap where hundreds of registered Instagram/TikTok/X/etc.
+    // profiles existed but collection searched unrelated generic web results.
+    const registrySeeds = await influencerRegistrySeeds(sectionKey, plan.platform);
+    const scoped = scopedQueriesWithRegistry(plan, researchCursor, passes, route, registrySeeds);
     const aiQuerySuffix = AIPolicy.querySuffix(aiPolicy);
-    const queries = scopedQueries(plan, researchCursor, passes, route).map((query) => {
+    const querySeeds = {};
+    const queries = scoped.queries.map((query) => {
       var value = qualitySweep ? query + " popular high quality active official" : query;
-      return aiQuerySuffix ? value + " " + aiQuerySuffix : value;
+      value = aiQuerySuffix ? value + " " + aiQuerySuffix : value;
+      querySeeds[value] = scoped.seedByQuery && scoped.seedByQuery[query] || null;
+      return value;
     });
-    const perQueryLimit = Math.max(1, Math.min(MAX_BATCH_SIZE, Math.ceil(target / queries.length)));
-    const catalogSize = Math.max(1, plan.policy.collectionQueries.length);
+    const perQueryLimit = Math.max(1, Math.min(MAX_BATCH_SIZE, Math.ceil(target / Math.max(1, queries.length))));
+    const baseCatalogSize = Math.max(1, plan.policy.collectionQueries.length);
+    const registryCatalogSize = registrySeeds.length ? Math.min(45, registrySeeds.length) : 0;
+    const catalogSize = Math.max(baseCatalogSize, registryCatalogSize);
     const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || (Math.floor(researchCursor / catalogSize) * perQueryLimit + 1)) || 1));
     const searchResults = [];
     for (let queryIndex = 0; queryIndex < queries.length; queryIndex += 1) {
       const queryText = queries[queryIndex];
       const directoryOffset = Math.max(0, (researchCursor + queryIndex) * perQueryLimit);
-      searchResults.push(await searchOne(
+      const searchResult = await searchOne(
         event, plan, queryText, perQueryLimit,
         body.language || body.lang || route.languages[0],
-        searchStart, route, cfg, qualitySweep, directoryOffset, providerGroup
-      ));
-    }
-
-    // Reuse the existing influencer registry as a first-class source of
-    // creator identities.  For non-YouTube platforms the resolver performs a
-    // targeted public latest-post search for these known active profiles instead
-    // of relying only on generic web-search hits.
-    const registeredInfluencerSeeds = await existingInfluencerLatestSeeds(
-      sectionKey,
-      Math.max(40, target * 8)
-    );
-    if (registeredInfluencerSeeds.length) {
-      searchResults.unshift({
-        query: "registered_influencer_latest_content",
-        providerGroup: -1,
-        providerGroupName: "registered_influencer_latest_content",
-        providers: [{
-          provider: "social-influencer-registry-latest-resolver",
-          status: "ok",
-          count: registeredInfluencerSeeds.length
-        }],
-        items: registeredInfluencerSeeds
-      });
+        searchStart, route, cfg, qualitySweep, directoryOffset, providerGroup, scoped.targeted
+      );
+      searchResult.registrySeed = querySeeds[queryText] || null;
+      searchResults.push(searchResult);
     }
 
     const resolved = await resolveSearchCandidates(
@@ -1610,24 +1549,22 @@ exports.handler = async function(event) {
       sectionKey,
       plan.platform,
       route,
-      target,
-      { event, cfg }
+      target
     );
     const rejected = resolved.rejected;
     const candidates = resolved.candidates;
     const policyAccepted = [];
-    candidates.forEach((candidate, index) => {
+    candidates.forEach((candidate) => {
       const verdict = AIPolicy.evaluate(candidate, aiPolicy);
-      if (verdict.ok) policyAccepted.push({ candidate, influencer: resolved.influencers[index] || null });
+      if (verdict.ok) policyAccepted.push(candidate);
       else rejected.push({ id: candidate && candidate.id, reason: verdict.reason });
     });
 
-    const selectedPairs = policyAccepted.slice(0, target);
-    const selected = selectedPairs.map((pair) => pair.candidate);
+    const selected = policyAccepted.slice(0, target);
     const submitted = [];
-    selectedPairs.forEach((pair) => {
-      if (pair.influencer) submitted.push(pair.influencer);
-      submitted.push(pair.candidate);
+    selected.forEach((candidate, index) => {
+      if (resolved.influencers[index]) submitted.push(resolved.influencers[index]);
+      submitted.push(candidate);
     });
     const gatewayResponse = await CandidateGateway.handler(
       gatewayEvent(event, submitted, sectionKey, dryRun, submitted.length || 1)
@@ -1654,6 +1591,13 @@ exports.handler = async function(event) {
       providerGroupCount: PROVIDER_GROUP_COUNT,
       searchStart,
       qualitySweep,
+      registryTargeted: scoped.targeted,
+      registrySeedCount: registrySeeds.length,
+      registrySeed: scoped.seed ? {
+        title: scoped.seed.title || null,
+        handle: scoped.seed.handle || null,
+        channelUrl: scoped.seed.url || null,
+      } : null,
       aiPolicy: {
         applied: !!(body.aiPolicy && typeof body.aiPolicy === "object"),
         scopeType: aiPolicy.scopeType,
@@ -1664,8 +1608,6 @@ exports.handler = async function(event) {
       },
       queries,
       searchedRows: searchResults.reduce((sum, result) => sum + result.items.length, 0),
-      registeredInfluencerSeeds: registeredInfluencerSeeds.length,
-      creatorLatestResolver: "registered_influencer + configured_search + sanmaru_public_search",
       resolutionRows: resolved.resolutionRows,
       resolutionDeferredRows: resolved.deferredRows,
       directCandidates: candidates.length,

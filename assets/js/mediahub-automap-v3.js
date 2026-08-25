@@ -7,8 +7,10 @@
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
  *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
- *  - Hero는 프론트에 실제 렌더링된 영화/드라마 카드 1개의 고화질 대표 이미지만 사용한다.
- *  - 저해상도 카드 썸네일 확대는 금지하며, 실제 1280x720+ 이미지 또는 원본 HD 영상의 선명한 프레임만 허용한다.
+ *  - Hero는 프론트에 실제 렌더된 미디어 영상 전체에서 랭킹·인기도를 우선해 1개를 고른다.
+ *  - 슬롯 썸네일은 1280x720급을 표준으로 하고 1920x1080급 원본을 슬롯에 직접 쓰지 않는다.
+ *  - Hero는 1280x720 이상 실제 고해상도 대표 이미지를 허용하며 1920x1080 이상은 우대만 한다.
+ *  - 품질 선별은 비동기/사전 준비된 URL 중심으로 수행해 메인 렌더링을 막지 않는다.
  */
 (function () {
   'use strict';
@@ -20,11 +22,15 @@
 
   const LIMIT = 50;
   const SAMPLE_IMAGE = '/assets/images/media-sample-card.png';
+  const SLOT_TARGET_WIDTH = 1280;
+  const SLOT_TARGET_HEIGHT = 720;
+  const SLOT_FALLBACK_WIDTH = 640;
+  const SLOT_FALLBACK_HEIGHT = 360;
   const HERO_MIN_WIDTH = 1280;
   const HERO_MIN_HEIGHT = 720;
   const HERO_MIN_EDGE_MEAN = 4.8;
   const HERO_MIN_EDGE_P90 = 15;
-  const HERO_CAPTURE_TARGET_LIMIT = 8;
+  const HERO_PROBE_LIMIT = 6;
 
   // Legacy feed-media fallback is disabled.
   // Keep the original snapshot -> automap -> front sample/real-content rendering process unchanged.
@@ -207,10 +213,6 @@
   );
 }
 
-  const AUTO_THUMB_TARGETS = [1, 3, 6, 10];
-  const autoThumbQueue = [];
-  let autoThumbBusy = false;
-  let autoThumbObserver = null;
   const thumbQuarantine = window.__IGDC_MEDIA_THUMBNAIL_QUARANTINE__ = window.__IGDC_MEDIA_THUMBNAIL_QUARANTINE__ || [];
 
   function youtubeIdForThumb(value){
@@ -249,62 +251,52 @@
     const id = youtubeIdForThumb(mediaSourceForThumb(item));
     if(!id)return [];
     const enc=encodeURIComponent(id);
+    // Slot recovery prefers the 1280x720-class provider asset first. Off-screen
+    // cards remain lazy, so this quality preference never blocks the main paint.
     return [
+      'https://i.ytimg.com/vi/'+enc+'/maxresdefault.jpg',
+      'https://i.ytimg.com/vi/'+enc+'/sddefault.jpg',
       'https://i.ytimg.com/vi/'+enc+'/hqdefault.jpg',
-      'https://i.ytimg.com/vi/'+enc+'/mqdefault.jpg',
-      'https://i.ytimg.com/vi/'+enc+'/default.jpg'
+      'https://i.ytimg.com/vi/'+enc+'/mqdefault.jpg'
     ];
+  }
+  function slotThumbnail(item){
+    if(!item||isSyntheticSampleItem(item))return '';
+    const explicit=[
+      item.slotThumbnail,item.slotThumbnailUrl,item.cardThumbnail,item.cardThumbnailUrl,
+      item.thumbnail1280,item.thumb1280,item.image1280
+    ];
+    for(const value of explicit){
+      const url=safeFrontThumbnail(value);
+      if(url)return url;
+    }
+    const raw=safeFrontThumbnail(rawThumbnail(item));
+    const w=numeric(item,['thumbnailWidth','thumbWidth','imageWidth']);
+    const h=numeric(item,['thumbnailHeight','thumbHeight','imageHeight']);
+
+    // A stored/verified slot image already in the desired range wins immediately.
+    if(raw&&w>0&&h>0&&w<=SLOT_TARGET_WIDTH&&h<=SLOT_TARGET_HEIGHT&&w>=SLOT_FALLBACK_WIDTH&&h>=SLOT_FALLBACK_HEIGHT)return raw;
+
+    // For YouTube-like sources prefer the provider's 1280x720-class asset without
+    // doing any synchronous size probe. If it is unavailable, lazy recovery falls
+    // through to the smaller provider variants.
+    const yt=providerThumbnailCandidates(item);
+    if(yt.length)return yt[0];
+
+    // Known Full-HD-or-larger images are reserved for Hero/background use, not
+    // downloaded into the small rail slots. Unknown-size legacy URLs are kept
+    // as a compatibility fallback so the front never waits for a dimension probe.
+    if(raw){
+      if(w>0&&h>0){
+        if(w>SLOT_TARGET_WIDTH||h>SLOT_TARGET_HEIGHT)return '';
+        if(w<SLOT_FALLBACK_WIDTH||h<SLOT_FALLBACK_HEIGHT)return '';
+      }
+      return raw;
+    }
+    return '';
   }
   function directVideoForThumb(source){
     return /\.(mp4|webm|ogv|ogg|m4v)(?:[?#].*)?$/i.test(String(source || ''));
-  }
-  function frameLooksUsable(ctx,w,h){
-    try{
-      const data=ctx.getImageData(0,0,w,h).data;
-      let count=0,sum=0,sum2=0;
-      const step=Math.max(4,Math.floor((w*h)/1400))*4;
-      for(let i=0;i<data.length;i+=step){
-        const y=(data[i]*.2126)+(data[i+1]*.7152)+(data[i+2]*.0722);
-        sum+=y;sum2+=y*y;count++;
-      }
-      if(!count)return false;
-      const mean=sum/count,variance=(sum2/count)-(mean*mean);
-      return mean>10&&mean<246&&variance>18;
-    }catch(_e){ return false; }
-  }
-  function captureVisibleVideoFrame(source){
-    return new Promise((resolve)=>{
-      const video=D.createElement('video');
-      let targetIndex=0,done=false;
-      // Queue-yield only: a slow source is deferred, never rejected.
-      const timeout=setTimeout(()=>finish(null),8000);
-      function clean(){clearTimeout(timeout);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
-      function finish(value){if(done)return;done=true;clean();resolve(value);}
-      function seekNext(){
-        if(targetIndex>=AUTO_THUMB_TARGETS.length){finish('');return;}
-        let t=AUTO_THUMB_TARGETS[targetIndex++];
-        const d=Number(video.duration);if(isFinite(d)&&d>0)t=Math.min(t,Math.max(.15,d-.2));
-        try{video.currentTime=Math.max(.05,t);}catch(_e){finish('');}
-      }
-      video.onloadedmetadata=seekNext;
-      video.onseeked=function(){
-        if(!video.videoWidth||!video.videoHeight){seekNext();return;}
-        try{
-          const c=D.createElement('canvas'),ctx=c.getContext('2d',{alpha:false});
-          if(!ctx){finish('');return;}
-          c.width=480;c.height=270;
-          const r=Math.max(c.width/video.videoWidth,c.height/video.videoHeight);
-          const sw=c.width/r,sh=c.height/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
-          ctx.drawImage(video,sx,sy,sw,sh,0,0,c.width,c.height);
-          if(!frameLooksUsable(ctx,c.width,c.height)){seekNext();return;}
-          finish(c.toDataURL('image/jpeg',.78));
-        }catch(_e){finish('');}
-      };
-      video.onerror=function(){finish('');};
-      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';
-      video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px;top:-9999px';
-      (D.body||D.documentElement).appendChild(video);video.src=source;video.load();
-    });
   }
   function preflightImage(url, timeoutMs){
     return new Promise((resolve)=>{
@@ -314,7 +306,10 @@
       // it is never treated as a rejection or permanent failure.
       const timer=setTimeout(()=>finish(null),Math.max(5000,Number(timeoutMs)||5000));
       function finish(ok){if(done)return;done=true;clearTimeout(timer);probe.onload=null;probe.onerror=null;resolve(ok);}
-      probe.onload=function(){finish(probe.naturalWidth>=120&&probe.naturalHeight>=68);};
+      probe.onload=function(){
+        const w=Number(probe.naturalWidth||0),h=Number(probe.naturalHeight||0);
+        finish(w>=SLOT_FALLBACK_WIDTH&&h>=SLOT_FALLBACK_HEIGHT&&w<=SLOT_TARGET_WIDTH&&h<=SLOT_TARGET_HEIGHT);
+      };
       probe.onerror=function(){finish(false);};
       probe.decoding='async';probe.src=url;
     });
@@ -366,7 +361,7 @@
   }
   function bindItemToAnchor(a,item,thumbOverride){
     const title = (item && (item.title || item.name || item.text || '')) || '';
-    const thumb = safeFrontThumbnail(thumbOverride || rawThumbnail(item));
+    const thumb = safeFrontThumbnail(thumbOverride || slotThumbnail(item));
     if(!thumb){quarantineItem(a,item,'thumbnail_missing');return false;}
     const url = (item && (item.url || item.video || item.link || item.href || '#')) || '#';
     const videoId = ensureContentId(item);
@@ -434,10 +429,20 @@
       if(settled||loadStarted||!a.isConnected)return;loadStarted=true;
       loader=new Image();loader.decoding='async';
       try{if(a.dataset.thumbEager==='1'&&'fetchPriority' in loader)loader.fetchPriority='high';}catch(_e){}
-      loader.onload=function(){if(settled)return;if(loader.naturalWidth>=120&&loader.naturalHeight>=68)activate();else fail('thumbnail_too_small');};
+      loader.onload=function(){
+        if(settled)return;
+        const w=Number(loader.naturalWidth||0),h=Number(loader.naturalHeight||0);
+        if(w>=SLOT_FALLBACK_WIDTH&&h>=SLOT_FALLBACK_HEIGHT&&w<=SLOT_TARGET_WIDTH&&h<=SLOT_TARGET_HEIGHT)activate();
+        else fail(w>SLOT_TARGET_WIDTH||h>SLOT_TARGET_HEIGHT?'thumbnail_above_slot_target':'thumbnail_below_slot_floor');
+      };
       loader.onerror=function(){fail('thumbnail_load_failed');};
       loader.src=thumb;
-      if(loader.complete){if(loader.naturalWidth>=120&&loader.naturalHeight>=68)activate();else if(loader.naturalWidth===0)fail('thumbnail_load_failed');}
+      if(loader.complete){
+        const w=Number(loader.naturalWidth||0),h=Number(loader.naturalHeight||0);
+        if(w>=SLOT_FALLBACK_WIDTH&&h>=SLOT_FALLBACK_HEIGHT&&w<=SLOT_TARGET_WIDTH&&h<=SLOT_TARGET_HEIGHT)activate();
+        else if(w===0)fail('thumbnail_load_failed');
+        else fail(w>SLOT_TARGET_WIDTH||h>SLOT_TARGET_HEIGHT?'thumbnail_above_slot_target':'thumbnail_below_slot_floor');
+      }
     }
     if(a.dataset.thumbEager==='1'){
       // First-screen cards should start immediately instead of waiting for the
@@ -452,29 +457,6 @@
     }else setTimeout(beginLoad,0);
     return true;
   }
-  function runAutoThumbQueue(){
-    if(autoThumbBusy||!autoThumbQueue.length)return;
-    autoThumbBusy=true;
-    const job=autoThumbQueue.shift();
-    captureVisibleVideoFrame(job.source).then((dataUrl)=>{
-      if(dataUrl&&job.card&&job.card.isConnected){job.card.dataset.thumbRecovery='1';bindItemToAnchor(job.card,job.item,dataUrl);}
-      else if(dataUrl===null&&job.card&&job.card.isConnected)deferThumbnail(job.card,job.item,'thumbnail_capture_deferred');
-      else if(job.card&&job.card.isConnected)quarantineItem(job.card,job.item,'thumbnail_capture_failed');
-    }).finally(()=>{autoThumbBusy=false;setTimeout(runAutoThumbQueue,0);});
-  }
-  function enqueueAutoThumb(card,item,source){
-    if(!card||!source||card.dataset.autoThumbQueued==='1')return;
-    card.dataset.autoThumbQueued='1';autoThumbQueue.push({card,item,source});runAutoThumbQueue();
-  }
-  function scheduleDirectCapture(card,item,source){
-    if(!card||!source)return;
-    if('IntersectionObserver' in window){
-      if(!autoThumbObserver)autoThumbObserver=new IntersectionObserver((entries)=>{
-        entries.forEach((entry)=>{if(!entry.isIntersecting)return;const el=entry.target;autoThumbObserver.unobserve(el);enqueueAutoThumb(el,el.__igdcThumbItem,el.dataset.autoThumbSource||'');});
-      },{root:null,rootMargin:'160px 0px',threshold:.01});
-      card.__igdcThumbItem=item;card.dataset.autoThumbSource=source;autoThumbObserver.observe(card);
-    }else setTimeout(()=>enqueueAutoThumb(card,item,source),0);
-  }
   const recoveryQueue=[];let recoveryBusy=false;let recoveryObserver=null;
   function enqueueRecovery(card,item){if(!card||!item||card.dataset.thumbRecoveryQueued==='1')return;card.dataset.thumbRecoveryQueued='1';recoveryQueue.push({card,item});runRecoveryQueue();}
   async function runRecoveryQueue(){
@@ -482,7 +464,7 @@
     const job=recoveryQueue.shift(),card=job.card,item=job.item;
     try{
       if(!card||!card.isConnected||isSyntheticSampleItem(item)){if(card&&card.isConnected)resetAnchorToPlaceholder(card,'sample_slot');return;}
-      const raw=safeFrontThumbnail(rawThumbnail(item));
+      const raw=safeFrontThumbnail(slotThumbnail(item));
       if(raw){
         const rawState=await preflightImage(raw,5000);
         if(rawState===true){if(card.isConnected)bindItemToAnchor(card,item,raw);return;}
@@ -498,10 +480,11 @@
       if(providerDeferred){if(card.isConnected)deferThumbnail(card,item,'provider_thumbnail_deferred');return;}
       const source=mediaSourceForThumb(item);
       if(directVideoForThumb(source)){
-        const dataUrl=await captureVisibleVideoFrame(source);
-        if(dataUrl&&card.isConnected){card.dataset.thumbRecovery='1';bindItemToAnchor(card,item,dataUrl);return;}
-        if(dataUrl===null&&card.isConnected){deferThumbnail(card,item,'thumbnail_capture_deferred');return;}
-        if(card.isConnected)quarantineItem(card,item,'thumbnail_capture_failed');return;
+        // Public rendering never captures video frames. Missing/low-quality slot
+        // art is prepared upstream/admin-side so canvas/video work cannot slow the
+        // main page or introduce a blurry 480x270 fallback.
+        if(card.isConnected)quarantineItem(card,item,'prepared_slot_thumbnail_required');
+        return;
       }
       if(card.isConnected)quarantineItem(card,item,'thumbnail_unavailable');
     } finally {recoveryBusy=false;setTimeout(runRecoveryQueue,0);}
@@ -538,7 +521,7 @@
     return 0;
   }
   function thumbnailReadyScore(item){
-    const thumb=safeFrontThumbnail(rawThumbnail(item));
+    const thumb=safeFrontThumbnail(slotThumbnail(item));
     if(!thumb)return 0;
     let score=700;
     if(item&&(item.thumbnailVerified===true||item.thumbVerified===true||item.thumbnailReady===true||item.frontThumbnailReady===true))score+=220;
@@ -548,7 +531,10 @@
     else if(/(?:slow|timeout|pending|processing|queued)/.test(status))score-=70;
     const w=numeric(item,['thumbnailWidth','thumbWidth','imageWidth']);
     const h=numeric(item,['thumbnailHeight','thumbHeight','imageHeight']);
-    if(w>=640&&h>=360)score+=100; else if(w>=320&&h>=180)score+=50;
+    if(w===SLOT_TARGET_WIDTH&&h===SLOT_TARGET_HEIGHT)score+=220;
+    else if(w>=960&&h>=540&&w<=SLOT_TARGET_WIDTH&&h<=SLOT_TARGET_HEIGHT)score+=150;
+    else if(w>=SLOT_FALLBACK_WIDTH&&h>=SLOT_FALLBACK_HEIGHT&&w<=SLOT_TARGET_WIDTH&&h<=SLOT_TARGET_HEIGHT)score+=90;
+    else if(w>SLOT_TARGET_WIDTH||h>SLOT_TARGET_HEIGHT)score-=40;
     return score;
   }
   function playbackReadyScore(item){
@@ -621,34 +607,20 @@
     }
     return out;
   }
-  function heroRankScore(item){
-    // Hero ranking is intentionally independent from rail order. It combines
-    // front readiness, popularity/ranking, recency and quality so the hero is
-    // never just "the first card in a section".
-    let score=frontPriority(item);
-    const rank=numeric(item,['heroScore','rankingScore','qualityScore','score','popularity']);
-    const views=numeric(item,['views','viewCount']);
-    const rating=numeric(item,['rating','voteAverage']);
-    const w=numeric(item,['heroWidth','backdropWidth','thumbnailWidth','thumbWidth','imageWidth']);
-    const h=numeric(item,['heroHeight','backdropHeight','thumbnailHeight','thumbHeight','imageHeight']);
-    const hasDedicatedHero=!!(item&&(item.heroImage||item.heroImageUrl||item.heroThumbnail||item.heroThumb||item.backdrop||item.backdropUrl||item.backdropImage||item.highResThumbnail||item.thumbnailHD||item.hdThumbnail||item.maxresThumbnail||item.image1920||item.image1280));
-    score+=Math.min(560,rank*4.5)+Math.min(220,Math.log10(Math.max(1,views))*30)+Math.min(110,rating*11)+(hasDedicatedHero?520:0);
-    if(w>=1920&&h>=1080)score+=420;
-    else if(w>=1280&&h>=720)score+=280;
-    else if(w>=960&&h>=540)score+=150;
-    return score;
-  }
   function heroResolutionTier(w,h){
     w=Number(w||0);h=Number(h||0);
+    if(w>=3840&&h>=2160)return 5;
+    if(w>=2560&&h>=1440)return 4;
     if(w>=1920&&h>=1080)return 3;
     if(w>=1280&&h>=720)return 2;
     if(w>=960&&h>=540)return 1;
     return 0;
   }
 
-  // V50 hero policy: select only from movie/drama content already rendered
-  // successfully on the front rails. Priority: 1) freshness, 2) ranking/hotness,
-  // 3) verified image quality. Hero image floor is a hard 1280x720.
+  // V56 hero policy: any successfully rendered media rail can feed the hero.
+  // Ranking is the primary selector, popularity/freshness break ties, and image
+  // quality is an admission/tie-break criterion. 1280x720 is the usable floor;
+  // 1920x1080+ is preferred when the same ranked content offers it.
   function heroFreshnessDay(item){
     if(!item)return 0;
     const raw=item.publishedAt||item.published_at||item.releaseDate||item.release_date||item.createdAt||item.created_at||item.updatedAt||item.updated_at||item.premiereDate||item.premieredAt||item.date;
@@ -662,27 +634,63 @@
     }
     return t>0?Math.floor(t/86400000):0;
   }
+  function heroFreshnessMetric(item){
+    const day=heroFreshnessDay(item);
+    if(!day)return 0;
+    const today=Math.floor(Date.now()/86400000);
+    const age=Math.max(0,today-day);
+    return Math.max(0,1000-(Math.min(age,100)*10));
+  }
+  function normalizeHeroScalar(value){
+    const v=Number(value||0);
+    if(!Number.isFinite(v)||v<=0)return 0;
+    if(v<=1)return Math.min(1000,v*1000);
+    if(v<=10)return Math.min(1000,v*100);
+    if(v<=100)return Math.min(1000,v*10);
+    return Math.min(1000,Math.log10(v+1)*250);
+  }
+  function heroRankingMetric(item){
+    if(!item)return 0;
+    const score=numeric(item,['rankingScore','rankScore','heroRankScore','editorialRankScore','qualityScore']);
+    const position=numeric(item,['rank','ranking','rankPosition','position']);
+    const scoreMetric=normalizeHeroScalar(score);
+    const positionMetric=position>0?Math.max(0,1000-(Math.min(position,200)-1)*5):0;
+    return Math.max(scoreMetric,positionMetric);
+  }
   function heroPopularityMetric(item){
     if(!item)return 0;
-    const score=numeric(item,['heroScore','rankingScore','rankScore','popularity','score','qualityScore','trendScore','hotScore']);
-    const position=numeric(item,['rank','ranking','rankPosition','position']);
+    const popularity=numeric(item,['popularity','popularityScore','trendScore','hotScore','heroScore','score']);
     const views=numeric(item,['views','viewCount']);
     const rating=numeric(item,['rating','voteAverage']);
     const metrics=item.metrics&&typeof item.metrics==='object'?item.metrics:{};
     const likes=Number(metrics.like||metrics.likes||item.likes||item.likeCount||0);
     const recommends=Number(metrics.recommend||metrics.recommends||item.recommendCount||0);
     const watch=Number(metrics.watchTime||item.watchTime||0);
-    const rankPositionBonus=position>0?Math.max(0,12000-(Math.min(position,1200)*10)):0;
-    return (score*1000)+rankPositionBonus+(Math.log10(Math.max(1,views))*260)+(rating*80)+(Math.log10(Math.max(1,likes+recommends+watch))*120);
+    const explicit=normalizeHeroScalar(popularity);
+    const viewsMetric=Math.min(1000,(Math.log10(Math.max(1,views+1))/7)*1000);
+    const socialMetric=Math.min(1000,(Math.log10(Math.max(1,likes+recommends+watch+1))/7)*1000);
+    const ratingMetric=Math.max(0,Math.min(1000,(rating/10)*1000));
+    return Math.max(explicit,(viewsMetric*.55)+(socialMetric*.25)+(ratingMetric*.20));
   }
   function heroQualityMetric(w,h,visual){
     w=Number(w||0);h=Number(h||0);
     if(w<HERO_MIN_WIDTH||h<HERO_MIN_HEIGHT)return -1;
-    const base=Math.min(40000000,w*h);
+    const pixels=w*h;
+    const hd=1280*720,fullHd=1920*1080,fourK=3840*2160;
+    const resolutionMetric=pixels<=fullHd
+      ?800+(Math.max(0,Math.min(1,(pixels-hd)/(fullHd-hd)))*100)
+      :900+(Math.max(0,Math.min(1,(pixels-fullHd)/(fourK-fullHd)))*60);
     const edge=visual&&Number.isFinite(Number(visual.edgeMean))?Number(visual.edgeMean):0;
     const p90=visual&&Number.isFinite(Number(visual.edgeP90))?Number(visual.edgeP90):0;
-    return base+(edge*160000)+(p90*30000);
+    const sharpMetric=visual&&visual.sharp?40:Math.min(40,(edge*2)+(p90*.4));
+    return Math.min(1000,resolutionMetric+sharpMetric);
   }
+  function heroUnifiedScore(item,w,h,visual){
+    const quality=heroQualityMetric(w,h,visual);
+    if(quality<0)return -1;
+    return heroFreshnessMetric(item)+heroRankingMetric(item)+heroPopularityMetric(item)+quality;
+  }
+
   function heroVisualQualityFromPixels(data,w,h){
     try{
       if(!data||!data.length||!w||!h)return null;
@@ -730,34 +738,60 @@
       return heroVisualQualityFromPixels(ctx.getImageData(0,0,SW,SH).data,SW,SH);
     }catch(_e){return null;}
   }
-  function heroPreProbeCompare(a,b){
-    const ad=heroFreshnessDay(a&&a.item),bd=heroFreshnessDay(b&&b.item);
-    if(ad!==bd)return bd-ad;
-    const ar=heroPopularityMetric(a&&a.item),br=heroPopularityMetric(b&&b.item);
+  function heroHintQualityMetric(hint){
+    hint=Number(hint||0);
+    if(hint>=5)return 1000;
+    if(hint>=4)return 950;
+    if(hint>=3)return 900;
+    if(hint>=2)return 620;
+    if(hint>=1)return 320;
+    return 0;
+  }
+  function heroItemRankCompare(a,b){
+    const ai=a&&a.item?a.item:a,bi=b&&b.item?b.item:b;
+    const ar=heroRankingMetric(ai),br=heroRankingMetric(bi);
     if(ar!==br)return br-ar;
-    const ah=Number(a&&a.hint||0),bh=Number(b&&b.hint||0);
-    if(ah!==bh)return bh-ah;
+    const ap=heroPopularityMetric(ai),bp=heroPopularityMetric(bi);
+    if(ap!==bp)return bp-ap;
+    const af=heroFreshnessMetric(ai),bf=heroFreshnessMetric(bi);
+    if(af!==bf)return bf-af;
+    return frontPriority(bi)-frontPriority(ai);
+  }
+  function heroPreProbeCompare(a,b){
+    const ranked=heroItemRankCompare(a,b);
+    if(ranked!==0)return ranked;
+    const aq=heroHintQualityMetric(a&&a.hint),bq=heroHintQualityMetric(b&&b.hint);
+    if(aq!==bq)return bq-aq;
     return Number(b&&b.score||0)-Number(a&&a.score||0);
   }
   function heroResolvedCompare(a,b){
-    const ad=Number(a&&a.freshnessDay||heroFreshnessDay(a&&a.item)),bd=Number(b&&b.freshnessDay||heroFreshnessDay(b&&b.item));
-    if(ad!==bd)return bd-ad;
-    const ar=Number(a&&a.popularityMetric||heroPopularityMetric(a&&a.item)),br=Number(b&&b.popularityMetric||heroPopularityMetric(b&&b.item));
+    const ar=Number(a&&a.rankingMetric!==undefined?a.rankingMetric:heroRankingMetric(a&&a.item));
+    const br=Number(b&&b.rankingMetric!==undefined?b.rankingMetric:heroRankingMetric(b&&b.item));
     if(ar!==br)return br-ar;
-    const aq=Number(a&&a.qualityMetric||heroQualityMetric(a&&a.w,a&&a.h,a&&a.visual)),bq=Number(b&&b.qualityMetric||heroQualityMetric(b&&b.w,b&&b.h,b&&b.visual));
+    const ap=Number(a&&a.popularityMetric!==undefined?a.popularityMetric:heroPopularityMetric(a&&a.item));
+    const bp=Number(b&&b.popularityMetric!==undefined?b.popularityMetric:heroPopularityMetric(b&&b.item));
+    if(ap!==bp)return bp-ap;
+    const af=Number(a&&a.freshnessMetric!==undefined?a.freshnessMetric:heroFreshnessMetric(a&&a.item));
+    const bf=Number(b&&b.freshnessMetric!==undefined?b.freshnessMetric:heroFreshnessMetric(b&&b.item));
+    if(af!==bf)return bf-af;
+    const aq=Number(a&&a.qualityMetric||0),bq=Number(b&&b.qualityMetric||0);
     if(aq!==bq)return bq-aq;
-    return Number(b&&b.finalScore||0)-Number(a&&a.finalScore||0);
+    const as=Number(a&&a.finalScore),bs=Number(b&&b.finalScore);
+    if(Number.isFinite(as)&&Number.isFinite(bs)&&as!==bs)return bs-as;
+    return 0;
   }
   function heroResolutionHint(item,url,index){
     const w=numeric(item,['heroWidth','backdropWidth','thumbnailWidth','thumbWidth','imageWidth']);
     const h=numeric(item,['heroHeight','backdropHeight','thumbnailHeight','thumbHeight','imageHeight']);
     const heroUrl=String(item&&(item.heroImage||item.heroImageUrl||item.heroThumbnail||item.heroThumb)||'');
-    if(item&&item.heroSharpVerified===true&&heroUrl&&String(url||'')===heroUrl&&w>=HERO_MIN_WIDTH&&h>=HERO_MIN_HEIGHT)return 3;
+    if(item&&item.heroSharpVerified===true&&heroUrl&&String(url||'')===heroUrl&&w>=HERO_MIN_WIDTH&&h>=HERO_MIN_HEIGHT)return heroResolutionTier(w,h);
     const tier=heroResolutionTier(w,h);
     if(tier)return tier;
     const text=String(url||'').toLowerCase();
-    if(/(?:maxres|1920|1080|fullhd|full-hd)/.test(text)||item.image1920||item.maxresThumbnail)return 3;
-    if(/(?:1280|720|hd|sddefault)/.test(text)||item.image1280||item.thumbnailHD||item.hdThumbnail||item.highResThumbnail)return 2;
+    if(/(?:3840|2160|4k|uhd)/.test(text))return 5;
+    if(/(?:2560|1440|qhd)/.test(text))return 4;
+    if(/(?:1920|1080|fullhd|full-hd)/.test(text)||item.image1920)return 3;
+    if(/(?:maxres|1280|720|hd|sddefault)/.test(text)||item.image1280||item.maxresThumbnail||item.thumbnailHD||item.hdThumbnail||item.highResThumbnail)return 2;
     if(index===0&&(item.heroImage||item.heroImageUrl||item.backdrop||item.backdropUrl||item.backdropImage))return 2;
     return 1;
   }
@@ -800,8 +834,10 @@
       const d=new Date(rawDate);
       if(Number.isFinite(d.getTime()))dateText=String(d.getFullYear());
     }
-    const detail=[provider.trim(),dateText].filter(Boolean).join(' · ');
-    return{title,detail};
+    const rawIntro=item&&(item.shortDescription||item.description||item.summary||item.overview||item.synopsis||item.excerpt||item.caption||item.tagline||'');
+    const intro=String(rawIntro||'').replace(/\s+/g,' ').trim().slice(0,220);
+    const meta=[provider.trim(),dateText].filter(Boolean).join(' · ');
+    return{title,intro,meta};
   }
   function updateHeroCaption(hero,item){
     if(!hero||!item)return;
@@ -813,13 +849,15 @@
       caption.setAttribute('dir','auto');
       caption.style.cssText='position:absolute;left:0;right:0;bottom:0;z-index:3;padding:28px 24px 18px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.78));color:#fff;pointer-events:none;box-sizing:border-box;text-align:start;';
       const title=D.createElement('div');title.className='igdc-media-hero-title';title.style.cssText='font-size:clamp(18px,2.2vw,32px);font-weight:800;line-height:1.15;text-shadow:0 1px 3px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-      const detail=D.createElement('div');detail.className='igdc-media-hero-detail';detail.style.cssText='margin-top:6px;font-size:clamp(12px,1.1vw,15px);font-weight:600;opacity:.92;text-shadow:0 1px 2px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-      caption.appendChild(title);caption.appendChild(detail);hero.appendChild(caption);
+      const intro=D.createElement('div');intro.className='igdc-media-hero-intro';intro.style.cssText='margin-top:7px;max-width:min(860px,88%);font-size:clamp(12px,1.15vw,16px);font-weight:600;line-height:1.35;opacity:.96;text-shadow:0 1px 2px rgba(0,0,0,.65);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;';
+      const detail=D.createElement('div');detail.className='igdc-media-hero-detail';detail.style.cssText='margin-top:5px;font-size:clamp(11px,1vw,14px);font-weight:600;opacity:.82;text-shadow:0 1px 2px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      caption.appendChild(title);caption.appendChild(intro);caption.appendChild(detail);hero.appendChild(caption);
     }
     const text=heroCaptionText(item);
-    const titleEl=q('.igdc-media-hero-title',caption),detailEl=q('.igdc-media-hero-detail',caption);
+    const titleEl=q('.igdc-media-hero-title',caption),introEl=q('.igdc-media-hero-intro',caption),detailEl=q('.igdc-media-hero-detail',caption);
     if(titleEl)titleEl.textContent=text.title;
-    if(detailEl){detailEl.textContent=text.detail;detailEl.style.display=text.detail?'block':'none';}
+    if(introEl){introEl.textContent=text.intro;introEl.style.display=text.intro?'block':'none';}
+    if(detailEl){detailEl.textContent=text.meta;detailEl.style.display=text.meta?'block':'none';}
   }
   function bindHeroPlayback(heroImg,item){
     if(!heroImg||!item)return;
@@ -836,7 +874,7 @@
     function play(event){
       if(event){event.preventDefault();event.stopPropagation();}
       const card=heroPlaybackCard(item,heroImg);
-      // When the same content is already rendered in Movie/Drama, route the hero
+      // When the same content is already rendered in any media rail, route the hero
       // through the exact card click handler. This keeps web/mobile/OTT behavior
       // identical to tapping the rail card itself.
       if(card&&card.isConnected&&!card.classList.contains('igdc-hero-playback-card')&&typeof card.click==='function'){
@@ -853,58 +891,9 @@
       if(event&&(event.key==='Enter'||event.key===' '||event.code==='Space')){event.preventDefault();play(event);}
     };
   }
-  function captureHeroFrameForItem(item){
-    if(!item)return Promise.resolve(null);
-    const source=mediaSourceForThumb(item);
-    if(!directVideoForThumb(source))return Promise.resolve(null);
-    const key=heroItemKey(item)||source;
-    if(heroRuntime.frameCaptureCache.has(key))return heroRuntime.frameCaptureCache.get(key);
-    const promise=new Promise((resolve)=>{
-      const video=D.createElement('video');let done=false,targetIndex=0,best=null,targets=[];
-      const timer=setTimeout(()=>finish(best),14000);
-      function clean(){clearTimeout(timer);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
-      function finish(value){if(done)return;done=true;clean();resolve(value&&value.visual&&value.visual.sharp?value:null);}
-      function buildTargets(){
-        const d=Number(video.duration),raw=[3,10];
-        if(Number.isFinite(d)&&d>12)raw.push(d*.12,d*.28,d*.45,d*.62,d*.78,d*.88);
-        const seen=new Set();targets=raw.map((t)=>Number(t)).filter((t)=>Number.isFinite(t)&&t>=.05).map((t)=>Number.isFinite(d)&&d>0?Math.min(t,Math.max(.2,d-.25)):t).filter((t)=>{const k=t.toFixed(2);if(seen.has(k))return false;seen.add(k);return true;}).slice(0,HERO_CAPTURE_TARGET_LIMIT);
-      }
-      function seekNext(){
-        if(targetIndex>=targets.length){finish(best);return;}
-        const t=targets[targetIndex++];
-        try{video.currentTime=Math.max(.05,t);}catch(_e){finish(best);}
-      }
-      video.onloadedmetadata=function(){
-        // Never turn an SD source into a fake HD hero by upscaling the canvas.
-        if(Number(video.videoWidth||0)<HERO_MIN_WIDTH||Number(video.videoHeight||0)<HERO_MIN_HEIGHT){finish(null);return;}
-        buildTargets();seekNext();
-      };
-      video.onseeked=function(){
-        if(Number(video.videoWidth||0)<HERO_MIN_WIDTH||Number(video.videoHeight||0)<HERO_MIN_HEIGHT){finish(null);return;}
-        try{
-          const c=D.createElement('canvas'),ctx=c.getContext('2d',{alpha:false});
-          if(!ctx){finish(best);return;}
-          const CW=1280,CH=720;c.width=CW;c.height=CH;
-          const r=Math.max(CW/video.videoWidth,CH/video.videoHeight);
-          const sw=CW/r,sh=CH/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
-          ctx.imageSmoothingEnabled=true;if('imageSmoothingQuality' in ctx)ctx.imageSmoothingQuality='high';
-          ctx.drawImage(video,sx,sy,sw,sh,0,0,CW,CH);
-          const visual=heroVisualQualityFromCanvas(ctx,CW,CH);
-          if(visual&&visual.usable){
-            const score=(Number(visual.edgeMean||0)*10)+Number(visual.edgeP90||0)+(Math.sqrt(Math.max(0,Number(visual.variance||0)))*.12);
-            if(!best||score>best.score){best={url:c.toDataURL('image/jpeg',.94),w:CW,h:CH,visual,score,sourceWidth:Number(video.videoWidth||0),sourceHeight:Number(video.videoHeight||0)};}
-          }
-        }catch(_e){}
-        seekNext();
-      };
-      video.onerror=function(){finish(best);};
-      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';
-      video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px;top:-9999px';
-      (D.body||D.documentElement).appendChild(video);video.src=source;video.load();
-    });
-    heroRuntime.frameCaptureCache.set(key,promise);
-    return promise;
-  }
+  // Hero frame generation is deliberately not performed on the public front.
+  // The front reuses already prepared 1280x720-or-better slot/hero assets and
+  // only verifies/selects image URLs. This keeps first render fast.
   function probeHeroImage(url, timeoutMs){
     return new Promise((resolve)=>{
       if(!safeFrontThumbnail(url)){resolve(null);return;}
@@ -996,7 +985,7 @@
   }
 
   function fillAnchor(a,item){
-    return bindItemToAnchor(a,item,safeFrontThumbnail(rawThumbnail(item)));
+    return bindItemToAnchor(a,item,safeFrontThumbnail(slotThumbnail(item)));
   }
 
   function refillFromReserve(a){
@@ -1021,7 +1010,7 @@
     const scanLimit=Math.max(LIMIT*3,LIMIT);
     for(const item of ranked){
       if(isSyntheticSampleItem(item))continue;
-      const thumb=safeFrontThumbnail(rawThumbnail(item));
+      const thumb=safeFrontThumbnail(slotThumbnail(item));
       // A URL by itself is not enough when the snapshot explicitly says the
       // thumbnail is still pending/generating. Such items stay behind the
       // already-renderable group until their thumbnail is actually ready.
@@ -1064,9 +1053,9 @@
     return thumbnailExplicitlyPending(item)?260:0;
   }
 
-  // Hero is the expanded playback surface for an actual movie/drama card.
-  // Trending is deliberately excluded because that rail also mixes variety/music.
-  const HERO_ALLOWED_SECTIONS=new Set(['media-movie','media-drama']);
+  // Hero is the expanded playback surface for one actual, successfully rendered
+  // media card. Every visible media-* rail is eligible; ranking decides the winner.
+  function heroSectionEligible(section){return /^media-[a-z0-9-]+$/i.test(String(section||''));}
   const heroRuntime={
     rotateKeys:[],sectionMap:null,timer:null,running:false,rerun:false,
     currentItem:null,currentUrl:'',currentTier:-1,currentScore:-Infinity,
@@ -1109,7 +1098,7 @@
       if(!card||card.getAttribute('data-placeholder')==='true')return;
       const line=card.closest&&card.closest('[data-psom-key^="media-"]');
       const section=canonKey(line&&line.getAttribute('data-psom-key')||'');
-      if(!HERO_ALLOWED_SECTIONS.has(section))return;
+      if(!heroSectionEligible(section))return;
       const img=q('img',card);
       if(!img||!img.naturalWidth||!img.naturalHeight)return;
       let item=card.__igdcMediaItem;
@@ -1132,7 +1121,7 @@
     const rows=[];
     const sectionKeys=Object.keys(sectionMap||{}).map(canonKey).filter((key)=>/^media-/.test(key));
     for(const key of sectionKeys){
-      if(!HERO_ALLOWED_SECTIONS.has(key))continue;
+      if(!heroSectionEligible(key))continue;
       const items=extractItems(sectionMap[key]);
       for(const item of items.slice(0,120)){
         if(!heroItemEligible(item,null))continue;
@@ -1159,25 +1148,19 @@
   function commitHeroChoice(heroImg,best){
     if(!heroImg||!best||!best.item||!best.url)return false;
     const tier=Number(best.tier||0);
-    const provisional=best.provisional===true;
-    if(tier<2&&!provisional)return false;
+    if(tier<2)return false;
     const currentItem=heroRuntime.currentItem;
     if(currentItem&&heroRuntime.currentUrl){
-      const currentTier=Number(heroRuntime.currentTier||0);
-      // A low-resolution card fallback is temporary: any verified HD movie/drama
-      // candidate may replace it. Once HD is installed, never downgrade to fallback.
-      if(currentTier>=2&&tier<2)return false;
-      if(!(currentTier<2&&tier>=2)){
-        const current={
-          item:currentItem,
-          freshnessDay:Number(heroImg.dataset.igdcHeroFreshnessDay||heroFreshnessDay(currentItem)),
-          popularityMetric:Number(heroImg.dataset.igdcHeroPopularityMetric||heroPopularityMetric(currentItem)),
-          qualityMetric:Number(heroImg.dataset.igdcHeroQualityMetric||heroQualityMetric(heroImg.dataset.igdcHeroSourceWidth,heroImg.dataset.igdcHeroSourceHeight)),
-          finalScore:Number(heroImg.dataset.igdcHeroFinalScore||heroRuntime.currentScore||0),
-          w:Number(heroImg.dataset.igdcHeroSourceWidth||0),h:Number(heroImg.dataset.igdcHeroSourceHeight||0)
-        };
-        if(heroResolvedCompare(best,current)>=0)return false;
-      }
+      const current={
+        item:currentItem,
+        freshnessMetric:Number(heroImg.dataset.igdcHeroFreshnessMetric||heroFreshnessMetric(currentItem)),
+        rankingMetric:Number(heroImg.dataset.igdcHeroRankingMetric||heroRankingMetric(currentItem)),
+        popularityMetric:Number(heroImg.dataset.igdcHeroPopularityMetric||heroPopularityMetric(currentItem)),
+        qualityMetric:Number(heroImg.dataset.igdcHeroQualityMetric||heroQualityMetric(heroImg.dataset.igdcHeroSourceWidth,heroImg.dataset.igdcHeroSourceHeight)),
+        finalScore:Number(heroImg.dataset.igdcHeroFinalScore||heroRuntime.currentScore||0),
+        w:Number(heroImg.dataset.igdcHeroSourceWidth||0),h:Number(heroImg.dataset.igdcHeroSourceHeight||0)
+      };
+      if(heroResolvedCompare(best,current)>=0)return false;
     }
     heroImg.loading='eager';heroImg.decoding='async';
     try{heroImg.fetchPriority='high';}catch(_e){}
@@ -1199,10 +1182,12 @@
     heroImg.dataset.igdcHeroSourceHeight=String(best.h||'');
     heroImg.dataset.igdcHeroResolutionTier=String(tier);
     heroImg.dataset.igdcHeroFinalScore=String(best.finalScore||0);
-    heroImg.dataset.igdcHeroFreshnessDay=String(best.freshnessDay||heroFreshnessDay(best.item)||0);
-    heroImg.dataset.igdcHeroPopularityMetric=String(best.popularityMetric||heroPopularityMetric(best.item)||0);
+    heroImg.dataset.igdcHeroFreshnessDay=String(heroFreshnessDay(best.item)||0);
+    heroImg.dataset.igdcHeroFreshnessMetric=String(best.freshnessMetric!==undefined?best.freshnessMetric:heroFreshnessMetric(best.item));
+    heroImg.dataset.igdcHeroRankingMetric=String(best.rankingMetric!==undefined?best.rankingMetric:heroRankingMetric(best.item));
+    heroImg.dataset.igdcHeroPopularityMetric=String(best.popularityMetric!==undefined?best.popularityMetric:heroPopularityMetric(best.item));
     heroImg.dataset.igdcHeroQualityMetric=String(best.qualityMetric!==undefined?best.qualityMetric:heroQualityMetric(best.w,best.h));
-    heroImg.dataset.igdcHeroQuality=tier>=3?'verified-fullhd-or-better':'verified-hd-sharp';
+    heroImg.dataset.igdcHeroQuality='verified-1280x720-or-better';
     bindHeroPlayback(heroImg,best.item);
     heroRuntime.currentItem=best.item;heroRuntime.currentUrl=selectedUrl;
     heroRuntime.currentTier=tier;heroRuntime.currentScore=best.finalScore||0;
@@ -1213,123 +1198,89 @@
     const heroImg=q('.hero img');
     if(!heroImg)return false;
 
-    const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey).filter((key)=>HERO_ALLOWED_SECTIONS.has(key)));
-    HERO_ALLOWED_SECTIONS.forEach((key)=>preferred.add(key));
-    const pool=mergeHeroRows(preferred,sectionMap);
+    const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey).filter(heroSectionEligible));
+    const pool=mergeHeroRows(preferred,sectionMap).slice().sort(heroItemRankCompare);
     if(!pool.length)return false;
-
-    pool.sort((a,b)=>{
-      // Requested hero policy: newest movie/drama first, then hot/ranked,
-      // then verified image quality. Image quality still has a 1280x720 target.
-      const ad=heroFreshnessDay(a.item),bd=heroFreshnessDay(b.item);
-      if(ad!==bd)return bd-ad;
-      const ar=heroPopularityMetric(a.item),br=heroPopularityMetric(b.item);
-      if(ar!==br)return br-ar;
-      const aq=heroResolutionTier(a.renderedW,a.renderedH),bq=heroResolutionTier(b.renderedW,b.renderedH);
-      if(aq!==bq)return bq-aq;
-      const as=heroRankScore(a.item)+(a.preferred?80:0)+(a.domReady?140:0)-heroPendingPenalty(a.item);
-      const bs=heroRankScore(b.item)+(b.preferred?80:0)+(b.domReady?140:0)-heroPendingPenalty(b.item);
-      return bs-as;
-    });
-
-    // V54: never enlarge a rail thumbnail into the hero. Keep the existing hero image
-    // until a genuinely qualified HD source is verified.
 
     const candidates=[],seenUrls=new Set();
     for(const row of pool.slice(0,64)){
       const item=row.item;
-      const base=heroRankScore(item)+(row.preferred?80:0)+(row.domReady?140:0)-heroPendingPenalty(item);
-      const urls=heroImageCandidates(item);
-      // If the exact front thumbnail has already loaded, preserve its known
-      // natural dimensions so a real 1280x720/1920x1080 card can be committed
-      // immediately without another network round-trip.
-      if(row.renderedUrl&&!seenUrls.has(row.renderedUrl)){
-        seenUrls.add(row.renderedUrl);
-        candidates.push({url:row.renderedUrl,item,card:row.card,score:base+130,hint:heroResolutionTier(row.renderedW,row.renderedH),
-          knownW:row.renderedW,knownH:row.renderedH,domReady:true});
-      }
-      urls.slice(0,6).forEach((url,index)=>{
-        if(!url||seenUrls.has(url)||heroRuntime.failedUrls.has(url))return;
+      const rankedUrls=heroImageCandidates(item).map((url,index)=>({url,index,hint:heroResolutionHint(item,url,index)}))
+        .sort((a,b)=>Number(b.hint||0)-Number(a.hint||0)).slice(0,2);
+      for(const entry of rankedUrls){
+        const url=entry.url,index=entry.index;
+        if(!url||seenUrls.has(url)||heroRuntime.failedUrls.has(url))continue;
         seenUrls.add(url);
-        candidates.push({url,item,card:row.card,score:base+(120-(index*16)),hint:heroResolutionHint(item,url,index),knownW:0,knownH:0,domReady:row.domReady});
-      });
+        candidates.push({
+          url,item,card:row.card,
+          score:heroRankingMetric(item)+heroPopularityMetric(item)+heroFreshnessMetric(item),
+          hint:entry.hint,
+          knownW:0,knownH:0,domReady:row.domReady
+        });
+      }
     }
     if(!candidates.length)return !!heroRuntime.currentItem;
 
     function resolveKnown(candidate){
-      const w=Number(candidate.knownW||0),h=Number(candidate.knownH||0),item=candidate&&candidate.item;
-      const tier=heroResolutionTier(w,h);
+      const item=candidate&&candidate.item;
       const heroUrl=String(item&&(item.heroImage||item.heroImageUrl||item.heroThumbnail||item.heroThumb)||'');
-      const strictCapture=!!(item&&item.heroSharpVerified===true&&heroUrl&&String(candidate.url||'')===heroUrl);
-      if(tier<2||!strictCapture)return null;
-      const visual={sharp:true,edgeMean:Number(item.heroEdgeMean||0)||HERO_MIN_EDGE_MEAN,edgeP90:Number(item.heroEdgeP90||0)||HERO_MIN_EDGE_P90};
+      if(!heroUrl||String(candidate.url||'')!==heroUrl)return null;
+      const w=numeric(item,['heroWidth','backdropWidth','imageWidth']);
+      const h=numeric(item,['heroHeight','backdropHeight','imageHeight']);
+      const tier=heroResolutionTier(w,h);
+      const verified=!!(item&&item.heroSharpVerified===true);
+      if(!verified||tier<2)return null;
+      const visual={sharp:true,edgeMean:Number(item.heroEdgeMean||0),edgeP90:Number(item.heroEdgeP90||0)};
       const qualityMetric=heroQualityMetric(w,h,visual);
-      return Object.assign({},candidate,{w,h,tier,visual,qualityMetric,
-        freshnessDay:heroFreshnessDay(candidate.item),popularityMetric:heroPopularityMetric(candidate.item),
-        finalScore:candidate.score+(tier>=3?900:620)+180});
+      const freshnessMetric=heroFreshnessMetric(item);
+      const rankingMetric=heroRankingMetric(item);
+      const popularityMetric=heroPopularityMetric(item);
+      return Object.assign({},candidate,{w,h,tier,visual,qualityMetric,freshnessMetric,rankingMetric,popularityMetric,
+        finalScore:heroUnifiedScore(item,w,h,visual)});
     }
-    function chooseBest(rows){
-      const valid=rows.filter((row)=>row&&row.tier>=2);
-      if(!valid.length)return null;
-      // Freshness > ranking/hotness > actual resolution (720p minimum).
-      return valid.slice().sort(heroResolvedCompare)[0]||null;
-    }
+
     async function checkedCandidate(candidate,timeoutMs){
-      const known=resolveKnown(candidate);if(known)return known;
+      const known=resolveKnown(candidate);
+      if(known)return known;
       const probe=await probeHeroImage(candidate.url,timeoutMs);
       if(!probe)return null;
       const tier=heroResolutionTier(probe.w,probe.h);
       if(tier<2)return null;
-      // If pixel inspection is possible, reject soft/upscaled 720p images. When
-      // CORS blocks inspection, only 1080p+ or an explicit high-resolution source
-      // hint may pass. This keeps blurry card art out of the hero.
       const visual=probe.visual;
-      const pixelPassed=!!(visual&&visual.sharp);
-      const trustedUninspected=!visual&&(tier>=3||Number(candidate.hint||0)>=3);
+      // Resolution is the Hero admission gate. Pixel inspection rejects only
+      // obviously unusable/blank imagery; sharpness remains a quality tie-break
+      // instead of a hard blocker, so a valid 1280x720 frame cannot leave Hero blank.
+      const pixelPassed=!!(visual&&visual.usable!==false);
+      const trustedUninspected=!visual&&tier>=2;
       if(!pixelPassed&&!trustedUninspected)return null;
       const qualityMetric=heroQualityMetric(probe.w,probe.h,visual);
-      const dimBonus=tier===3?900:620;
-      return Object.assign({},candidate,probe,{tier,visual,qualityMetric,
-        freshnessDay:heroFreshnessDay(candidate.item),popularityMetric:heroPopularityMetric(candidate.item),
-        finalScore:candidate.score+dimBonus+(pixelPassed?180:0)});
+      const freshnessMetric=heroFreshnessMetric(candidate.item);
+      const rankingMetric=heroRankingMetric(candidate.item);
+      const popularityMetric=heroPopularityMetric(candidate.item);
+      return Object.assign({},candidate,probe,{tier,visual,qualityMetric,freshnessMetric,rankingMetric,popularityMetric,
+        finalScore:heroUnifiedScore(candidate.item,probe.w,probe.h,visual)});
     }
 
-    // Fast path: a rail thumbnail that is already proven to be 720p/1080p can
-    // fill the hero immediately. This is the path V46 lacked in production.
-    const knownBest=chooseBest(candidates.map(resolveKnown));
+    // Use already verified 1280x720-or-better hero assets immediately when available.
+    const knownBest=candidates.map(resolveKnown).filter(Boolean).sort(heroResolvedCompare)[0]||null;
     if(knownBest)commitHeroChoice(heroImg,knownBest);
 
-    // Probe likely HD sources. Candidate timeouts are per-attempt only; they do
-    // not reject the item. Thumbnail-ready events and scheduled refreshes retry
-    // the same content later, so slow image generation can never permanently
-    // empty the hero.
-    const highHint=candidates.filter((row)=>row.hint>=2).sort(heroPreProbeCompare);
-    const probeSet=[];
-    for(const candidate of highHint.concat(candidates.slice().sort(heroPreProbeCompare))){
-      if(probeSet.length>=28)break;
-      if(probeSet.indexOf(candidate)>=0)continue;
-      probeSet.push(candidate);
+    // Non-blocking quality verification: only the six strongest candidates are
+    // probed, all concurrently and at low fetch priority. No video/canvas capture
+    // runs on the public page.
+    const orderedCandidates=candidates.slice().sort(heroPreProbeCompare);
+    const probeSet=orderedCandidates.slice(0,HERO_PROBE_LIMIT);
+    const checked=await Promise.all(probeSet.map((candidate)=>checkedCandidate(candidate,1800)));
+    let best=checked.filter(Boolean).sort(heroResolvedCompare)[0]||knownBest;
+    // Keep V55's normal six-probe fast path. Only when every top-ranked image
+    // fails the HD/usable check do we inspect one additional six-candidate batch.
+    if(!best&&orderedCandidates.length>HERO_PROBE_LIMIT){
+      const fallbackSet=orderedCandidates.slice(HERO_PROBE_LIMIT,HERO_PROBE_LIMIT*2);
+      const fallbackChecked=await Promise.all(fallbackSet.map((candidate)=>checkedCandidate(candidate,1800)));
+      best=fallbackChecked.filter(Boolean).sort(heroResolvedCompare)[0]||null;
     }
-    const checked=await Promise.all(probeSet.map((candidate)=>checkedCandidate(candidate,3600)));
-    let best=chooseBest(checked);
-
-    // If provider/backdrop assets are not HD, try a real 1280x720 frame from the
-    // top-ranked direct movie/drama video. This is a genuine frame capture; low-res
-    // sources are never upscaled and cross-origin failures simply fall back safely.
-    if(!best){
-      for(const row of pool.slice(0,18)){
-        const captured=await captureHeroFrameForItem(row.item);
-        if(!captured)continue;
-        const tier=heroResolutionTier(captured.w,captured.h);
-        if(tier<2)continue;
-        best={url:captured.url,item:row.item,card:row.card,w:captured.w,h:captured.h,tier,
-          visual:captured.visual,qualityMetric:heroQualityMetric(captured.w,captured.h,captured.visual),freshnessDay:heroFreshnessDay(row.item),
-          popularityMetric:heroPopularityMetric(row.item),finalScore:heroRankScore(row.item)+(row.preferred?80:0)+(row.domReady?140:0)+520};
-        break;
-      }
-    }
-    if(!best)return !!knownBest||!!heroRuntime.currentItem;
-    return commitHeroChoice(heroImg,best)||!!knownBest||!!heroRuntime.currentItem;
+    if(!best)return !!heroRuntime.currentItem;
+    return commitHeroChoice(heroImg,best)||!!heroRuntime.currentItem;
   }
 
   function requestHeroRefresh(delay){
@@ -1350,11 +1301,15 @@
   function scheduleHeroRefresh(heroRotateKeys,sectionMap){
     heroRuntime.rotateKeys=Array.isArray(heroRotateKeys)?heroRotateKeys.slice():[];
     heroRuntime.sectionMap=sectionMap||{};
-    requestHeroRefresh(0);
-    [700,1800,4200,9000,18000].forEach((delay)=>setTimeout(()=>requestHeroRefresh(0),delay));
+    const start=function(){requestHeroRefresh(0);};
+    // Give the visible slot cards the first network/paint turn. Hero probing runs
+    // at idle/low priority and never blocks the main rail render.
+    if(typeof window.requestIdleCallback==='function')window.requestIdleCallback(start,{timeout:700});
+    else setTimeout(start,360);
+    [1800,4200,9000,18000].forEach((delay)=>setTimeout(()=>requestHeroRefresh(0),delay));
   }
 
-  D.addEventListener('igdc:media-thumbnail-ready',()=>requestHeroRefresh(90));
+  D.addEventListener('igdc:media-thumbnail-ready',()=>requestHeroRefresh(420));
 
 
   D.addEventListener('igdc:media-source-failed',(event)=>{
@@ -1460,7 +1415,7 @@
     if(fallbackJobs.length)Promise.allSettled(fallbackJobs).then(()=>lines.forEach(compactLine));
 
     // Start hero selection only after the rail bind pass. The hero is therefore
-    // guaranteed to be an expansion of a successfully rendered movie/drama card.
+    // guaranteed to be an expansion of a successfully rendered media card.
     const heroRotateFrom=snapshot&&snapshot.hero&&(snapshot.hero.rotateFrom||snapshot.hero.source);
     scheduleHeroRefresh(heroRotateFrom,sectionMap);
 
@@ -1473,7 +1428,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.0-hero-sharp-hd-only';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.6.0-v55-slot720-ranked-hero-hd-intro-fast';
 })();
 
 
