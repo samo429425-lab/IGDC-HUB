@@ -13,7 +13,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-auto-curator-v1.4.0-thumbnail-continuity";
+  "social-candidate-auto-curator-v1.3.0-real-thumbnail-gate";
 const MAX_PER_SECTION = SocialStore.POOL_MAX_PER_SECTION || 350;
 
 function text(value) {
@@ -42,8 +42,7 @@ function rowThumbnail(row) {
   const raw = SocialStore.plain(row && row.raw);
   return text(
     row && (row.thumbnail_url || row.thumbnailUrl) ||
-    raw.thumbnailUrl || raw.thumbnail || raw.thumb || raw.image ||
-    raw.channelThumbnailUrl || raw.channel_thumbnail_url || ""
+    raw.thumbnailUrl || raw.thumbnail || raw.thumb || raw.image || ""
   );
 }
 function rowSourceUrl(row) {
@@ -106,7 +105,7 @@ function eligible(row, route, aiPolicy) {
   if (raw.channelAsset !== true)
     return { ok: false, reason: "channel_asset_required" };
   if (SocialStore.assetClassOf(row) === "latest_content" && !realThumbnail(row))
-    return { ok: false, reason: "usable_thumbnail_required" };
+    return { ok: false, reason: "real_thumbnail_required" };
   const aiVerdict = AIPolicy.evaluate(row, normalizedAI);
   if (!aiVerdict.ok) return { ok: false, reason: aiVerdict.reason };
   const scopes = CountryRouting.scopesFrom(row);

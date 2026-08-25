@@ -9,7 +9,7 @@
 const MediaStore=require("./lib/media-candidate-store.v1");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="media-candidate-thumbnail-v1.7.0-slot-720-hero-hd";
+const VERSION="media-candidate-thumbnail-v1.6.0-slot-720-hero-fullhd";
 const DEFAULT_BUCKET="media-candidate-thumbnails";
 const MAX_IMAGE_BYTES=1572864;
 const PROBE_TIMEOUT_MS=1600;
@@ -18,8 +18,8 @@ const SLOT_TARGET_WIDTH=1280;
 const SLOT_TARGET_HEIGHT=720;
 const FRONT_MIN_WIDTH=640;
 const FRONT_MIN_HEIGHT=360;
-const HERO_MIN_WIDTH=1280;
-const HERO_MIN_HEIGHT=720;
+const HERO_MIN_WIDTH=1920;
+const HERO_MIN_HEIGHT=1080;
 const HERO_MIN_EDGE_MEAN=4.8;
 const HERO_MIN_EDGE_P90=15;
 
@@ -283,8 +283,8 @@ async function uploadCapture(row,dataUrl,actor,meta){
       error.statusCode=400;error.code="media_hero_capture_section_invalid";throw error;
     }
     if(sourceWidth<HERO_MIN_WIDTH||sourceHeight<HERO_MIN_HEIGHT||image.width<HERO_MIN_WIDTH||image.height<HERO_MIN_HEIGHT){
-      const error=new Error("히어로용 캡처는 실제 원본과 저장 이미지가 최소 1280×720이어야 합니다. 저해상도 확대 저장은 허용하지 않습니다.");
-      error.statusCode=400;error.code="media_hero_capture_source_below_hd_floor";throw error;
+      const error=new Error("히어로용 캡처는 실제 원본과 저장 이미지가 최소 1920×1080이어야 합니다. 저해상도 확대 저장은 허용하지 않습니다.");
+      error.statusCode=400;error.code="media_hero_capture_source_below_fullhd_floor";throw error;
     }
     if(!sharp){
       const error=new Error("히어로용 프레임이 충분히 선명하지 않습니다. 다른 구간 또는 다른 콘텐츠를 선택해 주세요.");
@@ -323,8 +323,8 @@ async function uploadCapture(row,dataUrl,actor,meta){
     heroReady:heroCapture&&heroReadyDimensions(image.width,image.height)&&heroReadyDimensions(sourceWidth,sourceHeight)&&sharp,
     bucket,objectName
   };
-  // Slot and Hero assets are always stored separately. A dedicated Hero HD image can
-  // never overwrite the rail thumbnail, even when the slot image is absent.
+  // Slot and Hero assets are always stored separately. A Full-HD Hero image can
+  // never overwrite the small rail thumbnail, even when the slot image is absent.
   if(heroCapture)await storeHeroResolved(row,publicUrl,generation,actor);
   else await storeResolved(row,publicUrl,generation,actor);
   return publicUrl;

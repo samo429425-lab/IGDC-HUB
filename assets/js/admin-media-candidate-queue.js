@@ -795,7 +795,7 @@
       var heroMode=purpose==='hero';
       var sources=candidateSources(row);if(!sources.length){reject(new Error('직접 재생 주소가 없습니다.'));return;}
       var video=document.createElement('video'),sourceIndex=0,targetIndex=0,finished=false,targets=[],best=null;
-      var timer=setTimeout(function(){finish(best?null:new Error(heroMode?'선명한 1280×720 이상 히어로 프레임 캡처 시간이 초과되었습니다.':'슬롯용 프레임 캡처 시간이 초과되었습니다.'),best);},14000);
+      var timer=setTimeout(function(){finish(best?null:new Error(heroMode?'선명한 1920×1080 히어로 프레임 캡처 시간이 초과되었습니다.':'슬롯용 프레임 캡처 시간이 초과되었습니다.'),best);},14000);
       function clean(){clearTimeout(timer);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
       function finish(err,data){if(finished)return;finished=true;clean();err?reject(err):resolve(data);}
       function buildTargets(){
@@ -804,10 +804,10 @@
         var seen={};targets=raw.map(Number).filter(function(t){return isFinite(t)&&t>=.05;}).map(function(t){return isFinite(d)&&d>0?Math.min(t,Math.max(.2,d-.25)):t;}).filter(function(t){var k=t.toFixed(2);if(seen[k])return false;seen[k]=1;return true;}).slice(0,8);
       }
       function sourceUsable(){
-        if(heroMode)return video.videoWidth>=1280&&video.videoHeight>=720;
+        if(heroMode)return video.videoWidth>=1920&&video.videoHeight>=1080;
         return video.videoWidth>=640&&video.videoHeight>=360;
       }
-      function load(){if(sourceIndex>=sources.length){finish(best?null:new Error(heroMode?'1280×720 이상의 선명한 원본 프레임을 찾지 못했습니다.':'640×360 이상의 사용 가능한 슬롯 프레임을 찾지 못했습니다.'),best);return;}targetIndex=0;targets=[];video.src=sources[sourceIndex].url;video.load();}
+      function load(){if(sourceIndex>=sources.length){finish(best?null:new Error(heroMode?'1920×1080 이상의 선명한 원본 프레임을 찾지 못했습니다.':'640×360 이상의 사용 가능한 슬롯 프레임을 찾지 못했습니다.'),best);return;}targetIndex=0;targets=[];video.src=sources[sourceIndex].url;video.load();}
       function nextSource(){sourceIndex+=1;load();}
       function seek(){if(targetIndex>=targets.length){nextSource();return;}var t=targets[targetIndex++];try{video.currentTime=Math.max(.05,t);}catch(_e){nextSource();}}
       function frameQuality(){
@@ -833,7 +833,7 @@
         try{
           var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false});
           var CW,CH;
-          if(heroMode){CW=1280;CH=720;}
+          if(heroMode){CW=1920;CH=1080;}
           else{
             var scale=Math.min(1,1280/video.videoWidth,720/video.videoHeight);
             CW=Math.max(640,Math.round(video.videoWidth*scale));
@@ -867,7 +867,7 @@
     if(!row)return;
     button.disabled=true;
     try{
-      show('슬롯은 최대 1280×720, 히어로는 1280×720 이상이면 사용하고 더 큰 원본은 우대합니다.','ok');
+      show('슬롯은 최대 1280×720, 히어로는 1920×1080 이상 기준으로 선명한 이미지를 준비합니다.','ok');
       var resolved=await post(THUMB,{action:'resolve',id:id});
       var storedAny=!!resolved.cardThumbUrl||!!resolved.heroThumbUrl;
 
@@ -879,7 +879,7 @@
 
       if(resolved.heroCaptureRequired===true){
         var heroCapture=await captureFrameDataUrl(row,'hero');
-        var heroStored=await post(THUMB,{action:'store_capture',id:id,dataUrl:heroCapture.dataUrl,sourceWidth:heroCapture.sourceWidth,sourceHeight:heroCapture.sourceHeight,edgeMean:heroCapture.edgeMean,edgeP90:heroCapture.edgeP90,variance:heroCapture.variance,sharp:heroCapture.sharp,capturePurpose:'hero_hd'});
+        var heroStored=await post(THUMB,{action:'store_capture',id:id,dataUrl:heroCapture.dataUrl,sourceWidth:heroCapture.sourceWidth,sourceHeight:heroCapture.sourceHeight,edgeMean:heroCapture.edgeMean,edgeP90:heroCapture.edgeP90,variance:heroCapture.variance,sharp:heroCapture.sharp,capturePurpose:'hero_fullhd'});
         if(heroStored.thumbUrl)storedAny=true;
       }
 

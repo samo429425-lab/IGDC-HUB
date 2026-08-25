@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.4.0 - durable front-state recovery / eight-platform continuity */
+/* IGDC Social Hub Content Operations v3.3.0 - admin queue continuity / front-unpublish isolation */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -1402,46 +1402,19 @@
       return null;
     }
   }
-  async function durablePublishedState() {
-    var scope = currentScope(),
-      q = new URLSearchParams({
-        operation: "current_front_state",
-        scopeMode: scope.scopeMode || "auto",
-        countryCode: scope.countryCode || "",
-        regionId: scope.regionId || "",
-        languages: text($("collectorLanguages").value),
-      });
-    return get(PUBLISH + "?" + q.toString());
-  }
-  function idsFromStaticSnapshot(d) {
-    var sections = (d && d.pages && d.pages.social && d.pages.social.sections) || {},
-      ids = [];
-    order.forEach(function (key) {
-      (Array.isArray(sections[key]) ? sections[key] : []).forEach(function (slot) {
-        var audit = (slot && slot.audit) || {}, id = publishedCandidateId(slot);
-        if (id && text(slot && slot.type) === "external_social" && text(audit.origin) === "social_candidates") ids.push(id);
-      });
-    });
-    return Array.from(new Set(ids));
-  }
   async function loadPublishedState() {
-    var previous = new Set(publishedContentIds);
+    publishedContentIds = new Set();
     try {
-      var durable = await durablePublishedState(),
-        ids = Array.isArray(durable && durable.publishedContentIds)
-          ? durable.publishedContentIds
-          : [];
-      publishedContentIds = new Set(ids.map(text).filter(Boolean));
-      return publishedContentIds;
-    } catch (_durableError) {
-      try {
-        var d = await staticJson(STATIC_SOCIAL_SNAPSHOT);
-        publishedContentIds = new Set(idsFromStaticSnapshot(d));
-      } catch (_staticError) {
-        // A transient read failure must not make an already-published front
-        // appear empty in the administrator UI. Keep the last known state.
-        publishedContentIds = previous;
-      }
+      var d = await staticJson(STATIC_SOCIAL_SNAPSHOT),
+        sections = (d && d.pages && d.pages.social && d.pages.social.sections) || {};
+      order.forEach(function (key) {
+        (Array.isArray(sections[key]) ? sections[key] : []).forEach(function (slot) {
+          var audit = (slot && slot.audit) || {}, id = publishedCandidateId(slot);
+          if (id && text(slot && slot.type) === "external_social" && text(audit.origin) === "social_candidates") publishedContentIds.add(id);
+        });
+      });
+    } catch (_e) {
+      publishedContentIds = new Set();
     }
     return publishedContentIds;
   }
@@ -2635,13 +2608,15 @@
     var keys = selectedFrontSectionKeys();
     if (!keys.length) return show("프론트 등록 해제할 SNS 섹션을 먼저 선택해 주세요.", "warn");
     try {
-      var durable = await durablePublishedState(),
-        bySection = durable && durable.publishedIdsBySection || {},
-        ids = [];
+      var ids = [], d = await staticJson(STATIC_SOCIAL_SNAPSHOT),
+        sections = d && d.pages && d.pages.social && d.pages.social.sections || {};
       keys.forEach(function (key) {
-        ids = ids.concat(Array.isArray(bySection[key]) ? bySection[key] : []);
+        (Array.isArray(sections[key]) ? sections[key] : []).forEach(function (slot) {
+          var id = publishedCandidateId(slot);
+          if (id) ids.push(id);
+        });
       });
-      ids = Array.from(new Set(ids.map(text).filter(Boolean)));
+      ids = Array.from(new Set(ids));
       if (!ids.length) return show(keys.map(label).join(", ") + "에 현재 실제 적용된 콘텐츠가 없습니다.", "warn");
       return actualUnapplyIds(ids, "", keys.map(label).join(", ") + " 선택 섹션");
     } catch (e) {
@@ -2855,14 +2830,30 @@
     );
   }
   async function currentPublishedIds(sectionKey) {
-    var durable = await durablePublishedState(),
-      bySection = durable && durable.publishedIdsBySection || {},
+    var d = await staticJson(STATIC_SOCIAL_SNAPSHOT),
+      sections =
+        (d &&
+          d.pages &&
+          d.pages.social &&
+          d.pages.social.sections) ||
+        {},
       keys = sectionKey ? [sectionKey] : order,
       ids = [];
     keys.forEach(function (key) {
-      ids = ids.concat(Array.isArray(bySection[key]) ? bySection[key] : []);
+      (Array.isArray(sections[key]) ? sections[key] : []).forEach(function (
+        slot,
+      ) {
+        var audit = (slot && slot.audit) || {},
+          id = publishedCandidateId(slot);
+        if (
+          id &&
+          text(slot && slot.type) === "external_social" &&
+          text(audit.origin) === "social_candidates"
+        )
+          ids.push(id);
+      });
     });
-    return Array.from(new Set(ids.map(text).filter(Boolean)));
+    return Array.from(new Set(ids));
   }
   async function moveToReplacementInBatches(ids, scope) {
     var batchSize = 10,

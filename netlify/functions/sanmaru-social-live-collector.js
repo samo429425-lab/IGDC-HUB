@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.10.0-eight-platform-pipeline-continuity";
+const VERSION = "sanmaru-social-live-collector-v1.9.0-registry-targeted-latest-content";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -514,15 +514,7 @@ function registryIdentity(row, platform) {
     raw.title,
   ]).replace(/^(false|null|undefined)$/i, "");
   const handle = registryHandleFromUrl(url, platform).replace(/^@/, "");
-  const thumbnail = firstText([
-    row && (row.thumbnail_url || row.thumbnailUrl),
-    raw.channelThumbnailUrl,
-    raw.channel_thumbnail_url,
-    raw.thumbnailUrl,
-    raw.thumbnail,
-    raw.image,
-  ]);
-  return { row, url, title, handle, thumbnail };
+  return { row, url, title, handle };
 }
 async function influencerRegistrySeeds(sectionKey, platform) {
   try {
@@ -839,11 +831,7 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     // registry identity is being targeted, also ask the existing Maru/SearchBank
     // public search in the same pass so keyless deployments can still discover
     // a real latest post/video URL instead of repeatedly rejecting profiles.
-    if (registryTargeted || plan.platform !== "youtube") {
-      // Non-YouTube sections must never depend on a directory/profile result
-      // becoming a post by itself. Always pair the directory pass with the
-      // existing public Maru/SearchBank path so a real latest content URL can
-      // reach the candidate gateway even when external API keys are absent.
+    if (registryTargeted) {
       tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
     }
   } else if (providerGroup === 1) {
@@ -852,13 +840,6 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     }
     tasks.push(googleChannelSearch(plan, queryText, limit, start, cfg));
     tasks.push(naverChannelSearch(plan, queryText, limit, start, route, cfg));
-    if (plan.platform !== "youtube") {
-      // Configured search APIs are optional. Keep the canonical Maru public
-      // search as a same-pass fallback so Instagram/TikTok/Facebook/WeChat/
-      // Weibo/Pinterest/Reddit/X do not collapse to zero when keys, quotas or
-      // provider metadata are unavailable.
-      tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
-    }
   } else {
     tasks = [maruSearchOne(event, plan, queryText, limit, language, start)];
   }
@@ -1103,11 +1084,6 @@ async function resolveChannelAsset(item, platform, registrySeed) {
       seedChannel.registryBound = true;
       seedChannel.enrichment = Object.assign({}, seedChannel.enrichment || {}, {
         creatorName: firstText([registrySeed.title, registrySeed.handle, seedChannel.suggestedTitle]),
-        // A registered creator image is a valid continuity fallback when a
-        // platform blocks anonymous post-page metadata. The outbound URL still
-        // points to the verified latest post/video; only the visual preview
-        // falls back to the known creator image instead of dropping the row.
-        thumbnail: firstText([registrySeed.thumbnail]),
       });
       return seedChannel;
     }
@@ -1180,7 +1156,7 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
   );
   const publicMetadata = thumbnailResolution.metadata || {};
   const resolvedThumbnail = thumbnailResolution.thumbnail;
-  if (!resolvedThumbnail) return { ok: false, reason: "usable_thumbnail_required" };
+  if (!resolvedThumbnail) return { ok: false, reason: "real_thumbnail_required" };
   const title = firstText([
     latest.title,
     enrichment.title,

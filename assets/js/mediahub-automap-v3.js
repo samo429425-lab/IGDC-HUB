@@ -7,9 +7,9 @@
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
  *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
- *  - Hero는 프론트에 실제 렌더된 미디어 영상 전체에서 랭킹·인기도를 우선해 1개를 고른다.
+ *  - Hero는 프론트의 최신 영화/드라마 후보에서 최신성·랭킹·인기·영상/이미지 퀄리티를 통합 평가해 1개만 사용한다.
  *  - 슬롯 썸네일은 1280x720급을 표준으로 하고 1920x1080급 원본을 슬롯에 직접 쓰지 않는다.
- *  - Hero는 1280x720 이상 실제 고해상도 대표 이미지를 허용하며 1920x1080 이상은 우대만 한다.
+ *  - Hero는 1920x1080 이상 실제 고해상도 대표 이미지만 허용한다.
  *  - 품질 선별은 비동기/사전 준비된 URL 중심으로 수행해 메인 렌더링을 막지 않는다.
  */
 (function () {
@@ -26,8 +26,8 @@
   const SLOT_TARGET_HEIGHT = 720;
   const SLOT_FALLBACK_WIDTH = 640;
   const SLOT_FALLBACK_HEIGHT = 360;
-  const HERO_MIN_WIDTH = 1280;
-  const HERO_MIN_HEIGHT = 720;
+  const HERO_MIN_WIDTH = 1920;
+  const HERO_MIN_HEIGHT = 1080;
   const HERO_MIN_EDGE_MEAN = 4.8;
   const HERO_MIN_EDGE_P90 = 15;
   const HERO_PROBE_LIMIT = 6;
@@ -617,10 +617,9 @@
     return 0;
   }
 
-  // V56 hero policy: any successfully rendered media rail can feed the hero.
-  // Ranking is the primary selector, popularity/freshness break ties, and image
-  // quality is an admission/tie-break criterion. 1280x720 is the usable floor;
-  // 1920x1080+ is preferred when the same ranked content offers it.
+  // V55 hero policy: only movie/drama content can become the hero. The final
+  // choice is a unified four-factor score: freshness + ranking + popularity +
+  // verified visual quality. 1920x1080 is a hard image floor.
   function heroFreshnessDay(item){
     if(!item)return 0;
     const raw=item.publishedAt||item.published_at||item.releaseDate||item.release_date||item.createdAt||item.created_at||item.updatedAt||item.updated_at||item.premiereDate||item.premieredAt||item.date;
@@ -676,10 +675,8 @@
     w=Number(w||0);h=Number(h||0);
     if(w<HERO_MIN_WIDTH||h<HERO_MIN_HEIGHT)return -1;
     const pixels=w*h;
-    const hd=1280*720,fullHd=1920*1080,fourK=3840*2160;
-    const resolutionMetric=pixels<=fullHd
-      ?800+(Math.max(0,Math.min(1,(pixels-hd)/(fullHd-hd)))*100)
-      :900+(Math.max(0,Math.min(1,(pixels-fullHd)/(fourK-fullHd)))*60);
+    const fullHd=1920*1080, fourK=3840*2160;
+    const resolutionMetric=800+(Math.max(0,Math.min(1,(pixels-fullHd)/(fourK-fullHd)))*160);
     const edge=visual&&Number.isFinite(Number(visual.edgeMean))?Number(visual.edgeMean):0;
     const p90=visual&&Number.isFinite(Number(visual.edgeP90))?Number(visual.edgeP90):0;
     const sharpMetric=visual&&visual.sharp?40:Math.min(40,(edge*2)+(p90*.4));
@@ -747,38 +744,26 @@
     if(hint>=1)return 320;
     return 0;
   }
-  function heroItemRankCompare(a,b){
-    const ai=a&&a.item?a.item:a,bi=b&&b.item?b.item:b;
-    const ar=heroRankingMetric(ai),br=heroRankingMetric(bi);
-    if(ar!==br)return br-ar;
-    const ap=heroPopularityMetric(ai),bp=heroPopularityMetric(bi);
-    if(ap!==bp)return bp-ap;
-    const af=heroFreshnessMetric(ai),bf=heroFreshnessMetric(bi);
-    if(af!==bf)return bf-af;
-    return frontPriority(bi)-frontPriority(ai);
-  }
   function heroPreProbeCompare(a,b){
-    const ranked=heroItemRankCompare(a,b);
-    if(ranked!==0)return ranked;
-    const aq=heroHintQualityMetric(a&&a.hint),bq=heroHintQualityMetric(b&&b.hint);
-    if(aq!==bq)return bq-aq;
+    function score(row){
+      const item=row&&row.item;
+      return heroFreshnessMetric(item)+heroRankingMetric(item)+heroPopularityMetric(item)+heroHintQualityMetric(row&&row.hint);
+    }
+    const as=score(a),bs=score(b);
+    if(as!==bs)return bs-as;
     return Number(b&&b.score||0)-Number(a&&a.score||0);
   }
   function heroResolvedCompare(a,b){
-    const ar=Number(a&&a.rankingMetric!==undefined?a.rankingMetric:heroRankingMetric(a&&a.item));
-    const br=Number(b&&b.rankingMetric!==undefined?b.rankingMetric:heroRankingMetric(b&&b.item));
-    if(ar!==br)return br-ar;
-    const ap=Number(a&&a.popularityMetric!==undefined?a.popularityMetric:heroPopularityMetric(a&&a.item));
-    const bp=Number(b&&b.popularityMetric!==undefined?b.popularityMetric:heroPopularityMetric(b&&b.item));
-    if(ap!==bp)return bp-ap;
-    const af=Number(a&&a.freshnessMetric!==undefined?a.freshnessMetric:heroFreshnessMetric(a&&a.item));
-    const bf=Number(b&&b.freshnessMetric!==undefined?b.freshnessMetric:heroFreshnessMetric(b&&b.item));
-    if(af!==bf)return bf-af;
-    const aq=Number(a&&a.qualityMetric||0),bq=Number(b&&b.qualityMetric||0);
-    if(aq!==bq)return bq-aq;
-    const as=Number(a&&a.finalScore),bs=Number(b&&b.finalScore);
+    const as=Number(a&&a.finalScore);
+    const bs=Number(b&&b.finalScore);
     if(Number.isFinite(as)&&Number.isFinite(bs)&&as!==bs)return bs-as;
-    return 0;
+    const af=Number(a&&a.freshnessMetric||heroFreshnessMetric(a&&a.item)),bf=Number(b&&b.freshnessMetric||heroFreshnessMetric(b&&b.item));
+    if(af!==bf)return bf-af;
+    const ar=Number(a&&a.rankingMetric||heroRankingMetric(a&&a.item)),br=Number(b&&b.rankingMetric||heroRankingMetric(b&&b.item));
+    if(ar!==br)return br-ar;
+    const ap=Number(a&&a.popularityMetric||heroPopularityMetric(a&&a.item)),bp=Number(b&&b.popularityMetric||heroPopularityMetric(b&&b.item));
+    if(ap!==bp)return bp-ap;
+    return Number(b&&b.qualityMetric||0)-Number(a&&a.qualityMetric||0);
   }
   function heroResolutionHint(item,url,index){
     const w=numeric(item,['heroWidth','backdropWidth','thumbnailWidth','thumbWidth','imageWidth']);
@@ -834,10 +819,8 @@
       const d=new Date(rawDate);
       if(Number.isFinite(d.getTime()))dateText=String(d.getFullYear());
     }
-    const rawIntro=item&&(item.shortDescription||item.description||item.summary||item.overview||item.synopsis||item.excerpt||item.caption||item.tagline||'');
-    const intro=String(rawIntro||'').replace(/\s+/g,' ').trim().slice(0,220);
-    const meta=[provider.trim(),dateText].filter(Boolean).join(' · ');
-    return{title,intro,meta};
+    const detail=[provider.trim(),dateText].filter(Boolean).join(' · ');
+    return{title,detail};
   }
   function updateHeroCaption(hero,item){
     if(!hero||!item)return;
@@ -849,15 +832,13 @@
       caption.setAttribute('dir','auto');
       caption.style.cssText='position:absolute;left:0;right:0;bottom:0;z-index:3;padding:28px 24px 18px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.78));color:#fff;pointer-events:none;box-sizing:border-box;text-align:start;';
       const title=D.createElement('div');title.className='igdc-media-hero-title';title.style.cssText='font-size:clamp(18px,2.2vw,32px);font-weight:800;line-height:1.15;text-shadow:0 1px 3px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-      const intro=D.createElement('div');intro.className='igdc-media-hero-intro';intro.style.cssText='margin-top:7px;max-width:min(860px,88%);font-size:clamp(12px,1.15vw,16px);font-weight:600;line-height:1.35;opacity:.96;text-shadow:0 1px 2px rgba(0,0,0,.65);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;';
-      const detail=D.createElement('div');detail.className='igdc-media-hero-detail';detail.style.cssText='margin-top:5px;font-size:clamp(11px,1vw,14px);font-weight:600;opacity:.82;text-shadow:0 1px 2px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-      caption.appendChild(title);caption.appendChild(intro);caption.appendChild(detail);hero.appendChild(caption);
+      const detail=D.createElement('div');detail.className='igdc-media-hero-detail';detail.style.cssText='margin-top:6px;font-size:clamp(12px,1.1vw,15px);font-weight:600;opacity:.92;text-shadow:0 1px 2px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+      caption.appendChild(title);caption.appendChild(detail);hero.appendChild(caption);
     }
     const text=heroCaptionText(item);
-    const titleEl=q('.igdc-media-hero-title',caption),introEl=q('.igdc-media-hero-intro',caption),detailEl=q('.igdc-media-hero-detail',caption);
+    const titleEl=q('.igdc-media-hero-title',caption),detailEl=q('.igdc-media-hero-detail',caption);
     if(titleEl)titleEl.textContent=text.title;
-    if(introEl){introEl.textContent=text.intro;introEl.style.display=text.intro?'block':'none';}
-    if(detailEl){detailEl.textContent=text.meta;detailEl.style.display=text.meta?'block':'none';}
+    if(detailEl){detailEl.textContent=text.detail;detailEl.style.display=text.detail?'block':'none';}
   }
   function bindHeroPlayback(heroImg,item){
     if(!heroImg||!item)return;
@@ -874,7 +855,7 @@
     function play(event){
       if(event){event.preventDefault();event.stopPropagation();}
       const card=heroPlaybackCard(item,heroImg);
-      // When the same content is already rendered in any media rail, route the hero
+      // When the same content is already rendered in Movie/Drama, route the hero
       // through the exact card click handler. This keeps web/mobile/OTT behavior
       // identical to tapping the rail card itself.
       if(card&&card.isConnected&&!card.classList.contains('igdc-hero-playback-card')&&typeof card.click==='function'){
@@ -892,8 +873,8 @@
     };
   }
   // Hero frame generation is deliberately not performed on the public front.
-  // The front reuses already prepared 1280x720-or-better slot/hero assets and
-  // only verifies/selects image URLs. This keeps first render fast.
+  // Full-HD hero assets are prepared upstream/admin-side and the front only
+  // verifies/selects already available image URLs. This keeps first render fast.
   function probeHeroImage(url, timeoutMs){
     return new Promise((resolve)=>{
       if(!safeFrontThumbnail(url)){resolve(null);return;}
@@ -1053,9 +1034,9 @@
     return thumbnailExplicitlyPending(item)?260:0;
   }
 
-  // Hero is the expanded playback surface for one actual, successfully rendered
-  // media card. Every visible media-* rail is eligible; ranking decides the winner.
-  function heroSectionEligible(section){return /^media-[a-z0-9-]+$/i.test(String(section||''));}
+  // Hero is the expanded playback surface for an actual movie/drama card.
+  // Trending is deliberately excluded because that rail also mixes variety/music.
+  const HERO_ALLOWED_SECTIONS=new Set(['media-movie','media-drama']);
   const heroRuntime={
     rotateKeys:[],sectionMap:null,timer:null,running:false,rerun:false,
     currentItem:null,currentUrl:'',currentTier:-1,currentScore:-Infinity,
@@ -1098,7 +1079,7 @@
       if(!card||card.getAttribute('data-placeholder')==='true')return;
       const line=card.closest&&card.closest('[data-psom-key^="media-"]');
       const section=canonKey(line&&line.getAttribute('data-psom-key')||'');
-      if(!heroSectionEligible(section))return;
+      if(!HERO_ALLOWED_SECTIONS.has(section))return;
       const img=q('img',card);
       if(!img||!img.naturalWidth||!img.naturalHeight)return;
       let item=card.__igdcMediaItem;
@@ -1121,7 +1102,7 @@
     const rows=[];
     const sectionKeys=Object.keys(sectionMap||{}).map(canonKey).filter((key)=>/^media-/.test(key));
     for(const key of sectionKeys){
-      if(!heroSectionEligible(key))continue;
+      if(!HERO_ALLOWED_SECTIONS.has(key))continue;
       const items=extractItems(sectionMap[key]);
       for(const item of items.slice(0,120)){
         if(!heroItemEligible(item,null))continue;
@@ -1148,7 +1129,7 @@
   function commitHeroChoice(heroImg,best){
     if(!heroImg||!best||!best.item||!best.url)return false;
     const tier=Number(best.tier||0);
-    if(tier<2)return false;
+    if(tier<3)return false;
     const currentItem=heroRuntime.currentItem;
     if(currentItem&&heroRuntime.currentUrl){
       const current={
@@ -1187,7 +1168,7 @@
     heroImg.dataset.igdcHeroRankingMetric=String(best.rankingMetric!==undefined?best.rankingMetric:heroRankingMetric(best.item));
     heroImg.dataset.igdcHeroPopularityMetric=String(best.popularityMetric!==undefined?best.popularityMetric:heroPopularityMetric(best.item));
     heroImg.dataset.igdcHeroQualityMetric=String(best.qualityMetric!==undefined?best.qualityMetric:heroQualityMetric(best.w,best.h));
-    heroImg.dataset.igdcHeroQuality='verified-1280x720-or-better';
+    heroImg.dataset.igdcHeroQuality='verified-fullhd-or-better';
     bindHeroPlayback(heroImg,best.item);
     heroRuntime.currentItem=best.item;heroRuntime.currentUrl=selectedUrl;
     heroRuntime.currentTier=tier;heroRuntime.currentScore=best.finalScore||0;
@@ -1198,23 +1179,23 @@
     const heroImg=q('.hero img');
     if(!heroImg)return false;
 
-    const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey).filter(heroSectionEligible));
-    const pool=mergeHeroRows(preferred,sectionMap).slice().sort(heroItemRankCompare);
+    const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey).filter((key)=>HERO_ALLOWED_SECTIONS.has(key)));
+    HERO_ALLOWED_SECTIONS.forEach((key)=>preferred.add(key));
+    const pool=mergeHeroRows(preferred,sectionMap);
     if(!pool.length)return false;
 
     const candidates=[],seenUrls=new Set();
     for(const row of pool.slice(0,64)){
       const item=row.item;
-      const rankedUrls=heroImageCandidates(item).map((url,index)=>({url,index,hint:heroResolutionHint(item,url,index)}))
-        .sort((a,b)=>Number(b.hint||0)-Number(a.hint||0)).slice(0,2);
-      for(const entry of rankedUrls){
-        const url=entry.url,index=entry.index;
+      const urls=heroImageCandidates(item);
+      for(let index=0;index<Math.min(urls.length,6);index++){
+        const url=urls[index];
         if(!url||seenUrls.has(url)||heroRuntime.failedUrls.has(url))continue;
         seenUrls.add(url);
         candidates.push({
           url,item,card:row.card,
-          score:heroRankingMetric(item)+heroPopularityMetric(item)+heroFreshnessMetric(item),
-          hint:entry.hint,
+          score:heroFreshnessMetric(item)+heroRankingMetric(item)+heroPopularityMetric(item),
+          hint:heroResolutionHint(item,url,index),
           knownW:0,knownH:0,domReady:row.domReady
         });
       }
@@ -1229,7 +1210,7 @@
       const h=numeric(item,['heroHeight','backdropHeight','imageHeight']);
       const tier=heroResolutionTier(w,h);
       const verified=!!(item&&item.heroSharpVerified===true);
-      if(!verified||tier<2)return null;
+      if(!verified||tier<3)return null;
       const visual={sharp:true,edgeMean:Number(item.heroEdgeMean||0),edgeP90:Number(item.heroEdgeP90||0)};
       const qualityMetric=heroQualityMetric(w,h,visual);
       const freshnessMetric=heroFreshnessMetric(item);
@@ -1245,13 +1226,10 @@
       const probe=await probeHeroImage(candidate.url,timeoutMs);
       if(!probe)return null;
       const tier=heroResolutionTier(probe.w,probe.h);
-      if(tier<2)return null;
+      if(tier<3)return null;
       const visual=probe.visual;
-      // Resolution is the Hero admission gate. Pixel inspection rejects only
-      // obviously unusable/blank imagery; sharpness remains a quality tie-break
-      // instead of a hard blocker, so a valid 1280x720 frame cannot leave Hero blank.
-      const pixelPassed=!!(visual&&visual.usable!==false);
-      const trustedUninspected=!visual&&tier>=2;
+      const pixelPassed=!!(visual&&visual.sharp);
+      const trustedUninspected=!visual&&tier>=3;
       if(!pixelPassed&&!trustedUninspected)return null;
       const qualityMetric=heroQualityMetric(probe.w,probe.h,visual);
       const freshnessMetric=heroFreshnessMetric(candidate.item);
@@ -1261,24 +1239,18 @@
         finalScore:heroUnifiedScore(candidate.item,probe.w,probe.h,visual)});
     }
 
-    // Use already verified 1280x720-or-better hero assets immediately when available.
+    // Use already verified Full-HD hero assets immediately when available.
     const knownBest=candidates.map(resolveKnown).filter(Boolean).sort(heroResolvedCompare)[0]||null;
     if(knownBest)commitHeroChoice(heroImg,knownBest);
 
     // Non-blocking quality verification: only the six strongest candidates are
     // probed, all concurrently and at low fetch priority. No video/canvas capture
     // runs on the public page.
-    const orderedCandidates=candidates.slice().sort(heroPreProbeCompare);
-    const probeSet=orderedCandidates.slice(0,HERO_PROBE_LIMIT);
+    const likelyFullHd=candidates.filter((row)=>Number(row.hint||0)>=3).sort(heroPreProbeCompare);
+    const uncertain=candidates.filter((row)=>Number(row.hint||0)<3).sort(heroPreProbeCompare);
+    const probeSet=likelyFullHd.concat(uncertain).slice(0,HERO_PROBE_LIMIT);
     const checked=await Promise.all(probeSet.map((candidate)=>checkedCandidate(candidate,1800)));
-    let best=checked.filter(Boolean).sort(heroResolvedCompare)[0]||knownBest;
-    // Keep V55's normal six-probe fast path. Only when every top-ranked image
-    // fails the HD/usable check do we inspect one additional six-candidate batch.
-    if(!best&&orderedCandidates.length>HERO_PROBE_LIMIT){
-      const fallbackSet=orderedCandidates.slice(HERO_PROBE_LIMIT,HERO_PROBE_LIMIT*2);
-      const fallbackChecked=await Promise.all(fallbackSet.map((candidate)=>checkedCandidate(candidate,1800)));
-      best=fallbackChecked.filter(Boolean).sort(heroResolvedCompare)[0]||null;
-    }
+    const best=checked.filter(Boolean).sort(heroResolvedCompare)[0]||knownBest;
     if(!best)return !!heroRuntime.currentItem;
     return commitHeroChoice(heroImg,best)||!!heroRuntime.currentItem;
   }
@@ -1415,7 +1387,7 @@
     if(fallbackJobs.length)Promise.allSettled(fallbackJobs).then(()=>lines.forEach(compactLine));
 
     // Start hero selection only after the rail bind pass. The hero is therefore
-    // guaranteed to be an expansion of a successfully rendered media card.
+    // guaranteed to be an expansion of a successfully rendered movie/drama card.
     const heroRotateFrom=snapshot&&snapshot.hero&&(snapshot.hero.rotateFrom||snapshot.hero.source);
     scheduleHeroRefresh(heroRotateFrom,sectionMap);
 
@@ -1428,7 +1400,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.6.0-v55-slot720-ranked-hero-hd-intro-fast';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.5.0-slot-720-hero-fullhd-unified-fast';
 })();
 
 
