@@ -1145,9 +1145,10 @@
 
   function mergeHeroRows(preferred,sectionMap){
     const merged=[],byKey=new Map();
-    // Hero is allowed to select directly from the movie/drama snapshot.
-    // Already-rendered cards are kept first only to reuse their loaded image when available.
-    for(const row of renderedHeroRows(preferred).concat(snapshotHeroRows(preferred,sectionMap))){
+    // Hero may only use cards that the Automap has already rendered successfully.
+    // Snapshot-only rows are intentionally excluded so the hero itself can never
+    // hide a broken rail mapping or bypass the normal front render path.
+    for(const row of renderedHeroRows(preferred)){
       const key=heroItemKey(row.item)||(row.card&&String(row.card.dataset.contentId||row.card.dataset.igdcContentId||''));
       if(!key||byKey.has(key))continue;
       byKey.set(key,row);merged.push(row);
@@ -1279,14 +1280,18 @@
       if(!probe)return null;
       const tier=heroResolutionTier(probe.w,probe.h);
       if(tier<2)return null;
-      // Hero only needs a real HD image. 1280x720 is sufficient; higher
-      // resolutions naturally rank above it through the existing quality metric.
+      // If pixel inspection is possible, reject soft/upscaled 720p images. When
+      // CORS blocks inspection, only 1080p+ or an explicit high-resolution source
+      // hint may pass. This keeps blurry card art out of the hero.
       const visual=probe.visual;
+      const pixelPassed=!!(visual&&visual.sharp);
+      const trustedUninspected=!visual&&(tier>=3||Number(candidate.hint||0)>=3);
+      if(!pixelPassed&&!trustedUninspected)return null;
       const qualityMetric=heroQualityMetric(probe.w,probe.h,visual);
       const dimBonus=tier===3?900:620;
       return Object.assign({},candidate,probe,{tier,visual,qualityMetric,
         freshnessDay:heroFreshnessDay(candidate.item),popularityMetric:heroPopularityMetric(candidate.item),
-        finalScore:candidate.score+dimBonus});
+        finalScore:candidate.score+dimBonus+(pixelPassed?180:0)});
     }
 
     // Fast path: a rail thumbnail that is already proven to be 720p/1080p can
