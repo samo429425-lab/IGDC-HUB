@@ -9,7 +9,7 @@
 const MediaStore=require("./lib/media-candidate-store.v1");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="media-candidate-thumbnail-v1.4.0-card-hero-resolution-split";
+const VERSION="media-candidate-thumbnail-v1.5.0-hero-source-hd-sharp";
 const DEFAULT_BUCKET="media-candidate-thumbnails";
 const MAX_IMAGE_BYTES=1572864;
 const PROBE_TIMEOUT_MS=1600;
@@ -18,6 +18,8 @@ const FRONT_MIN_WIDTH=320;
 const FRONT_MIN_HEIGHT=180;
 const HERO_MIN_WIDTH=1280;
 const HERO_MIN_HEIGHT=720;
+const HERO_MIN_EDGE_MEAN=4.8;
+const HERO_MIN_EDGE_P90=15;
 
 function plain(value){return value&&typeof value==="object"&&!Array.isArray(value)?value:{};}
 function imageHeaders(){return{"accept":"image/*","user-agent":"IGDC-MARU-MediaThumbnail/1.0 (+https://igdc.info)"};}
@@ -168,6 +170,26 @@ function generationPatch(row,url,generation,actor){
     updated_at:record.updatedAt
   };
 }
+function heroGenerationPatch(row,url,generation,actor){
+  const raw=Object.assign({},plain(row.raw));
+  const sourceMetadata=Object.assign({},plain(raw.sourceMetadata));
+  const record=Object.assign({},generation,{
+    url,updatedAt:MediaStore.nowIso(),
+    updatedBy:MediaStore.compact(actor.email||actor.memberId||"admin",200)
+  });
+  const width=Number(record.width||0)||0,height=Number(record.height||0)||0;
+  sourceMetadata.heroImage=url;sourceMetadata.heroImageUrl=url;
+  sourceMetadata.heroWidth=width;sourceMetadata.heroHeight=height;
+  sourceMetadata.heroThumbnailReady=true;sourceMetadata.heroThumbnailGeneration=record;
+  raw.sourceMetadata=sourceMetadata;
+  raw.heroImage=url;raw.heroImageUrl=url;raw.heroWidth=width;raw.heroHeight=height;
+  raw.heroThumbnailReady=true;raw.heroThumbnailGeneration=record;
+  return{raw,updated_by:record.updatedBy,updated_at:record.updatedAt};
+}
+async function storeHeroResolved(row,url,generation,actor){
+  const updated=await MediaStore.updateCandidates([row.id],heroGenerationPatch(row,url,generation,actor));
+  return Array.isArray(updated)&&updated[0]||null;
+}
 async function storeResolved(row,url,generation,actor){
   const updated=await MediaStore.updateCandidates([row.id],generationPatch(row,url,generation,actor));
   return Array.isArray(updated)&&updated[0]||null;
@@ -231,8 +253,24 @@ function decodeImage(dataUrl){
   const mime=jpeg?"image/jpeg":"image/png",dimensions=imageDimensions(buffer,mime);
   return{buffer,mime,extension:jpeg?"jpg":"png",width:dimensions.width,height:dimensions.height};
 }
-async function uploadCapture(row,dataUrl,actor){
+async function uploadCapture(row,dataUrl,actor,meta){
   const image=decodeImage(dataUrl);
+  meta=plain(meta);
+  const section=MediaStore.normalizeSection(row.section_key||plain(row.raw).sectionKey);
+  const heroSection=section==="media-movie"||section==="media-drama";
+  const sourceWidth=Number(meta.sourceWidth||0)||0,sourceHeight=Number(meta.sourceHeight||0)||0;
+  const edgeMean=Number(meta.edgeMean||0)||0,edgeP90=Number(meta.edgeP90||0)||0,variance=Number(meta.variance||0)||0;
+  const sharp=meta.sharp===true||(edgeMean>=HERO_MIN_EDGE_MEAN||edgeP90>=HERO_MIN_EDGE_P90);
+  if(heroSection){
+    if(sourceWidth<HERO_MIN_WIDTH||sourceHeight<HERO_MIN_HEIGHT){
+      const error=new Error("히어로용 캡처는 실제 원본 영상이 최소 1280×720이어야 합니다. 저해상도 원본 확대 저장은 허용하지 않습니다.");
+      error.statusCode=400;error.code="media_hero_capture_source_below_hd_floor";throw error;
+    }
+    if(!sharp){
+      const error=new Error("히어로용 프레임이 충분히 선명하지 않습니다. 다른 구간 또는 다른 콘텐츠를 선택해 주세요.");
+      error.statusCode=400;error.code="media_hero_capture_not_sharp";throw error;
+    }
+  }
   const cfg=MediaStore.config();
   const bucket=safeStoragePart(process.env.MEDIA_CANDIDATE_THUMBNAIL_BUCKET||DEFAULT_BUCKET);
   if(!bucket){
@@ -252,11 +290,18 @@ async function uploadCapture(row,dataUrl,actor){
     error.statusCode=uploaded.response.status;error.code="media_thumbnail_upload_failed";throw error;
   }
   const publicUrl=cfg.url+"/storage/v1/object/public/"+encodeURIComponent(bucket)+"/"+objectPath;
-  await storeResolved(row,publicUrl,{
+  const generation={
     version:VERSION,mode:"administrator_video_frame",mime:image.mime,bytes:image.buffer.length,
-    width:image.width,height:image.height,frontReady:image.width>=FRONT_MIN_WIDTH&&image.height>=FRONT_MIN_HEIGHT,heroReady:image.width>=HERO_MIN_WIDTH&&image.height>=HERO_MIN_HEIGHT,
+    width:image.width,height:image.height,sourceWidth,sourceHeight,edgeMean,edgeP90,variance,sharp,
+    capturePurpose:MediaStore.text(meta.capturePurpose||"card"),
+    frontReady:image.width>=FRONT_MIN_WIDTH&&image.height>=FRONT_MIN_HEIGHT,
+    heroReady:heroSection&&sourceWidth>=HERO_MIN_WIDTH&&sourceHeight>=HERO_MIN_HEIGHT&&sharp&&image.width>=HERO_MIN_WIDTH&&image.height>=HERO_MIN_HEIGHT,
     bucket,objectName
-  },actor);
+  };
+  // Keep a good card thumbnail in place. Hero captures are stored separately so
+  // the large representative image never becomes the rail thumbnail by accident.
+  if(heroSection&&MediaStore.normalizeUrl(row.thumb_url))await storeHeroResolved(row,publicUrl,generation,actor);
+  else await storeResolved(row,publicUrl,generation,actor);
   return publicUrl;
 }
 
@@ -307,7 +352,9 @@ exports.handler=async function(event){
       });
     }
     if(action==="store_capture"){
-      const thumbUrl=await uploadCapture(row,body.dataUrl,actor);
+      const thumbUrl=await uploadCapture(row,body.dataUrl,actor,{
+        sourceWidth:body.sourceWidth,sourceHeight:body.sourceHeight,edgeMean:body.edgeMean,edgeP90:body.edgeP90,variance:body.variance,sharp:body.sharp===true,capturePurpose:body.capturePurpose
+      });
       return MediaStore.response(200,{ok:true,version:VERSION,id,thumbUrl,mode:"administrator_video_frame"});
     }
     return MediaStore.response(400,{ok:false,version:VERSION,error:"unsupported_thumbnail_action"});

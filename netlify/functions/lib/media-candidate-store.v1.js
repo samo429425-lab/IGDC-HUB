@@ -10,7 +10,7 @@
 const crypto = require("crypto");
 const MediaPolicy = require("./media-candidate-policy.v2");
 
-const VERSION = "media-candidate-store-v1.6.0-dimension-aware-front-hero";
+const VERSION = "media-candidate-store-v1.7.0-hero-backdrop-pass-through";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE = process.env.MEDIA_CANDIDATE_TABLE || "media_candidates";
 const RELEASE_TABLE = process.env.MEDIA_SNAPSHOT_RELEASE_TABLE || "media_snapshot_releases";
@@ -233,8 +233,15 @@ function thumbnailMeta(row){
   const height=Number(raw.thumbnailHeight||source.thumbnailHeight||generation.height||probe.height||0)||0;
   const known=width>0&&height>0;
   const frontReady=(generation.frontReady===true||probe.frontReady===true||raw.thumbnailReady===true)||(known&&width>=320&&height>=180);
-  const heroReady=(generation.heroReady===true||probe.heroReady===true||raw.heroThumbnailReady===true)||(known&&width>=1280&&height>=720);
-  return{width,height,known,frontReady,heroReady,probe,generation};
+  const frameCapture=lower(generation.mode)==="administrator_video_frame";
+  const sourceWidth=Number(generation.sourceWidth||0)||0,sourceHeight=Number(generation.sourceHeight||0)||0;
+  const edgeMean=Number(generation.edgeMean||0)||0,edgeP90=Number(generation.edgeP90||0)||0;
+  const captureSharp=generation.sharp===true||edgeMean>=4.8||edgeP90>=15;
+  // Legacy administrator captures could be 1280x720 canvases made from SD video.
+  // Such rows remain valid card thumbnails but must never be advertised as Hero HD.
+  const frameHeroReady=!frameCapture||(sourceWidth>=1280&&sourceHeight>=720&&captureSharp);
+  const heroReady=frameHeroReady&&((generation.heroReady===true||probe.heroReady===true)||(known&&width>=1280&&height>=720));
+  return{width,height,known,frontReady,heroReady,probe,generation,sourceWidth,sourceHeight,captureSharp};
 }
 function snapshotEligible(row){
   const urls=[row.source_url,row.video_url,row.embed_url].map(normalizeUrl).filter(Boolean);
@@ -248,6 +255,27 @@ function publicSlot(row, slotId, defaults){
   const source=plain(raw.sourceMetadata);
   const policy=MediaPolicy.releaseEligibility(row);
   const thumbMeta=thumbnailMeta(row),thumbUrl=usableThumbnailUrl(row.thumb_url);
+  const heroCandidates=[
+    raw.heroImage,raw.heroImageUrl,raw.heroThumbnail,raw.heroThumb,raw.backdrop,raw.backdropUrl,raw.backdropImage,
+    raw.highResThumbnail,raw.thumbnailHD,raw.hdThumbnail,raw.maxresThumbnail,raw.image1920,raw.image1280,
+    source.heroImage,source.heroImageUrl,source.heroThumbnail,source.heroThumb,source.backdrop,source.backdropUrl,source.backdropImage,
+    source.highResThumbnail,source.thumbnailHD,source.hdThumbnail,source.maxresThumbnail,source.image1920,source.image1280
+  ];
+  const alternateHeroUrl=heroCandidates.map(usableThumbnailUrl).find(Boolean)||"";
+  const alternateHeroWidth=Number(raw.heroWidth||raw.backdropWidth||source.heroWidth||source.backdropWidth||0)||0;
+  const alternateHeroHeight=Number(raw.heroHeight||raw.backdropHeight||source.heroHeight||source.backdropHeight||0)||0;
+  const heroGeneration=plain(raw.heroThumbnailGeneration||source.heroThumbnailGeneration||thumbMeta.generation);
+  const heroSourceWidth=Number(heroGeneration.sourceWidth||0)||0,heroSourceHeight=Number(heroGeneration.sourceHeight||0)||0;
+  const heroEdgeMean=Number(heroGeneration.edgeMean||0)||0,heroEdgeP90=Number(heroGeneration.edgeP90||0)||0;
+  const heroSharpVerified=lower(heroGeneration.mode)==="administrator_video_frame"&&heroSourceWidth>=1280&&heroSourceHeight>=720&&(heroGeneration.sharp===true||heroEdgeMean>=4.8||heroEdgeP90>=15);
+  // A separately captured, source-HD + sharp-verified Hero frame outranks the card
+  // thumbnail even when the card image itself happens to be 1280x720.
+  const useAlternateHero=!!alternateHeroUrl&&(heroSharpVerified||!thumbMeta.heroReady);
+  const heroUrl=useAlternateHero?alternateHeroUrl:(thumbMeta.heroReady?thumbUrl:alternateHeroUrl);
+  const heroWidth=useAlternateHero?alternateHeroWidth:(thumbMeta.heroReady?thumbMeta.width:alternateHeroWidth);
+  const heroHeight=useAlternateHero?alternateHeroHeight:(thumbMeta.heroReady?thumbMeta.height:alternateHeroHeight);
+  const heroKnown=heroWidth>0&&heroHeight>0;
+  const heroReady=!!heroUrl&&heroKnown&&heroWidth>=1280&&heroHeight>=720;
   const sourceUrl=normalizeUrl(row.source_url || row.embed_url || row.video_url);
   const videoUrl=normalizeUrl(row.video_url);
   const embedUrl=normalizeUrl(row.embed_url);
@@ -268,10 +296,15 @@ function publicSlot(row, slotId, defaults){
     thumbnailHeight:thumbMeta.height||null,
     thumbnailReady:thumbMeta.known?thumbMeta.frontReady:true,
     thumbnailStatus:thumbMeta.known?(thumbMeta.frontReady?"verified":"below_front_floor"):"verified_url",
-    heroImage:thumbMeta.heroReady?thumbUrl:undefined,
-    heroWidth:thumbMeta.heroReady?thumbMeta.width:null,
-    heroHeight:thumbMeta.heroReady?thumbMeta.height:null,
-    heroThumbnailReady:thumbMeta.heroReady,
+    heroImage:heroUrl||undefined,
+    heroWidth:heroWidth||null,
+    heroHeight:heroHeight||null,
+    heroThumbnailReady:heroUrl?(heroKnown?heroReady:null):false,
+    heroSharpVerified:heroSharpVerified||undefined,
+    heroSourceWidth:heroSourceWidth||null,
+    heroSourceHeight:heroSourceHeight||null,
+    heroEdgeMean:heroEdgeMean||null,
+    heroEdgeP90:heroEdgeP90||null,
     provider: text(row.provider || row.source_host),
     url: sourceUrl,
     link: sourceUrl,

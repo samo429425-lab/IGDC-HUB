@@ -789,48 +789,59 @@
     }catch(error){show('공개 파이프라인 JSON 생성 실패: '+error.message,'warn');}
     finally{if(button)button.disabled=false;}
   }
-  function captureFrameDataUrl(row){
+  function captureFrameDataUrl(row,requireHd){
     return new Promise(function(resolve,reject){
       var sources=candidateSources(row);if(!sources.length){reject(new Error('직접 재생 주소가 없습니다.'));return;}
-      var video=document.createElement('video'),sourceIndex=0,targetIndex=0,finished=false,TARGETS=[1,3,6,10];
-      var timer=setTimeout(function(){finish(new Error('초반 프레임 캡처 시간이 초과되었습니다.'));},7000);
+      var video=document.createElement('video'),sourceIndex=0,targetIndex=0,finished=false,targets=[],best=null;
+      var timer=setTimeout(function(){finish(best?null:new Error(requireHd?'선명한 HD 프레임 캡처 시간이 초과되었습니다.':'프레임 캡처 시간이 초과되었습니다.'),best);},14000);
       function clean(){clearTimeout(timer);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
       function finish(err,data){if(finished)return;finished=true;clean();err?reject(err):resolve(data);}
-      function load(){if(sourceIndex>=sources.length){finish(new Error('초반 프레임을 캡처하지 못했습니다.'));return;}targetIndex=0;video.src=sources[sourceIndex].url;video.load();}
+      function buildTargets(){
+        var d=Number(video.duration),raw=[3,10];
+        if(isFinite(d)&&d>12)raw.push(d*.12,d*.28,d*.45,d*.62,d*.78,d*.88);
+        var seen={};targets=raw.map(Number).filter(function(t){return isFinite(t)&&t>=.05;}).map(function(t){return isFinite(d)&&d>0?Math.min(t,Math.max(.2,d-.25)):t;}).filter(function(t){var k=t.toFixed(2);if(seen[k])return false;seen[k]=1;return true;}).slice(0,8);
+      }
+      function load(){if(sourceIndex>=sources.length){finish(best?null:new Error(requireHd?'1280×720 이상의 선명한 원본 프레임을 찾지 못했습니다.':'사용 가능한 프레임을 캡처하지 못했습니다.'),best);return;}targetIndex=0;targets=[];video.src=sources[sourceIndex].url;video.load();}
       function nextSource(){sourceIndex+=1;load();}
-      function seek(){var d=Number(video.duration),t=TARGETS[targetIndex];if(isFinite(d)&&d>0)t=Math.min(t,Math.max(.15,d-.2));try{video.currentTime=Math.max(0,t);}catch(_e){shot();}}
-      function next(){targetIndex+=1;if(targetIndex>=TARGETS.length){nextSource();return;}seek();}
-      function frameLooksUsable(){
-        if(!video.videoWidth||!video.videoHeight)return false;
+      function seek(){if(targetIndex>=targets.length){nextSource();return;}var t=targets[targetIndex++];try{video.currentTime=Math.max(.05,t);}catch(_e){nextSource();}}
+      function frameQuality(){
+        if(!video.videoWidth||!video.videoHeight)return null;
         try{
-          var sample=document.createElement('canvas'),ctx=sample.getContext('2d',{alpha:false});if(!ctx)return false;
-          sample.width=64;sample.height=36;ctx.drawImage(video,0,0,sample.width,sample.height);
-          var pixels=ctx.getImageData(0,0,sample.width,sample.height).data,count=0,sum=0,sum2=0;
-          for(var i=0;i<pixels.length;i+=16){var y=pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722;sum+=y;sum2+=y*y;count+=1;}
-          if(!count)return false;var mean=sum/count,variance=sum2/count-mean*mean;
-          return mean>10&&mean<246&&variance>18;
-        }catch(_e){return false;}
+          var W=320,H=180,sample=document.createElement('canvas'),ctx=sample.getContext('2d',{alpha:false});if(!ctx)return null;
+          sample.width=W;sample.height=H;
+          var r=Math.max(W/video.videoWidth,H/video.videoHeight),sw=W/r,sh=H/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
+          ctx.drawImage(video,sx,sy,sw,sh,0,0,W,H);
+          var px=ctx.getImageData(0,0,W,H).data,lum=new Float32Array(W*H),sum=0,sum2=0;
+          for(var i=0,p=0;i<px.length;i+=4,p++){var y=px[i]*.2126+px[i+1]*.7152+px[i+2]*.0722;lum[p]=y;sum+=y;sum2+=y*y;}
+          var count=lum.length,mean=sum/count,variance=Math.max(0,sum2/count-mean*mean),edgeSum=0,edgeCount=0,edges=[];
+          for(var yy=1;yy<H;yy+=2){var row=yy*W,prev=(yy-1)*W;for(var xx=1;xx<W;xx+=2){var v=lum[row+xx],e=(Math.abs(v-lum[row+xx-1])+Math.abs(v-lum[prev+xx]))*.5;edgeSum+=e;edgeCount++;if(edges.length<5000)edges.push(e);}}
+          edges.sort(function(a,b){return a-b;});var p90=edges.length?edges[Math.min(edges.length-1,Math.floor(edges.length*.9))]:0,edgeMean=edgeCount?edgeSum/edgeCount:0;
+          var usable=mean>12&&mean<244&&variance>120,sharp=usable&&(edgeMean>=4.8||p90>=15);
+          return{mean:mean,variance:variance,edgeMean:edgeMean,edgeP90:p90,usable:usable,sharp:sharp,score:(edgeMean*10)+p90+(Math.sqrt(variance)*.12)};
+        }catch(_e){return null;}
       }
       function shot(){
-        if(!video.videoWidth||!video.videoHeight||!frameLooksUsable()){next();return;}
+        if(!video.videoWidth||!video.videoHeight){seek();return;}
+        if(requireHd&&(video.videoWidth<1280||video.videoHeight<720)){nextSource();return;}
+        var quality=frameQuality();if(!quality||!quality.usable){seek();return;}
         try{
-          // HD thumbnail: keep the fast early-frame capture, but render the chosen usable frame at 1280x720.
-          var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false});
-          var CW=1280,CH=720;c.width=CW;c.height=CH;
+          var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false}),CW=1280,CH=720;c.width=CW;c.height=CH;
           x.fillStyle='#000';x.fillRect(0,0,CW,CH);
-          var r=Math.min(CW/video.videoWidth,CH/video.videoHeight),w=video.videoWidth*r,h=video.videoHeight*r;
-          x.imageSmoothingEnabled=true;
-          if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';
-          x.drawImage(video,(CW-w)/2,(CH-h)/2,w,h);
-          var data=c.toDataURL('image/jpeg',.90);
-          // Keep the existing 1.5MB server limit safe without lowering pixel resolution.
-          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.84);
-          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.78);
-          if(data&&data.length>1000){finish(null,data);return;}
+          // Hero capture never upscales an SD source. Non-hero card capture keeps the previous behaviour.
+          var r=requireHd?Math.max(CW/video.videoWidth,CH/video.videoHeight):Math.min(CW/video.videoWidth,CH/video.videoHeight);
+          var sw=CW/r,sh=CH/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
+          if(requireHd){x.imageSmoothingEnabled=true;if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';x.drawImage(video,sx,sy,sw,sh,0,0,CW,CH);}
+          else{var w=video.videoWidth*r,h=video.videoHeight*r;x.imageSmoothingEnabled=true;if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';x.drawImage(video,(CW-w)/2,(CH-h)/2,w,h);}
+          var data=c.toDataURL('image/jpeg',.94);if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.90);if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.86);
+          if(data&&data.length>1000){
+            var candidate={dataUrl:data,sourceWidth:Number(video.videoWidth||0),sourceHeight:Number(video.videoHeight||0),edgeMean:Number(quality.edgeMean||0),edgeP90:Number(quality.edgeP90||0),variance:Number(quality.variance||0),sharp:quality.sharp===true,score:Number(quality.score||0)};
+            if((!requireHd||candidate.sharp)&&(!best||candidate.score>best.score))best=candidate;
+          }
         }catch(_e){}
-        next();
+        seek();
       }
-      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';video.onerror=nextSource;video.onloadedmetadata=seek;video.onseeked=shot;document.body.appendChild(video);load();
+      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';
+      video.onerror=nextSource;video.onloadedmetadata=function(){if(requireHd&&(video.videoWidth<1280||video.videoHeight<720)){nextSource();return;}buildTargets();seek();};video.onseeked=shot;document.body.appendChild(video);load();
     });
   }
   async function generateThumbnail(id,button){
@@ -838,14 +849,15 @@
     if(!row)return;
     button.disabled=true;
     try{
-      show('1·3·6·10초 중 첫 성공 프레임을 HD 1280×720 썸네일로 저장합니다.','ok');
+      show('여러 구간을 비교해 가장 선명한 프레임을 선택합니다. 영화·드라마 히어로는 실제 HD 원본만 허용합니다.','ok');
       var resolved=await post(THUMB,{action:'resolve',id:id});
       if(resolved.thumbUrl){show('원본 제공 썸네일을 후보에 연결했습니다.','ok');await refresh();return;}
       if(resolved.heroCaptureRequired&&resolved.cardThumbUrl){
         show('카드용 원본 이미지는 보존했습니다. 영화·드라마 히어로용 1280×720 프레임을 추가 생성합니다.','ok');
       }
-      var dataUrl=await captureFrameDataUrl(row);
-      var stored=await post(THUMB,{action:'store_capture',id:id,dataUrl:dataUrl});
+      var heroSection=text(row.sectionKey)==='media-movie'||text(row.sectionKey)==='media-drama';
+      var capture=await captureFrameDataUrl(row,heroSection||resolved.heroCaptureRequired===true);
+      var stored=await post(THUMB,{action:'store_capture',id:id,dataUrl:capture.dataUrl,sourceWidth:capture.sourceWidth,sourceHeight:capture.sourceHeight,edgeMean:capture.edgeMean,edgeP90:capture.edgeP90,variance:capture.variance,sharp:capture.sharp,capturePurpose:(heroSection||resolved.heroCaptureRequired===true)?'hero_hd':'card'});
       show(stored.thumbUrl?'영상 프레임 썸네일을 생성해 저장했습니다.':'썸네일 생성 결과를 저장하지 못했습니다.',stored.thumbUrl?'ok':'warn');
       await refresh();
     }catch(error){show(error.message,'warn');}
