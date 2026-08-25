@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const os = require("os");
 const root = path.resolve(__dirname, "..");
 const canonical = require(path.join(root, "netlify", "functions", "lib", "canonical-snapshot-publisher.v1"));
@@ -327,19 +328,28 @@ function validateExplicitCommerceSelection(upstream, intent) {
   };
 }
 
-function currentReviewQueueFile(commerceRegistrySync) {
-  const reported = String(commerceRegistrySync && commerceRegistrySync.file || "").trim();
-  return reported ? path.resolve(reported) : path.join(root, "netlify", "functions", "data", "commerce-candidate-review-queue.v1.json");
+function sha256File(file) {
+  return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+}
+
+function upstreamMirrorFiles() {
+  return [
+    path.join(root, "data", "search-bank.upstream.snapshot.json"),
+    path.join(root, "netlify", "functions", "data", "search-bank.upstream.snapshot.json"),
+    path.join(root, "netlify", "functions", "search-bank.upstream.snapshot.json")
+  ];
 }
 
 /*
- * Publication input is the real administrator review queue. There is no
- * search-bank.upstream.snapshot.json contract in the current repository.
- * Without an authoritative explicit admin request we preserve the committed
- * snapshots; we never synthesize an empty release and never search phantom
- * upstream mirror paths.
+ * Snapshot publication normally requires an explicit administrator publication
+ * queue. The only authoritative empty queue is a durable, explicit
+ * administrator unpublication request written by the go-live audit flow. This
+ * distinction lets "no healthy replacement" restore sample fallbacks without
+ * allowing an ordinary empty queue to erase committed real-product snapshots.
  */
 function loadConfirmedUpstream(commerceRegistrySync) {
+  const files = upstreamMirrorFiles();
+  const mirrors = files.map(file => ({ path: path.relative(root, file).replace(/\\/g, "/"), present: fileExists(file) }));
   const authorization = commerceRegistrySync && commerceRegistrySync.releaseAuthorization || {};
   const requestedCount = Number(commerceRegistrySync && commerceRegistrySync.requestedCount || authorization.requestedCount || 0);
   const withdrawnCount = Number(commerceRegistrySync && commerceRegistrySync.withdrawnCount || authorization.withdrawnCount || 0);
@@ -365,46 +375,67 @@ function loadConfirmedUpstream(commerceRegistrySync) {
     withdrawalScopeKeys: Array.isArray(commerceRegistrySync && commerceRegistrySync.withdrawalScopeKeys) ? commerceRegistrySync.withdrawalScopeKeys.slice() : [],
     releaseAuthorization: authorization
   };
-  const queueFile = currentReviewQueueFile(commerceRegistrySync);
-  const queueInfo = {
-    path: path.relative(root, queueFile).replace(/\\/g, "/"),
-    present: fileExists(queueFile)
+
+  if (queueAuthoritative) {
+    try {
+      const queueFile = String(commerceRegistrySync.file || path.join(root, "netlify", "functions", "data", "commerce-candidate-review-queue.v1.json"));
+      const queueDoc = readJson(queueFile);
+      const requestedItems = Array.isArray(queueDoc && queueDoc.items)
+        ? queueDoc.items.filter(item => item && item.publicationRequest && item.publicationRequest.requested === true)
+        : [];
+      if (requestedItems.length !== queueMeta.requestedCount) {
+        return { ok: false, reason: "authoritative-admin-queue-count-mismatch", mirrors, queueAuthoritative };
+      }
+      if (requestedItems.length === 0 && !explicitAdminWithdrawal) {
+        return { ok: false, reason: "authoritative-admin-queue-empty-without-withdrawal", mirrors, queueAuthoritative };
+      }
+      return {
+        ok: true,
+        sourceMode: requestedItems.length ? "authoritative-admin-review-queue" : "authoritative-admin-withdrawal-empty-queue",
+        doc: Object.assign({}, queueDoc, { queue: queueMeta, items: requestedItems }),
+        candidateCount: requestedItems.length,
+        queueAuthoritative,
+        authoritativeWithdrawal: requestedItems.length === 0 && explicitAdminWithdrawal,
+        mirrors
+      };
+    } catch (_error) {
+      return { ok: false, reason: "authoritative-admin-queue-invalid", mirrors, queueAuthoritative };
+    }
+  }
+
+  if (mirrors.some(row => !row.present)) {
+    return { ok: false, reason: "upstream-candidate-source-missing", mirrors };
+  }
+
+  const parsed = [];
+  for (let index = 0; index < files.length; index += 1) {
+    try {
+      const doc = readJson(files[index]);
+      if (!doc || !Array.isArray(doc.items)) {
+        return { ok: false, reason: "upstream-candidate-source-invalid", mirrors };
+      }
+      parsed.push({ doc, hash: sha256File(files[index]) });
+    } catch (_error) {
+      return { ok: false, reason: "upstream-candidate-source-invalid", mirrors };
+    }
+  }
+
+  if (new Set(parsed.map(row => row.hash)).size !== 1) {
+    return { ok: false, reason: "upstream-candidate-mirrors-differ", mirrors };
+  }
+
+  if (parsed[0].doc.items.length === 0) {
+    return { ok: false, reason: "upstream-candidate-source-empty", mirrors };
+  }
+
+  return {
+    ok: true,
+    sourceMode: "mirrored-sanmaru-searchbank-upstream",
+    doc: Object.assign({}, parsed[0].doc, { queue:queueMeta }),
+    candidateCount: parsed[0].doc.items.length,
+    queueAuthoritative,
+    mirrors
   };
-
-  if (!queueAuthoritative) {
-    return {
-      ok: false,
-      reason: "authoritative-commerce-publication-source-unavailable",
-      queueAuthoritative: false,
-      queue: queueMeta,
-      queueFile: queueInfo
-    };
-  }
-
-  try {
-    const queueDoc = readJson(queueFile);
-    const requestedItems = Array.isArray(queueDoc && queueDoc.items)
-      ? queueDoc.items.filter(item => item && item.publicationRequest && item.publicationRequest.requested === true)
-      : [];
-    if (requestedItems.length !== queueMeta.requestedCount) {
-      return { ok: false, reason: "authoritative-admin-queue-count-mismatch", queueAuthoritative, queue: queueMeta, queueFile: queueInfo };
-    }
-    if (requestedItems.length === 0 && !explicitAdminWithdrawal) {
-      return { ok: false, reason: "authoritative-admin-queue-empty-without-withdrawal", queueAuthoritative, queue: queueMeta, queueFile: queueInfo };
-    }
-    return {
-      ok: true,
-      sourceMode: requestedItems.length ? "authoritative-admin-review-queue" : "authoritative-admin-withdrawal-empty-queue",
-      doc: Object.assign({}, queueDoc, { queue: queueMeta, items: requestedItems }),
-      candidateCount: requestedItems.length,
-      queueAuthoritative,
-      authoritativeWithdrawal: requestedItems.length === 0 && explicitAdminWithdrawal,
-      queue: queueMeta,
-      queueFile: queueInfo
-    };
-  } catch (error) {
-    return { ok: false, reason: "authoritative-admin-queue-invalid", queueAuthoritative, queue: queueMeta, queueFile: queueInfo, error: String(error && error.message || error) };
-  }
 }
 
 const ROOT_GATE_PAGE_BY_FILE = Object.freeze({
@@ -511,6 +542,26 @@ function writePreservedBuild(reason, details) {
   }, null, 2) + "\n");
 }
 
+function productionDeployBuild() {
+  return String(process.env.CONTEXT || "").trim().toLowerCase() === "production";
+}
+
+function nonPublishingTestProjectBuild() {
+  // igdc-test is a staging Netlify project. A normal code deploy there must not
+  // become a hard Distribution publication just because CONTEXT=production.
+  // Explicit administrator Commerce/Social publication requests still retain
+  // the normal fail-closed materialization requirement below.
+  const siteName = String(process.env.SITE_NAME || "").trim().toLowerCase();
+  if (siteName === "igdc-test") return true;
+  for (const raw of [process.env.URL, process.env.DEPLOY_PRIME_URL]) {
+    try {
+      const host = new URL(String(raw || "")).hostname.toLowerCase();
+      if (host === "igdc-test.netlify.app") return true;
+    } catch (_error) {}
+  }
+  return false;
+}
+
 function compactSocialReport(report) {
   if (!report || typeof report !== "object") return report || null;
   const gate = report.policyGate && typeof report.policyGate === "object" ? report.policyGate : null;
@@ -565,22 +616,9 @@ async function main() {
   const incomingSocialIntent = incomingSocialHookIntent();
   const explicitAdminPublicationInBuild = incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish";
   const explicitSocialPublicationInBuild = incomingSocialIntent.explicit === true;
-  const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild;
+  const ordinaryTestDeploy = productionDeployBuild() && nonPublishingTestProjectBuild() && !explicitAdminPublicationInBuild && !explicitSocialPublicationInBuild;
+  const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild || (productionDeployBuild() && !ordinaryTestDeploy);
   let explicitSocialPublication = null;
-
-  // Ordinary code/config deployments must never reinterpret "no fresh admin queue"
-  // as an empty Commerce release. The repository already contains the last
-  // committed front snapshots, so keep them byte-for-byte and do not run the
-  // Commerce/Distribution publication pipeline unless an explicit publication
-  // hook is present. This also prevents normal Netlify deploys from depending on
-  // non-existent search-bank.upstream.snapshot.json mirror files.
-  if (!explicitAdminPublicationInBuild && !explicitSocialPublicationInBuild) {
-    writePreservedBuild("ordinary-deploy-preserve-committed-snapshots", {
-      incomingCommerceIntent,
-      incomingSocialIntent
-    });
-    return;
-  }
 
   function preserveOrFail(reason, details) {
     // data/auto is build output, not a committed source tree. On a fresh Netlify
@@ -647,7 +685,7 @@ async function main() {
     if (incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish") {
       throw new Error("Explicit administrator Front Match reached the Netlify build, but the authoritative Global Slot publication queue could not be loaded: " + upstream.reason + " | " + JSON.stringify({commerceRegistrySync,incomingCommerceIntent}));
     }
-    preserveOrFail(upstream.reason, { commerceRegistrySync, queueFile: upstream.queueFile || null, queue: upstream.queue || null, incomingCommerceIntent });
+    preserveOrFail(upstream.reason, { commerceRegistrySync, mirrors: upstream.mirrors, incomingCommerceIntent });
     return;
   }
   const queueAuthoritative = upstream.queueAuthoritative === true;
@@ -873,7 +911,7 @@ async function main() {
     commerceRegistrySync,
     incomingCommerceIntent,
     incomingCommerceSelection,
-    upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, queueAuthoritative, queueFile: upstream.queueFile || null },
+    upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, queueAuthoritative, mirrors: upstream.mirrors },
     intake: { releaseGate: intake.releaseGate, summary: intake.summary, releaseItemCount: releaseItems.length },
     publicationInput: { source: publicationBank.source, itemCount: publicationBank.items.length },
     publication,
