@@ -2,7 +2,18 @@
   'use strict';
 
   var ENDPOINT='/.netlify/functions/donation-candidate-admin';
-  var rows=[],sections=[],stage='all',selected=new Set(),busy=false,policyBusy=false,policyWorkspace=null,recognition=null;
+  var DEFAULT_SECTIONS=[
+    {key:'donation-global',label:'글로벌 뉴스',capacity:100},
+    {key:'donation-ngo',label:'NGO',capacity:80},
+    {key:'donation-mission',label:'선교',capacity:80},
+    {key:'donation-service',label:'봉사',capacity:80},
+    {key:'donation-relief',label:'구호',capacity:80},
+    {key:'donation-education',label:'교육',capacity:80},
+    {key:'donation-environment',label:'환경',capacity:80},
+    {key:'donation-others',label:'기타',capacity:80}
+  ];
+  var rows=[],sections=DEFAULT_SECTIONS.slice(),stage='all',selected=new Set(),busy=false,policyBusy=false,policyWorkspace=null,recognition=null;
+  var loadError='',storageState={available:null,error:null,degraded:false},loadedAt='',sectionPolicyCache={};
   var STAGES=[['all','전체'],['research','리서치'],['queue','대기열'],['front_candidate','프론트 후보'],['published','프론트 매칭'],['hold','보류'],['excluded','제외']];
 
   function $(id){return document.getElementById(id)}
@@ -20,6 +31,44 @@
   function stageLabel(s){var hit=STAGES.find(function(x){return x[0]===s});return hit?hit[1]:s}
   function sectionLabel(key){var s=sections.find(function(x){return x.key===key});return s?s.label:key}
   function summaryHtml(sum){var st=(sum&&sum.stages)||{};var cards=[['전체',sum&&sum.total||0],['리서치',st.research||0],['대기열',st.queue||0],['프론트 후보',st.front_candidate||0],['프론트 매칭',st.published||0],['보류',st.hold||0],['제외',st.excluded||0]];return cards.map(function(x){return '<div class="stat"><b>'+x[1]+'</b><span>'+esc(x[0])+'</span></div>'}).join('')}
+  function mergeSections(list){
+    var by={};(Array.isArray(list)?list:[]).forEach(function(x){if(x&&x.key)by[x.key]=x});
+    return DEFAULT_SECTIONS.map(function(d){var x=by[d.key]||{};return {key:d.key,label:text(x.label)||d.label,capacity:Number(x.capacity||d.capacity)||d.capacity}});
+  }
+  function populateResearchSections(){
+    var sel=$('researchSection');if(!sel)return;var current=sel.value;
+    sel.innerHTML=sections.map(function(sec){return '<option value="'+esc(sec.key)+'">'+esc(sec.label)+' ('+sec.capacity+')</option>'}).join('');
+    if(Array.from(sel.options).some(function(o){return o.value===current}))sel.value=current;
+  }
+  function stageCounts(list){var out={research:0,queue:0,front_candidate:0,published:0,hold:0,excluded:0};list.forEach(function(r){if(out[r.stage]!==undefined)out[r.stage]++});return out}
+  function sectionAudit(secKey){
+    var sec=sections.find(function(x){return x.key===secKey})||{key:secKey,label:secKey,capacity:80};
+    var list=rows.filter(function(r){return r.section===secKey});var urls={},dup=[];
+    list.forEach(function(r){var u=text(r.url);if(u){urls[u]=(urls[u]||0)+1}});Object.keys(urls).forEach(function(u){if(urls[u]>1)dup.push({url:u,count:urls[u]})});
+    var missingUrl=list.filter(function(r){return !/^https:\/\//i.test(text(r.url))});
+    var missingThumb=list.filter(function(r){return !/^https:\/\//i.test(text(r.thumbnail))});
+    var placeholders=list.filter(function(r){return (r.issues||[]).indexOf('placeholder_or_seed')>=0||/\b(seed|placeholder|partner\s+\d+)\b/i.test(text(r.title)+' '+text(r.summary))});
+    var publishedNotReady=list.filter(function(r){return r.stage==='published'&&(!/^https:\/\//i.test(text(r.url))||!/^https:\/\//i.test(text(r.thumbnail)))});
+    return {section:sec.key,label:sec.label,capacity:sec.capacity,total:list.length,stages:stageCounts(list),missingHttpsUrl:missingUrl.length,missingThumbnail:missingThumb.length,placeholderOrSeed:placeholders.length,duplicateUrls:dup,publishedNotReady:publishedNotReady.length,items:list};
+  }
+  function overallAudit(){
+    var audits=sections.map(function(sec){return sectionAudit(sec.key)});
+    return {schema:'igdc-donation-admin-audit.v1',generatedAt:new Date().toISOString(),endpoint:ENDPOINT,stageFilter:stage,loadedAt:loadedAt||null,storage:storageState,loadError:loadError||null,sectionCount:sections.length,totalCandidates:rows.length,sections:audits};
+  }
+  function auditText(a){
+    var lines=['IGDC Donation 관리페이지 점검 보고서','생성: '+(a.generatedAt||new Date().toISOString()),'저장소: '+(a.storage&&a.storage.available===false?'연결 확인 필요':'정상/미확인')];
+    if(a.loadError)lines.push('조회 오류: '+a.loadError);lines.push('');
+    (a.sections||[a]).forEach(function(x){lines.push('['+x.label+'] '+x.section);lines.push('후보 '+x.total+' / 용량 '+x.capacity+' · URL 누락 '+x.missingHttpsUrl+' · 썸네일 누락 '+x.missingThumbnail+' · seed/placeholder '+x.placeholderOrSeed+' · 중복 URL '+(x.duplicateUrls||[]).length+' · 프론트매칭 준비불량 '+x.publishedNotReady);lines.push('단계: '+JSON.stringify(x.stages||{}));lines.push('')});
+    return lines.join('\n');
+  }
+  function downloadFile(name,content,type){var blob=new Blob([content],{type:type||'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url)},500)}
+  function downloadAudit(secKey,format){
+    var stamp=new Date().toISOString().replace(/[:.]/g,'-'),data;
+    if(secKey==='all')data=overallAudit();else{var one=sectionAudit(secKey);data={schema:'igdc-donation-admin-section-audit.v1',generatedAt:new Date().toISOString(),storage:storageState,loadError:loadError||null,sections:[one]}};
+    var base='IGDC_DONATION_AUDIT_'+(secKey==='all'?'ALL':secKey.replace(/^donation-/, '').toUpperCase())+'_'+stamp;
+    if(format==='json')downloadFile(base+'.json',JSON.stringify(data,null,2),'application/json;charset=utf-8');else downloadFile(base+'.txt',auditText(data),'text/plain;charset=utf-8');
+  }
+  function auditSummary(secKey){var a=sectionAudit(secKey);return 'URL누락 '+a.missingHttpsUrl+' · 썸네일누락 '+a.missingThumbnail+' · seed '+a.placeholderOrSeed+' · 중복 '+a.duplicateUrls.length}
   function renderTabs(){$('stageTabs').innerHTML=STAGES.map(function(x){return '<button type="button" data-stage="'+x[0]+'" class="'+(stage===x[0]?'active':'')+'">'+esc(x[1])+'</button>'}).join('')}
   function card(row){var id=esc(row.id),img=text(row.thumbnail),issues=Array.isArray(row.issues)?row.issues:[];return '<article class="candidate">'+
     '<div class="thumb">'+(img?'<img src="'+esc(img)+'" loading="lazy" alt="" onerror="this.remove()">':'<span class="fallback">'+esc((row.title||'?').slice(0,1))+'</span>')+(row.mediaKind==='video'?'<span class="video-mark">▶ VIDEO</span>':'')+'</div>'+
@@ -28,7 +77,29 @@
     (row.url?'<a href="'+esc(row.url)+'" target="_blank" rel="noopener">'+esc(row.url)+'</a>':'')+
     '<div class="card-actions"><button data-one="move_to_queue" data-id="'+id+'">대기열</button><button data-one="move_to_front" data-id="'+id+'">프론트 후보</button><button data-one="publish" data-id="'+id+'">프론트 매칭</button><button data-one="hold" data-id="'+id+'">보류</button><button data-one="exclude" data-id="'+id+'" class="danger">제외</button><button data-one="remove" data-id="'+id+'" class="danger">삭제</button><button data-one="restore" data-id="'+id+'">복구</button></div></div></article>'}
   function visibleRowsFor(sec){return rows.filter(function(r){return r.section===sec&&(stage==='all'||r.stage===stage)})}
-  function renderSections(){var html='';sections.forEach(function(sec){var list=visibleRowsFor(sec.key);html+='<section class="section"><div class="section-head"><label class="check"><input type="checkbox" data-section-check="'+esc(sec.key)+'"> 전체</label><h2>'+esc(sec.label)+'</h2><span class="badge">'+list.length+' / '+sec.capacity+'</span></div><div class="section-actions"><button data-section-action="research" data-section="'+esc(sec.key)+'">리서치</button><button data-section-action="ai_front_candidates" data-section="'+esc(sec.key)+'">AI 프론트 후보</button><button data-section-action="ai_auto_match" data-section="'+esc(sec.key)+'">프론트페이지 매칭 실행</button><button data-policy-open="'+esc(sec.key)+'">AI 정책 협의</button></div>'+(list.length?'<div class="grid">'+list.map(card).join('')+'</div>':'<div class="empty">현재 선택 단계에 항목이 없습니다.</div>')+'</section>'});$('sections').innerHTML=html;renderTabs()}
+  function sectionPolicyHtml(sec){
+    var cached=sectionPolicyCache[sec.key]||{},latest=cached.latest||null;
+    return '<div class="section-policy" data-section-policy-box="'+esc(sec.key)+'">'+
+      '<div class="section-policy-head"><b>'+esc(sec.label)+' · AI 정책 협의/실행</b><button type="button" data-section-voice="'+esc(sec.key)+'">말하기</button><button type="button" data-section-policy-load="'+esc(sec.key)+'">최근 협의</button></div>'+
+      '<textarea data-section-policy-input="'+esc(sec.key)+'" placeholder="이 섹션 후보를 어떤 기준으로 리서치·제외·프론트 매칭할지 말하거나 입력하세요."></textarea>'+
+      '<div class="section-policy-actions"><button type="button" class="primary" data-section-policy-discuss="'+esc(sec.key)+'">AI와 협의</button><button type="button" data-section-policy-run="admin" data-section="'+esc(sec.key)+'">협의안 리서치 실행</button><button type="button" data-section-policy-run="front_candidate" data-section="'+esc(sec.key)+'">프론트 후보 실행</button><button type="button" class="good" data-section-policy-run="front" data-section="'+esc(sec.key)+'">프론트 매칭 실행</button></div>'+
+      '<div class="section-policy-state" data-section-policy-state="'+esc(sec.key)+'">'+(cached.state?esc(cached.state):'섹션별 정책 협의 대기')+'</div>'+
+      '<div class="section-policy-latest" data-section-policy-latest="'+esc(sec.key)+'">'+(latest?'<b>'+esc(latest.title||'최근 안건')+'</b><br>'+esc(latest.summary||''):'최근 협의 안건 없음')+'</div></div>';
+  }
+  function renderSections(){
+    var html='';
+    sections.forEach(function(sec){
+      var list=visibleRowsFor(sec.key);
+      html+='<section class="section" data-section-block="'+esc(sec.key)+'"><div class="section-head"><label class="check"><input type="checkbox" data-section-check="'+esc(sec.key)+'"> 전체</label><h2>'+esc(sec.label)+'</h2><span class="badge">'+list.length+' / '+sec.capacity+'</span></div>'+
+        '<div class="section-actions"><button data-section-action="research" data-section="'+esc(sec.key)+'">다시 리서치</button><button data-section-action="ai_front_candidates" data-section="'+esc(sec.key)+'">AI 프론트 후보</button><button data-section-action="ai_auto_match" data-section="'+esc(sec.key)+'">프론트페이지 매칭 실행</button></div>'+
+        '<div class="section-audit"><button class="audit" type="button" data-audit-json="'+esc(sec.key)+'">JSON 점검 다운로드</button><button class="report" type="button" data-audit-report="'+esc(sec.key)+'">점검 보고서 다운로드</button><span class="audit-summary">'+esc(auditSummary(sec.key))+'</span></div>'+
+        sectionPolicyHtml(sec)+
+        (list.length?'<div class="grid">'+list.map(card).join('')+'</div>':'<div class="empty">현재 후보가 없습니다. 리서치 또는 저장소가 복구되면 이 블록에 후보 카드가 표시됩니다.</div>')+'</section>';
+    });
+    $('sections').innerHTML=html;renderTabs();
+    if($('overallAuditState'))$('overallAuditState').textContent='8개 섹션 · 후보 '+rows.length+'개 · '+(storageState.available===false?'저장소 연결 확인 필요':'점검 가능');
+  }
+
 
   function populateScopes(){
     if(!$('policyScope'))return;
@@ -41,16 +112,19 @@
     setBusy(true,'도네이션 후보 원장을 불러오는 중…');
     try{
       var j=await api('GET');
-      rows=j.items||[];sections=j.sections||[];
-      $('summary').innerHTML=summaryHtml(j.summary);
-      if(!$('researchSection').options.length)$('researchSection').innerHTML=sections.map(function(s){return '<option value="'+esc(s.key)+'">'+esc(s.label)+'</option>'}).join('');
-      populateScopes();
+      rows=Array.isArray(j.items)?j.items:rows;sections=mergeSections(j.sections);storageState=j.storage||{available:true,error:null,degraded:false};loadError='';loadedAt=new Date().toISOString();
+      $('summary').innerHTML=summaryHtml(j.summary||{total:rows.length,stages:stageCounts(rows)});
+      populateResearchSections();populateScopes();
       selected=new Set(Array.from(selected).filter(function(id){return rows.some(function(r){return r.id===id})}));
       renderSections();
-      $('state').textContent='도네이션 전용 원장 '+rows.length+'개 · 마지막 조회 '+new Date().toLocaleTimeString();
-    }catch(e){$('state').textContent='오류: '+e.message}
-    finally{setBusy(false)}
+      $('state').textContent=(storageState.available===false?'저장소 연결 확인 필요 · 8개 관리 블록은 유지됩니다. · ':'')+'도네이션 전용 원장 '+rows.length+'개 · 마지막 조회 '+new Date().toLocaleTimeString()+(storageState.error?' · '+storageState.error:'');
+    }catch(e){
+      loadError=e.message;sections=mergeSections(sections);populateResearchSections();populateScopes();renderSections();
+      if(!$('summary').innerHTML)$('summary').innerHTML=summaryHtml({total:rows.length,stages:stageCounts(rows)});
+      $('state').textContent='조회 오류: '+e.message+' · 8개 섹션 관리 블록은 유지됩니다.';
+    }finally{setBusy(false)}
   }
+
 
   async function act(action,ids,section){
     if(busy)return;
@@ -127,9 +201,40 @@
     finally{setPolicyBusy(false)}
   }
 
+  function sectionInput(sec){return document.querySelector('[data-section-policy-input="'+sec+'"]')}
+  function setSectionPolicyState(sec,msg){sectionPolicyCache[sec]=sectionPolicyCache[sec]||{};sectionPolicyCache[sec].state=msg;var el=document.querySelector('[data-section-policy-state="'+sec+'"]');if(el)el.textContent=msg}
+  function renderSectionLatest(sec,agenda){sectionPolicyCache[sec]=sectionPolicyCache[sec]||{};sectionPolicyCache[sec].latest=agenda||null;var el=document.querySelector('[data-section-policy-latest="'+sec+'"]');if(el)el.innerHTML=agenda?'<b>'+esc(agenda.title||'최근 안건')+'</b><br>'+esc(agenda.summary||''):'최근 협의 안건 없음'}
+  async function loadSectionPolicy(sec){
+    setSectionPolicyState(sec,'최근 협의 불러오는 중…');
+    try{var j=await api('POST',{action:'policy_workspace',scope:sec}),ag=(j.workspace&&j.workspace.agendas)||[],latest=ag.length?ag[ag.length-1]:null;renderSectionLatest(sec,latest);setSectionPolicyState(sec,latest?'최근 안건 준비 완료':'저장된 협의 안건 없음')}
+    catch(e){setSectionPolicyState(sec,'협의 조회 오류: '+e.message)}
+  }
+  async function discussSectionPolicy(sec){
+    var box=sectionInput(sec),instruction=text(box&&box.value);if(!instruction){alert('이 섹션에서 AI와 협의할 내용을 입력하거나 말해 주세요.');return}
+    setSectionPolicyState(sec,'AI와 협의 중…');
+    try{var j=await api('POST',{action:'policy_ai_discuss',scope:sec,instruction:instruction,language:policyLanguage()}),agenda=j.agenda||null;renderSectionLatest(sec,agenda);setSectionPolicyState(sec,'협의 안건 저장 완료 · 실행 버튼으로 적용할 수 있습니다.')}
+    catch(e){setSectionPolicyState(sec,'AI 협의 오류: '+e.message)}
+  }
+  async function runSectionPolicy(sec,destination){
+    var cached=sectionPolicyCache[sec]||{},agenda=cached.latest;if(!agenda||!agenda.id){await loadSectionPolicy(sec);agenda=(sectionPolicyCache[sec]||{}).latest}
+    if(!agenda||!agenda.id){alert('먼저 이 블록에서 AI와 협의해 안건을 만들어 주세요.');return}
+    var label=destinationLabel(destination);if(!confirm(sectionLabel(sec)+'의 최근 협의안을 '+label+'로 실행할까요?'))return;
+    setSectionPolicyState(sec,label+' 실행 중…');
+    try{var j=await api('POST',{action:'policy_execute',scope:sec,agendaId:agenda.id,destination:destination,limit:80}),r=j.result||{};setSectionPolicyState(sec,'실행 완료 · '+label+' · 리서치 저장 '+Number(r.research&&r.research.savedCount||0)+'개');await load()}
+    catch(e){setSectionPolicyState(sec,'실행 오류: '+e.message)}
+  }
+  function startSectionVoice(sec){
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){setSectionPolicyState(sec,'이 브라우저는 음성 인식을 지원하지 않습니다.');return}stopVoice();
+    var rec=new SR();recognition=rec;rec.continuous=true;rec.interimResults=true;rec.lang=policyLanguage()==='auto'?(navigator.language||'ko-KR'):policyLanguage();var btn=document.querySelector('[data-section-voice="'+sec+'"]');
+    rec.onstart=function(){if(btn)btn.classList.add('voice-on');setSectionPolicyState(sec,'듣는 중… 편하게 말씀하세요.')};
+    rec.onresult=function(ev){var finals='',interim='';for(var i=ev.resultIndex;i<ev.results.length;i++){var t=text(ev.results[i][0]&&ev.results[i][0].transcript);if(ev.results[i].isFinal)finals+=(finals?' ':'')+t;else interim+=(interim?' ':'')+t}if(interim)setSectionPolicyState(sec,'듣는 중: '+interim);if(finals){var box=sectionInput(sec);if(box)box.value=(text(box.value)+(text(box.value)?' ':'')+finals).trim();setSectionPolicyState(sec,'음성 입력됨: '+finals)}};
+    rec.onerror=function(ev){setSectionPolicyState(sec,'음성 인식 오류: '+text(ev&&ev.error));stopVoice()};rec.onend=function(){if(btn)btn.classList.remove('voice-on');if(recognition===rec)recognition=null};try{rec.start()}catch(e){setSectionPolicyState(sec,'마이크 시작 오류: '+e.message)}
+  }
+
   function stopVoice(){
     if(recognition){try{recognition.stop()}catch(_e){}recognition=null}
     if($('policyVoiceBtn'))$('policyVoiceBtn').classList.remove('voice-on');
+    document.querySelectorAll('[data-section-voice]').forEach(function(b){b.classList.remove('voice-on')});
     if($('policyVoiceLive'))$('policyVoiceLive').textContent='음성 대기';
   }
   function startVoice(){
@@ -151,6 +256,12 @@
     if(b.dataset.one){act(b.dataset.one,[b.dataset.id]);return}
     if(b.dataset.bulk){var ids=Array.from(selected);if(!ids.length){alert('처리할 후보를 선택해 주세요.');return}act(b.dataset.bulk,ids);return}
     if(b.dataset.sectionAction){if(b.dataset.sectionAction==='research')research(b.dataset.section,false);else act(b.dataset.sectionAction,null,b.dataset.section);return}
+    if(b.dataset.auditJson){downloadAudit(b.dataset.auditJson,'json');return}
+    if(b.dataset.auditReport){downloadAudit(b.dataset.auditReport,'report');return}
+    if(b.dataset.sectionPolicyDiscuss){discussSectionPolicy(b.dataset.sectionPolicyDiscuss);return}
+    if(b.dataset.sectionPolicyLoad){loadSectionPolicy(b.dataset.sectionPolicyLoad);return}
+    if(b.dataset.sectionPolicyRun){runSectionPolicy(b.dataset.section,b.dataset.sectionPolicyRun);return}
+    if(b.dataset.sectionVoice){startSectionVoice(b.dataset.sectionVoice);return}
     if(b.dataset.policyOpen){$('policyScope').value=b.dataset.policyOpen;$('policyInstruction').focus();loadPolicy();try{$('policyTitle').scrollIntoView({behavior:'smooth',block:'start'})}catch(_e){}return}
     if(b.dataset.policyDelete){deleteAgenda(b.dataset.policyDelete);return}
     if(b.dataset.policyExecute){executeAgenda(b.dataset.agenda,b.dataset.policyExecute);return}
@@ -170,7 +281,10 @@
   $('policyClearBtn').onclick=clearPolicy;
   $('policyVoiceBtn').onclick=startVoice;
   $('policyVoiceStopBtn').onclick=stopVoice;
+  $('downloadAllJsonBtn').onclick=function(){downloadAudit('all','json')};
+  $('downloadAllReportBtn').onclick=function(){downloadAudit('all','report')};
   window.addEventListener('beforeunload',stopVoice);
 
+  populateResearchSections();populateScopes();renderTabs();renderSections();$('summary').innerHTML=summaryHtml({total:0,stages:{}});
   load().then(loadPolicy);
 })();

@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.1.0-policy-voice-front-control";
+const VERSION = "donation-candidate-admin-v1.2.0-resilient-sections-audit";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -233,10 +233,23 @@ function summary(rows){
 exports.handler=async function(event){
   try{
     const method=text(event&&event.httpMethod||"GET").toUpperCase(); if(method==="OPTIONS")return json(204,{});
-    const actor=await AdminAuth.resolveUser(event); requireRole(actor,method!=="GET"); Store.config();
+    const actor=await AdminAuth.resolveUser(event); requireRole(actor,method!=="GET");
+    let storeConfigError=null;
+    try{ Store.config(); }catch(error){ storeConfigError=text(error&&error.message||error)||"donation_candidate_store_unavailable"; }
     if(method==="GET"){
-      const rows=(await readRows()).map(rowView); return json(200,{ok:true,version:VERSION,sourceRef:SOURCE_REF,sections:Policy.SECTIONS.map(k=>({key:k,label:Policy.SECTION_LABELS[k],capacity:CAPACITY[k]||80})),summary:summary(rows),items:rows,publicPublication:false});
+      let rows=[],storageError=storeConfigError;
+      if(!storageError){
+        try{ rows=(await readRows()).map(rowView); }
+        catch(error){ storageError=text(error&&error.message||error)||"donation_candidate_store_read_failed"; }
+      }
+      return json(200,{
+        ok:true,version:VERSION,sourceRef:SOURCE_REF,
+        sections:Policy.SECTIONS.map(k=>({key:k,label:Policy.SECTION_LABELS[k],capacity:CAPACITY[k]||80})),
+        summary:summary(rows),items:rows,publicPublication:false,
+        storage:{available:!storageError,error:storageError||null,degraded:!!storageError}
+      });
     }
+    if(storeConfigError){const e=new Error(storeConfigError);e.statusCode=503;throw e;}
     if(method!=="POST")return json(405,{ok:false,error:"method_not_allowed"});
     const body=parse(event),action=lower(body.action||body.decision);
     if(action==="policy_workspace"){
