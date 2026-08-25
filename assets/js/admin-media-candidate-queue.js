@@ -789,77 +789,48 @@
     }catch(error){show('공개 파이프라인 JSON 생성 실패: '+error.message,'warn');}
     finally{if(button)button.disabled=false;}
   }
-  function captureFrameDataUrl(row,purpose){
+  function captureFrameDataUrl(row){
     return new Promise(function(resolve,reject){
-      purpose=text(purpose||'card').toLowerCase();
-      var heroMode=purpose==='hero';
       var sources=candidateSources(row);if(!sources.length){reject(new Error('직접 재생 주소가 없습니다.'));return;}
-      var video=document.createElement('video'),sourceIndex=0,targetIndex=0,finished=false,targets=[],best=null;
-      var timer=setTimeout(function(){finish(best?null:new Error(heroMode?'선명한 1920×1080 히어로 프레임 캡처 시간이 초과되었습니다.':'슬롯용 프레임 캡처 시간이 초과되었습니다.'),best);},14000);
+      var video=document.createElement('video'),sourceIndex=0,targetIndex=0,finished=false,TARGETS=[1,3,6,10];
+      var timer=setTimeout(function(){finish(new Error('초반 프레임 캡처 시간이 초과되었습니다.'));},7000);
       function clean(){clearTimeout(timer);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
       function finish(err,data){if(finished)return;finished=true;clean();err?reject(err):resolve(data);}
-      function buildTargets(){
-        var d=Number(video.duration),raw=[3,10];
-        if(isFinite(d)&&d>12)raw.push(d*.12,d*.28,d*.45,d*.62,d*.78,d*.88);
-        var seen={};targets=raw.map(Number).filter(function(t){return isFinite(t)&&t>=.05;}).map(function(t){return isFinite(d)&&d>0?Math.min(t,Math.max(.2,d-.25)):t;}).filter(function(t){var k=t.toFixed(2);if(seen[k])return false;seen[k]=1;return true;}).slice(0,8);
-      }
-      function sourceUsable(){
-        if(heroMode)return video.videoWidth>=1920&&video.videoHeight>=1080;
-        return video.videoWidth>=640&&video.videoHeight>=360;
-      }
-      function load(){if(sourceIndex>=sources.length){finish(best?null:new Error(heroMode?'1920×1080 이상의 선명한 원본 프레임을 찾지 못했습니다.':'640×360 이상의 사용 가능한 슬롯 프레임을 찾지 못했습니다.'),best);return;}targetIndex=0;targets=[];video.src=sources[sourceIndex].url;video.load();}
+      function load(){if(sourceIndex>=sources.length){finish(new Error('초반 프레임을 캡처하지 못했습니다.'));return;}targetIndex=0;video.src=sources[sourceIndex].url;video.load();}
       function nextSource(){sourceIndex+=1;load();}
-      function seek(){if(targetIndex>=targets.length){nextSource();return;}var t=targets[targetIndex++];try{video.currentTime=Math.max(.05,t);}catch(_e){nextSource();}}
-      function frameQuality(){
-        if(!video.videoWidth||!video.videoHeight)return null;
+      function seek(){var d=Number(video.duration),t=TARGETS[targetIndex];if(isFinite(d)&&d>0)t=Math.min(t,Math.max(.15,d-.2));try{video.currentTime=Math.max(0,t);}catch(_e){shot();}}
+      function next(){targetIndex+=1;if(targetIndex>=TARGETS.length){nextSource();return;}seek();}
+      function frameLooksUsable(){
+        if(!video.videoWidth||!video.videoHeight)return false;
         try{
-          var W=320,H=180,sample=document.createElement('canvas'),ctx=sample.getContext('2d',{alpha:false});if(!ctx)return null;
-          sample.width=W;sample.height=H;
-          var r=Math.max(W/video.videoWidth,H/video.videoHeight),sw=W/r,sh=H/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
-          ctx.drawImage(video,sx,sy,sw,sh,0,0,W,H);
-          var px=ctx.getImageData(0,0,W,H).data,lum=new Float32Array(W*H),sum=0,sum2=0;
-          for(var i=0,p=0;i<px.length;i+=4,p++){var y=px[i]*.2126+px[i+1]*.7152+px[i+2]*.0722;lum[p]=y;sum+=y;sum2+=y*y;}
-          var count=lum.length,mean=sum/count,variance=Math.max(0,sum2/count-mean*mean),edgeSum=0,edgeCount=0,edges=[];
-          for(var yy=1;yy<H;yy+=2){var row=yy*W,prev=(yy-1)*W;for(var xx=1;xx<W;xx+=2){var v=lum[row+xx],e=(Math.abs(v-lum[row+xx-1])+Math.abs(v-lum[prev+xx]))*.5;edgeSum+=e;edgeCount++;if(edges.length<5000)edges.push(e);}}
-          edges.sort(function(a,b){return a-b;});var p90=edges.length?edges[Math.min(edges.length-1,Math.floor(edges.length*.9))]:0,edgeMean=edgeCount?edgeSum/edgeCount:0;
-          var usable=mean>12&&mean<244&&variance>120,sharp=usable&&(edgeMean>=4.8||p90>=15);
-          return{mean:mean,variance:variance,edgeMean:edgeMean,edgeP90:p90,usable:usable,sharp:sharp,score:(edgeMean*10)+p90+(Math.sqrt(variance)*.12)};
-        }catch(_e){return null;}
+          var sample=document.createElement('canvas'),ctx=sample.getContext('2d',{alpha:false});if(!ctx)return false;
+          sample.width=64;sample.height=36;ctx.drawImage(video,0,0,sample.width,sample.height);
+          var pixels=ctx.getImageData(0,0,sample.width,sample.height).data,count=0,sum=0,sum2=0;
+          for(var i=0;i<pixels.length;i+=16){var y=pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722;sum+=y;sum2+=y*y;count+=1;}
+          if(!count)return false;var mean=sum/count,variance=sum2/count-mean*mean;
+          return mean>10&&mean<246&&variance>18;
+        }catch(_e){return false;}
       }
       function shot(){
-        if(!video.videoWidth||!video.videoHeight){seek();return;}
-        if(!sourceUsable()){nextSource();return;}
-        var quality=frameQuality();if(!quality||!quality.usable){seek();return;}
+        if(!video.videoWidth||!video.videoHeight||!frameLooksUsable()){next();return;}
         try{
+          // HD thumbnail: keep the fast early-frame capture, but render the chosen usable frame at 1280x720.
           var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false});
-          var CW,CH;
-          if(heroMode){CW=1920;CH=1080;}
-          else{
-            var scale=Math.min(1,1280/video.videoWidth,720/video.videoHeight);
-            CW=Math.max(640,Math.round(video.videoWidth*scale));
-            CH=Math.max(360,Math.round(video.videoHeight*scale));
-            // Keep a 16:9 slot surface without ever exceeding 1280x720.
-            if(CW/CH>16/9)CW=Math.round(CH*16/9);else if(CW/CH<16/9)CH=Math.round(CW*9/16);
-            CW=Math.min(1280,CW);CH=Math.min(720,CH);
-          }
-          c.width=CW;c.height=CH;x.fillStyle='#000';x.fillRect(0,0,CW,CH);
-          var r=Math.max(CW/video.videoWidth,CH/video.videoHeight),sw=CW/r,sh=CH/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
-          x.imageSmoothingEnabled=true;if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';
-          x.drawImage(video,sx,sy,sw,sh,0,0,CW,CH);
-          var data=c.toDataURL('image/jpeg',heroMode ? .92 : .90);
-          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.86);
-          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.80);
-          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.74);
-          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.68);
-          if(data&&data.length>1000){
-            var candidate={dataUrl:data,sourceWidth:Number(video.videoWidth||0),sourceHeight:Number(video.videoHeight||0),outputWidth:CW,outputHeight:CH,edgeMean:Number(quality.edgeMean||0),edgeP90:Number(quality.edgeP90||0),variance:Number(quality.variance||0),sharp:quality.sharp===true,score:Number(quality.score||0)};
-            if((!heroMode||candidate.sharp)&&(!best||candidate.score>best.score))best=candidate;
-          }
+          var CW=1280,CH=720;c.width=CW;c.height=CH;
+          x.fillStyle='#000';x.fillRect(0,0,CW,CH);
+          var r=Math.min(CW/video.videoWidth,CH/video.videoHeight),w=video.videoWidth*r,h=video.videoHeight*r;
+          x.imageSmoothingEnabled=true;
+          if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';
+          x.drawImage(video,(CW-w)/2,(CH-h)/2,w,h);
+          var data=c.toDataURL('image/jpeg',.90);
+          // Keep the existing 1.5MB server limit safe without lowering pixel resolution.
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.84);
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.78);
+          if(data&&data.length>1000){finish(null,data);return;}
         }catch(_e){}
-        seek();
+        next();
       }
-      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';
-      video.onerror=nextSource;video.onloadedmetadata=function(){if(!sourceUsable()){nextSource();return;}buildTargets();seek();};video.onseeked=shot;document.body.appendChild(video);load();
+      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';video.onerror=nextSource;video.onloadedmetadata=seek;video.onseeked=shot;document.body.appendChild(video);load();
     });
   }
   async function generateThumbnail(id,button){
@@ -867,23 +838,15 @@
     if(!row)return;
     button.disabled=true;
     try{
-      show('슬롯은 최대 1280×720, 히어로는 1920×1080 이상 기준으로 선명한 이미지를 준비합니다.','ok');
+      show('1·3·6·10초 중 첫 성공 프레임을 HD 1280×720 썸네일로 저장합니다.','ok');
       var resolved=await post(THUMB,{action:'resolve',id:id});
-      var storedAny=!!resolved.cardThumbUrl||!!resolved.heroThumbUrl;
-
-      if(resolved.cardCaptureRequired===true){
-        var cardCapture=await captureFrameDataUrl(row,'card');
-        var cardStored=await post(THUMB,{action:'store_capture',id:id,dataUrl:cardCapture.dataUrl,sourceWidth:cardCapture.sourceWidth,sourceHeight:cardCapture.sourceHeight,edgeMean:cardCapture.edgeMean,edgeP90:cardCapture.edgeP90,variance:cardCapture.variance,sharp:cardCapture.sharp,capturePurpose:'card_720'});
-        if(cardStored.thumbUrl)storedAny=true;
+      if(resolved.thumbUrl){show('원본 제공 썸네일을 후보에 연결했습니다.','ok');await refresh();return;}
+      if(resolved.heroCaptureRequired&&resolved.cardThumbUrl){
+        show('카드용 원본 이미지는 보존했습니다. 영화·드라마 히어로용 1280×720 프레임을 추가 생성합니다.','ok');
       }
-
-      if(resolved.heroCaptureRequired===true){
-        var heroCapture=await captureFrameDataUrl(row,'hero');
-        var heroStored=await post(THUMB,{action:'store_capture',id:id,dataUrl:heroCapture.dataUrl,sourceWidth:heroCapture.sourceWidth,sourceHeight:heroCapture.sourceHeight,edgeMean:heroCapture.edgeMean,edgeP90:heroCapture.edgeP90,variance:heroCapture.variance,sharp:heroCapture.sharp,capturePurpose:'hero_fullhd'});
-        if(heroStored.thumbUrl)storedAny=true;
-      }
-
-      show(storedAny?'슬롯/히어로 썸네일 품질 준비가 완료되었습니다.':'사용 가능한 썸네일을 준비하지 못했습니다.',storedAny?'ok':'warn');
+      var dataUrl=await captureFrameDataUrl(row);
+      var stored=await post(THUMB,{action:'store_capture',id:id,dataUrl:dataUrl});
+      show(stored.thumbUrl?'영상 프레임 썸네일을 생성해 저장했습니다.':'썸네일 생성 결과를 저장하지 못했습니다.',stored.thumbUrl?'ok':'warn');
       await refresh();
     }catch(error){show(error.message,'warn');}
     finally{button.disabled=false;}

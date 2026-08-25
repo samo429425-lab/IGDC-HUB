@@ -16,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.14.0-durable-release-before-build";
+  "social-snapshot-publish-v1.15.0-durable-state-recovery";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -125,10 +125,11 @@ function fullStructuralBase(storedSnapshot) {
 }
 
 async function latestStoredBase(route) {
+  const countryCode = text(route && route.countryCode).toUpperCase();
+  const regionId = text(route && (route.worldRegion || route.regionId));
+  let exactRows;
   try {
-    const countryCode = text(route && route.countryCode).toUpperCase();
-    const regionId = text(route && (route.worldRegion || route.regionId));
-    const exactRows = await SocialStore.selectReleases(
+    exactRows = await SocialStore.selectReleases(
       "select=release_id,snapshot,created_at,notes&status=eq.stored&notes=like." +
         encodeURIComponent("scope=" + scopeToken(route) + ";%") +
         "&order=created_at.desc&limit=1",
@@ -158,8 +159,17 @@ async function latestStoredBase(route) {
         doc: structural.doc,
       };
     }
-  } catch (_error) {
-    /* Static snapshot remains the safe fallback. */
+  } catch (error) {
+    // Never turn a temporary release-store read failure into a new static-base
+    // publication. That could replace a valid persistent front with an older
+    // repository snapshot. Abort this publication and leave the live front as-is.
+    const wrapped = new Error(
+      "마지막 Social Release를 읽지 못해 기존 프론트를 보존했습니다. 저장소 연결이 복구된 뒤 다시 실행해 주세요.",
+    );
+    wrapped.code = "social_release_base_unavailable";
+    wrapped.statusCode = 503;
+    wrapped.cause = error;
+    throw wrapped;
   }
   return baseSnapshot();
 }
@@ -702,6 +712,60 @@ exports.handler = async function (event) {
       const report = await runtimePipelineDiagnostic(route);
       return SocialStore.response(200, report);
     }
+    if (
+      event.httpMethod === "GET" &&
+      (operation === "current_front_state" ||
+        operation === "published_state" ||
+        operation === "front_state")
+    ) {
+      const latest = await latestStoredReleaseForRoute(route);
+      if (latest && latest.snapshot) {
+        const calculatedHash = SocialStore.sha256(latest.snapshot);
+        if (text(latest.snapshot_hash) && calculatedHash !== text(latest.snapshot_hash)) {
+          return SocialStore.response(409, {
+            ok: false,
+            version: VERSION,
+            error: "stored_release_hash_mismatch",
+            message: "저장된 Social Release 해시가 일치하지 않아 현재 프론트 상태로 사용하지 않았습니다.",
+            preservedExistingFront: true,
+          });
+        }
+        const bySection = releasedIdsBySection(latest.snapshot);
+        const ids = Array.from(new Set(Object.values(bySection).flat()));
+        return SocialStore.response(200, {
+          ok: true,
+          version: VERSION,
+          operation: "current_front_state",
+          source: "supabase.social_snapshot_releases",
+          stored: true,
+          releaseId: text(latest.release_id),
+          snapshotHash: text(latest.snapshot_hash) || calculatedHash,
+          createdAt: text(latest.created_at) || null,
+          publishedIdsBySection: bySection,
+          publishedContentIds: ids,
+          publishedCount: ids.length,
+          readOnly: true,
+          buildQueued: false,
+        });
+      }
+      const fallback = baseSnapshot();
+      const bySection = releasedIdsBySection(fallback.doc);
+      const ids = Array.from(new Set(Object.values(bySection).flat()));
+      return SocialStore.response(200, {
+        ok: true,
+        version: VERSION,
+        operation: "current_front_state",
+        source: fallback.file,
+        stored: false,
+        releaseId: null,
+        snapshotHash: SocialStore.sha256(fallback.doc),
+        publishedIdsBySection: bySection,
+        publishedContentIds: ids,
+        publishedCount: ids.length,
+        readOnly: true,
+        buildQueued: false,
+      });
+    }
     const base = await latestStoredBase(route);
     let rows = [];
     let unpublish = null;
@@ -967,6 +1031,7 @@ exports.handler = async function (event) {
         runtimeFileWrite: false,
         socialSnapshotMutation: false,
         frontReadsLatestStoredSnapshot: false,
+        adminReadsLatestStoredReleaseState: true,
         canonicalBuildPipeline: true,
         socialSearchBankIsolated: true,
         sharedCommerceSearchBankMutation: false,
