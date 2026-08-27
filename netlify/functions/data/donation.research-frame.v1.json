@@ -1,0 +1,110 @@
+{
+  "schema": "igdc-donation-searchbank-research-frame.v1",
+  "version": "1.0.0",
+  "channel": "donation",
+  "page": "donation",
+  "policy": {
+    "requireOfficialHttps": true,
+    "preferHomepageRepresentativeImage": true,
+    "representativeImageOrder": ["og:image", "twitter:image", "search-thumbnail", "organization-logo"],
+    "seedIsFallbackOnly": true,
+    "searchBankOwnsDiscoveryAndSnapshot": true
+  },
+  "sections": {
+    "donation-global": {
+      "primaryQuery": "humanitarian crisis disaster earthquake flood wildfire famine refugee children emergency relief official video latest",
+      "freshnessHours": 48,
+      "preferVideo": true,
+      "localizeByIp": false,
+      "anchors": [
+        {"name":"UN OCHA / ReliefWeb","query":"ReliefWeb OCHA latest humanitarian emergency disaster official video"},
+        {"name":"UN News","query":"UN News latest humanitarian crisis disaster official video"},
+        {"name":"UNICEF Emergencies","query":"UNICEF emergencies latest children humanitarian official video"},
+        {"name":"UNHCR Emergencies","query":"UNHCR emergencies refugees displacement latest official video"},
+        {"name":"World Food Programme","query":"WFP emergency hunger famine latest official video"},
+        {"name":"IFRC","query":"IFRC disaster response earthquake flood latest official video"}
+      ]
+    },
+    "donation-ngo": {
+      "primaryQuery": "international NGO development humanitarian public aid organization official website homepage",
+      "localizeByIp": false,
+      "anchors": [
+        {"name":"KOICA","query":"KOICA Korea International Cooperation Agency official website"},
+        {"name":"Good Neighbors International","query":"Good Neighbors International official website"},
+        {"name":"UNICEF","query":"UNICEF official website international children aid"},
+        {"name":"UNHCR","query":"UNHCR official website refugee agency"},
+        {"name":"World Food Programme","query":"World Food Programme WFP official website"},
+        {"name":"IFRC","query":"International Federation Red Cross Red Crescent IFRC official website"}
+      ]
+    },
+    "donation-mission": {
+      "primaryQuery": "Protestant evangelical Christian mission organization international official website homepage",
+      "localizeByIp": true,
+      "anchors": [
+        {"name":"Lausanne Movement","query":"Lausanne Movement official website evangelical mission"},
+        {"name":"PAUA","query":"PAUA Pan Asia Africa Universities Association Christian official website"},
+        {"name":"Cru / Campus Crusade for Christ","query":"Cru Campus Crusade for Christ official website"},
+        {"name":"InterVarsity / IVF","query":"InterVarsity Christian Fellowship IVF official website"},
+        {"name":"Child Evangelism Fellowship","query":"Child Evangelism Fellowship official website"},
+        {"name":"Wycliffe Bible Translators","query":"Wycliffe Bible Translators official website"},
+        {"name":"Youth With A Mission","query":"YWAM Youth With A Mission official website"}
+      ]
+    },
+    "donation-service": {
+      "primaryQuery": "Christian volunteer service medical housing clean water community organization official website homepage",
+      "localizeByIp": true,
+      "anchors": [
+        {"name":"Habitat for Humanity International","query":"Habitat for Humanity International official website Christian volunteer housing"},
+        {"name":"Medical Teams International","query":"Medical Teams International official website Christian medical volunteer"},
+        {"name":"Living Water International","query":"Living Water International official website Christian clean water"},
+        {"name":"World Servants","query":"Christian volunteer service international official website"},
+        {"name":"Korea church volunteer service","query":"Korea church volunteer service organization official website"}
+      ]
+    },
+    "donation-relief": {
+      "primaryQuery": "Christian humanitarian relief disaster emergency hunger refugee organization official website homepage",
+      "localizeByIp": false,
+      "anchors": [
+        {"name":"World Vision International","query":"World Vision International official website humanitarian relief"},
+        {"name":"Food for the Hungry","query":"Food for the Hungry official website humanitarian relief"},
+        {"name":"Samaritan's Purse","query":"Samaritan's Purse official website disaster relief"},
+        {"name":"Tearfund","query":"Tearfund official website Christian humanitarian relief"},
+        {"name":"World Relief","query":"World Relief official website Christian humanitarian"},
+        {"name":"Compassion International","query":"Compassion International official website children relief"}
+      ]
+    },
+    "donation-education": {
+      "primaryQuery": "Christian education children youth university literacy training organization official website homepage",
+      "localizeByIp": true,
+      "anchors": [
+        {"name":"Association of Christian Schools International","query":"ACSI Association of Christian Schools International official website"},
+        {"name":"TeachBeyond","query":"TeachBeyond official website Christian education"},
+        {"name":"4/14 Window Movement","query":"4/14 Window Movement Christian children education official website"},
+        {"name":"PAUA Education","query":"PAUA Christian universities Asia Africa official website"},
+        {"name":"Cru Campus Ministry","query":"Cru campus ministry official website students"},
+        {"name":"InterVarsity Christian Fellowship","query":"InterVarsity Christian Fellowship official website students campus"}
+      ]
+    },
+    "donation-environment": {
+      "primaryQuery": "Christian environmental stewardship conservation reforestation creation care organization official website homepage",
+      "localizeByIp": false,
+      "anchors": [
+        {"name":"A Rocha International","query":"A Rocha International official website Christian conservation"},
+        {"name":"Plant With Purpose","query":"Plant With Purpose official website Christian environmental restoration"},
+        {"name":"Creation Care organizations","query":"Christian creation care conservation nonprofit official website"},
+        {"name":"Christian reforestation organizations","query":"Christian reforestation stewardship nonprofit official website"}
+      ]
+    },
+    "donation-others": {
+      "primaryQuery": "Christian nonprofit vulnerable people justice prison disability trafficking official organization website homepage",
+      "localizeByIp": true,
+      "anchors": [
+        {"name":"International Justice Mission","query":"International Justice Mission official website Christian justice trafficking"},
+        {"name":"Open Doors International","query":"Open Doors International official website persecuted Christians"},
+        {"name":"Prison Fellowship International","query":"Prison Fellowship International official website"},
+        {"name":"Christian disability ministry","query":"international Christian disability ministry official website"},
+        {"name":"Christian anti-trafficking organization","query":"Christian anti trafficking organization official website"}
+      ]
+    }
+  }
+}

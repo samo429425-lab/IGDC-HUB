@@ -6,8 +6,8 @@
  * research -> section queue -> front candidate -> published.
  *
  * Persistence is isolated by source_ref inside the existing gslot_candidates
- * ledger.  It never writes SearchBank snapshots, Distribution assignments, or
- * any public JSON file directly.
+ * ledger. It never edits SearchBank snapshot JSON files directly. Final matching
+ * asks the existing SearchBank Engine to run its own normal write/sync pipeline.
  */
 
 const crypto = require("crypto");
@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.2.0-resilient-sections-audit";
+const VERSION = "donation-candidate-admin-v1.3.0-searchbank-frame-bridge";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -118,10 +118,55 @@ async function upsertRows(rows){
 }
 function researchParams(section,query,limit){
   const q=text(query)||Policy.queryTerms(section)[0]||Policy.SECTION_LABELS[section]||"donation";
+  const frame=Policy.researchFrameFor ? Policy.researchFrameFor(section) : {};
   const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred"};
-  if(section==="donation-global"){params.freshnessHours="48";params.mediaPreference="video";}
-  if(section==="donation-mission"){params.localizeByIp="1";params.geoPreference="ip-preferred";}
+  if(section==="donation-global"||Number(frame.freshnessHours)>0){params.freshnessHours=String(Number(frame.freshnessHours)||48);}
+  if(section==="donation-global"||frame.preferVideo===true){params.mediaPreference="video";}
+  if(section==="donation-mission"||frame.localizeByIp===true){params.localizeByIp="1";params.geoPreference="ip-preferred";}
   return params;
+}
+function serverSearchBankToken(){
+  return text(process.env.SANMARU_ADMIN_TOKEN||process.env.MARU_ADMIN_TOKEN||process.env.ADMIN_TOKEN||"");
+}
+function searchBankWriteParams(section,query,limit){
+  const params=researchParams(section,query,limit);
+  params.writeMode="write";
+  params.mode="write";
+  params.allowWrite="1";
+  params.writeSnapshot="1";
+  params.snapshotWrite="1";
+  params.syncSearchBank="1";
+  const token=serverSearchBankToken();
+  if(token) params.adminToken=token;
+  return params;
+}
+async function applyResearchFrameToSearchBank(event,section,customQuery,limit){
+  if(!SearchBank||typeof SearchBank.runEngine!=="function") return {ok:false,error:"searchbank_engine_unavailable",reports:[]};
+  const sections=section==="all"?Policy.SECTIONS:[Policy.normalizeSection(section)].filter(Boolean);
+  const reports=[];
+  for(const sec of sections){
+    const terms=Policy.queryTerms(sec,customQuery&&sections.length===1?customQuery:"");
+    const queries=terms.slice(0, section==="all"?2:4);
+    const detail=[];
+    for(const q of queries){
+      try{
+        const result=await SearchBank.runEngine(event,searchBankWriteParams(sec,q,limit||80));
+        const meta=plain(result&&result.meta);
+        detail.push({query:q,items:Array.isArray(result&&result.items)?result.items.length:0,writeAllowed:meta.write_allowed===true,syncEnabled:meta.sync_enabled===true,servedFrom:text(result&&result.served_from),adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false})):[]});
+      }catch(error){detail.push({query:q,items:0,writeAllowed:false,syncEnabled:false,error:text(error&&error.message||error)});}
+    }
+    reports.push({section:sec,queries:detail,writeAllowed:detail.some(x=>x.writeAllowed),items:detail.reduce((n,x)=>n+Number(x.items||0),0)});
+  }
+  return {ok:reports.some(r=>r.writeAllowed),directSnapshotEdit:false,route:"Donation research frame -> SearchBank Engine -> SearchBank snapshot -> existing Donation Builder",reports};
+}
+async function sectionsForIds(ids){
+  const out=new Set();
+  for(const id of (ids||[]).slice(0,300)){
+    const row=await rowById(id);
+    if(!row) continue;
+    const v=rowView(row); if(v.section) out.add(v.section);
+  }
+  return Array.from(out);
 }
 async function performResearch(event,section,customQuery,limit){
   if(!SearchBank||typeof SearchBank.runEngine!=="function"){const e=new Error("SearchBank Engine을 불러오지 못했습니다.");e.statusCode=503;throw e;}
@@ -132,8 +177,8 @@ async function performResearch(event,section,customQuery,limit){
   for(const sec of sections){
     const baseTerms=Policy.queryTerms(sec);
     const queries=customQuery
-      ? (sections.length===1 ? [text(customQuery)] : [text([baseTerms[0]||"",customQuery].filter(Boolean).join(" "))])
-      : baseTerms.slice(0, section==="all"?1:2);
+      ? (sections.length===1 ? Array.from(new Set([text(customQuery)].concat(baseTerms.slice(0,2)).filter(Boolean))) : [text([baseTerms[0]||"",customQuery].filter(Boolean).join(" "))])
+      : baseTerms.slice(0, section==="all"?2:6);
     const seen=new Set(); let accepted=0, skippedExcluded=0;
     for(const q of queries){
       const result=await SearchBank.runEngine(event,researchParams(sec,q,limit));
@@ -221,8 +266,12 @@ async function executePolicyAgenda(event,body,actor){
   const research=await performResearch(event,scope,query,body.limit||80);
   let stageResult=null;
   if(destination==="front_candidate") stageResult=await autoStage(scope,"front_candidate",actor);
-  if(destination==="front") stageResult=await autoStage(scope,"published",actor);
-  return {scope,agendaId:agenda.id,destination,query,research,stageResult,publicPublication:destination==="front"};
+  let searchBank=null;
+  if(destination==="front"){
+    stageResult=await autoStage(scope,"published",actor);
+    searchBank=await applyResearchFrameToSearchBank(event,scope,query,body.limit||80);
+  }
+  return {scope,agendaId:agenda.id,destination,query,research,stageResult,searchBank,publicPublication:destination==="front"};
 }
 function summary(rows){
   const out={total:rows.length,stages:{},sections:{}};
@@ -244,7 +293,7 @@ exports.handler=async function(event){
       }
       return json(200,{
         ok:true,version:VERSION,sourceRef:SOURCE_REF,
-        sections:Policy.SECTIONS.map(k=>({key:k,label:Policy.SECTION_LABELS[k],capacity:CAPACITY[k]||80})),
+        sections:Policy.SECTIONS.map(k=>({key:k,label:Policy.SECTION_LABELS[k],capacity:CAPACITY[k]||80,researchFrame:Policy.researchFrameFor?Policy.researchFrameFor(k):null})),
         summary:summary(rows),items:rows,publicPublication:false,
         storage:{available:!storageError,error:storageError||null,degraded:!!storageError}
       });
@@ -278,12 +327,27 @@ exports.handler=async function(event){
     const stageMap={move_to_queue:"queue",queue:"queue",front_candidate:"front_candidate",move_to_front:"front_candidate",publish:"published",published:"published",hold:"hold",exclude:"excluded",restore:"queue",research_stage:"research"};
     if(stageMap[action]){
       if(!ids.length){const e=new Error("처리할 후보를 선택해 주세요.");e.statusCode=400;throw e;}
-      const results=await updateStage(ids,stageMap[action],actor,text(body.note)); return json(200,{ok:true,version:VERSION,action,stage:stageMap[action],results,publicPublication:stageMap[action]==="published"});
+      const results=await updateStage(ids,stageMap[action],actor,text(body.note));
+      let searchBank=null;
+      if(stageMap[action]==="published"){
+        const affected=await sectionsForIds(ids);
+        const reports=[];
+        for(const sec of affected){reports.push(await applyResearchFrameToSearchBank(event,sec,"",body.limit||80));}
+        searchBank={ok:reports.some(r=>r&&r.ok),reports};
+      }
+      return json(200,{ok:true,version:VERSION,action,stage:stageMap[action],results,searchBank,publicPublication:stageMap[action]==="published"});
     }
     if(action==="ai_front_candidates"||action==="ai_auto_match"){
       const section=lower(body.section)==="all"?"all":Policy.normalizeSection(body.section||"all")||"all";
       const target=action==="ai_auto_match"?"published":"front_candidate";
-      const result=await autoStage(section,target,actor); return json(200,{ok:true,version:VERSION,action,targetStage:target,result,publicPublication:target==="published"});
+      const result=await autoStage(section,target,actor);
+      const searchBank=target==="published"?await applyResearchFrameToSearchBank(event,section,"",body.limit||80):null;
+      return json(200,{ok:true,version:VERSION,action,targetStage:target,result,searchBank,publicPublication:target==="published"});
+    }
+    if(action==="searchbank_apply"){
+      const section=lower(body.section)==="all"?"all":Policy.normalizeSection(body.section||"all")||"all";
+      const searchBank=await applyResearchFrameToSearchBank(event,section,text(body.query),body.limit||80);
+      return json(200,{ok:true,version:VERSION,action,searchBank,publicPublication:false});
     }
     return json(400,{ok:false,error:"unsupported_action"});
   }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null,version:VERSION});}

@@ -6,7 +6,10 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.1.0-admin-directed-research";
+const VERSION = "donation-research-policy-v1.1.0-searchbank-frame";
+
+let RESEARCH_FRAME = null;
+try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
 
 const SECTIONS = Object.freeze([
   "donation-global",
@@ -56,113 +59,83 @@ const POLICY = Object.freeze({
   "donation-global": {
     category:"global",
     researchTerms:[
-      "latest humanitarian disaster earthquake flood wildfire conflict refugee hunger children health climate emergency video field report",
-      "breaking earthquake flood wildfire famine refugee civilian aid humanitarian response video official news",
-      "humanitarian crisis environment climate disaster relief children water sanitation health education current video"
+      "humanitarian crisis disaster conflict displacement hunger children climate emergency video",
+      "earthquake flood wildfire famine refugee civilian aid field report video",
+      "humanitarian response children health education water sanitation climate impact footage"
     ],
     semanticHints:[
       "humanitarian","crisis","disaster","earthquake","flood","wildfire","drought","famine","hunger","food insecurity",
       "refugee","displacement","displaced","civilian","conflict","war","children","child","orphan","health","hospital",
       "education","school","water","sanitation","climate","environment","emergency","relief","aid","response","field report",
-      "video","footage","broadcast","report","update","breaking","latest"
+      "video","footage","broadcast","report","update"
     ],
-    preferredKinds:["video","broadcast","article","feed_item"],
-    videoPreferred:true,
-    freshnessHours:48
+    preferredKinds:["video","article","feed_item"],
+    videoPreferred:true
   },
   "donation-ngo": {
     category:"ngo",
     researchTerms:[
-      "KOICA United Nations UNDP UNICEF international development aid NGO official website",
-      "Good Neighbors international NGO humanitarian development poverty official organization",
-      "international NGO public aid agency nonprofit humanitarian development global official website"
+      "international NGO nonprofit humanitarian development official organization",
+      "UN agency international humanitarian organization charity development official",
+      "global nonprofit aid development organization official website"
     ],
-    semanticHints:[
-      "ngo","nonprofit","non-profit","charity","foundation","association","humanitarian","development","international",
-      "united nations","un agency","public aid","development agency","official organization","poverty","food security","global aid",
-      "koica","good neighbors","undp","unicef","unhcr"
-    ],
-    preferredKinds:["organization","institution","official_site"]
+    semanticHints:["ngo","nonprofit","non-profit","charity","foundation","association","humanitarian","development","international","united nations","un agency","aid organization"]
   },
   "donation-mission": {
     category:"mission",
     researchTerms:[
-      "Lausanne Movement PAUA Pan Asia Africa Universities Association Protestant evangelical mission official",
-      "Campus Crusade for Christ CCC InterVarsity IVF Child Evangelism Fellowship mission official",
-      "Protestant evangelical Christian mission organization campus ministry Bible mission official local country"
+      "Protestant evangelical Christian mission organization international official",
+      "evangelical mission agency missions ministry Protestant official",
+      "Christian medical mission campus mission Bible mission Protestant organization"
     ],
-    semanticHints:[
-      "protestant","evangelical","christian mission","missions","mission agency","gospel","evangelism","missionary","campus ministry",
-      "bible translation","medical mission","church mission","lausanne","paua","campus crusade","ccc","intervarsity","ivf","child evangelism fellowship"
-    ],
-    excludedHints:["catholic","roman catholic","orthodox church","mosque","islamic mission","temple","hindu mission","new religious movement","cult"],
-    preferredKinds:["organization","institution","official_site"],
-    ipLocalized:true
+    semanticHints:["protestant","evangelical","christian mission","missions","mission agency","gospel","evangelism","missionary","campus ministry","bible translation","medical mission","church mission"],
+    excludedHints:["catholic","roman catholic","orthodox church","mosque","islamic mission","temple","hindu mission","new religious movement","cult"]
   },
   "donation-service": {
     category:"service",
     researchTerms:[
-      "Christian volunteer service organization community medical housing clean water official website",
-      "Habitat for Humanity Christian volunteer community service official organization",
-      "faith based volunteer service medical housing wells community development organization official"
+      "Christian volunteer service organization housing wells medical community official",
+      "faith based volunteer humanitarian service organization official",
+      "volunteer medical housing clean water community development organization"
     ],
-    semanticHints:[
-      "volunteer","service","community","medical","health","housing","habitat","well","clean water","water project","community development",
-      "welfare","support","shelter","volunteer corps","service organization","faith based"
-    ],
-    preferredKinds:["organization","institution","official_site"]
+    semanticHints:["volunteer","service","community","medical","health","housing","habitat","well","clean water","water project","community development","welfare","support","shelter"]
   },
   "donation-relief": {
     category:"relief",
     researchTerms:[
-      "World Vision Food for the Hungry Samaritan's Purse humanitarian relief official website",
-      "Christian relief disaster emergency hunger refugee organization official",
-      "emergency relief famine food security disaster response refugee aid official organization"
+      "humanitarian relief disaster emergency hunger refugee organization official",
+      "Christian relief organization disaster response food aid refugee official",
+      "emergency relief famine food security disaster response organization"
     ],
-    semanticHints:[
-      "relief","disaster","emergency","humanitarian","rescue","famine","hunger","food aid","food security","refugee","displacement",
-      "earthquake","flood","war relief","disaster response","world vision","food for the hungry","samaritan's purse"
-    ],
-    preferredKinds:["organization","institution","official_site"]
+    semanticHints:["relief","disaster","emergency","humanitarian","rescue","famine","hunger","food aid","food security","refugee","displacement","earthquake","flood","war relief","disaster response"]
   },
   "donation-education": {
     category:"education",
     researchTerms:[
-      "4/14 Window Christian education children youth mission official organization",
-      "Christian education mission university children literacy scholarship training official",
-      "international Christian education nonprofit school youth student campus training official"
+      "Christian education mission university children literacy organization official",
+      "international education nonprofit school youth student training official",
+      "campus ministry education literacy university mission organization"
     ],
-    semanticHints:[
-      "education","school","student","youth","child","children","scholarship","university","college","training","literacy","campus","teacher","learning",
-      "4/14 window","four fourteen window","christian education"
-    ],
-    preferredKinds:["organization","institution","official_site"]
+    semanticHints:["education","school","student","youth","child","children","scholarship","university","college","training","literacy","campus","teacher","learning"]
   },
   "donation-environment": {
     category:"environment",
     researchTerms:[
-      "A Rocha Christian environmental conservation creation care official organization",
-      "Plant With Purpose Christian reforestation poverty environment official organization",
-      "Christian environmental stewardship conservation reforestation clean water biodiversity official"
+      "Christian environmental stewardship conservation reforestation organization official",
+      "faith based creation care climate conservation tree planting nonprofit",
+      "Christian conservation reforestation biodiversity clean water stewardship organization"
     ],
-    semanticHints:[
-      "environment","creation care","stewardship","climate","forest","reforestation","tree planting","ocean","wildlife","conservation","biodiversity",
-      "sustainability","clean water","a rocha","plant with purpose"
-    ],
-    excludedHints:["political campaign","party campaign","election campaign","partisan"],
-    preferredKinds:["organization","institution","official_site"]
+    semanticHints:["environment","creation care","stewardship","climate","forest","reforestation","tree planting","ocean","wildlife","conservation","biodiversity","sustainability","clean water"],
+    excludedHints:["political campaign","party campaign","election campaign","partisan"]
   },
   "donation-others": {
     category:"others",
     researchTerms:[
-      "Christian nonprofit vulnerable people disability anti trafficking prison ministry official organization",
-      "faith based nonprofit legal aid human rights persecution family support official organization",
-      "international Christian charity vulnerable community disability justice elderly widow orphan official"
+      "Christian nonprofit vulnerable people justice prison disability official organization",
+      "faith based nonprofit legal aid human rights trafficking prison ministry official",
+      "international charity vulnerable community disability justice organization official"
     ],
-    semanticHints:[
-      "justice","legal aid","prison","prisoner","trafficking","disability","vulnerable","human rights","persecution","family support","elderly","widow","orphan","faith based","christian nonprofit"
-    ],
-    preferredKinds:["organization","institution","official_site"]
+    semanticHints:["justice","legal aid","prison","prisoner","trafficking","disability","vulnerable","human rights","persecution","family support","elderly","widow","orphan"]
   }
 });
 
@@ -182,9 +155,23 @@ function categoryForSection(value){
   const section = normalizeSection(value);
   return section && POLICY[section] ? POLICY[section].category : "ngo";
 }
+function researchFrameFor(value){
+  const section = normalizeSection(value) || "donation-ngo";
+  const sections = plain(RESEARCH_FRAME && RESEARCH_FRAME.sections);
+  const frame = plain(sections[section]);
+  return {
+    section,
+    primaryQuery:text(frame.primaryQuery),
+    freshnessHours:Number(frame.freshnessHours||0)||0,
+    preferVideo:frame.preferVideo===true,
+    localizeByIp:frame.localizeByIp===true,
+    anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({name:text(a&&a.name),query:text(a&&a.query)})).filter(a=>a.name||a.query) : []
+  };
+}
 function policyFor(value){
   const section = normalizeSection(value) || "donation-ngo";
-  return Object.assign({ section, label:SECTION_LABELS[section] || section, researchTerms:[], semanticHints:[], excludedHints:[], preferredKinds:["organization","institution","campaign","article"] }, POLICY[section] || {});
+  const frame = researchFrameFor(section);
+  return Object.assign({ section, label:SECTION_LABELS[section] || section, researchTerms:[], semanticHints:[], excludedHints:[], preferredKinds:["organization","institution","campaign","article"] }, POLICY[section] || {}, { researchFrame:frame });
 }
 function recordText(record){
   const r=plain(record), source=plain(r.source), org=plain(r.org), entity=plain(r.entity), media=plain(r.media), collector=plain(r.collector);
@@ -267,9 +254,16 @@ function inferSection(record, fallback){
   return best;
 }
 function queryTerms(sectionValue, customQuery){
-  const policy=policyFor(sectionValue); const custom=text(customQuery);
-  if(custom) return unique([custom].concat(policy.researchTerms.slice(0,2)));
-  return policy.researchTerms.slice();
+  const policy=policyFor(sectionValue), frame=policy.researchFrame||researchFrameFor(sectionValue), custom=text(customQuery);
+  const frameTerms=[];
+  if(frame.primaryQuery) frameTerms.push(frame.primaryQuery);
+  (frame.anchors||[]).forEach(a=>{ if(a.query) frameTerms.push(a.query); });
+  const base=unique(frameTerms.concat(policy.researchTerms||[]));
+  if(custom) return unique([custom].concat(base));
+  return base;
+}
+function researchAnchors(sectionValue){
+  return researchFrameFor(sectionValue).anchors.slice();
 }
 function isPlaceholder(record){
   const r=plain(record), blob=recordText(r), urls=candidateUrls(r);
@@ -308,6 +302,6 @@ function youtubeThumbnail(record){
 }
 
 module.exports={
-  VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,
+  VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,researchFrameFor,researchAnchors,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,
   missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls
 };
