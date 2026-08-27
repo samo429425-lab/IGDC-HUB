@@ -238,8 +238,36 @@ function groupBySection(items){
   return map;
 }
 
+  function isSeedItem(it){
+    const source = String(it?.meta?.source || '').toLowerCase();
+    const status = String(it?.verify?.status || '').toLowerCase();
+    const hasBankRecord = !!(it?.bank_ref && it.bank_ref.record_id);
+    return !hasBankRecord && (source === 'seed' || source === 'sample' || status === 'sample');
+  }
+
+  function seedOrdinal(it){
+    const raw = String(it?.uid || it?.id || it?.org?.name || it?.title || '');
+    const matches = raw.match(/(\d+)(?!.*\d)/);
+    if(!matches) return Number.MAX_SAFE_INTEGER;
+    const n = Number(matches[1]);
+    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+  }
+
   function sortSection(items){
     return (Array.isArray(items) ? items : []).sort((a,b)=>{
+      const aSeed = isSeedItem(a);
+      const bSeed = isSeedItem(b);
+
+      // Real SearchBank content always keeps the existing score/rank priority.
+      if(aSeed !== bSeed) return aSeed ? 1 : -1;
+
+      // Seed/sample cards are only placeholders: keep their visible slot order 1,2,3...
+      if(aSeed && bSeed){
+        const an = seedOrdinal(a);
+        const bn = seedOrdinal(b);
+        if(an !== bn) return an - bn;
+      }
+
       if((b.__score || 0) !== (a.__score || 0)){
         return (b.__score || 0) - (a.__score || 0);
       }
