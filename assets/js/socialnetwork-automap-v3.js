@@ -241,6 +241,27 @@
     return sec;
   }
 
+  function hasCompleteMainRows(snapshot) {
+    const sections = getSections(snapshot);
+    if (!sections) return false;
+
+    // A durable release that resolves successfully but contains empty Social rows
+    // must never wipe all nine front rails. Treat it as unavailable and fall back
+    // to the already-published canonical Social snapshot. Social remains isolated:
+    // no Media/Distribution snapshot is used here.
+    return Array.from(MANAGED_MAIN_KEYS).every(function (key) {
+      const raw = sections[key];
+      const list = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw && raw.items)
+          ? raw.items
+          : Array.isArray(raw && raw.slots)
+            ? raw.slots
+            : [];
+      return list.length > 0;
+    });
+  }
+
   function languageKey(value) {
     var raw = safeText(value).replace(/_/g, "-").toLowerCase();
     if (raw === "zh-hans" || raw === "zh-cn" || raw === "zh-sg") return "zh";
@@ -364,6 +385,7 @@
       const payload = await res.json();
       if (!payload || payload.ok !== true || !payload.snapshot) return null;
       if (payload.hashVerified === false) return null;
+      if (!hasCompleteMainRows(payload.snapshot)) return null;
       return {
         snapshot: payload.snapshot,
         pipeline: {
