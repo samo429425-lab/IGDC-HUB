@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.4.1 - administrator thumbnail continuity */
+/* IGDC Social Hub Content Operations v3.5.0 - differentiated publish reports + deploy dedupe awareness */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -2095,7 +2095,7 @@
           "SearchBank 실후보를 관리자 후보 목록으로 반입하고 있습니다.",
         "warn",
       );
-      var body = { action: "import_searchbank", limit: 3000 };
+      var body = { action: "import_searchbank", limit: 5000 };
       if (sectionKey) body.sectionKey = sectionKey;
       var d = await post(PIPELINE, body);
       diagnostic(d);
@@ -2632,16 +2632,22 @@
     )
       return false;
 
-    return actualApply("", true, registeredIds);
+    return actualApply("", true, registeredIds, "selected_content_front_publish", keys);
   }
 
-  async function actualApplyAllRegistered(skipConfirm) {
+  async function actualApplyAllRegistered(skipConfirm, publishMode) {
     var repaired = await repairLegacyFrontUnpublishHolds("");
     if (repaired) await refresh();
     var ids = registeredContentIds("");
     if (!ids.length)
       return show("SearchBank 인계 가능한 최신 콘텐츠 후보가 없습니다.", "warn");
-    return actualApply("", skipConfirm === true, ids);
+    return actualApply(
+      "",
+      skipConfirm === true,
+      ids,
+      publishMode || "all_sections_front_publish",
+      order.slice(),
+    );
   }
 
   async function actualApplySelectedFrontSections() {
@@ -2657,7 +2663,7 @@
     ids = Array.from(new Set(ids));
     if (!ids.length) return show("선택한 SNS 섹션에 SearchBank 인계 가능한 후보가 없습니다.", "warn");
     if (!confirm(keys.map(label).join(", ") + " 섹션의 후보 " + ids.length + "개를 프론트 등록 대상으로 보낼까요?")) return false;
-    return actualApply("", true, ids);
+    return actualApply("", true, ids, "selected_sections_front_publish", keys);
   }
 
   async function actualUnapplySelectedFrontSections() {
@@ -2708,7 +2714,7 @@
           "warn",
         );
       }
-      return actualApply(sectionKey, skipConfirm, selectedInSection);
+      return actualApply(sectionKey, skipConfirm, selectedInSection, "single_section_front_publish", [sectionKey]);
     }
     var allRegistered = registeredContentIds(sectionKey);
     if (!allRegistered.length) {
@@ -2719,10 +2725,22 @@
       );
       return false;
     }
-    return actualApply(sectionKey, skipConfirm, null);
+    return actualApply(sectionKey, skipConfirm, null, "single_section_front_publish", [sectionKey]);
   }
 
-  async function actualApply(sectionKey, skipConfirm, exactIds) {
+  function publishResultFileName(mode) {
+    var stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    var names = {
+      social_full_run: "igdc-social-full-run-result-",
+      selected_sections_front_publish: "igdc-social-selected-sections-front-publish-result-",
+      all_sections_front_publish: "igdc-social-all-sections-front-publish-result-",
+      selected_content_front_publish: "igdc-social-selected-content-front-publish-result-",
+      single_section_front_publish: "igdc-social-single-section-front-publish-result-",
+    };
+    return (names[mode] || "igdc-social-front-publish-result-") + stamp + ".json";
+  }
+
+  async function actualApply(sectionKey, skipConfirm, exactIds, publishMode, requestedSections) {
     var target = sectionKey ? label(sectionKey) : "전체 9개 섹션",
       scope = currentScope(),
       scopeName =
@@ -2733,7 +2751,18 @@
         "전 세계 공통",
       requestedIds = Array.isArray(exactIds)
         ? Array.from(new Set(exactIds.map(text).filter(Boolean)))
-        : [];
+        : [],
+      actionMode = text(publishMode) ||
+        (sectionKey ? "single_section_front_publish" : "all_sections_front_publish"),
+      actionSections = Array.from(new Set(
+        (Array.isArray(requestedSections) && requestedSections.length
+          ? requestedSections
+          : sectionKey
+            ? [sectionKey]
+            : order.slice())
+          .map(text)
+          .filter(function (key) { return order.indexOf(key) >= 0; })
+      ));
 
     if (requestedIds.length) {
       var unresolved = requestedIds.filter(function (id) {
@@ -2798,6 +2827,8 @@
         countryCode: scope.countryCode,
         scopeMode: scopeMode(),
         regionId: text($("collectorRegion").value),
+        publishMode: actionMode,
+        requestedSections: actionSections,
       };
       if (requestedIds.length) body.candidateIds = requestedIds;
 
@@ -2830,7 +2861,7 @@
           "실제 적용 후보는 확인됐지만 SearchBank 반영 빌드가 접수되지 않았습니다.",
         );
 
-      download("igdc-social-actual-apply-result.json", d);
+      download(publishResultFileName(actionMode), d);
       diagnostic(d);
 
       var verifyQ = new URLSearchParams({
@@ -2843,14 +2874,23 @@
       diagnostic({ actualApply: d, searchBankHandoff: verify });
 
       if ($("frontApplyState"))
-        $("frontApplyState").textContent =
-          d.buildTrigger && d.buildTrigger.ok
+        $("frontApplyState").textContent = d.noChange === true
+          ? "변경 없음 · 중복 배포 생략"
+          : d.buildTrigger && d.buildTrigger.ok
             ? (d.releaseStoredVerified
                 ? "승인본 저장 · SearchBank 빌드 접수"
                 : "게시 계획 확정 · SearchBank 빌드 접수")
             : "SearchBank 빌드 대기";
 
-      if (d.buildTrigger && d.buildTrigger.ok) {
+      if (d.noChange === true) {
+        show(
+          scopeName +
+            " 범위의 " +
+            applyLabel +
+            " 결과가 마지막 정상 게시본과 동일하여 새 Release 저장과 Netlify 중복 배포를 생략했습니다.",
+          "ok",
+        );
+      } else if (d.buildTrigger && d.buildTrigger.ok) {
         show(
           scopeName +
             " 범위의 " +
@@ -3115,11 +3155,18 @@
       openDetailSection = keys[0];
       await refresh();
       if ($("aiAutomationApply") && $("aiAutomationApply").checked) {
-        if (statusEl) statusEl.textContent = "프론트 실제 적용 중";
-        for (var a = 0; a < keys.length; a++) {
-          var applied = await actualApply(keys[a], true);
-          if (!applied) throw new Error(label(keys[a]) + " 프론트 실제 적용을 완료하지 못했습니다.");
-        }
+        if (statusEl) statusEl.textContent = "프론트 실제 적용 중 · 단일 배포";
+        var applyIds = [];
+        keys.forEach(function (key) { applyIds = applyIds.concat(registeredContentIds(key)); });
+        applyIds = Array.from(new Set(applyIds.map(text).filter(Boolean)));
+        if (!applyIds.length) throw new Error("프론트 등록 가능한 콘텐츠가 없습니다.");
+        var autoMode = keys.length === order.length
+          ? "social_full_run"
+          : keys.length === 1
+            ? "single_section_front_publish"
+            : "selected_sections_front_publish";
+        var applied = await actualApply("", true, applyIds, autoMode, keys);
+        if (!applied) throw new Error("AI 자동 운영 프론트 실제 적용을 완료하지 못했습니다.");
       }
       if (statusEl) statusEl.textContent = "완료 · " + keys.length + "개 SNS";
       show(keys.map(label).join(", ") + " AI 자동 운영을 완료했습니다.", "ok");
@@ -3415,12 +3462,16 @@
     // Critical publication control is bound first.  The final front apply must
     // remain usable even if a non-critical admin control later fails to bind.
     if ($("publishAllBtn")) {
-      $("publishAllBtn").onclick = function () { return actualApplyAllRegistered(false); };
+      $("publishAllBtn").onclick = function () {
+        return actualApplyAllRegistered(false, "all_sections_front_publish");
+      };
     }
     if ($("publishSelectedSectionsBtn")) {
       $("publishSelectedSectionsBtn").onclick = actualApplySelectedSections;
     }
-    if ($("socialFullRunBtn")) $("socialFullRunBtn").onclick = function () { return actualApplyAllRegistered(false); };
+    if ($("socialFullRunBtn")) $("socialFullRunBtn").onclick = function () {
+      return actualApplyAllRegistered(false, "social_full_run");
+    };
     if ($("socialFullCancelBtn")) $("socialFullCancelBtn").onclick = function () { return actualUnapplyAll(""); };
     if ($("selectAllFrontSectionsBtn")) $("selectAllFrontSectionsBtn").onclick = function () { setFrontSectionSelection(order, true); };
     if ($("clearFrontSectionsBtn")) $("clearFrontSectionsBtn").onclick = function () { setFrontSectionSelection(order, false); };

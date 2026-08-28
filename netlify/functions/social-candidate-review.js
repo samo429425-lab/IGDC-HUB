@@ -17,8 +17,8 @@ let SocialStore = null;
 try { SocialStore = require("./lib/social-candidate-store.v1"); } catch (_error) { SocialStore = null; }
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-candidate-review-api-v1.2.1-thumbnail-preservation";
-const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager"]);
+const VERSION = "social-candidate-review-api-v1.2.2-real-recovery-only";
+const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager", "media_manager", "commerce_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
 function lower(value) { return text(value).toLowerCase().replace(/\s+/g, "_"); }
@@ -98,6 +98,17 @@ function snapshotIdentity(item) {
   const audit = raw.audit && typeof raw.audit === "object" ? raw.audit : {};
   return text(first(audit,["candidate_id","candidateId"]) || first(raw,["candidateId","candidate_id","contentId","content_id","id","sourceUrl","source_url","url","link","href"]));
 }
+function recoverablePublishedItem(item) {
+  const raw = item && typeof item === "object" ? item : {};
+  const id = lower(first(raw,["id","candidateId","candidate_id","contentId","content_id"]));
+  const title = lower(first(raw,["title","name","label","channelName","author"]));
+  const sourceUrl = text(first(raw,["source_url","sourceUrl","url","link","href","permalink"]));
+  const rawMeta = raw.raw && typeof raw.raw === "object" ? raw.raw : {};
+  if (/^ph[_:-]/.test(id) || raw.placeholder === true || rawMeta.placeholder === true) return false;
+  if (!sourceUrl || sourceUrl === "#" || !/^https:\/\//i.test(sourceUrl)) return false;
+  if (/^(loading(?:…|\.\.\.)?|placeholder|sample|준비\s*중)$/.test(title)) return false;
+  return true;
+}
 function recoveredRow(item, sectionKey, index, assetClass) {
   const raw = item && typeof item === "object" ? item : {};
   const id = text(first(raw, ["id","candidateId","candidate_id","contentId","content_id","uuid"])) ||
@@ -141,9 +152,11 @@ function rowsFromPublishedSnapshot(doc) {
   const out = [];
   const seen = new Set();
   sectionKeys().forEach((sectionKey) => {
-    const pool = Array.isArray(candidatePool && candidatePool[sectionKey]) ? candidatePool[sectionKey] : [];
+    const poolRaw = Array.isArray(candidatePool && candidatePool[sectionKey]) ? candidatePool[sectionKey] : [];
+    const pool = poolRaw.filter(recoverablePublishedItem);
     const visibleRaw = sections && sections[sectionKey];
-    const visible = Array.isArray(visibleRaw) ? visibleRaw : (Array.isArray(visibleRaw && visibleRaw.items) ? visibleRaw.items : []);
+    const visibleAll = Array.isArray(visibleRaw) ? visibleRaw : (Array.isArray(visibleRaw && visibleRaw.items) ? visibleRaw.items : []);
+    const visible = visibleAll.filter(recoverablePublishedItem);
     const visibleByIdentity = new Map();
     visible.forEach((item) => {
       const key = snapshotIdentity(item);
@@ -199,7 +212,7 @@ async function candidateSnapshot(root) {
   if (SocialStore && typeof SocialStore.selectCandidates === "function") {
     try {
       SocialStore.config();
-      const rows = await SocialStore.selectCandidates("select=*&order=updated_at.desc&limit=3000");
+      const rows = await SocialStore.selectCandidates("select=*&order=updated_at.desc&limit=10000");
       if (Array.isArray(rows) && rows.length) {
         return { file: "supabase:" + (SocialStore.CANDIDATE_TABLE || "social_candidates"), sourceMode: "supabase", storeError: null, rows };
       }

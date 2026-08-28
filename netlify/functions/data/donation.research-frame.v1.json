@@ -6,7 +6,12 @@
   "policy": {
     "requireOfficialHttps": true,
     "preferHomepageRepresentativeImage": true,
-    "representativeImageOrder": ["og:image", "twitter:image", "search-thumbnail", "organization-logo"],
+    "representativeImageOrder": [
+      "og:image",
+      "twitter:image",
+      "search-thumbnail",
+      "organization-logo"
+    ],
     "seedIsFallbackOnly": true,
     "searchBankOwnsDiscoveryAndSnapshot": true
   },
@@ -17,94 +22,303 @@
       "preferVideo": true,
       "localizeByIp": false,
       "anchors": [
-        {"name":"UN OCHA / ReliefWeb","query":"ReliefWeb OCHA latest humanitarian emergency disaster official video"},
-        {"name":"UN News","query":"UN News latest humanitarian crisis disaster official video"},
-        {"name":"UNICEF Emergencies","query":"UNICEF emergencies latest children humanitarian official video"},
-        {"name":"UNHCR Emergencies","query":"UNHCR emergencies refugees displacement latest official video"},
-        {"name":"World Food Programme","query":"WFP emergency hunger famine latest official video"},
-        {"name":"IFRC","query":"IFRC disaster response earthquake flood latest official video"}
-      ]
+        {
+          "name": "UN OCHA / ReliefWeb",
+          "query": "ReliefWeb OCHA latest humanitarian emergency disaster official video"
+        },
+        {
+          "name": "UN News",
+          "query": "UN News latest humanitarian crisis disaster official video"
+        },
+        {
+          "name": "UNICEF Emergencies",
+          "query": "UNICEF emergencies latest children humanitarian official video"
+        },
+        {
+          "name": "UNHCR Emergencies",
+          "query": "UNHCR emergencies refugees displacement latest official video"
+        },
+        {
+          "name": "World Food Programme",
+          "query": "WFP emergency hunger famine latest official video"
+        },
+        {
+          "name": "IFRC",
+          "query": "IFRC disaster response earthquake flood latest official video"
+        }
+      ],
+      "psomKey": "donation-global",
+      "psomLabel": "Global News",
+      "psomKeywords": [
+        "donation",
+        "news",
+        "humanitarian",
+        "emergency"
+      ],
+      "policyPurpose": "최신 재난·구호·인도주의 이슈, 영상 우선, 48시간 신선도"
     },
     "donation-ngo": {
       "primaryQuery": "international NGO development humanitarian public aid organization official website homepage",
       "localizeByIp": false,
       "anchors": [
-        {"name":"KOICA","query":"KOICA Korea International Cooperation Agency official website"},
-        {"name":"Good Neighbors International","query":"Good Neighbors International official website"},
-        {"name":"UNICEF","query":"UNICEF official website international children aid"},
-        {"name":"UNHCR","query":"UNHCR official website refugee agency"},
-        {"name":"World Food Programme","query":"World Food Programme WFP official website"},
-        {"name":"IFRC","query":"International Federation Red Cross Red Crescent IFRC official website"}
-      ]
+        {
+          "name": "KOICA",
+          "query": "KOICA Korea International Cooperation Agency official website"
+        },
+        {
+          "name": "Good Neighbors International",
+          "query": "Good Neighbors International official website"
+        },
+        {
+          "name": "UNICEF",
+          "query": "UNICEF official website international children aid"
+        },
+        {
+          "name": "UNHCR",
+          "query": "UNHCR official website refugee agency"
+        },
+        {
+          "name": "World Food Programme",
+          "query": "World Food Programme WFP official website"
+        },
+        {
+          "name": "IFRC",
+          "query": "International Federation Red Cross Red Crescent IFRC official website"
+        }
+      ],
+      "psomKey": "donation-ngo",
+      "psomLabel": "NGO",
+      "psomKeywords": [
+        "ngo",
+        "donation",
+        "nonprofit",
+        "public aid"
+      ],
+      "policyPurpose": "국제 NGO·공공원조·국제기구 공식 홈페이지"
     },
     "donation-mission": {
       "primaryQuery": "Protestant evangelical Christian mission organization international official website homepage",
       "localizeByIp": true,
       "anchors": [
-        {"name":"Lausanne Movement","query":"Lausanne Movement official website evangelical mission"},
-        {"name":"PAUA","query":"PAUA Pan Asia Africa Universities Association Christian official website"},
-        {"name":"Cru / Campus Crusade for Christ","query":"Cru Campus Crusade for Christ official website"},
-        {"name":"InterVarsity / IVF","query":"InterVarsity Christian Fellowship IVF official website"},
-        {"name":"Child Evangelism Fellowship","query":"Child Evangelism Fellowship official website"},
-        {"name":"Wycliffe Bible Translators","query":"Wycliffe Bible Translators official website"},
-        {"name":"Youth With A Mission","query":"YWAM Youth With A Mission official website"}
-      ]
+        {
+          "name": "Lausanne Movement",
+          "query": "Lausanne Movement official website evangelical mission"
+        },
+        {
+          "name": "PAUA",
+          "query": "PAUA Pan Asia Africa Universities Association Christian official website"
+        },
+        {
+          "name": "Cru / Campus Crusade for Christ",
+          "query": "Cru Campus Crusade for Christ official website"
+        },
+        {
+          "name": "InterVarsity / IVF",
+          "query": "InterVarsity Christian Fellowship IVF official website"
+        },
+        {
+          "name": "Child Evangelism Fellowship",
+          "query": "Child Evangelism Fellowship official website"
+        },
+        {
+          "name": "Wycliffe Bible Translators",
+          "query": "Wycliffe Bible Translators official website"
+        },
+        {
+          "name": "Youth With A Mission",
+          "query": "YWAM Youth With A Mission official website"
+        }
+      ],
+      "psomKey": "donation-mission",
+      "psomLabel": "Mission",
+      "psomKeywords": [
+        "mission",
+        "donation",
+        "protestant",
+        "evangelical"
+      ],
+      "policyPurpose": "개신교·복음주의 선교기관 중심, 타종교·이단성 후보 제외"
     },
     "donation-service": {
       "primaryQuery": "Christian volunteer service medical housing clean water community organization official website homepage",
       "localizeByIp": true,
       "anchors": [
-        {"name":"Habitat for Humanity International","query":"Habitat for Humanity International official website Christian volunteer housing"},
-        {"name":"Medical Teams International","query":"Medical Teams International official website Christian medical volunteer"},
-        {"name":"Living Water International","query":"Living Water International official website Christian clean water"},
-        {"name":"World Servants","query":"Christian volunteer service international official website"},
-        {"name":"Korea church volunteer service","query":"Korea church volunteer service organization official website"}
-      ]
+        {
+          "name": "Habitat for Humanity International",
+          "query": "Habitat for Humanity International official website Christian volunteer housing"
+        },
+        {
+          "name": "Medical Teams International",
+          "query": "Medical Teams International official website Christian medical volunteer"
+        },
+        {
+          "name": "Living Water International",
+          "query": "Living Water International official website Christian clean water"
+        },
+        {
+          "name": "World Servants",
+          "query": "Christian volunteer service international official website"
+        },
+        {
+          "name": "Korea church volunteer service",
+          "query": "Korea church volunteer service organization official website"
+        }
+      ],
+      "psomKey": "donation-service",
+      "psomLabel": "Volunteer",
+      "psomKeywords": [
+        "volunteer",
+        "service",
+        "donation"
+      ],
+      "policyPurpose": "봉사·의료·주거·식수·지역사회 서비스 기관"
     },
     "donation-relief": {
       "primaryQuery": "Christian humanitarian relief disaster emergency hunger refugee organization official website homepage",
       "localizeByIp": false,
       "anchors": [
-        {"name":"World Vision International","query":"World Vision International official website humanitarian relief"},
-        {"name":"Food for the Hungry","query":"Food for the Hungry official website humanitarian relief"},
-        {"name":"Samaritan's Purse","query":"Samaritan's Purse official website disaster relief"},
-        {"name":"Tearfund","query":"Tearfund official website Christian humanitarian relief"},
-        {"name":"World Relief","query":"World Relief official website Christian humanitarian"},
-        {"name":"Compassion International","query":"Compassion International official website children relief"}
-      ]
+        {
+          "name": "World Vision International",
+          "query": "World Vision International official website humanitarian relief"
+        },
+        {
+          "name": "Food for the Hungry",
+          "query": "Food for the Hungry official website humanitarian relief"
+        },
+        {
+          "name": "Samaritan's Purse",
+          "query": "Samaritan's Purse official website disaster relief"
+        },
+        {
+          "name": "Tearfund",
+          "query": "Tearfund official website Christian humanitarian relief"
+        },
+        {
+          "name": "World Relief",
+          "query": "World Relief official website Christian humanitarian"
+        },
+        {
+          "name": "Compassion International",
+          "query": "Compassion International official website children relief"
+        }
+      ],
+      "psomKey": "donation-relief",
+      "psomLabel": "Relief",
+      "psomKeywords": [
+        "relief",
+        "donation",
+        "disaster",
+        "hunger",
+        "refugee"
+      ],
+      "policyPurpose": "재난·기아·난민·긴급구호 기관"
     },
     "donation-education": {
       "primaryQuery": "Christian education children youth university literacy training organization official website homepage",
       "localizeByIp": true,
       "anchors": [
-        {"name":"Association of Christian Schools International","query":"ACSI Association of Christian Schools International official website"},
-        {"name":"TeachBeyond","query":"TeachBeyond official website Christian education"},
-        {"name":"4/14 Window Movement","query":"4/14 Window Movement Christian children education official website"},
-        {"name":"PAUA Education","query":"PAUA Christian universities Asia Africa official website"},
-        {"name":"Cru Campus Ministry","query":"Cru campus ministry official website students"},
-        {"name":"InterVarsity Christian Fellowship","query":"InterVarsity Christian Fellowship official website students campus"}
-      ]
+        {
+          "name": "Association of Christian Schools International",
+          "query": "ACSI Association of Christian Schools International official website"
+        },
+        {
+          "name": "TeachBeyond",
+          "query": "TeachBeyond official website Christian education"
+        },
+        {
+          "name": "4/14 Window Movement",
+          "query": "4/14 Window Movement Christian children education official website"
+        },
+        {
+          "name": "PAUA Education",
+          "query": "PAUA Christian universities Asia Africa official website"
+        },
+        {
+          "name": "Cru Campus Ministry",
+          "query": "Cru campus ministry official website students"
+        },
+        {
+          "name": "InterVarsity Christian Fellowship",
+          "query": "InterVarsity Christian Fellowship official website students campus"
+        }
+      ],
+      "psomKey": "donation-education",
+      "psomLabel": "Education",
+      "psomKeywords": [
+        "education",
+        "donation",
+        "children",
+        "youth",
+        "university"
+      ],
+      "policyPurpose": "기독교 교육·아동·청소년·대학·문해·훈련 기관"
     },
     "donation-environment": {
       "primaryQuery": "Christian environmental stewardship conservation reforestation creation care organization official website homepage",
       "localizeByIp": false,
       "anchors": [
-        {"name":"A Rocha International","query":"A Rocha International official website Christian conservation"},
-        {"name":"Plant With Purpose","query":"Plant With Purpose official website Christian environmental restoration"},
-        {"name":"Creation Care organizations","query":"Christian creation care conservation nonprofit official website"},
-        {"name":"Christian reforestation organizations","query":"Christian reforestation stewardship nonprofit official website"}
-      ]
+        {
+          "name": "A Rocha International",
+          "query": "A Rocha International official website Christian conservation"
+        },
+        {
+          "name": "Plant With Purpose",
+          "query": "Plant With Purpose official website Christian environmental restoration"
+        },
+        {
+          "name": "Creation Care organizations",
+          "query": "Christian creation care conservation nonprofit official website"
+        },
+        {
+          "name": "Christian reforestation organizations",
+          "query": "Christian reforestation stewardship nonprofit official website"
+        }
+      ],
+      "psomKey": "donation-environment",
+      "psomLabel": "Environment",
+      "psomKeywords": [
+        "environment",
+        "donation",
+        "creation care",
+        "conservation"
+      ],
+      "policyPurpose": "환경·창조세계 돌봄·보전·재조림, 비정파성"
     },
     "donation-others": {
       "primaryQuery": "Christian nonprofit vulnerable people justice prison disability trafficking official organization website homepage",
       "localizeByIp": true,
       "anchors": [
-        {"name":"International Justice Mission","query":"International Justice Mission official website Christian justice trafficking"},
-        {"name":"Open Doors International","query":"Open Doors International official website persecuted Christians"},
-        {"name":"Prison Fellowship International","query":"Prison Fellowship International official website"},
-        {"name":"Christian disability ministry","query":"international Christian disability ministry official website"},
-        {"name":"Christian anti-trafficking organization","query":"Christian anti trafficking organization official website"}
-      ]
+        {
+          "name": "International Justice Mission",
+          "query": "International Justice Mission official website Christian justice trafficking"
+        },
+        {
+          "name": "Open Doors International",
+          "query": "Open Doors International official website persecuted Christians"
+        },
+        {
+          "name": "Prison Fellowship International",
+          "query": "Prison Fellowship International official website"
+        },
+        {
+          "name": "Christian disability ministry",
+          "query": "international Christian disability ministry official website"
+        },
+        {
+          "name": "Christian anti-trafficking organization",
+          "query": "Christian anti trafficking organization official website"
+        }
+      ],
+      "psomKey": "donation-others",
+      "psomLabel": "Others",
+      "psomKeywords": [
+        "others",
+        "donation",
+        "justice",
+        "disability",
+        "anti-trafficking"
+      ],
+      "policyPurpose": "기타 공익·정의·장애·교정·인신매매 방지 등"
     }
   }
 }

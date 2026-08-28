@@ -23,10 +23,39 @@ function regionCode(value, country) {
   return /^[A-Z0-9][A-Z0-9-]{0,15}$/.test(code) ? code : "";
 }
 
+function parseCountryList(value) {
+  if (Array.isArray(value)) return value.map(countryCode).filter(Boolean);
+  return text(value).split(/[|,\s]+/).map(countryCode).filter(Boolean);
+}
+
+function donationBlockedCountries() {
+  let raw = "";
+  try {
+    if (typeof Netlify !== "undefined" && Netlify.env && typeof Netlify.env.get === "function") {
+      raw = Netlify.env.get("MARU_DONATION_BLOCK_COUNTRIES") || "";
+    }
+  } catch (_) {}
+  try {
+    if (!raw && typeof Deno !== "undefined" && Deno.env && typeof Deno.env.get === "function") {
+      raw = Deno.env.get("MARU_DONATION_BLOCK_COUNTRIES") || "";
+    }
+  } catch (_) {}
+  try {
+    if (!raw && typeof process !== "undefined" && process.env) {
+      raw = process.env.MARU_DONATION_BLOCK_COUNTRIES || "";
+    }
+  } catch (_) {}
+
+  const set = new Set(parseCountryList(raw));
+  /* Keep the existing hard safety floor without replacing the configured OCS/SearchBank policy. */
+  set.add("KP");
+  return set;
+}
+
 export default async function handler(_request, context) {
   const geo = context && context.geo && typeof context.geo === "object" ? context.geo : {};
   const country = countryCode(geo.country || geo.countryCode || geo.country_code);
-  const excluded = country === "KP";
+  const excluded = !!country && donationBlockedCountries().has(country);
   const resolvedCountry = excluded ? "" : country;
   const region = resolvedCountry ? regionCode(
     geo.subdivision || geo.subdivisionCode || geo.regionCode || geo.stateCode || geo.provinceCode || geo.region || geo.state,

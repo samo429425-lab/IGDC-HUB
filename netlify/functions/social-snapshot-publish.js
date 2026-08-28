@@ -16,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.15.0-durable-state-recovery";
+  "social-snapshot-publish-v1.16.0-differentiated-report-deploy-dedupe";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -191,6 +191,79 @@ function candidateIdsFrom(params) {
     ),
   ).slice(0, 1000);
 }
+function requestedSectionsFrom(params, sectionKey) {
+  const raw = SocialStore.array(
+    params.requestedSections || params.sectionKeys || params.sections || [],
+  );
+  const normalized = Array.from(new Set(raw.map((value) =>
+    SocialStore.Policy.normalizeSectionKey(value),
+  ).filter((value) => SocialStore.Policy.ALLOWED_SECTIONS.has(value))));
+  if (normalized.length) return normalized;
+  if (sectionKey && SocialStore.Policy.ALLOWED_SECTIONS.has(sectionKey)) return [sectionKey];
+  return SocialStore.Policy.SECTION_KEYS.slice();
+}
+function publishModeFrom(params, sectionKey) {
+  const requested = text(params.publishMode || params.actionType || params.reportMode)
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  const allowed = new Set([
+    "social_full_run",
+    "selected_sections_front_publish",
+    "all_sections_front_publish",
+    "selected_content_front_publish",
+    "single_section_front_publish",
+  ]);
+  if (allowed.has(requested)) return requested;
+  return sectionKey ? "single_section_front_publish" : "all_sections_front_publish";
+}
+function publishReportType(mode) {
+  const map = {
+    social_full_run: "igdc-social-full-run-report",
+    selected_sections_front_publish: "igdc-social-selected-sections-front-publish-report",
+    all_sections_front_publish: "igdc-social-all-sections-front-publish-report",
+    selected_content_front_publish: "igdc-social-selected-content-front-publish-report",
+    single_section_front_publish: "igdc-social-single-section-front-publish-report",
+  };
+  return map[mode] || "igdc-social-front-publish-report";
+}
+function publicationPlanDiff(beforePlan, afterPlan) {
+  const before = beforePlan && typeof beforePlan === "object" ? beforePlan : {};
+  const after = afterPlan && typeof afterPlan === "object" ? afterPlan : {};
+  const sections = {};
+  const changedSections = [];
+  let addedTotal = 0;
+  let removedTotal = 0;
+  let retainedTotal = 0;
+  SocialStore.Policy.SECTION_KEYS.forEach((sectionKey) => {
+    const beforeIds = Array.from(new Set(SocialStore.array(before[sectionKey]).map(text).filter(Boolean)));
+    const afterIds = Array.from(new Set(SocialStore.array(after[sectionKey]).map(text).filter(Boolean)));
+    const beforeSet = new Set(beforeIds);
+    const afterSet = new Set(afterIds);
+    const added = afterIds.filter((id) => !beforeSet.has(id));
+    const removed = beforeIds.filter((id) => !afterSet.has(id));
+    const retained = afterIds.filter((id) => beforeSet.has(id));
+    if (added.length || removed.length) changedSections.push(sectionKey);
+    addedTotal += added.length;
+    removedTotal += removed.length;
+    retainedTotal += retained.length;
+    sections[sectionKey] = {
+      before: beforeIds.length,
+      after: afterIds.length,
+      addedCount: added.length,
+      removedCount: removed.length,
+      retainedCount: retained.length,
+      addedIds: added,
+      removedIds: removed,
+    };
+  });
+  return {
+    changed: changedSections.length > 0,
+    changedSections,
+    unchangedSections: SocialStore.Policy.SECTION_KEYS.filter((key) => !changedSections.includes(key)),
+    totals: { added: addedTotal, removed: removedTotal, retained: retainedTotal },
+    sections,
+  };
+}
 function buildHookSetting() {
   // The Social publisher triggers the same site build that runs the canonical
   // Social release -> SearchBank adapter -> Snapshot Engine chain. Reuse an
@@ -301,6 +374,10 @@ async function triggerCanonicalBuild(release, operation, route, handoff) {
         countryCode: text(route && route.countryCode).toUpperCase() || null,
         worldRegion: text(route && (route.worldRegion || route.regionId)) || null,
         operation: text(operation) || "publish",
+        publishMode: text(handoff && handoff.publishMode) || null,
+        requestedSections: Array.isArray(handoff && handoff.requestedSections)
+          ? handoff.requestedSections
+          : [],
         // Canonical publication manifest.  This is intentionally only the
         // candidate IDs per managed SNS section, not rendered card payload.
         // The Netlify build re-reads those exact approved candidates from the
@@ -707,6 +784,12 @@ exports.handler = async function (event) {
         allowedSections: SocialStore.Policy.SECTION_KEYS,
       });
     }
+    const publishMode = publishModeFrom(params, sectionKey);
+    const requestedSections = requestedSectionsFrom(params, sectionKey);
+    const omittedSections = SocialStore.Policy.SECTION_KEYS.filter(
+      (key) => !requestedSections.includes(key),
+    );
+    const reportType = publishReportType(publishMode);
     const route = CountryRouting.resolve(event, params);
     if (operation === "pipeline_diagnostic" || operation === "pipeline_verification") {
       const report = await runtimePipelineDiagnostic(route);
@@ -767,6 +850,12 @@ exports.handler = async function (event) {
       });
     }
     const base = await latestStoredBase(route);
+    const previousPublicationPlan = releasedIdsBySection(base.doc);
+    const previousPublicationPlanHash = SocialStore.sha256(previousPublicationPlan);
+    const hasDurablePreviousRelease = /^stored-current:/i.test(text(base.file));
+    const deployedBase = baseSnapshot();
+    const deployedPublicationPlan = releasedIdsBySection(deployedBase.doc);
+    const deployedPublicationPlanHash = SocialStore.sha256(deployedPublicationPlan);
     let rows = [];
     let unpublish = null;
     let snapshot;
@@ -855,6 +944,7 @@ exports.handler = async function (event) {
             : sectionKey
               ? "section_actual_apply:" + sectionKey
               : "all_social_sections_actual_apply") +
+          ";mode=" + publishMode +
           (params.notes ? ";" + params.notes : ""),
         1000,
       ),
@@ -866,6 +956,94 @@ exports.handler = async function (event) {
       (sum, list) => sum + (Array.isArray(list) ? list.length : 0),
       0,
     );
+    const publicationDiff = publicationPlanDiff(previousPublicationPlan, publicationPlan);
+
+    if (
+      publishMode === "selected_sections_front_publish" &&
+      publicationDiff.changedSections.some((key) => !requestedSections.includes(key))
+    ) {
+      return SocialStore.response(409, {
+        ok: false,
+        version: VERSION,
+        error: "selected_section_isolation_violation",
+        reportType,
+        actionType: publishMode,
+        requestedSections,
+        omittedSections,
+        changedSections: publicationDiff.changedSections,
+        publicationDiff,
+        preservedExistingFront: true,
+        buildQueued: false,
+        message: "선택하지 않은 SNS 섹션의 게시 계획까지 변경되는 것으로 계산되어 기존 프론트를 보존했습니다.",
+      });
+    }
+
+    // Same public candidate plan means the visible Social front would not change.
+    // Do not create another release row and do not spend a Netlify build for an
+    // identical publication. Metadata timestamps are intentionally ignored here;
+    // the canonical candidate-ID plan is the deployment identity.
+    if (
+      storeRelease &&
+      actualApplyOperation &&
+      !unpublishSelected &&
+      hasDurablePreviousRelease &&
+      publicationPlanHash === previousPublicationPlanHash &&
+      publicationPlanHash === deployedPublicationPlanHash
+    ) {
+      return SocialStore.response(200, {
+        ok: true,
+        version: VERSION,
+        reportType,
+        actionType: publishMode,
+        operation: "actual_front_apply",
+        effectiveOperation: "actual_front_apply",
+        appliedSection: sectionKey || null,
+        appliedAllSections: !sectionKey,
+        requestedSections,
+        omittedSections,
+        requestedCandidateIds: candidateIds.length,
+        exactCandidateSelectionApplied: candidateIds.length > 0,
+        resolvedCandidateRows: Array.isArray(rows) ? rows.length : 0,
+        resolvedCandidateIds: Array.isArray(rows)
+          ? rows.map((row) => SocialStore.text(row && row.id)).filter(Boolean)
+          : [],
+        approvedRows: Array.isArray(rows) ? rows.length : 0,
+        eligibleRows: eligible,
+        previousPublicationPlanHash,
+        deployedPublicationPlanHash,
+        publicationPlanHash,
+        publicationPlanCount,
+        publicationPlanBySection: Object.fromEntries(
+          Object.entries(publicationPlan).map(([key, list]) => [key, Array.isArray(list) ? list.length : 0]),
+        ),
+        publicationDiff,
+        noChange: true,
+        duplicateDeploymentPrevented: true,
+        deploymentRequired: false,
+        releaseStored: false,
+        releaseStoredVerified: false,
+        actualFrontApplyStored: false,
+        actualFrontApplyQueued: false,
+        actualApplyRequested: true,
+        storeReleaseRequested: true,
+        frontPublicationStatus: "unchanged_no_deploy",
+        buildHook: buildHookStatus(),
+        buildTrigger: {
+          ok: true,
+          status: "skipped_unchanged",
+          queued: false,
+          duplicateDeploymentPrevented: true,
+          message: "마지막 정상 Social 게시 계획과 동일하여 새 Release 저장 및 Netlify 배포를 생략했습니다.",
+        },
+        route,
+        safety: {
+          runtimeFileWrite: false,
+          preservedExistingFront: true,
+          duplicateNetlifyBuildPrevented: true,
+          sharedCommerceSearchBankMutation: false,
+        },
+      });
+    }
 
     // Fail closed before writing a stored release or queuing Netlify when a
     // normal publish unexpectedly resolves to zero real candidates. This is
@@ -934,6 +1112,8 @@ exports.handler = async function (event) {
         {
           publicationPlan,
           publicationPlanHash,
+          publishMode,
+          requestedSections,
         },
       );
     } else if (storeRelease) {
@@ -969,6 +1149,10 @@ exports.handler = async function (event) {
     return SocialStore.response(storeRelease && buildTrigger && buildTrigger.ok ? 202 : 200, {
       ok: true,
       version: VERSION,
+      reportType,
+      actionType: publishMode,
+      requestedSections,
+      omittedSections,
       baseFile: base.file,
       hash,
       approvedRows: Array.isArray(rows) ? rows.length : 0,
@@ -998,8 +1182,14 @@ exports.handler = async function (event) {
       releaseStored: !!stored,
       releaseStoredVerified: storedVerified,
       releaseStoreWarning,
+      previousPublicationPlanHash,
+      deployedPublicationPlanHash,
       publicationPlanHash,
       publicationPlanCount,
+      publicationDiff,
+      noChange: false,
+      duplicateDeploymentPrevented: false,
+      deploymentRequired: true,
       publicationPlanBySection: Object.fromEntries(
         Object.entries(publicationPlan).map(([key, list]) => [key, Array.isArray(list) ? list.length : 0]),
       ),

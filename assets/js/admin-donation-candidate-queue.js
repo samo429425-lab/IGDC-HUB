@@ -69,7 +69,7 @@
     if(format==='json')downloadFile(base+'.json',JSON.stringify(data,null,2),'application/json;charset=utf-8');else downloadFile(base+'.txt',auditText(data),'text/plain;charset=utf-8');
   }
   function auditSummary(secKey){var a=sectionAudit(secKey);return 'URL누락 '+a.missingHttpsUrl+' · 썸네일누락 '+a.missingThumbnail+' · seed '+a.placeholderOrSeed+' · 중복 '+a.duplicateUrls.length}
-  function frameSummary(sec){var f=sec&&sec.researchFrame||{},a=Array.isArray(f.anchors)?f.anchors:[];return a.length?'SearchBank 프레임 · '+a.slice(0,6).map(function(x){return text(x&&x.name)}).filter(Boolean).join(' · '):'SearchBank 프레임 연결 대기'}
+  function frameSummary(sec){var f=sec&&sec.researchFrame||{},a=Array.isArray(f.anchors)?f.anchors:[],parts=[];if(f.policyPurpose)parts.push(f.policyPurpose);if(Number(f.freshnessHours)>0)parts.push('신선도 '+Number(f.freshnessHours)+'h');if(f.preferVideo===true)parts.push('영상 우선');if(f.localizeByIp===true)parts.push('IP 지역화');if(Array.isArray(f.psomKeywords)&&f.psomKeywords.length)parts.push('PSOM '+f.psomKeywords.slice(0,5).join('/'));if(a.length)parts.push('기준 '+a.slice(0,5).map(function(x){return text(x&&x.name)}).filter(Boolean).join(' · '));return parts.length?'SearchBank 프레임 · '+parts.join(' · '):'SearchBank 프레임 연결 대기'}
   function searchBankStatus(j){
     var sb=j&&j.searchBank||(j&&j.result&&j.result.searchBank)||null;if(!sb)return '';
     var flat=[];function walk(x){if(!x)return;if(Array.isArray(x)){x.forEach(walk);return}if(x.reports){walk(x.reports);return}if(x.queries){flat.push(x);return}}walk(sb);

@@ -13,7 +13,7 @@ const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
 const VERSION =
-  "social-candidate-store-v1.7.1-selected-unpublish-sample-restore";
+  "social-candidate-store-v1.7.2-dedicated-preferred-shared-fallback";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -27,6 +27,8 @@ const READ_ROLES = new Set([
   "site_manager_director",
   "director",
   "social_manager",
+  "media_manager",
+  "commerce_manager",
 ]);
 const WRITE_ROLES = new Set([
   "owner",
@@ -180,60 +182,37 @@ function firstEnv(names) {
   }
   return { name: null, value: "" };
 }
-function normalizeProjectUrl(value) {
-  return text(value).replace(/\/+$/g, "").toLowerCase();
-}
 function config() {
-  // HARD ISOLATION: Social may use only Social-dedicated credentials.
-  // Never fall back to GSLOT/SUPABASE or any Media/Distribution/Donation store.
+  // Prefer dedicated Social credentials when present, but do not hard-stop the
+  // Social pipeline when the platform is still using the existing server-side
+  // Supabase project. Candidate/release tables remain Social-specific.
   const urlRec = firstEnv([
     "SOCIAL_SUPABASE_URL",
     "IGDC_SOCIAL_SUPABASE_URL",
+    "GSLOT_SUPABASE_URL",
+    "SUPABASE_URL",
   ]);
   const keyRec = firstEnv([
     "SOCIAL_SUPABASE_SERVICE_ROLE_KEY",
     "SOCIAL_SUPABASE_SECRET_KEY",
     "IGDC_SOCIAL_SUPABASE_SERVICE_ROLE_KEY",
     "IGDC_SOCIAL_SUPABASE_SECRET_KEY",
+    "GSLOT_SUPABASE_SECRET_KEY",
+    "GSLOT_SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SECRET_KEY",
+    "SUPABASE_SERVICE_KEY",
   ]);
   const url = text(urlRec.value).replace(/\/+$/g, "");
   const key = text(keyRec.value);
   if (!/^https:\/\/[^/]+$/i.test(url) || !key) {
     const error = new Error(
-      "소셜 전용 Supabase가 설정되지 않았습니다. SOCIAL_SUPABASE_URL과 SOCIAL_SUPABASE_SERVICE_ROLE_KEY(또는 IGDC_SOCIAL_* 전용 값)만 사용합니다.",
+      "소셜 후보 Supabase 연결 환경변수가 없습니다. SOCIAL_SUPABASE_URL/SOCIAL_SUPABASE_SERVICE_ROLE_KEY 또는 기존 SUPABASE 서버 키를 설정하세요.",
     );
     error.statusCode = 503;
-    error.code = "social_supabase_dedicated_config_missing";
+    error.code = "social_supabase_config_missing";
     throw error;
   }
-
-  // Reject accidental reuse of any shared or other-hub project URL.
-  const own = normalizeProjectUrl(url);
-  const foreignUrlNames = [
-    "GSLOT_SUPABASE_URL",
-    "SUPABASE_URL",
-    "MEDIA_SUPABASE_URL",
-    "IGDC_MEDIA_SUPABASE_URL",
-    "DISTRIBUTION_SUPABASE_URL",
-    "IGDC_DISTRIBUTION_SUPABASE_URL",
-    "COMMERCE_SUPABASE_URL",
-    "BROKERAGE_SUPABASE_URL",
-    "DONATION_SUPABASE_URL",
-    "IGDC_DONATION_SUPABASE_URL",
-  ];
-  for (const name of foreignUrlNames) {
-    const other = normalizeProjectUrl(process.env[name]);
-    if (other && other === own) {
-      const error = new Error(
-        "소셜 Supabase는 Media/Distribution/Donation/공용 Supabase와 같은 프로젝트를 사용할 수 없습니다. SOCIAL_SUPABASE_URL을 별도 프로젝트로 분리하세요.",
-      );
-      error.statusCode = 503;
-      error.code = "social_supabase_project_not_isolated";
-      error.conflictingEnv = name;
-      throw error;
-    }
-  }
-
   return {
     url,
     key,
@@ -307,23 +286,8 @@ function rest(table, query) {
 function encodeIn(values) {
   return "in.(" + values.map((v) => JSON.stringify(text(v))).join(",") + ")";
 }
-const SOCIAL_READ_LIMIT_MAX = 3000;
-function clampSocialSelectQuery(query) {
-  let q = text(query || "select=*");
-  const re = /(^|&)limit=(\d+)/i;
-  const match = q.match(re);
-  if (match) {
-    const requested = Number(match[2] || 0) || SOCIAL_READ_LIMIT_MAX;
-    const safe = Math.max(1, Math.min(SOCIAL_READ_LIMIT_MAX, requested));
-    q = q.replace(re, (all, prefix) => prefix + "limit=" + safe);
-  } else {
-    q += (q ? "&" : "") + "limit=" + SOCIAL_READ_LIMIT_MAX;
-  }
-  return q;
-}
 async function selectCandidates(query) {
-  const safeQuery = clampSocialSelectQuery(query);
-  return supabase(rest(CANDIDATE_TABLE, safeQuery), {
+  return supabase(rest(CANDIDATE_TABLE, query || "select=*"), {
     method: "GET",
     headers: { Prefer: "count=exact" },
   });
@@ -597,7 +561,7 @@ function candidatesFromSearchBankSnapshot(snapshot, actor, options) {
   const ignored = [];
   const cap = Math.max(
     1,
-    Math.min(SOCIAL_READ_LIMIT_MAX, Number(opts.limit || SOCIAL_READ_LIMIT_MAX) || SOCIAL_READ_LIMIT_MAX),
+    Math.min(10000, Number(opts.limit || 10000) || 10000),
   );
   for (
     let index = 0;

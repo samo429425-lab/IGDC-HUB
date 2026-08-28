@@ -707,36 +707,28 @@
           if(deleting&&result&&result.ok!==false){var confirmedKeys=Array.isArray(part.deletedKeys)?part.deletedKeys.map(text).filter(Boolean):[];if(confirmedKeys.length){var confirmedMap={};confirmedKeys.forEach(function(key){confirmedMap[key]=true;});rowsChunk.forEach(function(row){var key=latestProductKey(row);if(key&&confirmedMap[key])deletedUiKeys[key]=true;});}else if(Number(part.deleted||0)>=rowsChunk.length){chunkIds.forEach(function(id){deletedUiKeys[id]=true;});}}
           await new Promise(function(resolve){setTimeout(resolve,120);});
         }
-      }else if(allMode){
-        var pass=0,lastRemaining=null,stalled=0,maxPasses=320;
-        while(pass<maxPasses){
-          if(scopeKey()!==requestedKey)throw new Error('대기열 작업 중 선택 범위가 변경됐습니다.');
-          if(state)state.textContent='최신 상품 전체 대기열 등록 · 현재 리서치 원장을 10건 단위로 안전 등록합니다.';
-          var allResult=await api(CONTROL,'product_research_stage_current','POST',{}, {countryCode:requestedScope.country,subdivisionCode:requestedScope.region,jobId:lastProductJson&&lastProductJson.jobId||'',source:'latest_list_manual',operation:'stage'},20000),allPart=allResult&&allResult.partialQueue||{};
-          if(allPart.migration===true){if(state)state.textContent='기존 대용량 상품 원장을 국가·지역 분할 원장으로 안전 전환 중 · '+Number(allPart.migrated||0)+'/'+Number(allPart.migrationTotal||0)+'건';pass+=1;await new Promise(function(resolve){setTimeout(resolve,180);});continue;}
-          totalHandled+=Number(allPart.handled||0);totalFailed+=Number(allPart.failed||0);totalBlocked+=Number(allPart.blocked||0);totalEligible=Math.max(totalEligible,Number(allPart.eligible||0));
-          var remaining=Number(allPart.remaining||0);if(state)state.textContent='최신 상품 전체 대기열 등록 · 처리 '+Number(allPart.done||0)+'/'+Number(allPart.eligible||0)+' · 남음 '+remaining;
-          if(allPart.complete===true||remaining<=0)break;
-          if(lastRemaining!=null&&remaining>=lastRemaining&&Number(allPart.handled||0)<=0)stalled+=1;else stalled=0;
-          if(stalled>=4)throw new Error('대기열 등록 진행이 반복 정체되어 안전하게 중단했습니다. 저장된 위치부터 다시 실행할 수 있습니다.');
-          lastRemaining=remaining;pass+=1;await new Promise(function(resolve){setTimeout(resolve,180);});
-        }
-        if(pass>=maxPasses)throw new Error('대기열 안전 반복 한도에 도달했습니다. 현재 저장 지점부터 다시 실행할 수 있습니다.');
       }else{
-        for(var start=0;start<selectedRows.length;start+=100){
-          var selectedChunkRows=selectedRows.slice(start,start+100),selectedChunkIds=selectedChunkRows.map(latestProductKey).filter(Boolean),selectedChunkRefs=latestRefsForRows(selectedChunkRows),selectedPass=0,selectedStalled=0,selectedRemaining=null;
+        /* Latest-list registration must use the exact rows visible to the
+           administrator.  The old whole-list path relied on a durable scan
+           cursor; once that cursor reached the end, newly eligible rows could
+           remain visible while every later click reported handled=0.  Treat
+           both selected and whole-list registration as explicit 100-row
+           windows, with the server still committing only 10 rows per request. */
+        var stageRows=allMode?latestProductRows.slice():selectedRows.slice(),stageLabel=allMode?'최신 상품 전체':'선택 상품',stagedCandidateIds={};
+        for(var start=0;start<stageRows.length;start+=100){
+          var selectedChunkRows=stageRows.slice(start,start+100),selectedChunkIds=selectedChunkRows.map(latestProductKey).filter(Boolean),selectedChunkRefs=latestRefsForRows(selectedChunkRows),selectedPass=0,selectedStalled=0,selectedRemaining=null;
           while(selectedPass<24){
             if(scopeKey()!==requestedKey)throw new Error('대기열 작업 중 선택 범위가 변경됐습니다.');
-            if(state)state.textContent='선택 상품 대기열 등록 · 선택 '+Math.min(start+selectedChunkRows.length,selectedRows.length)+'/'+selectedRows.length+'건 · 10건 단위 저장';
+            if(state)state.textContent=stageLabel+' 대기열 등록 · '+Math.min(start+selectedChunkRows.length,stageRows.length)+'/'+stageRows.length+'건 · 10건 단위 저장';
             var selectedResult=await api(CONTROL,'product_research_stage_current','POST',{}, {countryCode:requestedScope.country,subdivisionCode:requestedScope.region,jobId:lastProductJson&&lastProductJson.jobId||'',source:'latest_list_manual',operation:'stage',productIds:selectedChunkIds,productRefs:selectedChunkRefs},20000),selectedPart=selectedResult&&selectedResult.partialQueue||{};
             if(selectedPart.migration===true){if(state)state.textContent='기존 대용량 상품 원장을 국가·지역 분할 원장으로 안전 전환 중 · '+Number(selectedPart.migrated||0)+'/'+Number(selectedPart.migrationTotal||0)+'건';selectedPass+=1;await new Promise(function(resolve){setTimeout(resolve,180);});continue;}
-            totalHandled+=Number(selectedPart.handled||0);totalFailed+=Number(selectedPart.failed||0);totalBlocked+=Number(selectedPart.blocked||0);totalEligible+=Number(selectedPart.eligible||0);
+            totalHandled+=Number(selectedPart.handled||0);totalFailed+=Number(selectedPart.failed||0);totalBlocked+=Number(selectedPart.blocked||0);totalEligible+=Number(selectedPart.eligible||0);(Array.isArray(selectedPart.candidateIds)?selectedPart.candidateIds:[]).forEach(function(id){id=text(id);if(id)stagedCandidateIds[id]=true;});
             var selectedRemain=Number(selectedPart.remaining||0);if(selectedPart.complete===true||selectedRemain<=0)break;
             if(selectedRemaining!=null&&selectedRemain>=selectedRemaining&&Number(selectedPart.handled||0)<=0)selectedStalled+=1;else selectedStalled=0;
-            if(selectedStalled>=3)throw new Error('선택 상품 대기열 등록이 반복 정체되어 저장 상태를 유지한 채 중단했습니다.');
+            if(selectedStalled>=3)throw new Error(stageLabel+' 대기열 등록이 반복 정체되어 저장 상태를 유지한 채 중단했습니다.');
             selectedRemaining=selectedRemain;selectedPass+=1;await new Promise(function(resolve){setTimeout(resolve,160);});
           }
-          if(selectedPass>=24)throw new Error('선택 상품 대기열 안전 반복 한도에 도달했습니다.');
+          if(selectedPass>=24)throw new Error(stageLabel+' 대기열 안전 반복 한도에 도달했습니다.');
         }
       }
       if(deleting&&Object.keys(deletedUiKeys).length){latestProductRows=latestProductRows.filter(function(row){return deletedUiKeys[latestProductKey(row)]!==true;});Object.keys(deletedUiKeys).forEach(function(id){delete latestSelectedProducts[id];});latestProductPage=clampPage(latestProductPage,latestProductRows.length,MANAGEMENT_PAGE_SIZE);renderLatestProductRows();}try{var saved=await loadProductResearchCompact(requestedScope.country,requestedScope.region);if(saved&&saved.status&&saved.status!=='not_started'){lastProductJson=mergeCompactProductStatus(saved);renderProductProgress(lastProductJson);rememberReport('product',lastProductJson);saveReviewSnapshot();}}catch(_statusError){}
@@ -745,7 +737,7 @@
       lastScopeAuditJson=null;if(activeScopeAudit==='queue'){try{var queueAudit=await api(REVIEW,'diagnostic','GET',scopeParams());queueAudit.scope=auditScopeOf(queueAudit);renderScopeAudit(queueAudit,'queue');}catch(_queueAuditRefreshError){}}
       selectedIds.forEach(function(id){delete latestSelectedProducts[id];});syncLatestProductQueueControls();
       var finalText=(deleting?'최신 상품 목록 삭제':(unmatch?'최신 상품 대기열 매칭 해제':'최신 상품 대기열 등록'))+' 완료 · '+(allMode?'현재 리서치 전체':'선택 '+ids.length+'건')+' · 반영 '+totalHandled+'건'+(totalBlocked?' · 보호/차단 '+totalBlocked+'건':'')+(totalFailed?' · 실패 '+totalFailed+'건':'');if(state)state.textContent=finalText;if(manualState)manualState.textContent=finalText;
-      show((deleting?'선택 상품을 현재 최신 리서치 목록에서 삭제했습니다.':(unmatch?'선택 상품의 대기열 매칭을 해제했습니다.':'최신 상품을 상품 후보·중개수익 대기열에 등록했습니다.'))+(totalBlocked?(deleting?' · 후속 배치·공개·관리자 고정 '+totalBlocked+'건은 그대로 보존했습니다.':' · 보호 상태 '+totalBlocked+'건은 변경하지 않았습니다.'):'')+(!unmatch&&!deleting&&totalHandled?' · 전체 상품 후보·대기열에 '+totalHandled+'건 반영했습니다.':''),totalFailed?'warn':'ok');return{ok:totalFailed===0,handled:totalHandled,failed:totalFailed,blocked:totalBlocked,eligible:totalEligible};
+      show((deleting?'선택 상품을 현재 최신 리서치 목록에서 삭제했습니다.':(unmatch?'선택 상품의 대기열 매칭을 해제했습니다.':'최신 상품을 상품 후보·중개수익 대기열에 등록했습니다.'))+(totalBlocked?(deleting?' · 후속 배치·공개·관리자 고정 '+totalBlocked+'건은 그대로 보존했습니다.':' · 보호 상태 '+totalBlocked+'건은 변경하지 않았습니다.'):'')+(!unmatch&&!deleting&&totalHandled?' · 전체 상품 후보·대기열에 '+totalHandled+'건 반영했습니다.':''),totalFailed?'warn':'ok');return{ok:totalFailed===0,handled:totalHandled,failed:totalFailed,blocked:totalBlocked,eligible:totalEligible,candidateIds:typeof stagedCandidateIds==='object'?Object.keys(stagedCandidateIds):[]};
     }catch(e){var failText='최신 상품 수동 작업 중단: '+conciseRequestError(e&&e.message,e&&e.status);if(state)state.textContent=failText;if(manualState)manualState.textContent=failText;show(conciseRequestError(e&&e.message,e&&e.status),'warn');return{ok:false,error:e};}
     finally{latestQueueActionActive=false;syncLatestProductQueueControls();}
   }
@@ -754,9 +746,9 @@
   async function runLatestAi(scopeMode){
     if(!selectedCountry||latestQueueActionActive||productAutomationActive)return;var allMode=scopeMode==='all',rows=allMode?latestProductRows.slice():latestRowsForIds(latestSelectedIds());if(!rows.length){show(allMode?'현재 최신 상품 리서치 목록이 비어 있습니다.':'먼저 최신 상품을 선택해 주세요.','warn');return;}
     var staged=await runLatestProductQueueAction('stage',allMode?'all':'selected');if(!staged||staged.ok===false&&Number(staged.handled||0)<=0)return;
-    var candidateIds=candidateIdsForLatestRows(rows);if(!candidateIds.length){show((allMode?'최신 상품':'선택 상품')+' 중 비공개 대기열 등록이 확인된 후보가 없습니다. 대기열·배치 전환 검증으로 연결 상태를 확인해 주세요.','warn');return;}
+    var candidateIds=Array.from(new Set((Array.isArray(staged.candidateIds)?staged.candidateIds:[]).concat(candidateIdsForLatestRows(rows)).map(text).filter(Boolean)));if(!candidateIds.length){show((allMode?'최신 상품':'선택 상품')+' 중 비공개 대기열 등록이 확인된 후보가 없습니다. 대기열·배치 전환 검증으로 연결 상태를 확인해 주세요.','warn');return;}
     if(candidateIds.length<rows.length)show((allMode?'최신 상품 ':'선택 ')+rows.length+'건 중 대기열에서 확인된 '+candidateIds.length+'건만 AI 검증·자동 배치합니다. 나머지는 검증 보류·중복 병합 또는 대기열 보호 상태일 수 있습니다.','warn');
-    await runProductAiAutomation('products','',candidateIds);try{await runProductTransitionAudit({silent:true});}catch(_auditError){}
+    await runCandidateLedgerAiRecovery(candidateIds,{label:allMode?'최신 상품 전체':'선택 최신 상품',confirm:false});try{await runProductTransitionAudit({silent:true});}catch(_auditError){}
   }
   async function runLatestSelectedAi(){return runLatestAi('selected');}
   async function runLatestAllAi(){return runLatestAi('all');}
@@ -848,7 +840,15 @@
     options=options||{};
     if(!selectedCountry||productAutomationActive)return;
     if(!lastProductJson||!productRows.length){show('AI 자동 배치할 상품 조사 결과가 없습니다. 상품 조사를 먼저 실행해 주세요.','warn');return;}
-    var candidateLedgerMode=candidateLedgerViewActive(),pendingDraft=productAiDraft(lastProductJson);if(!candidateLedgerMode&&Number(pendingDraft.pendingItems||0)>0){show('이전에 정상 완료된 AI 임시 정리 '+Number(pendingDraft.pendingItems||0)+'건이 최종 확정 대기 중입니다. 먼저 `AI 정리 최종 완료`를 눌러 확정한 뒤 다음 정리를 시작해 주세요.','warn');syncProductAiFinalizeControl();return;}
+    var candidateLedgerMode=candidateLedgerViewActive(),pendingDraft=productAiDraft(lastProductJson);
+    if(!candidateLedgerMode&&mode==='all'){
+      /* The durable candidate ledger is the correct source for the top-level
+         green AI automation button.  A page restored from chunked research
+         results can otherwise call the legacy job.products path, which is
+         intentionally empty for chunked_v1 jobs and returns 409. */
+      try{await refreshCandidateLedgerProducts({preserveResearchReport:true});candidateLedgerMode=candidateLedgerViewActive();}catch(_candidateLedgerRefreshError){}
+    }
+    if(!candidateLedgerMode&&Number(pendingDraft.pendingItems||0)>0){show('이전에 정상 완료된 AI 임시 정리 '+Number(pendingDraft.pendingItems||0)+'건이 최종 확정 대기 중입니다. 먼저 `AI 정리 최종 완료`를 눌러 확정한 뒤 다음 정리를 시작해 주세요.','warn');syncProductAiFinalizeControl();return;}
     if(candidateLedgerMode){
       var selectedModeLedger=mode==='products',selectedLedgerIds=Array.isArray(productIds)?productIds.map(text).filter(Boolean):[],targets=productRows.filter(function(row){if(row.ledgerSource!=='candidate')return false;if(selectedModeLedger&&selectedLedgerIds.indexOf(text(row.id))<0)return false;var decision=productDecision(row);if(decision==='reject'||decision==='purge')return false;if(mode==='repair')return decision==='slot_candidate'&&!assignedSectionKey(row);if(mode==='section')return assignedSectionKey(row)===sectionKey||candidatePlacementKey(row)===sectionKey;return decision==='undecided'||decision==='slot_candidate'||decision==='hold';}).map(function(row){return text(row.candidateId||row.id);}).filter(Boolean);
       await runCandidateLedgerAiRecovery(targets,{label:selectedModeLedger?'선택 상품':'상품 후보',confirm:options.skipConfirm!==true});return;

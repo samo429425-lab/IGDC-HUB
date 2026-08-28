@@ -22,6 +22,8 @@
   const SAMPLE_IMAGE = '/assets/images/media-sample-card.png';
   const HERO_MIN_WIDTH = 1280;
   const HERO_MIN_HEIGHT = 720;
+  const HERO_ROTATE_WINDOW_DAYS = 3;
+  const HERO_ROTATE_TOP_POOL = 3;
   const HERO_MIN_EDGE_MEAN = 4.8;
   const HERO_MIN_EDGE_P90 = 15;
   const HERO_CAPTURE_TARGET_LIMIT = 8;
@@ -731,19 +733,19 @@
     }catch(_e){return null;}
   }
   function heroPreProbeCompare(a,b){
-    const ad=heroFreshnessDay(a&&a.item),bd=heroFreshnessDay(b&&b.item);
-    if(ad!==bd)return bd-ad;
     const ar=heroPopularityMetric(a&&a.item),br=heroPopularityMetric(b&&b.item);
     if(ar!==br)return br-ar;
+    const ad=heroFreshnessDay(a&&a.item),bd=heroFreshnessDay(b&&b.item);
+    if(ad!==bd)return bd-ad;
     const ah=Number(a&&a.hint||0),bh=Number(b&&b.hint||0);
     if(ah!==bh)return bh-ah;
     return Number(b&&b.score||0)-Number(a&&a.score||0);
   }
   function heroResolvedCompare(a,b){
-    const ad=Number(a&&a.freshnessDay||heroFreshnessDay(a&&a.item)),bd=Number(b&&b.freshnessDay||heroFreshnessDay(b&&b.item));
-    if(ad!==bd)return bd-ad;
     const ar=Number(a&&a.popularityMetric||heroPopularityMetric(a&&a.item)),br=Number(b&&b.popularityMetric||heroPopularityMetric(b&&b.item));
     if(ar!==br)return br-ar;
+    const ad=Number(a&&a.freshnessDay||heroFreshnessDay(a&&a.item)),bd=Number(b&&b.freshnessDay||heroFreshnessDay(b&&b.item));
+    if(ad!==bd)return bd-ad;
     const aq=Number(a&&a.qualityMetric||heroQualityMetric(a&&a.w,a&&a.h,a&&a.visual)),bq=Number(b&&b.qualityMetric||heroQualityMetric(b&&b.w,b&&b.h,b&&b.visual));
     if(aq!==bq)return bq-aq;
     return Number(b&&b.finalScore||0)-Number(a&&a.finalScore||0);
@@ -1219,12 +1221,12 @@
     if(!pool.length)return false;
 
     pool.sort((a,b)=>{
-      // Requested hero policy: newest movie/drama first, then hot/ranked,
-      // then verified image quality. Image quality still has a 1280x720 target.
-      const ad=heroFreshnessDay(a.item),bd=heroFreshnessDay(b.item);
-      if(ad!==bd)return bd-ad;
+      // Requested hero policy: hot/ranked movie/drama first, then recency,
+      // then verified image quality. A usable hero starts at 1280x720.
       const ar=heroPopularityMetric(a.item),br=heroPopularityMetric(b.item);
       if(ar!==br)return br-ar;
+      const ad=heroFreshnessDay(a.item),bd=heroFreshnessDay(b.item);
+      if(ad!==bd)return bd-ad;
       const aq=heroResolutionTier(a.renderedW,a.renderedH),bq=heroResolutionTier(b.renderedW,b.renderedH);
       if(aq!==bq)return bq-aq;
       const as=heroRankScore(a.item)+(a.preferred?80:0)+(a.domReady?140:0)-heroPendingPenalty(a.item);
@@ -1259,20 +1261,24 @@
     function resolveKnown(candidate){
       const w=Number(candidate.knownW||0),h=Number(candidate.knownH||0),item=candidate&&candidate.item;
       const tier=heroResolutionTier(w,h);
-      const heroUrl=String(item&&(item.heroImage||item.heroImageUrl||item.heroThumbnail||item.heroThumb)||'');
-      const strictCapture=!!(item&&item.heroSharpVerified===true&&heroUrl&&String(candidate.url||'')===heroUrl);
-      if(tier<2||!strictCapture)return null;
-      const visual={sharp:true,edgeMean:Number(item.heroEdgeMean||0)||HERO_MIN_EDGE_MEAN,edgeP90:Number(item.heroEdgeP90||0)||HERO_MIN_EDGE_P90};
+      if(tier<2)return null;
+      const visual=(item&&item.heroSharpVerified===true)?{sharp:true,edgeMean:Number(item.heroEdgeMean||0)||HERO_MIN_EDGE_MEAN,edgeP90:Number(item.heroEdgeP90||0)||HERO_MIN_EDGE_P90}:null;
       const qualityMetric=heroQualityMetric(w,h,visual);
       return Object.assign({},candidate,{w,h,tier,visual,qualityMetric,
         freshnessDay:heroFreshnessDay(candidate.item),popularityMetric:heroPopularityMetric(candidate.item),
-        finalScore:candidate.score+(tier>=3?900:620)+180});
+        finalScore:candidate.score+(tier>=3?900:620)+(visual&&visual.sharp?180:60)});
+    }
+    function heroRotationBucket(){
+      const now=Date.now();
+      const day=Math.max(1,Number(HERO_ROTATE_WINDOW_DAYS)||1)*86400000;
+      return Math.floor(now/day);
     }
     function chooseBest(rows){
-      const valid=rows.filter((row)=>row&&row.tier>=2);
+      const valid=rows.filter((row)=>row&&row.tier>=2).slice().sort(heroResolvedCompare);
       if(!valid.length)return null;
-      // Freshness > ranking/hotness > actual resolution (720p minimum).
-      return valid.slice().sort(heroResolvedCompare)[0]||null;
+      const poolSize=Math.max(1,Math.min(valid.length,Number(HERO_ROTATE_TOP_POOL)||1));
+      const pick=heroRotationBucket()%poolSize;
+      return valid[pick]||valid[0]||null;
     }
     async function checkedCandidate(candidate,timeoutMs){
       const known=resolveKnown(candidate);if(known)return known;
@@ -1280,12 +1286,12 @@
       if(!probe)return null;
       const tier=heroResolutionTier(probe.w,probe.h);
       if(tier<2)return null;
-      // If pixel inspection is possible, reject soft/upscaled 720p images. When
-      // CORS blocks inspection, only 1080p+ or an explicit high-resolution source
-      // hint may pass. This keeps blurry card art out of the hero.
+      // If pixel inspection is possible, reject soft/upscaled hero art. When
+      // CORS blocks inspection, trust real 1280x720+ images that already rendered
+      // on the front or come from an explicit HD source hint.
       const visual=probe.visual;
       const pixelPassed=!!(visual&&visual.sharp);
-      const trustedUninspected=!visual&&(tier>=3||Number(candidate.hint||0)>=3);
+      const trustedUninspected=!visual&&(tier>=2&&(candidate.domReady||Number(candidate.hint||0)>=2));
       if(!pixelPassed&&!trustedUninspected)return null;
       const qualityMetric=heroQualityMetric(probe.w,probe.h,visual);
       const dimBonus=tier===3?900:620;
@@ -1473,7 +1479,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.0-hero-sharp-hd-only';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.2-hero-hd-1280x720-ranked-rotate';
 })();
 
 
