@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.10.0-eight-platform-pipeline-continuity";
+const VERSION = "sanmaru-social-live-collector-v1.11.0-eight-platform-thumbnail-continuity";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -182,6 +182,34 @@ function firstText(values) {
   }
   return "";
 }
+function deepThumbnail(value) {
+  const seen = new Set();
+  const queue = [value];
+  const preferredKeys = /^(?:thumbnail(?:Url|_url)?|thumb|image(?:Url|_url)?|image|poster|cover|src|ogImage|twitterImage)$/i;
+  while (queue.length) {
+    const current = queue.shift();
+    if (current == null) continue;
+    if (typeof current === "string") {
+      const clean = SocialStore.text(current);
+      if (/^https:\/\//i.test(clean) && /(?:image|img|thumb|media|cdn|static|preview|poster|cover|fbcdn|twimg|pinimg|ytimg|scontent)/i.test(clean)) return clean;
+      continue;
+    }
+    if (typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      current.slice(0, 12).forEach((entry) => queue.push(entry));
+      continue;
+    }
+    const entries = Object.entries(current);
+    for (const [key, entry] of entries) if (preferredKeys.test(key)) queue.unshift(entry);
+    for (const [key, entry] of entries) {
+      if (preferredKeys.test(key)) continue;
+      if (/^(?:media|preview|pagemap|cse_thumbnail|cse_image|images|image|thumbnail|source|payload|enclosure|attachments?)$/i.test(key)) queue.push(entry);
+    }
+  }
+  return "";
+}
+
 function itemSourceName(item) {
   const source = item && item.source;
   return firstText([
@@ -1171,7 +1199,9 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     media.poster,
     mediaPreview.thumbnail,
     mediaPreview.poster,
-    mediaPreview.image
+    mediaPreview.image,
+    registrySeed && registrySeed.thumbnail,
+    deepThumbnail(item)
   ]);
   const thumbnailResolution = await stablePublicThumbnail(
     platform,
@@ -1179,8 +1209,16 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     suppliedThumbnail,
   );
   const publicMetadata = thumbnailResolution.metadata || {};
-  const resolvedThumbnail = thumbnailResolution.thumbnail;
-  if (!resolvedThumbnail) return { ok: false, reason: "usable_thumbnail_required" };
+  const resolvedThumbnail = firstText([
+    thumbnailResolution.thumbnail,
+    usableThumbnail(registrySeed && registrySeed.thumbnail, resolved.latestContentUrl, platform),
+    usableThumbnail(enrichment.thumbnail, resolved.latestContentUrl, platform),
+    usableThumbnail(deepThumbnail(item), resolved.latestContentUrl, platform)
+  ]);
+  // A temporary thumbnail miss must not destroy a verified latest-content row.
+  // Non-YouTube platforms often block anonymous metadata/oEmbed requests even
+  // when the public post itself is valid. Keep the candidate and let later
+  // collection passes enrich its preview instead of collapsing the section to 0.
   const title = firstText([
     latest.title,
     enrichment.title,
@@ -1223,9 +1261,12 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     latestContentAsset: true,
     contentPublishedAt: firstText([latest.publishedAt, item && item.publishedAt, item && item.published_at, item && item.pubDate, item && item.date]),
     thumbnailUrl: resolvedThumbnail,
+    thumbnailState: resolvedThumbnail ? "resolved" : "retryable_unresolved",
     channelThumbnailUrl: firstText([
       item && item.channelThumbnail,
       item && item.channelThumbnailUrl,
+      registrySeed && registrySeed.thumbnail,
+      enrichment.thumbnail,
       latest.channelThumbnail
     ]),
     description: firstText([item && item.description, item && item.summary, item && item.snippet]).slice(0, 1200),

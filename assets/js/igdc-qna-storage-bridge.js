@@ -1,7 +1,7 @@
 /*
- * IGDC Q&A canonical storage bridge — final7 rebase
- * Keeps the existing Q&A modal UI intact while routing popup writes and list reads
- * through the server-side qa-proxy endpoint.
+ * IGDC Q&A canonical storage bridge — final9 ownership/AI repair
+ * Keeps the existing Q&A modal UI intact while routing popup writes, reads and
+ * owner/admin deletes through the server-side qa-proxy endpoint.
  */
 (function (global, doc) {
   'use strict';
@@ -15,7 +15,8 @@
   var ANSWER_SELECTOR = '.igdc-qa-text.a';
   var SUBMIT_SELECTOR = '.igdc-qa-btn.primary';
   var refreshTimer = null;
-  var lastScopeKey = '';
+  var qaSupabaseClient = null;
+  var qaSupabaseSessionPromise = null;
 
   function text(value) {
     return value == null ? '' : String(value);
@@ -41,7 +42,12 @@
       saveFail: '질문을 서버에 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.',
       answerPending: '답변 준비 중',
       admin: '관리요청',
-      normal: '일반'
+      normal: '일반',
+      remove: '삭제',
+      removing: '질문을 삭제하고 있습니다.',
+      removed: '질문이 삭제되었습니다.',
+      removeFail: '질문을 삭제하지 못했습니다. 작성자 또는 관리자 권한을 확인해 주세요.',
+      removeConfirm: '이 질문을 삭제하시겠습니까?'
     };
     var en = {
       saving: 'Saving your question.',
@@ -50,7 +56,12 @@
       saveFail: 'Your question could not be saved. Please try again shortly.',
       answerPending: 'Answer pending',
       admin: 'Admin request',
-      normal: 'General'
+      normal: 'General',
+      remove: 'Delete',
+      removing: 'Deleting the question.',
+      removed: 'The question was deleted.',
+      removeFail: 'The question could not be deleted. Check author or admin permission.',
+      removeConfirm: 'Delete this question?'
     };
     return (lang === 'ko' ? ko : en)[kind] || en[kind] || '';
   }
@@ -60,10 +71,6 @@
     var project = clean(vars.project || 'IGDC', 120) || 'IGDC';
     var pageId = clean(vars.pageId || vars.page_id || (global.location && (global.location.pathname + (global.location.hash || ''))), 360);
     return { project: project, page_id: pageId };
-  }
-
-  function scopeKey(scope) {
-    return scope.project + '|' + scope.page_id;
   }
 
   function modalFor(node) {
@@ -113,6 +120,125 @@
     try { return new Date(value).toLocaleString(); } catch (e) { return ''; }
   }
 
+  function safeJson(value) {
+    try { return JSON.parse(value); } catch (e) { return null; }
+  }
+
+  function jwtValid(token) {
+    try {
+      var parts = text(token).split('.');
+      if (parts.length !== 3) return false;
+      var value = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (value.length % 4) value += '=';
+      var payload = JSON.parse(global.atob(value));
+      return !payload.exp || Number(payload.exp) * 1000 > Date.now() + 10000;
+    } catch (e) { return false; }
+  }
+
+  function memberIdToken() {
+    var candidates = [];
+    try {
+      if (global.IGDCMemberAuth && typeof global.IGDCMemberAuth.getIdToken === 'function') candidates.push(global.IGDCMemberAuth.getIdToken());
+    } catch (e) {}
+    try {
+      if (global.osAuth && typeof global.osAuth.getIdToken === 'function') candidates.push(global.osAuth.getIdToken());
+    } catch (e) {}
+    var tokenKeys = ['osauth.tokens.v2','osauth.tokens.v1','igdc.tokens','igdc_auth_tokens','auth0_tokens','auth0spa'];
+    [global.localStorage, global.sessionStorage].forEach(function (store) {
+      if (!store) return;
+      tokenKeys.forEach(function (key) {
+        try {
+          var record = safeJson(store.getItem(key));
+          if (record && typeof record === 'object') {
+            candidates.push(record.id_token, record.idToken, record.__raw, record.raw);
+          }
+        } catch (e) {}
+      });
+      ['igdc_id_token','id_token','auth0_id_token'].forEach(function (key) {
+        try { candidates.push(store.getItem(key)); } catch (e) {}
+      });
+    });
+    for (var i = 0; i < candidates.length; i++) {
+      if (candidates[i] && jwtValid(candidates[i])) return text(candidates[i]);
+    }
+    return '';
+  }
+
+  function tokenFromSupabaseRecord(record) {
+    if (!record || typeof record !== 'object') return '';
+    if (record.access_token) return text(record.access_token);
+    if (record.currentSession && record.currentSession.access_token) return text(record.currentSession.access_token);
+    if (record.session && record.session.access_token) return text(record.session.access_token);
+    return '';
+  }
+
+  function storedSupabaseToken() {
+    var stores = [];
+    try { stores.push(global.localStorage); } catch (e) {}
+    try { stores.push(global.sessionStorage); } catch (e) {}
+    for (var s = 0; s < stores.length; s++) {
+      var store = stores[s];
+      if (!store) continue;
+      for (var i = 0; i < store.length; i++) {
+        var key = '';
+        try { key = store.key(i) || ''; } catch (e) { continue; }
+        if (!/^sb-.+-auth-token$/i.test(key)) continue;
+        try {
+          var token = tokenFromSupabaseRecord(safeJson(store.getItem(key)));
+          if (token) return token;
+        } catch (e) {}
+      }
+    }
+    return '';
+  }
+
+  function supabaseConfig() {
+    var vars = global.SUPER_VARSAR || {};
+    var pub = global.SUPABASE || {};
+    return {
+      url: clean(vars.url || vars.supabaseUrl || vars.supabase_url || pub.url || '', 500),
+      anonKey: clean(vars.anonKey || vars.supabaseAnonKey || vars.supabase_anon_key || pub.anonKey || '', 2000)
+    };
+  }
+
+  async function supabaseAccessToken() {
+    var stored = storedSupabaseToken();
+    if (stored) return stored;
+    if (qaSupabaseSessionPromise) return qaSupabaseSessionPromise;
+    qaSupabaseSessionPromise = (async function () {
+      var cfg = supabaseConfig();
+      if (!cfg.url || !cfg.anonKey || !global.supabase || typeof global.supabase.createClient !== 'function') return '';
+      try {
+        if (!qaSupabaseClient) {
+          qaSupabaseClient = global.supabase.createClient(cfg.url, cfg.anonKey, {
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+          });
+        }
+        var current = await qaSupabaseClient.auth.getSession();
+        var session = current && current.data && current.data.session;
+        if (!session && qaSupabaseClient.auth && typeof qaSupabaseClient.auth.signInAnonymously === 'function') {
+          var signed = await qaSupabaseClient.auth.signInAnonymously();
+          session = signed && signed.data && signed.data.session;
+        }
+        return session && session.access_token ? text(session.access_token) : storedSupabaseToken();
+      } catch (e) {
+        return storedSupabaseToken();
+      }
+    })();
+    try { return await qaSupabaseSessionPromise; }
+    finally { qaSupabaseSessionPromise = null; }
+  }
+
+  async function authHeaders(withJson) {
+    var headers = { Accept: 'application/json' };
+    if (withJson) headers['Content-Type'] = 'application/json';
+    var supabaseToken = await supabaseAccessToken();
+    if (supabaseToken) headers.Authorization = 'Bearer ' + supabaseToken;
+    var memberToken = memberIdToken();
+    if (memberToken && memberToken !== supabaseToken) headers['X-IGDC-Member-Token'] = memberToken;
+    return headers;
+  }
+
   function renderRows(modal, rows) {
     var list = getList(modal);
     if (!list) return;
@@ -134,6 +260,17 @@
       tag.textContent = row.is_admin ? message('admin') : message('normal');
       meta.appendChild(when);
       meta.appendChild(tag);
+      if (row.can_delete && row.id != null) {
+        var actions = doc.createElement('span');
+        actions.className = 'igdc-qa-thread-actions';
+        var del = doc.createElement('button');
+        del.type = 'button';
+        del.className = 'igdc-qa-btn muted';
+        del.textContent = message('remove');
+        del.setAttribute('data-igdc-qna-delete', clean(row.id, 240));
+        actions.appendChild(del);
+        meta.appendChild(actions);
+      }
       box.appendChild(q);
       box.appendChild(a);
       box.appendChild(meta);
@@ -160,10 +297,10 @@
     if (!modal || !list) return null;
     var scope = getScope();
     if (!scope.page_id) return null;
-    lastScopeKey = scopeKey(scope);
     try {
       var query = '?action=list&project=' + encodeURIComponent(scope.project) + '&page_id=' + encodeURIComponent(scope.page_id) + '&limit=100';
-      var payload = await request(ENDPOINT + query, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });
+      var headers = await authHeaders(false);
+      var payload = await request(ENDPOINT + query, { method: 'GET', cache: 'no-store', credentials: 'same-origin', headers: headers });
       renderRows(modal, payload.rows || []);
       if (!quiet) setStatus(modal, '', false);
       return payload.rows || [];
@@ -194,9 +331,11 @@
     }
     setStatus(modal, message('saving'), false);
     try {
+      var headers = await authHeaders(true);
       var payload = await request(ENDPOINT, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        credentials: 'same-origin',
+        headers: headers,
         body: JSON.stringify({
           question: question,
           project: scope.project,
@@ -231,6 +370,29 @@
     }
   }
 
+  async function removeThread(modal, id) {
+    modal = modal || modalFor();
+    id = clean(id, 240);
+    if (!modal || !id) return;
+    if (typeof global.confirm === 'function' && !global.confirm(message('removeConfirm'))) return;
+    var scope = getScope();
+    setStatus(modal, message('removing'), false);
+    try {
+      var headers = await authHeaders(true);
+      await request(ENDPOINT, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: headers,
+        body: JSON.stringify({ action: 'delete', id: id, project: scope.project, page_id: scope.page_id })
+      });
+      setStatus(modal, message('removed'), false);
+      await refresh(modal, true);
+    } catch (err) {
+      setStatus(modal, message('removeFail'), true);
+      try { global.console && global.console.error && global.console.error('[IGDC Q&A] delete failed:', err); } catch (ignore) {}
+    }
+  }
+
   function scheduleRefresh(target) {
     var modal = modalFor(target);
     if (!modal) return;
@@ -239,11 +401,18 @@
   }
 
   // Capture phase wins over the existing popup's direct browser-to-Supabase submit handler.
-  // Existing modal layout, modal lifecycle, answer field and registered-question list stay unchanged.
+  // Existing modal layout, lifecycle, answer field and registered-question list stay unchanged.
   doc.addEventListener('click', function (event) {
     var target = event.target && event.target.closest ? event.target.closest('button, a, [role="button"]') : null;
     if (!target) return;
     var modal = modalFor(target);
+    var deleteId = target.getAttribute && target.getAttribute('data-igdc-qna-delete');
+    if (deleteId && modal && modal.contains(target)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      removeThread(modal, deleteId);
+      return;
+    }
     if (target.matches && target.matches(SUBMIT_SELECTOR) && modal && modal.contains(target)) {
       event.preventDefault();
       event.stopImmediatePropagation();

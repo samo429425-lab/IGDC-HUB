@@ -179,19 +179,25 @@
 
   <section id="summaryGrid" class="grid hidden"></section>
   <section id="filterPanel" class="panel hidden">
-    <h2>섹션·랭킹·품질 정렬</h2>
-    <div class="filters">
-      <input id="searchInput" type="search" placeholder="제목, 출처, 섹션 검색" style="min-width:260px;flex:1">
-      <select id="riskFilter"><option value="">전체 위험도</option></select>
-      <select id="safetyFilter"><option value="">전체 안전판정</option></select>
-      <select id="statusFilter"><option value="">전체 검증상태</option></select>
-      <select id="sortSelect"><option value="rank">종합랭킹순</option><option value="quality">화질순</option><option value="year">최신연도순</option><option value="subtitle">자막수순</option><option value="title">제목순</option></select>
+    <div class="modal-head">
+      <h2 style="margin:0">섹션·랭킹·품질 정렬</h2>
+      <button id="rankingToggleBtn" type="button" class="secondary" aria-expanded="true">목록 접기 ▲</button>
     </div>
-    <div id="filterState" class="small">섹션을 펼치면 해당 섹션의 카드만 불러옵니다.</div>
+    <div id="rankingPanelBody">
+      <div class="filters">
+        <input id="searchInput" type="search" placeholder="제목, 출처, 섹션 검색" style="min-width:260px;flex:1">
+        <select id="riskFilter"><option value="">전체 위험도</option></select>
+        <select id="safetyFilter"><option value="">전체 안전판정</option></select>
+        <select id="statusFilter"><option value="">전체 검증상태</option></select>
+        <select id="sortSelect"><option value="rank">종합랭킹순</option><option value="quality">화질순</option><option value="year">최신연도순</option><option value="subtitle">자막수순</option><option value="title">제목순</option></select>
+      </div>
+      <div id="filterState" class="small">섹션을 펼치면 해당 섹션의 카드만 불러옵니다.</div>
+    </div>
   </section>
 
   <section id="tablePanel" class="panel hidden">
-    <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">유통 섹션 운영과 같은 방식으로 실제 배치 대상 9개 섹션을 복수 선택해 한 번에 프론트 반영·해제할 수 있습니다. ‘지금 뜨는 콘텐츠’는 자동 조합 섹션이므로 수동 선택 대상에서 제외됩니다.</div></div><div class="supplier-actions"><button type="button" class="secondary media-ai-talk-btn" data-media-ai-scope="sections" data-media-ai-label="10개 섹션 영상 후보 전체 정책">AI 정책 대화</button><span id="candidateCapacityState" class="state"></span></div></div>
+    <div class="modal-head"><div><h2 style="margin:0">10개 섹션 영상 후보</h2><div class="small">유통 섹션 운영과 같은 방식으로 실제 배치 대상 9개 섹션을 복수 선택해 한 번에 프론트 반영·해제할 수 있습니다. ‘지금 뜨는 콘텐츠’는 자동 조합 섹션이므로 수동 선택 대상에서 제외됩니다.</div></div><div class="supplier-actions"><button type="button" class="secondary media-ai-talk-btn" data-media-ai-scope="sections" data-media-ai-label="10개 섹션 영상 후보 전체 정책">AI 정책 대화</button><button id="sectionBoardToggleBtn" type="button" class="secondary" aria-expanded="true">9개 섹션 전체 접기 ▲</button><span id="candidateCapacityState" class="state"></span></div></div>
+    <div id="sectionBoardBody">
     <div class="section-board-toolbar" aria-label="미디어 섹션 프론트 운영">
       <label class="section-select-all"><input id="selectAllMediaSections" type="checkbox"> 9개 배치 섹션 전체 선택</label>
       <span id="selectedMediaSectionCount" class="pill section">선택 섹션 0개</span>
@@ -203,6 +209,7 @@
       <div class="section-board-note">체크한 여러 섹션은 하나의 release로 묶어 한 번만 배포합니다. 섹션별 개별 버튼도 그대로 사용할 수 있습니다.</div>
     </div>
     <div id="sectionAccordion" class="section-accordion"></div>
+    </div>
   </section>
 
   <section id="exclusionPanel" class="panel hidden">
@@ -236,13 +243,13 @@
         <div class="player-progress-row"><span id="currentTimeText">00:00</span><input id="seekBar" type="range" min="0" max="1000" value="0" step="1" aria-label="재생 위치"><span id="durationText">00:00</span></div>
         <button id="playToggle">재생</button><button id="back10">-10초</button><button id="forward10">+10초</button><button id="fitToggle">맞춤</button>
         <button id="muteToggle">음소거</button><select id="subtitleSelect"><option value="">자막 없음</option></select><button id="subtitleToggle">자막 켜기</button>
-        <button id="fullscreenBtn">전체화면</button><a id="sourceOpen" class="secondary" target="_blank" rel="noopener noreferrer" style="padding:9px 11px;border-radius:9px;text-decoration:none">원본 페이지</a>
+        <button id="fullscreenBtn">전체화면</button><button id="previewHeroBtn" type="button" class="publish hidden" aria-pressed="false">히어로 지정</button><a id="sourceOpen" class="secondary" target="_blank" rel="noopener noreferrer" style="padding:9px 11px;border-radius:9px;text-decoration:none">원본 페이지</a>
       </div>
     </div>
   </div>
 </div>
 <script src="/assets/js/igdc-member-auth.js"></script>
 <script src="/assets/js/admin-media-ai-dialog.js?v=1"></script>
-<script src="/assets/js/admin-media-candidate-queue.js?v=20260824-v50-hd-hero"></script>
+<script src="/assets/js/admin-media-candidate-queue.js?v=28"></script>
 </body>
 </html>

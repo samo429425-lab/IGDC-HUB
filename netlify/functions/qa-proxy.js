@@ -17,9 +17,9 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { authorizeAiAccess, bearerToken } = require("./lib/maru-ai-access-control");
+const { bearerToken } = require("./lib/maru-ai-access-control");
 
-const VERSION = "igdc-qa-proxy-v1.2.2-public-template-secure-ai";
+const VERSION = "igdc-qa-proxy-v1.3.0-public-ai-owner-delete";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
@@ -29,7 +29,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization",
+  "Access-Control-Allow-Headers": "Content-Type,Authorization,X-IGDC-Member-Token",
   "Cache-Control": "no-store"
 };
 
@@ -57,20 +57,104 @@ function qaRateAllowed(event){
   QA_RATE_STATE.set(key, row);
   return row.count <= limit;
 }
-async function canUseOpenAiForQa(event){
-  if (!bearerToken(event)) return false;
-  try {
-    await authorizeAiAccess(event, { purpose: "qa-support", allowPaid: false, maximumBytes: 64 * 1024 });
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
 
 async function fetchCompat(url, init){
   if (typeof fetch === "function") return fetch(url, init);
   const mod = await import("node-fetch");
   return mod.default(url, init);
+}
+
+function getHeader(event, name){
+  const headers = event && event.headers || {};
+  const wanted = low(name);
+  for (const [key, value] of Object.entries(headers)) {
+    if (low(key) === wanted) return cleanText(value, 10000);
+  }
+  return "";
+}
+
+function normalizeRole(value){
+  return low(value).replace(/[\s.\-]+/g, "_");
+}
+
+function memberVerifyUrl(){
+  const explicit = cleanText(process.env.MARU_AUTH_VERIFY_URL, 1000);
+  const base = cleanText(process.env.URL || process.env.DEPLOY_PRIME_URL || "https://igdcglobal.com", 1000).replace(/\/+$/, "");
+  const raw = explicit || `${base}/.netlify/functions/member-admin?action=me`;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return "";
+    return url.toString();
+  } catch (_) { return ""; }
+}
+
+async function verifyPlatformMemberToken(token){
+  token = cleanText(token, 10000);
+  if (!token) return null;
+  const url = memberVerifyUrl();
+  if (!url) return null;
+  try {
+    const response = await fetchCompat(url, {
+      method:"GET",
+      headers:{ Authorization:`Bearer ${token}`, Accept:"application/json" },
+      redirect:"error"
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    if (!payload || payload.ok !== true || !payload.me) return null;
+    const me = payload.me || {};
+    const roles = [...new Set([...(Array.isArray(me.roles) ? me.roles : []), me.role]
+      .flatMap(v => typeof v === "string" ? v.split(",") : [])
+      .map(normalizeRole).filter(Boolean))];
+    return {
+      userId: cleanText(me.user_id || me.sub, 300),
+      email: cleanText(me.email, 500).toLowerCase(),
+      roles,
+      isAdmin: roles.includes("owner") || roles.includes("admin")
+    };
+  } catch (_) { return null; }
+}
+
+async function verifySupabaseUserToken(token){
+  token = cleanText(token, 10000);
+  if (!token || !SUPABASE_URL || (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY)) return null;
+  const apiKey = SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    const response = await fetchCompat(`${SUPABASE_URL.replace(/\/$/,"")}/auth/v1/user`, {
+      method:"GET",
+      headers:{ apikey:apiKey, Authorization:`Bearer ${token}`, Accept:"application/json" }
+    });
+    if (!response.ok) return null;
+    const user = await response.json();
+    const id = cleanText(user && user.id, 300);
+    return id ? { userId:id, email:cleanText(user.email,500).toLowerCase() } : null;
+  } catch (_) { return null; }
+}
+
+async function isSupabaseAdmin(userId, dbToken){
+  userId = cleanText(userId, 300);
+  if (!userId) return false;
+  try {
+    const rows = await sbFetch(`igdc_admins?select=uid&uid=eq.${encodeURIComponent(userId)}&limit=1`, { method:"GET", headers:{ Prefer:"" } }, true, dbToken);
+    return Array.isArray(rows) && rows.some(row => cleanText(row && row.uid, 300) === userId);
+  } catch (_) { return false; }
+}
+
+async function requestIdentity(event){
+  const authToken = bearerToken(event);
+  const memberHeaderToken = getHeader(event, "x-igdc-member-token");
+  let supabase = await verifySupabaseUserToken(authToken);
+  let member = await verifyPlatformMemberToken(memberHeaderToken);
+  if (!member && !supabase && authToken) member = await verifyPlatformMemberToken(authToken);
+  const dbToken = supabase ? authToken : "";
+  const supabaseAdmin = supabase ? await isSupabaseAdmin(supabase.userId, dbToken) : false;
+  return {
+    supabaseUserId: supabase && supabase.userId || "",
+    memberUserId: member && member.userId || "",
+    roles: member && member.roles || [],
+    isAdmin: !!(supabaseAdmin || member && member.isAdmin),
+    dbToken
+  };
 }
 
 function parseBody(event){
@@ -196,7 +280,7 @@ async function answerFor(question, meta, route, k, allowOpenAi){
   const adminNote = route.admin_required ? pack.admin : pack.done;
   const fallback = [pack.hello, pack.intro, "", body, "", adminNote, "", pack.thanks].join("\n");
   const ai = allowOpenAi === true ? await openAiAnswer(question, meta, route, k, fallback) : null;
-  return ai || fallback;
+  return { answer: ai || fallback, ai_used: !!ai, fallback_used: !ai };
 }
 
 async function openAiAnswer(question, meta, route, k, fallbackAnswer){
@@ -268,20 +352,22 @@ function adminSummary(question, route){
   };
 }
 
-function sbHeaders(service){
-  const key = service && SUPABASE_SERVICE_ROLE_KEY ? SUPABASE_SERVICE_ROLE_KEY : SUPABASE_ANON_KEY;
+function sbHeaders(service, userToken){
+  const useService = !!(service && SUPABASE_SERVICE_ROLE_KEY);
+  const key = useService ? SUPABASE_SERVICE_ROLE_KEY : (SUPABASE_ANON_KEY || SUPABASE_SERVICE_ROLE_KEY);
+  const authorization = useService ? SUPABASE_SERVICE_ROLE_KEY : (cleanText(userToken, 10000) || key);
   return {
     apikey: key,
-    Authorization: `Bearer ${key}`,
+    Authorization: `Bearer ${authorization}`,
     "Content-Type":"application/json",
     Prefer:"return=representation"
   };
 }
 
-async function sbFetch(restPath, init, service){
+async function sbFetch(restPath, init, service, userToken){
   if (!SUPABASE_URL || (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY)) throw new Error("Supabase env missing");
   const url = `${SUPABASE_URL.replace(/\/$/,"")}/rest/v1/${restPath}`;
-  const res = await fetchCompat(url, Object.assign({}, init || {}, { headers:Object.assign(sbHeaders(service), (init && init.headers) || {}) }));
+  const res = await fetchCompat(url, Object.assign({}, init || {}, { headers:Object.assign(sbHeaders(service, userToken), (init && init.headers) || {}) }));
   const text = await res.text();
   let data = null;
   try{ data = text ? JSON.parse(text) : null; }catch(e){ data = text; }
@@ -310,7 +396,18 @@ function isSavedThread(saved){
   return !!(saved && Array.isArray(saved.threads) && saved.threads.length);
 }
 
-function publicThread(row){
+function canDeleteThread(row, identity){
+  identity = identity || {};
+  const meta = row && row.meta || {};
+  const rowUserId = cleanText(row && row.user_id || meta.user_id, 300);
+  const rowMemberUserId = cleanText(meta.member_user_id || meta.memberUserId, 300);
+  if (identity.isAdmin) return true;
+  if (identity.supabaseUserId && rowUserId && identity.supabaseUserId === rowUserId) return true;
+  if (identity.memberUserId && rowMemberUserId && identity.memberUserId === rowMemberUserId) return true;
+  return false;
+}
+
+function publicThread(row, identity){
   const meta = row && row.meta || {};
   return {
     id: row && (row.id || row.uuid || row.ts) || null,
@@ -320,11 +417,12 @@ function publicThread(row){
     answer: row && (row.answer || row.a) || "",
     is_admin: !!(row && (row.is_admin || row.admin_required) || meta.admin_required),
     status: row && row.status || meta.status || "answered",
-    created_at: row && (row.created_at || row.updated_at || row.ts) || null
+    created_at: row && (row.created_at || row.updated_at || row.ts) || null,
+    can_delete: canDeleteThread(row, identity)
   };
 }
 
-async function saveQuestion(record){
+async function saveQuestion(record, dbToken){
   const saved = { questions:null, threads:null, persisted:false, errors:[], warnings:[] };
   if (!SUPABASE_URL || (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY)) {
     saved.errors.push("Supabase env missing; answer generated without DB save.");
@@ -346,7 +444,9 @@ async function saveQuestion(record){
     admin_required: !!record.admin_required,
     status: record.status,
     ai_answered: record.ai_answered,
-    answer_hash: hash(record.answer)
+    answer_hash: hash(record.answer),
+    user_id: cleanText(record.user_id, 300) || null,
+    member_user_id: cleanText(record.member_user_id, 300) || null
   });
 
   // This is the canonical row read by the existing popup's registered-question list.
@@ -354,6 +454,7 @@ async function saveQuestion(record){
   const canonicalThread = [{
     project: scope.project,
     page_id: scope.page_id,
+    user_id: cleanText(record.user_id, 300) || null,
     question: record.question,
     answer: record.answer,
     is_admin: !!record.admin_required,
@@ -361,18 +462,19 @@ async function saveQuestion(record){
     meta
   }];
   try{
-    saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify(canonicalThread) }, true);
+    saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify(canonicalThread) }, true, dbToken);
   }catch(e1){
     // Some older deployments do not yet have a JSON meta column. Preserve saving with the core popup fields.
     const compatThread = [{
       project: scope.project,
       page_id: scope.page_id,
+      user_id: cleanText(record.user_id, 300) || null,
       question: record.question,
       answer: record.answer,
       is_admin: !!record.admin_required,
       created_at: record.created_at
     }];
-    try{ saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify(compatThread) }, true); }
+    try{ saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify(compatThread) }, true, dbToken); }
     catch(e2){ saved.errors.push(`igdc_qna_threads save failed: ${e2.message || e2}`); }
   }
   saved.persisted = isSavedThread(saved);
@@ -390,15 +492,15 @@ async function saveQuestion(record){
     created_at: record.created_at
   }];
   const simpleQuestion = [{ question: record.question, meta }];
-  try{ saved.questions = await sbFetch("questions", { method:"POST", body:JSON.stringify(richQuestion) }, true); }
+  try{ saved.questions = await sbFetch("questions", { method:"POST", body:JSON.stringify(richQuestion) }, true, dbToken); }
   catch(e1){
-    try{ saved.questions = await sbFetch("questions", { method:"POST", body:JSON.stringify(simpleQuestion) }, true); }
+    try{ saved.questions = await sbFetch("questions", { method:"POST", body:JSON.stringify(simpleQuestion) }, true, dbToken); }
     catch(e2){ saved.warnings.push(`questions mirror save skipped: ${e2.message || e2}`); }
   }
   return saved;
 }
 
-async function listPublicThreads(project, pageId, limit){
+async function listPublicThreads(project, pageId, limit, identity, dbToken){
   limit = Math.max(1, Math.min(100, safeNum(limit, 100)));
   const result = { ok:true, version:VERSION, project, page_id:pageId, limit, rows:[], warnings:[] };
   if (!SUPABASE_URL || (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY)) {
@@ -414,13 +516,40 @@ async function listPublicThreads(project, pageId, limit){
   const p = encodeURIComponent(project);
   const id = encodeURIComponent(pageId);
   try{
-    const rows = await sbFetch(`igdc_qna_threads?select=*&project=eq.${p}&page_id=eq.${id}&order=created_at.desc&limit=${limit}`, { method:"GET", headers:{ Prefer:"" } }, true);
-    result.rows = (Array.isArray(rows) ? rows : []).map(publicThread).filter(x => x.question);
+    const rows = await sbFetch(`igdc_qna_threads?select=*&project=eq.${p}&page_id=eq.${id}&order=created_at.desc&limit=${limit}`, { method:"GET", headers:{ Prefer:"" } }, true, dbToken);
+    result.rows = (Array.isArray(rows) ? rows : []).map(row => publicThread(row, identity)).filter(x => x.question);
   }catch(e){
     result.ok = false;
     result.warnings.push(String(e.message || e).slice(0,280));
   }
   return result;
+}
+
+async function deletePublicThread(payload, identity, dbToken){
+  identity = identity || {};
+  const id = cleanText(payload && payload.id, 240);
+  const project = normalizeScope(payload && payload.project, "IGDC", 120);
+  const pageId = normalizeScope(payload && (payload.page_id || payload.pageId || payload.page), "", 360);
+  if (!id) return { ok:false, statusCode:400, error:"Missing id" };
+  if (!identity.isAdmin && !identity.supabaseUserId && !identity.memberUserId) {
+    return { ok:false, statusCode:401, error:"A valid question author or administrator session is required." };
+  }
+  try{
+    const rows = await sbFetch(`igdc_qna_threads?select=*&id=eq.${encodeURIComponent(id)}&limit=1`, { method:"GET", headers:{ Prefer:"" } }, true, dbToken);
+    const row = Array.isArray(rows) && rows[0];
+    if (!row) return { ok:false, statusCode:404, error:"Question not found" };
+    const rowScope = scopeFor(row);
+    if (pageId && rowScope.page_id !== pageId) return { ok:false, statusCode:403, error:"Question scope mismatch" };
+    if (project && rowScope.project !== project) return { ok:false, statusCode:403, error:"Question scope mismatch" };
+    if (!canDeleteThread(row, identity)) return { ok:false, statusCode:403, error:"Only the author or an administrator can delete this question." };
+    const deleted = await sbFetch(`igdc_qna_threads?id=eq.${encodeURIComponent(id)}`, { method:"DELETE" }, true, dbToken);
+    if (!Array.isArray(deleted) || !deleted.length) {
+      return { ok:false, statusCode:403, error:"The question could not be deleted under the current database policy." };
+    }
+    return { ok:true, version:VERSION, id, deleted:true };
+  }catch(e){
+    return { ok:false, statusCode:503, error:String(e.message || e).slice(0,360) };
+  }
 }
 
 function normalizeRows(rows, source){
@@ -509,7 +638,8 @@ exports.handler = async function(event){
       if (action === "list" || action === "threads" || action === "thread-list") {
         const project = normalizeScope(qs.project, "IGDC", 120);
         const pageId = normalizeScope(qs.page_id || qs.pageId || qs.page, "", 360);
-        const listed = await listPublicThreads(project, pageId, qs.limit);
+        const identity = await requestIdentity(event);
+        const listed = await listPublicThreads(project, pageId, qs.limit, identity, identity.dbToken);
         return json(listed.ok ? 200 : 503, listed);
       }
       // No deployed client currently uses the legacy admin endpoints. Keep their surface closed
@@ -535,6 +665,11 @@ exports.handler = async function(event){
       const rawBytes = Buffer.byteLength(String(event.body || ""), event.isBase64Encoded ? "base64" : "utf8");
       if (rawBytes > 64 * 1024) return json(413, { ok:false, version:VERSION, error:"request_too_large" });
       const body = parseBody(event);
+      const identity = await requestIdentity(event);
+      if (low(body.action) === "delete") {
+        const removed = await deletePublicThread(body, identity, identity.dbToken);
+        return json(removed.ok ? 200 : (removed.statusCode || 403), removed);
+      }
       if (low(body.action) === "admin-update") {
         return json(403, { ok:false, version:VERSION, error:"Admin Q&A updates require a verified server-side admin session." });
       }
@@ -554,25 +689,31 @@ exports.handler = async function(event){
         ua: cleanText(incomingMeta.ua, 500),
         channel: cleanText(incomingMeta.channel, 120)
       };
+      meta.member_user_id = identity.memberUserId || "";
+      meta.author_kind = identity.memberUserId ? "member" : (identity.supabaseUserId ? "supabase-session" : "unverified");
       const k = readKnowledge();
       const route = classify(question, meta, k);
-      const allowOpenAi = await canUseOpenAiForQa(event);
-      const answerMode = allowOpenAi ? "verified-owner-admin-openai" : "public-guidance-template";
-      const answer = await answerFor(question, meta, route, k, allowOpenAi);
+      // Every registered public Q&A attempts an AI first-line answer. The safe template
+      // remains only as a resilience fallback when the AI key/provider is unavailable.
+      const answerResult = await answerFor(question, meta, route, k, true);
+      const answer = answerResult.answer;
+      const answerMode = answerResult.ai_used ? "openai-firstline" : "safe-template-fallback";
       meta.answer_mode = answerMode;
       console.log("[qa-proxy]", "answer_mode=", answerMode, "category=", route.category);
       const record = Object.assign({
         project,
         page_id: pageId,
+        user_id: identity.supabaseUserId || null,
+        member_user_id: identity.memberUserId || null,
         question,
         answer,
         created_at: nowIso(),
         source: meta.source || "qa-proxy",
         meta
       }, route);
-      const saved = await saveQuestion(record);
+      const saved = await saveQuestion(record, identity.dbToken);
       const stored = isSavedThread(saved);
-      const persistedRow = stored ? publicThread(saved.threads[0]) : null;
+      const persistedRow = stored ? publicThread(saved.threads[0], identity) : null;
       return json(stored ? 200 : 503, {
         ok:stored,
         version:VERSION,

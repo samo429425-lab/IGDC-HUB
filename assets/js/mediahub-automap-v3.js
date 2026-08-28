@@ -1076,7 +1076,7 @@
   // Trending is deliberately excluded because that rail also mixes variety/music.
   const HERO_ALLOWED_SECTIONS=new Set(['media-movie','media-drama']);
   const heroRuntime={
-    rotateKeys:[],sectionMap:null,timer:null,running:false,rerun:false,
+    rotateKeys:[],sectionMap:null,manualContentId:'',timer:null,running:false,rerun:false,
     currentItem:null,currentUrl:'',currentTier:-1,currentScore:-Infinity,
     failedUrls:new Set(),frameCaptureCache:new Map()
   };
@@ -1223,8 +1223,13 @@
 
     const preferred=new Set((Array.isArray(heroRotateKeys)?heroRotateKeys:[]).map(canonKey).filter((key)=>HERO_ALLOWED_SECTIONS.has(key)));
     HERO_ALLOWED_SECTIONS.forEach((key)=>preferred.add(key));
-    const pool=mergeHeroRows(preferred,sectionMap);
+    let pool=mergeHeroRows(preferred,sectionMap);
     if(!pool.length)return false;
+    const manualId=String(heroRuntime.manualContentId||'').trim();
+    if(manualId){
+      const manualRow=pool.find((row)=>String(ensureContentId(row&&row.item)||heroItemKey(row&&row.item)||'').trim()===manualId);
+      if(manualRow)pool=[manualRow];
+    }
 
     pool.sort((a,b)=>{
       // Requested hero policy: hot/ranked movie/drama first, then recency,
@@ -1369,9 +1374,10 @@
     },Math.max(0,Number(delay)||0));
   }
 
-  function scheduleHeroRefresh(heroRotateKeys,sectionMap){
+  function scheduleHeroRefresh(heroRotateKeys,sectionMap,manualContentId){
     heroRuntime.rotateKeys=Array.isArray(heroRotateKeys)?heroRotateKeys.slice():[];
     heroRuntime.sectionMap=sectionMap||{};
+    heroRuntime.manualContentId=String(manualContentId||'').trim();
     requestHeroRefresh(0);
     [700,1800,4200,9000,18000].forEach((delay)=>setTimeout(()=>requestHeroRefresh(0),delay));
   }
@@ -1484,7 +1490,8 @@
     // Start hero selection only after the rail bind pass. The hero is therefore
     // guaranteed to be an expansion of a successfully rendered movie/drama card.
     const heroRotateFrom=snapshot&&snapshot.hero&&(snapshot.hero.rotateFrom||snapshot.hero.source);
-    scheduleHeroRefresh(heroRotateFrom,sectionMap);
+    const heroManualContentId=snapshot&&snapshot.hero&&snapshot.hero.manual===true?snapshot.hero.manualContentId:'';
+    scheduleHeroRefresh(heroRotateFrom,sectionMap,heroManualContentId);
 
     // Async image decode/recovery and any later renderer must not be allowed to
     // reintroduce Sample/real interleaving. Re-compact a few times after the
@@ -1495,7 +1502,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.3-hero-image-quality-fullhd-first';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.4-hero-fullhd-manual-pin';
 })();
 
 

@@ -789,59 +789,48 @@
     }catch(error){show('공개 파이프라인 JSON 생성 실패: '+error.message,'warn');}
     finally{if(button)button.disabled=false;}
   }
-  function captureFrameDataUrl(row,requireHd){
+  function captureFrameDataUrl(row){
     return new Promise(function(resolve,reject){
       var sources=candidateSources(row);if(!sources.length){reject(new Error('직접 재생 주소가 없습니다.'));return;}
-      var video=document.createElement('video'),sourceIndex=0,targetIndex=0,finished=false,targets=[],best=null;
-      var timer=setTimeout(function(){finish(best?null:new Error(requireHd?'선명한 HD 프레임 캡처 시간이 초과되었습니다.':'프레임 캡처 시간이 초과되었습니다.'),best);},14000);
+      var video=document.createElement('video'),sourceIndex=0,targetIndex=0,finished=false,TARGETS=[1,3,6,10];
+      var timer=setTimeout(function(){finish(new Error('초반 프레임 캡처 시간이 초과되었습니다.'));},7000);
       function clean(){clearTimeout(timer);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
       function finish(err,data){if(finished)return;finished=true;clean();err?reject(err):resolve(data);}
-      function buildTargets(){
-        var d=Number(video.duration),raw=[3,10];
-        if(isFinite(d)&&d>12)raw.push(d*.12,d*.28,d*.45,d*.62,d*.78,d*.88);
-        var seen={};targets=raw.map(Number).filter(function(t){return isFinite(t)&&t>=.05;}).map(function(t){return isFinite(d)&&d>0?Math.min(t,Math.max(.2,d-.25)):t;}).filter(function(t){var k=t.toFixed(2);if(seen[k])return false;seen[k]=1;return true;}).slice(0,8);
-      }
-      function load(){if(sourceIndex>=sources.length){finish(best?null:new Error(requireHd?'1280×720 이상의 선명한 원본 프레임을 찾지 못했습니다.':'사용 가능한 프레임을 캡처하지 못했습니다.'),best);return;}targetIndex=0;targets=[];video.src=sources[sourceIndex].url;video.load();}
+      function load(){if(sourceIndex>=sources.length){finish(new Error('초반 프레임을 캡처하지 못했습니다.'));return;}targetIndex=0;video.src=sources[sourceIndex].url;video.load();}
       function nextSource(){sourceIndex+=1;load();}
-      function seek(){if(targetIndex>=targets.length){nextSource();return;}var t=targets[targetIndex++];try{video.currentTime=Math.max(.05,t);}catch(_e){nextSource();}}
-      function frameQuality(){
-        if(!video.videoWidth||!video.videoHeight)return null;
+      function seek(){var d=Number(video.duration),t=TARGETS[targetIndex];if(isFinite(d)&&d>0)t=Math.min(t,Math.max(.15,d-.2));try{video.currentTime=Math.max(0,t);}catch(_e){shot();}}
+      function next(){targetIndex+=1;if(targetIndex>=TARGETS.length){nextSource();return;}seek();}
+      function frameLooksUsable(){
+        if(!video.videoWidth||!video.videoHeight)return false;
         try{
-          var W=320,H=180,sample=document.createElement('canvas'),ctx=sample.getContext('2d',{alpha:false});if(!ctx)return null;
-          sample.width=W;sample.height=H;
-          var r=Math.max(W/video.videoWidth,H/video.videoHeight),sw=W/r,sh=H/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
-          ctx.drawImage(video,sx,sy,sw,sh,0,0,W,H);
-          var px=ctx.getImageData(0,0,W,H).data,lum=new Float32Array(W*H),sum=0,sum2=0;
-          for(var i=0,p=0;i<px.length;i+=4,p++){var y=px[i]*.2126+px[i+1]*.7152+px[i+2]*.0722;lum[p]=y;sum+=y;sum2+=y*y;}
-          var count=lum.length,mean=sum/count,variance=Math.max(0,sum2/count-mean*mean),edgeSum=0,edgeCount=0,edges=[];
-          for(var yy=1;yy<H;yy+=2){var row=yy*W,prev=(yy-1)*W;for(var xx=1;xx<W;xx+=2){var v=lum[row+xx],e=(Math.abs(v-lum[row+xx-1])+Math.abs(v-lum[prev+xx]))*.5;edgeSum+=e;edgeCount++;if(edges.length<5000)edges.push(e);}}
-          edges.sort(function(a,b){return a-b;});var p90=edges.length?edges[Math.min(edges.length-1,Math.floor(edges.length*.9))]:0,edgeMean=edgeCount?edgeSum/edgeCount:0;
-          var usable=mean>12&&mean<244&&variance>120,sharp=usable&&(edgeMean>=4.8||p90>=15);
-          return{mean:mean,variance:variance,edgeMean:edgeMean,edgeP90:p90,usable:usable,sharp:sharp,score:(edgeMean*10)+p90+(Math.sqrt(variance)*.12)};
-        }catch(_e){return null;}
+          var sample=document.createElement('canvas'),ctx=sample.getContext('2d',{alpha:false});if(!ctx)return false;
+          sample.width=64;sample.height=36;ctx.drawImage(video,0,0,sample.width,sample.height);
+          var pixels=ctx.getImageData(0,0,sample.width,sample.height).data,count=0,sum=0,sum2=0;
+          for(var i=0;i<pixels.length;i+=16){var y=pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722;sum+=y;sum2+=y*y;count+=1;}
+          if(!count)return false;var mean=sum/count,variance=sum2/count-mean*mean;
+          return mean>10&&mean<246&&variance>18;
+        }catch(_e){return false;}
       }
       function shot(){
-        if(!video.videoWidth||!video.videoHeight){seek();return;}
-        if(requireHd&&(video.videoWidth<1280||video.videoHeight<720)){nextSource();return;}
-        var quality=frameQuality();if(!quality||!quality.usable){seek();return;}
+        if(!video.videoWidth||!video.videoHeight||!frameLooksUsable()){next();return;}
         try{
-          var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false}),CW=1280,CH=720;c.width=CW;c.height=CH;
+          // HD thumbnail: keep the fast early-frame capture, but render the chosen usable frame at 1280x720.
+          var c=document.createElement('canvas'),x=c.getContext('2d',{alpha:false});
+          var CW=1280,CH=720;c.width=CW;c.height=CH;
           x.fillStyle='#000';x.fillRect(0,0,CW,CH);
-          // Hero capture never upscales an SD source. Non-hero card capture keeps the previous behaviour.
-          var r=requireHd?Math.max(CW/video.videoWidth,CH/video.videoHeight):Math.min(CW/video.videoWidth,CH/video.videoHeight);
-          var sw=CW/r,sh=CH/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
-          if(requireHd){x.imageSmoothingEnabled=true;if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';x.drawImage(video,sx,sy,sw,sh,0,0,CW,CH);}
-          else{var w=video.videoWidth*r,h=video.videoHeight*r;x.imageSmoothingEnabled=true;if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';x.drawImage(video,(CW-w)/2,(CH-h)/2,w,h);}
-          var data=c.toDataURL('image/jpeg',.94);if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.90);if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.86);
-          if(data&&data.length>1000){
-            var candidate={dataUrl:data,sourceWidth:Number(video.videoWidth||0),sourceHeight:Number(video.videoHeight||0),edgeMean:Number(quality.edgeMean||0),edgeP90:Number(quality.edgeP90||0),variance:Number(quality.variance||0),sharp:quality.sharp===true,score:Number(quality.score||0)};
-            if((!requireHd||candidate.sharp)&&(!best||candidate.score>best.score))best=candidate;
-          }
+          var r=Math.min(CW/video.videoWidth,CH/video.videoHeight),w=video.videoWidth*r,h=video.videoHeight*r;
+          x.imageSmoothingEnabled=true;
+          if('imageSmoothingQuality' in x)x.imageSmoothingQuality='high';
+          x.drawImage(video,(CW-w)/2,(CH-h)/2,w,h);
+          var data=c.toDataURL('image/jpeg',.90);
+          // Keep the existing 1.5MB server limit safe without lowering pixel resolution.
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.84);
+          if(data&&data.length>1900000)data=c.toDataURL('image/jpeg',.78);
+          if(data&&data.length>1000){finish(null,data);return;}
         }catch(_e){}
-        seek();
+        next();
       }
-      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';
-      video.onerror=nextSource;video.onloadedmetadata=function(){if(requireHd&&(video.videoWidth<1280||video.videoHeight<720)){nextSource();return;}buildTargets();seek();};video.onseeked=shot;document.body.appendChild(video);load();
+      video.crossOrigin='anonymous';video.muted=true;video.playsInline=true;video.preload='metadata';video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-10px;top:-10px';video.onerror=nextSource;video.onloadedmetadata=seek;video.onseeked=shot;document.body.appendChild(video);load();
     });
   }
   async function generateThumbnail(id,button){
@@ -849,15 +838,11 @@
     if(!row)return;
     button.disabled=true;
     try{
-      show('여러 구간을 비교해 가장 선명한 프레임을 선택합니다. 영화·드라마 히어로는 실제 HD 원본만 허용합니다.','ok');
+      show('1·3·6·10초 중 첫 성공 프레임을 HD 1280×720 썸네일로 저장합니다.','ok');
       var resolved=await post(THUMB,{action:'resolve',id:id});
       if(resolved.thumbUrl){show('원본 제공 썸네일을 후보에 연결했습니다.','ok');await refresh();return;}
-      if(resolved.heroCaptureRequired&&resolved.cardThumbUrl){
-        show('카드용 원본 이미지는 보존했습니다. 영화·드라마 히어로용 1280×720 프레임을 추가 생성합니다.','ok');
-      }
-      var heroSection=text(row.sectionKey)==='media-movie'||text(row.sectionKey)==='media-drama';
-      var capture=await captureFrameDataUrl(row,heroSection||resolved.heroCaptureRequired===true);
-      var stored=await post(THUMB,{action:'store_capture',id:id,dataUrl:capture.dataUrl,sourceWidth:capture.sourceWidth,sourceHeight:capture.sourceHeight,edgeMean:capture.edgeMean,edgeP90:capture.edgeP90,variance:capture.variance,sharp:capture.sharp,capturePurpose:(heroSection||resolved.heroCaptureRequired===true)?'hero_hd':'card'});
+      var dataUrl=await captureFrameDataUrl(row);
+      var stored=await post(THUMB,{action:'store_capture',id:id,dataUrl:dataUrl});
       show(stored.thumbUrl?'영상 프레임 썸네일을 생성해 저장했습니다.':'썸네일 생성 결과를 저장하지 못했습니다.',stored.thumbUrl?'ok':'warn');
       await refresh();
     }catch(error){show(error.message,'warn');}
@@ -1329,10 +1314,45 @@
       String(Math.max(0,Math.min(1000,Math.round((video.currentTime/duration)*1000)))):'0';
     bar.disabled=!(isFinite(duration)&&duration>0);
   }
+  function heroManualEligible(row){
+    if(!row)return false;
+    var section=text(row.sectionKey);
+    return (section==='media-movie'||section==='media-drama')&&lower(row.reviewStatus)==='approved'&&lower(row.verificationStatus)==='approved_for_snapshot'&&row.frontEnabled!==false;
+  }
+  function heroManualPinnedId(){return text(frontReleaseState&&frontReleaseState.heroManualContentId);}
+  function syncPreviewHeroButton(row){
+    var button=$('previewHeroBtn');if(!button)return;
+    var eligible=heroManualEligible(row),id=text(row&&(row.contentId||row.id)),pinned=!!id&&heroManualPinnedId()===id;
+    button.classList.toggle('hidden',!eligible);
+    button.disabled=!eligible;
+    button.setAttribute('aria-pressed',pinned?'true':'false');
+    button.classList.toggle('publish',!pinned);
+    button.classList.toggle('secondary',pinned);
+    button.textContent=pinned?'히어로 지정 해제 · 자동선별':'이 영상 히어로 지정';
+    button.title=eligible?(pinned?'수동 지정을 해제하고 고화질·랭킹 자동 선별로 돌아갑니다.':'현재 점검 중인 이 한 편을 히어로 바로가기 영상으로 지정합니다.'):'영화·드라마의 승인·검증·프론트 공급 후보에서 지정할 수 있습니다.';
+  }
+  async function setManualHero(row){
+    if(!heroManualEligible(row)){show('히어로 수동 지정은 프론트 공급이 허용된 승인 완료 영화·드라마 후보에서만 가능합니다.','warn');return;}
+    var id=text(row.contentId||row.id),pinned=heroManualPinnedId()===id;
+    var message=pinned?'이 영상의 히어로 수동 지정을 해제하고 자동 선별로 돌아갈까요?':'현재 점검한 이 영상을 히어로 바로가기 영상으로 지정할까요?\n\n프론트에 이미 반영된 영상이어야 하며, 히어로 이미지는 기존 Full HD 우선 → 선명한 1280×720 → 고화질 영상 프레임 순으로 선택합니다.';
+    if(!window.confirm(message))return;
+    var button=$('previewHeroBtn');if(button)button.disabled=true;
+    try{
+      var data=await post(PUB,{storeRelease:true,publishFront:true,frontAction:pinned?'hero_auto':'hero_pin',heroContentId:pinned?'':id,includeSnapshot:'0'});
+      if(data&&data.frontState)frontReleaseState=data.frontState;
+      syncPreviewHeroButton(row);renderRows();
+      show(pinned?'히어로 수동 지정 해제 완료 · 자동 선별로 복귀합니다.':'히어로 수동 지정 완료 · 선택한 영상 한 편으로 프론트 반영을 요청했습니다.','ok');
+    }catch(error){
+      show('히어로 지정 실패: '+error.message,'warn');
+      syncPreviewHeroButton(row);
+    }
+  }
+
   function openPreview(id){
     var row=rowsCache.find(function(item){return text(item.contentId||item.id)===id;});
     if(!row)return;
     currentPreview=row;previewSources=candidateSources(row);previewSourceIndex=0;
+    syncPreviewHeroButton(row);
     var video=$('previewVideo');
     video.pause();video.innerHTML='';video.poster=safeWebUrl(row.thumb);
     $('previewTitle').textContent=row.title||'';
@@ -1386,6 +1406,7 @@
     $('seekBar').value='0';$('seekBar').disabled=true;
     $('currentTimeText').textContent='00:00';$('durationText').textContent='00:00';
     $('previewModal').classList.add('hidden');
+    if($('previewHeroBtn'))$('previewHeroBtn').classList.add('hidden');
     currentPreview=null;previewSources=[];previewSourceIndex=0;
   }
   function previewClick(event){
@@ -1417,6 +1438,43 @@
     try{poolCache=await get(POOL+'?action=status');renderPool();}
     catch(error){poolCache=null;renderPool();$('poolState').textContent='후보 운영 현황 확인 실패';show('후보 운영 현황 확인 실패: '+error.message,'warn');}
   }
+  function setPoolCollapsed(collapsed){
+    var panel=$('candidatePoolPanel'),button=$('poolToggleBtn');
+    if(!panel||!button)return;
+    panel.classList.toggle('pool-collapsed',!!collapsed);
+    button.setAttribute('aria-expanded',collapsed?'false':'true');
+    button.textContent=collapsed?'목록 펼치기 ▼':'목록 접기 ▲';
+  }
+  function togglePoolPanel(){
+    var panel=$('candidatePoolPanel');
+    if(!panel)return;
+    setPoolCollapsed(!panel.classList.contains('pool-collapsed'));
+  }
+  function setRankingCollapsed(collapsed){
+    var body=$('rankingPanelBody'),button=$('rankingToggleBtn');
+    if(!body||!button)return;
+    body.classList.toggle('hidden',!!collapsed);
+    button.setAttribute('aria-expanded',collapsed?'false':'true');
+    button.textContent=collapsed?'목록 펼치기 ▼':'목록 접기 ▲';
+  }
+  function toggleRankingPanel(){
+    var body=$('rankingPanelBody');
+    if(!body)return;
+    setRankingCollapsed(!body.classList.contains('hidden'));
+  }
+  function setSectionBoardCollapsed(collapsed){
+    var body=$('sectionBoardBody'),button=$('sectionBoardToggleBtn');
+    if(!body||!button)return;
+    body.classList.toggle('hidden',!!collapsed);
+    button.setAttribute('aria-expanded',collapsed?'false':'true');
+    button.textContent=collapsed?'9개 섹션 전체 펼치기 ▼':'9개 섹션 전체 접기 ▲';
+  }
+  function toggleSectionBoard(){
+    var body=$('sectionBoardBody');
+    if(!body)return;
+    setSectionBoardCollapsed(!body.classList.contains('hidden'));
+  }
+
   function selectedPoolIds(){return Array.from(poolSelected);}
   function poolSelectedRowMap(){
     var map={};
@@ -1497,6 +1555,18 @@
     $('poolResearchLatestBtn').onclick=researchLatestAll;
     $('poolAutoRebalanceBtn').onclick=poolAutoRebalance;
     $('poolDownloadBtn').onclick=downloadPool;
+    if($('poolToggleBtn')){
+      $('poolToggleBtn').onclick=togglePoolPanel;
+      setPoolCollapsed($('candidatePoolPanel')&&$('candidatePoolPanel').classList.contains('pool-collapsed'));
+    }
+    if($('rankingToggleBtn')){
+      $('rankingToggleBtn').onclick=toggleRankingPanel;
+      setRankingCollapsed($('rankingPanelBody')&&$('rankingPanelBody').classList.contains('hidden'));
+    }
+    if($('sectionBoardToggleBtn')){
+      $('sectionBoardToggleBtn').onclick=toggleSectionBoard;
+      setSectionBoardCollapsed($('sectionBoardBody')&&$('sectionBoardBody').classList.contains('hidden'));
+    }
     $('poolSectionFilter').onchange=function(){poolSelected.clear();renderPool();};
     $('poolBucketFilter').onchange=function(){poolSelected.clear();$('poolSelectAll').checked=false;renderPool();};
     $('poolSelectAll').onchange=function(){var checked=this.checked;document.querySelectorAll('.poolRowCheck').forEach(function(el){el.checked=checked;var id=text(el.dataset.id);if(checked)poolSelected.add(id);else poolSelected.delete(id);});};
@@ -1638,6 +1708,7 @@
     },true);
     $('excludedRows').addEventListener('click',previewClick);
     $('previewClose').onclick=closePreview;
+    if($('previewHeroBtn'))$('previewHeroBtn').onclick=function(){if(currentPreview)setManualHero(currentPreview);};
     $('previewModal').addEventListener('click',function(event){if(event.target===this)closePreview();});
     $('playToggle').onclick=function(){
       var video=$('previewVideo');

@@ -13,7 +13,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-auto-curator-v1.4.0-thumbnail-continuity";
+  "social-candidate-auto-curator-v1.5.0-thumbnail-retry-continuity";
 const MAX_PER_SECTION = SocialStore.POOL_MAX_PER_SECTION || 350;
 
 function text(value) {
@@ -105,8 +105,9 @@ function eligible(row, route, aiPolicy) {
     return { ok: false, reason: "trust_score_below_ai_policy_minimum" };
   if (raw.channelAsset !== true)
     return { ok: false, reason: "channel_asset_required" };
-  if (SocialStore.assetClassOf(row) === "latest_content" && !realThumbnail(row))
-    return { ok: false, reason: "usable_thumbnail_required" };
+  // Do not reject a verified latest-content row only because a platform
+  // temporarily withholds anonymous thumbnail metadata. The collector keeps
+  // the row retryable and later passes can enrich the preview image.
   const aiVerdict = AIPolicy.evaluate(row, normalizedAI);
   if (!aiVerdict.ok) return { ok: false, reason: aiVerdict.reason };
   const scopes = CountryRouting.scopesFrom(row);
