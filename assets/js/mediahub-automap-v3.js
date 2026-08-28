@@ -595,22 +595,26 @@
   }
   function heroImageCandidates(item){
     if(!item||isSyntheticSampleItem(item))return [];
-    const values=[
+    const values=[];
+    const source=mediaSourceForThumb(item),yt=youtubeIdForThumb(source)||youtubeIdForThumb(rawThumbnail(item));
+    if(yt){
+      const enc=encodeURIComponent(yt);
+      // Hero only: probe the provider's genuine high-resolution artwork before
+      // rail/card thumbnails. Missing maxres images are rejected by dimension checks.
+      values.push('https://i.ytimg.com/vi/'+enc+'/maxresdefault.jpg');
+    }
+    values.push(
       item.heroImage,item.heroImageUrl,item.heroThumbnail,item.heroThumb,
       item.backdrop,item.backdropUrl,item.backdropImage,item.backdropPath,
       item.highResThumbnail,item.thumbnailHigh,item.thumbnailHD,item.hdThumbnail,
       item.maxresThumbnail,item.largeThumbnail,item.thumbnailLarge,
       item.image1920,item.image1280,item.coverImage,item.coverUrl,
       renderedHeroThumbnail(item),rawThumbnail(item)
-    ];
-    const source=mediaSourceForThumb(item),yt=youtubeIdForThumb(source)||youtubeIdForThumb(rawThumbnail(item));
+    );
     if(yt){
       const enc=encodeURIComponent(yt);
-      // Hero only: try the high-resolution provider assets first. These are
-      // dimension-checked before use, so YouTube's tiny fallback placeholder
-      // can never be blown up into the hero.
+      // Lower provider variants are fallback only after maxres/dedicated hero art.
       values.push(
-        'https://i.ytimg.com/vi/'+enc+'/maxresdefault.jpg',
         'https://i.ytimg.com/vi/'+enc+'/sddefault.jpg',
         'https://i.ytimg.com/vi/'+enc+'/hqdefault.jpg'
       );
@@ -886,7 +890,9 @@
         try{
           const c=D.createElement('canvas'),ctx=c.getContext('2d',{alpha:false});
           if(!ctx){finish(best);return;}
-          const CW=1280,CH=720;c.width=CW;c.height=CH;
+          const sourceW=Number(video.videoWidth||0),sourceH=Number(video.videoHeight||0);
+          const fullHd=sourceW>=1920&&sourceH>=1080;
+          const CW=fullHd?1920:1280,CH=fullHd?1080:720;c.width=CW;c.height=CH;
           const r=Math.max(CW/video.videoWidth,CH/video.videoHeight);
           const sw=CW/r,sh=CH/r,sx=(video.videoWidth-sw)/2,sy=(video.videoHeight-sh)/2;
           ctx.imageSmoothingEnabled=true;if('imageSmoothingQuality' in ctx)ctx.imageSmoothingQuality='high';
@@ -1250,7 +1256,7 @@
         candidates.push({url:row.renderedUrl,item,card:row.card,score:base+130,hint:heroResolutionTier(row.renderedW,row.renderedH),
           knownW:row.renderedW,knownH:row.renderedH,domReady:true});
       }
-      urls.slice(0,6).forEach((url,index)=>{
+      urls.slice(0,10).forEach((url,index)=>{
         if(!url||seenUrls.has(url)||heroRuntime.failedUrls.has(url))return;
         seenUrls.add(url);
         candidates.push({url,item,card:row.card,score:base+(120-(index*16)),hint:heroResolutionHint(item,url,index),knownW:0,knownH:0,domReady:row.domReady});
@@ -1262,11 +1268,16 @@
       const w=Number(candidate.knownW||0),h=Number(candidate.knownH||0),item=candidate&&candidate.item;
       const tier=heroResolutionTier(w,h);
       if(tier<2)return null;
-      const visual=(item&&item.heroSharpVerified===true)?{sharp:true,edgeMean:Number(item.heroEdgeMean||0)||HERO_MIN_EDGE_MEAN,edgeP90:Number(item.heroEdgeP90||0)||HERO_MIN_EDGE_P90}:null;
+      const verifiedSharp=!!(item&&item.heroSharpVerified===true);
+      // Do not immediately promote an arbitrary 720p rail image just because its
+      // dimensions are large. Full-HD may fast-path; 720p needs sharp verification
+      // or the normal probe/fallback pass below.
+      if(tier===2&&!verifiedSharp)return null;
+      const visual=verifiedSharp?{sharp:true,edgeMean:Number(item.heroEdgeMean||0)||HERO_MIN_EDGE_MEAN,edgeP90:Number(item.heroEdgeP90||0)||HERO_MIN_EDGE_P90}:null;
       const qualityMetric=heroQualityMetric(w,h,visual);
       return Object.assign({},candidate,{w,h,tier,visual,qualityMetric,
         freshnessDay:heroFreshnessDay(candidate.item),popularityMetric:heroPopularityMetric(candidate.item),
-        finalScore:candidate.score+(tier>=3?900:620)+(visual&&visual.sharp?180:60)});
+        finalScore:candidate.score+(tier>=3?1100:700)+(visual&&visual.sharp?180:0)});
     }
     function heroRotationBucket(){
       const now=Date.now();
@@ -1276,9 +1287,14 @@
     function chooseBest(rows){
       const valid=rows.filter((row)=>row&&row.tier>=2).slice().sort(heroResolvedCompare);
       if(!valid.length)return null;
-      const poolSize=Math.max(1,Math.min(valid.length,Number(HERO_ROTATE_TOP_POOL)||1));
+      // Prefer genuinely higher-resolution hero art first. If no Full-HD image
+      // exists, prefer pixel-verified 720p before uninspected 720p fallbacks.
+      const fullHd=valid.filter((row)=>row.tier>=3);
+      const sharpHd=valid.filter((row)=>row.tier===2&&row.visual&&row.visual.sharp===true);
+      const source=fullHd.length?fullHd:(sharpHd.length?sharpHd:valid);
+      const poolSize=Math.max(1,Math.min(source.length,Number(HERO_ROTATE_TOP_POOL)||1));
       const pick=heroRotationBucket()%poolSize;
-      return valid[pick]||valid[0]||null;
+      return source[pick]||source[0]||null;
     }
     async function checkedCandidate(candidate,timeoutMs){
       const known=resolveKnown(candidate);if(known)return known;
@@ -1479,7 +1495,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.2-hero-hd-1280x720-ranked-rotate';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.3-hero-image-quality-fullhd-first';
 })();
 
 

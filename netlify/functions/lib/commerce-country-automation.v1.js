@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.19.1-3000-ledger-cleanup-execution";
+const VERSION = "commerce-country-automation-v3.19.2-latest-queue-ledger-reconcile";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2614,6 +2614,14 @@ async function resolveChunkedProductSelection(job,input){
   for(let offset=0;offset<total&&out.length<ids.size;offset+=PRODUCT_STATUS_PAGE_LIMIT){const rows=await readProductChunkRange(job,"result",offset,PRODUCT_STATUS_PAGE_LIMIT);for(const row of rows){const identity=ProductRanking.productIdentity(row),key=identity||text(row&&row.id)||productUrl(row);if(productSelectionMatches(row,ids)&&key&&!seen.has(key)){seen.add(key);out.push(row);}}}
   return out;
 }
+async function reconcileExplicitPrivateQueueSelection(scope,products,handled,rankingContext){
+  const selected=array(products).slice(0,100),evaluated=array(ProductRanking.buildPortfolio(selected,plain(rankingContext)).products),identityByCandidate=new Map(),candidateIds=[];
+  for(const product of evaluated){const identity=ProductRanking.productIdentity(product)||text(product&&product.id)||productUrl(product);if(!identity)continue;const candidateId=productCandidateId(scope,product);if(!candidateId)continue;identityByCandidate.set(candidateId,identity);candidateIds.push(candidateId);}
+  const existing=await candidateRowsByIds(new Set(candidateIds)),actualCandidateIds=[],actualIdentities=new Set();let staleHandledRepaired=0;
+  for(const [candidateId,identity] of identityByCandidate){const row=existing.get(candidateId),registered=!!(row&&text(row.source_ref)===PRODUCT_SOURCE_REF);if(registered){handled.add(identity);actualIdentities.add(identity);actualCandidateIds.push(candidateId);}else if(handled.delete(identity))staleHandledRepaired+=1;}
+  return{products:evaluated,actualCandidateIds,actualIdentities,staleHandledRepaired,checked:identityByCandidate.size};
+}
+
 async function unmatchPrivateResearchRows(actorId,scope,products,handled,explicitlyUnstaged){
   let removed=0,skipped=0,blocked=0,failed=0;const details=[];
   for(const product of array(products).slice(0,100)){
@@ -2653,8 +2661,14 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
     return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,latestResearchRowsPreserved:true,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
   }
 
-  let scanCursor=Math.max(0,Number(runtime.partialQueueScanCursor||0)),selectedRows=hasSelection?await resolveChunkedProductSelection(job,input):[],batch=[],scanned=0,total=Math.max(0,Number(job.resultCount||0)),manualReviewQueue=lower(input&&input.source)==="latest_list_manual";
+  let scanCursor=Math.max(0,Number(runtime.partialQueueScanCursor||0)),selectedRows=hasSelection?await resolveChunkedProductSelection(job,input):[],batch=[],scanned=0,total=Math.max(0,Number(job.resultCount||0)),manualReviewQueue=lower(input&&input.source)==="latest_list_manual",selectionReconcile={actualCandidateIds:[],actualIdentities:new Set(),staleHandledRepaired:0,checked:0};
   const queueAccepts=(row)=>row&&row.inspectionComplete===true&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));
+  // Explicit latest-list clicks must reflect the real private candidate ledger,
+  // not only the historical partialQueueStagedIdentities checkpoint. Older
+  // builds could mark an identity handled when research completed even though
+  // no gslot_candidates row was written. Repair those stale markers before
+  // deciding that a selected product is already staged.
+  if(hasSelection){selectionReconcile=await reconcileExplicitPrivateQueueSelection(scope,selectedRows,handled,job.rankingContext);selectedRows=array(selectionReconcile.products);}
   /* A completed one-way cursor can become stale when inspection/ranking makes
      additional durable result rows queue-eligible after an earlier partial
      stage.  Do one bounded restart from the beginning whenever the checkpoint
@@ -2662,7 +2676,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
      registration does not use this cursor at all. */
   if(!hasSelection&&scanCursor>=total&&total>0){const expected=Math.max(0,Number(plain(job.resultStats).queueEligible||0)-Math.min(Number(plain(job.resultStats).queueEligible||0),explicitlyUnstaged.size));if(handled.size<expected)scanCursor=0;}
   if(hasSelection){
-    for(const raw of selectedRows){const identity=ProductRanking.productIdentity(raw)||text(raw&&raw.id);if(!identity||handled.has(identity))continue;const evaluated=ProductRanking.buildPortfolio([raw],plain(job.rankingContext)).products[0]||raw;if(queueAccepts(evaluated))batch.push({identity,product:evaluated,absoluteIndex:Number(raw.researchResultIndex)});if(batch.length>=PRODUCT_PARTIAL_STAGE_BATCH)break;}
+    for(const product of selectedRows){const identity=ProductRanking.productIdentity(product)||text(product&&product.id);if(!identity||handled.has(identity))continue;if(queueAccepts(product))batch.push({identity,product,absoluteIndex:Number(product.researchResultIndex)});if(batch.length>=PRODUCT_PARTIAL_STAGE_BATCH)break;}
   }else{
     while(scanCursor<total&&batch.length<PRODUCT_PARTIAL_STAGE_BATCH){
       const rows=await readProductChunkRange(job,"result",scanCursor,Math.min(40,total-scanCursor));if(!rows.length){scanCursor=total;break;}
@@ -2682,7 +2696,8 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   if(!hasSelection&&firstFailed!=null)scanCursor=Math.min(scanCursor,firstFailed);
   const globalEligibleTotal=Math.max(0,Number(plain(job.resultStats).queueEligible||0)-Math.min(Number(plain(job.resultStats).queueEligible||0),explicitlyUnstaged.size)),globalDone=Math.min(globalEligibleTotal,handled.size),globalRemaining=Math.max(0,globalEligibleTotal-globalDone);
   const selectedEligible=hasSelection?selectedRows.filter(queueAccepts):[],selectedPending=hasSelection?selectedEligible.filter((row)=>{const identity=ProductRanking.productIdentity(row)||text(row&&row.id);return identity&&!handled.has(identity);}):[],eligibleTotal=hasSelection?selectedEligible.length:globalEligibleTotal,done=hasSelection?Math.max(0,eligibleTotal-selectedPending.length):globalDone,remaining=hasSelection?selectedPending.length:globalRemaining,complete=hasSelection?(remaining===0&&summary.failed===0):(scanCursor>=total&&summary.failed===0);
-  const partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"stage",source:lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual"),eligible:eligibleTotal,done,remaining,attempted:batch.length,handled:summary.created+summary.updated+summary.preserved,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,blocked:hasSelection?Math.max(0,selectedRows.length-batch.length):0,failed:summary.failed,candidateIds:Array.from(stagedCandidateIds).slice(0,PRODUCT_PARTIAL_STAGE_BATCH),complete,researchStatus:job.status,researchCursorPreserved:true,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
+  const selectedBlocked=hasSelection?Math.max(0,selectedRows.length-selectedEligible.length):0,verifiedCandidateIds=Array.from(new Set(selectionReconcile.actualCandidateIds.concat(Array.from(stagedCandidateIds)))).slice(0,100);
+  const partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"stage",source:lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual"),eligible:eligibleTotal,done,remaining,attempted:batch.length,handled:summary.created+summary.updated+summary.preserved,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,blocked:selectedBlocked,failed:summary.failed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),complete,researchStatus:job.status,researchCursorPreserved:true,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
   runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueScanCursor:hasSelection?Number(runtime.partialQueueScanCursor||0):scanCursor,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
   return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,onlyInspectionCompleteProducts:true,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
 }
@@ -2732,6 +2747,7 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
   const requestedRows = requestedIds.size ? portfolioRows.filter((row) => productSelectionMatches(row, requestedIds)) : portfolioRows;
   const handled = new Set(array(runtime.partialQueueStagedIdentities).concat(array(job.partialQueueStagedIdentities)).map(text).filter(Boolean));
   const explicitlyUnstaged = new Set(array(runtime.partialQueueUnstagedIdentities).concat(array(job.partialQueueUnstagedIdentities)).map(text).filter(Boolean));
+  let selectionReconcile={actualCandidateIds:[],actualIdentities:new Set(),staleHandledRepaired:0,checked:0};
 
   if (operation === "delete") {
     if (!requestedIds.size) { const error = new Error("대기열에서 삭제할 최신 상품을 선택하세요."); error.statusCode = 400; throw error; }
@@ -2793,13 +2809,18 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
 
   const manualReviewQueue = lower(input&&input.source)==="latest_list_manual";
   const eligibleAll = requestedRows.filter((row) => row && row.inspectionComplete === true && (ProductPipeline.researchReadiness(row).queueEligible === true || (manualReviewQueue && administratorReviewQueueEligible(row))));
+  if(requestedIds.size)selectionReconcile=await reconcileExplicitPrivateQueueSelection(scope,eligibleAll,handled,job.rankingContext);
+  const eligibleRows=requestedIds.size?array(selectionReconcile.products).filter((row)=>row&&row.inspectionComplete===true&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)))):eligibleAll;
   const eligibleByIdentity = new Map();
-  for (const row of eligibleAll) { const identity = ProductRanking.productIdentity(row); if (identity && !eligibleByIdentity.has(identity)) eligibleByIdentity.set(identity, row); }
+  for (const row of eligibleRows) { const identity = ProductRanking.productIdentity(row); if (identity && !eligibleByIdentity.has(identity)) eligibleByIdentity.set(identity, row); }
 
   // Normal full completion always stages automatically. A product explicitly
   // unmatched from the latest list is the one exception. The stagePool may be
   // legacy full product objects or the compact identity-only v12.10 format.
-  if (job.status === "complete" && Number(plain(job.stageSummary).failed || 0) === 0) {
+  if (!requestedIds.size && job.status === "complete" && Number(plain(job.stageSummary).failed || 0) === 0) {
+    // Legacy no-selection recovery keeps the historical completion checkpoint.
+    // Explicit latest-list registration is reconciled against gslot_candidates
+    // above and must never inherit this optimistic completion assumption.
     for (const row of eligibleAll) { const identity = ProductRanking.productIdentity(row); if (identity && !explicitlyUnstaged.has(identity)) handled.add(identity); }
   } else if (job.status === "staging" && Number(plain(job.stageSummary).failed || 0) === 0 && !requestedIds.size) {
     for (const rowOrId of array(job.stagePool).slice(0, Number(job.stageCursor || 0))) {
@@ -2854,6 +2875,9 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
     skipped: summary.skipped,
     blocked,
     failed: summary.failed,
+    candidateIds: Array.from(new Set(selectionReconcile.actualCandidateIds.concat(batch.map(([identity,product])=>productCandidateId(scope,product))))).slice(0,100),
+    staleHandledRepaired: Number(selectionReconcile.staleHandledRepaired||0),
+    verifiedExisting: Number(selectionReconcile.actualCandidateIds.length||0),
     complete: remaining === 0,
     researchStatus: job.status,
     researchCursorPreserved: true,
