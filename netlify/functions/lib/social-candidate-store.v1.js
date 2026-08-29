@@ -13,7 +13,7 @@ const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
 const VERSION =
-  "social-candidate-store-v1.8.0-thumbnail-embed-continuity";
+  "social-candidate-store-v1.8.1-front-player-url-continuity";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -103,18 +103,18 @@ function platformContentUrl(platform, value) {
   let u;
   try { u = new URL(url); } catch (_e) { return ""; }
   const p = String(platform || Policy.platformFromHost(url) || "").toLowerCase();
-  const path = u.pathname || "/";
+  const path = (u.pathname || "/").replace(/\/{2,}/g, "/");
   const host = u.hostname.toLowerCase().replace(/^www\./, "");
   let ok = false;
-  if (p === "youtube") ok = host === "youtu.be" || /^\/(watch|shorts|live|embed)(?:\/|$)/i.test(path) || (path === "/watch" && !!u.searchParams.get("v"));
+  if (p === "youtube") ok = host === "youtu.be" || (path === "/watch" && !!u.searchParams.get("v")) || /^\/(shorts|live|embed)\//i.test(path);
   else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
-  else if (p === "tiktok") ok = /^\/@[^/]+\/video\//i.test(path);
-  else if (p === "facebook") ok = /^\/(reel|watch|videos|posts|photo|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos)\//i.test(path);
+  else if (p === "tiktok") ok = /\/video\/[^/]+/i.test(path);
+  else if (p === "facebook") ok = /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (path === "/watch/" && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
   else if (p === "wechat") ok = /^\/s(?:\/|$)/i.test(path) || !!u.searchParams.get("__biz");
-  else if (p === "weibo") ok = /^\/(detail|status)\//i.test(path);
-  else if (p === "pinterest") ok = /^\/pin\//i.test(path) || host === "pin.it";
-  else if (p === "reddit") ok = /\/comments\//i.test(path) || host === "redd.it";
-  else if (p === "twitter") ok = /\/status\//i.test(path);
+  else if (p === "weibo") ok = /^\/(detail|status|tv\/show)\//i.test(path) || /^\/\d+\/[a-z0-9]+/i.test(path);
+  else if (p === "pinterest") ok = /^\/pin\/[^/]+/i.test(path) || host === "pin.it";
+  else if (p === "reddit") ok = /\/comments\/[^/]+/i.test(path) || host === "redd.it";
+  else if (p === "twitter" || p === "x") ok = /\/status\/[^/]+/i.test(path);
   return ok ? url : "";
 }
 function socialEmbedUrl(platform, value) {
@@ -1289,6 +1289,10 @@ function publicSocialSlot(row, slotId, defaults) {
     link: sourceUrl,
     href: sourceUrl,
     permalink: sourceUrl,
+    sourceUrl: sourceUrl,
+    latestContentUrl: latestContentUrl || sourceUrl,
+    platform: platform,
+    viewerUrl: sourceUrl,
     thumb: thumb || undefined,
     thumbnail: thumb || undefined,
     thumbnailUrl: thumb || undefined,

@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.20.0-durable-private-queue-reconcile";
+const VERSION = "commerce-country-automation-v3.20.1-latest-manual-queue-reactivation";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2634,20 +2634,24 @@ async function durableProductCandidate(scope,product,candidateIdInput){
   }
   return registeredProductCandidateByUrl(product);
 }
-async function reconcileExplicitPrivateQueueSelection(scope,products,handled,rankingContext){
-  const selected=array(products).slice(0,100),evaluated=array(ProductRanking.buildPortfolio(selected,plain(rankingContext)).products),identityByCandidate=new Map(),candidateIds=[];
+function candidateNeedsQueueReactivation(row){
+  const payload=plain(row&&row.source_payload),decision=lower(payload.slotDecision),control=plain(payload.managementControl),queue=plain(payload.queueControl),front=plain(payload.frontPublication),frontStatus=lower(front.status);
+  return decision==="hold"&&control.administratorLocked!==true&&control.aiReclassificationAllowed!==false&&queue.permanentExcluded!==true&&!(["queued","publish_requested","published","matched","active","unpublish_requested"].includes(frontStatus));
+}
+async function reconcileExplicitPrivateQueueSelection(scope,products,handled,rankingContext,optionsInput){
+  const options=plain(optionsInput),reactivateReviewable=options.reactivateReviewable===true,selected=array(products).slice(0,100),evaluated=array(ProductRanking.buildPortfolio(selected,plain(rankingContext)).products),identityByCandidate=new Map(),candidateIds=[];
   for(const product of evaluated){const identity=productQueueIdentity(product);if(!identity)continue;const candidateId=productCandidateId(scope,product);if(!candidateId)continue;identityByCandidate.set(candidateId,{identity,product});candidateIds.push(candidateId);}
-  const existing=await candidateRowsByIds(new Set(candidateIds)),actualCandidateIds=[],actualIdentities=new Set(),unresolved=[];let staleHandledRepaired=0;
-  for(const [candidateId,entry] of identityByCandidate){const row=existing.get(candidateId),registered=!!(row&&text(row.source_ref)===PRODUCT_SOURCE_REF);if(registered){handled.add(entry.identity);actualIdentities.add(entry.identity);actualCandidateIds.push(text(row.id)||candidateId);}else unresolved.push({candidateId,identity:entry.identity,product:entry.product});}
+  const existing=await candidateRowsByIds(new Set(candidateIds)),actualCandidateIds=[],actualIdentities=new Set(),unresolved=[];let staleHandledRepaired=0,reactivationPending=0;
+  for(const [candidateId,entry] of identityByCandidate){const row=existing.get(candidateId),registered=!!(row&&text(row.source_ref)===PRODUCT_SOURCE_REF);if(registered){if(reactivateReviewable&&candidateNeedsQueueReactivation(row)){handled.delete(entry.identity);reactivationPending+=1;}else{handled.add(entry.identity);actualIdentities.add(entry.identity);actualCandidateIds.push(text(row.id)||candidateId);}}else unresolved.push({candidateId,identity:entry.identity,product:entry.product});}
   /* Product identity can legitimately change when a later research cycle improves
      a title/image. The durable private ledger is URL-stable, so reconcile the
      unresolved deterministic IDs against official_url as well. Without this,
      the same first 10 rows were repeatedly treated as unstaged forever. */
   for(let offset=0;offset<unresolved.length;offset+=6){
     const group=unresolved.slice(offset,offset+6),rows=await Promise.all(group.map((entry)=>registeredProductCandidateByUrl(entry.product)));
-    for(let i=0;i<group.length;i++){const entry=group[i],row=rows[i];if(row){handled.add(entry.identity);actualIdentities.add(entry.identity);actualCandidateIds.push(text(row.id));}else if(handled.delete(entry.identity))staleHandledRepaired+=1;}
+    for(let i=0;i<group.length;i++){const entry=group[i],row=rows[i];if(row){if(reactivateReviewable&&candidateNeedsQueueReactivation(row)){handled.delete(entry.identity);reactivationPending+=1;}else{handled.add(entry.identity);actualIdentities.add(entry.identity);actualCandidateIds.push(text(row.id));}}else if(handled.delete(entry.identity))staleHandledRepaired+=1;}
   }
-  return{products:evaluated,actualCandidateIds:Array.from(new Set(actualCandidateIds.filter(Boolean))),actualIdentities,staleHandledRepaired,checked:identityByCandidate.size};
+  return{products:evaluated,actualCandidateIds:Array.from(new Set(actualCandidateIds.filter(Boolean))),actualIdentities,staleHandledRepaired,reactivationPending,checked:identityByCandidate.size};
 }
 
 async function unmatchPrivateResearchRows(actorId,scope,products,handled,explicitlyUnstaged){
@@ -2689,7 +2693,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
     return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,latestResearchRowsPreserved:true,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
   }
 
-  let scanCursor=Math.max(0,Number(runtime.partialQueueScanCursor||0)),selectedRows=hasSelection?await resolveChunkedProductSelection(job,input):[],batch=[],scanned=0,total=Math.max(0,Number(job.resultCount||0)),manualReviewQueue=lower(input&&input.source)==="latest_list_manual",selectionReconcile={actualCandidateIds:[],actualIdentities:new Set(),staleHandledRepaired:0,checked:0};
+  let scanCursor=Math.max(0,Number(runtime.partialQueueScanCursor||0)),selectedRows=hasSelection?await resolveChunkedProductSelection(job,input):[],batch=[],scanned=0,total=Math.max(0,Number(job.resultCount||0)),manualReviewQueue=lower(input&&input.source)==="latest_list_manual",selectionReconcile={actualCandidateIds:[],actualIdentities:new Set(),staleHandledRepaired:0,reactivationPending:0,checked:0};
   const durableLedgerCheckpointFresh=text(runtime.partialQueueLedgerVerifiedVersion)===VERSION;
   if(!hasSelection&&!durableLedgerCheckpointFresh){scanCursor=0;handled.clear();}
   const queueAccepts=(row)=>row&&row.inspectionComplete===true&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));
@@ -2698,7 +2702,8 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   // builds could mark an identity handled when research completed even though
   // no gslot_candidates row was written. Repair those stale markers before
   // deciding that a selected product is already staged.
-  if(hasSelection){selectionReconcile=await reconcileExplicitPrivateQueueSelection(scope,selectedRows,handled,job.rankingContext);selectedRows=array(selectionReconcile.products);}
+  const explicitManualQueue=["latest_list_manual","administrator_manual"].includes(lower(input&&input.source));
+  if(hasSelection){selectionReconcile=await reconcileExplicitPrivateQueueSelection(scope,selectedRows,handled,job.rankingContext,{reactivateReviewable:explicitManualQueue});selectedRows=array(selectionReconcile.products);}
   /* A completed one-way cursor can become stale when inspection/ranking makes
      additional durable result rows queue-eligible after an earlier partial
      stage.  Do one bounded restart from the beginning whenever the checkpoint
@@ -2710,8 +2715,8 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   }else{
     while(scanCursor<total&&batch.length<PRODUCT_PARTIAL_STAGE_BATCH){
       const rows=await readProductChunkRange(job,"result",scanCursor,Math.min(40,total-scanCursor));if(!rows.length){scanCursor=total;break;}
-      const evaluated=ProductRanking.buildPortfolio(rows,plain(job.rankingContext)).products,windowReconcile=await reconcileExplicitPrivateQueueSelection(scope,evaluated,handled,job.rankingContext),evaluatedMap=new Map(array(windowReconcile.products).map((row)=>[productQueueIdentity(row),row]));
-      selectionReconcile.actualCandidateIds=selectionReconcile.actualCandidateIds.concat(array(windowReconcile.actualCandidateIds));selectionReconcile.staleHandledRepaired+=Number(windowReconcile.staleHandledRepaired||0);selectionReconcile.checked+=Number(windowReconcile.checked||0);
+      const evaluated=ProductRanking.buildPortfolio(rows,plain(job.rankingContext)).products,windowReconcile=await reconcileExplicitPrivateQueueSelection(scope,evaluated,handled,job.rankingContext,{reactivateReviewable:explicitManualQueue}),evaluatedMap=new Map(array(windowReconcile.products).map((row)=>[productQueueIdentity(row),row]));
+      selectionReconcile.actualCandidateIds=selectionReconcile.actualCandidateIds.concat(array(windowReconcile.actualCandidateIds));selectionReconcile.staleHandledRepaired+=Number(windowReconcile.staleHandledRepaired||0);selectionReconcile.reactivationPending+=Number(windowReconcile.reactivationPending||0);selectionReconcile.checked+=Number(windowReconcile.checked||0);
       let localScanned=0;
       for(let i=0;i<rows.length;i++){const raw=rows[i],identity=productQueueIdentity(raw),product=evaluatedMap.get(identity)||raw;localScanned=i+1;if(!identity||handled.has(identity)||explicitlyUnstaged.has(identity))continue;if(!queueAccepts(product))continue;batch.push({identity,product,absoluteIndex:scanCursor+i});if(batch.length>=PRODUCT_PARTIAL_STAGE_BATCH)break;}
       scanned+=localScanned;scanCursor+=Math.max(1,localScanned);
@@ -2721,14 +2726,14 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
 
   const summary={created:0,updated:0,preserved:0,skipped:0,failed:0},stagedCandidateIds=new Set();let firstFailed=null;
   for(let offset=0;offset<batch.length;offset+=PRODUCT_PARTIAL_STAGE_CONCURRENCY){
-    const group=batch.slice(offset,offset+PRODUCT_PARTIAL_STAGE_CONCURRENCY),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product,{allowAdministratorReviewQueue:manualReviewQueue})));
+    const group=batch.slice(offset,offset+PRODUCT_PARTIAL_STAGE_CONCURRENCY),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product,{allowAdministratorReviewQueue:manualReviewQueue,restoreReviewableExisting:explicitManualQueue})));
     for(let i=0;i<settled.length;i++){const result=settled[i],entry=group[i];if(result.status!=="fulfilled"){summary.failed+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}const state=text(result.value&&result.value.status),candidateId=text(result.value&&result.value.candidateId),registered=result.value&&result.value.registered===true;if(!registered){summary.skipped+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}if(/created/.test(state))summary.created+=1;else if(/updated/.test(state))summary.updated+=1;else summary.preserved+=1;handled.add(entry.identity);explicitlyUnstaged.delete(entry.identity);if(candidateId)stagedCandidateIds.add(candidateId);}
   }
   if(!hasSelection&&firstFailed!=null)scanCursor=Math.min(scanCursor,firstFailed);
   const globalEligibleTotal=Math.max(0,Number(plain(job.resultStats).queueEligible||0)-Math.min(Number(plain(job.resultStats).queueEligible||0),explicitlyUnstaged.size)),globalDone=Math.min(globalEligibleTotal,handled.size),rawGlobalRemaining=Math.max(0,globalEligibleTotal-globalDone),globalRemaining=!hasSelection&&scanCursor<total?Math.max(1,rawGlobalRemaining):rawGlobalRemaining;
   const selectedEligible=hasSelection?selectedRows.filter(queueAccepts):[],selectedPending=hasSelection?selectedEligible.filter((row)=>{const identity=productQueueIdentity(row);return identity&&!handled.has(identity);}):[],eligibleTotal=hasSelection?selectedEligible.length:globalEligibleTotal,done=hasSelection?Math.max(0,eligibleTotal-selectedPending.length):globalDone,remaining=hasSelection?selectedPending.length:globalRemaining,complete=hasSelection?(remaining===0&&summary.failed===0):(scanCursor>=total&&summary.failed===0);
   const selectedBlocked=hasSelection?Math.max(0,selectedRows.length-selectedEligible.length):0,verifiedCandidateIds=Array.from(new Set(selectionReconcile.actualCandidateIds.concat(Array.from(stagedCandidateIds)))).slice(0,100);
-  const partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"stage",source:lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual"),eligible:eligibleTotal,done,remaining,attempted:batch.length,handled:summary.created+summary.updated+summary.preserved,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,blocked:selectedBlocked,failed:summary.failed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),complete,researchStatus:job.status,researchCursorPreserved:true,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
+  const partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"stage",source:lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual"),eligible:eligibleTotal,done,remaining,attempted:batch.length,handled:summary.created+summary.updated+summary.preserved,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,blocked:selectedBlocked,failed:summary.failed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),reactivationPending:Number(selectionReconcile.reactivationPending||0),complete,researchStatus:job.status,researchCursorPreserved:true,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
   runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueScanCursor:hasSelection?Number(runtime.partialQueueScanCursor||0):scanCursor,partialQueueLedgerVerifiedVersion:hasSelection?text(runtime.partialQueueLedgerVerifiedVersion):VERSION,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
   return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,onlyInspectionCompleteProducts:true,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
 }
@@ -3350,6 +3355,24 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
   if(existing&&permanentExcluded)return { status: "operator_state_preserved", candidateId, registered:false, currentStatus: text(existing.status), decision: "purge", approvedPlacement: plain(existingPayload.approvedPlacement) };
 
   const payload = productCandidatePayload(actorId, scope, product, "research_pending");
+
+  // An explicit administrator queue-registration click means a rediscovered,
+  // reviewable HOLD candidate should return to the active private management
+  // queue unless it is permanently excluded, administrator-locked, or already
+  // in a front-publication lifecycle. This is deliberately NOT used by the
+  // unattended pause-auto path.
+  if(existing&&options.restoreReviewableExisting===true&&candidateNeedsQueueReactivation(existing)){
+    const now=iso(),refreshedPayload=Object.assign({},existingPayload,payload,{
+      slotDecision:"undecided",approvedPlacement:null,primaryPlacement:null,selectedPlacement:null,placement:null,
+      decisionAt:now,decisionBy:text(actorId)||"administrator",decisionSource:"administrator_queue_reactivation",
+      review:Object.assign({},plain(existingPayload.review),{state:"research_pending",nextGate:"administrator_product_selection",decidedAt:now,decidedBy:text(actorId)||"administrator"}),
+      queueControl:Object.assign({},plain(existingPayload.queueControl),{permanentExcluded:false,hiddenFromCountryQueue:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:text(actorId)||"administrator"}),
+      managementControl:Object.assign({},plain(existingPayload.managementControl),{administratorLocked:false,aiReclassificationAllowed:true})
+    });
+    await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{title:payload.title,official_url:payload.externalProductUrl,thumbnail_url:payload.image,status:"approval_pending",source_payload:refreshedPayload,updated_at:now});
+    const durable=await durableProductCandidate(scope,product,candidateId);if(!durable)throw new Error("PRIVATE_PRODUCT_QUEUE_DURABLE_VERIFY_FAILED");candidateId=text(durable.id)||candidateId;
+    return{status:"research_preview_updated_reactivated",candidateId,registered:true,currentStatus:"approval_pending",decision:"undecided",approvedPlacement:null};
+  }
 
   // A researched product may already have an administrator placement/hold or a
   // later publication lifecycle state.  Refresh only its current product

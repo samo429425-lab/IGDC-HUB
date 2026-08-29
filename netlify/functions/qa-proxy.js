@@ -19,12 +19,50 @@ const path = require("path");
 const crypto = require("crypto");
 const { bearerToken } = require("./lib/maru-ai-access-control");
 
-const VERSION = "igdc-qa-proxy-v1.3.0-public-ai-owner-delete";
+const VERSION = "igdc-qa-proxy-v1.4.0-public-ai-legacy-save-cap-delete";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const QA_DELETE_SECRET = process.env.IGDC_QA_DELETE_SECRET || SUPABASE_SERVICE_ROLE_KEY || "";
+
+function base64urlEncode(value){
+  return Buffer.from(String(value || ""), "utf8").toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+function base64urlDecode(value){
+  let v = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (v.length % 4) v += "=";
+  return Buffer.from(v, "base64").toString("utf8");
+}
+function capabilityPayload(row){
+  const scope = scopeFor(row || {});
+  const id = cleanText(row && (row.id || row.uuid), 240);
+  if (!id || !scope.page_id) return null;
+  return { id, project:scope.project, page_id:scope.page_id };
+}
+function signDeleteCapability(row){
+  if (!QA_DELETE_SECRET) return "";
+  const payload = capabilityPayload(row);
+  if (!payload) return "";
+  const body = base64urlEncode(JSON.stringify(payload));
+  const sig = crypto.createHmac("sha256", QA_DELETE_SECRET).update(body).digest("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  return `v1.${body}.${sig}`;
+}
+function verifyDeleteCapability(token, row){
+  token = cleanText(token, 4000);
+  if (!token || !QA_DELETE_SECRET) return false;
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== "v1") return false;
+  const expected = crypto.createHmac("sha256", QA_DELETE_SECRET).update(parts[1]).digest("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const a = Buffer.from(expected), b = Buffer.from(parts[2]);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a,b)) return false;
+  try{
+    const signed = JSON.parse(base64urlDecode(parts[1]));
+    const actual = capabilityPayload(row);
+    return !!(actual && signed && String(signed.id) === String(actual.id) && signed.project === actual.project && signed.page_id === actual.page_id);
+  }catch(_){ return false; }
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -423,7 +461,7 @@ function publicThread(row, identity){
 }
 
 async function saveQuestion(record, dbToken){
-  const saved = { questions:null, threads:null, persisted:false, errors:[], warnings:[] };
+  const saved = { questions:null, threads:null, persisted:false, errors:[], warnings:[], schema_mode:"" };
   if (!SUPABASE_URL || (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY)) {
     saved.errors.push("Supabase env missing; answer generated without DB save.");
     return saved;
@@ -435,6 +473,8 @@ async function saveQuestion(record, dbToken){
     return saved;
   }
 
+  const userId = cleanText(record.user_id, 300) || null;
+  const memberUserId = cleanText(record.member_user_id, 300) || null;
   const meta = Object.assign({}, record.meta || {}, {
     project: scope.project,
     page_id: scope.page_id,
@@ -445,42 +485,41 @@ async function saveQuestion(record, dbToken){
     status: record.status,
     ai_answered: record.ai_answered,
     answer_hash: hash(record.answer),
-    user_id: cleanText(record.user_id, 300) || null,
-    member_user_id: cleanText(record.member_user_id, 300) || null
+    user_id: userId,
+    member_user_id: memberUserId
   });
-
-  // This is the canonical row read by the existing popup's registered-question list.
-  // Keep the first write restricted to the fields already used by the current popup schema.
-  const canonicalThread = [{
+  const core = {
     project: scope.project,
     page_id: scope.page_id,
-    user_id: cleanText(record.user_id, 300) || null,
     question: record.question,
     answer: record.answer,
     is_admin: !!record.admin_required,
-    created_at: record.created_at,
-    meta
-  }];
-  try{
-    saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify(canonicalThread) }, true, dbToken);
-  }catch(e1){
-    // Some older deployments do not yet have a JSON meta column. Preserve saving with the core popup fields.
-    const compatThread = [{
-      project: scope.project,
-      page_id: scope.page_id,
-      user_id: cleanText(record.user_id, 300) || null,
-      question: record.question,
-      answer: record.answer,
-      is_admin: !!record.admin_required,
-      created_at: record.created_at
-    }];
-    try{ saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify(compatThread) }, true, dbToken); }
-    catch(e2){ saved.errors.push(`igdc_qna_threads save failed: ${e2.message || e2}`); }
+    created_at: record.created_at
+  };
+
+  // Compatibility order matters. Some deployed igdc_qna_threads tables are older and
+  // have neither user_id nor meta. A failed unknown-column insert is retried with the
+  // next smaller shape so registration never depends on a schema migration.
+  const candidates = [];
+  if (userId) candidates.push({ mode:"meta+user", row:Object.assign({}, core, { user_id:userId, meta }) });
+  candidates.push({ mode:"meta", row:Object.assign({}, core, { meta }) });
+  if (userId) candidates.push({ mode:"user", row:Object.assign({}, core, { user_id:userId }) });
+  candidates.push({ mode:"legacy-core", row:Object.assign({}, core) });
+
+  let lastError = null;
+  for (const candidate of candidates){
+    try{
+      saved.threads = await sbFetch("igdc_qna_threads", { method:"POST", body:JSON.stringify([candidate.row]) }, true, dbToken);
+      if (isSavedThread(saved)) { saved.schema_mode = candidate.mode; break; }
+    }catch(e){ lastError = e; }
   }
   saved.persisted = isSavedThread(saved);
-  if (!saved.persisted) return saved;
+  if (!saved.persisted) {
+    if (lastError) saved.errors.push(`igdc_qna_threads save failed: ${lastError.message || lastError}`);
+    return saved;
+  }
 
-  // Preserve the legacy audit/mirror table when it exists, but do not let mirror failure pretend that the popup save failed.
+  // Legacy mirror is best-effort only; failure here must never roll back the popup save.
   const richQuestion = [{
     question: record.question,
     answer: record.answer,
@@ -530,10 +569,8 @@ async function deletePublicThread(payload, identity, dbToken){
   const id = cleanText(payload && payload.id, 240);
   const project = normalizeScope(payload && payload.project, "IGDC", 120);
   const pageId = normalizeScope(payload && (payload.page_id || payload.pageId || payload.page), "", 360);
+  const capability = cleanText(payload && payload.delete_token, 4000);
   if (!id) return { ok:false, statusCode:400, error:"Missing id" };
-  if (!identity.isAdmin && !identity.supabaseUserId && !identity.memberUserId) {
-    return { ok:false, statusCode:401, error:"A valid question author or administrator session is required." };
-  }
   try{
     const rows = await sbFetch(`igdc_qna_threads?select=*&id=eq.${encodeURIComponent(id)}&limit=1`, { method:"GET", headers:{ Prefer:"" } }, true, dbToken);
     const row = Array.isArray(rows) && rows[0];
@@ -541,7 +578,13 @@ async function deletePublicThread(payload, identity, dbToken){
     const rowScope = scopeFor(row);
     if (pageId && rowScope.page_id !== pageId) return { ok:false, statusCode:403, error:"Question scope mismatch" };
     if (project && rowScope.project !== project) return { ok:false, statusCode:403, error:"Question scope mismatch" };
-    if (!canDeleteThread(row, identity)) return { ok:false, statusCode:403, error:"Only the author or an administrator can delete this question." };
+
+    const authorByAccount = canDeleteThread(row, identity);
+    const authorByCapability = verifyDeleteCapability(capability, row);
+    if (!identity.isAdmin && !authorByAccount && !authorByCapability) {
+      return { ok:false, statusCode:403, error:"Only the author or an administrator can delete this question." };
+    }
+
     const deleted = await sbFetch(`igdc_qna_threads?id=eq.${encodeURIComponent(id)}`, { method:"DELETE" }, true, dbToken);
     if (!Array.isArray(deleted) || !deleted.length) {
       return { ok:false, statusCode:403, error:"The question could not be deleted under the current database policy." };
@@ -713,7 +756,9 @@ exports.handler = async function(event){
       }, route);
       const saved = await saveQuestion(record, identity.dbToken);
       const stored = isSavedThread(saved);
-      const persistedRow = stored ? publicThread(saved.threads[0], identity) : null;
+      const persistedRaw = stored ? saved.threads[0] : null;
+      const persistedRow = persistedRaw ? publicThread(persistedRaw, identity) : null;
+      const deleteToken = persistedRaw ? signDeleteCapability(persistedRaw) : "";
       return json(stored ? 200 : 503, {
         ok:stored,
         version:VERSION,
@@ -726,6 +771,7 @@ exports.handler = async function(event){
         answer_mode: answerMode,
         saved,
         record:persistedRow,
+        delete_token:deleteToken || null,
         error: stored ? null : "Q&A answer was generated, but the question was not saved."
       });
     }

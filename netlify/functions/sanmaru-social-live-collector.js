@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.11.0-eight-platform-thumbnail-continuity";
+const VERSION = "sanmaru-social-live-collector-v1.11.1-eight-platform-content-url-continuity";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -226,32 +226,60 @@ function candidateUrls(item) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
   const media = row.media && typeof row.media === "object" ? row.media : {};
   const preview = media.preview && typeof media.preview === "object" ? media.preview : {};
-  return [
+  const source = row.source && typeof row.source === "object" ? row.source : {};
+  const social = row.social && typeof row.social === "object" ? row.social : {};
+  const data = row.data && typeof row.data === "object" ? row.data : {};
+  const direct = [
+    row.latestContentUrl, row.latest_content_url, row.sourceContentUrl, row.source_content_url,
+    row.canonicalUrl, row.canonical_url, row.permalink, row.originalUrl, row.targetUrl, row.outboundUrl,
     row.channelUrl, row.accountUrl, row.profileUrl, row.groupUrl,
     row.url, row.link, row.href, row.openUrl, row.pageUrl, row.sourcePageUrl,
     row.watchUrl, row.videoUrl, row.contextLink,
+    payload.latestContentUrl, payload.sourceContentUrl, payload.canonicalUrl, payload.permalink,
     payload.url, payload.link, payload.openUrl, payload.pageUrl, payload.watchUrl,
-    preview.pageUrl, preview.videoUrl
-  ].map(Policy.normalizeUrl).filter(Boolean);
+    preview.pageUrl, preview.videoUrl, preview.url,
+    source.url, source.link, source.permalink,
+    social.latestContentUrl, social.sourceUrl, social.url,
+    data.latestContentUrl, data.sourceContentUrl, data.url, data.link, data.permalink
+  ];
+  // SearchBank/Maru providers do not always use the same URL field names.
+  // Scan a small, bounded object surface for URL-like keys so real post/video
+  // URLs are not discarded merely because the provider wrapped them.
+  const seen = new Set();
+  const queue = [{ value: row, depth: 0 }];
+  const keyPattern = /(?:^|_)(?:url|link|href|permalink|canonical|target|outbound|watch|video|post|content)(?:$|_)/i;
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || current.value == null || current.depth > 3) continue;
+    const value = current.value;
+    if (typeof value !== "object" || seen.has(value)) continue;
+    seen.add(value);
+    const entries = Array.isArray(value) ? value.slice(0, 20).map((entry, index) => [String(index), entry]) : Object.entries(value).slice(0, 80);
+    for (const [key, entry] of entries) {
+      if (typeof entry === "string" && keyPattern.test(key)) direct.push(entry);
+      else if (entry && typeof entry === "object" && current.depth < 3 && /^(?:payload|data|result|item|source|social|media|preview|metadata|pagemap|links?|content|post|video|page)$/i.test(key)) queue.push({ value: entry, depth: current.depth + 1 });
+    }
+  }
+  return Array.from(new Set(direct.map(Policy.normalizeUrl).filter(Boolean)));
 }
 function contentKind(platform, value) {
   const normalized = Policy.normalizeUrl(value);
   if (!normalized || Policy.platformFromHost(normalized) !== platform) return "";
   try {
     const url = new URL(normalized);
-    const path = url.pathname.replace(/\/+/g, "/");
+    const path = url.pathname.replace(/\/{2,}/g, "/");
     if (platform === "youtube") {
       if (/youtu\.be$/i.test(url.hostname) && /^\/[^/]+/.test(path)) return "latest_video";
       if (/^\/watch/i.test(path) && url.searchParams.get("v")) return "latest_video";
       if (/^\/(shorts|live|embed)\/[^/]+/i.test(path)) return "latest_video";
     }
-    if (platform === "instagram" && /^\/(p|reel|tv)\/[^/]+/i.test(path)) return "latest_post";
-    if (platform === "tiktok" && /^\/@[^/]+\/video\/[^/]+/i.test(path)) return "latest_video";
-    if (platform === "facebook" && (/^\/(reel|watch|videos|posts)\//i.test(path) || /\/(videos|posts)\/[^/]+/i.test(path) || /\/permalink\.php$/i.test(path))) return "latest_post";
+    if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
+    if (platform === "tiktok" && /\/video\/[^/]+/i.test(path)) return "latest_video";
+    if (platform === "facebook" && (/^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (path === "/watch/" && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
     if (platform === "wechat" && (/^\/s(?:\/|$)/i.test(path) || url.searchParams.get("__biz"))) return "latest_post";
     if (platform === "weibo" && (/^\/(status|detail|tv\/show)\//i.test(path) || /^\/\d+\/[a-z0-9]+/i.test(path))) return "latest_post";
-    if (platform === "pinterest" && /^\/pin\/[^/]+/i.test(path)) return "latest_post";
-    if (platform === "reddit" && /\/comments\/[^/]+/i.test(path)) return "latest_post";
+    if (platform === "pinterest" && (/^\/pin\/[^/]+/i.test(path) || /pin\.it$/i.test(url.hostname))) return "latest_post";
+    if (platform === "reddit" && (/\/comments\/[^/]+/i.test(path) || /redd\.it$/i.test(url.hostname))) return "latest_post";
     if (platform === "twitter" && /\/status\/[^/]+/i.test(path)) return "latest_post";
   } catch (_error) {}
   return "";

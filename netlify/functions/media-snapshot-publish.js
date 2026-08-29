@@ -12,7 +12,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const MediaReleaseDispatch = require("./lib/media-release-dispatch.v1");
 const MediaReleaseAdapter = require("./lib/media-searchbank-release-adapter.v1");
 
-const VERSION = "media-snapshot-publish-v1.12.2-manual-hero-pin";
+const VERSION = "media-snapshot-publish-v1.12.3-live-hero-control";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 const HERO_SECTIONS=new Set(["media-movie","media-drama"]);
@@ -285,6 +285,19 @@ exports.handler = async function(event){
   try{
     if(!["GET","POST"].includes(event.httpMethod)) return MediaStore.response(405,{ok:false,error:"method_not_allowed"});
     const params=Object.assign({}, event.queryStringParameters || {}, event.httpMethod === "POST" ? MediaStore.parseBody(event) : {});
+    // Public front needs only the current hero override id. Expose no candidate,
+    // actor, storage or release internals here; all other reads/writes stay protected.
+    if(params.heroPublicStatus === "1" || params.heroPublicStatus === 1 || params.heroPublicStatus === true){
+      const release=await latestStoredRelease();
+      const snapshot=release&&release.snapshot&&typeof release.snapshot==="object"?release.snapshot:{};
+      const hero=snapshot&&snapshot.hero&&typeof snapshot.hero==="object"?snapshot.hero:{};
+      const manual=hero.manual===true&&!!MediaStore.text(hero.manualContentId);
+      return MediaStore.response(200,{
+        ok:true,manual,contentId:manual?MediaStore.text(hero.manualContentId):null,
+        sectionKey:manual?MediaStore.text(hero.manualSectionKey)||null:null,
+        updatedAt:MediaStore.text(hero.manualSetAt||release&&release.created_at)||null
+      });
+    }
     const publishFront = params.publishFront === true || params.publishFront === "true";
     const storeRelease = publishFront || params.storeRelease === true || params.storeRelease === "true";
     const actor=await actorFor(event, storeRelease);

@@ -1338,10 +1338,10 @@
     if(!window.confirm(message))return;
     var button=$('previewHeroBtn');if(button)button.disabled=true;
     try{
-      var data=await post(PUB,{storeRelease:true,publishFront:true,frontAction:pinned?'hero_auto':'hero_pin',heroContentId:pinned?'':id,includeSnapshot:'0'});
+      var data=await post(PUB,{storeRelease:true,publishFront:false,frontAction:pinned?'hero_auto':'hero_pin',heroContentId:pinned?'':id,includeSnapshot:'0'});
       if(data&&data.frontState)frontReleaseState=data.frontState;
       syncPreviewHeroButton(row);renderRows();
-      show(pinned?'히어로 수동 지정 해제 완료 · 자동 선별로 복귀합니다.':'히어로 수동 지정 완료 · 선택한 영상 한 편으로 프론트 반영을 요청했습니다.','ok');
+      show(pinned?'히어로 수동 지정 해제 완료 · 자동 선별로 복귀합니다.':'히어로 수동 지정 완료 · 프론트가 최신 지정값을 바로 읽어 교체합니다.','ok');
     }catch(error){
       show('히어로 지정 실패: '+error.message,'warn');
       syncPreviewHeroButton(row);

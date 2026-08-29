@@ -27,6 +27,8 @@
   const HERO_MIN_EDGE_MEAN = 4.8;
   const HERO_MIN_EDGE_P90 = 15;
   const HERO_CAPTURE_TARGET_LIMIT = 8;
+  const HERO_CONTROL_URL = '/.netlify/functions/media-snapshot-publish?heroPublicStatus=1';
+  const HERO_CONTROL_POLL_MS = 30000;
 
   // Legacy feed-media fallback is disabled.
   // Keep the original snapshot -> automap -> front sample/real-content rendering process unchanged.
@@ -1078,6 +1080,7 @@
   const heroRuntime={
     rotateKeys:[],sectionMap:null,manualContentId:'',timer:null,running:false,rerun:false,
     currentItem:null,currentUrl:'',currentTier:-1,currentScore:-Infinity,
+    currentMode:'',currentRotationBucket:null,controlTimer:null,
     failedUrls:new Set(),frameCaptureCache:new Map()
   };
 
@@ -1169,8 +1172,12 @@
     const tier=Number(best.tier||0);
     const provisional=best.provisional===true;
     if(tier<2&&!provisional)return false;
+    const nextMode=best.manualForced===true?'manual':'auto';
+    const nextRotationBucket=Number.isFinite(Number(best.rotationBucket))?Number(best.rotationBucket):null;
+    const forceReplace=best.manualForced===true||heroRuntime.currentMode!==nextMode||
+      (nextMode==='auto'&&nextRotationBucket!==null&&heroRuntime.currentRotationBucket!==nextRotationBucket);
     const currentItem=heroRuntime.currentItem;
-    if(currentItem&&heroRuntime.currentUrl){
+    if(currentItem&&heroRuntime.currentUrl&&!forceReplace){
       const currentTier=Number(heroRuntime.currentTier||0);
       // A low-resolution card fallback is temporary: any verified HD movie/drama
       // candidate may replace it. Once HD is installed, never downgrade to fallback.
@@ -1214,6 +1221,7 @@
     bindHeroPlayback(heroImg,best.item);
     heroRuntime.currentItem=best.item;heroRuntime.currentUrl=selectedUrl;
     heroRuntime.currentTier=tier;heroRuntime.currentScore=best.finalScore||0;
+    heroRuntime.currentMode=nextMode;heroRuntime.currentRotationBucket=nextRotationBucket;
     return true;
   }
 
@@ -1228,7 +1236,10 @@
     const manualId=String(heroRuntime.manualContentId||'').trim();
     if(manualId){
       const manualRow=pool.find((row)=>String(ensureContentId(row&&row.item)||heroItemKey(row&&row.item)||'').trim()===manualId);
-      if(manualRow)pool=[manualRow];
+      // A manual pin must never silently fall back to a different automatic item.
+      // Wait for the pinned card/image to become render-ready and retry instead.
+      if(!manualRow)return !!heroRuntime.currentItem;
+      pool=[manualRow];
     }
 
     pool.sort((a,b)=>{
@@ -1298,8 +1309,10 @@
       const sharpHd=valid.filter((row)=>row.tier===2&&row.visual&&row.visual.sharp===true);
       const source=fullHd.length?fullHd:(sharpHd.length?sharpHd:valid);
       const poolSize=Math.max(1,Math.min(source.length,Number(HERO_ROTATE_TOP_POOL)||1));
-      const pick=heroRotationBucket()%poolSize;
-      return source[pick]||source[0]||null;
+      const bucket=heroRotationBucket();
+      const pick=bucket%poolSize;
+      const selected=source[pick]||source[0]||null;
+      return selected?Object.assign({},selected,{manualForced:!!manualId,rotationBucket:bucket}):null;
     }
     async function checkedCandidate(candidate,timeoutMs){
       const known=resolveKnown(candidate);if(known)return known;
@@ -1351,7 +1364,8 @@
         if(tier<2)continue;
         best={url:captured.url,item:row.item,card:row.card,w:captured.w,h:captured.h,tier,
           visual:captured.visual,qualityMetric:heroQualityMetric(captured.w,captured.h,captured.visual),freshnessDay:heroFreshnessDay(row.item),
-          popularityMetric:heroPopularityMetric(row.item),finalScore:heroRankScore(row.item)+(row.preferred?80:0)+(row.domReady?140:0)+520};
+          popularityMetric:heroPopularityMetric(row.item),finalScore:heroRankScore(row.item)+(row.preferred?80:0)+(row.domReady?140:0)+520,
+          manualForced:!!manualId,rotationBucket:heroRotationBucket()};
         break;
       }
     }
@@ -1372,6 +1386,31 @@
         if(heroRuntime.rerun){heroRuntime.rerun=false;requestHeroRefresh(80);}
       }
     },Math.max(0,Number(delay)||0));
+  }
+
+  async function readLiveHeroControl(){
+    try{
+      const response=await fetch(HERO_CONTROL_URL,{cache:'no-store',credentials:'same-origin'});
+      if(!response.ok)return null;
+      const data=await response.json();
+      if(!data||data.ok!==true)return null;
+      return data.manual===true?String(data.contentId||'').trim():'';
+    }catch(_e){return null;}
+  }
+
+  async function syncLiveHeroControl(){
+    const liveId=await readLiveHeroControl();
+    if(liveId===null)return;
+    if(liveId===heroRuntime.manualContentId)return;
+    heroRuntime.manualContentId=liveId;
+    requestHeroRefresh(0);
+  }
+
+  function startLiveHeroControlWatch(){
+    if(heroRuntime.controlTimer)clearInterval(heroRuntime.controlTimer);
+    heroRuntime.controlTimer=setInterval(syncLiveHeroControl,HERO_CONTROL_POLL_MS);
+    try{window.addEventListener('focus',syncLiveHeroControl,{passive:true});}catch(_e){}
+    try{D.addEventListener('visibilitychange',()=>{if(!D.hidden)syncLiveHeroControl();});}catch(_e){}
   }
 
   function scheduleHeroRefresh(heroRotateKeys,sectionMap,manualContentId){
@@ -1490,8 +1529,11 @@
     // Start hero selection only after the rail bind pass. The hero is therefore
     // guaranteed to be an expansion of a successfully rendered movie/drama card.
     const heroRotateFrom=snapshot&&snapshot.hero&&(snapshot.hero.rotateFrom||snapshot.hero.source);
-    const heroManualContentId=snapshot&&snapshot.hero&&snapshot.hero.manual===true?snapshot.hero.manualContentId:'';
+    const snapshotManualContentId=snapshot&&snapshot.hero&&snapshot.hero.manual===true?snapshot.hero.manualContentId:'';
+    const liveManualContentId=await readLiveHeroControl();
+    const heroManualContentId=liveManualContentId===null?snapshotManualContentId:liveManualContentId;
     scheduleHeroRefresh(heroRotateFrom,sectionMap,heroManualContentId);
+    startLiveHeroControlWatch();
 
     // Async image decode/recovery and any later renderer must not be allowed to
     // reintroduce Sample/real interleaving. Re-compact a few times after the
@@ -1502,7 +1544,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.4-hero-fullhd-manual-pin';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.5-hero-live-manual-rotation-fix';
 })();
 
 
