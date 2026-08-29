@@ -1,9 +1,9 @@
 // socialnetwork-automap.v3.fixed.js
 // 목적:
-// 1) social.snapshot.json 실데이터가 있으면 메인 9섹션 + 우측 패널에 꽂는다.
-// 2) 실데이터가 없으면 기존 HTML/더미를 절대 지우지 않는다.
-// 3) key는 하드코딩 최소화: HTML의 data-psom-key를 그대로 읽는다.
-// 4) 우측 패널도 실데이터가 있을 때만 기존 더미를 밀어내고 교체한다.
+// 1) Social 메인 9섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
+// 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
+// 3) 메인 Social과 rightPanel의 fetch/render/state를 완전히 분리해 어느 한쪽 지연/실패가 다른 쪽을 막지 않는다.
+// 4) Social runtime readback은 rightPanel/social-maru를 절대 읽거나 덮지 않는다.
 
 (function () {
   "use strict";
@@ -13,17 +13,25 @@
   window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
 
   // --- config ---
-  const SNAPSHOT_URL = "/data/social.snapshot.json";
+  const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
   const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 9;
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 20;
   const RIGHT_LIMIT = 100;
-  const RIGHT_BATCH = 20;
-  const RIGHT_SECTION_KEY = "rightPanel";
+  const MANAGED_MAIN_KEYS = new Set([
+    "social-youtube",
+    "social-instagram",
+    "social-tiktok",
+    "social-facebook",
+    "social-wechat",
+    "social-weibo",
+    "social-pinterest",
+    "social-reddit",
+    "social-twitter",
+  ]);
   const mainRenderTokens = new WeakMap();
-  const rightRenderTokens = new WeakMap();
 
   function qs(sel, root) {
     return (root || document).querySelector(sel);
@@ -39,25 +47,22 @@
   }
 
   function pickUrl(it) {
-    var social = (it && it.social) || {};
-    var source = (it && it.source) || {};
-    // Social front cards must keep the real latest-post/video URL first.
-    // Commerce/internal aliases are only fallbacks and must never replace
-    // a verified SNS content URL on the nine managed Social sections.
     return (
       safeText(
         it &&
-          (social.latestContentUrl ||
-            social.latest_content_url ||
+          (it.sourceUrl ||
+            it.source_url ||
             it.latestContentUrl ||
             it.latest_content_url ||
             it.sourceContentUrl ||
             it.source_content_url ||
             it.permalink ||
-            source.url ||
-            it.url ||
-            it.href ||
-            it.link ||
+            it.affiliateOutboundUrl ||
+            it.affiliate_outbound_url ||
+            it.externalOutboundUrl ||
+            it.external_outbound_url ||
+            it.checkoutUrl ||
+            it.paymentUrl ||
             it.contentUrl ||
             it.pageUrl ||
             it.internalUrl ||
@@ -65,44 +70,14 @@
             it.productLink ||
             it.detailUrl ||
             it.redirectUrl ||
+            it.permalink ||
             it.path ||
-            it.affiliateOutboundUrl ||
-            it.affiliate_outbound_url ||
-            it.externalOutboundUrl ||
-            it.external_outbound_url ||
-            it.checkoutUrl ||
-            it.paymentUrl ||
+            it.url ||
+            it.href ||
+            it.link ||
             ""),
       ) || "#"
     );
-  }
-
-  function pickEmbed(it) {
-    var social = (it && it.social) || {};
-    return safeText(
-      it &&
-        (it.embedUrl ||
-          it.embed_url ||
-          social.embedUrl ||
-          social.embed_url ||
-          "")
-    ).trim();
-  }
-
-  function pickPlatform(it, gridEl) {
-    var social = (it && it.social) || {};
-    var source = (it && it.source) || {};
-    var value = safeText(
-      it && (it.platform || social.platform || source.platform || "")
-    ).trim().toLowerCase();
-    if (value === "x") value = "twitter";
-    if (value) return value;
-    var key = safeText(gridEl && gridEl.getAttribute("data-psom-key")).toLowerCase();
-    if (key.indexOf("social-") === 0) {
-      value = key.slice(7);
-      return value === "x" ? "twitter" : value;
-    }
-    return "";
   }
 
   function pickThumb(it) {
@@ -141,6 +116,26 @@
           it.id ||
           ""),
     ).trim();
+  }
+
+  function dedupeMainItems(items) {
+    const seenIds = new Set();
+    const seenUrls = new Set();
+    const out = [];
+    (Array.isArray(items) ? items : []).forEach(function (it) {
+      if (!it) return;
+      const id = pickProductId(it).toLowerCase();
+      const url = pickUrl(it).trim().toLowerCase();
+      const sample = isPlaceholderItem(it);
+      if (!sample) {
+        if (id && seenIds.has(id)) return;
+        if (url && url !== "#" && seenUrls.has(url)) return;
+      }
+      if (id) seenIds.add(id);
+      if (url && url !== "#") seenUrls.add(url);
+      out.push(it);
+    });
+    return out;
   }
 
   function isExternalUrl(url) {
@@ -230,35 +225,6 @@
     if (isValidSecondUrl(raw)) return raw;
 
     return "";
-  }
-
-  function resolveElementUrl(el) {
-    if (!el) return "";
-
-    return safeText(
-      (el.dataset &&
-        (el.dataset.checkoutUrl ||
-          el.dataset.paymentUrl ||
-          el.dataset.contentUrl ||
-          el.dataset.pageUrl ||
-          el.dataset.internalUrl ||
-          el.dataset.productUrl ||
-          el.dataset.productLink ||
-          el.dataset.detailUrl ||
-          el.dataset.href ||
-          el.dataset.url)) ||
-        el.getAttribute("data-checkout-url") ||
-        el.getAttribute("data-payment-url") ||
-        el.getAttribute("data-content-url") ||
-        el.getAttribute("data-page-url") ||
-        el.getAttribute("data-internal-url") ||
-        el.getAttribute("data-product-url") ||
-        el.getAttribute("data-product-link") ||
-        el.getAttribute("data-detail-url") ||
-        el.getAttribute("data-href") ||
-        el.getAttribute("href") ||
-        "",
-    ).trim();
   }
 
   function isRealItem(it) {
@@ -367,44 +333,52 @@
       .slice(0, MAIN_LIMIT);
   }
 
-  async function loadCurrentSnapshot() {
+  async function fetchRightPanelSnapshot() {
     try {
-      const current = await fetch(
-        CURRENT_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
-        {
-        cache: "no-store",
-        credentials: "same-origin",
-        },
-      );
-      if (current.ok) {
-        const payload = await current.json();
-        if (payload && payload.ok === true && payload.snapshot) {
-          return {
-            snapshot: payload.snapshot,
-            pipeline: {
-              source: "stored_release_current",
-              status: "front_readback_passed",
-              releaseId: payload.releaseId || null,
-              hash: payload.hash || null,
-              documentHash: payload.documentHash || null,
-              hashVerified: payload.hashVerified === true,
-              publicSlots: payload.publicSlots || null,
-              route: payload.route || null,
-              loadedAt: new Date().toISOString(),
-            },
-          };
-        }
-      }
+      const res = await fetch(RIGHT_SNAPSHOT_URL, { cache: "no-store", priority: "high" });
+      if (!res.ok) return null;
+      return await res.json();
     } catch (_e) {
-      /* 정적 스냅샷을 이미 별도로 요청 중이다. */
+      return null;
     }
-    return null;
   }
 
-  async function loadStaticSnapshot() {
-    const res = await fetch(SNAPSHOT_URL, { cache: "no-store" });
-    if (!res.ok) throw new Error("snapshot_load_failed:" + res.status);
-    return res.json();
+  // Same load behavior as Network/Tour right panels: start the Canonical/IP
+  // request immediately, share one in-flight promise, and never impose a
+  // client-side timeout. A real HTTP/network failure may be retried later.
+  let initialRightSnapshotPromise = null;
+  function getInitialRightSnapshotPromise() {
+    if (!initialRightSnapshotPromise) {
+      initialRightSnapshotPromise = fetchRightPanelSnapshot();
+    }
+    return initialRightSnapshotPromise;
+  }
+
+  async function loadCurrentSnapshot() {
+    try {
+      const res = await fetch(
+        CURRENT_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
+        { cache: "no-store", credentials: "same-origin" },
+      );
+      if (!res.ok) return null;
+      const payload = await res.json();
+      if (!payload || payload.ok !== true || !payload.snapshot) return null;
+      if (payload.hashVerified === false) return null;
+      return {
+        snapshot: payload.snapshot,
+        pipeline: {
+          source: "stored_release_current",
+          status: "front_readback_passed",
+          releaseId: payload.releaseId || null,
+          hash: payload.hash || null,
+          publicSlots: payload.publicSlots || null,
+          route: payload.route || null,
+          loadedAt: new Date().toISOString(),
+        },
+      };
+    } catch (_e) {
+      return null;
+    }
   }
 
   function getMainSlots(gridEl) {
@@ -412,49 +386,162 @@
     return qsa("a.card", gridEl);
   }
 
+  function mainCtaLabel(gridEl) {
+    const existing = qs("a.card .cta", gridEl);
+    return safeText(existing && existing.textContent).trim() || "Open";
+  }
+
+  function mainCardMarkup(gridEl) {
+    const label = mainCtaLabel(gridEl);
+    return (
+      '<div class="pic"></div>' +
+      '<div class="meta">' +
+      '<div class="title"></div>' +
+      '<div class="desc"></div>' +
+      '<div class="cta">' + label.replace(/[&<>"']/g, function (ch) {
+        return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch];
+      }) + '</div>' +
+      '</div>'
+    );
+  }
+
+  function normalizeMainCardLayout(gridEl) {
+    if (!gridEl) return;
+    const cards = getMainSlots(gridEl);
+    if (!cards.length) return;
+
+    let maxTitleHeight = 0;
+    cards.forEach(function (card) {
+      const title = qs(".title", card);
+      const desc = qs(".desc", card);
+      const meta = qs(".meta", card);
+      const cta = qs(".cta", card);
+
+      if (desc) {
+        // Keep the text in the DOM for the detail/full-screen viewer,
+        // but do not expose supplier/production description on the front card.
+        desc.style.display = "none";
+      }
+      if (meta) meta.style.flex = "1 1 auto";
+      if (cta) cta.style.marginTop = "auto";
+      if (title) {
+        title.style.minHeight = "0px";
+        maxTitleHeight = Math.max(maxTitleHeight, title.getBoundingClientRect().height);
+      }
+      card.style.minHeight = "0px";
+    });
+
+    if (maxTitleHeight > 0) {
+      cards.forEach(function (card) {
+        const title = qs(".title", card);
+        if (title) title.style.minHeight = Math.ceil(maxTitleHeight) + "px";
+      });
+    }
+
+    // Equalize the full card height within this SNS section so every CTA
+    // sits on the same bottom line, based on that section's longest title.
+    let maxCardHeight = 0;
+    cards.forEach(function (card) {
+      maxCardHeight = Math.max(maxCardHeight, card.getBoundingClientRect().height);
+    });
+    if (maxCardHeight > 0) {
+      cards.forEach(function (card) {
+        card.style.minHeight = Math.ceil(maxCardHeight) + "px";
+      });
+    }
+  }
+
+  function sampleLabelForSection(key) {
+    const labels = {
+      "social-youtube": "YouTube",
+      "social-instagram": "Instagram",
+      "social-tiktok": "TikTok",
+      "social-facebook": "Facebook",
+      "social-wechat": "WeChat",
+      "social-weibo": "Weibo",
+      "social-pinterest": "Pinterest",
+      "social-reddit": "Reddit",
+      "social-twitter": "X (Twitter)",
+    };
+    return labels[safeText(key)] || "SNS";
+  }
+
+  function snapshotSampleNumber(it, card) {
+    const id = pickProductId(it);
+    const m = String(id || "").match(/(?:_|:)(\d{1,3})$/);
+    if (m) return String(Number(m[1]) || 1).padStart(3, "0");
+    try {
+      const grid = card && card.closest && card.closest("[data-psom-key]");
+      const idx = grid ? getMainSlots(grid).indexOf(card) : -1;
+      return String((idx >= 0 ? idx : 0) + 1).padStart(3, "0");
+    } catch (_e) {
+      return "001";
+    }
+  }
+
+  function paintSnapshotSampleCard(card, it) {
+    if (!card || !it) return;
+    const grid = card.closest && card.closest("[data-psom-key]");
+    const key = safeText(grid && grid.getAttribute("data-psom-key"));
+    const label = sampleLabelForSection(key);
+    const number = snapshotSampleNumber(it, card);
+
+    card.href = "#";
+    card.target = "_self";
+    card.rel = "noopener";
+    card.dataset.sample = "1";
+    card.dataset.snapshotSample = "1";
+    card.removeAttribute("data-dummy");
+
+    const pic = qs(".pic", card);
+    const metaTitle = qs(".title", card);
+    const metaDesc = qs(".desc", card);
+    if (metaTitle) metaTitle.textContent = label + " · SAMPLE " + number;
+    if (metaDesc) {
+      metaDesc.textContent = pickDesc(it) || "Snapshot sample slot";
+      metaDesc.style.display = "none";
+    }
+    if (pic) {
+      pic.style.backgroundImage = "";
+      pic.style.backgroundSize = "";
+      pic.style.backgroundPosition = "";
+      pic.textContent = label;
+    }
+  }
+
   function paintMainCard(card, it) {
-    if (!card) return;
+    if (!card || !it) return;
+
+    // SAMPLE ownership is upstream. Automap never creates sample rows; it only
+    // renders a sample when that row actually arrived in the Social snapshot.
+    if (isPlaceholderItem(it)) {
+      paintSnapshotSampleCard(card, it);
+      return;
+    }
+
+    card.removeAttribute("data-sample");
+    card.removeAttribute("data-snapshot-sample");
 
     const url = pickUrl(it);
     const title = pickTitle(it) || "Item";
     const desc = pickDesc(it) || " ";
     const thumb = pickThumb(it);
-    const gridEl = card.closest(".thumb-grid[data-psom-key]");
-    const platform = pickPlatform(it, gridEl);
-    const embedUrl = pickEmbed(it);
-    const contentId = pickProductId(it);
 
     card.href = url || "#";
-    // Main Social cards are opened by the IGDC internal SNS viewer. Do not
-    // leave an _blank escape path on the DOM while the viewer is available.
-    card.target = "_self";
+    card.dataset.contentUrl = url || "#";
+    card.target = url && url !== "#" ? "_blank" : "_self";
     card.rel = "noopener";
     card.removeAttribute("data-dummy");
-
-    if (url && url !== "#") {
-      card.dataset.socialUrl = url;
-      card.dataset.latestContentUrl = url;
-      card.dataset.sourceUrl = url;
-    } else {
-      delete card.dataset.socialUrl;
-      delete card.dataset.latestContentUrl;
-      delete card.dataset.sourceUrl;
-    }
-    if (embedUrl) card.dataset.embedUrl = embedUrl;
-    else delete card.dataset.embedUrl;
-    if (platform) card.dataset.platform = platform;
-    else delete card.dataset.platform;
-    if (thumb) card.dataset.thumbnailUrl = thumb;
-    else delete card.dataset.thumbnailUrl;
-    if (contentId) card.dataset.contentId = contentId;
-    else delete card.dataset.contentId;
 
     const pic = qs(".pic", card);
     const metaTitle = qs(".title", card);
     const metaDesc = qs(".desc", card);
 
     if (metaTitle) metaTitle.textContent = title;
-    if (metaDesc) metaDesc.textContent = desc;
+    if (metaDesc) {
+      metaDesc.textContent = desc;
+      metaDesc.style.display = "none";
+    }
 
     if (pic) {
       if (thumb) {
@@ -469,45 +556,17 @@
     }
   }
 
-  function resetMainCardToDummy(card) {
-    if (!card) return;
-
-    card.href = "#";
-    card.target = "_self";
-    card.rel = "noopener";
-    card.dataset.dummy = "1";
-    delete card.dataset.socialUrl;
-    delete card.dataset.latestContentUrl;
-    delete card.dataset.sourceUrl;
-    delete card.dataset.embedUrl;
-    delete card.dataset.platform;
-    delete card.dataset.thumbnailUrl;
-    delete card.dataset.contentId;
-
-    const pic = qs(".pic", card);
-    const metaTitle = qs(".title", card);
-    const metaDesc = qs(".desc", card);
-
-    if (metaTitle) metaTitle.textContent = "Loading";
-    if (metaDesc) metaDesc.textContent = "Preparing";
-
-    if (pic) {
-      pic.style.backgroundImage = "";
-      pic.textContent = "";
-    }
-  }
 
   function mountMainRow(gridEl, items) {
     if (!gridEl) return;
 
-    const raw = Array.isArray(items) ? items : [];
+    const raw = Array.isArray(items) ? items.filter(Boolean) : [];
     const displayItems = raw.slice(0, MAIN_LIMIT);
-    while (displayItems.length < MAIN_LIMIT) displayItems.push(null);
 
-    // A new approved snapshot starts from one visible batch. Later cards are
-    // created only when the user reaches the end of this row.
+    // Snapshot is the sole owner of both real rows and SAMPLE rows. Trim stale
+    // DOM cards to the exact snapshot length; never pad missing rows locally.
     let cards = getMainSlots(gridEl);
-    for (let i = MAIN_BATCH; i < cards.length; i++) {
+    for (let i = displayItems.length; i < cards.length; i++) {
       if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
     }
     cards = getMainSlots(gridEl);
@@ -521,13 +580,7 @@
         a.className = "card";
         a.href = "#";
 
-        a.innerHTML = `
-        <div class="pic"></div>
-        <div class="meta">
-          <div class="title"></div>
-          <div class="desc"></div>
-        </div>
-      `;
+        a.innerHTML = mainCardMarkup(gridEl);
         frag.appendChild(a);
       }
       gridEl.appendChild(frag);
@@ -545,9 +598,9 @@
       for (let i = job.offset; i < end; i++) {
         const it = job.items[i] || null;
         if (it) paintMainCard(cards[i], it);
-        else resetMainCardToDummy(cards[i]);
       }
       job.offset = end;
+      normalizeMainCardLayout(gridEl);
     }
 
     renderMore();
@@ -574,7 +627,7 @@
         const a = document.createElement("a");
         a.className = "card";
         a.href = "#";
-        a.innerHTML = '<div class="pic"></div><div class="meta"><div class="title"></div><div class="desc"></div></div>';
+        a.innerHTML = mainCardMarkup(gridEl);
         frag.appendChild(a);
       }
       gridEl.appendChild(frag);
@@ -583,61 +636,53 @@
     for (let i = job.offset; i < end; i++) {
       const it = displayItems[i] || null;
       if (it) paintMainCard(cards[i], it);
-      else resetMainCardToDummy(cards[i]);
     }
     job.offset = end;
+    normalizeMainCardLayout(gridEl);
+  }
+
+  function ensureRightCardCss() {
+    const id = "igdc-social-right-card-render-v2";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = `
+[data-psom-key="rightPanel"] .ad-box.product-card{position:relative;line-height:normal!important;overflow:hidden!important;background:#fff!important;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a{position:relative;display:flex!important;flex-direction:column!important;width:100%;height:100%;line-height:normal!important;overflow:hidden;border-radius:inherit;text-decoration:none!important;background:#fff!important;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a > img.social-right-card-thumb{display:block;width:100%;height:auto!important;flex:1 1 auto!important;min-height:0!important;object-fit:contain;object-position:center;background:#fff;}
+[data-psom-key="rightPanel"] .ad-box.product-card > a > .social-right-card-title{position:static!important;flex:0 0 auto!important;box-sizing:border-box;min-height:42px;max-height:52px;padding:7px 9px;color:#222!important;font-weight:600;font-size:.88rem;line-height:1.3;text-align:left;background:#fff!important;text-shadow:none!important;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+`;
+    document.head.appendChild(style);
   }
 
   function getRightPanels() {
     return qsa('[data-psom-key="rightPanel"]');
   }
 
-  function getRightCards(panel, required) {
-    if (!panel) return [];
-
-    let cards = qsa(".ad-box", panel);
-    const wanted = Math.min(RIGHT_LIMIT, Math.max(0, required == null ? RIGHT_LIMIT : required));
-    if (cards.length < wanted) {
-      const frag = document.createDocumentFragment();
-      for (let i = cards.length; i < wanted; i++) {
-        const box = document.createElement("div");
-        box.className = "ad-box product-card";
-        box.dataset.dummy = "1";
-        box.dataset.productId = "";
-        box.dataset.productTitle = "RIGHT SAMPLE";
-        box.dataset.productLink = "";
-        box.dataset.productUrl = "";
-        box.dataset.detailUrl = "";
-        box.dataset.href = "";
-        box.innerHTML =
-          '<a href="javascript:void(0)" aria-disabled="true" data-product-id="" data-product-title="RIGHT SAMPLE" data-product-link="">RIGHT SAMPLE</a>';
-        frag.appendChild(box);
-      }
-
-      panel.appendChild(frag);
-      cards = qsa(".ad-box", panel);
-    }
-
-    return cards;
+  function rightUsableItems(items) {
+    return (Array.isArray(items) ? items : []).filter(function (it) {
+      if (!it || isPlaceholderItem(it)) return false;
+      return !!(pickTitle(it).trim() && pickThumb(it).trim() && resolveItemUrl(it));
+    }).slice(0, RIGHT_LIMIT);
   }
 
-  function paintRightCard(box, it) {
-    if (!box) return;
+  function makeRightCard() {
+    const box = document.createElement("div");
+    box.className = "ad-box product-card";
+    const a = document.createElement("a");
+    box.appendChild(a);
+    return box;
+  }
 
-    if (isPlaceholderItem(it)) {
-      resetRightCardToDummy(box);
-      return;
-    }
-
-    const url = resolveItemUrl(it);
+  function paintRightCard(box, it, index) {
+    if (!box || !it) return;
     const title = pickTitle(it) || "Item";
+    const url = resolveItemUrl(it);
     const productId = pickProductId(it);
-    const rawUrl = pickUrl(it).trim();
-    const externalUrl =
-      rawUrl && isExternalUrl(rawUrl) && !isBadPlaceholderUrl(rawUrl)
-        ? rawUrl
-        : "";
+    const thumb = pickThumb(it).trim();
+    if (!url || !thumb) return;
 
+    ensureRightCardCss();
     box.className = "ad-box product-card";
     box.removeAttribute("data-dummy");
     box.dataset.productId = productId;
@@ -646,261 +691,90 @@
     box.dataset.productUrl = url;
     box.dataset.detailUrl = url;
     box.dataset.href = url;
-    if (externalUrl) box.dataset.externalUrl = externalUrl;
-    else delete box.dataset.externalUrl;
 
     let a = qs("a", box);
     if (!a) {
-      box.innerHTML = "";
       a = document.createElement("a");
+      box.textContent = "";
       box.appendChild(a);
     }
-
-    a.href = url || "javascript:void(0)";
-    a.target = url ? (isExternalUrl(url) ? "_blank" : "_self") : "_self";
+    a.textContent = "";
+    a.href = url;
+    a.target = isExternalUrl(url) ? "_top" : "_self";
     a.rel = "noopener";
-    a.textContent = title;
+    if (isExternalUrl(url)) a.setAttribute("data-igdc-external", "top");
+    else a.removeAttribute("data-igdc-external");
     a.dataset.productId = productId;
     a.dataset.productTitle = title;
     a.dataset.productLink = url;
-    a.dataset.productUrl = url;
-    a.dataset.detailUrl = url;
-    if (it && it.affiliateOutboundUrl) a.dataset.affiliateOutbound = "1";
-    if (it && it.externalOutboundUrl) a.dataset.externalOutbound = "1";
-    a.dataset.href = url;
-    if (externalUrl) a.dataset.externalUrl = externalUrl;
-    else delete a.dataset.externalUrl;
 
-    if (url) {
-      a.removeAttribute("aria-disabled");
-    } else {
-      a.setAttribute("aria-disabled", "true");
+    const img = document.createElement("img");
+    img.className = "social-right-card-thumb";
+    img.src = thumb;
+    img.alt = title;
+    const firstView = Number(index) >= 0 && Number(index) < 8;
+    img.loading = firstView ? "eager" : "lazy";
+    img.decoding = "async";
+    if (firstView) {
+      try { img.fetchPriority = "high"; } catch (_e) {}
     }
-  }
+    a.appendChild(img);
 
-  function resetRightCardToDummy(box) {
-    if (!box) return;
-
-    box.className = "ad-box product-card";
-    box.dataset.dummy = "1";
-    box.dataset.productId = "";
-    box.dataset.productTitle = "RIGHT SAMPLE";
-    box.dataset.productLink = "";
-    box.dataset.productUrl = "";
-    box.dataset.detailUrl = "";
-    box.dataset.href = "";
-    delete box.dataset.externalUrl;
-
-    let a = qs("a", box);
-    if (!a) {
-      box.innerHTML = "";
-      a = document.createElement("a");
-      box.appendChild(a);
-    }
-
-    a.href = "javascript:void(0)";
-    a.target = "_self";
-    a.rel = "noopener";
-    a.textContent = "RIGHT SAMPLE";
-    a.dataset.productId = "";
-    a.dataset.productTitle = "RIGHT SAMPLE";
-    a.dataset.productLink = "";
-    a.dataset.productUrl = "";
-    a.dataset.detailUrl = "";
-    a.dataset.href = "";
-    delete a.dataset.externalUrl;
-    a.setAttribute("aria-disabled", "true");
-  }
-
-  function installRightPanelClickRouter() {
-    if (window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__) return;
-    window.__SOCIAL_RIGHTPANEL_CLICK_ROUTER_READY__ = true;
-
-    document.addEventListener(
-      "click",
-      function (e) {
-        if (e.defaultPrevented) return;
-        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return;
-        if (e.target && e.target.closest && e.target.closest(".rscroll"))
-          return;
-
-        const hit =
-          e.target &&
-          e.target.closest &&
-          e.target.closest(
-            '[data-psom-key="rightPanel"] [data-checkout], ' +
-              '[data-psom-key="rightPanel"] .product-card, ' +
-              '[data-psom-key="rightPanel"] .ad-box, ' +
-              '[data-psom-key="rightPanel"] a[href]',
-          );
-
-        if (!hit) return;
-
-        // 결제 훅은 기존 IGTC checkout 로직에 맡긴다.
-        if (hit.closest && hit.closest("[data-checkout]")) return;
-
-        const box = hit.closest
-          ? hit.closest(".product-card, .ad-box") || hit
-          : hit;
-        const a =
-          hit.matches && hit.matches("a[href]")
-            ? hit
-            : box.querySelector
-              ? box.querySelector("a[href]")
-              : null;
-
-        const url = resolveElementUrl(box) || resolveElementUrl(a);
-
-        if (!isValidSecondUrl(url)) {
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (isExternalUrl(url)) {
-          window.open(url, "_blank", "noopener");
-        } else {
-          window.location.assign(url);
-        }
-      },
-      true,
-    );
-  }
-
-  function installRightPanelRenderOverride() {
-    if (window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__) return;
-    window.__SOCIAL_RIGHTPANEL_RENDER_OVERRIDE_READY__ = true;
-
-    window.__IGDC_RIGHTPANEL_RENDER = function (items) {
-      const rightPanels = getRightPanels();
-      rightPanels.forEach(function (panel) {
-        mountRightPanel(panel, Array.isArray(items) ? items : []);
-      });
-    };
+    const cap = document.createElement("div");
+    cap.className = "social-right-card-title";
+    cap.textContent = title;
+    a.appendChild(cap);
   }
 
   function mountRightPanel(panel, items) {
     if (!panel) return;
+    const usable = rightUsableItems(items);
 
-    const raw = Array.isArray(items) ? items : [];
+    // Match Network/Tour right-panel behavior. Once the Canonical/IP snapshot
+    // has answered, stale "Loading" shells are not kept. No generic/global
+    // product feed is substituted here.
+    panel.innerHTML = "";
+    if (!usable.length) return;
 
-    const usable = raw.filter(function (it) {
-      if (!it) return false;
-      if (isPlaceholderItem(it)) return false;
-
-      const title = pickTitle(it).trim();
-      const url = resolveItemUrl(it);
-      const thumb = pickThumb(it).trim();
-
-      return !!(title || thumb || url);
+    const frag = document.createDocumentFragment();
+    usable.forEach(function (it, index) {
+      const box = makeRightCard();
+      paintRightCard(box, it, index);
+      frag.appendChild(box);
     });
-
-    const displayItems = usable.slice(0, RIGHT_LIMIT);
-
-    while (displayItems.length < RIGHT_LIMIT) {
-      displayItems.push(null);
-    }
-
-    let cards = getRightCards(panel, RIGHT_BATCH);
-    for (let i = RIGHT_BATCH; i < cards.length; i++) {
-      if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
-    }
-
-    const scrollHost = panel.closest("#rpMobileScroller") || panel;
-    const job = { panel: panel, items: displayItems, offset: 0 };
-    rightRenderTokens.set(scrollHost, job);
-
-    function renderMore() {
-      if (rightRenderTokens.get(scrollHost) !== job) return;
-      const end = Math.min(job.offset + RIGHT_BATCH, RIGHT_LIMIT, job.items.length);
-      cards = getRightCards(panel, end);
-      for (let i = job.offset; i < end; i++) {
-        const it = job.items[i];
-        if (it) paintRightCard(cards[i], it);
-        else resetRightCardToDummy(cards[i]);
-      }
-      job.offset = end;
-    }
-
-    renderMore();
-    if (scrollHost.dataset.igdcSocialRightBatchBound === "1") return;
-    scrollHost.dataset.igdcSocialRightBatchBound = "1";
-    scrollHost.addEventListener("scroll", function () {
-      const current = rightRenderTokens.get(scrollHost);
-      if (!current || current.offset >= Math.min(RIGHT_LIMIT, current.items.length)) return;
-      const nearX = scrollHost.scrollWidth > scrollHost.clientWidth + 2 &&
-        scrollHost.scrollLeft + scrollHost.clientWidth >= scrollHost.scrollWidth - 40;
-      const nearY = scrollHost.scrollHeight > scrollHost.clientHeight + 2 &&
-        scrollHost.scrollTop + scrollHost.clientHeight >= scrollHost.scrollHeight - 40;
-      if (!nearX && !nearY) return;
-      const end = Math.min(current.offset + RIGHT_BATCH, RIGHT_LIMIT, current.items.length);
-      const activeCards = getRightCards(current.panel, end);
-      for (let i = current.offset; i < end; i++) {
-        const it = current.items[i];
-        if (it) paintRightCard(activeCards[i], it);
-        else resetRightCardToDummy(activeCards[i]);
-      }
-      current.offset = end;
-    }, { passive: true });
+    panel.appendChild(frag);
   }
 
-  let lastSnapshot = null;
+  let lastMainSnapshot = null;
   let lastRoute = routeFallback();
-  let runInFlight = null;
+  let mainRunInFlight = null;
+  let rightRunInFlight = null;
+  let rightApplied = false;
 
-  function renderSnapshot(snap, route) {
+  function renderMainSnapshot(snap, route) {
     const sections = getSections(snap);
     if (!sections) return false;
 
     const grids = document.querySelectorAll("[data-psom-key]");
-
-    grids.forEach((grid) => {
+    grids.forEach(function (grid) {
       const key = grid.getAttribute("data-psom-key");
-      if (!key) return;
+      if (!key || !MANAGED_MAIN_KEYS.has(key)) return;
 
-      if (key === "rightPanel") return;
-      if (key === "social-maru") return;
-
-      const raw = routedItems(snap, key, route) || sections[key];
-
-      const items = Array.isArray(raw)
+      // Front rendering consumes the Snapshot Engine's published section slots
+      // exactly. candidatePool is administrative reserve/ranking context and must
+      // never bypass the real+SAMPLE replacement state already decided upstream.
+      const raw = sections[key];
+      const sourceItems = Array.isArray(raw)
         ? raw
-        : Array.isArray(raw?.items)
+        : Array.isArray(raw && raw.items)
           ? raw.items
           : [];
-
-      const finalItems =
-        items.length > 0
-          ? items
-          : [
-              {
-                title: key + " SAMPLE",
-                url: "#",
-                thumbnail: "",
-              },
-            ];
-
-      mountMainRow(grid, finalItems);
+      const items = dedupeMainItems(sourceItems);
+      // Do not filter SAMPLE rows here. If Snapshot Engine sends a sample slot,
+      // render it; if it sends nothing, clear the row. This makes SAMPLE slots
+      // a real end-to-end pipeline diagnostic instead of a browser fallback.
+      mountMainRow(grid, items.filter(Boolean));
     });
-
-    const rightPanels = getRightPanels();
-
-    if (rightPanels.length) {
-      const raw = Array.isArray(sections.rightPanel)
-        ? sections.rightPanel
-        : Array.isArray(sections.rightPanel?.items)
-          ? sections.rightPanel.items
-          : [];
-
-      const finalItems = raw.length > 0 ? raw : [];
-
-      rightPanels.forEach(function (panel) {
-        mountRightPanel(panel, finalItems);
-      });
-    }
 
     window.__SOCIALNETWORK_AUTOMAP_V3_DONE__ = true;
     window.__IGDC_SOCIAL_COUNTRY_ROUTE__ = {
@@ -911,69 +785,118 @@
     return true;
   }
 
-  function run() {
-    if (runInFlight) return runInFlight;
+  function renderRightPanelSnapshot(snap) {
+    // Strict ownership boundary: read ONLY rightPanel from the Edge-routed
+    // Canonical Distribution/IP document. Social main rows in that document,
+    // if present structurally, are deliberately ignored.
+    const sections = getSections(snap);
+    if (!sections) return false;
+    const rightRaw = Array.isArray(sections.rightPanel)
+      ? sections.rightPanel
+      : Array.isArray(sections.rightPanel && sections.rightPanel.items)
+        ? sections.rightPanel.items
+        : Array.isArray(sections.rightPanel && sections.rightPanel.slots)
+          ? sections.rightPanel.slots
+          : [];
+    getRightPanels().forEach(function (panel) { mountRightPanel(panel, rightRaw); });
+    window.__IGDC_SOCIAL_RIGHTPANEL_PIPELINE__ = {
+      source: RIGHT_SNAPSHOT_URL,
+      owner: "distribution",
+      scope: "canonical-ip-routed",
+      loadedAt: new Date().toISOString(),
+    };
+    return true;
+  }
 
-    const staticPromise = loadStaticSnapshot();
-    const currentPromise = loadCurrentSnapshot();
-    const routePromise = loadCountryRoute();
-    let finalApplied = false;
+  function runRightPanel() {
+    if (rightApplied) return Promise.resolve(true);
+    if (rightRunInFlight) return rightRunInFlight;
 
-    const earlyStatic = staticPromise
-      .then(function (snap) {
-        if (!finalApplied) {
-          lastSnapshot = snap;
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "static_snapshot_early",
-            status: "stored_release_current_pending",
-            loadedAt: new Date().toISOString(),
-          };
-          renderSnapshot(snap, lastRoute);
-        }
-        return snap;
-      })
-      .catch(function () {
-        return null;
-      });
+    rightRunInFlight = (async function () {
+      const snap = await getInitialRightSnapshotPromise();
+      if (!snap) {
+        initialRightSnapshotPromise = null;
+        return false;
+      }
+      renderRightPanelSnapshot(snap);
+      rightApplied = true;
+      return true;
+    })().finally(function () {
+      rightRunInFlight = null;
+    });
+    return rightRunInFlight;
+  }
 
-    runInFlight = Promise.all([currentPromise, routePromise])
-      .then(async function (results) {
+  function runMain() {
+    if (mainRunInFlight) return mainRunInFlight;
+
+    mainRunInFlight = Promise.all([loadCurrentSnapshot(), loadCountryRoute()])
+      .then(function (results) {
         const current = results[0];
         lastRoute = results[1] || routeFallback();
-        finalApplied = true;
-        if (current && current.snapshot) {
-          lastSnapshot = current.snapshot;
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
-        } else {
-          lastSnapshot = await earlyStatic;
-          if (!lastSnapshot) throw new Error("snapshot_load_failed");
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "static_snapshot_fallback",
-            status: "stored_release_current_unavailable",
-            loadedAt: new Date().toISOString(),
-          };
+
+        // Prefer the durable stored Social release. If that readback is temporarily
+        // unavailable, read the canonical Snapshot Engine output already published
+        // at /data/social.snapshot.json. This is a read-only recovery path: it does
+        // not create candidates, mutate SearchBank/Snapshot, or synthesize SAMPLE cards.
+        if (!(current && current.snapshot)) {
+          return fetchRightPanelSnapshot().then(function (canonicalSnapshot) {
+            if (!canonicalSnapshot) {
+              window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+                source: "stored_release_current+canonical_snapshot_engine_output",
+                status: "both_readbacks_unavailable_preserve_existing_slots",
+                loadedAt: new Date().toISOString(),
+              };
+              return false;
+            }
+            lastMainSnapshot = canonicalSnapshot;
+            window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+              source: "canonical_snapshot_engine_output",
+              status: "front_readback_recovered",
+              url: RIGHT_SNAPSHOT_URL,
+              loadedAt: new Date().toISOString(),
+            };
+            return renderMainSnapshot(lastMainSnapshot, lastRoute);
+          });
         }
-        renderSnapshot(lastSnapshot, lastRoute);
+
+        lastMainSnapshot = current.snapshot;
+        window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
+        return renderMainSnapshot(lastMainSnapshot, lastRoute);
       })
       .catch(function (e) {
-        console.error("[social-automap-fixed] fail", e);
+        console.error("[social-main-automap] fail", e);
+        return false;
       })
       .finally(function () {
-        runInFlight = null;
+        mainRunInFlight = null;
       });
 
-    return runInFlight;
+    return mainRunInFlight;
   }
 
   function boot() {
-    installRightPanelClickRouter();
-    installRightPanelRenderOverride();
-    run();
+    // Start the Distribution/IP right-panel request first and independently,
+    // exactly like Network/Tour. Social release lookup runs in parallel and can
+    // neither delay nor overwrite the right panel.
+    runRightPanel();
+    runMain();
   }
+
   window.addEventListener("igdc:rightpanel:refresh", function () {
-    if (lastSnapshot) renderSnapshot(lastSnapshot, lastRoute);
+    rightApplied = false;
+    initialRightSnapshotPromise = null;
+    runRightPanel();
   });
-  boot();
+
+  // Start the canonical right-panel request immediately; DOM events reuse it.
+  getInitialRightSnapshotPromise();
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    setTimeout(boot, 0);
+  } else {
+    document.addEventListener("DOMContentLoaded", boot, { once: true });
+    window.addEventListener("load", boot, { once: true });
+  }
 })();
 
 /* ------------------------------------------------------------------
