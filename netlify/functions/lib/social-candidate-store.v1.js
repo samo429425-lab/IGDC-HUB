@@ -13,7 +13,7 @@ const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
 const VERSION =
-  "social-candidate-store-v1.8.1-front-player-url-continuity";
+  "social-candidate-store-v1.7.2-dedicated-preferred-shared-fallback";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -103,97 +103,20 @@ function platformContentUrl(platform, value) {
   let u;
   try { u = new URL(url); } catch (_e) { return ""; }
   const p = String(platform || Policy.platformFromHost(url) || "").toLowerCase();
-  const path = (u.pathname || "/").replace(/\/{2,}/g, "/");
+  const path = u.pathname || "/";
   const host = u.hostname.toLowerCase().replace(/^www\./, "");
   let ok = false;
-  if (p === "youtube") ok = host === "youtu.be" || (path === "/watch" && !!u.searchParams.get("v")) || /^\/(shorts|live|embed)\//i.test(path);
+  if (p === "youtube") ok = host === "youtu.be" || /^\/(watch|shorts|live|embed)(?:\/|$)/i.test(path) || (path === "/watch" && !!u.searchParams.get("v"));
   else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
-  else if (p === "tiktok") ok = /\/video\/[^/]+/i.test(path);
-  else if (p === "facebook") ok = /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (path === "/watch/" && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
+  else if (p === "tiktok") ok = /^\/@[^/]+\/video\//i.test(path);
+  else if (p === "facebook") ok = /^\/(reel|watch|videos|posts|photo|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos)\//i.test(path);
   else if (p === "wechat") ok = /^\/s(?:\/|$)/i.test(path) || !!u.searchParams.get("__biz");
-  else if (p === "weibo") ok = /^\/(detail|status|tv\/show)\//i.test(path) || /^\/\d+\/[a-z0-9]+/i.test(path);
-  else if (p === "pinterest") ok = /^\/pin\/[^/]+/i.test(path) || host === "pin.it";
-  else if (p === "reddit") ok = /\/comments\/[^/]+/i.test(path) || host === "redd.it";
-  else if (p === "twitter" || p === "x") ok = /\/status\/[^/]+/i.test(path);
+  else if (p === "weibo") ok = /^\/(detail|status)\//i.test(path);
+  else if (p === "pinterest") ok = /^\/pin\//i.test(path) || host === "pin.it";
+  else if (p === "reddit") ok = /\/comments\//i.test(path) || host === "redd.it";
+  else if (p === "twitter") ok = /\/status\//i.test(path);
   return ok ? url : "";
 }
-function socialEmbedUrl(platform, value) {
-  const url = Policy.normalizeUrl(value);
-  if (!url) return "";
-  let u;
-  try { u = new URL(url); } catch (_e) { return ""; }
-  const p = String(platform || Policy.platformFromHost(url) || "").toLowerCase();
-  const path = u.pathname || "/";
-  let match;
-  if (p === "youtube") {
-    match = url.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|live\/|embed\/))([A-Za-z0-9_-]{6,})/i);
-    return match ? "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(match[1]) + "?autoplay=1&rel=0" : "";
-  }
-  if (p === "instagram") {
-    match = path.match(/^\/(p|reel|reels|tv)\/([^/?#]+)/i);
-    return match ? "https://www.instagram.com/" + (match[1].toLowerCase() === "reels" ? "reel" : match[1].toLowerCase()) + "/" + encodeURIComponent(match[2]) + "/embed/" : "";
-  }
-  if (p === "tiktok") {
-    match = path.match(/\/video\/(\d+)/i);
-    return match ? "https://www.tiktok.com/player/v1/" + encodeURIComponent(match[1]) + "?autoplay=1" : "";
-  }
-  if (p === "facebook") {
-    const endpoint = /\/(?:reel|watch|videos)\//i.test(path) || /\/videos\//i.test(path)
-      ? "video.php" : "post.php";
-    return "https://www.facebook.com/plugins/" + endpoint + "?href=" + encodeURIComponent(url) + (endpoint === "video.php" ? "&show_text=false&autoplay=true" : "&show_text=true");
-  }
-  if (p === "pinterest") {
-    match = path.match(/\/pin\/(\d+)/i);
-    return match ? "https://assets.pinterest.com/ext/embed.html?id=" + encodeURIComponent(match[1]) : "";
-  }
-  if (p === "reddit") {
-    if (/\/comments\//i.test(path)) return "https://www.redditmedia.com" + path.replace(/\/?$/, "/") + "?ref_source=embed&ref=share&embed=true";
-    return "";
-  }
-  if (p === "twitter") {
-    match = path.match(/\/status\/(\d+)/i);
-    return match ? "https://platform.twitter.com/embed/Tweet.html?id=" + encodeURIComponent(match[1]) + "&dnt=true" : "";
-  }
-  // WeChat and Weibo commonly reject third-party iframe embedding. Their
-  // real content URL is retained and the IGDC internal viewer uses the stored
-  // preview instead of navigating the browser away from IGDC.
-  return "";
-}
-function thumbnailFromCandidate(row, normalized) {
-  const r = plain(row);
-  const raw = plain(r.raw);
-  const media = plain(r.media);
-  const preview = plain(media.preview);
-  const social = plain(r.social);
-  const source = plain(r.source);
-  const values = [
-    normalized && normalized.thumbnailUrl,
-    r.thumbnail_url, r.thumbnailUrl, r.thumbnail, r.thumb, r.image,
-    r.imageUrl, r.image_url, r.poster, r.cover,
-    raw.thumbnail_url, raw.thumbnailUrl, raw.thumbnail, raw.thumb, raw.image,
-    raw.imageUrl, raw.image_url, raw.poster, raw.cover,
-    raw.channelThumbnailUrl, raw.channel_thumbnail_url,
-    media.thumbnail, media.poster, media.image,
-    preview.thumbnail, preview.poster, preview.image,
-    social.thumbnailUrl, social.thumbnail, social.image,
-    source.thumbnailUrl, source.thumbnail, source.image,
-  ];
-  for (const value of values) {
-    const url = Policy.normalizeUrl(value);
-    if (/^https:\/\//i.test(url)) return url;
-  }
-  const sourceUrl = Policy.normalizeUrl(
-    r.latestContentUrl || r.latest_content_url || r.sourceContentUrl ||
-    r.source_content_url || r.source_url || r.sourceUrl || "",
-  );
-  const platform = String(r.platform || (normalized && normalized.platform) || Policy.platformFromHost(sourceUrl) || "").toLowerCase();
-  if (platform === "youtube") {
-    const match = sourceUrl.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|live\/|embed\/))([A-Za-z0-9_-]{6,})/i);
-    if (match) return "https://i.ytimg.com/vi/" + match[1] + "/hqdefault.jpg";
-  }
-  return "";
-}
-
 function roleList(member) {
   return Array.from(
     new Set(
@@ -512,8 +435,8 @@ function normalizeCandidate(input, actor) {
     creator_name: normalized.creatorName,
     creator_handle: normalized.creatorHandle,
     source_url: normalized.sourceUrl,
-    embed_url: text(normalized.embedUrl || row.embedUrl || row.embed_url) || socialEmbedUrl(normalized.platform, normalized.sourceUrl),
-    thumbnail_url: thumbnailFromCandidate(row, normalized),
+    embed_url: normalized.embedUrl,
+    thumbnail_url: normalized.thumbnailUrl,
     description: normalized.description,
     language: normalized.language || "und",
     region: normalized.region,
@@ -742,12 +665,8 @@ function normalizeDbRow(row) {
       raw.latest_content_asset === true ||
       plain(r.evidence).latestContentAsset === true,
     category: text(raw.category),
-    embedUrl: text(r.embed_url || r.embedUrl) || socialEmbedUrl(text(r.platform), text(r.source_url || r.sourceUrl)),
-    thumbnailUrl: thumbnailFromCandidate(Object.assign({}, raw, r), {
-      platform: text(r.platform),
-      sourceUrl: text(r.source_url || r.sourceUrl),
-      thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
-    }),
+    embedUrl: text(r.embed_url || r.embedUrl),
+    thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
     channelThumbnailUrl: text(
       raw.channelThumbnailUrl ||
         raw.channel_thumbnail_url ||
@@ -1256,11 +1175,8 @@ function publicSocialSlot(row, slotId, defaults) {
   );
   const sourceUrl = latestContentUrl || text(r.source_url || r.sourceUrl);
   const thumb = text(
-    thumbnailFromCandidate(Object.assign({}, raw, r), {
-      platform: platformHint,
-      sourceUrl,
-      thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
-    }) ||
+    r.thumbnail_url ||
+      r.thumbnailUrl ||
       base.thumb ||
       base.thumbnail ||
       base.image ||
@@ -1289,10 +1205,6 @@ function publicSocialSlot(row, slotId, defaults) {
     link: sourceUrl,
     href: sourceUrl,
     permalink: sourceUrl,
-    sourceUrl: sourceUrl,
-    latestContentUrl: latestContentUrl || sourceUrl,
-    platform: platform,
-    viewerUrl: sourceUrl,
     thumb: thumb || undefined,
     thumbnail: thumb || undefined,
     thumbnailUrl: thumb || undefined,
@@ -1303,7 +1215,7 @@ function publicSocialSlot(row, slotId, defaults) {
     ),
     creatorName: text(r.creator_name || r.creatorName),
     creatorHandle: text(r.creator_handle || r.creatorHandle),
-    embedUrl: text(r.embed_url || r.embedUrl) || socialEmbedUrl(platform, sourceUrl) || undefined,
+    embedUrl: text(r.embed_url || r.embedUrl) || undefined,
     displayMode: text(r.display_mode || r.displayMode || "link_card"),
     source: Object.assign({}, plain(base.source), {
       platform,
@@ -1633,7 +1545,6 @@ module.exports = {
   commercialRoute,
   channelIdentity,
   assetClassOf,
-  socialEmbedUrl,
   isApprovedInfluencer,
   approvedContentRows,
 };
