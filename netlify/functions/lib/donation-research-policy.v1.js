@@ -280,6 +280,9 @@ function usablePublicCandidate(record, sectionValue){
   if(section==="donation-mission" && missionExcluded(record)) return false;
   const urls=candidateUrls(record).filter(u=>/^https:\/\//i.test(u));
   if(!urls.length) return false;
+  const media=plain(record.media);
+  const representativeImage=text(record.thumbnail||record.thumb||record.image||record.og_image||record.logo||record.logo_url||media.thumb||youtubeThumbnail(record));
+  if(!/^https:\/\//i.test(representativeImage) || /placeholder|sample/i.test(representativeImage)) return false;
   const title=text(record.title||record.name||plain(record.org).name);
   if(!title) return false;
   if(section==="donation-global"){

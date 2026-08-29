@@ -246,11 +246,27 @@ function groupBySection(items){
   }
 
   function seedOrdinal(it){
-    const raw = String(it?.uid || it?.id || it?.org?.name || it?.title || '');
-    const matches = raw.match(/(\d+)(?!.*\d)/);
-    if(!matches) return Number.MAX_SAFE_INTEGER;
-    const n = Number(matches[1]);
-    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+    // Builder seed UIDs can end in a hash. The front contract is the visible
+    // placeholder number, so read title/name before UID/ID.
+    for(const value of [it?.title, it?.org?.name]){
+      const raw = String(value || '').trim();
+      const match = raw.match(/(?:^|\s)(\d{1,3})\s*$/);
+      if(match){
+        const n = Number(match[1]);
+        if(Number.isFinite(n) && n >= 1 && n <= 200) return n;
+      }
+    }
+
+    // Static seed snapshot IDs use a zero-padded terminal ordinal.
+    for(const value of [it?.uid, it?.id]){
+      const raw = String(value || '').trim();
+      const match = raw.match(/:(\d{1,6})$/);
+      if(match){
+        const n = Number(match[1]);
+        if(Number.isFinite(n) && n >= 1 && n <= 200) return n;
+      }
+    }
+    return Number.MAX_SAFE_INTEGER;
   }
 
   function sortSection(items){

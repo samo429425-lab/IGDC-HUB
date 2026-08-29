@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.3.0-searchbank-frame-bridge";
+const VERSION = "donation-candidate-admin-v1.3.1-publish-ready-auto-stage";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -249,7 +249,10 @@ async function autoStage(section,targetStage,actor){
     const eligible=rows.filter(v=>v.section===sec&&v.stage!=="published").sort((a,b)=>rankForAuto(b)-rankForAuto(a)||String(b.updatedAt).localeCompare(String(a.updatedAt)));
     for(const v of eligible){
       if(selected.filter(x=>x.section===sec).length>=cap) break;
-      if(targetStage==="published"&&!Policy.usablePublicCandidate(v.candidate,sec)) continue;
+      // AI may advance only candidates that are already safe for the front:
+      // official HTTPS destination + representative thumbnail + section policy.
+      // Manual review stages remain available for incomplete research records.
+      if((targetStage==="front_candidate"||targetStage==="published")&&!Policy.usablePublicCandidate(v.candidate,sec)) continue;
       if(sec==="donation-mission"&&Policy.missionExcluded(v.candidate)) continue;
       selected.push(v);
     }
