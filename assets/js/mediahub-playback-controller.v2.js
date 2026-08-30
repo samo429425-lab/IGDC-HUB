@@ -775,6 +775,8 @@
       stage.dataset.playerKind = 'embed';
       var frame = document.createElement('iframe');
       frame.title = titleFor(card);
+      frame.loading = 'eager';
+      try { if ('fetchPriority' in frame) frame.fetchPriority = 'high'; } catch (_) {}
       var resumeAt=readResumePosition(card), origin='';
       try{origin=encodeURIComponent(global.location.origin||'');}catch(_origin){}
       frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(youtube) + '?autoplay=1&rel=0&playsinline=1&enablejsapi=1' + (origin?'&origin='+origin:'') + (resumeAt>0?'&start='+Math.floor(resumeAt):'');
@@ -798,7 +800,7 @@
       var video = document.createElement('video');
       // Set mobile-inline policy before assigning src/autoplay so iOS/Android never
       // get a chance to promote the element into their native fullscreen player.
-      video.controls = false; video.playsInline = true; video.preload = 'metadata';
+      video.controls = false; video.playsInline = true; video.preload = 'auto';
       video.setAttribute('playsinline',''); video.setAttribute('webkit-playsinline',''); video.setAttribute('aria-label', titleFor(card));
       video.autoplay = true; video.src = source;
       video.addEventListener('error', function(){ notifySourceFailure(card, 'video_source_error'); }, { once:true });
@@ -822,7 +824,23 @@
       });
     } catch (_) {}
   }
+  function managedPlaybackRequired(card) {
+    var item = card && card.__igdcMediaItem || {};
+    var dataset = card && card.dataset || {};
+    if (item.ottManaged === true || item.managedPlayback === true || item.requiresMember === true || item.memberOnly === true || item.paid === true || item.premium === true) return true;
+    var mode = text(item.accessMode || item.playbackMode || item.access || dataset.accessMode || dataset.playbackMode || dataset.ottMode).toLowerCase();
+    return /(?:member|paid|premium|managed|ott|subscription|purchase)/.test(mode);
+  }
   function appendPlayer(stage, card) {
+    var source = sourceFor(card);
+    // Public YouTube cards already carry a verified playback URL on the rendered
+    // card. Do not block the user's click on a round-trip to the managed OTT
+    // registry just to learn that this public item is not registered there.
+    // Managed/member/paid items keep the existing OTT gate unchanged.
+    if (youtubeId(source) && !managedPlaybackRequired(card)) {
+      appendLegacyPlayer(stage, card);
+      return;
+    }
     var ott = global.IGDCMediaHubOTTInline;
     if (ott && typeof ott.mount === 'function') { try { if (ott.mount(stage, card, { legacyMount: appendLegacyPlayer })) return; } catch (_) {} }
     appendLegacyPlayer(stage, card);
@@ -1450,6 +1468,17 @@
     global.requestAnimationFrame(function(){global.scrollTo(0,0);state.stage.focus({preventScroll:true});frameHeight();syncUi();normalizePlayerGeometry();if(isMobileSession())hideChromeNow();else showChrome(2200);});
   }
 
+  function primePlaybackConnections() {
+    try {
+      ['https://www.youtube-nocookie.com','https://i.ytimg.com'].forEach(function (href) {
+        if (document.querySelector('link[rel="preconnect"][href="'+href+'"]')) return;
+        var link=document.createElement('link');link.rel='preconnect';link.href=href;link.crossOrigin='anonymous';
+        (document.head||document.documentElement).appendChild(link);
+      });
+    } catch (_) {}
+  }
+  primePlaybackConnections();
+
   // Prepare the same-origin parent iframe long before the first playback tap.
   // This avoids real-device Fullscreen permission races that leave Chrome's
   // address bar visible even though the CSS immersive shell fills the iframe.
@@ -1523,5 +1552,5 @@
   try{if(global.screen&&global.screen.orientation&&global.screen.orientation.addEventListener)global.screen.orientation.addEventListener('change',orientationViewportRepair,{passive:true});}catch(_){}
 
   global.__IGDC_MEDIAHUB_PLAYER_VERSION__='4.0.2-v43-desktop-panel-tools-only';
-  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'4.0.2-v43-desktop-panel-tools-only'};
+  global.IGDCMediaHubPlayback={open:open,close:close,previous:function(){move(-1);},next:function(){move(1);},captureFrame:captureFrame,captureClip:captureClip,VERSION:'4.0.3-fast-public-youtube-start'};
 })(window, document);
