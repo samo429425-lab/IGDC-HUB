@@ -368,20 +368,24 @@ function mountSection(key, items, limit){
     }
   }
 
-  function buildFallbackSamples(sectionKey, count){
+  function buildFallbackSamples(sectionKey, count, usedOrdinals){
     const label = sampleLabel(sectionKey);
     const out = [];
+    const used = usedOrdinals instanceof Set ? new Set(usedOrdinals) : new Set();
+    let ordinal = 1;
 
-    for(let i = 0; i < count; i++){
+    while(out.length < count && ordinal <= 200){
+      if(used.has(ordinal)){ ordinal += 1; continue; }
+      used.add(ordinal);
       out.push({
-        uid: `sample:${sectionKey}:${String(i+1).padStart(3,'0')}`,
-        id: `sample:${sectionKey}:${String(i+1).padStart(3,'0')}`,
+        uid: `sample:${sectionKey}:${String(ordinal).padStart(3,'0')}`,
+        id: `sample:${sectionKey}:${String(ordinal).padStart(3,'0')}`,
         psom_key: sectionKey,
         category: sectionKey.replace(/^donation-/, '') || 'donation',
-        title: `${label} Partner ${i+1}`,
+        title: `${label} Partner ${ordinal}`,
         summary: 'Verified data will replace this sample automatically.',
         org: {
-          name: `${label} Partner ${i+1}`,
+          name: `${label} Partner ${ordinal}`,
           country: '-',
           legal_name: ''
         },
@@ -404,6 +408,7 @@ function mountSection(key, items, limit){
           source: 'automap-sample'
         }
       });
+      ordinal += 1;
     }
 
     return out;
@@ -411,8 +416,16 @@ function mountSection(key, items, limit){
 
   let list = (Array.isArray(items) ? items : []).filter(Boolean);
 
-  if(list.length === 0){
-    list = buildFallbackSamples(key, finalLimit);
+  // Builder normally returns a fully populated lane.  This is a second safety
+  // net for partial/missing responses: every vacant front slot is restored with
+  // a sample card, while real content remains first and existing sample numbers
+  // are not duplicated.
+  if(list.length < finalLimit){
+    const usedSeedOrdinals = new Set(
+      list.filter(isSeedItem).map(seedOrdinal).filter((n)=>Number.isFinite(n) && n >= 1 && n <= 200)
+    );
+    const fallback = buildFallbackSamples(key, finalLimit - list.length, usedSeedOrdinals);
+    list = sortSection(list.concat(fallback));
   }
 
   box.innerHTML = '';

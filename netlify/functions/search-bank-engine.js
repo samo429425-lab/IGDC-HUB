@@ -292,6 +292,11 @@ function uniquePaths(arr){
 function snapshotCandidates(){
   const cwd = process.cwd();
   return uniquePaths([
+    // A successful runtime write lands here in Netlify's writable filesystem.
+    // Read it before immutable deployment files so a warm function invocation
+    // continues from the newest SearchBank state instead of reverting to seed.
+    path.join("/tmp","search-bank.snapshot.json"),
+
     // Static publish root / repository root candidates
     path.join(cwd,"search-bank.snapshot.json"),
     path.join(cwd,"data","search-bank.snapshot.json"),
@@ -309,8 +314,6 @@ function snapshotCandidates(){
     path.join(__dirname,"netlify","functions","data","search-bank.snapshot.json"),
     path.join(__dirname,"netlify","functions","search-bank.snapshot.json"),
 
-    // Last-resort runtime copy location
-    path.join("/tmp","search-bank.snapshot.json")
   ]);
 }
 
@@ -2050,12 +2053,26 @@ function writeSearchBankSnapshots(bank){
     path.join("/tmp","search-bank.snapshot.json")
   ]);
 
+  const report = { target_count: 0, success_count: 0, failed_count: 0, targets: [] };
+  const labelFor = (target) => {
+    if(target === path.join("/tmp","search-bank.snapshot.json")) return "runtime:/tmp/search-bank.snapshot.json";
+    const rel = path.relative(cwd, target);
+    return (!rel || rel.startsWith("..")) ? path.basename(target) : rel.replace(/\\/g,"/");
+  };
+
   for(const p of targets){
+    report.target_count += 1;
     try{
       fs.mkdirSync(path.dirname(p), { recursive:true });
       fs.writeFileSync(p, JSON.stringify(publicBank, null, 2), "utf8");
-    }catch(e){}
+      report.success_count += 1;
+      report.targets.push({ target: labelFor(p), ok: true });
+    }catch(e){
+      report.failed_count += 1;
+      report.targets.push({ target: labelFor(p), ok: false, error: s(e && e.code || e && e.message || "write_failed") });
+    }
   }
+  return report;
 }
 
 function isPlainObject(v){
@@ -2288,8 +2305,9 @@ const bank = {
 };
 
 const writeAllowed = writeModeEnabled(adapterCtx);
+let snapshotPersistence = { attempted:false, target_count:0, success_count:0, failed_count:0, targets:[] };
 if(writeAllowed && (persistCandidates.length || truthy(params.forceSnapshotWrite))){
-  writeSearchBankSnapshots(bank);
+  snapshotPersistence = Object.assign({ attempted:true }, writeSearchBankSnapshots(bank));
 }
 
   const explicitGeo = explicitGeoFilters(params, queryIntent);
@@ -2411,6 +2429,7 @@ return {
     entity_context: queryIntent.entityHint || undefined,
     adapters: served.adapters || undefined,
     write_allowed: !!writeAllowed,
+    snapshot_persistence: snapshotPersistence,
     sync_enabled: !!searchBankSyncEnabled(adapterCtx),
     external_mode: explicitExternalMode(adapterCtx),
     external_policy: "maru-search-controlled-internal-first",

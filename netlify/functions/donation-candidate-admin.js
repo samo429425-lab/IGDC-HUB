@@ -152,12 +152,13 @@ async function applyResearchFrameToSearchBank(event,section,customQuery,limit){
       try{
         const result=await SearchBank.runEngine(event,searchBankWriteParams(sec,q,limit||80));
         const meta=plain(result&&result.meta);
-        detail.push({query:q,items:Array.isArray(result&&result.items)?result.items.length:0,writeAllowed:meta.write_allowed===true,syncEnabled:meta.sync_enabled===true,servedFrom:text(result&&result.served_from),adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false})):[]});
+        const persistence=plain(meta.snapshot_persistence);
+        detail.push({query:q,items:Array.isArray(result&&result.items)?result.items.length:0,writeAllowed:meta.write_allowed===true,snapshotPersisted:Number(persistence.success_count||0)>0,persistence, syncEnabled:meta.sync_enabled===true,servedFrom:text(result&&result.served_from),adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false})):[]});
       }catch(error){detail.push({query:q,items:0,writeAllowed:false,syncEnabled:false,error:text(error&&error.message||error)});}
     }
-    reports.push({section:sec,queries:detail,writeAllowed:detail.some(x=>x.writeAllowed),items:detail.reduce((n,x)=>n+Number(x.items||0),0)});
+    reports.push({section:sec,queries:detail,writeAllowed:detail.some(x=>x.writeAllowed),snapshotPersisted:detail.some(x=>x.snapshotPersisted),items:detail.reduce((n,x)=>n+Number(x.items||0),0)});
   }
-  return {ok:reports.some(r=>r.writeAllowed),directSnapshotEdit:false,route:"Donation research frame -> SearchBank Engine -> SearchBank snapshot -> existing Donation Builder",reports};
+  return {ok:reports.some(r=>r.writeAllowed),snapshotPersisted:reports.some(r=>r.snapshotPersisted),directSnapshotEdit:false,durableCandidateLedger:"gslot_candidates/source_ref=donation-candidate-admin-v1",route:"Donation research frame -> SearchBank Engine -> SearchBank snapshot -> existing Donation Builder",reports};
 }
 async function sectionsForIds(ids){
   const out=new Set();

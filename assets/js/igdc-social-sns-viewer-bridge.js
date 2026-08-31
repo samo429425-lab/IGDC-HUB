@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v2.0.0
+ * IGDC Social Network main-card viewer bridge v2.1.0
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -275,7 +275,18 @@
     if (document.getElementById('igdcSocialViewerV2Style')) return;
     var s = document.createElement('style');
     s.id = 'igdcSocialViewerV2Style';
+    var mainScopes = Object.keys(MAIN_KEYS).map(function (key) {
+      return '.thumb-grid[data-psom-key="' + key + '"]';
+    });
+    var mainPic = mainScopes.map(function (scope) { return scope + ' a.card .pic'; }).join(',');
+    var mainPicMedia = mainScopes.map(function (scope) { return scope + ' a.card .pic img,' + scope + ' a.card .pic video'; }).join(',');
+    var mainMeta = mainScopes.map(function (scope) { return scope + ' a.card .meta'; }).join(',');
+    var mainTitle = mainScopes.map(function (scope) { return scope + ' a.card .title'; }).join(',');
     s.textContent = '' +
+      mainPic + '{width:100%!important;height:auto!important;aspect-ratio:16/9!important;min-height:0!important;overflow:hidden!important;background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important}' +
+      mainPicMedia + '{width:100%!important;height:100%!important;object-fit:cover!important;object-position:center!important}' +
+      mainMeta + '{display:flex!important;flex-direction:column!important;min-height:92px!important;box-sizing:border-box!important}' +
+      mainTitle + '{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:3!important;overflow:hidden!important;white-space:normal!important;text-overflow:ellipsis!important;line-height:1.35!important;max-height:4.05em!important;word-break:break-word!important}' +
       '#igdcSocialViewerV2{position:fixed;inset:0;z-index:2147483640;display:none;background:#000;color:#fff;overscroll-behavior:none}' +
       '#igdcSocialViewerV2.open{display:flex;flex-direction:column}' +
       '#igdcSocialViewerV2 .igsv-toolbar{height:56px;flex:0 0 56px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#090a0c;border-bottom:1px solid rgba(255,255,255,.14);box-sizing:border-box}' +
@@ -316,6 +327,12 @@
     q('.igsv-back', root).addEventListener('click', returnToList);
     q('.igsv-full', root).addEventListener('click', toggleFullscreen);
     return root;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectStyle, { once: true });
+  } else {
+    injectStyle();
   }
 
   function updateLabels(root) {
@@ -485,6 +502,15 @@
     event.preventDefault();
     event.stopPropagation();
     returnToList();
+  }, true);
+
+  document.addEventListener('mouseover', function (event) {
+    var titleEl = event.target && event.target.closest && event.target.closest('.title');
+    if (!titleEl) return;
+    var card = titleEl.closest('a.card');
+    if (!isMainSocialCard(card)) return;
+    var fullTitle = text(titleEl.textContent).trim();
+    if (fullTitle && titleEl.getAttribute('title') !== fullTitle) titleEl.setAttribute('title', fullTitle);
   }, true);
 
   document.addEventListener('click', function (event) {

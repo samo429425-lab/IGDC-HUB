@@ -742,6 +742,47 @@ function isMissionExcludedRecord(rec, sectionKey){
   return Boolean(DonationResearchPolicy && sectionKey === "donation-mission" && DonationResearchPolicy.missionExcluded(rec));
 }
 
+// SearchBank ships Donation seed rows in its canonical snapshot so empty lanes
+// always have a structural placeholder.  Those rows are fallback material, not
+// live candidates.  Keep them out of the bank-first candidate pool; otherwise
+// they consume the lane limit before donation.snapshot.json can restore the
+// canonical 1..100 / 1..80 sample order.
+function isFallbackPlaceholderRecord(rec){
+  if(!rec || typeof rec !== "object") return true;
+
+  if(DonationResearchPolicy && typeof DonationResearchPolicy.isPlaceholder === "function") {
+    try { if(DonationResearchPolicy.isPlaceholder(rec)) return true; } catch(_error){}
+  }
+
+  const sourceName = pickFirst(
+    rec.meta?.source,
+    rec.source?.name,
+    typeof rec.source === "string" ? rec.source : "",
+    rec.collector?.engine
+  );
+  const hasBankRecord = Boolean(pickFirst(rec.bank_ref?.record_id, rec.record_id, rec.searchBankId, rec.search_bank_id));
+  const explicitPlaceholder = Boolean(rec.placeholder === true || rec.isPlaceholder === true || rec.extension?.placeholder);
+  const fallbackSource = /seed|sample|placeholder|demo|mock/i.test(sourceName);
+  const destination = safeUrl(pickFirst(rec.url, rec.link?.url, rec.org?.homepage, rec.homepage, rec.website));
+  const image = safeUrl(pickFirst(rec.media?.thumb, rec.thumbnail, rec.thumb, rec.image, rec.og_image, rec.logo, rec.logo_url));
+
+  if(explicitPlaceholder) return true;
+  if(!hasBankRecord && fallbackSource && (!destination || destination === "#" || /placeholder|sample/i.test(image))) return true;
+  return false;
+}
+
+function isUsableLiveRecord(rec, sectionKey){
+  if(isFallbackPlaceholderRecord(rec)) return false;
+
+  if(DonationResearchPolicy && typeof DonationResearchPolicy.usablePublicCandidate === "function") {
+    try { return DonationResearchPolicy.usablePublicCandidate(rec, sectionKey); } catch(_error){}
+  }
+
+  const destination = safeUrl(pickFirst(rec.url, rec.link?.url, rec.org?.homepage, rec.homepage, rec.website));
+  const image = safeUrl(pickFirst(rec.media?.thumb, rec.thumbnail, rec.thumb, rec.image, rec.og_image, rec.logo, rec.logo_url));
+  return /^https:\/\//i.test(destination) && /^https:\/\//i.test(image) && !/placeholder|sample/i.test(image);
+}
+
 async function loadManagedPublishedCandidates(){
   if(!SlotStore) return { items:[], source:"unavailable" };
   try{
@@ -801,14 +842,22 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
   const psomDonation = getPsomDonationInfo(psomList);
 
   const candidates = [];
+  const inputAudit = {
+    managed_total: 0, managed_usable: 0,
+    bank_donation_total: 0, bank_usable: 0, bank_fallback_skipped: 0, bank_unusable_skipped: 0,
+    optional_total: 0, optional_usable: 0
+  };
 
   // Manual/admin final matching is a priority overlay only. It never disables
   // SearchBank's normal bank-first automatic replacement flow.
   const managedList = managed && Array.isArray(managed.items) ? managed.items : [];
+  inputAudit.managed_total = managedList.length;
   managedList.forEach((rec, i)=>{
     const semanticCategory = classifyCategory(rec);
     const sectionKey = resolveSection(rec, semanticCategory);
     if(isMissionExcludedRecord(rec, sectionKey)) return;
+    if(!isUsableLiveRecord(rec, sectionKey)) return;
+    inputAudit.managed_usable += 1;
     candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i, psomDonation));
   });
 
@@ -822,11 +871,21 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
 
     return false;
   });
+  inputAudit.bank_donation_total = donationList.length;
 
   donationList.forEach((rec, i)=>{
     const semanticCategory = classifyCategory(rec);
     const sectionKey = resolveSection(rec, semanticCategory);
     if(isMissionExcludedRecord(rec, sectionKey)) return;
+    if(isFallbackPlaceholderRecord(rec)){
+      inputAudit.bank_fallback_skipped += 1;
+      return;
+    }
+    if(!isUsableLiveRecord(rec, sectionKey)){
+      inputAudit.bank_unusable_skipped += 1;
+      return;
+    }
+    inputAudit.bank_usable += 1;
     candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i + managedList.length, psomDonation));
   });
 
@@ -840,10 +899,13 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
     }
   }
 
+  inputAudit.optional_total = optItems.length;
   optItems.forEach((rec, i)=>{
     const semanticCategory = classifyCategory(rec);
     const sectionKey = resolveSection(rec, semanticCategory);
     if(isMissionExcludedRecord(rec, sectionKey)) return;
+    if(!isUsableLiveRecord(rec, sectionKey)) return;
+    inputAudit.optional_usable += 1;
     candidates.push(normalizeRecord(rec, sectionKey, semanticCategory, i + managedList.length + donationList.length, psomDonation));
   });
 
@@ -960,7 +1022,8 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
         search_bank: Boolean(bank),
         managed_priority_overlay: Boolean(managed && Array.isArray(managed.items)),
         managed_priority_count: managed && Array.isArray(managed.items) ? managed.items.length : 0,
-        optional: Object.keys(optional||{})
+        optional: Object.keys(optional||{}),
+        donation_input_audit: inputAudit
       }
     },
     policy: seed.policy || {},

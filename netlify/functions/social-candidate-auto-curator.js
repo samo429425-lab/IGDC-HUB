@@ -13,7 +13,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-auto-curator-v1.5.0-thumbnail-retry-continuity";
+  "social-candidate-auto-curator-v1.5.1-content-first-global-preference";
 const MAX_PER_SECTION = SocialStore.POOL_MAX_PER_SECTION || 350;
 
 function text(value) {
@@ -103,21 +103,22 @@ function eligible(row, route, aiPolicy) {
     return { ok: false, reason: "safety_score_below_ai_policy_minimum" };
   if (Number(row.trust_score || 0) < normalizedAI.minTrustScore)
     return { ok: false, reason: "trust_score_below_ai_policy_minimum" };
-  if (raw.channelAsset !== true)
+  // Latest public posts/videos may be valid even when the platform hides the
+  // creator profile from anonymous metadata. Require a channel identity only
+  // for influencer-registry rows, not for the actual content pool.
+  if (
+    SocialStore.assetClassOf(row) === "influencer_registry" &&
+    raw.channelAsset !== true
+  )
     return { ok: false, reason: "channel_asset_required" };
   // Do not reject a verified latest-content row only because a platform
   // temporarily withholds anonymous thumbnail metadata. The collector keeps
   // the row retryable and later passes can enrich the preview image.
   const aiVerdict = AIPolicy.evaluate(row, normalizedAI);
   if (!aiVerdict.ok) return { ok: false, reason: aiVerdict.reason };
-  const scopes = CountryRouting.scopesFrom(row);
-  if (
-    route.countryCode &&
-    scopes.countries.length &&
-    !scopes.countries.includes(route.countryCode)
-  ) {
-    return { ok: false, reason: "country_scope_mismatch" };
-  }
+  // Country/IP is a ranking preference, never a hard creator-origin filter.
+  // CountryRouting.matchScore() below boosts local/regional content while
+  // healthy global content stays eligible.
   return { ok: true };
 }
 function rejectionSummary(entries) {
