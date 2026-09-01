@@ -47,8 +47,18 @@ function donationBlockedCountries() {
   } catch (_) {}
 
   const set = new Set(parseCountryList(raw));
-  /* Keep the existing hard safety floor without replacing the configured OCS/SearchBank policy. */
-  set.add("KP");
+
+  /*
+   * Donation IP safety floor.
+   *
+   * The configured MARU_DONATION_BLOCK_COUNTRIES list remains authoritative and
+   * may add more countries. These entries are kept locally as a deployment-safe
+   * minimum so the public Donation navigation does not fail open when the Netlify
+   * environment variable is missing or not propagated to an Edge Function.
+   * Owner/admin access is NOT handled here; index.html/donation.html intentionally
+   * keep their authenticated management bypass after this request-IP decision.
+   */
+  ["CN", "IR", "SY", "CU", "KP"].forEach((code) => set.add(code));
   return set;
 }
 
