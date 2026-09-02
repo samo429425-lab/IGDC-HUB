@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.15.0-native-social-filter-fast-preview";
+const VERSION = "sanmaru-social-live-collector-v1.16.0-registry-generic-execution-rescue";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -648,10 +648,18 @@ function scopedQueriesWithRegistry(plan, cursor, passes, route, registrySeeds) {
       if (!seedByQuery[q]) seedByQuery[q] = seed;
     }
   }
+
+  // A populated registry must not lock the collector into stale/bad identities.
+  // Keep one registry-targeted query for continuity, but always pair it with one
+  // generic platform discovery query so Instagram/TikTok/Facebook/etc. can find
+  // new real posts even when old registry rows no longer yield public content.
+  const generic = scopedQueries(plan, cursor, 1, route)[0];
+  if (generic) queries.push(generic);
+
   const finalQueries = Array.from(new Set(queries.length ? queries : scopedQueries(plan, cursor, passes, route)));
   return {
     queries: finalQueries,
-    targeted: queries.length > 0,
+    targeted: Object.keys(seedByQuery).length > 0,
     seed: selectedSeed,
     seedByQuery,
   };
@@ -1187,14 +1195,19 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
   // duplicate requests while preventing search-page passthroughs from collapsing
   // the entire SNS section to zero.
   if (plan.platform !== "youtube") {
-    const hasActualPost = () => providers.some((result) => (result.items || []).some((item) =>
+    const hasActualPost = (list) => (list || []).some((result) => (result.items || []).some((item) =>
       candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
     ));
-    if (!hasActualPost()) {
-      // `maruSearchOne` already reads Maru in `all` mode for non-YouTube
-      // and applies the strict Social platform/post gate locally. If that route
-      // is empty, use only the independent public-post rescue. This removes a
-      // duplicate Maru request from every empty batch.
+    if (!hasActualPost(providers)) {
+      // This rescue function already existed but was never connected to the
+      // execution path. Run the broad Maru/SearchBank read with a simple social
+      // query before going outside to public search engines.
+      const broad = await maruUnfilteredSearchOne(
+        event, plan, queryText, limit, language, start
+      );
+      providers = providers.concat([broad]);
+    }
+    if (!hasActualPost(providers)) {
       const rescue = await directPublicPostSearch(plan, queryText, limit);
       providers = providers.concat([rescue]);
     }
