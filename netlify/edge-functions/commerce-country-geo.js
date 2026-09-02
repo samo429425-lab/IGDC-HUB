@@ -49,14 +49,10 @@ function donationBlockedCountries() {
   const set = new Set(parseCountryList(raw));
 
   /*
-   * Donation IP safety floor.
-   *
-   * The configured MARU_DONATION_BLOCK_COUNTRIES list remains authoritative and
-   * may add more countries. These entries are kept locally as a deployment-safe
-   * minimum so the public Donation navigation does not fail open when the Netlify
-   * environment variable is missing or not propagated to an Edge Function.
-   * Owner/admin access is NOT handled here; index.html/donation.html intentionally
-   * keep their authenticated management bypass after this request-IP decision.
+   * Deployment safety floor only. The configured MARU_DONATION_BLOCK_COUNTRIES
+   * remains authoritative and may add any other restricted countries.
+   * This prevents known Donation-restricted countries from failing open when an
+   * Edge deployment does not receive the environment variable.
    */
   ["CN", "IR", "SY", "CU", "KP"].forEach((code) => set.add(code));
   return set;

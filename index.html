@@ -4521,29 +4521,36 @@ function normLang(l){
 </script>
 <!-- /IGDC donation arrow nano-pin v6 -->
 
-<!-- IGDC donation navigation auth/country gate v3: IP-restricted countries only -->
-<script id="igdc-donation-nav-gate-v3">
+<!-- IGDC donation navigation auth/country gate v4: request-IP + authoritative Donation policy -->
+<script id="igdc-donation-nav-gate-v4">
 (function(){
   'use strict';
-  if (window.__IGDC_DONATION_NAV_GATE_V3__) return;
-  window.__IGDC_DONATION_NAV_GATE_V3__ = true;
+  if (window.__IGDC_DONATION_NAV_GATE_V4__) return;
+  window.__IGDC_DONATION_NAV_GATE_V4__ = true;
 
   var GEO_URL = '/api/igdc-country-geo';
+  var POLICY_URL = '/.netlify/functions/donation-country-policy';
   var ROLE_KEYS = [
     'https://igdcglobal.com/roles', 'https://os.auth/roles', 'https://os0.app/roles',
     'https://example.com/roles', 'https://osu/roles', 'roles', 'role'
   ];
   var syncQueued = false;
   var repeatTimer = 0;
-  var geoStarted = false;
-  var geoReady = false;
-  var geoExcluded = false;
+  var decisionStarted = false;
+  var decisionReady = false;
+  var restrictedByIp = false;
+  var detectedCountry = '';
 
   function normalize(value){
     return String(value == null ? '' : value)
       .trim()
       .toLowerCase()
       .replace(/[\s.]+/g, '_');
+  }
+
+  function countryCode(value){
+    var code = String(value == null ? '' : value).trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(code) ? code : '';
   }
 
   function getPayload(){
@@ -4591,70 +4598,6 @@ function normLang(l){
     });
   }
 
-  function beginGeo(){
-    if (geoStarted) return;
-    geoStarted = true;
-    fetch(GEO_URL, { cache:'no-store', credentials:'same-origin' })
-      .then(function(res){
-        if (!res || !res.ok) throw new Error('donation_country_geo_http');
-        return res.json();
-      })
-      .then(function(data){
-        /* Single source of truth: current request IP country restriction only. */
-        geoExcluded = !!(data && data.excluded === true);
-        geoReady = true;
-        schedule();
-      })
-      .catch(function(){
-        /* No guessed country policy. Keep hidden only while IP country is unresolved. */
-        geoReady = false;
-        geoExcluded = false;
-        schedule();
-      });
-  }
-
-  function setAllowed(link, allowed){
-    /* Original Donation nav stays the canonical state; CSS may keep its replacement form visually hidden. */
-    link.style.display = allowed ? '' : 'none';
-    link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
-
-    /* Replacement emoticon/arrow must follow the same result 1:1. */
-    var arrow = document.getElementById('igdcDonationArrowTrigger');
-    if (arrow) {
-      arrow.style.display = allowed ? 'inline-flex' : 'none';
-      arrow.setAttribute('aria-hidden', allowed ? 'false' : 'true');
-      arrow.setAttribute('tabindex', allowed ? '0' : '-1');
-    }
-    document.documentElement.dataset.igdcDonationReady = '1';
-  }
-
-  function apply(){
-    syncQueued = false;
-    var link = document.querySelector('nav [data-igdc-donation-nav="1"]');
-    if (!link) return;
-
-    beginGeo();
-    var payload = getPayload();
-    var authenticated = isFresh(payload);
-    var roles = authenticated ? getRoles(payload) : [];
-
-    /* Owner/admin/super_admin are always allowed, regardless of current country IP. */
-    if (authenticated && isOwnerOrAdmin(roles)) {
-      setAllowed(link, true);
-      return;
-    }
-
-    /* Prevent a flash before the request-IP country result arrives. */
-    if (!geoReady) {
-      setAllowed(link, false);
-      delete document.documentElement.dataset.igdcDonationReady;
-      return;
-    }
-
-    /* Everyone else is hidden ONLY when the current request IP is a Donation-restricted country. */
-    setAllowed(link, !geoExcluded);
-  }
-
   function schedule(){
     if (syncQueued) return;
     syncQueued = true;
@@ -4662,8 +4605,114 @@ function normLang(l){
     else setTimeout(apply, 0);
   }
 
+  function finishDecision(restricted, country){
+    restrictedByIp = restricted === true;
+    detectedCountry = countryCode(country) || detectedCountry;
+    decisionReady = true;
+    schedule();
+  }
+
+  function checkPolicy(country, edgeExcluded){
+    var code = countryCode(country);
+    if (edgeExcluded === true) {
+      finishDecision(true, code);
+      return;
+    }
+    if (!code) {
+      /* No country means the request-IP decision is genuinely unresolved; do not flash Donation. */
+      decisionReady = false;
+      schedule();
+      return;
+    }
+
+    fetch(POLICY_URL + '?country=' + encodeURIComponent(code), {
+      cache:'no-store',
+      credentials:'same-origin'
+    })
+      .then(function(res){
+        if (!res || !res.ok) throw new Error('donation_country_policy_http');
+        return res.json();
+      })
+      .then(function(data){
+        if (!data || data.ok !== true || countryCode(data.country) !== code) {
+          throw new Error('donation_country_policy_invalid');
+        }
+        finishDecision(data.restricted === true, code);
+      })
+      .catch(function(){
+        /* Edge result remains a valid fallback; never convert an Edge block into allow. */
+        finishDecision(edgeExcluded === true, code);
+      });
+  }
+
+  function beginDecision(){
+    if (decisionStarted) return;
+    decisionStarted = true;
+
+    fetch(GEO_URL, { cache:'no-store', credentials:'same-origin' })
+      .then(function(res){
+        if (!res || !res.ok) throw new Error('donation_country_geo_http');
+        return res.json();
+      })
+      .then(function(data){
+        var code = countryCode(data && (data.detectedCountry || data.country));
+        detectedCountry = code;
+        checkPolicy(code, !!(data && data.excluded === true));
+      })
+      .catch(function(){
+        /* Without a request-IP country result there is no safe country decision. Keep hidden for non-admins. */
+        decisionReady = false;
+        restrictedByIp = false;
+        schedule();
+      });
+  }
+
+  function setAllowed(link, allowed){
+    /* Keep the original Donation anchor as the canonical gate state. */
+    link.style.display = allowed ? '' : 'none';
+    link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
+
+    /* The replacement overlay emoticon/arrow follows that same gate result 1:1. */
+    var arrow = document.getElementById('igdcDonationArrowTrigger');
+    if (arrow) {
+      arrow.style.display = allowed ? 'inline-flex' : 'none';
+      arrow.setAttribute('aria-hidden', allowed ? 'false' : 'true');
+      arrow.setAttribute('tabindex', allowed ? '0' : '-1');
+    }
+
+    if (allowed || decisionReady) document.documentElement.dataset.igdcDonationReady = '1';
+    else delete document.documentElement.dataset.igdcDonationReady;
+  }
+
+  function apply(){
+    syncQueued = false;
+    var link = document.querySelector('nav [data-igdc-donation-nav="1"]');
+    if (!link) return;
+
+    beginDecision();
+
+    var payload = getPayload();
+    var authenticated = isFresh(payload);
+    var roles = authenticated ? getRoles(payload) : [];
+
+    /* ONLY owner/admin/super_admin bypass the Donation country-IP restriction. */
+    if (authenticated && isOwnerOrAdmin(roles)) {
+      setAllowed(link, true);
+      return;
+    }
+
+    /* All other roles, members and guests wait for the actual request-IP decision. */
+    if (!decisionReady) {
+      setAllowed(link, false);
+      return;
+    }
+
+    /* Non-admins are hidden exactly when the detected IP country is Donation-restricted. */
+    setAllowed(link, !restrictedByIp);
+  }
+
   function arm(){
-    beginGeo();
+    beginDecision();
     schedule();
     document.addEventListener('osauth:ready', schedule, true);
     document.addEventListener('osauth:done', schedule, true);
@@ -4689,7 +4738,7 @@ function normLang(l){
   }
 })();
 </script>
-<!-- /IGDC donation navigation auth/country gate v3 -->
+<!-- /IGDC donation navigation auth/country gate v4 -->
 </body>
 
 
