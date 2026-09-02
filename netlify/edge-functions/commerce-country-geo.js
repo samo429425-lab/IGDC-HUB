@@ -2,7 +2,7 @@
  * IGDC administrator country/region detector.
  * Returns only the current request's coarse Netlify geo scope.
  */
-export const config = { path: "/api/igdc-country-geo" };
+export const config = { path: "/igdc-country-geo" };
 
 function text(value) {
   return value == null ? "" : String(value).trim();

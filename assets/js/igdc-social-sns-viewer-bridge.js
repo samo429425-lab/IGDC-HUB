@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v2.1.0
+ * IGDC Social Network main-card viewer bridge v2.3.0
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -43,6 +43,22 @@
   function text(v) { return v == null ? '' : String(v); }
   function q(sel, root) { return (root || document).querySelector(sel); }
 
+  function decodeEntities(value) {
+    var raw = text(value);
+    if (!raw || raw.indexOf('&') < 0) return raw;
+    var box = document.createElement('textarea');
+    var current = raw;
+    /* Search providers sometimes double-encode numeric entities. Decode a
+       bounded number of rounds so `&amp;#xacbd;` also becomes the real text. */
+    for (var i = 0; i < 3 && current.indexOf('&') >= 0; i++) {
+      box.innerHTML = current;
+      var next = text(box.value).trim();
+      if (!next || next === current) break;
+      current = next;
+    }
+    return current;
+  }
+
   function language() {
     var raw = text(document.documentElement.lang || navigator.language || 'en')
       .toLowerCase().replace(/_/g, '-');
@@ -70,7 +86,17 @@
     url = text(url).trim();
     return !url || url === '#' || /^javascript:/i.test(url) ||
       /\/pages\/coming-soon\.html/i.test(url) ||
-      /(?:^|\.)example\.com(?:[\/:?#]|$)/i.test(url);
+      /(?:^|\.)example\.com(?:[\/:?#]|$)/i.test(url) ||
+      /social[_-](?:youtube|instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|twitter)[_-]?\d+/i.test(url) ||
+      /tiktok\.com\/@seed\/video\//i.test(url) ||
+      /reddit\.com\/r\/seed\/comments\//i.test(url);
+  }
+
+  function placeholderCard(card) {
+    if (!card) return true;
+    var title = decodeEntities(titleOf(card));
+    if (/\bSAMPLE\s*\d+\b/i.test(title) || /^Loading(?:…|\.\.\.)?$/i.test(title)) return true;
+    return false;
   }
 
   function sectionPlatform(card) {
@@ -94,7 +120,7 @@
   }
 
   function firstUrl(card) {
-    if (!card) return '';
+    if (!card || placeholderCard(card)) return '';
     var d = card.dataset || {};
     var values = [
       d.socialUrl,
@@ -121,12 +147,12 @@
 
   function titleOf(card) {
     var el = q('.title', card);
-    return text(el && el.textContent).trim();
+    return decodeEntities(text(el && el.textContent).trim());
   }
 
   function descOf(card) {
     var el = q('.desc', card);
-    return text(el && el.textContent).trim();
+    return decodeEntities(text(el && el.textContent).trim());
   }
 
   function videoIdYouTube(url) {
@@ -181,19 +207,26 @@
   function instagramEmbed(url) {
     try {
       var u = new URL(url, location.href);
-      var m = u.pathname.match(/^\/(p|reel|tv)\/([^/?#]+)/i);
+      var m = u.pathname.match(/^\/(p|reel|reels|tv)\/([^/?#]+)/i);
       if (!m) return '';
-      return 'https://www.instagram.com/' + m[1].toLowerCase() + '/' + m[2] + '/embed/';
+      var kind = m[1].toLowerCase() === 'reels' ? 'reel' : m[1].toLowerCase();
+      return 'https://www.instagram.com/' + kind + '/' + m[2] + '/embed/';
     } catch (_) { return ''; }
+  }
+
+  function facebookIsVideo(url) {
+    return /\/(?:reel|watch|videos?)\//i.test(url) || /[?&]v=\d+/i.test(url) || /fb\.watch/i.test(url);
   }
 
   function facebookEmbed(url) {
     if (!validHttp(url)) return '';
     var encoded = encodeURIComponent(url);
-    if (/\/(?:reel|watch|videos?)\//i.test(url) || /[?&]v=\d+/i.test(url) || /fb\.watch/i.test(url)) {
-      return 'https://www.facebook.com/plugins/video.php?href=' + encoded + '&show_text=false&autoplay=true';
+    if (facebookIsVideo(url)) {
+      return 'https://www.facebook.com/plugins/video.php?href=' + encoded + '&show_text=false&autoplay=true&width=1280';
     }
-    return 'https://www.facebook.com/plugins/post.php?href=' + encoded + '&show_text=true&width=900';
+    /* Facebook post plugin has a provider-side natural width limit.
+       Keep its native 750px document, then scale the whole frame inside IGDC. */
+    return 'https://www.facebook.com/plugins/post.php?href=' + encoded + '&show_text=true&width=750';
   }
 
   function buildEmbed(platform, url, card) {
@@ -228,7 +261,13 @@
 
     if (platform === 'facebook') {
       var fb = facebookEmbed(url);
-      return fb ? { mode: 'iframe', src: fb, aspect: '16/9' } : null;
+      if (!fb) return null;
+      return {
+        mode: 'iframe',
+        src: fb,
+        aspect: facebookIsVideo(url) ? '16/9' : 'auto',
+        provider: facebookIsVideo(url) ? 'facebook-video' : 'facebook-post'
+      };
     }
 
     if (platform === 'twitter') {
@@ -295,6 +334,8 @@
       '#igdcSocialViewerV2 .igsv-title{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-stage{position:relative;min-height:0;flex:1 1 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"]{align-items:center;justify-content:center;overflow:hidden}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:absolute;left:50%;top:50%;width:750px;max-width:none;transform-origin:center center;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-stage[data-aspect="9/16"] .igsv-frame{width:min(100%,calc(100dvh * 9 / 16));max-width:720px}' +
       '#igdcSocialViewerV2 .igsv-stage[data-aspect="16/9"] .igsv-frame{width:100%;height:100%}' +
       '#igdcSocialViewerV2 .igsv-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:500 15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#ddd;background:#000}' +
@@ -362,6 +403,20 @@
     var frame = q('.igsv-frame', stage);
     if (frame) frame.remove();
     stage.setAttribute('data-aspect', 'auto');
+    stage.removeAttribute('data-provider');
+  }
+
+  function sizeProviderFrame(stage, iframe, embed) {
+    if (!stage || !iframe || !embed || embed.provider !== 'facebook-post') return;
+    var naturalWidth = 750;
+    var rect = stage.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    var scale = Math.max(0.45, Math.min(2.4, rect.width / naturalWidth));
+    iframe.style.width = naturalWidth + 'px';
+    iframe.style.height = Math.max(420, Math.ceil(rect.height / scale)) + 'px';
+    iframe.style.left = '50%';
+    iframe.style.top = '50%';
+    iframe.style.transform = 'translate(-50%,-50%) scale(' + scale.toFixed(4) + ')';
   }
 
   function mountEmbed(root, embed, title) {
@@ -374,6 +429,7 @@
 
     showStatus(labels().loading);
     stage.setAttribute('data-aspect', embed.aspect || 'auto');
+    if (embed.provider) stage.setAttribute('data-provider', embed.provider);
     var iframe = document.createElement('iframe');
     iframe.className = 'igsv-frame';
     iframe.src = embed.src;
@@ -382,10 +438,16 @@
     iframe.referrerPolicy = 'strict-origin-when-cross-origin';
     iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write; web-share';
     iframe.setAttribute('allowfullscreen', '');
+    if (embed.provider === 'facebook-post') iframe.setAttribute('scrolling', 'yes');
     /* Prevent provider content from opening popups or navigating IGDC's top window. */
     iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads');
-    iframe.addEventListener('load', function () { showStatus(''); }, { once: true });
+    iframe.addEventListener('load', function () {
+      sizeProviderFrame(stage, iframe, embed);
+      showStatus('');
+    }, { once: true });
     stage.appendChild(iframe);
+    sizeProviderFrame(stage, iframe, embed);
+    iframe.__igdcSocialEmbed = embed;
 
     /* If a provider never fires load, do not leave the loading veil forever. */
     window.setTimeout(function () {
@@ -479,12 +541,33 @@
     }
   }
 
+  function resizeActiveProviderFrame() {
+    if (!state.open) return;
+    var root = document.getElementById('igdcSocialViewerV2');
+    var stage = root && q('.igsv-stage', root);
+    var iframe = stage && q('.igsv-frame', stage);
+    if (stage && iframe && iframe.__igdcSocialEmbed) {
+      sizeProviderFrame(stage, iframe, iframe.__igdcSocialEmbed);
+    }
+  }
+
   document.addEventListener('fullscreenchange', function () {
     var root = document.getElementById('igdcSocialViewerV2');
-    if (root && state.open) updateLabels(root);
+    if (root && state.open) {
+      updateLabels(root);
+      window.setTimeout(resizeActiveProviderFrame, 30);
+    }
     /* Deliberately DO NOT close the viewer when native fullscreen ends.
        This provides the required two-step return: fullscreen -> in-page player -> list. */
   });
+
+  window.addEventListener('resize', function () {
+    if (state.open) resizeActiveProviderFrame();
+  }, { passive: true });
+
+  window.addEventListener('orientationchange', function () {
+    if (state.open) window.setTimeout(resizeActiveProviderFrame, 80);
+  }, { passive: true });
 
   window.addEventListener('popstate', function () {
     if (!state.open) return;
@@ -503,6 +586,176 @@
     event.stopPropagation();
     returnToList();
   }, true);
+
+  function previewUrlOf(card) {
+    if (!card) return '';
+    var pic = q('.pic', card);
+    var img = q('img', card);
+    var d = card.dataset || {};
+    return text(d.thumbnailUrl || d.thumb || d.image || (img && img.src) || getBgUrl(pic)).trim();
+  }
+
+  function facebookPreviewNeedsRefresh(card) {
+    var platform = sectionPlatform(card);
+    if (platform !== 'facebook') return false;
+    var src = previewUrlOf(card);
+    if (!src) return true;
+    try {
+      var u = new URL(src, location.href);
+      if (!/(?:^|\.)fbcdn\.net$/i.test(u.hostname)) return false;
+      var token = u.searchParams.get('oe');
+      if (!token || !/^[0-9a-f]+$/i.test(token)) return false;
+      var expiry = parseInt(token, 16) * 1000;
+      return Number.isFinite(expiry) && expiry <= Date.now() + 30 * 60 * 1000;
+    } catch (_) { return false; }
+  }
+
+  function cardHasPreview(card) {
+    if (facebookPreviewNeedsRefresh(card)) return false;
+    var pic = q('.pic', card);
+    if (!pic) return false;
+    if (q('img,video,picture', pic)) return true;
+    if (getBgUrl(pic)) return true;
+    var d = card.dataset || {};
+    return validHttp(d.thumbnailUrl || d.thumb || d.image || '');
+  }
+
+  function applyDecodedTitle(card) {
+    var titleEl = q('.title', card);
+    if (!titleEl) return;
+    var raw = text(titleEl.textContent).trim();
+    var decoded = decodeEntities(raw);
+    if (decoded && decoded !== raw) titleEl.textContent = decoded;
+    if (decoded) titleEl.setAttribute('title', decoded);
+  }
+
+  function hydratePreview(card) {
+    if (!card || !isMainSocialCard(card) || placeholderCard(card)) return;
+    applyDecodedTitle(card);
+    if (cardHasPreview(card)) return;
+
+    var platform = sectionPlatform(card);
+    var url = firstUrl(card);
+    if (!platform || !url) return;
+
+    var d = card.dataset || {};
+    if (d.igdcPreviewUrl === url && d.igdcPreviewState === 'loading') return;
+    if (d.igdcPreviewUrl === url && d.igdcPreviewState === 'resolved') return;
+    var failedAt = Number(d.igdcPreviewFailedAt || 0);
+    if (d.igdcPreviewUrl === url && failedAt && Date.now() - failedAt < 5 * 60 * 1000) return;
+
+    d.igdcPreviewUrl = url;
+    d.igdcPreviewState = 'loading';
+
+    fetch('/.netlify/functions/social-preview-metadata?platform=' +
+      encodeURIComponent(platform) + '&url=' + encodeURIComponent(url), {
+        method: 'GET',
+        cache: 'force-cache',
+        credentials: 'same-origin'
+      })
+      .then(function (response) {
+        if (!response.ok) throw new Error('preview_' + response.status);
+        return response.json();
+      })
+      .then(function (payload) {
+        if (d.igdcPreviewUrl !== url) return;
+        var pic = q('.pic', card);
+        var thumb = text(payload && payload.thumbnailUrl).trim();
+        if (pic && validHttp(thumb)) {
+          pic.textContent = '';
+          pic.style.backgroundImage = "url('" + thumb.replace(/'/g, '%27') + "')";
+          pic.style.backgroundSize = 'cover';
+          pic.style.backgroundPosition = 'center';
+          d.thumbnailUrl = thumb;
+        }
+        var titleEl = q('.title', card);
+        var resolvedTitle = decodeEntities(payload && payload.title);
+        var currentTitle = decodeEntities(titleEl && titleEl.textContent);
+        if (titleEl && resolvedTitle && (!currentTitle || /&#(?:x[0-9a-f]+|\d+);/i.test(text(titleEl.textContent)))) {
+          titleEl.textContent = resolvedTitle;
+          titleEl.setAttribute('title', resolvedTitle);
+        } else {
+          applyDecodedTitle(card);
+        }
+        if (cardHasPreview(card)) {
+          d.igdcPreviewState = 'resolved';
+          delete d.igdcPreviewFailedAt;
+        } else {
+          d.igdcPreviewState = 'unresolved';
+          d.igdcPreviewFailedAt = String(Date.now());
+        }
+      })
+      .catch(function () {
+        if (d.igdcPreviewUrl !== url) return;
+        d.igdcPreviewState = 'unresolved';
+        d.igdcPreviewFailedAt = String(Date.now());
+      });
+  }
+
+  var previewObserver = null;
+  function ensurePreviewObserver() {
+    if (previewObserver || !('IntersectionObserver' in window)) return previewObserver;
+    previewObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var card = entry.target;
+        hydratePreview(card);
+        if (cardHasPreview(card) && previewObserver) previewObserver.unobserve(card);
+      });
+    }, { root: null, rootMargin: '600px 600px', threshold: 0.01 });
+    return previewObserver;
+  }
+
+  function scanMainCards() {
+    Object.keys(MAIN_KEYS).forEach(function (key) {
+      var grid = document.querySelector('.thumb-grid[data-psom-key="' + key + '"]');
+      if (!grid) return;
+      var cards = grid.querySelectorAll('a.card');
+      for (var i = 0; i < cards.length; i++) {
+        applyDecodedTitle(cards[i]);
+        if (placeholderCard(cards[i]) || !firstUrl(cards[i]) || cardHasPreview(cards[i])) continue;
+        var observer = ensurePreviewObserver();
+        if (observer) observer.observe(cards[i]);
+        else hydratePreview(cards[i]);
+      }
+    });
+  }
+
+  var scanTimer = 0;
+  function scheduleMainScan(delay) {
+    window.clearTimeout(scanTimer);
+    scanTimer = window.setTimeout(scanMainCards, delay == null ? 160 : delay);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () {
+      scheduleMainScan(150);
+      window.setTimeout(scanMainCards, 1200);
+      window.setTimeout(scanMainCards, 3500);
+    }, { once: true });
+  } else {
+    scheduleMainScan(80);
+    window.setTimeout(scanMainCards, 1200);
+  }
+
+  var mutationRoot = document.querySelector('.rows') || document.querySelector('.main-content') || document.body;
+  if (mutationRoot && window.MutationObserver) {
+    var cardMutationObserver = new MutationObserver(function (mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        var m = mutations[i];
+        if (m.type === 'childList' || m.type === 'attributes') {
+          scheduleMainScan(180);
+          break;
+        }
+      }
+    });
+    cardMutationObserver.observe(mutationRoot, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['href', 'style', 'data-social-url', 'data-latest-content-url', 'data-thumbnail-url']
+    });
+  }
 
   document.addEventListener('mouseover', function (event) {
     var titleEl = event.target && event.target.closest && event.target.closest('.title');

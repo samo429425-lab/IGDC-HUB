@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.13.0-direct-public-post-fallback";
+const VERSION = "sanmaru-social-live-collector-v1.14.0-eight-platform-rescue-routing";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -102,6 +102,20 @@ const CONTENT_SITE_FILTERS = Object.freeze({
   pinterest: "site:pinterest.com/pin/",
   reddit: "site:reddit.com/r/ inurl:/comments/",
   twitter: "(site:x.com/status/ OR site:twitter.com/status/)"
+});
+
+// Simple public-search forms used only by the Social collector rescue path.
+// They deliberately avoid Google-only inurl/parenthesized syntax because Bing
+// RSS and DuckDuckGo Lite do not interpret those operators consistently.
+const PUBLIC_POST_SEARCH = Object.freeze({
+  instagram: { host: "instagram.com", hint: "reel post" },
+  tiktok: { host: "tiktok.com", hint: "video" },
+  facebook: { host: "facebook.com", hint: "reel video posts" },
+  wechat: { host: "mp.weixin.qq.com", hint: "article" },
+  weibo: { host: "weibo.com", hint: "status" },
+  pinterest: { host: "pinterest.com", hint: "pin" },
+  reddit: { host: "reddit.com", hint: "comments" },
+  twitter: { host: "x.com", hint: "status" }
 });
 
 const LATEST_QUERY_TERMS = Object.freeze({
@@ -434,7 +448,7 @@ function providerReadiness(configValue) {
     channelPromotion: { ready: true, role: "운영 채널은 내부 식별자로 보존하고 최신 영상·게시물을 표시·클릭 대상으로 유지" },
     collectionCanRun: true,
     keyFreeAutomaticDiscovery: true,
-    directPublicPostFallback: { ready: true, providers: ["Bing RSS", "DuckDuckGo HTML"], role: "비YouTube 8개 SNS의 실제 공개 게시물 URL 직접 발견" },
+    directPublicPostFallback: { ready: true, providers: ["Sanmaru all-rescue", "Bing RSS/HTML", "DuckDuckGo Lite"], role: "비YouTube 8개 SNS의 실제 공개 게시물 URL 직접 발견" },
     requirements: [
       { key: "필수 키 없음", neededFor: "YouTube RSS + 비YouTube 8개 SNS 공개 웹 검색 fallback", cost: "무료 공개 데이터; 공개 검색 제공자 응답 가능 범위" },
       { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "8개 비YouTube 플랫폼의 최신 공개 게시물 발견", cost: "Google 무료 할당량 및 서비스 약관 범위" },
@@ -853,64 +867,121 @@ async function naverChannelSearch(plan, queryText, limit, start, route, cfg) {
     return { provider: "naver-web-channel", status: error.statusCode === 401 || error.statusCode === 403 || error.statusCode === 429 ? "credential_or_quota_error" : "error", error: error.message, items: [] };
   }
 }
-function searchResultUrl(value) {
-  const raw = decodeXml(SocialStore.text(value)).trim();
+function decodeSearchRedirectTarget(rawValue) {
+  const raw = decodeXml(SocialStore.text(rawValue)).trim();
   if (!raw) return "";
   try {
     const url = new URL(raw, "https://duckduckgo.com");
-    if (/duckduckgo\.com$/i.test(url.hostname) && url.pathname === "/l/") {
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+
+    // DuckDuckGo redirect.
+    if (host === "duckduckgo.com" && url.pathname === "/l/") {
       const target = url.searchParams.get("uddg");
       if (target) return Policy.normalizeUrl(decodeURIComponent(target));
     }
+
+    // Bing tracking links often store the destination in `u=a1<base64url>`.
+    if (host === "bing.com" && /^\/ck\/a/i.test(url.pathname)) {
+      const token = SocialStore.text(url.searchParams.get("u"));
+      if (token) {
+        let encoded = token.replace(/^a1/i, "").replace(/-/g, "+").replace(/_/g, "/");
+        while (encoded.length % 4) encoded += "=";
+        try {
+          const decoded = Buffer.from(encoded, "base64").toString("utf8");
+          const normalized = Policy.normalizeUrl(decoded);
+          if (normalized) return normalized;
+        } catch (_error) {}
+      }
+    }
+
+    // Yahoo search redirects encode the destination in /RU=<url>/RK=...
+    if (/yahoo\./i.test(host)) {
+      const match = url.pathname.match(/\/RU=([^/]+)\/(?:RK|RS)=/i);
+      if (match && match[1]) {
+        try {
+          const normalized = Policy.normalizeUrl(decodeURIComponent(match[1]));
+          if (normalized) return normalized;
+        } catch (_error) {}
+      }
+    }
+
+    // Generic search redirect query parameters.
+    for (const key of ["url", "target", "dest", "destination", "r", "q"]) {
+      const candidate = url.searchParams.get(key);
+      if (!candidate || !/^https?%3A|^https?:/i.test(candidate)) continue;
+      try {
+        const normalized = Policy.normalizeUrl(decodeURIComponent(candidate));
+        if (normalized) return normalized;
+      } catch (_error) {}
+    }
+
     return Policy.normalizeUrl(url.toString());
   } catch (_error) { return ""; }
+}
+function searchResultUrl(value) {
+  return decodeSearchRedirectTarget(value);
+}
+function publicSearchQuery(plan, queryText) {
+  const cfg = PUBLIC_POST_SEARCH[plan && plan.platform] || {};
+  const base = SocialStore.text(queryText)
+    .replace(/\bsite:[^\s)]+/gi, " ")
+    .replace(/\binurl:[^\s)]+/gi, " ")
+    .replace(/[()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"]
+    .filter(Boolean).join(" ");
+}
+function pushPublicPost(out, seen, plan, provider, rawUrl, title, description) {
+  const link = searchResultUrl(rawUrl);
+  if (!link || Policy.platformFromHost(link) !== plan.platform || !contentKind(plan.platform, link)) return;
+  const key = link.toLowerCase();
+  if (seen.has(key)) return;
+  seen.add(key);
+  out.push({
+    provider,
+    platform: plan.platform,
+    url: link,
+    sourceUrl: link,
+    latestContentUrl: link,
+    title: firstText([stripHtml(decodeXml(title)), plan.platform + " public content"]),
+    description: firstText([stripHtml(decodeXml(description))]),
+    entityKind: contentKind(plan.platform, link),
+    source: { name: provider, platform: plan.platform, mode: "public_post_search" }
+  });
 }
 function rssItems(xml, plan, provider) {
   const out = [];
   const seen = new Set();
   const blocks = String(xml || "").match(/<item\b[\s\S]*?<\/item>/gi) || [];
   for (const block of blocks) {
-    const link = searchResultUrl(xmlValue(block, "link"));
-    if (!link || Policy.platformFromHost(link) !== plan.platform || !contentKind(plan.platform, link)) continue;
-    const key = link.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      provider,
-      platform: plan.platform,
-      url: link,
-      sourceUrl: link,
-      latestContentUrl: link,
-      title: firstText([xmlValue(block, "title"), plan.platform + " public content"]),
-      description: firstText([xmlValue(block, "description")]),
-      entityKind: contentKind(plan.platform, link),
-      source: { name: provider, platform: plan.platform, mode: "public_post_search" }
-    });
+    pushPublicPost(out, seen, plan, provider, xmlValue(block, "link"), xmlValue(block, "title"), xmlValue(block, "description"));
   }
   return out;
 }
-function ddgItems(html, plan, provider) {
+function htmlPublicPostItems(html, plan, provider) {
   const source = String(html || "");
   const out = [];
   const seen = new Set();
-  const re = /<a[^>]+class=["'][^"']*result__a[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+
+  // Anchor parsing covers Bing HTML, DuckDuckGo HTML/Lite and Yahoo layouts.
+  const anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match;
-  while ((match = re.exec(source))) {
-    const link = searchResultUrl(match[1]);
-    if (!link || Policy.platformFromHost(link) !== plan.platform || !contentKind(plan.platform, link)) continue;
-    const key = link.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      provider,
-      platform: plan.platform,
-      url: link,
-      sourceUrl: link,
-      latestContentUrl: link,
-      title: stripHtml(decodeXml(match[2])) || plan.platform + " public content",
-      entityKind: contentKind(plan.platform, link),
-      source: { name: provider, platform: plan.platform, mode: "public_post_search" }
-    });
+  while ((match = anchorRe.exec(source))) {
+    pushPublicPost(out, seen, plan, provider, match[1], match[2], "");
+  }
+
+  // Some search pages place the destination in JSON/script rather than href.
+  // Scan only bounded HTTPS-looking strings, then apply the strict platform +
+  // contentKind gate before accepting anything.
+  const rawRe = /https?(?:\\u002f|\\\/|\/)[^"'<>\s]{8,500}/gi;
+  const rawMatches = source.match(rawRe) || [];
+  for (const raw of rawMatches.slice(0, 250)) {
+    const decoded = decodeXml(raw)
+      .replace(/\\u002f/gi, "/")
+      .replace(/\\\//g, "/")
+      .replace(/&amp;/gi, "&");
+    pushPublicPost(out, seen, plan, provider, decoded, "", "");
   }
   return out;
 }
@@ -918,11 +989,11 @@ async function directPublicPostSearch(plan, queryText, limit) {
   if (!plan || plan.platform === "youtube") {
     return { provider: "direct-public-post-search", status: "not_needed", items: [] };
   }
-  const q = [queryText, CONTENT_SITE_FILTERS[plan.platform]].filter(Boolean).join(" ");
+  const q = publicSearchQuery(plan, queryText);
   const wanted = Math.max(1, Math.min(30, Number(limit || 10) || 10));
   const headers = {
     Accept: "text/html,application/rss+xml,application/xml;q=0.9,*/*;q=0.8",
-    "User-Agent": "Mozilla/5.0 (compatible; IGDC-MARU-SocialHub/1.0)"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"
   };
   const jobs = [
     withDeadline(
@@ -931,10 +1002,15 @@ async function directPublicPostSearch(plan, queryText, limit) {
       ""
     ).then((xml) => ({ provider: "bing-rss-social", items: rssItems(xml, plan, "bing-rss-social") })).catch((error) => ({ provider: "bing-rss-social", items: [], error: error && error.message })),
     withDeadline(
-      fetchText("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
+      fetchText("https://www.bing.com/search?count=30&q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
       REQUEST_TIMEOUT_MS,
       ""
-    ).then((html) => ({ provider: "duckduckgo-html-social", items: ddgItems(html, plan, "duckduckgo-html-social") })).catch((error) => ({ provider: "duckduckgo-html-social", items: [], error: error && error.message }))
+    ).then((html) => ({ provider: "bing-html-social", items: htmlPublicPostItems(html, plan, "bing-html-social") })).catch((error) => ({ provider: "bing-html-social", items: [], error: error && error.message })),
+    withDeadline(
+      fetchText("https://lite.duckduckgo.com/lite/?q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
+      REQUEST_TIMEOUT_MS,
+      ""
+    ).then((html) => ({ provider: "duckduckgo-lite-social", items: htmlPublicPostItems(html, plan, "duckduckgo-lite-social") })).catch((error) => ({ provider: "duckduckgo-lite-social", items: [], error: error && error.message }))
   ];
   const settled = await Promise.all(jobs);
   const items = [];
@@ -990,6 +1066,56 @@ async function maruSearchOne(event, plan, queryText, limit, language, start) {
     return { provider: "sanmaru-public-search", status: "error", error: error.message, items: [], trace: [] };
   }
 }
+async function maruUnfilteredSearchOne(event, plan, queryText, limit, language, start) {
+  try {
+    const result = await withDeadline(
+      MaruSearch.runEngine({
+        httpMethod: "GET",
+        headers: event && event.headers || {},
+        queryStringParameters: {
+          action: "search-ui", searchUi: "1", publicSearch: "1", realContentFirst: "1",
+          openPipe: "1", external: "1", noAnalytics: "1", noRevenue: "1"
+        }
+      }, {
+        // `all` is intentional. Maru's shared SNS category recognises only a
+        // subset of the nine platforms. The Social collector performs the
+        // strict host + post/video path filter after this broad rescue read.
+        q: publicSearchQuery(plan, queryText),
+        limit: Math.max(10, Number(limit || 10)),
+        lang: language || null,
+        start: start || 1,
+        deep: false,
+        external: true,
+        type: "all",
+        sort: "date",
+        freshness: "recent",
+        noAnalytics: true,
+        noRevenue: true
+      }),
+      REQUEST_TIMEOUT_MS,
+      () => ({ __providerTimeout: true })
+    );
+    if (result && result.__providerTimeout) {
+      return { provider: "sanmaru-unfiltered-social-rescue", status: "timeout", error: "provider_deadline", items: [], trace: [] };
+    }
+    const rows = Array.isArray(result && result.items) ? result.items : [];
+    const items = rows.filter((item) => candidateUrls(item).some((url) =>
+      Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url)
+    ));
+    return {
+      provider: "sanmaru-unfiltered-social-rescue",
+      status: items.length ? "ok" : "empty",
+      source: result && result.source || null,
+      items,
+      trace: Array.isArray(result && result.meta && result.meta.trace)
+        ? result.meta.trace.map((entry) => ({ name: entry && entry.name, status: entry && entry.status, count: Number(entry && entry.count || 0) }))
+        : []
+    };
+  } catch (error) {
+    return { provider: "sanmaru-unfiltered-social-rescue", status: "error", error: error.message, items: [], trace: [] };
+  }
+}
+
 async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup, registryTargeted) {
   let tasks = [];
   if (providerGroup === 0) {
@@ -1037,11 +1163,18 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
   // duplicate requests while preventing search-page passthroughs from collapsing
   // the entire SNS section to zero.
   if (plan.platform !== "youtube") {
-    const hasActualPost = providers.some((result) => (result.items || []).some((item) =>
+    const hasActualPost = () => providers.some((result) => (result.items || []).some((item) =>
       candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
     ));
-    if (!hasActualPost) {
-      providers = providers.concat([await directPublicPostSearch(plan, queryText, limit)]);
+    if (!hasActualPost()) {
+      // Run the collector-local Maru `all` rescue and independent public-post
+      // search in parallel. This avoids the shared Maru SNS classifier without
+      // modifying it, while keeping a second route when CSE/quota is unavailable.
+      const rescue = await Promise.all([
+        maruUnfilteredSearchOne(event, plan, queryText, limit, language, start),
+        directPublicPostSearch(plan, queryText, limit)
+      ]);
+      providers = providers.concat(rescue);
     }
   }
   return {
@@ -1211,7 +1344,7 @@ function usableThumbnail(value, contentUrl, platform) {
     const imagePath = /\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(url.pathname + url.search);
     if (pageHost && pageHost.test(host) && !imagePath) return "";
     const expiry = signedFacebookThumbnailExpiry(normalized);
-    if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
+    if (expiry && expiry <= Date.now() + 30 * 60 * 1000) return "";
     return normalized;
   } catch (_error) { return ""; }
 }
@@ -1855,4 +1988,15 @@ exports.handler = async function(event) {
       sampleSlotMutation: false
     });
   }
+};
+
+
+exports.__test = {
+  contentKind,
+  candidateUrls,
+  searchResultUrl,
+  publicSearchQuery,
+  rssItems,
+  htmlPublicPostItems,
+  decodeSearchRedirectTarget
 };
