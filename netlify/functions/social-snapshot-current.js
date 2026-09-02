@@ -7,10 +7,80 @@
 const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-snapshot-current-v1.3.0-durable-stored-release-fallback";
+const VERSION = "social-snapshot-current-v1.4.0-compact-front-read-cache";
 
 function text(value) {
   return value == null ? "" : String(value).trim();
+}
+
+const FRONT_SECTION_KEYS = Object.freeze([
+  "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
+  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter",
+]);
+let warmProjectionCache = null;
+
+function compactObject(source, keys) {
+  const input = source && typeof source === "object" ? source : {};
+  const out = {};
+  keys.forEach((key) => {
+    const value = input[key];
+    if (value == null || value === "") return;
+    if (Array.isArray(value) && value.length === 0) return;
+    out[key] = value;
+  });
+  return out;
+}
+
+function compactFrontSlot(slot) {
+  if (!slot || typeof slot !== "object") return null;
+  const out = compactObject(slot, [
+    "id", "contentId", "type", "title", "description",
+    "url", "link", "href", "permalink", "sourceUrl", "latestContentUrl",
+    "viewerUrl", "thumb", "thumbnail", "thumbnailUrl", "image", "embedUrl",
+    "platform", "creator", "creatorName", "creatorHandle", "displayMode",
+    "sample", "placeholder", "isSample", "realProduct",
+  ]);
+  const source = compactObject(slot.source, ["platform", "provider", "url"]);
+  if (Object.keys(source).length) out.source = source;
+  const social = compactObject(slot.social, [
+    "platform", "sectionKey", "latestContentUrl", "channelUrl",
+    "contentPublishedAt", "countryScopes", "languageScopes",
+  ]);
+  if (Object.keys(social).length) out.social = social;
+  const signals = compactObject(slot.signals, ["rotation_score", "quality_score"]);
+  if (Object.keys(signals).length) out.signals = signals;
+  const audit = compactObject(slot.audit, ["origin"]);
+  if (Object.keys(audit).length) out.audit = audit;
+  return out;
+}
+
+function compactFrontSnapshot(snapshot) {
+  const sections = snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections || {};
+  const compactSections = {};
+  FRONT_SECTION_KEYS.forEach((key) => {
+    compactSections[key] = (Array.isArray(sections[key]) ? sections[key] : [])
+      .map(compactFrontSlot)
+      .filter(Boolean);
+  });
+  return {
+    meta: compactObject(snapshot && snapshot.meta, ["generatedAt", "updatedAt", "releaseId", "applicationScope"]),
+    pages: { social: { sections: compactSections } },
+  };
+}
+
+function projectionForRelease(release) {
+  const cacheKey = text(release && release.release_id) + "|" + text(release && release.snapshot_hash);
+  if (warmProjectionCache && warmProjectionCache.key === cacheKey) return warmProjectionCache;
+  const documentHash = SocialStore.sha256(release.snapshot);
+  const projected = {
+    key: cacheKey,
+    documentHash,
+    hashVerified: !!release.snapshot_hash && release.snapshot_hash === documentHash,
+    publicSlots: publicSlotCounts(release.snapshot),
+    snapshot: compactFrontSnapshot(release.snapshot),
+  };
+  warmProjectionCache = projected;
+  return projected;
 }
 function releaseCountry(row) {
   return text(
@@ -63,9 +133,11 @@ exports.handler = async function (event) {
         version: VERSION,
         error: "method_not_allowed",
       });
+    const query = event.queryStringParameters || {};
+    const frontView = text(query.view).toLowerCase() === "front";
     const route = CountryRouting.resolve(
       event,
-      event.queryStringParameters || {},
+      query,
     );
     const countryCode = text(route.countryCode).toUpperCase();
     let exact = countryCode ? await latestForToken(countryCode) : null;
@@ -96,8 +168,9 @@ exports.handler = async function (event) {
         { "cache-control": "no-store, max-age=0" },
       );
     }
-    const documentHash = SocialStore.sha256(release.snapshot);
-    const publicSlots = publicSlotCounts(release.snapshot);
+    const projection = projectionForRelease(release);
+    const documentHash = projection.documentHash;
+    const publicSlots = projection.publicSlots;
     return SocialStore.response(
       200,
       {
@@ -106,8 +179,7 @@ exports.handler = async function (event) {
         releaseId: release.release_id,
         hash: release.snapshot_hash,
         documentHash,
-        hashVerified:
-          !!release.snapshot_hash && release.snapshot_hash === documentHash,
+        hashVerified: projection.hashVerified,
         createdAt: release.created_at,
         publicSlots,
         route: {
@@ -129,10 +201,12 @@ exports.handler = async function (event) {
             release.snapshot_hash === documentHash ? "passed" : "failed",
           frontPayloadReady: publicSlots.total > 0 ? "passed" : "empty",
         },
-        snapshot: release.snapshot,
+        snapshot: frontView ? projection.snapshot : release.snapshot,
       },
       {
-        "cache-control": "no-store, max-age=0",
+        "cache-control": frontView
+          ? "private, max-age=2"
+          : "no-store, max-age=0",
         "access-control-allow-origin": "*",
         vary: "x-country-code, x-nf-country, cf-ipcountry",
       },

@@ -1227,48 +1227,10 @@ function changePopupLanguage(lang){
   if (GA_ID) gtag('config', GA_ID);
 </script>
 <!-- BEGIN: Upgrade scripts (non-intrusive) -->
-<script>(async()=>{
-
-const filesToCheck = [
-    "index.html",
-    "admin.html",
-    "literature_academic.html",
-    "media_hub.html",
-    "donation.html"
-  ];
-
-  const apiEndpoints = [
-    "https://api.coupang.com/",
-    "https://api.amazon.com/",
-    "https://api.paypal.com/",
-    "https://api.openai.com/"
-  ];
-
-  const fileResults = await Promise.all(filesToCheck.map(async (file) => {
-    try {
-      const res = await fetch(file);
-      return { type: "file", name: file, status: res.status, ok: res.ok };
-    } catch (e) {
-      return { type: "file", name: file, status: "FETCH ERROR", ok: false };
-    }
-  }));
-
-  const apiResults = await Promise.all(apiEndpoints.map(async (api) => {
-    try {
-      const res = await fetch(api, { method: "HEAD", mode: "no-cors" });
-      return { type: "api", name: api, status: "CONNECTED", ok: true };
-    } catch (e) {
-      return { type: "api", name: api, status: "DISCONNECTED", ok: false };
-    }
-  }));
-
-  window._GPT_SYSTEM_HEALTH = {
-    timestamp: new Date().toISOString(),
-    files: fileResults,
-    apis: apiResults
-  };
-
-})();</script>
+<script>
+/* Front runtime health sweep disabled: diagnostics must not compete with first render. */
+window._GPT_SYSTEM_HEALTH = { disabled:true, files:[], apis:[] };
+</script>
 <script>
 </script>
 <script>window.__IGTC_INDEX_UPG__=true;</script><script>
@@ -1465,7 +1427,7 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 <script>
 (function(){
   try{
-    if(!window.IGDC_FEATURES){ window.IGDC_FEATURES = {externalHooks:true, healthCheck:true}; }
+    if(!window.IGDC_FEATURES){ window.IGDC_FEATURES = {externalHooks:true, healthCheck:false}; }
     if(window.IGDC_FEATURES.externalHooks !== true){
       window.triggerAPILinks = window.triggerAPILinks || function(){};
       window.orphanFundsSeed = window.orphanFundsSeed || function(){};
@@ -4535,7 +4497,6 @@ function normLang(l){
     'https://example.com/roles', 'https://osu/roles', 'roles', 'role'
   ];
   var syncQueued = false;
-  var repeatTimer = 0;
   var geoPromise = null;
   var geoState = { ready:false, excluded:false, country:'' };
   var authGraceUntil = Date.now() + 2500;
@@ -4606,8 +4567,28 @@ function normLang(l){
 
   function loadGeo(){
     if (geoPromise) return geoPromise;
-    geoPromise = fetch(GEO_URL, { cache:'no-store', credentials:'same-origin' })
-      .then(function(res){ return res && res.ok ? res.json() : null; })
+
+    var controller = (typeof AbortController === 'function') ? new AbortController() : null;
+    var timeoutId = controller ? window.setTimeout(function(){
+      try { controller.abort(); } catch (_) {}
+    }, 3500) : 0;
+
+    geoPromise = fetch(GEO_URL, {
+      cache:'no-store',
+      credentials:'same-origin',
+      headers:{ 'Accept':'application/json' },
+      signal: controller ? controller.signal : undefined
+    })
+      .then(function(res){
+        if (!res || !res.ok) throw new Error('geo-http');
+        var contentType = String(res.headers && res.headers.get('content-type') || '').toLowerCase();
+        if (contentType.indexOf('application/json') === -1) {
+          /* A SPA/index.html fallback is not a geo response. Do not consume its large body. */
+          try { if (res.body && typeof res.body.cancel === 'function') res.body.cancel(); } catch (_) {}
+          throw new Error('geo-non-json');
+        }
+        return res.json();
+      })
       .then(function(data){
         geoState.ready = true;
         geoState.excluded = !!(data && data.excluded === true);
@@ -4620,6 +4601,10 @@ function normLang(l){
         geoState.excluded = false;
         geoState.country = '';
         return geoState;
+      })
+      .then(function(state){
+        if (timeoutId) window.clearTimeout(timeoutId);
+        return state;
       });
     return geoPromise;
   }
@@ -4708,14 +4693,8 @@ function normLang(l){
     window.addEventListener('pageshow', schedule);
     window.addEventListener('storage', schedule);
 
-    var deadline = Date.now() + 30000;
-    repeatTimer = window.setInterval(function(){
-      schedule();
-      if (Date.now() > deadline) {
-        window.clearInterval(repeatTimer);
-        repeatTimer = 0;
-      }
-    }, 750);
+    /* One late-auth safety resync replaces the former 40-pass/30-second polling loop. */
+    window.setTimeout(schedule, 1800);
   }
 
   if (document.readyState === 'loading') {

@@ -357,8 +357,8 @@
   async function loadCurrentSnapshot() {
     try {
       const res = await fetch(
-        CURRENT_SNAPSHOT_URL + "?_=" + encodeURIComponent(Date.now()),
-        { cache: "no-store", credentials: "same-origin" },
+        CURRENT_SNAPSHOT_URL + "?view=front",
+        { cache: "default", credentials: "same-origin" },
       );
       if (!res.ok) return null;
       const payload = await res.json();
@@ -407,48 +407,10 @@
 
   function normalizeMainCardLayout(gridEl) {
     if (!gridEl) return;
-    const cards = getMainSlots(gridEl);
-    if (!cards.length) return;
-
-    let maxTitleHeight = 0;
-    cards.forEach(function (card) {
-      const title = qs(".title", card);
-      const desc = qs(".desc", card);
-      const meta = qs(".meta", card);
-      const cta = qs(".cta", card);
-
-      if (desc) {
-        // Keep the text in the DOM for the detail/full-screen viewer,
-        // but do not expose supplier/production description on the front card.
-        desc.style.display = "none";
-      }
-      if (meta) meta.style.flex = "1 1 auto";
-      if (cta) cta.style.marginTop = "auto";
-      if (title) {
-        title.style.minHeight = "0px";
-        maxTitleHeight = Math.max(maxTitleHeight, title.getBoundingClientRect().height);
-      }
-      card.style.minHeight = "0px";
-    });
-
-    if (maxTitleHeight > 0) {
-      cards.forEach(function (card) {
-        const title = qs(".title", card);
-        if (title) title.style.minHeight = Math.ceil(maxTitleHeight) + "px";
-      });
-    }
-
-    // Equalize the full card height within this SNS section so every CTA
-    // sits on the same bottom line, based on that section's longest title.
-    let maxCardHeight = 0;
-    cards.forEach(function (card) {
-      maxCardHeight = Math.max(maxCardHeight, card.getBoundingClientRect().height);
-    });
-    if (maxCardHeight > 0) {
-      cards.forEach(function (card) {
-        card.style.minHeight = Math.ceil(maxCardHeight) + "px";
-      });
-    }
+    // Performance policy: card geometry is owned by the existing CSS
+    // (16:9 media + bounded 3-line title/meta). Do not read layout metrics
+    // and write heights for every card: that forces synchronous reflow across
+    // all nine SNS rows and delays first paint on slower devices.
   }
 
   function sampleLabelForSection(key) {
@@ -830,17 +792,26 @@
   function runMain() {
     if (mainRunInFlight) return mainRunInFlight;
 
-    mainRunInFlight = Promise.all([loadCurrentSnapshot(), loadCountryRoute()])
-      .then(function (results) {
-        const current = results[0];
-        lastRoute = results[1] || routeFallback();
+    // One front read is enough. social-snapshot-current already resolves the
+    // request country, so waiting for social-country-route as a second serverless
+    // dependency only delays the nine main rows. Browser language remains the
+    // lightweight fallback for language ranking.
+    mainRunInFlight = loadCurrentSnapshot()
+      .then(function (current) {
+        const fallbackRoute = routeFallback();
+        const releaseRoute = current && current.pipeline && current.pipeline.route || {};
+        lastRoute = Object.assign({}, fallbackRoute, {
+          countryCode: releaseRoute.countryCode || fallbackRoute.countryCode || null,
+          worldRegion: releaseRoute.worldRegion || fallbackRoute.worldRegion || null,
+          source: "stored_release_current_route"
+        });
 
-        // Prefer the durable stored Social release. If that readback is temporarily
-        // unavailable, read the canonical Snapshot Engine output already published
-        // at /data/social.snapshot.json. This is a read-only recovery path: it does
-        // not create candidates, mutate SearchBank/Snapshot, or synthesize SAMPLE cards.
+        // Prefer the durable stored Social release. If it is temporarily
+        // unavailable, reuse the canonical snapshot request that the independent
+        // Distribution-owned right panel already started. Never start a duplicate
+        // multi-megabyte snapshot fetch from the Social main path.
         if (!(current && current.snapshot)) {
-          return fetchRightPanelSnapshot().then(function (canonicalSnapshot) {
+          return getInitialRightSnapshotPromise().then(function (canonicalSnapshot) {
             if (!canonicalSnapshot) {
               window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
                 source: "stored_release_current+canonical_snapshot_engine_output",
@@ -851,7 +822,7 @@
             }
             lastMainSnapshot = canonicalSnapshot;
             window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-              source: "canonical_snapshot_engine_output",
+              source: "canonical_snapshot_engine_output_reused",
               status: "front_readback_recovered",
               url: RIGHT_SNAPSHOT_URL,
               loadedAt: new Date().toISOString(),
