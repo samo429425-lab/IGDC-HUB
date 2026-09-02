@@ -4548,17 +4548,23 @@ function normLang(l){
   }
 
   function getPayload(){
+    var memberPayload = null;
+    var osPayload = null;
     try {
       if (window.IGDCMemberAuth && typeof window.IGDCMemberAuth.getIdTokenPayload === 'function') {
-        return window.IGDCMemberAuth.getIdTokenPayload() || null;
+        memberPayload = window.IGDCMemberAuth.getIdTokenPayload() || null;
       }
     } catch (_) {}
     try {
       if (window.osAuth && typeof window.osAuth.getIdTokenPayload === 'function') {
-        return window.osAuth.getIdTokenPayload() || null;
+        osPayload = window.osAuth.getIdTokenPayload() || null;
       }
     } catch (_) {}
-    return null;
+
+    /* Donation restriction is an OS0/Auth0 claim. Prefer whichever live payload actually carries it. */
+    if (memberPayload && Object.prototype.hasOwnProperty.call(memberPayload, CLAIM_BLOCKED)) return memberPayload;
+    if (osPayload && Object.prototype.hasOwnProperty.call(osPayload, CLAIM_BLOCKED)) return osPayload;
+    return memberPayload || osPayload || null;
   }
 
   function isFresh(payload){
@@ -4569,7 +4575,8 @@ function normLang(l){
   function getRoles(payload){
     try {
       if (window.IGDCMemberAuth && typeof window.IGDCMemberAuth.getRoles === 'function') {
-        return (window.IGDCMemberAuth.getRoles() || []).map(normalize).filter(Boolean);
+        var memberRoles = (window.IGDCMemberAuth.getRoles() || []).map(normalize).filter(Boolean);
+        if (memberRoles.length) return memberRoles;
       }
     } catch (_) {}
     var roles = [];

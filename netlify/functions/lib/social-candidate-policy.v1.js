@@ -8,7 +8,7 @@
  * from SearchBank core engines: SearchBank remains a broad ledger, and this
  * policy is applied only when copying social candidates into social_candidates.
  */
-const VERSION = "social-candidate-policy-v1.1.0-country-content-policy";
+const VERSION = "social-candidate-policy-v1.2.0-facebook-creator-focus";
 const CountryContentPolicy = require("./social-country-content-policy.v1");
 
 const POOL_TARGET_PER_SECTION = 300;
@@ -109,12 +109,16 @@ const PLATFORM_POLICIES = Object.freeze({
   },
   facebook: {
     sectionKey: "social-facebook",
-    defaultDisplayMode: "link_card",
-    publicPreference: "public_page_only",
-    categories: ["official_page", "culture", "event", "community", "brand", "creator", "travel", "education"],
+    defaultDisplayMode: "link_card_or_official_embed",
+    publicPreference: "public_creator_post_reel_or_major_issue",
+    categories: ["influencer", "creator", "celebrity", "artist", "athlete", "music", "travel", "food", "culture", "lifestyle", "major_issue", "reel", "video"],
     collectionQueries: [
-      "facebook public page culture", "facebook public event travel", "facebook official artist page", "facebook education public page",
-      "facebook community culture page", "facebook brand creator page"
+      "facebook influencer creator reel trending public post",
+      "facebook artist athlete musician creator public video",
+      "facebook travel food culture creator reel",
+      "facebook popular creator lifestyle public post",
+      "facebook major issue creator public discussion",
+      "facebook viral creator public video"
     ]
   },
   wechat: {

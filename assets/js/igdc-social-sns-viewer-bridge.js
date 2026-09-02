@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v2.3.0
+ * IGDC Social Network main-card viewer bridge v2.4.0
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -629,133 +629,13 @@
     if (decoded) titleEl.setAttribute('title', decoded);
   }
 
-  function hydratePreview(card) {
-    if (!card || !isMainSocialCard(card) || placeholderCard(card)) return;
-    applyDecodedTitle(card);
-    if (cardHasPreview(card)) return;
-
-    var platform = sectionPlatform(card);
-    var url = firstUrl(card);
-    if (!platform || !url) return;
-
-    var d = card.dataset || {};
-    if (d.igdcPreviewUrl === url && d.igdcPreviewState === 'loading') return;
-    if (d.igdcPreviewUrl === url && d.igdcPreviewState === 'resolved') return;
-    var failedAt = Number(d.igdcPreviewFailedAt || 0);
-    if (d.igdcPreviewUrl === url && failedAt && Date.now() - failedAt < 5 * 60 * 1000) return;
-
-    d.igdcPreviewUrl = url;
-    d.igdcPreviewState = 'loading';
-
-    fetch('/.netlify/functions/social-preview-metadata?platform=' +
-      encodeURIComponent(platform) + '&url=' + encodeURIComponent(url), {
-        method: 'GET',
-        cache: 'force-cache',
-        credentials: 'same-origin'
-      })
-      .then(function (response) {
-        if (!response.ok) throw new Error('preview_' + response.status);
-        return response.json();
-      })
-      .then(function (payload) {
-        if (d.igdcPreviewUrl !== url) return;
-        var pic = q('.pic', card);
-        var thumb = text(payload && payload.thumbnailUrl).trim();
-        if (pic && validHttp(thumb)) {
-          pic.textContent = '';
-          pic.style.backgroundImage = "url('" + thumb.replace(/'/g, '%27') + "')";
-          pic.style.backgroundSize = 'cover';
-          pic.style.backgroundPosition = 'center';
-          d.thumbnailUrl = thumb;
-        }
-        var titleEl = q('.title', card);
-        var resolvedTitle = decodeEntities(payload && payload.title);
-        var currentTitle = decodeEntities(titleEl && titleEl.textContent);
-        if (titleEl && resolvedTitle && (!currentTitle || /&#(?:x[0-9a-f]+|\d+);/i.test(text(titleEl.textContent)))) {
-          titleEl.textContent = resolvedTitle;
-          titleEl.setAttribute('title', resolvedTitle);
-        } else {
-          applyDecodedTitle(card);
-        }
-        if (cardHasPreview(card)) {
-          d.igdcPreviewState = 'resolved';
-          delete d.igdcPreviewFailedAt;
-        } else {
-          d.igdcPreviewState = 'unresolved';
-          d.igdcPreviewFailedAt = String(Date.now());
-        }
-      })
-      .catch(function () {
-        if (d.igdcPreviewUrl !== url) return;
-        d.igdcPreviewState = 'unresolved';
-        d.igdcPreviewFailedAt = String(Date.now());
-      });
-  }
-
-  var previewObserver = null;
-  function ensurePreviewObserver() {
-    if (previewObserver || !('IntersectionObserver' in window)) return previewObserver;
-    previewObserver = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
-        var card = entry.target;
-        hydratePreview(card);
-        if (cardHasPreview(card) && previewObserver) previewObserver.unobserve(card);
-      });
-    }, { root: null, rootMargin: '600px 600px', threshold: 0.01 });
-    return previewObserver;
-  }
-
-  function scanMainCards() {
-    Object.keys(MAIN_KEYS).forEach(function (key) {
-      var grid = document.querySelector('.thumb-grid[data-psom-key="' + key + '"]');
-      if (!grid) return;
-      var cards = grid.querySelectorAll('a.card');
-      for (var i = 0; i < cards.length; i++) {
-        applyDecodedTitle(cards[i]);
-        if (placeholderCard(cards[i]) || !firstUrl(cards[i]) || cardHasPreview(cards[i])) continue;
-        var observer = ensurePreviewObserver();
-        if (observer) observer.observe(cards[i]);
-        else hydratePreview(cards[i]);
-      }
-    });
-  }
-
-  var scanTimer = 0;
-  function scheduleMainScan(delay) {
-    window.clearTimeout(scanTimer);
-    scanTimer = window.setTimeout(scanMainCards, delay == null ? 160 : delay);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () {
-      scheduleMainScan(150);
-      window.setTimeout(scanMainCards, 1200);
-      window.setTimeout(scanMainCards, 3500);
-    }, { once: true });
-  } else {
-    scheduleMainScan(80);
-    window.setTimeout(scanMainCards, 1200);
-  }
-
-  var mutationRoot = document.querySelector('.rows') || document.querySelector('.main-content') || document.body;
-  if (mutationRoot && window.MutationObserver) {
-    var cardMutationObserver = new MutationObserver(function (mutations) {
-      for (var i = 0; i < mutations.length; i++) {
-        var m = mutations[i];
-        if (m.type === 'childList' || m.type === 'attributes') {
-          scheduleMainScan(180);
-          break;
-        }
-      }
-    });
-    cardMutationObserver.observe(mutationRoot, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['href', 'style', 'data-social-url', 'data-latest-content-url', 'data-thumbnail-url']
-    });
-  }
+  /*
+   * Preview policy v2.4
+   * Do NOT issue background metadata requests from the front list.
+   * Thumbnails must arrive with the published Social candidate/snapshot.
+   * This keeps initial rendering DOM-only and prevents serverless preview
+   * calls / MutationObserver rescan loops from delaying the page.
+   */
 
   document.addEventListener('mouseover', function (event) {
     var titleEl = event.target && event.target.closest && event.target.closest('.title');

@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.14.0-eight-platform-rescue-routing";
+const VERSION = "sanmaru-social-live-collector-v1.15.0-native-social-filter-fast-preview";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -595,6 +595,11 @@ function registryIdentity(row, platform) {
   ]);
   return { row, url, title, handle, thumbnail };
 }
+function facebookPressPublisher(value) {
+  const corpus = SocialStore.text(value).toLowerCase();
+  if (!corpus) return false;
+  return /(?:\bnews\b|newspaper|\bpress\b|journal|herald|\btimes\b|\bdaily\b|newsroom|broadcast|media\s+(?:group|network|company)|신문|신문사|일보|뉴스|언론|통신사|보도국|방송사|연합뉴스|뉴시스|huffpost|reuters|apnews|donga|chosun|joongang|hani|khan|ytn|mbcnews|sbsnews|kbsnews|jtbcnews)/i.test(corpus);
+}
 async function influencerRegistrySeeds(sectionKey, platform) {
   try {
     const rows = await SocialStore.selectCandidates(
@@ -605,6 +610,9 @@ async function influencerRegistrySeeds(sectionKey, platform) {
     return (Array.isArray(rows) ? rows : [])
       .filter((row) => SocialStore.assetClassOf(row) === "influencer_registry" && registryRowActive(row))
       .map((row) => registryIdentity(row, platform))
+      .filter((seed) => platform !== "facebook" || !facebookPressPublisher(
+        [seed.title, seed.handle, seed.url].filter(Boolean).join(" ")
+      ))
       .filter((seed) => {
         const key = String(seed.url || (seed.title + "|" + seed.handle)).toLowerCase();
         if (!key || seen.has(key)) return false;
@@ -718,7 +726,14 @@ async function publicDirectoryRequest(plan, route, limit, offset, countryStrict)
         quality: { rank: Number(bindingValue(binding, "sitelinks") || 0) },
         country: countryStrict && route && route.countryCode || ""
       };
-    }).filter((item) => item.channelUrl && item.title && !/^Q\d+$/i.test(item.title));
+    }).filter((item) =>
+      item.channelUrl &&
+      item.title &&
+      !/^Q\d+$/i.test(item.title) &&
+      (plan.platform !== "facebook" || !facebookPressPublisher(
+        [item.title, item.creatorName, item.description, item.channelUrl].filter(Boolean).join(" ")
+      ))
+    );
     return {
       provider: "wikidata-public-social-directory",
       status: "ok",
@@ -1044,7 +1059,10 @@ async function maruSearchOne(event, plan, queryText, limit, language, start) {
       }, {
         q: queryText + " " + CONTENT_SITE_FILTERS[plan.platform],
         limit, lang: language || null, start: start || 1, deep: false, external: true,
-        type: plan.platform === "youtube" ? "video" : "sns",
+        // The shared Maru `sns` classifier does not cover all nine providers.
+        // Read the broad pool for non-YouTube sections, then apply the strict
+        // platform + real-post filter above inside this Social-only collector.
+        type: plan.platform === "youtube" ? "video" : "all",
         sort: "date", freshness: "recent", noAnalytics: true, noRevenue: true
       }),
       REQUEST_TIMEOUT_MS,
@@ -1053,11 +1071,17 @@ async function maruSearchOne(event, plan, queryText, limit, language, start) {
     if (result && result.__providerTimeout) {
       return { provider: "sanmaru-public-search", status: "timeout", error: "provider_deadline", items: [], trace: [] };
     }
+    const rawItems = Array.isArray(result && result.items) ? result.items : [];
+    const items = plan.platform === "youtube"
+      ? rawItems
+      : rawItems.filter((item) => candidateUrls(item).some((url) =>
+          Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url)
+        ));
     return {
       provider: "sanmaru-public-search",
-      status: "ok",
+      status: items.length ? "ok" : "empty",
       source: result && result.source || null,
-      items: Array.isArray(result && result.items) ? result.items : [],
+      items,
       trace: Array.isArray(result && result.meta && result.meta.trace)
         ? result.meta.trace.map((entry) => ({ name: entry && entry.name, status: entry && entry.status, count: Number(entry && entry.count || 0) }))
         : []
@@ -1167,14 +1191,12 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
       candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
     ));
     if (!hasActualPost()) {
-      // Run the collector-local Maru `all` rescue and independent public-post
-      // search in parallel. This avoids the shared Maru SNS classifier without
-      // modifying it, while keeping a second route when CSE/quota is unavailable.
-      const rescue = await Promise.all([
-        maruUnfilteredSearchOne(event, plan, queryText, limit, language, start),
-        directPublicPostSearch(plan, queryText, limit)
-      ]);
-      providers = providers.concat(rescue);
+      // `maruSearchOne` already reads Maru in `all` mode for non-YouTube
+      // and applies the strict Social platform/post gate locally. If that route
+      // is empty, use only the independent public-post rescue. This removes a
+      // duplicate Maru request from every empty batch.
+      const rescue = await directPublicPostSearch(plan, queryText, limit);
+      providers = providers.concat([rescue]);
     }
   }
   return {
@@ -1275,6 +1297,81 @@ async function publicOembed(platform, contentUrl) {
     };
   } catch (_error) { return {}; }
 }
+function providerEmbedMetadataUrl(platform, contentUrl) {
+  try {
+    const url = new URL(contentUrl);
+    if (platform === "facebook") {
+      const isVideo = /\/(?:reel|watch|videos?)\//i.test(contentUrl) ||
+        /[?&](?:v|video_id)=\d+/i.test(contentUrl) || /fb\.watch/i.test(contentUrl);
+      const base = isVideo
+        ? "https://www.facebook.com/plugins/video.php"
+        : "https://www.facebook.com/plugins/post.php";
+      return base + "?" + new URLSearchParams({
+        href: contentUrl,
+        show_text: isVideo ? "false" : "true",
+        autoplay: "false",
+        width: "750"
+      }).toString();
+    }
+    if (platform === "instagram") {
+      const match = url.pathname.match(/^\/(p|reel|reels|tv)\/([^/?#]+)/i);
+      if (!match) return "";
+      const kind = match[1].toLowerCase() === "reels" ? "reel" : match[1].toLowerCase();
+      return "https://www.instagram.com/" + kind + "/" + match[2] + "/embed/";
+    }
+  } catch (_error) {}
+  return "";
+}
+function providerEmbedImage(html, baseUrl) {
+  const meta = htmlMetaValue(html, [
+    "og:image:secure_url", "og:image", "twitter:image:src",
+    "twitter:image", "thumbnail"
+  ]);
+  if (meta) {
+    const normalized = absoluteHttps(meta, baseUrl);
+    if (normalized) return normalized;
+  }
+  const source = String(html || "").slice(0, 1200000)
+    .replace(/\\u002f/gi, "/")
+    .replace(/\\\//g, "/")
+    .replace(/&amp;/gi, "&");
+  const patterns = [
+    /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/i,
+    /(?:src|poster|data-poster|data-thumb|data-thumbnail)=["'](https:\/\/[^"'<>]+(?:fbcdn\.net|cdninstagram\.com)[^"'<>]*)["']/i,
+    /(https:\/\/[^"'<>\s]+(?:fbcdn\.net|cdninstagram\.com)[^"'<>\s]*)/i
+  ];
+  for (const pattern of patterns) {
+    const match = source.match(pattern);
+    if (match && match[1]) {
+      const normalized = absoluteHttps(decodeXml(match[1]), baseUrl);
+      if (normalized) return normalized;
+    }
+  }
+  return "";
+}
+async function publicEmbedMetadata(platform, contentUrl) {
+  const embedUrl = providerEmbedMetadataUrl(platform, contentUrl);
+  if (!embedUrl) return {};
+  try {
+    const html = await fetchText(
+      embedUrl,
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+          "Accept-Language": "en-US,en;q=0.8"
+        }
+      },
+      PUBLIC_METADATA_TIMEOUT_MS
+    );
+    return {
+      title: firstText([htmlMetaValue(html, ["og:title", "twitter:title"])]),
+      creatorName: firstText([htmlMetaValue(html, ["author", "article:author", "og:site_name"])]),
+      thumbnail: providerEmbedImage(html, embedUrl),
+      source: "provider_embed_metadata"
+    };
+  } catch (_error) { return {}; }
+}
 async function publicPageMetadata(platform, contentUrl) {
   if (
     !contentUrl ||
@@ -1351,6 +1448,17 @@ function usableThumbnail(value, contentUrl, platform) {
 async function stablePublicThumbnail(platform, contentUrl, supplied) {
   let thumb = usableThumbnail(supplied, contentUrl, platform);
   if (thumb) return { thumbnail: thumb, metadata: {} };
+
+  // Facebook/Instagram frequently expose the post image in the provider embed
+  // document even when the canonical page returns a login/interstitial shell.
+  // Resolve it during collection so the public front never needs per-card
+  // serverless metadata calls.
+  if (platform === "facebook" || platform === "instagram") {
+    const embedMetadata = await publicEmbedMetadata(platform, contentUrl);
+    thumb = usableThumbnail(embedMetadata.thumbnail, contentUrl, platform);
+    if (thumb) return { thumbnail: thumb, metadata: embedMetadata };
+  }
+
   const metadata = await publicPageMetadata(platform, contentUrl);
   thumb = usableThumbnail(metadata.thumbnail, contentUrl, platform);
   return { thumbnail: thumb, metadata };
