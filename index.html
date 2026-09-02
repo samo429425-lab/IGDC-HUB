@@ -4530,6 +4530,7 @@ function normLang(l){
 
   var CLAIM_BLOCKED = 'https://igdcglobal.com/donation_blocked';
   var GEO_URL = '/api/igdc-country-geo';
+  var SEARCHBANK_URL = '/.netlify/functions/search-bank-engine';
   var ROLE_KEYS = [
     'https://igdcglobal.com/roles', 'https://os.auth/roles', 'https://os0.app/roles',
     'https://example.com/roles', 'https://osu/roles', 'roles', 'role'
@@ -4539,6 +4540,10 @@ function normLang(l){
   var geoStarted = false;
   var geoReady = false;
   var geoExcluded = false;
+  var geoCountry = '';
+  var policyStartedFor = '';
+  var policyReady = false;
+  var policyDonationBlocked = false;
 
   function normalize(value){
     return String(value == null ? '' : value)
@@ -4597,6 +4602,39 @@ function normLang(l){
     return value === true || String(value).toLowerCase() === 'true';
   }
 
+  function beginPolicy(country){
+    country = String(country || '').trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(country)) {
+      policyReady = false;
+      policyDonationBlocked = false;
+      return;
+    }
+    if (policyStartedFor === country) return;
+    policyStartedFor = country;
+    policyReady = false;
+    policyDonationBlocked = false;
+
+    var url = SEARCHBANK_URL + '?channel=donation&country=' + encodeURIComponent(country) + '&list=1&limit=1';
+    fetch(url, { cache:'no-store', credentials:'same-origin' })
+      .then(function(res){ return res && res.ok ? res.json() : null; })
+      .then(function(data){
+        var operational = data && data.operational_policy;
+        var blocked = operational && Array.isArray(operational.blockedChannels)
+          ? operational.blockedChannels.map(function(v){ return String(v || '').toLowerCase(); })
+          : null;
+        if (!blocked) throw new Error('donation_policy_unresolved');
+        policyDonationBlocked = blocked.indexOf('donation') !== -1;
+        policyReady = true;
+        schedule();
+      })
+      .catch(function(){
+        /* Fail closed: never reveal Donation until the canonical country policy resolves. */
+        policyReady = false;
+        policyDonationBlocked = false;
+        schedule();
+      });
+  }
+
   function beginGeo(){
     if (geoStarted) return;
     geoStarted = true;
@@ -4605,12 +4643,16 @@ function normLang(l){
       .then(function(data){
         geoReady = true;
         geoExcluded = !!(data && data.excluded === true);
+        geoCountry = String(data && (data.detectedCountry || data.country) || '').trim().toUpperCase();
+        beginPolicy(geoCountry);
         schedule();
       })
       .catch(function(){
-        // Fail open only when the geo service itself cannot positively identify a blocked country.
-        geoReady = true;
+        /* Fail closed: without a request-IP country decision Donation stays hidden. */
+        geoReady = false;
         geoExcluded = false;
+        geoCountry = '';
+        policyReady = false;
         schedule();
       });
   }
@@ -4646,15 +4688,15 @@ function normLang(l){
       return;
     }
 
-    /* Do not reveal the replacement icon before the request-IP decision is ready. */
-    if (!geoReady) {
+    /* Do not reveal Donation before both request-IP and canonical Donation policy resolve. */
+    if (!geoReady || !policyReady) {
       setAllowed(link, false);
       delete document.documentElement.dataset.igdcDonationReady;
       return;
     }
 
-    /* Ordinary members and guests use the same request-IP/OCS country decision. */
-    var blocked = geoExcluded || (authenticated && isBlockedClaim(payload));
+    /* Ordinary members and guests share the same request-IP Donation country policy. */
+    var blocked = geoExcluded || policyDonationBlocked || (authenticated && isBlockedClaim(payload));
     setAllowed(link, !blocked);
   }
 
