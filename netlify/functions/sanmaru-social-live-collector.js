@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.12.0-content-first-eight-platform";
+const VERSION = "sanmaru-social-live-collector-v1.13.0-direct-public-post-fallback";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -434,8 +434,9 @@ function providerReadiness(configValue) {
     channelPromotion: { ready: true, role: "운영 채널은 내부 식별자로 보존하고 최신 영상·게시물을 표시·클릭 대상으로 유지" },
     collectionCanRun: true,
     keyFreeAutomaticDiscovery: true,
+    directPublicPostFallback: { ready: true, providers: ["Bing RSS", "DuckDuckGo HTML"], role: "비YouTube 8개 SNS의 실제 공개 게시물 URL 직접 발견" },
     requirements: [
-      { key: "필수 키 없음", neededFor: "공개 디렉터리의 YouTube 크리에이터별 최신 영상 RSS 수집", cost: "무료 공개 데이터; 관리자 검증 후 사용" },
+      { key: "필수 키 없음", neededFor: "YouTube RSS + 비YouTube 8개 SNS 공개 웹 검색 fallback", cost: "무료 공개 데이터; 공개 검색 제공자 응답 가능 범위" },
       { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "8개 비YouTube 플랫폼의 최신 공개 게시물 발견", cost: "Google 무료 할당량 및 서비스 약관 범위" },
       { key: "YOUTUBE_API_KEY", neededFor: "국가·언어별 YouTube 크리에이터 직접 검색", cost: "Google Cloud에서 YouTube Data API v3 활성화" },
       { key: "NAVER_CLIENT_ID + NAVER_CLIENT_SECRET", neededFor: "한국어 최신 공개 영상·게시물 검색 보조", cost: "Naver Developers 애플리케이션 등록" },
@@ -852,6 +853,108 @@ async function naverChannelSearch(plan, queryText, limit, start, route, cfg) {
     return { provider: "naver-web-channel", status: error.statusCode === 401 || error.statusCode === 403 || error.statusCode === 429 ? "credential_or_quota_error" : "error", error: error.message, items: [] };
   }
 }
+function searchResultUrl(value) {
+  const raw = decodeXml(SocialStore.text(value)).trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw, "https://duckduckgo.com");
+    if (/duckduckgo\.com$/i.test(url.hostname) && url.pathname === "/l/") {
+      const target = url.searchParams.get("uddg");
+      if (target) return Policy.normalizeUrl(decodeURIComponent(target));
+    }
+    return Policy.normalizeUrl(url.toString());
+  } catch (_error) { return ""; }
+}
+function rssItems(xml, plan, provider) {
+  const out = [];
+  const seen = new Set();
+  const blocks = String(xml || "").match(/<item\b[\s\S]*?<\/item>/gi) || [];
+  for (const block of blocks) {
+    const link = searchResultUrl(xmlValue(block, "link"));
+    if (!link || Policy.platformFromHost(link) !== plan.platform || !contentKind(plan.platform, link)) continue;
+    const key = link.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      provider,
+      platform: plan.platform,
+      url: link,
+      sourceUrl: link,
+      latestContentUrl: link,
+      title: firstText([xmlValue(block, "title"), plan.platform + " public content"]),
+      description: firstText([xmlValue(block, "description")]),
+      entityKind: contentKind(plan.platform, link),
+      source: { name: provider, platform: plan.platform, mode: "public_post_search" }
+    });
+  }
+  return out;
+}
+function ddgItems(html, plan, provider) {
+  const source = String(html || "");
+  const out = [];
+  const seen = new Set();
+  const re = /<a[^>]+class=["'][^"']*result__a[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = re.exec(source))) {
+    const link = searchResultUrl(match[1]);
+    if (!link || Policy.platformFromHost(link) !== plan.platform || !contentKind(plan.platform, link)) continue;
+    const key = link.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      provider,
+      platform: plan.platform,
+      url: link,
+      sourceUrl: link,
+      latestContentUrl: link,
+      title: stripHtml(decodeXml(match[2])) || plan.platform + " public content",
+      entityKind: contentKind(plan.platform, link),
+      source: { name: provider, platform: plan.platform, mode: "public_post_search" }
+    });
+  }
+  return out;
+}
+async function directPublicPostSearch(plan, queryText, limit) {
+  if (!plan || plan.platform === "youtube") {
+    return { provider: "direct-public-post-search", status: "not_needed", items: [] };
+  }
+  const q = [queryText, CONTENT_SITE_FILTERS[plan.platform]].filter(Boolean).join(" ");
+  const wanted = Math.max(1, Math.min(30, Number(limit || 10) || 10));
+  const headers = {
+    Accept: "text/html,application/rss+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (compatible; IGDC-MARU-SocialHub/1.0)"
+  };
+  const jobs = [
+    withDeadline(
+      fetchText("https://www.bing.com/search?format=rss&q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
+      REQUEST_TIMEOUT_MS,
+      ""
+    ).then((xml) => ({ provider: "bing-rss-social", items: rssItems(xml, plan, "bing-rss-social") })).catch((error) => ({ provider: "bing-rss-social", items: [], error: error && error.message })),
+    withDeadline(
+      fetchText("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
+      REQUEST_TIMEOUT_MS,
+      ""
+    ).then((html) => ({ provider: "duckduckgo-html-social", items: ddgItems(html, plan, "duckduckgo-html-social") })).catch((error) => ({ provider: "duckduckgo-html-social", items: [], error: error && error.message }))
+  ];
+  const settled = await Promise.all(jobs);
+  const items = [];
+  const seen = new Set();
+  settled.forEach((result) => {
+    (result.items || []).forEach((item) => {
+      const url = SocialStore.text(item.latestContentUrl || item.sourceUrl || item.url).toLowerCase();
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      if (items.length < wanted) items.push(item);
+    });
+  });
+  return {
+    provider: "direct-public-post-search",
+    status: items.length ? "ok" : "empty",
+    items,
+    trace: settled.map((result) => ({ name: result.provider, status: result.error ? "error" : "ok", count: (result.items || []).length, error: result.error || null }))
+  };
+}
+
 async function maruSearchOne(event, plan, queryText, limit, language, start) {
   try {
     const result = await withDeadline(
@@ -919,7 +1022,7 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     tasks = [maruSearchOne(event, plan, queryText, limit, language, start)];
   }
   const settled = await Promise.allSettled(tasks);
-  const providers = settled.map((entry, index) => {
+  let providers = settled.map((entry, index) => {
     if (entry.status === "fulfilled") return entry.value;
     return {
       provider: "provider-group-" + providerGroup + "-" + index,
@@ -928,6 +1031,19 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
       items: []
     };
   });
+  // YouTube already owns a real-content RSS/Data-API path. For the other eight
+  // platforms, invoke the Social-only public-post fallback only when the normal
+  // provider group did not return even one genuine post/video URL. This avoids
+  // duplicate requests while preventing search-page passthroughs from collapsing
+  // the entire SNS section to zero.
+  if (plan.platform !== "youtube") {
+    const hasActualPost = providers.some((result) => (result.items || []).some((item) =>
+      candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
+    ));
+    if (!hasActualPost) {
+      providers = providers.concat([await directPublicPostSearch(plan, queryText, limit)]);
+    }
+  }
   return {
     query: queryText,
     items: providers.flatMap((result) => result.items || []),

@@ -47,14 +47,8 @@ function donationBlockedCountries() {
   } catch (_) {}
 
   const set = new Set(parseCountryList(raw));
-
-  /*
-   * Deployment safety floor only. The configured MARU_DONATION_BLOCK_COUNTRIES
-   * remains authoritative and may add any other restricted countries.
-   * This prevents known Donation-restricted countries from failing open when an
-   * Edge deployment does not receive the environment variable.
-   */
-  ["CN", "IR", "SY", "CU", "KP"].forEach((code) => set.add(code));
+  /* Keep the existing hard safety floor without replacing the configured OCS/SearchBank policy. */
+  set.add("KP");
   return set;
 }
 

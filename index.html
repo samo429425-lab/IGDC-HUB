@@ -4521,36 +4521,30 @@ function normLang(l){
 </script>
 <!-- /IGDC donation arrow nano-pin v6 -->
 
-<!-- IGDC donation navigation auth/country gate v4: request-IP + authoritative Donation policy -->
-<script id="igdc-donation-nav-gate-v4">
+<!-- IGDC donation navigation auth/country gate v1 -->
+<script id="igdc-donation-nav-gate-v1">
 (function(){
   'use strict';
-  if (window.__IGDC_DONATION_NAV_GATE_V4__) return;
-  window.__IGDC_DONATION_NAV_GATE_V4__ = true;
+  if (window.__IGDC_DONATION_NAV_GATE_V1__) return;
+  window.__IGDC_DONATION_NAV_GATE_V1__ = true;
 
-  var GEO_URL = '/__igdc-donation-country-geo';
-  var POLICY_URL = '/.netlify/functions/donation-country-policy';
+  var CLAIM_BLOCKED = 'https://igdcglobal.com/donation_blocked';
+  var GEO_URL = '/api/igdc-country-geo';
   var ROLE_KEYS = [
     'https://igdcglobal.com/roles', 'https://os.auth/roles', 'https://os0.app/roles',
     'https://example.com/roles', 'https://osu/roles', 'roles', 'role'
   ];
   var syncQueued = false;
   var repeatTimer = 0;
-  var decisionStarted = false;
-  var decisionReady = false;
-  var restrictedByIp = false;
-  var detectedCountry = '';
+  var geoPromise = null;
+  var geoState = { ready:false, excluded:false, country:'' };
+  var authGraceUntil = Date.now() + 2500;
 
   function normalize(value){
     return String(value == null ? '' : value)
       .trim()
       .toLowerCase()
       .replace(/[\s.]+/g, '_');
-  }
-
-  function countryCode(value){
-    var code = String(value == null ? '' : value).trim().toUpperCase();
-    return /^[A-Z]{2}$/.test(code) ? code : '';
   }
 
   function getPayload(){
@@ -4569,7 +4563,7 @@ function normLang(l){
 
   function isFresh(payload){
     var exp = Number(payload && payload.exp || 0);
-    return !!(payload && (!exp || exp * 1000 > Date.now() + 15000));
+    return !!(payload && exp && exp * 1000 > Date.now() + 15000);
   }
 
   function getRoles(payload){
@@ -4598,90 +4592,48 @@ function normLang(l){
     });
   }
 
-  function schedule(){
-    if (syncQueued) return;
-    syncQueued = true;
-    if (window.requestAnimationFrame) window.requestAnimationFrame(apply);
-    else setTimeout(apply, 0);
+  function isBlocked(payload){
+    var value = payload && payload[CLAIM_BLOCKED];
+    return value === true || String(value).toLowerCase() === 'true';
   }
 
-  function finishDecision(restricted, country){
-    restrictedByIp = restricted === true;
-    detectedCountry = countryCode(country) || detectedCountry;
-    decisionReady = true;
-    schedule();
-  }
-
-  function checkPolicy(country, edgeExcluded){
-    var code = countryCode(country);
-    if (edgeExcluded === true) {
-      finishDecision(true, code);
-      return;
-    }
-    if (!code) {
-      /* No country means the request-IP decision is genuinely unresolved; do not flash Donation. */
-      decisionReady = false;
-      schedule();
-      return;
-    }
-
-    fetch(POLICY_URL + '?country=' + encodeURIComponent(code), {
-      cache:'no-store',
-      credentials:'same-origin'
-    })
-      .then(function(res){
-        if (!res || !res.ok) throw new Error('donation_country_policy_http');
-        return res.json();
-      })
+  function loadGeo(){
+    if (geoPromise) return geoPromise;
+    geoPromise = fetch(GEO_URL, { cache:'no-store', credentials:'same-origin' })
+      .then(function(res){ return res && res.ok ? res.json() : null; })
       .then(function(data){
-        if (!data || data.ok !== true || countryCode(data.country) !== code) {
-          throw new Error('donation_country_policy_invalid');
-        }
-        finishDecision(data.restricted === true, code);
+        geoState.ready = true;
+        geoState.excluded = !!(data && data.excluded === true);
+        geoState.country = String(data && (data.detectedCountry || data.country) || '').toUpperCase();
+        return geoState;
       })
       .catch(function(){
-        /* Edge result remains a valid fallback; never convert an Edge block into allow. */
-        finishDecision(edgeExcluded === true, code);
+        /* Fail open: only a positively identified restricted country is blocked. */
+        geoState.ready = true;
+        geoState.excluded = false;
+        geoState.country = '';
+        return geoState;
       });
+    return geoPromise;
   }
 
-  function beginDecision(){
-    if (decisionStarted) return;
-    decisionStarted = true;
-
-    fetch(GEO_URL, { cache:'no-store', credentials:'same-origin' })
-      .then(function(res){
-        if (!res || !res.ok) throw new Error('donation_country_geo_http');
-        return res.json();
-      })
-      .then(function(data){
-        var code = countryCode(data && (data.detectedCountry || data.country));
-        detectedCountry = code;
-        checkPolicy(code, !!(data && data.excluded === true));
-      })
-      .catch(function(){
-        /* Without a request-IP country result there is no safe country decision. Keep hidden for non-admins. */
-        decisionReady = false;
-        restrictedByIp = false;
-        schedule();
-      });
-  }
-
-  function setAllowed(link, allowed){
-    /* Keep the original Donation anchor as the canonical gate state. */
-    link.style.display = allowed ? '' : 'none';
-    link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
-
-    /* The replacement overlay emoticon/arrow follows that same gate result 1:1. */
-    var arrow = document.getElementById('igdcDonationArrowTrigger');
-    if (arrow) {
-      arrow.style.display = allowed ? 'inline-flex' : 'none';
-      arrow.setAttribute('aria-hidden', allowed ? 'false' : 'true');
-      arrow.setAttribute('tabindex', allowed ? '0' : '-1');
-    }
-
-    if (allowed || decisionReady) document.documentElement.dataset.igdcDonationReady = '1';
-    else delete document.documentElement.dataset.igdcDonationReady;
+  function moveOffDonationRoute(){
+    try {
+      var route = (typeof detectPublicRoute === 'function') ? detectPublicRoute() : null;
+      var onDonationRoute = !!(route && Number(route.index) === 6) || /(?:^|\/)donation(?:_[^/?#]+)?(?:$|[/?#])/i.test(location.pathname || '');
+      if (!onDonationRoute) return;
+      var lang = (typeof currentLang !== 'undefined' && currentLang) ? currentLang : 'ko';
+      var homePage = (typeof pageMap !== 'undefined' && pageMap[lang] && pageMap[lang][0]) ? pageMap[lang][0] : 'home.html';
+      var frameTarget = (typeof withLanguage === 'function' && typeof framePageSrc === 'function')
+        ? withLanguage(framePageSrc(homePage), lang)
+        : '/home.html?lang=' + encodeURIComponent(lang);
+      var publicTarget = (typeof withLanguage === 'function' && typeof publicPageHref === 'function')
+        ? withLanguage(publicPageHref(homePage, 0), lang)
+        : '/home?lang=' + encodeURIComponent(lang);
+      if (typeof currentPageIndex !== 'undefined') currentPageIndex = 0;
+      try { history.replaceState({igdcPage:0, lang:lang, frameSrc:frameTarget}, '', publicTarget); } catch (_) {}
+      if (typeof restoreFrameWithoutHistory === 'function') restoreFrameWithoutHistory(frameTarget);
+    } catch (_) {}
   }
 
   function apply(){
@@ -4689,35 +4641,63 @@ function normLang(l){
     var link = document.querySelector('nav [data-igdc-donation-nav="1"]');
     if (!link) return;
 
-    beginDecision();
-
     var payload = getPayload();
     var authenticated = isFresh(payload);
     var roles = authenticated ? getRoles(payload) : [];
+    var privileged = authenticated && isOwnerOrAdmin(roles);
 
-    /* ONLY owner/admin/super_admin bypass the Donation country-IP restriction. */
-    if (authenticated && isOwnerOrAdmin(roles)) {
-      setAllowed(link, true);
-      return;
+    /* Owner/admin can inspect Donation even from a restricted country. */
+    if (privileged) {
+      link.style.display = '';
+      link.setAttribute('aria-hidden', 'false');
+    } else if (!geoState.ready) {
+      /* Do not guess before IP/country resolution; resolve and re-apply. */
+      link.style.display = 'none';
+      link.setAttribute('aria-hidden', 'true');
+      loadGeo().then(schedule);
+    } else {
+      var blockedByClaim = authenticated && isBlocked(payload);
+      var blockedByIp = geoState.excluded === true;
+      var blocked = blockedByClaim || blockedByIp;
+
+      /* On a restricted IP, briefly allow auth storage to surface an owner/admin token
+         before hard route redirect. Guests and ordinary members are then blocked. */
+      if (blockedByIp && !authenticated && Date.now() < authGraceUntil) {
+        link.style.display = 'none';
+        link.setAttribute('aria-hidden', 'true');
+        window.setTimeout(schedule, 150);
+      } else {
+        var allowed = !blocked;
+        link.style.display = allowed ? '' : 'none';
+        link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
+        if (blocked) moveOffDonationRoute();
+      }
     }
 
-    /* All other roles, members and guests wait for the actual request-IP decision. */
-    if (!decisionReady) {
-      setAllowed(link, false);
-      return;
+    /* The replacement arrow follows the original Donation menu state 1:1. */
+    var arrow = document.getElementById('igdcDonationArrowTrigger');
+    var menuAllowed = link.style.display !== 'none' && link.getAttribute('aria-hidden') !== 'true';
+    if (arrow) {
+      arrow.style.display = menuAllowed ? 'inline-flex' : 'none';
+      arrow.setAttribute('aria-hidden', menuAllowed ? 'false' : 'true');
+      arrow.setAttribute('tabindex', menuAllowed ? '0' : '-1');
     }
+    document.documentElement.dataset.igdcDonationReady = geoState.ready || privileged ? '1' : '0';
+  }
 
-    /* Non-admins are hidden exactly when the detected IP country is Donation-restricted. */
-    setAllowed(link, !restrictedByIp);
+  function schedule(){
+    if (syncQueued) return;
+    syncQueued = true;
+    if (window.requestAnimationFrame) window.requestAnimationFrame(apply);
+    else setTimeout(apply, 0);
   }
 
   function arm(){
-    beginDecision();
+    loadGeo().then(schedule);
     schedule();
     document.addEventListener('osauth:ready', schedule, true);
     document.addEventListener('osauth:done', schedule, true);
     document.addEventListener('igdc:member-auth-ready', schedule, true);
-    document.addEventListener('igdc:session-refresh-complete', schedule, true);
     window.addEventListener('pageshow', schedule);
     window.addEventListener('storage', schedule);
 
@@ -4738,7 +4718,7 @@ function normLang(l){
   }
 })();
 </script>
-<!-- /IGDC donation navigation auth/country gate v4 -->
+<!-- /IGDC donation navigation auth/country gate v1 -->
 </body>
 
 
