@@ -53,7 +53,6 @@ document.documentElement.setAttribute("data-igdc-donation-gate","pending");
 (function(){
   "use strict";
 
-  var BLOCK_CLAIM = "https://igdcglobal.com/donation_blocked";
   var GEO_URL = "/igdc-country-geo";
   var settled = false;
   var attempts = 0;
@@ -131,9 +130,9 @@ document.documentElement.setAttribute("data-igdc-donation-gate","pending");
         start();
       })
       .catch(function(){
-        /* Fail open: a country is restricted only when positively identified. */
+        /* Donation access is fail-closed when current-IP country resolution is unavailable. */
         geoReady = true;
-        geoExcluded = false;
+        geoExcluded = true;
         geoCountry = "";
         start();
       });
@@ -156,20 +155,6 @@ document.documentElement.setAttribute("data-igdc-donation-gate","pending");
     /* Management exception is intentional: owner/admin may inspect every country. */
     if (authenticated && isOwnerOrAdmin(roles)) {
       allow();
-      return true;
-    }
-
-    var payload = null;
-    if (authenticated) {
-      try{ payload = typeof auth.getIdTokenPayload === "function" ? auth.getIdTokenPayload() : null; }catch(e){}
-    }
-    var blockedByClaim = !!(
-      payload &&
-      Object.prototype.hasOwnProperty.call(payload, BLOCK_CLAIM) &&
-      (payload[BLOCK_CLAIM] === true || String(payload[BLOCK_CLAIM]).toLowerCase() === "true")
-    );
-    if (blockedByClaim) {
-      deny();
       return true;
     }
 
@@ -2628,7 +2613,7 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">후원</button>
+<button class="bc-tile orange" data-action="donate" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">후원</button>
 </section>
 <section class="hero">
 <h2>💝 글로벌 나눔허브 💝</h2>
@@ -2742,7 +2727,7 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER 카페</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">후원</button>
+<button class="button" data-action="donate" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">후원</button>
 <p><b>IESF (국제교류봉사단)</b><br/>
         - 일반: 농협 301-0078-3333-51<br/>
         - 외화: 농협 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>

@@ -28,25 +28,37 @@ function parseCountryList(value) {
   return text(value).split(/[|,\s]+/).map(countryCode).filter(Boolean);
 }
 
-function donationBlockedCountries() {
+function readEnv(name) {
   let raw = "";
   try {
-    if (typeof Netlify !== "undefined" && Netlify.env && typeof Netlify.env.get === "function") {
-      raw = Netlify.env.get("MARU_DONATION_BLOCK_COUNTRIES") || "";
-    }
+    if (typeof Netlify !== "undefined" && Netlify.env && typeof Netlify.env.get === "function") raw = Netlify.env.get(name) || "";
   } catch (_) {}
   try {
-    if (!raw && typeof Deno !== "undefined" && Deno.env && typeof Deno.env.get === "function") {
-      raw = Deno.env.get("MARU_DONATION_BLOCK_COUNTRIES") || "";
-    }
+    if (!raw && typeof Deno !== "undefined" && Deno.env && typeof Deno.env.get === "function") raw = Deno.env.get(name) || "";
   } catch (_) {}
   try {
-    if (!raw && typeof process !== "undefined" && process.env) {
-      raw = process.env.MARU_DONATION_BLOCK_COUNTRIES || "";
-    }
+    if (!raw && typeof process !== "undefined" && process.env) raw = process.env[name] || "";
   } catch (_) {}
+  return raw;
+}
 
-  const set = new Set(parseCountryList(raw));
+function donationBlockedByCountryPolicy(country) {
+  const raw = readEnv("MARU_BANK_COUNTRY_POLICY");
+  if (!raw || !country) return false;
+  let table = null;
+  try { table = JSON.parse(String(raw)); } catch (_) { return false; }
+  if (!table || typeof table !== "object") return false;
+  const row = table[country] || table[country.toUpperCase()] || table[country.toLowerCase()];
+  if (!row || typeof row !== "object") return false;
+  if (row.donation === false || row.noDonation === true) return true;
+  const channels = Array.isArray(row.blockChannels || row.blockedChannels)
+    ? (row.blockChannels || row.blockedChannels)
+    : text(row.blockChannels || row.blockedChannels).split(/[|,\s]+/);
+  return channels.some((value) => text(value).toLowerCase() === "donation");
+}
+
+function donationBlockedCountries() {
+  const set = new Set(parseCountryList(readEnv("MARU_DONATION_BLOCK_COUNTRIES")));
   /* Keep the existing hard safety floor without replacing the configured OCS/SearchBank policy. */
   set.add("KP");
   return set;
@@ -55,7 +67,7 @@ function donationBlockedCountries() {
 export default async function handler(_request, context) {
   const geo = context && context.geo && typeof context.geo === "object" ? context.geo : {};
   const country = countryCode(geo.country || geo.countryCode || geo.country_code);
-  const excluded = !!country && donationBlockedCountries().has(country);
+  const excluded = !!country && (donationBlockedCountries().has(country) || donationBlockedByCountryPolicy(country));
   const resolvedCountry = excluded ? "" : country;
   const region = resolvedCountry ? regionCode(
     geo.subdivision || geo.subdivisionCode || geo.regionCode || geo.stateCode || geo.provinceCode || geo.region || geo.state,

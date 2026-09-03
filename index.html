@@ -4490,7 +4490,6 @@ function normLang(l){
   if (window.__IGDC_DONATION_NAV_GATE_V1__) return;
   window.__IGDC_DONATION_NAV_GATE_V1__ = true;
 
-  var CLAIM_BLOCKED = 'https://igdcglobal.com/donation_blocked';
   var GEO_URL = '/igdc-country-geo';
   var ROLE_KEYS = [
     'https://igdcglobal.com/roles', 'https://os.auth/roles', 'https://os0.app/roles',
@@ -4522,9 +4521,7 @@ function normLang(l){
       }
     } catch (_) {}
 
-    /* Donation restriction is an OS0/Auth0 claim. Prefer whichever live payload actually carries it. */
-    if (memberPayload && Object.prototype.hasOwnProperty.call(memberPayload, CLAIM_BLOCKED)) return memberPayload;
-    if (osPayload && Object.prototype.hasOwnProperty.call(osPayload, CLAIM_BLOCKED)) return osPayload;
+    /* Auth payload is used only for owner/admin role exception; country is resolved from current IP. */
     return memberPayload || osPayload || null;
   }
 
@@ -4560,11 +4557,6 @@ function normLang(l){
     });
   }
 
-  function isBlocked(payload){
-    var value = payload && payload[CLAIM_BLOCKED];
-    return value === true || String(value).toLowerCase() === 'true';
-  }
-
   function loadGeo(){
     if (geoPromise) return geoPromise;
 
@@ -4596,9 +4588,9 @@ function normLang(l){
         return geoState;
       })
       .catch(function(){
-        /* Fail open: only a positively identified restricted country is blocked. */
+        /* Donation access is fail-closed when current-IP country resolution is unavailable. */
         geoState.ready = true;
-        geoState.excluded = false;
+        geoState.excluded = true;
         geoState.country = '';
         return geoState;
       })
@@ -4648,9 +4640,8 @@ function normLang(l){
       link.setAttribute('aria-hidden', 'true');
       loadGeo().then(schedule);
     } else {
-      var blockedByClaim = authenticated && isBlocked(payload);
       var blockedByIp = geoState.excluded === true;
-      var blocked = blockedByClaim || blockedByIp;
+      var blocked = blockedByIp;
 
       /* On a restricted IP, briefly allow auth storage to surface an owner/admin token
          before hard route redirect. Guests and ordinary members are then blocked. */
