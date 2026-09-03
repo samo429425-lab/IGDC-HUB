@@ -16,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.16.0-differentiated-report-deploy-dedupe";
+  "social-snapshot-publish-v1.17.0-main-reconcile";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -883,6 +883,11 @@ exports.handler = async function (event) {
         if (sectionKey && rowSection !== sectionKey) return false;
         return true;
       });
+      const authoritativeReconcile =
+        publishMode === "social_full_run" ||
+        publishMode === "all_sections_front_publish" ||
+        publishMode === "selected_sections_front_publish" ||
+        (publishMode === "single_section_front_publish" && candidateIds.length === 0);
       snapshot = SocialStore.buildSnapshot(
         base.doc,
         Array.isArray(rows) ? rows : [],
@@ -891,6 +896,9 @@ exports.handler = async function (event) {
           limitPerSection: params.limitPerSection,
           route,
           sectionKey,
+          requestedSections,
+          seedSnapshot: deployedBase.doc,
+          reconcileTargetSections: authoritativeReconcile,
         },
       );
     }
@@ -903,7 +911,7 @@ exports.handler = async function (event) {
     const hash = SocialStore.sha256(snapshot);
     const rotation = (snapshot.meta && snapshot.meta.rotation) || {};
     const eligible = Array.isArray(rows)
-      ? rows.filter(SocialStore.isApprovedForSnapshot).length
+      ? SocialStore.approvedContentRows(rows).length
       : 0;
     if (storeRelease && !unpublishSelected && eligible < 1) {
       return SocialStore.response(409, {

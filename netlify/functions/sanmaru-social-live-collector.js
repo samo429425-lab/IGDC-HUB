@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.16.0-registry-generic-execution-rescue";
+const VERSION = "sanmaru-social-live-collector-v1.16.1-main-content-alignment";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -1663,6 +1663,12 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     item && item.channel, item && item.publisher, source && typeof source === "object" && source.name,
     resolved.suggestedTitle
   ]).replace(/^(false|null|undefined)$/i, "") || firstText([resolved.suggestedTitle, title]);
+  if (platform === "facebook" && facebookPressPublisher([
+    title, creatorName, item && item.publisher,
+    source && typeof source === "object" && source.name, resolvedChannelUrl
+  ].filter(Boolean).join(" "))) {
+    return { ok: false, reason: "facebook_press_or_news_publisher_excluded" };
+  }
   const routeLanguages = route && route.languages || [];
   const explicitCountry = SocialStore.text(item && item.country).toUpperCase();
   // Creator origin is not a hard filter. The route remains a preference weight
@@ -1835,7 +1841,10 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
     }
     seenUrls.add(key);
     candidates.push(result.candidate);
-    if (result.influencer) influencers.push(result.influencer);
+    // Keep candidate/influencer arrays index-aligned. Non-YouTube public posts
+    // often have no resolvable creator profile; collapsing nulls here previously
+    // attached a later creator record to the wrong content row.
+    influencers.push(result.influencer || null);
   });
   return {
     candidates,
@@ -1897,7 +1906,7 @@ async function intakeCandidates(body, plan, route) {
     if (seen.has(key)) { rejected.push({ index: index + 1, reason: "duplicate_latest_content" }); continue; }
     seen.add(key);
     candidates.push(converted.candidate);
-    if (converted.influencer) influencers.push(converted.influencer);
+    influencers.push(converted.influencer || null);
   }
   return {
     candidates,
@@ -1968,7 +1977,7 @@ exports.handler = async function(event) {
         dryRun,
         inputLines: intake.lineCount,
         resolvedLatestContents: intake.candidates.length,
-        resolvedInfluencers: intake.influencers.length,
+        resolvedInfluencers: intake.influencers.filter(Boolean).length,
         submittedCandidates: selected.length,
         submittedRecords: submitted.length,
         rejectedRows: intake.rejected.length,
@@ -2027,17 +2036,26 @@ exports.handler = async function(event) {
     const rejected = resolved.rejected;
     const candidates = resolved.candidates;
     const policyAccepted = [];
-    candidates.forEach((candidate) => {
+    candidates.forEach((candidate, index) => {
       const verdict = AIPolicy.evaluate(candidate, aiPolicy);
-      if (verdict.ok) policyAccepted.push(candidate);
-      else rejected.push({ id: candidate && candidate.id, reason: verdict.reason });
+      if (verdict.ok) {
+        policyAccepted.push({
+          candidate,
+          influencer: resolved.influencers[index] || null,
+        });
+      } else {
+        rejected.push({ id: candidate && candidate.id, reason: verdict.reason });
+      }
     });
 
-    const selected = policyAccepted.slice(0, target);
+    // Keep the creator record bound to the exact content row even when AI
+    // policy rejects an earlier candidate and compacts the selected list.
+    const selectedPairs = policyAccepted.slice(0, target);
+    const selected = selectedPairs.map((pair) => pair.candidate);
     const submitted = [];
-    selected.forEach((candidate, index) => {
-      if (resolved.influencers[index]) submitted.push(resolved.influencers[index]);
-      submitted.push(candidate);
+    selectedPairs.forEach((pair) => {
+      if (pair.influencer) submitted.push(pair.influencer);
+      submitted.push(pair.candidate);
     });
     const gatewayResponse = await CandidateGateway.handler(
       gatewayEvent(event, submitted, sectionKey, dryRun, submitted.length || 1)
@@ -2085,7 +2103,7 @@ exports.handler = async function(event) {
       resolutionDeferredRows: resolved.deferredRows,
       directCandidates: candidates.length,
       submittedCandidates: selected.length,
-      submittedInfluencers: Math.min(selected.length, resolved.influencers.length),
+      submittedInfluencers: selectedPairs.filter((pair) => !!pair.influencer).length,
       submittedRecords: submitted.length,
       rejectedRows: rejected.length,
       rejectedByReason: rejectionSummary(rejected),

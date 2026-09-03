@@ -20,7 +20,7 @@ const SocialStore = require("./social-candidate-store.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const SearchBankEngine = require("../search-bank-engine");
 
-const VERSION = "social-searchbank-release-adapter-v1.7.0-dedicated-bank";
+const VERSION = "social-searchbank-release-adapter-v1.7.1-publish-eligibility";
 const RELEASE_FILE = "social-searchbank.release.snapshot.json";
 const REPORT_FILE = "social-pipeline.report.json";
 const SEARCH_BANK_FILE = "search-bank.snapshot.json";
@@ -698,8 +698,8 @@ async function selectExactPublicationCandidates(plan) {
       rejected.push({ id: request.id, sectionKey: request.sectionKey, actualSection, reason: "section_mismatch" });
       return;
     }
-    if (!SocialStore.isApprovedForSnapshot(row)) {
-      rejected.push({ id: request.id, sectionKey: request.sectionKey, reason: "candidate_no_longer_snapshot_eligible" });
+    if (!SocialStore.isPublishEligibleContentRow(row)) {
+      rejected.push({ id: request.id, sectionKey: request.sectionKey, reason: "candidate_no_longer_publish_eligible" });
       return;
     }
     accepted.push(row);

@@ -13,7 +13,7 @@ const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
 const VERSION =
-  "social-candidate-store-v1.8.2-content-first-eight-platform";
+  "social-candidate-store-v1.9.0-main-publish-reconcile";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1069,29 +1069,70 @@ function isApprovedInfluencer(row) {
     !!channelIdentity(r)
   );
 }
+function facebookSignedThumbnailExpiry(value) {
+  try {
+    const url = new URL(text(value));
+    if (!/(^|\.)fbcdn\.net$/i.test(url.hostname)) return 0;
+    const token = url.searchParams.get("oe");
+    if (!token || !/^[0-9a-f]+$/i.test(token)) return 0;
+    const seconds = parseInt(token, 16);
+    return Number.isFinite(seconds) ? seconds * 1000 : 0;
+  } catch (_e) {
+    return 0;
+  }
+}
+function publishableThumbnail(row) {
+  const r = plain(row);
+  const raw = plain(r.raw);
+  const platform = text(
+    r.platform || PLATFORM_BY_SECTION[lowerKey(r.section_key || r.sectionKey)],
+  );
+  const contentUrl = platformContentUrl(
+    platform,
+    raw.latestContentUrl ||
+      raw.latest_content_url ||
+      raw.sourceContentUrl ||
+      raw.source_content_url ||
+      plain(r.evidence).latestContentUrl ||
+      r.source_url ||
+      r.sourceUrl,
+  );
+  if (!contentUrl) return "";
+  const thumb = thumbnailFromCandidate(Object.assign({}, raw, r), {
+    platform,
+    sourceUrl: contentUrl,
+    thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
+  });
+  if (!/^https:\/\//i.test(thumb) || sameHttpsUrl(thumb, contentUrl)) return "";
+  if (/placeholder|\/assets\/sample\//i.test(thumb)) return "";
+  const expiry = facebookSignedThumbnailExpiry(thumb);
+  if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
+  return thumb;
+}
+function isPublishEligibleContentRow(row) {
+  const r = plain(row);
+  if (!isApprovedForSnapshot(r)) return false;
+  const section = lowerKey(r.section_key || r.sectionKey);
+  const platform = text(r.platform || PLATFORM_BY_SECTION[section]);
+  const raw = plain(r.raw);
+  const contentUrl = platformContentUrl(
+    platform,
+    raw.latestContentUrl ||
+      raw.latest_content_url ||
+      raw.sourceContentUrl ||
+      raw.source_content_url ||
+      plain(r.evidence).latestContentUrl ||
+      r.source_url ||
+      r.sourceUrl,
+  );
+  return !!contentUrl && !!publishableThumbnail(r);
+}
 function approvedContentRows(rows) {
-  const list = array(rows);
-  const registryBySection = {};
-  const approvedChannelsBySection = {};
-  list.forEach((row) => {
-    const section = lowerKey(row.section_key || row.sectionKey);
-    if (!section) return;
-    if (assetClassOf(row) === "influencer_registry") {
-      registryBySection[section] = true;
-      if (isApprovedInfluencer(row)) {
-        if (!approvedChannelsBySection[section])
-          approvedChannelsBySection[section] = new Set();
-        approvedChannelsBySection[section].add(channelIdentity(row));
-      }
-    }
-  });
-  return list.filter((row) => {
-    if (!isApprovedForSnapshot(row)) return false;
-    const section = lowerKey(row.section_key || row.sectionKey);
-    if (!registryBySection[section]) return true;
-    const channels = approvedChannelsBySection[section] || new Set();
-    return channels.has(channelIdentity(row));
-  });
+  // Influencer registry and latest-content publication are independent pools.
+  // A real approved post/video must not disappear merely because the platform
+  // hid its creator/profile identity from anonymous metadata. Publication is
+  // instead gated by the real platform content URL + durable thumbnail contract.
+  return array(rows).filter(isPublishEligibleContentRow);
 }
 function byRank(salt) {
   return function (a, b) {
@@ -1371,29 +1412,53 @@ function publicSocialSlot(row, slotId, defaults) {
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value == null ? {} : value));
 }
+function isPublishedSocialCandidateSlot(slot) {
+  const value = plain(slot);
+  return (
+    text(value.type) === "external_social" &&
+    text(plain(value.audit).origin) === "social_candidates"
+  );
+}
 function buildSnapshot(baseSnapshot, rows, options) {
   const opts = plain(options);
   const base = cloneJson(baseSnapshot || {});
+  const seed = cloneJson(opts.seedSnapshot || {});
   if (!base.pages) base.pages = {};
   if (!base.pages.social) base.pages.social = {};
   if (!base.pages.social.sections) base.pages.social.sections = {};
   const sections = base.pages.social.sections;
+  const seedSections = plain(
+    seed.pages && seed.pages.social && seed.pages.social.sections,
+  );
   const requestedSection = Policy.normalizeSectionKey(
     opts.sectionKey || opts.section || opts.targetSection,
+  );
+  const requestedSections = unique(
+    array(opts.requestedSections || opts.sectionKeys)
+      .map((value) => Policy.normalizeSectionKey(value))
+      .filter((value) => ALLOWED_SECTIONS.has(value)),
   );
   const targetSections =
     requestedSection && ALLOWED_SECTIONS.has(requestedSection)
       ? [requestedSection]
-      : Policy.SECTION_KEYS;
+      : requestedSections.length
+        ? requestedSections
+        : Policy.SECTION_KEYS;
+  const reconcileTargetSections = opts.reconcileTargetSections === true;
   const rotation = selectRotation(rows, opts);
   const approvedRows = approvedContentRows(rows);
   const filled = {};
+
   targetSections.forEach((sectionKey) => {
     const current = Array.isArray(sections[sectionKey])
       ? sections[sectionKey].slice()
       : [];
+    const seedList = Array.isArray(seedSections[sectionKey])
+      ? seedSections[sectionKey]
+      : [];
     const capacity = Math.max(
       current.length,
+      seedList.length,
       Number(
         opts.limitPerSection ||
           opts.publicSlotsPerSection ||
@@ -1402,33 +1467,77 @@ function buildSnapshot(baseSnapshot, rows, options) {
     );
     const next = [];
     for (let index = 0; index < capacity; index += 1) {
+      const fallback = sampleSlot(seedSections, sectionKey, index);
       next.push(
-        current[index]
-          ? Object.assign({}, current[index])
-          : {
-              id: "ph_" + sectionKey + "_" + String(index + 1).padStart(3, "0"),
-              type: "placeholder",
-              title: "Loading…",
-              url: "#",
-              source: { platform: "placeholder", section_key: sectionKey },
-            },
+        reconcileTargetSections
+          ? fallback
+          : current[index]
+            ? Object.assign({}, current[index])
+            : fallback,
       );
     }
+
     const selected = rotation.selected[sectionKey] || [];
-    selected.slice(0, capacity).forEach((row, index) => {
-      next[index] = publicSocialSlot(row, index + 1, next[index]);
-    });
+    if (reconcileTargetSections) {
+      selected.slice(0, capacity).forEach((row, index) => {
+        next[index] = publicSocialSlot(row, index + 1, next[index]);
+      });
+    } else {
+      // Incremental/selected-content publish: preserve unrelated live cards,
+      // update an already-published candidate in place, otherwise consume the
+      // first sample slot. This prevents duplicate cards and accidental removal
+      // of normal content that the administrator did not select.
+      const indexByCandidateId = new Map();
+      next.forEach((slot, index) => {
+        if (!isPublishedSocialCandidateSlot(slot)) return;
+        const id = slotCandidateId(slot);
+        if (id && !indexByCandidateId.has(id)) indexByCandidateId.set(id, index);
+      });
+      const used = new Set();
+      selected.slice(0, capacity).forEach((row) => {
+        const id = text(row && row.id);
+        let index = id && indexByCandidateId.has(id)
+          ? indexByCandidateId.get(id)
+          : -1;
+        if (index < 0 || used.has(index)) {
+          index = next.findIndex(
+            (slot, candidateIndex) =>
+              !used.has(candidateIndex) && !isPublishedSocialCandidateSlot(slot),
+          );
+        }
+        if (index < 0) return;
+        next[index] = publicSocialSlot(row, index + 1, next[index]);
+        used.add(index);
+        if (id) indexByCandidateId.set(id, index);
+      });
+    }
     sections[sectionKey] = next;
-    filled[sectionKey] = selected.length;
+    filled[sectionKey] = next.filter(isPublishedSocialCandidateSlot).length;
   });
+
   const candidatePool = plain(base.pages.social.candidatePool);
   const poolGroups = groupRowsBySection(approvedRows);
   targetSections.forEach((sectionKey) => {
-    candidatePool[sectionKey] = poolGroups[sectionKey]
+    const incoming = poolGroups[sectionKey]
       .slice()
       .sort(byRouteRank(opts.route || {}, rotation.rotationSalt))
       .slice(0, POOL_MAX_PER_SECTION)
       .map((row, index) => publicSocialSlot(row, index + 1, {}));
+    if (reconcileTargetSections) {
+      candidatePool[sectionKey] = incoming;
+      return;
+    }
+    const merged = [];
+    const seen = new Set();
+    incoming.concat(array(candidatePool[sectionKey])).forEach((slot) => {
+      const id = slotCandidateId(slot);
+      const url = text(plain(slot).sourceUrl || plain(slot).url).toLowerCase();
+      const key = id ? "id:" + id : url ? "url:" + url : "";
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      merged.push(slot);
+    });
+    candidatePool[sectionKey] = merged.slice(0, POOL_MAX_PER_SECTION);
   });
   base.pages.social.candidatePool = candidatePool;
   base.pages.social.countryRouting = {
@@ -1449,8 +1558,9 @@ function buildSnapshot(baseSnapshot, rows, options) {
     generatedAt: nowIso(),
     generatedBy: "social-snapshot-publish",
     source: "supabase.social_candidates",
-    samplePreservePolicy:
-      "Approved rotation candidates replace only their target slots; all remaining sample/placeholder slots are preserved.",
+    samplePreservePolicy: reconcileTargetSections
+      ? "Target SNS sections are recalculated from their permanent sample slots; publish-ready real content replaces samples and any vanished real content returns to its sample fallback."
+      : "Selected real content replaces only an available sample slot or its own existing slot; unrelated live content and all remaining sample slots are preserved.",
     excludedSections: ["social-maru", "rightPanel"],
     appliedSections: targetSections,
     applicationScope: {
@@ -1629,6 +1739,8 @@ module.exports = {
   isPromotable,
   summaryDoc,
   isApprovedForSnapshot,
+  isPublishEligibleContentRow,
+  publishableThumbnail,
   rowScore,
   selectRotation,
   publicSocialSlot,
