@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v2.4.0
+ * IGDC Social Network main-card viewer bridge v2.5.0
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -188,8 +188,13 @@
   }
 
   function tiktokVideoId(url) {
-    var m = text(url).match(/\/video\/(\d+)/i);
-    return m ? m[1] : '';
+    var raw = text(url);
+    var m = raw.match(/\/video\/(\d+)/i) || raw.match(/\/v\/(\d+)\.html(?:[?#]|$)/i);
+    if (m) return m[1];
+    try {
+      var u = new URL(raw, location.href);
+      return text(u.searchParams.get('item_id') || u.searchParams.get('video_id')).replace(/\D/g, '');
+    } catch (_) { return ''; }
   }
 
   function pinterestPinId(url) {
@@ -332,10 +337,11 @@
       '#igdcSocialViewerV2 .igsv-back,#igdcSocialViewerV2 .igsv-full{border:0;border-radius:9px;min-height:40px;padding:0 13px;background:#17191d;color:#fff;font:600 14px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;white-space:nowrap}' +
       '#igdcSocialViewerV2 .igsv-back{display:inline-flex;align-items:center;gap:7px}' +
       '#igdcSocialViewerV2 .igsv-title{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
-      '#igdcSocialViewerV2 .igsv-stage{position:relative;min-height:0;flex:1 1 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}' +
-      '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block}' +
-      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"]{align-items:center;justify-content:center;overflow:hidden}' +
-      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:absolute;left:50%;top:50%;width:750px;max-width:none;transform-origin:center center;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-stage{position:relative;min-height:0;flex:1 1 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}' +
+      '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block;flex:0 0 auto}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"]{align-items:flex-start;justify-content:center;overflow-x:auto;overflow-y:auto;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:relative;left:auto;top:auto;max-width:none;transform:none!important;transform-origin:top center;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-aspect="9/16"],#igdcSocialViewerV2 .igsv-stage[data-aspect="16/9"]{overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-stage[data-aspect="9/16"] .igsv-frame{width:min(100%,calc(100dvh * 9 / 16));max-width:720px}' +
       '#igdcSocialViewerV2 .igsv-stage[data-aspect="16/9"] .igsv-frame{width:100%;height:100%}' +
       '#igdcSocialViewerV2 .igsv-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:500 15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#ddd;background:#000}' +
@@ -408,15 +414,18 @@
 
   function sizeProviderFrame(stage, iframe, embed) {
     if (!stage || !iframe || !embed || embed.provider !== 'facebook-post') return;
-    var naturalWidth = 750;
     var rect = stage.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    var scale = Math.max(0.45, Math.min(2.4, rect.width / naturalWidth));
-    iframe.style.width = naturalWidth + 'px';
-    iframe.style.height = Math.max(420, Math.ceil(rect.height / scale)) + 'px';
-    iframe.style.left = '50%';
-    iframe.style.top = '50%';
-    iframe.style.transform = 'translate(-50%,-50%) scale(' + scale.toFixed(4) + ')';
+    /* Facebook's post plugin does not expose its cross-origin document height.
+       The old centered scale transform clipped everything below the first
+       viewport. Give the provider a real document-height iframe and let the
+       IGDC stage own vertical scrolling instead. */
+    var providerWidth = Number(iframe.__igdcFacebookWidth || 0) || Math.max(350, Math.min(750, Math.floor(rect.width)));
+    iframe.style.width = providerWidth + 'px';
+    iframe.style.height = Math.max(2200, Math.ceil(rect.height * 2.8)) + 'px';
+    iframe.style.left = 'auto';
+    iframe.style.top = 'auto';
+    iframe.style.transform = 'none';
   }
 
   function mountEmbed(root, embed, title) {
@@ -432,7 +441,18 @@
     if (embed.provider) stage.setAttribute('data-provider', embed.provider);
     var iframe = document.createElement('iframe');
     iframe.className = 'igsv-frame';
-    iframe.src = embed.src;
+    var frameSrc = embed.src;
+    if (embed.provider === 'facebook-post') {
+      var stageRect = stage.getBoundingClientRect();
+      var providerWidth = Math.max(350, Math.min(750, Math.floor(stageRect.width || 750)));
+      try {
+        var fbSrc = new URL(frameSrc, location.href);
+        fbSrc.searchParams.set('width', String(providerWidth));
+        frameSrc = fbSrc.toString();
+      } catch (_) {}
+      iframe.__igdcFacebookWidth = providerWidth;
+    }
+    iframe.src = frameSrc;
     iframe.title = title || 'Social content';
     iframe.loading = 'eager';
     iframe.referrerPolicy = 'strict-origin-when-cross-origin';

@@ -13,7 +13,7 @@ const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
 const VERSION =
-  "social-candidate-store-v1.9.0-main-publish-reconcile";
+  "social-candidate-store-v1.9.1-tiktok-url-compat";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -108,7 +108,7 @@ function platformContentUrl(platform, value) {
   let ok = false;
   if (p === "youtube") ok = host === "youtu.be" || (path === "/watch" && !!u.searchParams.get("v")) || /^\/(shorts|live|embed)\//i.test(path);
   else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
-  else if (p === "tiktok") ok = /\/video\/[^/]+/i.test(path);
+  else if (p === "tiktok") ok = /\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path);
   else if (p === "facebook") ok = /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (path === "/watch/" && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
   else if (p === "wechat") ok = /^\/s(?:\/|$)/i.test(path) || !!u.searchParams.get("__biz");
   else if (p === "weibo") ok = /^\/(detail|status|tv\/show)\//i.test(path) || /^\/\d+\/[a-z0-9]+/i.test(path);
@@ -134,7 +134,7 @@ function socialEmbedUrl(platform, value) {
     return match ? "https://www.instagram.com/" + (match[1].toLowerCase() === "reels" ? "reel" : match[1].toLowerCase()) + "/" + encodeURIComponent(match[2]) + "/embed/" : "";
   }
   if (p === "tiktok") {
-    match = path.match(/\/video\/(\d+)/i);
+    match = path.match(/\/video\/(\d+)/i) || path.match(/\/v\/(\d+)\.html(?:$|[?#])/i);
     return match ? "https://www.tiktok.com/player/v1/" + encodeURIComponent(match[1]) + "?autoplay=1" : "";
   }
   if (p === "facebook") {

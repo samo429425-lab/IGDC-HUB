@@ -53,6 +53,7 @@ document.documentElement.setAttribute("data-igdc-donation-gate","pending");
 (function(){
   "use strict";
 
+  var BLOCK_CLAIM = "https://igdcglobal.com/donation_blocked";
   var GEO_URL = "/igdc-country-geo";
   var settled = false;
   var attempts = 0;
@@ -155,6 +156,20 @@ document.documentElement.setAttribute("data-igdc-donation-gate","pending");
     /* Management exception is intentional: owner/admin may inspect every country. */
     if (authenticated && isOwnerOrAdmin(roles)) {
       allow();
+      return true;
+    }
+
+    var payload = null;
+    if (authenticated) {
+      try{ payload = typeof auth.getIdTokenPayload === "function" ? auth.getIdTokenPayload() : null; }catch(e){}
+    }
+    var blockedByClaim = !!(
+      payload &&
+      Object.prototype.hasOwnProperty.call(payload, BLOCK_CLAIM) &&
+      (payload[BLOCK_CLAIM] === true || String(payload[BLOCK_CLAIM]).toLowerCase() === "true")
+    );
+    if (blockedByClaim) {
+      deny();
       return true;
     }
 
@@ -4161,14 +4176,27 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
 </script>
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
 <style id="igdc-donation-section-menu-style">
-#donationSectionMenuBackdrop .donate-modal{max-width:560px;max-height:76vh;overflow:auto;}
-#donationSectionMenuBody{display:grid;gap:10px;}
-.donation-section-group{border-top:1px solid #e4e4e4;padding-top:8px;}
+#donationSectionMenuBackdrop .donate-modal{width:min(760px,94vw);max-width:760px;max-height:78vh;overflow:hidden;display:flex;flex-direction:column;}
+#donationSectionMenuBody{display:grid;gap:10px;overflow:auto;padding-right:2px;}
+.donation-section-group{border-top:1px solid #e4e4e4;padding-top:9px;min-width:0;}
 .donation-section-group:first-child{border-top:0;padding-top:0;}
-.donation-section-group h4{margin:0 0 6px;color:#004080;font-size:.95rem;}
-.donation-section-orgs{display:flex;gap:6px;flex-wrap:wrap;}
-.donation-section-orgs button{border:1px solid #d7b06d;border-radius:8px;background:#fff4e0;color:#704000;padding:7px 10px;cursor:pointer;}
+.donation-section-head{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+.donation-section-head h4{flex:0 0 92px;margin:0;color:#004080;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.donation-section-search{flex:1 1 auto;min-width:0;height:32px;border:1px solid #cfd7e3;border-radius:8px;padding:0 10px;font-size:.88rem;outline:none;background:#fff;}
+.donation-section-search:focus{border-color:#7096c7;box-shadow:0 0 0 2px rgba(0,64,128,.08);}
+.donation-section-rail-wrap{display:grid;grid-template-columns:30px minmax(0,1fr) 30px;align-items:center;gap:5px;}
+.donation-section-scroll{border:0;background:#f7f9fc;color:#004080;border-radius:50%;width:30px;height:30px;cursor:pointer;font-weight:900;line-height:1;}
+.donation-section-scroll:disabled{opacity:.28;cursor:default;}
+.donation-section-orgs{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;scrollbar-width:thin;padding:2px 1px 5px;min-width:0;}
+.donation-section-orgs button{flex:0 0 auto;max-width:220px;border:1px solid #d7b06d;border-radius:8px;background:#fff4e0;color:#704000;padding:7px 10px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.donation-section-count{margin:5px 0 0 130px;color:#777;font-size:.76rem;min-height:1em;}
 #donationSectionMenuEmpty{margin:4px 0;color:#666;}
+@media(max-width:640px){
+  #donationSectionMenuBackdrop .donate-modal{width:94vw;max-height:82vh;}
+  .donation-section-head{align-items:stretch;flex-direction:column;gap:5px;}
+  .donation-section-head h4{flex:none;width:100%;}
+  .donation-section-count{margin-left:0;}
+}
 </style>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donationSectionMenuBackdrop">
   <div aria-labelledby="donationSectionMenuTitle" aria-modal="true" class="donate-modal" role="dialog">
@@ -4193,6 +4221,17 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
     backdrop.setAttribute('aria-hidden','true');
   }
 
+  function normalizeText(value){
+    return String(value==null?'':value).trim().toLowerCase();
+  }
+
+  function updateButtons(rail,left,right){
+    if(!rail) return;
+    var max=Math.max(0,rail.scrollWidth-rail.clientWidth-2);
+    left.disabled=rail.scrollLeft<=2;
+    right.disabled=rail.scrollLeft>=max;
+  }
+
   function buildMenu(){
     body.innerHTML='';
     var total=0;
@@ -4203,39 +4242,83 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
       var label=(row&&row.querySelector('.row-label')&&row.querySelector('.row-label').textContent||key.replace(/^donation-/,'' )).trim();
       var seen={};
       var entries=[];
-      track.querySelectorAll('.donation-card').forEach(function(card){
-        var uid=String(card.getAttribute('data-uid')||'');
-        if(/^sample:/i.test(uid)) return;
+      track.querySelectorAll('.donation-card').forEach(function(card,index){
         var titleEl=card.querySelector('.card-title');
         var title=String(titleEl&&titleEl.textContent||card.getAttribute('aria-label')||'').trim();
         if(!title) return;
-        var dedupe=title.toLowerCase();
+        var dedupe=normalizeText(title);
         if(seen[dedupe]) return;
         seen[dedupe]=1;
-        entries.push({title:title,card:card});
+        entries.push({title:title,card:card,index:index+1});
       });
       if(!entries.length) return;
       total+=entries.length;
+
       var group=document.createElement('section');
       group.className='donation-section-group';
-      var head=document.createElement('h4');
-      head.textContent=label;
-      var actions=document.createElement('div');
-      actions.className='donation-section-orgs';
-      entries.forEach(function(entry){
-        var btn=document.createElement('button');
-        btn.type='button';
-        btn.textContent=entry.title;
-        btn.addEventListener('click',function(){
-          closeMenu();
-          try{ entry.card.scrollIntoView({behavior:'smooth',block:'center',inline:'nearest'}); }catch(_){ entry.card.scrollIntoView(); }
-          try{ entry.card.focus({preventScroll:true}); }catch(_){ try{ entry.card.focus(); }catch(__){} }
+
+      var head=document.createElement('div');
+      head.className='donation-section-head';
+      var title=document.createElement('h4');
+      title.textContent=label;
+      var search=document.createElement('input');
+      search.type='search';
+      search.className='donation-section-search';
+      search.placeholder=label+' 검색';
+      search.setAttribute('aria-label',label+' 기관·단체 검색');
+      head.appendChild(title);
+      head.appendChild(search);
+
+      var wrap=document.createElement('div');
+      wrap.className='donation-section-rail-wrap';
+      var left=document.createElement('button');
+      left.type='button';
+      left.className='donation-section-scroll';
+      left.setAttribute('aria-label',label+' 이전 목록');
+      left.textContent='‹';
+      var rail=document.createElement('div');
+      rail.className='donation-section-orgs';
+      var right=document.createElement('button');
+      right.type='button';
+      right.className='donation-section-scroll';
+      right.setAttribute('aria-label',label+' 다음 목록');
+      right.textContent='›';
+      wrap.appendChild(left);wrap.appendChild(rail);wrap.appendChild(right);
+
+      var count=document.createElement('div');
+      count.className='donation-section-count';
+
+      function render(query){
+        var q=normalizeText(query);
+        rail.innerHTML='';
+        var filtered=entries.filter(function(entry){ return !q||normalizeText(entry.title).indexOf(q)!==-1; });
+        filtered.forEach(function(entry){
+          var btn=document.createElement('button');
+          btn.type='button';
+          btn.textContent=entry.title;
+          btn.title=entry.title;
+          btn.addEventListener('click',function(){
+            closeMenu();
+            try{ entry.card.scrollIntoView({behavior:'smooth',block:'center',inline:'center'}); }catch(_){ entry.card.scrollIntoView(); }
+            try{ entry.card.focus({preventScroll:true}); }catch(_){ try{ entry.card.focus(); }catch(__){} }
+          });
+          rail.appendChild(btn);
         });
-        actions.appendChild(btn);
-      });
+        rail.scrollLeft=0;
+        count.textContent=q ? (filtered.length+'개 검색됨 / 전체 '+entries.length+'개') : ('전체 '+entries.length+'개');
+        window.requestAnimationFrame(function(){ updateButtons(rail,left,right); });
+      }
+
+      left.addEventListener('click',function(){ rail.scrollBy({left:-Math.max(220,rail.clientWidth*.78),behavior:'smooth'}); });
+      right.addEventListener('click',function(){ rail.scrollBy({left:Math.max(220,rail.clientWidth*.78),behavior:'smooth'}); });
+      rail.addEventListener('scroll',function(){ updateButtons(rail,left,right); },{passive:true});
+      search.addEventListener('input',function(){ render(search.value); });
+
       group.appendChild(head);
-      group.appendChild(actions);
+      group.appendChild(wrap);
+      group.appendChild(count);
       body.appendChild(group);
+      render('');
     });
     if(!total){
       var empty=document.createElement('p');

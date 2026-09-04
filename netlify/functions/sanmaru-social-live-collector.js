@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.16.1-main-content-alignment";
+const VERSION = "sanmaru-social-live-collector-v1.17.0-tiktok-metadata-recovery";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -32,7 +32,9 @@ const PROVIDER_GROUP_NAMES = Object.freeze([
 ]);
 const CHANNEL_RESOLUTION_TIMEOUT_MS = 1500;
 const PUBLIC_METADATA_TIMEOUT_MS = 1500;
+const TIKTOK_METADATA_TIMEOUT_MS = 3000;
 const CHANNEL_RESOLUTION_BUDGET_MS = 4200;
+const TIKTOK_CHANNEL_RESOLUTION_BUDGET_MS = 8500;
 const CHANNEL_RESOLUTION_CONCURRENCY = 4;
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 
@@ -95,7 +97,7 @@ const PUBLIC_DIRECTORY = Object.freeze({
 const CONTENT_SITE_FILTERS = Object.freeze({
   youtube: "(site:youtube.com/watch OR site:youtube.com/shorts/ OR site:youtu.be)",
   instagram: "(site:instagram.com/p/ OR site:instagram.com/reel/)",
-  tiktok: "site:tiktok.com/@ inurl:/video/",
+  tiktok: "site:tiktok.com/@ inurl:video",
   facebook: "(site:facebook.com/reel/ OR site:facebook.com/watch OR site:facebook.com/videos/ OR site:facebook.com/posts/)",
   wechat: "site:mp.weixin.qq.com/s",
   weibo: "(site:weibo.com/status/ OR site:m.weibo.cn/detail/)",
@@ -288,7 +290,7 @@ function contentKind(platform, value) {
       if (/^\/(shorts|live|embed)\/[^/]+/i.test(path)) return "latest_video";
     }
     if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
-    if (platform === "tiktok" && /\/video\/[^/]+/i.test(path)) return "latest_video";
+    if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path))) return "latest_video";
     if (platform === "facebook" && (/^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (path === "/watch/" && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
     if (platform === "wechat" && (/^\/s(?:\/|$)/i.test(path) || url.searchParams.get("__biz"))) return "latest_post";
     if (platform === "weibo" && (/^\/(status|detail|tv\/show)\//i.test(path) || /^\/\d+\/[a-z0-9]+/i.test(path))) return "latest_post";
@@ -1295,7 +1297,7 @@ async function publicOembed(platform, contentUrl) {
     const data = await fetchJson(
       endpoint + encodeURIComponent(contentUrl),
       { headers: { Accept: "application/json" } },
-      PUBLIC_METADATA_TIMEOUT_MS
+      platform === "tiktok" ? TIKTOK_METADATA_TIMEOUT_MS : PUBLIC_METADATA_TIMEOUT_MS
     );
     return {
       title: firstText([data.title]),
@@ -1401,7 +1403,7 @@ async function publicPageMetadata(platform, contentUrl) {
           "User-Agent": "Mozilla/5.0 (compatible; IGDC-MARU-SocialHub/1.0)"
         }
       },
-      PUBLIC_METADATA_TIMEOUT_MS
+      platform === "tiktok" ? TIKTOK_METADATA_TIMEOUT_MS : PUBLIC_METADATA_TIMEOUT_MS
     );
     const thumbnail = absoluteHttps(
       htmlMetaValue(html, [
@@ -1789,7 +1791,7 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
   const limit = Math.max(target, Math.min(48, target * 4));
   const selectedInputs = inputs.slice(0, limit);
   const converted = new Array(selectedInputs.length);
-  const deadline = Date.now() + CHANNEL_RESOLUTION_BUDGET_MS;
+  const deadline = Date.now() + (platform === "tiktok" ? TIKTOK_CHANNEL_RESOLUTION_BUDGET_MS : CHANNEL_RESOLUTION_BUDGET_MS);
   let cursor = 0;
   async function worker() {
     while (cursor < selectedInputs.length && Date.now() < deadline) {
@@ -1815,7 +1817,7 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
   }
   await Promise.all(
     Array.from(
-      { length: Math.min(CHANNEL_RESOLUTION_CONCURRENCY, selectedInputs.length || 1) },
+      { length: Math.min(platform === "tiktok" ? 5 : CHANNEL_RESOLUTION_CONCURRENCY, selectedInputs.length || 1) },
       worker
     )
   );
