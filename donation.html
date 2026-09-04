@@ -130,7 +130,7 @@ document.documentElement.setAttribute("data-igdc-donation-gate","pending");
         start();
       })
       .catch(function(){
-        /* Donation access is fail-closed when current-IP country resolution is unavailable. */
+        /* Do not expose Donation when current-IP country resolution is unavailable. */
         geoReady = true;
         geoExcluded = true;
         geoCountry = "";
@@ -2613,7 +2613,7 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" data-action="donate" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">후원</button>
+<button aria-controls="donationSectionMenuBackdrop" aria-haspopup="dialog" class="bc-tile orange" id="donationSectionMenuBtn" style="margin-left:8px" type="button">후원</button>
 </section>
 <section class="hero">
 <h2>💝 글로벌 나눔허브 💝</h2>
@@ -4160,6 +4160,102 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
 })();
 </script>
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
+<style id="igdc-donation-section-menu-style">
+#donationSectionMenuBackdrop .donate-modal{max-width:560px;max-height:76vh;overflow:auto;}
+#donationSectionMenuBody{display:grid;gap:10px;}
+.donation-section-group{border-top:1px solid #e4e4e4;padding-top:8px;}
+.donation-section-group:first-child{border-top:0;padding-top:0;}
+.donation-section-group h4{margin:0 0 6px;color:#004080;font-size:.95rem;}
+.donation-section-orgs{display:flex;gap:6px;flex-wrap:wrap;}
+.donation-section-orgs button{border:1px solid #d7b06d;border-radius:8px;background:#fff4e0;color:#704000;padding:7px 10px;cursor:pointer;}
+#donationSectionMenuEmpty{margin:4px 0;color:#666;}
+</style>
+<div aria-hidden="true" class="donate-modal-backdrop" id="donationSectionMenuBackdrop">
+  <div aria-labelledby="donationSectionMenuTitle" aria-modal="true" class="donate-modal" role="dialog">
+    <h3 id="donationSectionMenuTitle">후원 기관·단체 선택</h3>
+    <div id="donationSectionMenuBody"></div>
+    <button class="donate-close" id="donationSectionMenuClose" type="button">닫기</button>
+  </div>
+</div>
+<script id="igdc-donation-section-menu-js">
+(function(){
+  'use strict';
+  var trigger=document.getElementById('donationSectionMenuBtn');
+  var backdrop=document.getElementById('donationSectionMenuBackdrop');
+  var body=document.getElementById('donationSectionMenuBody');
+  var closeBtn=document.getElementById('donationSectionMenuClose');
+  if(!trigger||!backdrop||!body) return;
+
+  var sectionKeys=['donation-ngo','donation-mission','donation-service','donation-relief','donation-education','donation-environment','donation-others'];
+
+  function closeMenu(){
+    backdrop.style.display='none';
+    backdrop.setAttribute('aria-hidden','true');
+  }
+
+  function buildMenu(){
+    body.innerHTML='';
+    var total=0;
+    sectionKeys.forEach(function(key){
+      var track=document.querySelector('[data-psom-key="'+key+'"]');
+      if(!track) return;
+      var row=track.closest('.feed-row');
+      var label=(row&&row.querySelector('.row-label')&&row.querySelector('.row-label').textContent||key.replace(/^donation-/,'' )).trim();
+      var seen={};
+      var entries=[];
+      track.querySelectorAll('.donation-card').forEach(function(card){
+        var uid=String(card.getAttribute('data-uid')||'');
+        if(/^sample:/i.test(uid)) return;
+        var titleEl=card.querySelector('.card-title');
+        var title=String(titleEl&&titleEl.textContent||card.getAttribute('aria-label')||'').trim();
+        if(!title) return;
+        var dedupe=title.toLowerCase();
+        if(seen[dedupe]) return;
+        seen[dedupe]=1;
+        entries.push({title:title,card:card});
+      });
+      if(!entries.length) return;
+      total+=entries.length;
+      var group=document.createElement('section');
+      group.className='donation-section-group';
+      var head=document.createElement('h4');
+      head.textContent=label;
+      var actions=document.createElement('div');
+      actions.className='donation-section-orgs';
+      entries.forEach(function(entry){
+        var btn=document.createElement('button');
+        btn.type='button';
+        btn.textContent=entry.title;
+        btn.addEventListener('click',function(){
+          closeMenu();
+          try{ entry.card.scrollIntoView({behavior:'smooth',block:'center',inline:'nearest'}); }catch(_){ entry.card.scrollIntoView(); }
+          try{ entry.card.focus({preventScroll:true}); }catch(_){ try{ entry.card.focus(); }catch(__){} }
+        });
+        actions.appendChild(btn);
+      });
+      group.appendChild(head);
+      group.appendChild(actions);
+      body.appendChild(group);
+    });
+    if(!total){
+      var empty=document.createElement('p');
+      empty.id='donationSectionMenuEmpty';
+      empty.textContent='등록된 후원 기관·단체가 아직 없습니다.';
+      body.appendChild(empty);
+    }
+  }
+
+  trigger.addEventListener('click',function(ev){
+    if(ev) ev.preventDefault();
+    buildMenu();
+    backdrop.style.display='flex';
+    backdrop.setAttribute('aria-hidden','false');
+  });
+  if(closeBtn) closeBtn.addEventListener('click',closeMenu);
+  backdrop.addEventListener('click',function(ev){ if(ev.target===backdrop) closeMenu(); });
+  document.addEventListener('keydown',function(ev){ if(ev.key==='Escape'&&backdrop.getAttribute('aria-hidden')==='false') closeMenu(); });
+})();
+</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
 <div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
 <h3 id="donateModalTitle">후원 단체 선택</h3>

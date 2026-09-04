@@ -4201,6 +4201,12 @@ function normLang(l){
 
   #igdcDonationArrowTrigger { display:none; }
   html:not([data-igdc-donation-ready="1"]) #igdcDonationArrowTrigger { display:none !important; }
+  html[data-igdc-donation-allowed="0"] #igdcDonationArrowTrigger,
+  html[data-igdc-donation-allowed="0"] #igdcDonationArrowTip {
+    display:none !important;
+    visibility:hidden !important;
+    pointer-events:none !important;
+  }
 
   /* Arrow first, original couple-heart character second. Slightly overlaid below nav is allowed. */
   #igdcDonationArrowTrigger{
@@ -4521,7 +4527,7 @@ function normLang(l){
       }
     } catch (_) {}
 
-    /* Auth payload is used only for owner/admin role exception; country is resolved from current IP. */
+    /* Auth payload is used only for the owner/admin/super_admin exception. */
     return memberPayload || osPayload || null;
   }
 
@@ -4588,7 +4594,7 @@ function normLang(l){
         return geoState;
       })
       .catch(function(){
-        /* Donation access is fail-closed when current-IP country resolution is unavailable. */
+        /* Do not expose Donation when current-IP country resolution is unavailable. */
         geoState.ready = true;
         geoState.excluded = true;
         geoState.country = '';
@@ -4657,13 +4663,28 @@ function normLang(l){
       }
     }
 
-    /* The replacement arrow follows the original Donation menu state 1:1. */
+    /* The replacement artwork is a visual successor of the original Donation menu gate. */
     var arrow = document.getElementById('igdcDonationArrowTrigger');
+    var tip = document.getElementById('igdcDonationArrowTip');
     var menuAllowed = link.style.display !== 'none' && link.getAttribute('aria-hidden') !== 'true';
+    document.documentElement.dataset.igdcDonationAllowed = menuAllowed ? '1' : '0';
     if (arrow) {
-      arrow.style.display = menuAllowed ? 'inline-flex' : 'none';
+      arrow.hidden = !menuAllowed;
+      if (menuAllowed) {
+        arrow.style.removeProperty('display');
+        arrow.style.display = 'inline-flex';
+      } else {
+        arrow.style.setProperty('display', 'none', 'important');
+      }
       arrow.setAttribute('aria-hidden', menuAllowed ? 'false' : 'true');
       arrow.setAttribute('tabindex', menuAllowed ? '0' : '-1');
+    }
+    if (!menuAllowed && tip) {
+      tip.classList.remove('is-visible');
+      tip.style.setProperty('display', 'none', 'important');
+      tip.setAttribute('aria-hidden', 'true');
+    } else if (menuAllowed && tip) {
+      tip.style.removeProperty('display');
     }
     document.documentElement.dataset.igdcDonationReady = geoState.ready || privileged ? '1' : '0';
   }
