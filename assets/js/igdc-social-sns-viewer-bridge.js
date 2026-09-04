@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v2.5.0
+ * IGDC Social Network main-card viewer bridge v2.6.0
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -339,8 +339,10 @@
       '#igdcSocialViewerV2 .igsv-title{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-stage{position:relative;min-height:0;flex:1 1 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}' +
       '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block;flex:0 0 auto}' +
-      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"]{align-items:flex-start;justify-content:center;overflow-x:auto;overflow-y:auto;background:#fff}' +
-      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:relative;left:auto;top:auto;max-width:none;transform:none!important;transform-origin:top center;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"]{align-items:stretch;justify-content:stretch;overflow:hidden;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-shell{position:relative;width:100%;height:100%;overflow:auto;background:#fff;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-canvas{position:relative;margin:0 auto;transform-origin:top left;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:absolute;left:0;top:0;max-width:none;transform:none!important;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-stage[data-aspect="9/16"],#igdcSocialViewerV2 .igsv-stage[data-aspect="16/9"]{overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-stage[data-aspect="9/16"] .igsv-frame{width:min(100%,calc(100dvh * 9 / 16));max-width:720px}' +
       '#igdcSocialViewerV2 .igsv-stage[data-aspect="16/9"] .igsv-frame{width:100%;height:100%}' +
@@ -408,6 +410,8 @@
     if (!stage) return;
     var frame = q('.igsv-frame', stage);
     if (frame) frame.remove();
+    var shell = q('.igsv-fb-shell', stage);
+    if (shell) shell.remove();
     stage.setAttribute('data-aspect', 'auto');
     stage.removeAttribute('data-provider');
   }
@@ -416,16 +420,36 @@
     if (!stage || !iframe || !embed || embed.provider !== 'facebook-post') return;
     var rect = stage.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    /* Facebook's post plugin does not expose its cross-origin document height.
-       The old centered scale transform clipped everything below the first
-       viewport. Give the provider a real document-height iframe and let the
-       IGDC stage own vertical scrolling instead. */
+
+    /* Facebook only exposes an embeddable POST document, not the full facebook.com
+       page. Its provider width tops out at 750px. Scale that official document to
+       the IGDC viewer width, but keep a real scroll container and a viewport-sized
+       iframe so the user sees a browser-filling document rather than a tiny card
+       floating above a large blank canvas. */
     var providerWidth = Number(iframe.__igdcFacebookWidth || 0) || Math.max(350, Math.min(750, Math.floor(rect.width)));
+    var scale = Math.max(1, rect.width / providerWidth);
+    var rawHeight = Math.max(520, Math.ceil(rect.height / scale));
+    var shell = iframe.closest('.igsv-fb-shell');
+    var canvas = iframe.closest('.igsv-fb-canvas');
+
     iframe.style.width = providerWidth + 'px';
-    iframe.style.height = Math.max(2200, Math.ceil(rect.height * 2.8)) + 'px';
-    iframe.style.left = 'auto';
-    iframe.style.top = 'auto';
+    iframe.style.height = rawHeight + 'px';
+    iframe.style.left = '0';
+    iframe.style.top = '0';
     iframe.style.transform = 'none';
+
+    if (canvas) {
+      canvas.style.width = providerWidth + 'px';
+      canvas.style.height = rawHeight + 'px';
+      canvas.style.transform = 'scale(' + scale + ')';
+      canvas.style.transformOrigin = 'top left';
+      canvas.style.margin = '0';
+    }
+    if (shell) {
+      shell.style.width = '100%';
+      shell.style.height = '100%';
+      shell.scrollTop = Math.min(shell.scrollTop, Math.max(0, rawHeight * scale - rect.height));
+    }
   }
 
   function mountEmbed(root, embed, title) {
@@ -465,7 +489,17 @@
       sizeProviderFrame(stage, iframe, embed);
       showStatus('');
     }, { once: true });
-    stage.appendChild(iframe);
+    if (embed.provider === 'facebook-post') {
+      var shell = document.createElement('div');
+      shell.className = 'igsv-fb-shell';
+      var canvas = document.createElement('div');
+      canvas.className = 'igsv-fb-canvas';
+      canvas.appendChild(iframe);
+      shell.appendChild(canvas);
+      stage.appendChild(shell);
+    } else {
+      stage.appendChild(iframe);
+    }
     sizeProviderFrame(stage, iframe, embed);
     iframe.__igdcSocialEmbed = embed;
 

@@ -4528,7 +4528,7 @@ function normLang(l){
       }
     } catch (_) {}
 
-    /* Preserve the original OS0/Auth0 Donation decision when it is present. */
+    /* Preserve the existing OS0/Auth0 Donation decision whenever that claim is present. */
     if (memberPayload && Object.prototype.hasOwnProperty.call(memberPayload, CLAIM_BLOCKED)) return memberPayload;
     if (osPayload && Object.prototype.hasOwnProperty.call(osPayload, CLAIM_BLOCKED)) return osPayload;
     return memberPayload || osPayload || null;
@@ -4566,9 +4566,24 @@ function normLang(l){
     });
   }
 
+  function blockedClaimValue(value){
+    if (value === true || value === 1) return true;
+    if (value === false || value === 0 || value == null) return false;
+    if (typeof value === 'object') {
+      if (Object.prototype.hasOwnProperty.call(value, 'blocked')) return blockedClaimValue(value.blocked);
+      if (Object.prototype.hasOwnProperty.call(value, 'excluded')) return blockedClaimValue(value.excluded);
+      if (Object.prototype.hasOwnProperty.call(value, 'value')) return blockedClaimValue(value.value);
+      return false;
+    }
+    var v = String(value).trim().toLowerCase();
+    if (!v || v === 'false' || v === '0' || v === 'no' || v === 'off' || v === 'allow' || v === 'allowed' || v === 'unblocked') return false;
+    return v === 'true' || v === '1' || v === 'yes' || v === 'on' ||
+           v === 'block' || v === 'blocked' || v === 'deny' || v === 'denied' ||
+           v === 'restrict' || v === 'restricted' || v === 'exclude' || v === 'excluded';
+  }
+
   function isBlocked(payload){
-    var value = payload && payload[CLAIM_BLOCKED];
-    return value === true || String(value).toLowerCase() === 'true';
+    return !!(payload && Object.prototype.hasOwnProperty.call(payload, CLAIM_BLOCKED) && blockedClaimValue(payload[CLAIM_BLOCKED]));
   }
 
   function loadGeo(){
@@ -4589,7 +4604,6 @@ function normLang(l){
         if (!res || !res.ok) throw new Error('geo-http');
         var contentType = String(res.headers && res.headers.get('content-type') || '').toLowerCase();
         if (contentType.indexOf('application/json') === -1) {
-          /* A SPA/index.html fallback is not a geo response. Do not consume its large body. */
           try { if (res.body && typeof res.body.cancel === 'function') res.body.cancel(); } catch (_) {}
           throw new Error('geo-non-json');
         }
@@ -4602,7 +4616,7 @@ function normLang(l){
         return geoState;
       })
       .catch(function(){
-        /* Do not expose Donation when current-IP country resolution is unavailable. */
+        /* Donation-only fail-closed: never expose the shortcut on an unresolved current-IP check. */
         geoState.ready = true;
         geoState.excluded = true;
         geoState.country = '';
@@ -4634,29 +4648,32 @@ function normLang(l){
     } catch (_) {}
   }
 
-  function mirrorOverlayFromNav(link){
-    if (!link) return;
-    /* The old Donation nav gate remains the single source of truth. The artwork only mirrors it. */
-    var menuAllowed = link.style.display !== 'none' && link.getAttribute('aria-hidden') !== 'true';
+  function applyUi(link, allowed){
+    if (link) {
+      link.style.display = allowed ? '' : 'none';
+      link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
+    }
+
+    document.documentElement.dataset.igdcDonationAllowed = allowed ? '1' : '0';
+
     var arrow = document.getElementById('igdcDonationArrowTrigger');
     var tip = document.getElementById('igdcDonationArrowTip');
-    document.documentElement.dataset.igdcDonationAllowed = menuAllowed ? '1' : '0';
     if (arrow) {
-      arrow.hidden = !menuAllowed;
-      if (menuAllowed) {
+      arrow.hidden = !allowed;
+      if (allowed) {
         arrow.style.removeProperty('display');
         arrow.style.display = 'inline-flex';
       } else {
         arrow.style.setProperty('display', 'none', 'important');
       }
-      arrow.setAttribute('aria-hidden', menuAllowed ? 'false' : 'true');
-      arrow.setAttribute('tabindex', menuAllowed ? '0' : '-1');
+      arrow.setAttribute('aria-hidden', allowed ? 'false' : 'true');
+      arrow.setAttribute('tabindex', allowed ? '0' : '-1');
     }
-    if (!menuAllowed && tip) {
+    if (!allowed && tip) {
       tip.classList.remove('is-visible');
       tip.style.setProperty('display', 'none', 'important');
       tip.setAttribute('aria-hidden', 'true');
-    } else if (menuAllowed && tip) {
+    } else if (allowed && tip) {
       tip.style.removeProperty('display');
     }
   }
@@ -4671,36 +4688,34 @@ function normLang(l){
     var roles = authenticated ? getRoles(payload) : [];
     var privileged = authenticated && isOwnerOrAdmin(roles);
 
-    /* Owner/admin can inspect Donation even from a restricted country. */
     if (privileged) {
-      link.style.display = '';
-      link.setAttribute('aria-hidden', 'false');
-    } else if (!geoState.ready) {
-      /* Do not guess before IP/country resolution; resolve and re-apply. */
-      link.style.display = 'none';
-      link.setAttribute('aria-hidden', 'true');
-      loadGeo().then(schedule);
-    } else {
-      var blockedByClaim = authenticated && isBlocked(payload);
-      var blockedByIp = geoState.excluded === true;
-      var blocked = blockedByClaim || blockedByIp;
-
-      /* On a restricted IP, briefly allow auth storage to surface an owner/admin token
-         before hard route redirect. Guests and ordinary members are then blocked. */
-      if (blockedByIp && !authenticated && Date.now() < authGraceUntil) {
-        link.style.display = 'none';
-        link.setAttribute('aria-hidden', 'true');
-        window.setTimeout(schedule, 150);
-      } else {
-        var allowed = !blocked;
-        link.style.display = allowed ? '' : 'none';
-        link.setAttribute('aria-hidden', allowed ? 'false' : 'true');
-        if (blocked) moveOffDonationRoute();
-      }
+      /* owner/admin/super_admin is the only restricted-country UI exception. */
+      applyUi(link, true);
+      document.documentElement.dataset.igdcDonationReady = '1';
+      return;
     }
 
-    mirrorOverlayFromNav(link);
-    document.documentElement.dataset.igdcDonationReady = geoState.ready || privileged ? '1' : '0';
+    if (!geoState.ready) {
+      /* Pre-hide the old menu and its replacement artwork until current IP is resolved. */
+      applyUi(link, false);
+      document.documentElement.dataset.igdcDonationReady = '0';
+      loadGeo().then(schedule);
+      return;
+    }
+
+    var blockedByClaim = authenticated && isBlocked(payload);
+    var blockedByIp = geoState.excluded === true;
+    var blocked = blockedByClaim || blockedByIp;
+
+    applyUi(link, !blocked);
+    document.documentElement.dataset.igdcDonationReady = '1';
+
+    if (blockedByIp && !authenticated && Date.now() < authGraceUntil) {
+      /* Keep hidden immediately, but give a late owner/admin token a short startup grace period. */
+      window.setTimeout(schedule, 150);
+      return;
+    }
+    if (blocked) moveOffDonationRoute();
   }
 
   function schedule(){
@@ -4711,23 +4726,20 @@ function normLang(l){
   }
 
   function arm(){
+    /* Hide first. The same Donation-only gate then makes one current-IP check. */
+    var link = document.querySelector('nav [data-igdc-donation-nav="1"]');
+    applyUi(link, false);
     loadGeo().then(schedule);
     schedule();
     document.addEventListener('osauth:ready', schedule, true);
     document.addEventListener('osauth:done', schedule, true);
     document.addEventListener('igdc:member-auth-ready', schedule, true);
+    document.addEventListener('igdc:auth-storage-ready', schedule, true);
+    document.addEventListener('igdc:session-refresh-complete', schedule, true);
     window.addEventListener('pageshow', schedule);
     window.addEventListener('storage', schedule);
 
-    try {
-      var donationLink = document.querySelector('nav [data-igdc-donation-nav="1"]');
-      if (donationLink && window.MutationObserver) {
-        new MutationObserver(function(){ mirrorOverlayFromNav(donationLink); })
-          .observe(donationLink, { attributes:true, attributeFilter:['style','aria-hidden','hidden','class'] });
-      }
-    } catch (_) {}
-
-    /* One late-auth safety resync replaces the former 40-pass/30-second polling loop. */
+    /* One late-auth safety resync only; no 30-second Donation polling loop. */
     window.setTimeout(schedule, 1800);
   }
 
