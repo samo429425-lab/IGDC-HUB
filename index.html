@@ -4506,6 +4506,10 @@ function normLang(l){
   var geoPromise = null;
   var geoState = { ready:false, excluded:false, country:'' };
   var authGraceUntil = Date.now() + 2500;
+  /* Live OS0/Auth0 Donation restriction handed to index through auth events.
+     null means no explicit event signal has been observed on this page yet. */
+  var liveDonationBlocked = null;
+  var lastGeoRefreshAt = 0;
 
   function normalize(value){
     return String(value == null ? '' : value)
@@ -4584,6 +4588,33 @@ function normLang(l){
 
   function isBlocked(payload){
     return !!(payload && Object.prototype.hasOwnProperty.call(payload, CLAIM_BLOCKED) && blockedClaimValue(payload[CLAIM_BLOCKED]));
+  }
+
+  function decodeEventIdToken(token){
+    try {
+      var parts = String(token || '').split('.');
+      if (parts.length < 2) return null;
+      var value = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (value.length % 4) value += '=';
+      return JSON.parse(window.atob(value));
+    } catch (_) { return null; }
+  }
+
+  function payloadFromAuthEvent(ev){
+    var detail = ev && ev.detail;
+    if (!detail || typeof detail !== 'object') return null;
+    if (detail.payload && typeof detail.payload === 'object') return detail.payload;
+    var tokens = detail.tokens && typeof detail.tokens === 'object' ? detail.tokens : null;
+    if (tokens) return decodeEventIdToken(tokens.id_token || tokens.idToken || '');
+    return null;
+  }
+
+  function captureDonationSignal(ev){
+    var payload = payloadFromAuthEvent(ev);
+    if (payload && Object.prototype.hasOwnProperty.call(payload, CLAIM_BLOCKED)) {
+      liveDonationBlocked = blockedClaimValue(payload[CLAIM_BLOCKED]);
+    }
+    schedule();
   }
 
   function loadGeo(){
@@ -4703,7 +4734,11 @@ function normLang(l){
       return;
     }
 
-    var blockedByClaim = authenticated && isBlocked(payload);
+    /* If OS0/Auth0 has explicitly handed index a Donation decision, use that
+       exact live signal. Otherwise preserve the existing token-claim fallback. */
+    var blockedByClaim = (liveDonationBlocked !== null)
+      ? liveDonationBlocked
+      : (authenticated && isBlocked(payload));
     var blockedByIp = geoState.excluded === true;
     var blocked = blockedByClaim || blockedByIp;
 
@@ -4725,19 +4760,65 @@ function normLang(l){
     else setTimeout(apply, 0);
   }
 
+  function refreshCurrentIp(){
+    var now = Date.now();
+    /* focus + visibilitychange can fire together; collapse them into one GEO read. */
+    if (now - lastGeoRefreshAt < 1200) { schedule(); return; }
+    lastGeoRefreshAt = now;
+
+    /* A signed-in owner/admin never needs a country check to keep Donation visible. */
+    var payload = getPayload();
+    var privileged = isFresh(payload) && isOwnerOrAdmin(getRoles(payload));
+    if (privileged) {
+      var privilegedLink = document.querySelector('nav [data-igdc-donation-nav="1"]');
+      applyUi(privilegedLink, true);
+      document.documentElement.dataset.igdcDonationReady = '1';
+      return;
+    }
+
+    if (geoPromise && !geoState.ready) { schedule(); return; }
+    geoPromise = null;
+    geoState = { ready:false, excluded:false, country:'' };
+    var link = document.querySelector('nav [data-igdc-donation-nav="1"]');
+    applyUi(link, false);
+    document.documentElement.dataset.igdcDonationReady = '0';
+    loadGeo().then(schedule);
+  }
+
   function arm(){
     /* Hide first. The same Donation-only gate then makes one current-IP check. */
     var link = document.querySelector('nav [data-igdc-donation-nav="1"]');
     applyUi(link, false);
-    loadGeo().then(schedule);
+    refreshCurrentIp();
     schedule();
-    document.addEventListener('osauth:ready', schedule, true);
-    document.addEventListener('osauth:done', schedule, true);
+
+    /* Consume the actual OS0/Auth0 event payload instead of only re-reading storage. */
+    document.addEventListener('osauth:ready', captureDonationSignal, true);
+    document.addEventListener('osauth:done', captureDonationSignal, true);
+    document.addEventListener('igdc:auth-storage-ready', captureDonationSignal, true);
+    document.addEventListener('igdc:session-refresh-complete', captureDonationSignal, true);
     document.addEventListener('igdc:member-auth-ready', schedule, true);
-    document.addEventListener('igdc:auth-storage-ready', schedule, true);
-    document.addEventListener('igdc:session-refresh-complete', schedule, true);
-    window.addEventListener('pageshow', schedule);
-    window.addEventListener('storage', schedule);
+    window.addEventListener('storage', refreshCurrentIp);
+
+    /* A VPN/network switch can leave the SPA shell alive. Re-check current IP only
+       on real page/network return signals; there is no Donation polling loop. */
+    window.addEventListener('pageshow', refreshCurrentIp);
+    window.addEventListener('focus', refreshCurrentIp);
+    window.addEventListener('online', refreshCurrentIp);
+    window.addEventListener('popstate', refreshCurrentIp);
+    document.addEventListener('visibilitychange', function(){
+      if (!document.hidden) refreshCurrentIp();
+    });
+    document.addEventListener('click', function(ev){
+      var node = ev && ev.target;
+      var link = node && typeof node.closest === 'function' ? node.closest('nav a[data-page-index]') : null;
+      if (link) refreshCurrentIp();
+    }, true);
+    try {
+      if (navigator.connection && typeof navigator.connection.addEventListener === 'function') {
+        navigator.connection.addEventListener('change', refreshCurrentIp);
+      }
+    } catch (_) {}
 
     /* One late-auth safety resync only; no 30-second Donation polling loop. */
     window.setTimeout(schedule, 1800);

@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v2.6.0
+ * IGDC Social Network main-card viewer bridge v2.6.1
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -428,7 +428,16 @@
        floating above a large blank canvas. */
     var providerWidth = Number(iframe.__igdcFacebookWidth || 0) || Math.max(350, Math.min(750, Math.floor(rect.width)));
     var scale = Math.max(1, rect.width / providerWidth);
-    var rawHeight = Math.max(520, Math.ceil(rect.height / scale));
+
+    /* The Facebook post plugin does not publish its cross-origin document height
+       back to IGDC. A viewport-derived 520px frame can therefore cut the post
+       exactly where the caption/body begins. Keep enough provider-side document
+       height for image + text and reserve visible breathing room below the post. */
+    var visibleRawHeight = Math.ceil(rect.height / scale);
+    var rawHeight = Math.max(900, visibleRawHeight + 180);
+    var bottomReservePx = Math.max(120, Math.min(220, Math.round(rect.height * 0.22)));
+    var bottomReserveRaw = Math.max(1, Math.ceil(bottomReservePx / scale));
+    var canvasRawHeight = rawHeight + bottomReserveRaw;
     var shell = iframe.closest('.igsv-fb-shell');
     var canvas = iframe.closest('.igsv-fb-canvas');
 
@@ -440,7 +449,7 @@
 
     if (canvas) {
       canvas.style.width = providerWidth + 'px';
-      canvas.style.height = rawHeight + 'px';
+      canvas.style.height = canvasRawHeight + 'px';
       canvas.style.transform = 'scale(' + scale + ')';
       canvas.style.transformOrigin = 'top left';
       canvas.style.margin = '0';
@@ -448,7 +457,7 @@
     if (shell) {
       shell.style.width = '100%';
       shell.style.height = '100%';
-      shell.scrollTop = Math.min(shell.scrollTop, Math.max(0, rawHeight * scale - rect.height));
+      shell.scrollTop = Math.min(shell.scrollTop, Math.max(0, canvasRawHeight * scale - rect.height));
     }
   }
 
