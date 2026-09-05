@@ -4605,7 +4605,7 @@ function normLang(l){
   var geoPromise = null;
   var geoController = null;
   var geoGeneration = 0;
-  var geoState = { ready:false, excluded:true, country:'' };
+  var geoState = { ready:false, allowed:false, excluded:true, country:'' };
   /* Live OS0/Auth0 Donation restriction handed to index through auth events.
      null means no explicit event signal has been observed on this page yet. */
   var liveDonationBlocked = null;
@@ -4780,7 +4780,7 @@ function normLang(l){
     }
     geoController = null;
     geoPromise = null;
-    geoState = { ready:false, excluded:true, country:'' };
+    geoState = { ready:false, allowed:false, excluded:true, country:'' };
   }
 
   function loadGeo(){
@@ -4811,17 +4811,21 @@ function normLang(l){
       .then(function(data){
         /* Ignore any GEO response that belongs to an older auth/VPN/network state. */
         if (generation !== geoGeneration) return null;
+        var detectedCountry = String(data && (data.detectedCountry || data.country) || '').toUpperCase();
         geoState = {
           ready:true,
+          /* Positive allow only. A 200/JSON response or excluded:false alone is
+             not an allow decision for an unauthenticated guest. */
+          allowed:!!(data && data.donationAllowed === true && detectedCountry),
           excluded:!!(data && data.excluded === true),
-          country:String(data && (data.detectedCountry || data.country) || '').toUpperCase()
+          country:detectedCountry
         };
         return geoState;
       })
       .catch(function(){
         if (generation !== geoGeneration) return null;
         /* Donation-only fail-closed: an unresolved current-IP check never reveals the shortcut. */
-        geoState = { ready:true, excluded:true, country:'' };
+        geoState = { ready:true, allowed:false, excluded:true, country:'' };
         return geoState;
       })
       .then(function(state){
@@ -4909,7 +4913,7 @@ function normLang(l){
       return;
     }
 
-    var currentIpAllowed = geoState.excluded === false;
+    var currentIpAllowed = geoState.ready === true && geoState.allowed === true && !!geoState.country;
     var restrictedByOs0 = liveDonationBlocked === true ||
       (authenticated && isBlocked(livePayload));
     var allowed = currentIpAllowed && !restrictedByOs0;

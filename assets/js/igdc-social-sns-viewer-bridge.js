@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v2.9.0
+ * IGDC Social Network main-card viewer bridge v3.0.0
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -372,7 +372,7 @@
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"]{align-items:stretch;justify-content:stretch;overflow:hidden;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-shell{position:relative;width:100%;height:100%;overflow:auto;background:#fff;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-canvas{position:relative;margin:0 auto;transform-origin:top left;background:#fff}' +
-      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:absolute;left:0;top:0;max-width:none;transform:none!important;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:absolute;left:0;top:0;z-index:2;max-width:none;transform:none!important;background:#fff;pointer-events:auto;touch-action:auto}' +
       '#igdcSocialViewerV2 .igsv-status{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:500 15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#ddd;background:#000}' +
       '#igdcSocialViewerV2 .igsv-status[hidden]{display:none}' +
       '#igdcSocialViewerV2 .igsv-stage:fullscreen{width:100vw;height:100vh;background:#000}' +
@@ -390,6 +390,7 @@
       '#igdcSocialViewerV2 .igsv-yt-action.is-primary{background:#0f0f0f;color:#fff}' +
       '#igdcSocialViewerV2 .igsv-yt-action[aria-disabled=true]{opacity:.72}' +
       '#igdcSocialViewerV2 .igsv-yt-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 0}' +
+      '#igdcSocialViewerV2 .igsv-provider-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:14px;padding:14px 0 2px;border-top:1px solid #e5e7eb}' +
       '#igdcSocialViewerV2 .igsv-yt-views{margin-right:auto;color:#444;font:600 14px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-yt-oauth-hint{display:none;margin:6px 0 0;color:#666;font:500 12px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-yt-oauth-hint.show{display:block}' +
@@ -405,7 +406,7 @@
       '#igdcSocialViewerV2 .igsv-yt-comment-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-yt-comment-text.expanded{display:block;overflow:visible}' +
       '#igdcSocialViewerV2 .igsv-yt-comment-more,#igdcSocialViewerV2 .igsv-yt-comments-toggle{border:0;background:transparent;color:#111;font:700 13px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;padding:6px 0}' +
-      '#igdcSocialViewerV2 .igsv-yt-comments-toggle{margin-top:8px;font-size:14px}' +
+      '#igdcSocialViewerV2 .igsv-yt-comments-toggle{margin:0 0 0 2px;font-size:14px;white-space:nowrap}' +
       '#igdcSocialViewerV2 .igsv-yt-note{margin-top:8px}' +
       '@media(max-width:768px){#igdcSocialViewerV2 .igsv-toolbar{height:52px;flex-basis:52px;padding:0 8px;gap:7px}#igdcSocialViewerV2 .igsv-back,#igdcSocialViewerV2 .igsv-full{min-height:38px;padding:0 10px;font-size:13px}#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(640px,calc(100dvh - 52px - 56px));min-height:640px}#igdcSocialViewerV2 .igsv-detail{padding:16px}#igdcSocialViewerV2 .igsv-detail-title{font-size:18px}}';
     (document.head || document.documentElement).appendChild(s);
@@ -530,6 +531,45 @@
     btn.className = 'igsv-yt-action' + (extraClass ? ' ' + extraClass : '');
     btn.textContent = label;
     return btn;
+  }
+
+  function mountProviderUtilityActions(detail, platform, title, sourceUrl) {
+    if (!detail || platform === 'youtube') return;
+    var tools = document.createElement('div');
+    tools.className = 'igsv-provider-tools';
+
+    var shareBtn = makeActionButton('↗ ' + labels().ytShare);
+    shareBtn.addEventListener('click', function () {
+      shareSource(title || platform || document.title, sourceUrl || state.lastUrl || '', shareBtn);
+    });
+    tools.appendChild(shareBtn);
+
+    var saveBtn = makeActionButton((isSavedUrl(sourceUrl || state.lastUrl || '') ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave));
+    saveBtn.addEventListener('click', function () {
+      var target = sourceUrl || state.lastUrl || '';
+      var saved = toggleSavedUrl(target);
+      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave;
+    });
+    tools.appendChild(saveBtn);
+
+    detail.appendChild(tools);
+  }
+
+  function iframeSandboxFor(platform, embed) {
+    var strict = 'allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads';
+    /* WeChat/Weibo are direct third-party pages, not IGDC-generated provider embed
+       documents. Keep their sandbox strict. Official provider embeds need their own
+       user-activated popup/modal/storage flows for login and interaction. Facebook's
+       post plugin additionally routes Like/Reaction/Comment/Share through a
+       user-activated top-level navigation handshake in some browser/login states.
+       Grant that capability ONLY to Facebook and ONLY after a real user gesture;
+       automatic top navigation remains blocked by the sandbox token itself. */
+    if (embed && embed.restrictedProvider) return strict;
+    var allowed = strict + ' allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation';
+    if (platform === 'facebook' || (embed && /^facebook-/.test(String(embed.provider || '')))) {
+      allowed += ' allow-top-navigation-by-user-activation';
+    }
+    return allowed;
   }
 
   function showOAuthHint(box) {
@@ -729,6 +769,26 @@
     select.addEventListener('change', function () { loadYouTubeDetail(detail, state.lastUrl || '', select.value); });
     sortWrap.appendChild(select);
     head.appendChild(sortWrap);
+
+    /* Keep the comment expand/collapse control beside the comment count and
+       sort control. Users should never have to scroll to the end of a long
+       comment list just to collapse it again. */
+    var commentsToggle = null;
+    if (comments.length > 3) {
+      commentsToggle = makeText('button', 'igsv-yt-comments-toggle', labels().ytOpenComments);
+      commentsToggle.type = 'button';
+      commentsToggle.addEventListener('click', function () {
+        var hidden = q('.igsv-yt-comment.is-hidden', commentsBox);
+        var open = !!hidden;
+        Array.prototype.forEach.call(commentsBox.querySelectorAll('.igsv-yt-comment'), function (node, index) {
+          node.classList.toggle('is-hidden', open ? false : index >= 3);
+        });
+        commentsToggle.textContent = open ? labels().ytCloseComments : labels().ytOpenComments;
+        commentsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+      commentsToggle.setAttribute('aria-expanded', 'false');
+      head.appendChild(commentsToggle);
+    }
     commentsBox.appendChild(head);
 
     var compose = document.createElement('div');
@@ -774,19 +834,6 @@
       commentsBox.appendChild(item);
     });
 
-    if (comments.length > 3) {
-      var commentsToggle = makeText('button', 'igsv-yt-comments-toggle', labels().ytOpenComments);
-      commentsToggle.type = 'button';
-      commentsToggle.addEventListener('click', function () {
-        var hidden = q('.igsv-yt-comment.is-hidden', commentsBox);
-        var open = !!hidden;
-        Array.prototype.forEach.call(commentsBox.querySelectorAll('.igsv-yt-comment'), function (node, index) {
-          node.classList.toggle('is-hidden', open ? false : index >= 3);
-        });
-        commentsToggle.textContent = open ? labels().ytCloseComments : labels().ytOpenComments;
-      });
-      commentsBox.appendChild(commentsToggle);
-    }
     box.appendChild(commentsBox);
     box.appendChild(makeText('div', 'igsv-yt-note', labels().ytPublicNote));
   }
@@ -892,8 +939,10 @@
     iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write; web-share';
     iframe.setAttribute('allowfullscreen', '');
     if (embed.provider === 'facebook-post') iframe.setAttribute('scrolling', 'yes');
-    /* Prevent provider content from opening popups or navigating IGDC's top window. */
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads');
+    /* Official provider embeds need their own user-initiated login/share dialogs for
+       native reactions, comments and sharing. The sandbox remains in place and still
+       omits allow-top-navigation, so the IGDC host page cannot be replaced. */
+    iframe.setAttribute('sandbox', iframeSandboxFor(platform, embed));
     iframe.addEventListener('load', function () {
       sizeProviderFrame(stage, iframe, embed);
       showStatus('');
@@ -930,6 +979,7 @@
       var detail = buildDetail(title || platform, description || '', platform);
       content.appendChild(detail);
       if (platform === 'youtube') loadYouTubeDetail(detail, state.lastUrl || '', 'relevance');
+      else mountProviderUtilityActions(detail, platform, title || platform, state.lastUrl || '');
 
       var safeSpace = document.createElement('div');
       safeSpace.className = 'igsv-safe-space';

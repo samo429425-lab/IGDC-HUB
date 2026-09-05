@@ -107,6 +107,30 @@ function countryPolicyBlocksDonation(country) {
   return false;
 }
 
+function donationPolicyReadyFor(country) {
+  if (!country) return false;
+
+  /* The existing global Donation block-list is itself a complete negative
+     policy: if it is configured, a country not in the list is positively allowed. */
+  const blockRaw = readEnv("MARU_DONATION_BLOCK_COUNTRIES");
+  if (text(blockRaw)) return true;
+
+  /* If the global list is not available in the Edge runtime, only an explicit
+     existing SearchBank country-policy row can make a guest-country decision. */
+  const raw = readEnv("MARU_BANK_COUNTRY_POLICY");
+  if (!raw) return false;
+  const policy = typeof raw === "object" ? raw : parseJson(raw);
+  if (!policy || typeof policy !== "object") return false;
+  const tables = [policy, policy.markets, policy.countries, policy.countryPolicy, policy.policies];
+  for (const table of tables) {
+    if (!table || typeof table !== "object") continue;
+    if (Object.prototype.hasOwnProperty.call(table, country) ||
+        Object.prototype.hasOwnProperty.call(table, country.toUpperCase()) ||
+        Object.prototype.hasOwnProperty.call(table, country.toLowerCase())) return true;
+  }
+  return false;
+}
+
 function donationBlockedCountries() {
   const set = new Set(parseCountryList(readEnv("MARU_DONATION_BLOCK_COUNTRIES")));
   /* Keep the existing hard safety floor without replacing configured policy. */
@@ -117,10 +141,15 @@ function donationBlockedCountries() {
 export default async function handler(_request, context) {
   const geo = context && context.geo && typeof context.geo === "object" ? context.geo : {};
   const country = countryCode(geo.country || geo.countryCode || geo.country_code);
-  const excluded = !!country && (
+  const blockedByPolicy = !!country && (
     donationBlockedCountries().has(country) ||
     countryPolicyBlocksDonation(country)
   );
+  const excluded = blockedByPolicy;
+  const donationPolicyReady = donationPolicyReadyFor(country);
+  /* Guest visibility is positive-allow only: both current country and the
+     existing Donation policy source must be resolved before revealing UI. */
+  const donationAllowed = !!country && donationPolicyReady && !blockedByPolicy;
   const resolvedCountry = excluded ? "" : country;
   const region = resolvedCountry ? regionCode(
     geo.subdivision || geo.subdivisionCode || geo.regionCode || geo.stateCode || geo.provinceCode || geo.region || geo.state,
@@ -133,7 +162,9 @@ export default async function handler(_request, context) {
     region: region || null,
     resolved: !!resolvedCountry,
     excluded,
-    detectedCountry: country || null
+    detectedCountry: country || null,
+    donationPolicyReady,
+    donationAllowed
   };
   return new Response(JSON.stringify(payload), {
     status: 200,
