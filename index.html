@@ -4649,6 +4649,32 @@ function normLang(l){
     return false;
   }
 
+  /* Donation privilege must follow the one live OS0/Auth0 session that drives
+     the header Login/Logout button.  Do not grant owner/admin bypass from any
+     legacy/member-auth fallback token that can survive after logout. */
+  function getLiveOsPayload(){
+    try {
+      if (!window.osAuth || typeof window.osAuth.isAuthenticated !== 'function') return null;
+      if (!window.osAuth.isAuthenticated()) return null;
+      if (typeof window.osAuth.getIdTokenPayload !== 'function') return null;
+      var payload = window.osAuth.getIdTokenPayload() || null;
+      return isFresh(payload) ? payload : null;
+    } catch (_) { return null; }
+  }
+
+  function rolesFromPayloadOnly(payload){
+    var roles = [];
+    ROLE_KEYS.forEach(function(key){
+      var value = payload && payload[key];
+      if (Array.isArray(value)) {
+        value.forEach(function(role){ roles.push(normalize(role)); });
+      } else if (typeof value === 'string') {
+        value.split(',').forEach(function(role){ roles.push(normalize(role)); });
+      }
+    });
+    return roles.filter(Boolean);
+  }
+
   function getRoles(payload){
     try {
       if (window.IGDCMemberAuth && typeof window.IGDCMemberAuth.getRoles === 'function') {
@@ -4830,10 +4856,9 @@ function normLang(l){
     var link = document.querySelector('nav [data-igdc-donation-nav="1"]');
     if (!link) return;
 
-    var payload = getPayload();
-    var authenticated = hasAuthenticatedSession(payload);
-    var roles = authenticated ? getRoles(payload) : [];
-    var privileged = authenticated && isOwnerOrAdmin(roles);
+    var livePayload = getLiveOsPayload();
+    var authenticated = !!livePayload;
+    var privileged = authenticated && isOwnerOrAdmin(rolesFromPayloadOnly(livePayload));
 
     if (!geoState.ready) {
       /* Hide first for everybody until the current-IP Donation decision exists. */
@@ -4848,7 +4873,7 @@ function normLang(l){
        + NOT owner/admin/super_admin => hide/deny, regardless of guest/member/other role. */
     var restricted = geoState.excluded === true ||
       liveDonationBlocked === true ||
-      (authenticated && isBlocked(payload));
+      (authenticated && isBlocked(livePayload));
     var allowed = privileged || !restricted;
 
     applyUi(link, allowed);
@@ -4871,8 +4896,8 @@ function normLang(l){
     lastGeoRefreshAt = now;
 
     /* A signed-in owner/admin never needs a country check to keep Donation visible. */
-    var payload = getPayload();
-    var privileged = hasAuthenticatedSession(payload) && isOwnerOrAdmin(getRoles(payload));
+    var livePayload = getLiveOsPayload();
+    var privileged = !!livePayload && isOwnerOrAdmin(rolesFromPayloadOnly(livePayload));
     if (privileged) {
       var privilegedLink = document.querySelector('nav [data-igdc-donation-nav="1"]');
       applyUi(privilegedLink, true);

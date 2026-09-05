@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v2.7.0
+ * IGDC Social Network main-card viewer bridge v2.8.0
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -37,7 +37,9 @@
     previousFocus: null,
     closingFromHistory: false,
     lastUrl: '',
-    platform: ''
+    platform: '',
+    parentTopState: null,
+    youtubeDetailToken: 0
   };
 
   function text(v) { return v == null ? '' : String(v); }
@@ -70,11 +72,11 @@
   }
 
   var LABELS = {
-    ko: { list: '목록으로', fullscreen: '전체 화면', exitFullscreen: '전체 화면 종료', loading: '콘텐츠를 불러오는 중입니다.', unavailable: '이 콘텐츠는 현재 내부 재생을 준비할 수 없습니다.' },
-    en: { list: 'Back to list', fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', loading: 'Loading content…', unavailable: 'This content cannot currently be prepared for in-site playback.' },
-    ja: { list: '一覧へ', fullscreen: '全画面', exitFullscreen: '全画面を終了', loading: 'コンテンツを読み込み中です。', unavailable: 'このコンテンツは現在サイト内再生を準備できません。' },
-    zh: { list: '返回列表', fullscreen: '全屏', exitFullscreen: '退出全屏', loading: '正在加载内容。', unavailable: '此内容目前无法在站内准备播放。' },
-    zht:{ list: '返回列表', fullscreen: '全螢幕', exitFullscreen: '退出全螢幕', loading: '正在載入內容。', unavailable: '此內容目前無法在站內準備播放。' }
+    ko: { list: '목록으로', fullscreen: '전체 화면', exitFullscreen: '전체 화면 종료', loading: '콘텐츠를 불러오는 중입니다.', unavailable: '이 콘텐츠는 현재 내부 재생을 준비할 수 없습니다.', ytChecking:'YouTube 상세 정보를 확인하는 중입니다.', ytDetailUnavailable:'YouTube 공개 상세 정보를 불러오지 못해 현재 저장된 제목·설명만 표시합니다.', ytSubscriber:'구독자', ytViews:'조회수', ytLikes:'좋아요', ytComments:'댓글', ytOpenComments:'펼쳐보기', ytPublicNote:'조회수·좋아요·댓글은 YouTube 공개 데이터입니다. 구독·좋아요 변경 및 댓글 작성은 YouTube 계정 OAuth 없이는 IGDC 내부에서 실행하지 않습니다.' },
+    en: { list: 'Back to list', fullscreen: 'Fullscreen', exitFullscreen: 'Exit fullscreen', loading: 'Loading content…', unavailable: 'This content cannot currently be prepared for in-site playback.', ytChecking:'Loading YouTube details…', ytDetailUnavailable:'YouTube public details are unavailable; showing the stored title and description.', ytSubscriber:'Subscribers', ytViews:'Views', ytLikes:'Likes', ytComments:'Comments', ytOpenComments:'Show', ytPublicNote:'Views, likes and comments are public YouTube data. Subscribe/like changes and comment posting require YouTube account OAuth and are not executed inside IGDC without it.' },
+    ja: { list: '一覧へ', fullscreen: '全画面', exitFullscreen: '全画面を終了', loading: 'コンテンツを読み込み中です。', unavailable: 'このコンテンツは現在サイト内再生を準備できません。', ytChecking:'YouTubeの詳細を読み込み中です。', ytDetailUnavailable:'YouTubeの公開詳細を取得できないため、保存済みのタイトルと説明を表示します。', ytSubscriber:'登録者', ytViews:'視聴回数', ytLikes:'高評価', ytComments:'コメント', ytOpenComments:'表示', ytPublicNote:'視聴回数・高評価・コメントはYouTubeの公開データです。登録・高評価の変更やコメント投稿にはYouTube OAuthが必要です。' },
+    zh: { list: '返回列表', fullscreen: '全屏', exitFullscreen: '退出全屏', loading: '正在加载内容。', unavailable: '此内容目前无法在站内准备播放。', ytChecking:'正在加载 YouTube 详细信息。', ytDetailUnavailable:'无法获取 YouTube 公开详细信息，显示已保存的标题和说明。', ytSubscriber:'订阅者', ytViews:'观看次数', ytLikes:'点赞', ytComments:'评论', ytOpenComments:'展开', ytPublicNote:'观看次数、点赞和评论来自 YouTube 公开数据。订阅、点赞变更及发表评论需要 YouTube OAuth。' },
+    zht:{ list: '返回列表', fullscreen: '全螢幕', exitFullscreen: '退出全螢幕', loading: '正在載入內容。', unavailable: '此內容目前無法在站內準備播放。', ytChecking:'正在載入 YouTube 詳細資訊。', ytDetailUnavailable:'無法取得 YouTube 公開詳細資訊，顯示已儲存的標題與說明。', ytSubscriber:'訂閱者', ytViews:'觀看次數', ytLikes:'喜歡', ytComments:'留言', ytOpenComments:'展開', ytPublicNote:'觀看次數、喜歡和留言來自 YouTube 公開資料。訂閱、喜歡變更及留言發佈需要 YouTube OAuth。' }
   };
   function labels() { return LABELS[language()] || LABELS.en; }
 
@@ -339,15 +341,34 @@
       '#igdcSocialViewerV2 .igsv-title{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-stage{position:relative;min-height:0;flex:1 1 auto;display:flex;align-items:stretch;justify-content:stretch;background:#000;overflow:hidden;overscroll-behavior:none}' +
       '#igdcSocialViewerV2 .igsv-scroll{position:relative;width:100%;height:100%;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:#000}' +
-      '#igdcSocialViewerV2 .igsv-content{width:100%;min-height:100%;box-sizing:border-box;padding:0 0 80px;background:#000;display:flex;flex-direction:column;align-items:center}' +
+      '#igdcSocialViewerV2 .igsv-content{width:100%;min-height:100%;box-sizing:border-box;padding:0;background:#000;display:flex;flex-direction:column;align-items:center}' +
       '#igdcSocialViewerV2 .igsv-media{position:relative;width:100%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-media[data-aspect="16/9"]{aspect-ratio:16/9}' +
       '#igdcSocialViewerV2 .igsv-media[data-aspect="9/16"]{width:min(100%,720px);aspect-ratio:9/16}' +
-      '#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(720px,calc(100dvh - 56px - 80px));min-height:720px}' +
+      '#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(720px,calc(100dvh - 56px - 56px));min-height:720px}' +
       '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block;flex:0 0 auto}' +
       '#igdcSocialViewerV2 .igsv-detail{width:min(100%,1280px);box-sizing:border-box;padding:18px 22px 22px;background:#111;color:#fff;border-top:1px solid rgba(255,255,255,.12);align-self:center}' +
       '#igdcSocialViewerV2 .igsv-detail-title{font:700 20px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;word-break:break-word}' +
       '#igdcSocialViewerV2 .igsv-detail-desc{margin-top:10px;color:#d8d8d8;font:400 15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;white-space:pre-wrap;word-break:break-word}' +
+      '#igdcSocialViewerV2 .igsv-safe-space{width:100%;height:56px;min-height:56px;flex:0 0 56px;background:#000}' +
+      '#igdcSocialViewerV2 .igsv-yt-live{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12)}' +
+      '#igdcSocialViewerV2 .igsv-yt-channel{display:flex;align-items:center;gap:10px;min-height:44px}' +
+      '#igdcSocialViewerV2 .igsv-yt-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#252525;flex:0 0 40px}' +
+      '#igdcSocialViewerV2 .igsv-yt-channel-copy{min-width:0;flex:1 1 auto}' +
+      '#igdcSocialViewerV2 .igsv-yt-channel-name{font:700 15px/1.3 system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '#igdcSocialViewerV2 .igsv-yt-subs{margin-top:2px;color:#aaa;font:400 12px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}' +
+      '#igdcSocialViewerV2 .igsv-yt-pill{display:inline-flex;align-items:center;min-height:34px;padding:0 12px;border-radius:18px;background:#272727;color:#f3f3f3;font:600 13px/1 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-comments{margin-top:14px;border-top:1px solid rgba(255,255,255,.12);padding-top:12px}' +
+      '#igdcSocialViewerV2 .igsv-yt-comments>summary{cursor:pointer;list-style:none;font:700 14px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;user-select:none}' +
+      '#igdcSocialViewerV2 .igsv-yt-comments>summary::-webkit-details-marker{display:none}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.08)}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#252525;flex:0 0 34px}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-body{min-width:0;flex:1 1 auto}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-head{color:#bbb;font:600 12px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-text{margin-top:4px;white-space:pre-wrap;word-break:break-word;color:#eee;font:400 14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-like{margin-top:5px;color:#aaa;font:400 12px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-note{margin-top:10px;color:#9d9d9d;font:400 12px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"]{align-items:stretch;justify-content:stretch;overflow:hidden;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-shell{position:relative;width:100%;height:100%;overflow:auto;background:#fff;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-canvas{position:relative;margin:0 auto;transform-origin:top left;background:#fff}' +
@@ -356,7 +377,7 @@
       '#igdcSocialViewerV2 .igsv-status[hidden]{display:none}' +
       '#igdcSocialViewerV2 .igsv-stage:fullscreen{width:100vw;height:100vh;background:#000}' +
       '#igdcSocialViewerV2 .igsv-stage:fullscreen .igsv-scroll{width:100%;height:100%}' +
-      '@media(max-width:768px){#igdcSocialViewerV2 .igsv-toolbar{height:52px;flex-basis:52px;padding:0 8px;gap:7px}#igdcSocialViewerV2 .igsv-back,#igdcSocialViewerV2 .igsv-full{min-height:38px;padding:0 10px;font-size:13px}#igdcSocialViewerV2 .igsv-content{padding-bottom:80px}#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(640px,calc(100dvh - 52px - 80px));min-height:640px}#igdcSocialViewerV2 .igsv-detail{padding:16px}#igdcSocialViewerV2 .igsv-detail-title{font-size:18px}}';
+      '@media(max-width:768px){#igdcSocialViewerV2 .igsv-toolbar{height:52px;flex-basis:52px;padding:0 8px;gap:7px}#igdcSocialViewerV2 .igsv-back,#igdcSocialViewerV2 .igsv-full{min-height:38px;padding:0 10px;font-size:13px}#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(640px,calc(100dvh - 52px - 56px));min-height:640px}#igdcSocialViewerV2 .igsv-detail{padding:16px}#igdcSocialViewerV2 .igsv-detail-title{font-size:18px}}';
     (document.head || document.documentElement).appendChild(s);
   }
 
@@ -424,6 +445,156 @@
     stage.removeAttribute('data-provider');
   }
 
+  function notifyParentScroll(top, force) {
+    top = !!top;
+    if (!force && state.parentTopState === top) return;
+    state.parentTopState = top;
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ IGDC_SCROLL: true, top: top }, '*');
+      }
+    } catch (_) {}
+  }
+
+  function bindViewerScrollHost(host) {
+    if (!host || host.__igdcViewerScrollBound) return;
+    host.__igdcViewerScrollBound = true;
+    function sync() { notifyParentScroll((host.scrollTop || 0) <= 2, true); }
+    host.addEventListener('scroll', sync, { passive: true });
+    host.addEventListener('wheel', function (event) {
+      var dy = Number(event && event.deltaY || 0);
+      if (dy > 0) notifyParentScroll(false, true);
+      else if (dy < 0 && (host.scrollTop || 0) <= 2) notifyParentScroll(true, true);
+    }, { passive: true });
+    sync();
+  }
+
+  function formatCount(value) {
+    var n = Number(value || 0);
+    if (!Number.isFinite(n) || n < 0) n = 0;
+    try { return new Intl.NumberFormat(language() || 'en').format(n); } catch (_) { return String(Math.round(n)); }
+  }
+
+  function makeText(tag, className, value) {
+    var el = document.createElement(tag);
+    if (className) el.className = className;
+    el.textContent = text(value);
+    return el;
+  }
+
+  function ensureYouTubeLiveBox(detail) {
+    if (!detail) return null;
+    var box = q('.igsv-yt-live', detail);
+    if (box) return box;
+    box = document.createElement('div');
+    box.className = 'igsv-yt-live';
+    box.innerHTML = '<div class="igsv-yt-note"></div>';
+    q('.igsv-yt-note', box).textContent = labels().ytChecking;
+    detail.appendChild(box);
+    return box;
+  }
+
+  function renderYouTubeDetail(detail, payload) {
+    if (!detail || !payload || !payload.ok) return;
+    var video = payload.video || {};
+    var channel = payload.channel || {};
+    var stats = video.statistics || {};
+    var titleEl = q('.igsv-detail-title', detail);
+    var descEl = q('.igsv-detail-desc', detail);
+    if (titleEl && video.title) titleEl.textContent = video.title;
+    if (descEl && video.description) { descEl.textContent = video.description; descEl.style.display = ''; }
+
+    var box = ensureYouTubeLiveBox(detail);
+    if (!box) return;
+    box.textContent = '';
+
+    var channelRow = document.createElement('div');
+    channelRow.className = 'igsv-yt-channel';
+    if (channel.thumbnail) {
+      var avatar = document.createElement('img');
+      avatar.className = 'igsv-yt-avatar';
+      avatar.alt = '';
+      avatar.loading = 'lazy';
+      avatar.src = channel.thumbnail;
+      channelRow.appendChild(avatar);
+    }
+    var copy = document.createElement('div');
+    copy.className = 'igsv-yt-channel-copy';
+    copy.appendChild(makeText('div', 'igsv-yt-channel-name', channel.title || video.channelTitle || 'YouTube'));
+    if (channel.subscriberCount != null && !channel.hiddenSubscriberCount) {
+      copy.appendChild(makeText('div', 'igsv-yt-subs', labels().ytSubscriber + ' ' + formatCount(channel.subscriberCount)));
+    }
+    channelRow.appendChild(copy);
+    box.appendChild(channelRow);
+
+    var statsRow = document.createElement('div');
+    statsRow.className = 'igsv-yt-stats';
+    if (stats.viewCount != null) statsRow.appendChild(makeText('span', 'igsv-yt-pill', labels().ytViews + ' ' + formatCount(stats.viewCount)));
+    if (stats.likeCount != null) statsRow.appendChild(makeText('span', 'igsv-yt-pill', labels().ytLikes + ' ' + formatCount(stats.likeCount)));
+    if (stats.commentCount != null) statsRow.appendChild(makeText('span', 'igsv-yt-pill', labels().ytComments + ' ' + formatCount(stats.commentCount)));
+    if (video.publishedAt) {
+      try { statsRow.appendChild(makeText('span', 'igsv-yt-pill', new Date(video.publishedAt).toLocaleDateString())); } catch (_) {}
+    }
+    if (statsRow.childNodes.length) box.appendChild(statsRow);
+
+    var comments = Array.isArray(payload.comments) ? payload.comments : [];
+    var commentCount = stats.commentCount != null ? Number(stats.commentCount || 0) : comments.length;
+    if (comments.length || commentCount > 0) {
+      var details = document.createElement('details');
+      details.className = 'igsv-yt-comments';
+      var summary = document.createElement('summary');
+      summary.textContent = labels().ytComments + ' ' + formatCount(commentCount) + ' · ' + labels().ytOpenComments;
+      details.appendChild(summary);
+      comments.forEach(function (row) {
+        var item = document.createElement('div');
+        item.className = 'igsv-yt-comment';
+        if (row.authorAvatar) {
+          var ca = document.createElement('img');
+          ca.className = 'igsv-yt-comment-avatar';
+          ca.alt = '';
+          ca.loading = 'lazy';
+          ca.src = row.authorAvatar;
+          item.appendChild(ca);
+        }
+        var body = document.createElement('div');
+        body.className = 'igsv-yt-comment-body';
+        var head = row.author || 'YouTube';
+        if (row.publishedAt) {
+          try { head += ' · ' + new Date(row.publishedAt).toLocaleDateString(); } catch (_) {}
+        }
+        body.appendChild(makeText('div', 'igsv-yt-comment-head', head));
+        body.appendChild(makeText('div', 'igsv-yt-comment-text', row.text || ''));
+        if (row.likeCount != null) body.appendChild(makeText('div', 'igsv-yt-comment-like', labels().ytLikes + ' ' + formatCount(row.likeCount)));
+        item.appendChild(body);
+        details.appendChild(item);
+      });
+      box.appendChild(details);
+    }
+
+    var note = makeText('div', 'igsv-yt-note', labels().ytPublicNote);
+    box.appendChild(note);
+  }
+
+  function loadYouTubeDetail(detail, sourceUrl) {
+    var id = videoIdYouTube(sourceUrl);
+    if (!detail || !id) return;
+    var token = ++state.youtubeDetailToken;
+    var box = ensureYouTubeLiveBox(detail);
+    fetch('/.netlify/functions/social-youtube-public-detail?videoId=' + encodeURIComponent(id), {
+      method: 'GET', credentials: 'same-origin', cache: 'no-store'
+    }).then(function (res) {
+      if (!res.ok) throw new Error('http_' + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (!state.open || token !== state.youtubeDetailToken || state.platform !== 'youtube') return;
+      if (data && data.ok) renderYouTubeDetail(detail, data);
+      else if (box) { box.textContent = ''; box.appendChild(makeText('div', 'igsv-yt-note', labels().ytDetailUnavailable)); }
+    }).catch(function () {
+      if (!state.open || token !== state.youtubeDetailToken || state.platform !== 'youtube') return;
+      if (box) { box.textContent = ''; box.appendChild(makeText('div', 'igsv-yt-note', labels().ytDetailUnavailable)); }
+    });
+  }
+
   function sizeProviderFrame(stage, iframe, embed) {
     if (!stage || !iframe || !embed || embed.provider !== 'facebook-post') return;
     var rect = stage.getBoundingClientRect();
@@ -442,8 +613,8 @@
        exactly where the caption/body begins. Keep enough provider-side document
        height for image + text and reserve visible breathing room below the post. */
     var visibleRawHeight = Math.ceil(rect.height / scale);
-    var rawHeight = Math.max(900, visibleRawHeight + 180);
-    var bottomReservePx = 80;
+    var rawHeight = Math.max(620, visibleRawHeight + 70);
+    var bottomReservePx = 50;
     var bottomReserveRaw = Math.max(1, Math.ceil(bottomReservePx / scale));
     var canvasRawHeight = rawHeight + bottomReserveRaw;
     var shell = iframe.closest('.igsv-fb-shell');
@@ -514,9 +685,10 @@
       canvas.appendChild(iframe);
       shell.appendChild(canvas);
       stage.appendChild(shell);
+      bindViewerScrollHost(shell);
     } else {
       /* All nine main SNS viewers share one scroll contract: the provider media
-         sits in a full-width content document and a real 80px safe area remains
+         sits in a full-width content document and a compact safe area remains
          below it. The browser only paints a vertical scrollbar when that document
          is taller than the available viewer stage (overflow:auto). */
       var scroll = document.createElement('div');
@@ -532,28 +704,31 @@
 
       /* YouTube's official iframe exposes the player only, not the watch-page
          title/description/comments UI. Reuse the already-published card metadata
-         under the player so the in-site viewer still behaves like a scrollable
-         content page without opening youtube.com or adding front-time API calls. */
-      if (platform === 'youtube' && (title || description)) {
+         under the player so the in-site viewer behaves like a scrollable content page.
+         Live public stats/comments are requested only after a YouTube card is opened. */
+      if (platform === 'youtube') {
         var detail = document.createElement('div');
         detail.className = 'igsv-detail';
-        if (title) {
-          var detailTitle = document.createElement('div');
-          detailTitle.className = 'igsv-detail-title';
-          detailTitle.textContent = title;
-          detail.appendChild(detailTitle);
-        }
-        if (description) {
-          var detailDesc = document.createElement('div');
-          detailDesc.className = 'igsv-detail-desc';
-          detailDesc.textContent = description;
-          detail.appendChild(detailDesc);
-        }
+        var detailTitle = document.createElement('div');
+        detailTitle.className = 'igsv-detail-title';
+        detailTitle.textContent = title || 'YouTube';
+        detail.appendChild(detailTitle);
+        var detailDesc = document.createElement('div');
+        detailDesc.className = 'igsv-detail-desc';
+        detailDesc.textContent = description || '';
+        if (!description) detailDesc.style.display = 'none';
+        detail.appendChild(detailDesc);
         content.appendChild(detail);
+        loadYouTubeDetail(detail, state.lastUrl || '');
       }
 
+      var safeSpace = document.createElement('div');
+      safeSpace.className = 'igsv-safe-space';
+      safeSpace.setAttribute('aria-hidden', 'true');
+      content.appendChild(safeSpace);
       scroll.appendChild(content);
       stage.appendChild(scroll);
+      bindViewerScrollHost(scroll);
     }
     sizeProviderFrame(stage, iframe, embed);
     iframe.__igdcSocialEmbed = embed;
@@ -580,6 +755,7 @@
     state.platform = platform;
     state.open = true;
     state.closingFromHistory = false;
+    state.parentTopState = null;
 
     q('.igsv-title', root).textContent = title;
     root.classList.add('open');
@@ -616,6 +792,8 @@
     state.closingFromHistory = false;
     state.lastUrl = '';
     state.platform = '';
+    state.parentTopState = null;
+    state.youtubeDetailToken++;
     var focus = state.previousFocus;
     state.previousFocus = null;
     if (focus && focus.focus) {
