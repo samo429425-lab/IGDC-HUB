@@ -4974,20 +4974,17 @@ function normLang(l){
     document.documentElement.dataset.igdcDonationReady = '0';
     refreshCurrentIp(true);
 
-    /* Login/Logout intent is fail-closed for every non-privileged session.
-       Hide from pointerdown, before any auth popup/callback can repaint the nav.
-       Country/IP policy itself is unchanged; the existing gate decides whether
-       the shortcut may be revealed again after the fresh current-IP check. */
-    function refreshOnAuthIntent(ev){
+    /* Logout intent immediately invalidates the previous allowed-IP state.
+       If logout is cancelled, the fresh GEO result restores the correct state. */
+    function refreshOnLogoutIntent(ev){
       var node = ev && ev.target;
       if (!node || typeof node.closest !== 'function') return;
-      var authControl = node.closest('#osLoginBtn,#logoutBtn,[data-os-login],[data-os-logout],a[href*="login"],a[href*="logout"],button[onclick*="login"],button[onclick*="logout"]');
-      if (!authControl) return;
-      var livePayload = getLiveOsPayload();
-      if (livePayload && isOwnerOrAdmin(rolesFromPayloadOnly(livePayload))) return;
+      var logout = node.closest('#osLoginBtn,#logoutBtn,[data-os-logout],a[href*="logout"],button[onclick*="logout"]');
+      if (!logout) return;
+      if (!getLiveOsPayload()) return;
       refreshCurrentIp(true);
     }
-    document.addEventListener('pointerdown', refreshOnAuthIntent, true);
+    document.addEventListener('pointerdown', refreshOnLogoutIntent, true);
 
     /* Consume the actual OS0/Auth0 event payload, then force a fresh current-IP
        decision instead of reusing the previous SPA GEO state. */
