@@ -97,6 +97,8 @@ exports.handler = async function (event) {
     var html = await fetchText(embedUrl, 5000);
     var title = metaValue(html, ['og:title', 'twitter:title']);
     var description = metaValue(html, ['og:description', 'twitter:description', 'description']);
+    var image = metaValue(html, ['og:image', 'twitter:image']);
+    if (image && !/^https:\/\//i.test(image)) image = '';
 
     /* Some Facebook shells expose generic boilerplate instead of post text. Do not
        overwrite a useful stored snapshot with that. */
@@ -106,6 +108,7 @@ exports.handler = async function (event) {
       ok: true,
       title: text(title).slice(0, 500),
       description: text(description).slice(0, 5000),
+      image: text(image).slice(0, 3000),
       sourceUrl
     });
   } catch (error) {

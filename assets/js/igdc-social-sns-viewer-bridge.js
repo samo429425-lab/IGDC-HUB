@@ -37,6 +37,7 @@
     previousFocus: null,
     closingFromHistory: false,
     lastUrl: '',
+    lastPreview: '',
     platform: '',
     parentTopState: null,
     youtubeDetailToken: 0,
@@ -376,6 +377,15 @@
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-shell{position:relative;width:100%;height:100%;overflow:auto;background:#fff;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-canvas{position:relative;margin:0 auto;transform-origin:top left;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:absolute;left:0;top:0;z-index:2;max-width:none;transform:none!important;background:#fff;pointer-events:auto;touch-action:auto}' +
+      '#igdcSocialViewerV2 .igsv-fb-owned-media{width:100%;background:#111;display:flex;align-items:center;justify-content:center;overflow:hidden}' +
+      '#igdcSocialViewerV2 .igsv-fb-owned-media img{display:block;width:100%;height:auto;max-width:100%;object-fit:contain;object-position:center;background:#111}' +
+      '#igdcSocialViewerV2 .igsv-fb-official{width:100%;box-sizing:border-box;padding:12px clamp(18px,3vw,48px) 0;background:#fff;color:#111;border-top:1px solid #e5e7eb}' +
+      '#igdcSocialViewerV2 .igsv-fb-like-frame{display:block;width:100%;height:76px;border:0;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-fb-comments-head{display:flex;align-items:center;gap:10px;min-height:44px;border-top:1px solid #e5e7eb;padding-top:8px}' +
+      '#igdcSocialViewerV2 .igsv-fb-comments-toggle{border:0;border-radius:18px;background:#f1f3f5;color:#111;min-height:34px;padding:0 14px;font:700 13px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer}' +
+      '#igdcSocialViewerV2 .igsv-fb-save{margin-left:auto}' +
+      '#igdcSocialViewerV2 .igsv-fb-comments-wrap{width:100%;overflow:hidden;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-fb-comments-frame{display:block;width:100%;height:min(62vh,640px);min-height:360px;border:0;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-status{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:500 15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#ddd;background:#000}' +
       '#igdcSocialViewerV2 .igsv-status[hidden]{display:none}' +
       '#igdcSocialViewerV2 .igsv-stage:fullscreen{width:100vw;height:100vh;background:#000}' +
@@ -559,6 +569,133 @@
     tools.appendChild(saveBtn);
 
     detail.appendChild(tools);
+  }
+
+  function facebookPluginFrame(src, className, title, height) {
+    var frame = document.createElement('iframe');
+    frame.className = className || '';
+    frame.src = src;
+    frame.title = title || 'Facebook';
+    frame.loading = 'eager';
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    frame.allow = 'clipboard-write; web-share';
+    frame.setAttribute('sandbox', iframeSandboxFor('facebook', { provider: 'facebook-social-plugin' }));
+    if (height) frame.style.height = String(height) + 'px';
+    return frame;
+  }
+
+  function facebookPluginUrl(kind, sourceUrl, width) {
+    if (!validHttp(sourceUrl)) return '';
+    var base = 'https://www.facebook.com/plugins/';
+    width = Math.max(320, Math.min(1200, Math.floor(Number(width || 0) || 750)));
+    if (kind === 'like') {
+      return base + 'like.php?' + new URLSearchParams({
+        href: sourceUrl,
+        width: String(width),
+        layout: 'standard',
+        action: 'like',
+        size: 'large',
+        share: 'true',
+        height: '76'
+      }).toString();
+    }
+    if (kind === 'comments') {
+      return base + 'comments.php?' + new URLSearchParams({
+        href: sourceUrl,
+        numposts: '8',
+        width: String(width),
+        order_by: 'social'
+      }).toString();
+    }
+    return '';
+  }
+
+  function mountFacebookOfficialActions(host, sourceUrl) {
+    if (!host || !validHttp(sourceUrl)) return;
+    var box = document.createElement('div');
+    box.className = 'igsv-fb-official';
+    var width = Math.max(320, Math.floor((host.getBoundingClientRect().width || window.innerWidth || 750) - 96));
+
+    /* Meta-owned Like/Reaction + Share surface. Authentication and the reaction
+       picker stay inside Facebook's official social plugin. IGDC does not synthesize
+       a successful reaction. */
+    var likeSrc = facebookPluginUrl('like', sourceUrl, width);
+    if (likeSrc) box.appendChild(facebookPluginFrame(likeSrc, 'igsv-fb-like-frame', 'Facebook Like and Share', 76));
+
+    var head = document.createElement('div');
+    head.className = 'igsv-fb-comments-head';
+    var toggle = makeText('button', 'igsv-fb-comments-toggle', labels().ytOpenComments);
+    toggle.type = 'button';
+    head.appendChild(toggle);
+
+    var saveBtn = makeActionButton((isSavedUrl(sourceUrl) ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave), 'igsv-fb-save');
+    saveBtn.addEventListener('click', function () {
+      var saved = toggleSavedUrl(sourceUrl);
+      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave;
+    });
+    head.appendChild(saveBtn);
+    box.appendChild(head);
+
+    var commentsWrap = document.createElement('div');
+    commentsWrap.className = 'igsv-fb-comments-wrap';
+    commentsWrap.hidden = true;
+    box.appendChild(commentsWrap);
+
+    var commentsFrame = null;
+    toggle.addEventListener('click', function () {
+      var opening = commentsWrap.hidden;
+      commentsWrap.hidden = !opening;
+      toggle.textContent = opening ? labels().ytCloseComments : labels().ytOpenComments;
+      if (opening && !commentsFrame) {
+        var src = facebookPluginUrl('comments', sourceUrl, width);
+        if (src) {
+          commentsFrame = facebookPluginFrame(src, 'igsv-fb-comments-frame', 'Facebook Comments');
+          commentsWrap.appendChild(commentsFrame);
+        }
+      }
+    });
+
+    host.appendChild(box);
+  }
+
+  function mountFacebookPostDocument(stage, title, description, sourceUrl) {
+    stage.setAttribute('data-aspect', 'auto');
+    stage.setAttribute('data-provider', 'facebook-post');
+    var scroll = document.createElement('div');
+    scroll.className = 'igsv-scroll';
+    var content = document.createElement('div');
+    content.className = 'igsv-content';
+
+    var media = document.createElement('div');
+    media.className = 'igsv-fb-owned-media';
+    var preview = text(state.lastPreview || '').trim();
+    var image = null;
+    media.hidden = !validHttp(preview);
+    if (validHttp(preview)) {
+      image = document.createElement('img');
+      image.src = preview;
+      image.alt = title || 'Facebook post';
+      image.loading = 'eager';
+      image.referrerPolicy = 'no-referrer';
+      media.appendChild(image);
+    }
+    content.appendChild(media);
+
+    var detail = buildDetail(title || 'Facebook', description || '', 'facebook');
+    content.appendChild(detail);
+    mountFacebookOfficialActions(content, sourceUrl);
+
+    var safeSpace = document.createElement('div');
+    safeSpace.className = 'igsv-safe-space';
+    safeSpace.setAttribute('aria-hidden', 'true');
+    content.appendChild(safeSpace);
+    scroll.appendChild(content);
+    stage.appendChild(scroll);
+    bindViewerScrollHost(scroll);
+
+    loadFacebookPublicDetail(detail, sourceUrl, image, media);
+    showStatus('');
+    return true;
   }
 
   function iframeSandboxFor(platform, embed) {
@@ -786,7 +923,7 @@
     if (value) refreshDescriptionToggle(detail);
   }
 
-  function loadFacebookPublicDetail(detail, sourceUrl) {
+  function loadFacebookPublicDetail(detail, sourceUrl, imageEl, mediaEl) {
     if (!detail || !validHttp(sourceUrl)) return;
     fetch('/.netlify/functions/social-facebook-public-detail?url=' + encodeURIComponent(sourceUrl), {
       method: 'GET', credentials: 'same-origin', cache: 'default'
@@ -799,6 +936,17 @@
       var titleEl = q('.igsv-detail-title', detail);
       if (titleEl && data.title) titleEl.textContent = decodeEntities(data.title);
       if (data.description) updateDetailDescription(detail, decodeEntities(data.description));
+      if (data.image && validHttp(data.image)) {
+        if (!imageEl && mediaEl) {
+          imageEl = document.createElement('img');
+          imageEl.alt = titleEl ? titleEl.textContent : 'Facebook post';
+          imageEl.loading = 'eager';
+          imageEl.referrerPolicy = 'no-referrer';
+          mediaEl.appendChild(imageEl);
+        }
+        if (mediaEl) mediaEl.hidden = false;
+        if (imageEl && imageEl.src !== data.image) imageEl.src = data.image;
+      }
     }).catch(function () {
       /* Stored snapshot title/description remain visible; viewer never blocks. */
     });
@@ -1076,6 +1224,15 @@
     showStatus(labels().loading);
     stage.setAttribute('data-aspect', embed.aspect || 'auto');
     if (embed.provider) stage.setAttribute('data-provider', embed.provider);
+    if (embed.provider === 'facebook-post') {
+      /* Do not render Facebook's cross-origin post shell as the visible document.
+         Its internal `See more` link can only navigate within Facebook and its
+         natural cross-origin height cannot be measured reliably, which produced
+         the large blank gaps seen in some posts. Render the stored/public media
+         and text as an IGDC-owned document, then attach Meta's official Like/
+         Reaction, Share and Comments plugins below it. */
+      return mountFacebookPostDocument(stage, title, description, state.lastUrl || '');
+    }
     var iframe = document.createElement('iframe');
     iframe.className = 'igsv-frame';
     var frameSrc = embed.src;
@@ -1153,6 +1310,7 @@
       var detail = buildDetail(title || platform, description || '', platform);
       content.appendChild(detail);
       if (platform === 'youtube') loadYouTubeDetail(detail, state.lastUrl || '', 'relevance');
+      else if (platform === 'facebook') mountFacebookOfficialActions(content, state.lastUrl || '');
       else mountProviderUtilityActions(detail, platform, title || platform, state.lastUrl || '');
 
       var safeSpace = document.createElement('div');
@@ -1185,6 +1343,7 @@
 
     state.previousFocus = document.activeElement;
     state.lastUrl = url;
+    state.lastPreview = previewUrlOf(card);
     state.platform = platform;
     state.open = true;
     state.closingFromHistory = false;
@@ -1224,6 +1383,7 @@
     state.pushed = false;
     state.closingFromHistory = false;
     state.lastUrl = '';
+    state.lastPreview = '';
     state.platform = '';
     state.parentTopState = null;
     state.youtubeDetailToken++;
