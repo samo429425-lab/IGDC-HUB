@@ -4766,9 +4766,11 @@ function normLang(l){
       nextSignal = blockedClaimValue(payload[CLAIM_BLOCKED]);
       signalSeen = true;
     }
-    /* Do not let a previous login's blocked/allowed signal leak into a later
-       guest/member session; current-IP GEO remains the reveal authority. */
-    liveDonationBlocked = signalSeen ? nextSignal : null;
+    /* Keep the last EXPLICIT OS0/Auth0 Donation decision until OS0/Auth0
+       explicitly replaces it. A generic auth event with no Donation signal
+       must never erase a current restricted-country decision -- especially
+       for guests, who have no ID-token claim as a second safety net. */
+    if (signalSeen) liveDonationBlocked = nextSignal;
     /* Auth/login/logout transitions must never reuse an earlier allowed-IP result. */
     refreshCurrentIp(true);
   }
@@ -4974,17 +4976,20 @@ function normLang(l){
     document.documentElement.dataset.igdcDonationReady = '0';
     refreshCurrentIp(true);
 
-    /* Logout intent immediately invalidates the previous allowed-IP state.
-       If logout is cancelled, the fresh GEO result restores the correct state. */
-    function refreshOnLogoutIntent(ev){
+    /* Any Login/Logout intent is a fail-closed transition for non-privileged
+       users. Hide first and re-check the current IP, but do not erase the last
+       explicit OS0 Donation restriction signal. */
+    function refreshOnAuthIntent(ev){
       var node = ev && ev.target;
       if (!node || typeof node.closest !== 'function') return;
-      var logout = node.closest('#osLoginBtn,#logoutBtn,[data-os-logout],a[href*="logout"],button[onclick*="logout"]');
-      if (!logout) return;
-      if (!getLiveOsPayload()) return;
+      var authControl = node.closest('#osLoginBtn,#logoutBtn,[data-os-login],[data-os-logout],a[href*="login"],a[href*="logout"],button[onclick*="login"],button[onclick*="logout"]');
+      if (!authControl) return;
+      var livePayload = getLiveOsPayload();
+      var privileged = !!livePayload && isOwnerOrAdmin(rolesFromPayloadOnly(livePayload));
+      if (privileged) return;
       refreshCurrentIp(true);
     }
-    document.addEventListener('pointerdown', refreshOnLogoutIntent, true);
+    document.addEventListener('pointerdown', refreshOnAuthIntent, true);
 
     /* Consume the actual OS0/Auth0 event payload, then force a fresh current-IP
        decision instead of reusing the previous SPA GEO state. */

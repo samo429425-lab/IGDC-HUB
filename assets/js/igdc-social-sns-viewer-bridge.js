@@ -236,7 +236,7 @@
     }
     /* Facebook post plugin has a provider-side natural width limit.
        Keep its native 750px document, then scale the whole frame inside IGDC. */
-    return 'https://www.facebook.com/plugins/post.php?href=' + encoded + '&show_text=true&width=750';
+    return 'https://www.facebook.com/plugins/post.php?href=' + encoded + '&show_text=false&width=750';
   }
 
   function buildEmbed(platform, url, card) {
@@ -563,14 +563,17 @@
 
   function iframeSandboxFor(platform, embed) {
     var strict = 'allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads';
-    /* Social viewer containment is non-negotiable: provider content may run its own
-       scripts/forms and may open a user-initiated auth dialog, but it must never
-       replace the IGDC tab or escape an opened popup from the sandbox. This keeps
-       Facebook/Instagram/TikTok/X/etc. inside the IGDC viewer contract. OAuth that
-       IGDC owns (for example YouTube writes) is opened by the parent viewer itself,
-       not by granting top-navigation to a third-party iframe. */
+    /* Keep the IGDC top-level page contained. Facebook's official post plugin does,
+       however, use user-initiated popup/dialog flows for login, reactions, comments
+       and share in some browser states. Let ONLY those popups escape the iframe
+       sandbox so the provider dialog can function, while deliberately omitting every
+       allow-top-navigation token: the IGDC tab itself can never become facebook.com. */
     if (embed && embed.restrictedProvider) return strict;
-    return strict + ' allow-popups allow-modals allow-storage-access-by-user-activation';
+    var allowed = strict + ' allow-popups allow-modals allow-storage-access-by-user-activation';
+    if (platform === 'facebook' || (embed && /^facebook-/.test(text(embed.provider)))) {
+      allowed += ' allow-popups-to-escape-sandbox';
+    }
+    return allowed;
   }
 
   function showOAuthHint(box) {
@@ -781,6 +784,24 @@
     desc.textContent = value || '';
     wrap.style.display = value ? '' : 'none';
     if (value) refreshDescriptionToggle(detail);
+  }
+
+  function loadFacebookPublicDetail(detail, sourceUrl) {
+    if (!detail || !validHttp(sourceUrl)) return;
+    fetch('/.netlify/functions/social-facebook-public-detail?url=' + encodeURIComponent(sourceUrl), {
+      method: 'GET', credentials: 'same-origin', cache: 'default'
+    }).then(function (res) {
+      if (!res.ok) throw new Error('http_' + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (!state.open || state.platform !== 'facebook' || state.lastUrl !== sourceUrl) return;
+      if (!data || !data.ok) return;
+      var titleEl = q('.igsv-detail-title', detail);
+      if (titleEl && data.title) titleEl.textContent = decodeEntities(data.title);
+      if (data.description) updateDetailDescription(detail, decodeEntities(data.description));
+    }).catch(function () {
+      /* Stored snapshot title/description remain visible; viewer never blocks. */
+    });
   }
 
   function renderYouTubeDetail(detail, payload, requestedOrder) {
@@ -1010,7 +1031,9 @@
        exactly where the caption/body begins. Keep enough provider-side document
        height for image + text and reserve visible breathing room below the post. */
     var visibleRawHeight = Math.ceil(rect.height / scale);
-    var rawHeight = Math.max(620, visibleRawHeight + 70);
+    /* Leave enough provider document height for Facebook's native reaction/comment/
+       share footer. The shell still owns viewport scrolling. */
+    var rawHeight = Math.max(760, visibleRawHeight + 90);
     var bottomReservePx = 90;
     var bottomReserveRaw = Math.max(1, Math.ceil(bottomReservePx / scale));
     var canvasRawHeight = rawHeight + bottomReserveRaw;
@@ -1033,7 +1056,12 @@
     if (shell) {
       shell.style.width = '100%';
       shell.style.height = '100%';
-      shell.scrollTop = Math.min(shell.scrollTop, Math.max(0, canvasRawHeight * scale - rect.height));
+      var fbDetail = q('.igsv-fb-detail', shell);
+      if (fbDetail) {
+        /* CSS transforms do not add their scaled visual height to normal flow. */
+        fbDetail.style.marginTop = Math.max(0, Math.ceil(canvasRawHeight * scale - canvasRawHeight)) + 'px';
+      }
+      shell.scrollTop = Math.min(shell.scrollTop, Math.max(0, shell.scrollHeight - rect.height));
     }
   }
 
@@ -1083,6 +1111,23 @@
       canvas.className = 'igsv-fb-canvas';
       canvas.appendChild(iframe);
       shell.appendChild(canvas);
+
+      /* Facebook's cross-origin `더보기/See more` cannot be allowed to replace the
+         IGDC top-level page. The provider text is therefore hidden in the plugin
+         (`show_text=false`) and rendered as an IGDC-owned expandable detail block.
+         Native reactions/comments/share remain provider-owned inside the official
+         Facebook plugin; no fake success UI is introduced. */
+      var fbDetail = buildDetail(title || platform, description || '', platform);
+      fbDetail.classList.add('igsv-fb-detail');
+      shell.appendChild(fbDetail);
+      mountProviderUtilityActions(fbDetail, platform, title || platform, state.lastUrl || '');
+      loadFacebookPublicDetail(fbDetail, state.lastUrl || '');
+
+      var fbSafe = document.createElement('div');
+      fbSafe.className = 'igsv-safe-space';
+      fbSafe.setAttribute('aria-hidden', 'true');
+      shell.appendChild(fbSafe);
+
       stage.appendChild(shell);
       bindViewerScrollHost(shell);
     } else {
