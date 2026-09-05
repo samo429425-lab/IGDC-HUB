@@ -2904,6 +2904,99 @@ function setActive(i){
 <script src="edge-autohide-mobile.js"></script>
 <script src="assets/js/seller-modal.addon.js"></script>
 <script src="/assets/js/igdc-member-auth.js?v=1.0.1-roleclaims"></script>
+<script id="igdc-member-session-role-reconcile-v1">
+/* Index-only auth read reconciliation.
+   A valid signed-in OS0/Auth0 session with no usable platform role is the base
+   member, not guest. Existing explicit roles are preserved. No token/storage write. */
+(function(){
+  'use strict';
+  if (window.__IGDC_MEMBER_SESSION_ROLE_RECONCILE_V1__) return;
+  window.__IGDC_MEMBER_SESSION_ROLE_RECONCILE_V1__ = true;
+
+  var auth = window.IGDCMemberAuth;
+  if (!auth || auth.__igdcSessionRoleReconciled) return;
+
+  var originalIsAuthenticated = typeof auth.isAuthenticated === 'function' ? auth.isAuthenticated : null;
+  var originalGetRoles = typeof auth.getRoles === 'function' ? auth.getRoles : null;
+  var originalGetPayload = typeof auth.getIdTokenPayload === 'function' ? auth.getIdTokenPayload : null;
+  var ROLE_KEYS = [
+    'https://igdcglobal.com/roles', 'https://os.auth/roles', 'https://os0.app/roles',
+    'https://example.com/roles', 'https://osu/roles', 'roles', 'role', 'permissions'
+  ];
+
+  function normalize(value){
+    return String(value == null ? '' : value).trim().toLowerCase().replace(/[\s.]+/g, '_');
+  }
+  function unique(values){
+    var out = [], seen = {};
+    (values || []).forEach(function(value){
+      var role = normalize(value);
+      if (!role || seen[role]) return;
+      seen[role] = true;
+      out.push(role);
+    });
+    return out;
+  }
+  function fresh(payload){
+    var exp = Number(payload && payload.exp || 0);
+    return !!(payload && exp && exp * 1000 > Date.now() + 15000);
+  }
+  function originalPayload(){
+    try {
+      var payload = originalGetPayload ? originalGetPayload.call(auth) : null;
+      return fresh(payload) ? payload : null;
+    } catch (_) { return null; }
+  }
+  function osPayload(){
+    try {
+      if (!window.osAuth || typeof window.osAuth.getIdTokenPayload !== 'function') return null;
+      var payload = window.osAuth.getIdTokenPayload() || null;
+      if (!fresh(payload)) return null;
+      if (typeof window.osAuth.isAuthenticated === 'function' && !window.osAuth.isAuthenticated()) return null;
+      return payload;
+    } catch (_) { return null; }
+  }
+  function rolesFromPayload(payload){
+    var values = [];
+    ROLE_KEYS.forEach(function(key){
+      var value = payload && payload[key];
+      if (Array.isArray(value)) values = values.concat(value);
+      else if (typeof value === 'string') values = values.concat(value.split(','));
+    });
+    return unique(values);
+  }
+  function hasSignedInSession(){
+    try { if (originalIsAuthenticated && originalIsAuthenticated.call(auth)) return true; } catch (_) {}
+    try { if (window.osAuth && typeof window.osAuth.isAuthenticated === 'function' && window.osAuth.isAuthenticated()) return !!osPayload(); } catch (_) {}
+    return !!(originalPayload() || osPayload());
+  }
+
+  auth.isAuthenticated = function(){
+    return hasSignedInSession();
+  };
+  auth.getIdTokenPayload = function(){
+    return originalPayload() || osPayload() || null;
+  };
+  auth.getRoles = function(){
+    var roles = [];
+    try { if (originalGetRoles) roles = unique(originalGetRoles.call(auth) || []); } catch (_) {}
+
+    /* If the member-side reader has no useful role (empty/guest), read the same
+       live OS0/Auth0 identity that already drives the Logout button. */
+    var useful = roles.filter(function(role){ return role !== 'guest'; });
+    if (!useful.length) {
+      useful = unique(rolesFromPayload(originalPayload()).concat(rolesFromPayload(osPayload())))
+        .filter(function(role){ return role !== 'guest'; });
+    }
+    if (useful.length) return useful;
+
+    /* Valid login with no explicit platform role is the base member only. */
+    return hasSignedInSession() ? ['member'] : [];
+  };
+
+  auth.__igdcSessionRoleReconciled = true;
+})();
+</script>
 <script id="igdc-member-auth-click-guard-v2">
 (function(){
   'use strict';
@@ -4064,11 +4157,14 @@ function normLang(l){
   function getFreshIdentity(){
     try{
       var auth = window.IGDCMemberAuth;
-      if (!auth || typeof auth.getIdTokenPayload !== 'function') return { authenticated:false, role:'guest', label:guestLabel() };
-      var payload = auth.getIdTokenPayload();
-      if (!isFresh(payload)) return { authenticated:false, role:'guest', label:guestLabel() };
+      if (!auth) return { authenticated:false, role:'guest', label:guestLabel() };
+      var payload = typeof auth.getIdTokenPayload === 'function' ? auth.getIdTokenPayload() : null;
+      var authenticated = false;
+      try { authenticated = typeof auth.isAuthenticated === 'function' && !!auth.isAuthenticated(); } catch (_) {}
+      if (!authenticated && !isFresh(payload)) return { authenticated:false, role:'guest', label:guestLabel() };
       var roles = typeof auth.getRoles === 'function' ? auth.getRoles() : [];
       var role = highestRole(roles);
+      if (role === 'guest') role = 'member';
       return { authenticated:true, role:role, label:role || 'member' };
     }catch(_){
       return { authenticated:false, role:'guest', label:guestLabel() };
@@ -4505,7 +4601,6 @@ function normLang(l){
   var syncQueued = false;
   var geoPromise = null;
   var geoState = { ready:false, excluded:false, country:'' };
-  var authGraceUntil = Date.now() + 2500;
   /* Live OS0/Auth0 Donation restriction handed to index through auth events.
      null means no explicit event signal has been observed on this page yet. */
   var liveDonationBlocked = null;
@@ -4541,6 +4636,17 @@ function normLang(l){
   function isFresh(payload){
     var exp = Number(payload && payload.exp || 0);
     return !!(payload && exp && exp * 1000 > Date.now() + 15000);
+  }
+
+  function hasAuthenticatedSession(payload){
+    if (isFresh(payload)) return true;
+    try {
+      if (window.IGDCMemberAuth && typeof window.IGDCMemberAuth.isAuthenticated === 'function' && window.IGDCMemberAuth.isAuthenticated()) return true;
+    } catch (_) {}
+    try {
+      if (window.osAuth && typeof window.osAuth.isAuthenticated === 'function' && window.osAuth.isAuthenticated()) return true;
+    } catch (_) {}
+    return false;
   }
 
   function getRoles(payload){
@@ -4610,6 +4716,16 @@ function normLang(l){
   }
 
   function captureDonationSignal(ev){
+    var detail = ev && ev.detail;
+    if (detail && typeof detail === 'object') {
+      /* OS0 can hand the Donation decision directly to index even when there is
+         no member token (guest). Consume that existing signal before token fallback. */
+      if (Object.prototype.hasOwnProperty.call(detail, CLAIM_BLOCKED)) {
+        liveDonationBlocked = blockedClaimValue(detail[CLAIM_BLOCKED]);
+      } else if (Object.prototype.hasOwnProperty.call(detail, 'donation_blocked')) {
+        liveDonationBlocked = blockedClaimValue(detail.donation_blocked);
+      }
+    }
     var payload = payloadFromAuthEvent(ev);
     if (payload && Object.prototype.hasOwnProperty.call(payload, CLAIM_BLOCKED)) {
       liveDonationBlocked = blockedClaimValue(payload[CLAIM_BLOCKED]);
@@ -4715,42 +4831,30 @@ function normLang(l){
     if (!link) return;
 
     var payload = getPayload();
-    var authenticated = isFresh(payload);
+    var authenticated = hasAuthenticatedSession(payload);
     var roles = authenticated ? getRoles(payload) : [];
     var privileged = authenticated && isOwnerOrAdmin(roles);
 
-    if (privileged) {
-      /* owner/admin/super_admin is the only restricted-country UI exception. */
-      applyUi(link, true);
-      document.documentElement.dataset.igdcDonationReady = '1';
-      return;
-    }
-
     if (!geoState.ready) {
-      /* Pre-hide the old menu and its replacement artwork until current IP is resolved. */
+      /* Hide first for everybody until the current-IP Donation decision exists. */
       applyUi(link, false);
       document.documentElement.dataset.igdcDonationReady = '0';
       loadGeo().then(schedule);
       return;
     }
 
-    /* If OS0/Auth0 has explicitly handed index a Donation decision, use that
-       exact live signal. Otherwise preserve the existing token-claim fallback. */
-    var blockedByClaim = (liveDonationBlocked !== null)
-      ? liveDonationBlocked
-      : (authenticated && isBlocked(payload));
-    var blockedByIp = geoState.excluded === true;
-    var blocked = blockedByClaim || blockedByIp;
+    /* Canonical Donation rule:
+       restricted current IP / existing OS0 Donation-block signal
+       + NOT owner/admin/super_admin => hide/deny, regardless of guest/member/other role. */
+    var restricted = geoState.excluded === true ||
+      liveDonationBlocked === true ||
+      (authenticated && isBlocked(payload));
+    var allowed = privileged || !restricted;
 
-    applyUi(link, !blocked);
+    applyUi(link, allowed);
     document.documentElement.dataset.igdcDonationReady = '1';
 
-    if (blockedByIp && !authenticated && Date.now() < authGraceUntil) {
-      /* Keep hidden immediately, but give a late owner/admin token a short startup grace period. */
-      window.setTimeout(schedule, 150);
-      return;
-    }
-    if (blocked) moveOffDonationRoute();
+    if (restricted && !privileged) moveOffDonationRoute();
   }
 
   function schedule(){
@@ -4768,7 +4872,7 @@ function normLang(l){
 
     /* A signed-in owner/admin never needs a country check to keep Donation visible. */
     var payload = getPayload();
-    var privileged = isFresh(payload) && isOwnerOrAdmin(getRoles(payload));
+    var privileged = hasAuthenticatedSession(payload) && isOwnerOrAdmin(getRoles(payload));
     if (privileged) {
       var privilegedLink = document.querySelector('nav [data-igdc-donation-nav="1"]');
       applyUi(privilegedLink, true);

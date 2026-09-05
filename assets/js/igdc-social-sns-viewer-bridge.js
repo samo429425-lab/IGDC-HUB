@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v2.6.1
+ * IGDC Social Network main-card viewer bridge v2.7.0
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -337,20 +337,26 @@
       '#igdcSocialViewerV2 .igsv-back,#igdcSocialViewerV2 .igsv-full{border:0;border-radius:9px;min-height:40px;padding:0 13px;background:#17191d;color:#fff;font:600 14px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;white-space:nowrap}' +
       '#igdcSocialViewerV2 .igsv-back{display:inline-flex;align-items:center;gap:7px}' +
       '#igdcSocialViewerV2 .igsv-title{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
-      '#igdcSocialViewerV2 .igsv-stage{position:relative;min-height:0;flex:1 1 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}' +
+      '#igdcSocialViewerV2 .igsv-stage{position:relative;min-height:0;flex:1 1 auto;display:flex;align-items:stretch;justify-content:stretch;background:#000;overflow:hidden;overscroll-behavior:none}' +
+      '#igdcSocialViewerV2 .igsv-scroll{position:relative;width:100%;height:100%;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:#000}' +
+      '#igdcSocialViewerV2 .igsv-content{width:100%;min-height:100%;box-sizing:border-box;padding:0 0 80px;background:#000;display:flex;flex-direction:column;align-items:center}' +
+      '#igdcSocialViewerV2 .igsv-media{position:relative;width:100%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}' +
+      '#igdcSocialViewerV2 .igsv-media[data-aspect="16/9"]{aspect-ratio:16/9}' +
+      '#igdcSocialViewerV2 .igsv-media[data-aspect="9/16"]{width:min(100%,720px);aspect-ratio:9/16}' +
+      '#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(720px,calc(100dvh - 56px - 80px));min-height:720px}' +
       '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block;flex:0 0 auto}' +
+      '#igdcSocialViewerV2 .igsv-detail{width:min(100%,1280px);box-sizing:border-box;padding:18px 22px 22px;background:#111;color:#fff;border-top:1px solid rgba(255,255,255,.12);align-self:center}' +
+      '#igdcSocialViewerV2 .igsv-detail-title{font:700 20px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;word-break:break-word}' +
+      '#igdcSocialViewerV2 .igsv-detail-desc{margin-top:10px;color:#d8d8d8;font:400 15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;white-space:pre-wrap;word-break:break-word}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"]{align-items:stretch;justify-content:stretch;overflow:hidden;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-shell{position:relative;width:100%;height:100%;overflow:auto;background:#fff;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-canvas{position:relative;margin:0 auto;transform-origin:top left;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:absolute;left:0;top:0;max-width:none;transform:none!important;background:#fff}' +
-      '#igdcSocialViewerV2 .igsv-stage[data-aspect="9/16"],#igdcSocialViewerV2 .igsv-stage[data-aspect="16/9"]{overflow:hidden}' +
-      '#igdcSocialViewerV2 .igsv-stage[data-aspect="9/16"] .igsv-frame{width:min(100%,calc(100dvh * 9 / 16));max-width:720px}' +
-      '#igdcSocialViewerV2 .igsv-stage[data-aspect="16/9"] .igsv-frame{width:100%;height:100%}' +
-      '#igdcSocialViewerV2 .igsv-status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:500 15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#ddd;background:#000}' +
+      '#igdcSocialViewerV2 .igsv-status{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:500 15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#ddd;background:#000}' +
       '#igdcSocialViewerV2 .igsv-status[hidden]{display:none}' +
       '#igdcSocialViewerV2 .igsv-stage:fullscreen{width:100vw;height:100vh;background:#000}' +
-      '#igdcSocialViewerV2 .igsv-stage:fullscreen .igsv-frame{width:100%;height:100%;max-width:none}' +
-      '@media(max-width:768px){#igdcSocialViewerV2 .igsv-toolbar{height:52px;flex-basis:52px;padding:0 8px;gap:7px}#igdcSocialViewerV2 .igsv-back,#igdcSocialViewerV2 .igsv-full{min-height:38px;padding:0 10px;font-size:13px}}';
+      '#igdcSocialViewerV2 .igsv-stage:fullscreen .igsv-scroll{width:100%;height:100%}' +
+      '@media(max-width:768px){#igdcSocialViewerV2 .igsv-toolbar{height:52px;flex-basis:52px;padding:0 8px;gap:7px}#igdcSocialViewerV2 .igsv-back,#igdcSocialViewerV2 .igsv-full{min-height:38px;padding:0 10px;font-size:13px}#igdcSocialViewerV2 .igsv-content{padding-bottom:80px}#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(640px,calc(100dvh - 52px - 80px));min-height:640px}#igdcSocialViewerV2 .igsv-detail{padding:16px}#igdcSocialViewerV2 .igsv-detail-title{font-size:18px}}';
     (document.head || document.documentElement).appendChild(s);
   }
 
@@ -412,6 +418,8 @@
     if (frame) frame.remove();
     var shell = q('.igsv-fb-shell', stage);
     if (shell) shell.remove();
+    var scroll = q('.igsv-scroll', stage);
+    if (scroll) scroll.remove();
     stage.setAttribute('data-aspect', 'auto');
     stage.removeAttribute('data-provider');
   }
@@ -435,7 +443,7 @@
        height for image + text and reserve visible breathing room below the post. */
     var visibleRawHeight = Math.ceil(rect.height / scale);
     var rawHeight = Math.max(900, visibleRawHeight + 180);
-    var bottomReservePx = Math.max(120, Math.min(220, Math.round(rect.height * 0.22)));
+    var bottomReservePx = 80;
     var bottomReserveRaw = Math.max(1, Math.ceil(bottomReservePx / scale));
     var canvasRawHeight = rawHeight + bottomReserveRaw;
     var shell = iframe.closest('.igsv-fb-shell');
@@ -461,7 +469,7 @@
     }
   }
 
-  function mountEmbed(root, embed, title) {
+  function mountEmbed(root, embed, title, description, platform) {
     var stage = q('.igsv-stage', root);
     clearStage(stage);
     if (!embed || !embed.src) {
@@ -507,7 +515,45 @@
       shell.appendChild(canvas);
       stage.appendChild(shell);
     } else {
-      stage.appendChild(iframe);
+      /* All nine main SNS viewers share one scroll contract: the provider media
+         sits in a full-width content document and a real 80px safe area remains
+         below it. The browser only paints a vertical scrollbar when that document
+         is taller than the available viewer stage (overflow:auto). */
+      var scroll = document.createElement('div');
+      scroll.className = 'igsv-scroll';
+      var content = document.createElement('div');
+      content.className = 'igsv-content';
+      var media = document.createElement('div');
+      media.className = 'igsv-media';
+      media.setAttribute('data-aspect', embed.aspect || 'auto');
+      if (embed.provider) media.setAttribute('data-provider', embed.provider);
+      media.appendChild(iframe);
+      content.appendChild(media);
+
+      /* YouTube's official iframe exposes the player only, not the watch-page
+         title/description/comments UI. Reuse the already-published card metadata
+         under the player so the in-site viewer still behaves like a scrollable
+         content page without opening youtube.com or adding front-time API calls. */
+      if (platform === 'youtube' && (title || description)) {
+        var detail = document.createElement('div');
+        detail.className = 'igsv-detail';
+        if (title) {
+          var detailTitle = document.createElement('div');
+          detailTitle.className = 'igsv-detail-title';
+          detailTitle.textContent = title;
+          detail.appendChild(detailTitle);
+        }
+        if (description) {
+          var detailDesc = document.createElement('div');
+          detailDesc.className = 'igsv-detail-desc';
+          detailDesc.textContent = description;
+          detail.appendChild(detailDesc);
+        }
+        content.appendChild(detail);
+      }
+
+      scroll.appendChild(content);
+      stage.appendChild(scroll);
     }
     sizeProviderFrame(stage, iframe, embed);
     iframe.__igdcSocialEmbed = embed;
@@ -526,6 +572,7 @@
 
     var root = ensureViewer();
     var title = titleOf(card) || platform;
+    var description = descOf(card);
     var embed = buildEmbed(platform, url, card);
 
     state.previousFocus = document.activeElement;
@@ -540,7 +587,7 @@
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     updateLabels(root);
-    mountEmbed(root, embed, title);
+    mountEmbed(root, embed, title, description, platform);
 
     if (!state.pushed) {
       try {

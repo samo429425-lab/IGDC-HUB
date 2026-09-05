@@ -75,10 +75,19 @@ function parseCountryList(value) {
 function rowBlocksDonation(row) {
   if (!row || typeof row !== "object") return false;
   if (row.donation === false || row.noDonation === true) return true;
-  const channels = Array.isArray(row.blockChannels || row.blockedChannels)
+
+  const blocked = Array.isArray(row.blockChannels || row.blockedChannels)
     ? (row.blockChannels || row.blockedChannels)
     : text(row.blockChannels || row.blockedChannels).split(/[|,\s]+/);
-  return channels.some((value) => text(value).toLowerCase() === "donation");
+  if (blocked.some((value) => text(value).toLowerCase() === "donation")) return true;
+
+  /* Match the existing SearchBank country-policy semantics exactly:
+     when a country supplies an allow-list, every omitted channel is blocked. */
+  const allowed = Array.isArray(row.allowChannels || row.allowedChannels)
+    ? (row.allowChannels || row.allowedChannels)
+    : text(row.allowChannels || row.allowedChannels).split(/[|,\s]+/);
+  const normalizedAllowed = allowed.map((value) => text(value).toLowerCase()).filter(Boolean);
+  return normalizedAllowed.length > 0 && !normalizedAllowed.includes("donation");
 }
 
 function countryPolicyBlocksDonation(country) {
