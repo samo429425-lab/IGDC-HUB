@@ -1,5 +1,5 @@
 /*
- * IGDC Social Network main-card viewer bridge v3.0.0
+ * IGDC Social Network main-card viewer bridge v3.1.0-social-oauth
  * Scope: social main 9 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
@@ -39,7 +39,10 @@
     lastUrl: '',
     platform: '',
     parentTopState: null,
-    youtubeDetailToken: 0
+    youtubeDetailToken: 0,
+    youtubeOAuthStatus: 'unknown',
+    youtubeOAuthPopup: null,
+    youtubePendingAction: null
   };
 
   function text(v) { return v == null ? '' : String(v); }
@@ -72,11 +75,11 @@
   }
 
   var LABELS = {
-    ko: { list:'목록으로', fullscreen:'전체 화면', exitFullscreen:'전체 화면 종료', loading:'콘텐츠를 불러오는 중입니다.', unavailable:'이 콘텐츠는 현재 내부 재생을 준비할 수 없습니다.', ytChecking:'YouTube 상세 정보를 확인하는 중입니다.', ytDetailUnavailable:'YouTube 공개 상세 정보를 불러오지 못해 현재 저장된 제목·설명만 표시합니다.', ytSubscriber:'구독자', ytViews:'조회수', ytLikes:'좋아요', ytComments:'댓글', ytOpenComments:'댓글 더보기', ytCloseComments:'댓글 접기', ytSort:'정렬 기준', ytSortTop:'인기순', ytSortNewest:'최신순', ytMore:'더보기', ytLess:'간략히', ytShare:'공유', ytSave:'저장', ytSaved:'저장됨', ytSubscribe:'구독', ytJoin:'가입', ytCommentAdd:'댓글 추가…', ytOAuth:'구독·좋아요·댓글 작성은 YouTube 계정 OAuth 연동이 필요합니다.', ytPublicNote:'조회수·좋아요·댓글은 YouTube 공개 데이터입니다.' },
-    en: { list:'Back to list', fullscreen:'Fullscreen', exitFullscreen:'Exit fullscreen', loading:'Loading content…', unavailable:'This content cannot currently be prepared for in-site playback.', ytChecking:'Loading YouTube details…', ytDetailUnavailable:'YouTube public details are unavailable; showing the stored title and description.', ytSubscriber:'Subscribers', ytViews:'Views', ytLikes:'Like', ytComments:'Comments', ytOpenComments:'Show more comments', ytCloseComments:'Show fewer comments', ytSort:'Sort by', ytSortTop:'Top comments', ytSortNewest:'Newest first', ytMore:'Show more', ytLess:'Show less', ytShare:'Share', ytSave:'Save', ytSaved:'Saved', ytSubscribe:'Subscribe', ytJoin:'Join', ytCommentAdd:'Add a comment…', ytOAuth:'Subscribe, like changes and comment posting require YouTube account OAuth.', ytPublicNote:'Views, likes and comments are public YouTube data.' },
-    ja: { list:'一覧へ', fullscreen:'全画面', exitFullscreen:'全画面を終了', loading:'コンテンツを読み込み中です。', unavailable:'このコンテンツは現在サイト内再生を準備できません。', ytChecking:'YouTubeの詳細を読み込み中です。', ytDetailUnavailable:'YouTubeの公開詳細を取得できないため、保存済みのタイトルと説明を表示します。', ytSubscriber:'登録者', ytViews:'視聴回数', ytLikes:'高評価', ytComments:'コメント', ytOpenComments:'コメントをもっと見る', ytCloseComments:'コメントを閉じる', ytSort:'並べ替え', ytSortTop:'人気順', ytSortNewest:'新しい順', ytMore:'もっと見る', ytLess:'一部を表示', ytShare:'共有', ytSave:'保存', ytSaved:'保存済み', ytSubscribe:'登録', ytJoin:'メンバーになる', ytCommentAdd:'コメントを追加…', ytOAuth:'登録・高評価・コメント投稿には YouTube OAuth が必要です。', ytPublicNote:'視聴回数・高評価・コメントは YouTube の公開データです。' },
-    zh: { list:'返回列表', fullscreen:'全屏', exitFullscreen:'退出全屏', loading:'正在加载内容。', unavailable:'此内容目前无法在站内准备播放。', ytChecking:'正在加载 YouTube 详细信息。', ytDetailUnavailable:'无法获取 YouTube 公开详细信息，显示已保存的标题和说明。', ytSubscriber:'订阅者', ytViews:'观看次数', ytLikes:'点赞', ytComments:'评论', ytOpenComments:'查看更多评论', ytCloseComments:'收起评论', ytSort:'排序', ytSortTop:'热门', ytSortNewest:'最新', ytMore:'展开', ytLess:'收起', ytShare:'分享', ytSave:'保存', ytSaved:'已保存', ytSubscribe:'订阅', ytJoin:'加入', ytCommentAdd:'添加评论…', ytOAuth:'订阅、点赞变更和发表评论需要 YouTube OAuth。', ytPublicNote:'观看次数、点赞和评论来自 YouTube 公开数据。' },
-    zht:{ list:'返回列表', fullscreen:'全螢幕', exitFullscreen:'退出全螢幕', loading:'正在載入內容。', unavailable:'此內容目前無法在站內準備播放。', ytChecking:'正在載入 YouTube 詳細資訊。', ytDetailUnavailable:'無法取得 YouTube 公開詳細資訊，顯示已儲存的標題與說明。', ytSubscriber:'訂閱者', ytViews:'觀看次數', ytLikes:'喜歡', ytComments:'留言', ytOpenComments:'查看更多留言', ytCloseComments:'收起留言', ytSort:'排序', ytSortTop:'熱門', ytSortNewest:'最新', ytMore:'展開', ytLess:'收起', ytShare:'分享', ytSave:'儲存', ytSaved:'已儲存', ytSubscribe:'訂閱', ytJoin:'加入', ytCommentAdd:'新增留言…', ytOAuth:'訂閱、喜歡變更與留言發佈需要 YouTube OAuth。', ytPublicNote:'觀看次數、喜歡和留言來自 YouTube 公開資料。' }
+    ko: { list:'목록으로', fullscreen:'전체 화면', exitFullscreen:'전체 화면 종료', loading:'콘텐츠를 불러오는 중입니다.', unavailable:'이 콘텐츠는 현재 내부 재생을 준비할 수 없습니다.', ytChecking:'YouTube 상세 정보를 확인하는 중입니다.', ytDetailUnavailable:'YouTube 공개 상세 정보를 불러오지 못해 현재 저장된 제목·설명만 표시합니다.', ytSubscriber:'구독자', ytViews:'조회수', ytLikes:'좋아요', ytComments:'댓글', ytOpenComments:'댓글 더보기', ytCloseComments:'댓글 접기', ytSort:'정렬 기준', ytSortTop:'인기순', ytSortNewest:'최신순', ytMore:'더보기', ytLess:'간략히', ytShare:'공유', ytSave:'저장', ytSaved:'저장됨', ytSubscribe:'구독', ytJoin:'가입', ytCommentAdd:'댓글 추가…', ytOAuth:'구독·좋아요·댓글 작성은 YouTube 계정 연결이 필요합니다.', ytConnect:'YouTube 계정 연결', ytConnecting:'계정 연결 중…', ytConnected:'계정 연결됨', ytCommentPost:'댓글', ytSubscribed:'구독됨', ytLiked:'좋아요 완료', ytActionFailed:'요청을 처리하지 못했습니다.', ytPublicNote:'조회수·좋아요·댓글은 YouTube 공개 데이터입니다.' },
+    en: { list:'Back to list', fullscreen:'Fullscreen', exitFullscreen:'Exit fullscreen', loading:'Loading content…', unavailable:'This content cannot currently be prepared for in-site playback.', ytChecking:'Loading YouTube details…', ytDetailUnavailable:'YouTube public details are unavailable; showing the stored title and description.', ytSubscriber:'Subscribers', ytViews:'Views', ytLikes:'Like', ytComments:'Comments', ytOpenComments:'Show more comments', ytCloseComments:'Show fewer comments', ytSort:'Sort by', ytSortTop:'Top comments', ytSortNewest:'Newest first', ytMore:'Show more', ytLess:'Show less', ytShare:'Share', ytSave:'Save', ytSaved:'Saved', ytSubscribe:'Subscribe', ytJoin:'Join', ytCommentAdd:'Add a comment…', ytOAuth:'Subscribe, like and comment posting require a YouTube account connection.', ytConnect:'Connect YouTube', ytConnecting:'Connecting…', ytConnected:'Connected', ytCommentPost:'Post', ytSubscribed:'Subscribed', ytLiked:'Liked', ytActionFailed:'Could not complete this action.', ytPublicNote:'Views, likes and comments are public YouTube data.' },
+    ja: { list:'一覧へ', fullscreen:'全画面', exitFullscreen:'全画面を終了', loading:'コンテンツを読み込み中です。', unavailable:'このコンテンツは現在サイト内再生を準備できません。', ytChecking:'YouTubeの詳細を読み込み中です。', ytDetailUnavailable:'YouTubeの公開詳細を取得できないため、保存済みのタイトルと説明を表示します。', ytSubscriber:'登録者', ytViews:'視聴回数', ytLikes:'高評価', ytComments:'コメント', ytOpenComments:'コメントをもっと見る', ytCloseComments:'コメントを閉じる', ytSort:'並べ替え', ytSortTop:'人気順', ytSortNewest:'新しい順', ytMore:'もっと見る', ytLess:'一部を表示', ytShare:'共有', ytSave:'保存', ytSaved:'保存済み', ytSubscribe:'登録', ytJoin:'メンバーになる', ytCommentAdd:'コメントを追加…', ytOAuth:'登録・高評価・コメント投稿には YouTube アカウント接続が必要です。', ytConnect:'YouTubeを接続', ytConnecting:'接続中…', ytConnected:'接続済み', ytCommentPost:'投稿', ytSubscribed:'登録済み', ytLiked:'高評価済み', ytActionFailed:'操作を完了できませんでした。', ytPublicNote:'視聴回数・高評価・コメントは YouTube の公開データです。' },
+    zh: { list:'返回列表', fullscreen:'全屏', exitFullscreen:'退出全屏', loading:'正在加载内容。', unavailable:'此内容目前无法在站内准备播放。', ytChecking:'正在加载 YouTube 详细信息。', ytDetailUnavailable:'无法获取 YouTube 公开详细信息，显示已保存的标题和说明。', ytSubscriber:'订阅者', ytViews:'观看次数', ytLikes:'点赞', ytComments:'评论', ytOpenComments:'查看更多评论', ytCloseComments:'收起评论', ytSort:'排序', ytSortTop:'热门', ytSortNewest:'最新', ytMore:'展开', ytLess:'收起', ytShare:'分享', ytSave:'保存', ytSaved:'已保存', ytSubscribe:'订阅', ytJoin:'加入', ytCommentAdd:'添加评论…', ytOAuth:'订阅、点赞和发表评论需要连接 YouTube 帐号。', ytConnect:'连接 YouTube', ytConnecting:'正在连接…', ytConnected:'已连接', ytCommentPost:'发布', ytSubscribed:'已订阅', ytLiked:'已点赞', ytActionFailed:'无法完成此操作。', ytPublicNote:'观看次数、点赞和评论来自 YouTube 公开数据。' },
+    zht:{ list:'返回列表', fullscreen:'全螢幕', exitFullscreen:'退出全螢幕', loading:'正在載入內容。', unavailable:'此內容目前無法在站內準備播放。', ytChecking:'正在載入 YouTube 詳細資訊。', ytDetailUnavailable:'無法取得 YouTube 公開詳細資訊，顯示已儲存的標題與說明。', ytSubscriber:'訂閱者', ytViews:'觀看次數', ytLikes:'喜歡', ytComments:'留言', ytOpenComments:'查看更多留言', ytCloseComments:'收起留言', ytSort:'排序', ytSortTop:'熱門', ytSortNewest:'最新', ytMore:'展開', ytLess:'收起', ytShare:'分享', ytSave:'儲存', ytSaved:'已儲存', ytSubscribe:'訂閱', ytJoin:'加入', ytCommentAdd:'新增留言…', ytOAuth:'訂閱、喜歡與留言發佈需要連接 YouTube 帳號。', ytConnect:'連接 YouTube', ytConnecting:'正在連接…', ytConnected:'已連接', ytCommentPost:'發佈', ytSubscribed:'已訂閱', ytLiked:'已喜歡', ytActionFailed:'無法完成此操作。', ytPublicNote:'觀看次數、喜歡和留言來自 YouTube 公開資料。' }
   };
   function labels() { return LABELS[language()] || LABELS.en; }
 
@@ -399,9 +402,12 @@
       '#igdcSocialViewerV2 .igsv-yt-comments-title{margin:0;font:700 20px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;color:#111}' +
       '#igdcSocialViewerV2 .igsv-yt-sort{display:flex;align-items:center;gap:7px;color:#333;font:600 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-yt-sort select{border:1px solid #d6d6d6;border-radius:8px;background:#fff;color:#111;padding:6px 28px 6px 9px;font:600 13px/1.2 system-ui,-apple-system,Segoe UI,sans-serif}' +
-      '#igdcSocialViewerV2 .igsv-yt-comment-compose{display:flex;align-items:center;gap:10px;padding:10px 0 14px;border-bottom:1px solid #e5e7eb;color:#777;font:400 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-compose{display:flex;align-items:flex-end;gap:10px;padding:10px 0 14px;border-bottom:1px solid #e5e7eb;color:#777;font:400 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-yt-compose-dot{width:34px;height:34px;border-radius:50%;background:#e2e4e7;flex:0 0 34px}' +
-      '#igdcSocialViewerV2 .igsv-yt-compose-line{flex:1 1 auto;border-bottom:1px solid #b8b8b8;padding:0 0 8px}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-input{min-width:0;flex:1 1 auto;resize:vertical;min-height:38px;max-height:160px;border:0;border-bottom:1px solid #b8b8b8;background:#fff;color:#111;padding:8px 2px;font:400 14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;outline:none}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-submit{border:0;border-radius:18px;min-height:36px;padding:0 14px;background:#111;color:#fff;font:700 13px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-submit:disabled{opacity:.45;cursor:default}' +
+      '#igdcSocialViewerV2 .igsv-yt-auth-state{margin:4px 0 0;color:#666;font:600 12px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-yt-comment.is-hidden{display:none}' +
       '#igdcSocialViewerV2 .igsv-yt-comment-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-yt-comment-text.expanded{display:block;overflow:visible}' +
@@ -557,19 +563,14 @@
 
   function iframeSandboxFor(platform, embed) {
     var strict = 'allow-scripts allow-same-origin allow-forms allow-presentation allow-downloads';
-    /* WeChat/Weibo are direct third-party pages, not IGDC-generated provider embed
-       documents. Keep their sandbox strict. Official provider embeds need their own
-       user-activated popup/modal/storage flows for login and interaction. Facebook's
-       post plugin additionally routes Like/Reaction/Comment/Share through a
-       user-activated top-level navigation handshake in some browser/login states.
-       Grant that capability ONLY to Facebook and ONLY after a real user gesture;
-       automatic top navigation remains blocked by the sandbox token itself. */
+    /* Social viewer containment is non-negotiable: provider content may run its own
+       scripts/forms and may open a user-initiated auth dialog, but it must never
+       replace the IGDC tab or escape an opened popup from the sandbox. This keeps
+       Facebook/Instagram/TikTok/X/etc. inside the IGDC viewer contract. OAuth that
+       IGDC owns (for example YouTube writes) is opened by the parent viewer itself,
+       not by granting top-navigation to a third-party iframe. */
     if (embed && embed.restrictedProvider) return strict;
-    var allowed = strict + ' allow-popups allow-popups-to-escape-sandbox allow-modals allow-storage-access-by-user-activation';
-    if (platform === 'facebook' || (embed && /^facebook-/.test(String(embed.provider || '')))) {
-      allowed += ' allow-top-navigation-by-user-activation';
-    }
-    return allowed;
+    return strict + ' allow-popups allow-modals allow-storage-access-by-user-activation';
   }
 
   function showOAuthHint(box) {
@@ -631,6 +632,106 @@
       ta.remove();
       mark();
     } catch (_) {}
+  }
+
+
+  function setYouTubeOAuthStatus(status) {
+    state.youtubeOAuthStatus = status || 'unknown';
+    var root = document.getElementById('igdcSocialViewerV2');
+    if (!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll('.igsv-yt-auth-state'), function (node) {
+      node.textContent = state.youtubeOAuthStatus === 'authorized' ? labels().ytConnected : '';
+    });
+  }
+
+  function checkYouTubeOAuthStatus() {
+    fetch('/.netlify/functions/social-youtube-action', { method: 'GET', credentials: 'same-origin', cache: 'no-store' })
+      .then(function (res) { return res.json().catch(function () { return {}; }); })
+      .then(function (data) {
+        if (!state.open || state.platform !== 'youtube') return;
+        if (data && data.configured === false) setYouTubeOAuthStatus('unconfigured');
+        else setYouTubeOAuthStatus(data && data.authorized ? 'authorized' : 'required');
+      })
+      .catch(function () { if (state.open && state.platform === 'youtube') setYouTubeOAuthStatus('unknown'); });
+  }
+
+  function openYouTubeOAuthPopup(onDone) {
+    var width = 540, height = 720;
+    var left = Math.max(0, Math.round((window.screenX || 0) + ((window.outerWidth || screen.width || width) - width) / 2));
+    var top = Math.max(0, Math.round((window.screenY || 0) + ((window.outerHeight || screen.height || height) - height) / 2));
+    var popup = null;
+    try {
+      popup = window.open('/.netlify/functions/social-youtube-oauth-start', 'igdcSocialYouTubeOAuth', 'popup=yes,width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes');
+    } catch (_) {}
+    if (!popup) {
+      setYouTubeOAuthStatus('required');
+      if (typeof onDone === 'function') onDone(false, 'popup_blocked');
+      return;
+    }
+    state.youtubeOAuthPopup = popup;
+    setYouTubeOAuthStatus('connecting');
+    var settled = false;
+    function finish(ok, error) {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMessage);
+      window.clearInterval(closePoll);
+      state.youtubeOAuthPopup = null;
+      setYouTubeOAuthStatus(ok ? 'authorized' : 'required');
+      if (typeof onDone === 'function') onDone(!!ok, error || '');
+    }
+    function onMessage(event) {
+      if (event.origin !== location.origin) return;
+      var data = event.data || {};
+      if (data.type !== 'IGDC_SOCIAL_OAUTH' || data.provider !== 'youtube') return;
+      finish(data.ok === true, data.error || '');
+    }
+    window.addEventListener('message', onMessage);
+    var closePoll = window.setInterval(function () {
+      try { if (popup.closed) finish(state.youtubeOAuthStatus === 'authorized', 'popup_closed'); } catch (_) {}
+    }, 500);
+  }
+
+  function youtubeWriteAction(action, payload, button, onSuccess) {
+    var body = Object.assign({}, payload || {}, { action: action });
+    var retriedAfterOAuth = false;
+    function execute() {
+      if (button) button.disabled = true;
+      return fetch('/.netlify/functions/social-youtube-action', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) { return { status: res.status, data: data }; });
+      }).then(function (result) {
+        if (button) button.disabled = false;
+        if (result.data && result.data.ok) {
+          setYouTubeOAuthStatus('authorized');
+          if (typeof onSuccess === 'function') onSuccess(result.data);
+          return true;
+        }
+        if (result.data && result.data.oauthRequired) {
+          setYouTubeOAuthStatus('required');
+          if (!retriedAfterOAuth) {
+            retriedAfterOAuth = true;
+            openYouTubeOAuthPopup(function (ok) { if (ok) execute(); });
+          }
+          return false;
+        }
+        if (button) {
+          var original = button.textContent;
+          button.textContent = labels().ytActionFailed;
+          window.setTimeout(function () { if (button) button.textContent = original; }, 1800);
+        }
+        return true;
+      }).catch(function () {
+        if (button) button.disabled = false;
+        return true;
+      });
+    }
+
+    if (state.youtubeOAuthStatus === 'authorized') { execute(); return; }
+    retriedAfterOAuth = true;
+    openYouTubeOAuthPopup(function (ok) { if (ok) execute(); });
   }
 
   function refreshDescriptionToggle(detail) {
@@ -715,13 +816,12 @@
 
     var channelActions = document.createElement('div');
     channelActions.className = 'igsv-yt-channel-actions';
-    var joinBtn = makeActionButton(labels().ytJoin);
-    joinBtn.setAttribute('aria-disabled', 'true');
-    joinBtn.addEventListener('click', function () { showOAuthHint(box); });
     var subBtn = makeActionButton(labels().ytSubscribe, 'is-primary');
-    subBtn.setAttribute('aria-disabled', 'true');
-    subBtn.addEventListener('click', function () { showOAuthHint(box); });
-    channelActions.appendChild(joinBtn);
+    subBtn.addEventListener('click', function () {
+      youtubeWriteAction('subscribe', { channelId: channel.id || video.channelId || '' }, subBtn, function () {
+        subBtn.textContent = '✓ ' + labels().ytSubscribed;
+      });
+    });
     channelActions.appendChild(subBtn);
     channelRow.appendChild(channelActions);
     box.appendChild(channelRow);
@@ -730,8 +830,11 @@
     actions.className = 'igsv-yt-actions';
     if (stats.viewCount != null) actions.appendChild(makeText('div', 'igsv-yt-views', labels().ytViews + ' ' + formatCount(stats.viewCount)));
     var likeBtn = makeActionButton('♡ ' + labels().ytLikes + (stats.likeCount != null ? ' ' + formatCount(stats.likeCount) : ''));
-    likeBtn.setAttribute('aria-disabled', 'true');
-    likeBtn.addEventListener('click', function () { showOAuthHint(box); });
+    likeBtn.addEventListener('click', function () {
+      youtubeWriteAction('like', { videoId: video.id || videoIdYouTube(state.lastUrl || '') }, likeBtn, function () {
+        likeBtn.textContent = '♥ ' + labels().ytLiked + (stats.likeCount != null ? ' ' + formatCount(Number(stats.likeCount || 0) + 1) : '');
+      });
+    });
     actions.appendChild(likeBtn);
     var shareBtn = makeActionButton('↗ ' + labels().ytShare);
     shareBtn.addEventListener('click', function () { shareSource(video.title || '', state.lastUrl || '', shareBtn); });
@@ -749,6 +852,8 @@
 
     var oauthHint = makeText('div', 'igsv-yt-oauth-hint', labels().ytOAuth);
     box.appendChild(oauthHint);
+    var authState = makeText('div', 'igsv-yt-auth-state', state.youtubeOAuthStatus === 'authorized' ? labels().ytConnected : '');
+    box.appendChild(authState);
 
     var comments = Array.isArray(payload.comments) ? payload.comments : [];
     var commentCount = stats.commentCount != null ? Number(stats.commentCount || 0) : comments.length;
@@ -793,13 +898,36 @@
 
     var compose = document.createElement('div');
     compose.className = 'igsv-yt-comment-compose';
-    compose.setAttribute('role', 'button');
-    compose.tabIndex = 0;
-    compose.innerHTML = '<span class="igsv-yt-compose-dot" aria-hidden="true"></span><span class="igsv-yt-compose-line"></span>';
-    q('.igsv-yt-compose-line', compose).textContent = labels().ytCommentAdd;
-    function commentAuth() { showOAuthHint(box); }
-    compose.addEventListener('click', commentAuth);
-    compose.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); commentAuth(); } });
+    var composeDot = document.createElement('span');
+    composeDot.className = 'igsv-yt-compose-dot';
+    composeDot.setAttribute('aria-hidden', 'true');
+    var commentInput = document.createElement('textarea');
+    commentInput.className = 'igsv-yt-comment-input';
+    commentInput.rows = 2;
+    commentInput.maxLength = 10000;
+    commentInput.placeholder = labels().ytCommentAdd;
+    var commentSubmit = makeText('button', 'igsv-yt-comment-submit', labels().ytCommentPost);
+    commentSubmit.type = 'button';
+    commentSubmit.disabled = true;
+    commentInput.addEventListener('input', function () { commentSubmit.disabled = !text(commentInput.value); });
+    commentSubmit.addEventListener('click', function () {
+      var value = text(commentInput.value);
+      if (!value) return;
+      youtubeWriteAction('comment', { videoId: video.id || videoIdYouTube(state.lastUrl || ''), comment: value }, commentSubmit, function () {
+        commentInput.value = '';
+        commentSubmit.disabled = true;
+        window.setTimeout(function () { loadYouTubeDetail(detail, state.lastUrl || '', select.value); }, 450);
+      });
+    });
+    commentInput.addEventListener('keydown', function (event) {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && text(commentInput.value)) {
+        event.preventDefault();
+        commentSubmit.click();
+      }
+    });
+    compose.appendChild(composeDot);
+    compose.appendChild(commentInput);
+    compose.appendChild(commentSubmit);
     commentsBox.appendChild(compose);
 
     comments.forEach(function (row, index) {
@@ -843,6 +971,7 @@
     if (!detail || !id) return;
     order = order === 'time' ? 'time' : 'relevance';
     var token = ++state.youtubeDetailToken;
+    if (state.youtubeOAuthStatus === 'unknown') checkYouTubeOAuthStatus();
     var box = ensureYouTubeLiveBox(detail);
     if (box) {
       box.textContent = '';
@@ -939,9 +1068,9 @@
     iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write; web-share';
     iframe.setAttribute('allowfullscreen', '');
     if (embed.provider === 'facebook-post') iframe.setAttribute('scrolling', 'yes');
-    /* Official provider embeds need their own user-initiated login/share dialogs for
-       native reactions, comments and sharing. The sandbox remains in place and still
-       omits allow-top-navigation, so the IGDC host page cannot be replaced. */
+    /* Provider embeds stay contained. They may use an in-sandbox user popup when the
+       provider requires one, but cannot replace the IGDC tab and cannot create an
+       unsandboxed external browsing context. */
     iframe.setAttribute('sandbox', iframeSandboxFor(platform, embed));
     iframe.addEventListener('load', function () {
       sizeProviderFrame(stage, iframe, embed);

@@ -18,7 +18,7 @@ const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "sanmaru-social-live-collector-v1.17.0-tiktok-metadata-recovery";
+const VERSION = "sanmaru-social-live-collector-v1.18.0-shortlink-resolution";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -31,10 +31,10 @@ const PROVIDER_GROUP_NAMES = Object.freeze([
   "sanmaru_searchbank"
 ]);
 const CHANNEL_RESOLUTION_TIMEOUT_MS = 1500;
-const PUBLIC_METADATA_TIMEOUT_MS = 1500;
-const TIKTOK_METADATA_TIMEOUT_MS = 3000;
-const CHANNEL_RESOLUTION_BUDGET_MS = 4200;
-const TIKTOK_CHANNEL_RESOLUTION_BUDGET_MS = 8500;
+const PUBLIC_METADATA_TIMEOUT_MS = 2200;
+const TIKTOK_METADATA_TIMEOUT_MS = 3600;
+const CHANNEL_RESOLUTION_BUDGET_MS = 6500;
+const TIKTOK_CHANNEL_RESOLUTION_BUDGET_MS = 9000;
 const CHANNEL_RESOLUTION_CONCURRENCY = 4;
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 
@@ -300,6 +300,56 @@ function contentKind(platform, value) {
   } catch (_error) {}
   return "";
 }
+
+const SHORT_CONTENT_HOSTS = new Set([
+  'vm.tiktok.com', 'vt.tiktok.com', 'fb.watch', 'pin.it', 'redd.it'
+]);
+async function expandKnownShortContentUrl(platform, value) {
+  const normalized = Policy.normalizeUrl(value);
+  if (!normalized) return '';
+  let host = '';
+  try { host = new URL(normalized).hostname.toLowerCase().replace(/^www\./, ''); } catch (_error) { return normalized; }
+  if (!SHORT_CONTENT_HOSTS.has(host)) return normalized;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2600);
+  try {
+    const response = await fetch(normalized, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; IGDC-MARU-SocialHub/1.0)',
+        'Accept': 'text/html,application/xhtml+xml,*/*;q=0.7'
+      }
+    });
+    const finalUrl = Policy.normalizeUrl(response && response.url);
+    if (
+      finalUrl &&
+      Policy.platformFromHost(finalUrl) === platform &&
+      contentKind(platform, finalUrl)
+    ) return finalUrl;
+  } catch (_error) {
+    // A short-link lookup is an enrichment only. The original candidate stays.
+  } finally {
+    clearTimeout(timer);
+  }
+  return normalized;
+}
+async function itemWithExpandedShortContent(item, platform) {
+  if (!item || typeof item !== 'object') return item;
+  const urls = candidateUrls(item);
+  for (const value of urls.slice(0, 8)) {
+    let host = '';
+    try { host = new URL(value).hostname.toLowerCase().replace(/^www\./, ''); } catch (_error) {}
+    if (!SHORT_CONTENT_HOSTS.has(host)) continue;
+    const expanded = await expandKnownShortContentUrl(platform, value);
+    if (expanded && expanded !== value && contentKind(platform, expanded)) {
+      return Object.assign({}, item, { latestContentUrl: expanded, canonicalUrl: expanded });
+    }
+  }
+  return item;
+}
+
 function channelIdFromItem(item) {
   const direct = SocialStore.text(item && item.channelId);
   if (/^UC[a-zA-Z0-9_-]{20,}$/.test(direct)) return direct;
@@ -1585,8 +1635,13 @@ async function resolveChannelAsset(item, platform, registrySeed) {
   return { ok: false, reason: hasPlatformUrl ? "channel_target_not_resolved" : "platform_host_mismatch" };
 }
 async function candidateFromItem(item, sectionKey, platform, queryText, route, registrySeed) {
-  let resolved = await resolveChannelAsset(item, platform, registrySeed);
-  const directLatestContentUrl = candidateUrls(item).find((url) => contentKind(platform, url)) || "";
+  // Search engines frequently return provider short-links (fb.watch, vm.tiktok,
+  // pin.it, redd.it). Resolve those once during collection so the stored release
+  // contains a canonical post/video URL that the front viewer can embed without
+  // any per-card redirect work. This is backend-only and never delays first paint.
+  const workingItem = await itemWithExpandedShortContent(item, platform);
+  let resolved = await resolveChannelAsset(workingItem, platform, registrySeed);
+  const directLatestContentUrl = candidateUrls(workingItem).find((url) => contentKind(platform, url)) || "";
   // Non-YouTube platforms frequently expose a real public post/video URL while
   // hiding the creator/profile identity from anonymous metadata. Keep that real
   // content candidate instead of collapsing the entire section to zero. YouTube
@@ -1612,27 +1667,27 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
   if (!resolved.latestContentUrl || !resolved.latestContentKind) {
     return { ok: false, reason: "latest_public_content_required" };
   }
-  const originalTitle = firstText([item && item.title, item && item.name, item && item.label]);
+  const originalTitle = firstText([workingItem && workingItem.title, workingItem && workingItem.name, workingItem && workingItem.label]);
   const enrichment = resolved.enrichment || {};
   const latest = resolved.latest || {};
-  const media = item && item.media && typeof item.media === "object" ? item.media : {};
+  const media = workingItem && workingItem.media && typeof workingItem.media === "object" ? workingItem.media : {};
   const mediaPreview = media.preview && typeof media.preview === "object" ? media.preview : {};
   const suppliedThumbnail = firstText([
     latest.thumbnail,
     enrichment.thumbnail,
-    item && item.thumbnail,
-    item && item.thumb,
-    item && item.image,
-    item && item.imageUrl,
-    item && item.cardImage,
-    item && item.poster,
+    workingItem && workingItem.thumbnail,
+    workingItem && workingItem.thumb,
+    workingItem && workingItem.image,
+    workingItem && workingItem.imageUrl,
+    workingItem && workingItem.cardImage,
+    workingItem && workingItem.poster,
     media.thumbnail,
     media.poster,
     mediaPreview.thumbnail,
     mediaPreview.poster,
     mediaPreview.image,
     registrySeed && registrySeed.thumbnail,
-    deepThumbnail(item)
+    deepThumbnail(workingItem)
   ]);
   const thumbnailResolution = await stablePublicThumbnail(
     platform,
@@ -1652,7 +1707,7 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     thumbnailResolution.thumbnail,
     usableThumbnail(registrySeed && registrySeed.thumbnail, resolved.latestContentUrl, platform),
     usableThumbnail(enrichment.thumbnail, resolved.latestContentUrl, platform),
-    usableThumbnail(deepThumbnail(item), resolved.latestContentUrl, platform)
+    usableThumbnail(deepThumbnail(workingItem), resolved.latestContentUrl, platform)
   ]);
   // A temporary thumbnail miss must not destroy a verified latest-content row.
   // Non-YouTube platforms often block anonymous metadata/oEmbed requests even
@@ -1667,25 +1722,25 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     resolved.suggestedTitle
   ]));
   if (syntheticTitle(title)) return { ok: false, reason: "real_content_title_required" };
-  const source = item && item.source;
+  const source = workingItem && workingItem.source;
   const creatorName = firstText([
     latest.creatorName, enrichment.creatorName, publicMetadata.creatorName,
-    item && item.creatorName, item && item.channelName,
-    item && item.channel, item && item.publisher, source && typeof source === "object" && source.name,
+    workingItem && workingItem.creatorName, workingItem && workingItem.channelName,
+    workingItem && workingItem.channel, workingItem && workingItem.publisher, source && typeof source === "object" && source.name,
     resolved.suggestedTitle
   ]).replace(/^(false|null|undefined)$/i, "") || firstText([resolved.suggestedTitle, title]);
   if (platform === "facebook" && facebookPressPublisher([
-    title, creatorName, item && item.publisher,
+    title, creatorName, workingItem && workingItem.publisher,
     source && typeof source === "object" && source.name, resolvedChannelUrl
   ].filter(Boolean).join(" "))) {
     return { ok: false, reason: "facebook_press_or_news_publisher_excluded" };
   }
   const routeLanguages = route && route.languages || [];
-  const explicitCountry = SocialStore.text(item && item.country).toUpperCase();
+  const explicitCountry = SocialStore.text(workingItem && workingItem.country).toUpperCase();
   // Creator origin is not a hard filter. The route remains a preference weight
   // and explicitly supplied origin is preserved for later ranking.
-  const category = firstText([item && item.category, categoryFromQuery(platform, queryText)]);
-  const itemLanguage = CountryRouting.normalizeLanguage(item && (item.lang || item.language));
+  const category = firstText([workingItem && workingItem.category, categoryFromQuery(platform, queryText)]);
+  const itemLanguage = CountryRouting.normalizeLanguage(workingItem && (workingItem.lang || workingItem.language));
   const language = itemLanguage && routeLanguages.includes(itemLanguage)
     ? itemLanguage
     : firstText([routeLanguages[0], itemLanguage, "und"]);
@@ -1703,20 +1758,20 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     channelEntityKind: resolved.entityKind,
     channelAsset: !!resolvedChannelUrl,
     latestContentAsset: true,
-    contentPublishedAt: firstText([latest.publishedAt, item && item.publishedAt, item && item.published_at, item && item.pubDate, item && item.date]),
+    contentPublishedAt: firstText([latest.publishedAt, workingItem && workingItem.publishedAt, workingItem && workingItem.published_at, workingItem && workingItem.pubDate, workingItem && workingItem.date]),
     thumbnailUrl: resolvedThumbnail,
     thumbnailState: resolvedThumbnail ? "resolved" : "retryable_unresolved",
     channelThumbnailUrl: firstText([
-      item && item.channelThumbnail,
-      item && item.channelThumbnailUrl,
+      workingItem && workingItem.channelThumbnail,
+      workingItem && workingItem.channelThumbnailUrl,
       registrySeed && registrySeed.thumbnail,
       enrichment.thumbnail,
       latest.channelThumbnail
     ]),
-    description: firstText([item && item.description, item && item.summary, item && item.snippet]).slice(0, 1200),
+    description: firstText([workingItem && workingItem.description, workingItem && workingItem.summary, workingItem && workingItem.snippet]).slice(0, 1200),
     creatorName: creatorName.slice(0, 180),
     language,
-    countryScopes: item && item.publicDirectoryCountryFallback
+    countryScopes: workingItem && workingItem.publicDirectoryCountryFallback
       ? []
       : (explicitCountry ? [explicitCountry] : (route && route.countryCode ? [route.countryCode] : [])),
     languageScopes: routeLanguages,
@@ -1727,15 +1782,15 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     candidateOnly: true,
     verificationStatus: "web_verification_required",
     discoveryQuery: queryText,
-    engagement: item && item.engagement || {},
+    engagement: workingItem && workingItem.engagement || {},
     source: {
-      name: itemSourceName(item),
+      name: itemSourceName(workingItem),
       platform,
       mode: "social_hub_latest_content_discovery"
     },
     bind: { section: sectionKey, psom_key: sectionKey, platform },
-    tags: Array.from(new Set([].concat(item && item.tags || [], [platform, category, resolved.latestContentKind, "public", "latest_content", "creator_channel_identified"]))).slice(0, 12),
-    quality: { rank: Number(item && (item._finalScore || item.score || item.rank) || 0) }
+    tags: Array.from(new Set([].concat(workingItem && workingItem.tags || [], [platform, category, resolved.latestContentKind, "public", "latest_content", "creator_channel_identified"]))).slice(0, 12),
+    quality: { rank: Number(workingItem && (workingItem._finalScore || item.score || item.rank) || 0) }
   };
   const reasons = Policy.validationReasons(candidate);
   if (reasons.length) return { ok: false, reason: reasons[0] };
@@ -1753,9 +1808,9 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     latestContentAsset: false,
     thumbnailUrl: firstText([
       candidate.channelThumbnailUrl,
-      item && item.channelThumbnail,
-      item && item.channelThumbnailUrl,
-      item && item.publicDirectoryItem && item.thumbnail
+      workingItem && workingItem.channelThumbnail,
+      workingItem && workingItem.channelThumbnailUrl,
+      workingItem && workingItem.publicDirectoryItem && item.thumbnail
     ]),
     description: candidate.description,
     creatorName: creatorName.slice(0, 180),
@@ -1771,7 +1826,7 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     discoveryQuery: queryText,
     engagement: candidate.engagement,
     source: {
-      name: itemSourceName(item),
+      name: itemSourceName(workingItem),
       platform,
       mode: "social_hub_influencer_registry_discovery"
     },
@@ -2149,5 +2204,6 @@ exports.__test = {
   rssItems,
   htmlPublicPostItems,
   decodeSearchRedirectTarget,
-  decodeXml
+  decodeXml,
+  expandKnownShortContentUrl
 };

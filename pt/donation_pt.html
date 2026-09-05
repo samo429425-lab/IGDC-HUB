@@ -53,8 +53,14 @@ document.documentElement.setAttribute("data-igdc-donation-gate","pending");
   "use strict";
 
   var BLOCK_CLAIM = "https://igdcglobal.com/donation_blocked";
+  var GEO_URL = "/igdc-country-geo";
   var settled = false;
   var attempts = 0;
+  var geoStarted = false;
+  var geoReady = false;
+  var geoExcluded = false;
+  var geoCountry = "";
+  var startedAt = Date.now();
 
   function normalizeRole(value){
     return String(value == null ? "" : value)
@@ -90,26 +96,18 @@ document.documentElement.setAttribute("data-igdc-donation-gate","pending");
     document.documentElement.setAttribute("data-igdc-donation-gate","allowed");
   }
 
-  function deny(reason){
+  function deny(){
     if (settled) return;
     settled = true;
 
     function render(){
-      var message =
-        reason === "country"
-          ? "현재 접속 국가에서는 후원 서비스를 이용할 수 없습니다."
-          : reason === "session"
-            ? "국가 확인이 포함된 새 로그인 세션이 필요합니다. 로그아웃 후 다시 로그인해 주십시오."
-            : "회원 로그인 후 이용할 수 있습니다.";
-
       document.body.innerHTML =
         '<main role="main" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#f2f2f2;font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;">' +
           '<section style="width:min(520px,100%);padding:28px;border:1px solid #dcdcdc;border-radius:12px;background:#fff;text-align:center;box-shadow:0 4px 18px rgba(0,0,0,.08);">' +
-            '<h1 style="margin:0 0 14px;color:#004080;font-size:1.35rem;">후원 서비스 접근 제한</h1>' +
-            '<p style="margin:0;color:#333;line-height:1.65;">' + message + '</p>' +
+            '<h1 style="margin:0 0 14px;color:#004080;font-size:1.35rem;">Acesso ao serviço de doação restrito</h1>' +
+            '<p style="margin:0;color:#333;line-height:1.65;">O serviço de doação não está disponível no seu país atual.</p>' +
           '</section>' +
         '</main>';
-
       document.documentElement.setAttribute("data-igdc-donation-gate","denied");
     }
 
@@ -120,55 +118,77 @@ document.documentElement.setAttribute("data-igdc-donation-gate","pending");
     }
   }
 
+  function beginGeo(){
+    if (geoStarted) return;
+    geoStarted = true;
+    fetch(GEO_URL, { cache:"no-store", credentials:"same-origin" })
+      .then(function(res){ return res && res.ok ? res.json() : null; })
+      .then(function(data){
+        geoReady = true;
+        geoExcluded = !!(data && data.excluded === true);
+        geoCountry = String(data && (data.detectedCountry || data.country) || "").toUpperCase();
+        start();
+      })
+      .catch(function(){
+        /* Do not expose Donation when current-IP country resolution is unavailable. */
+        geoReady = true;
+        geoExcluded = true;
+        geoCountry = "";
+        start();
+      });
+  }
+
   function check(finalCheck){
     if (settled) return true;
 
     var auth = getAuth();
-    if (!auth ||
-        typeof auth.isAuthenticated !== "function" ||
-        !auth.isAuthenticated()) {
-      if (finalCheck) deny("login");
-      return false;
-    }
-
-    var roles = [];
+    var authenticated = false;
     try{
-      roles = typeof auth.getRoles === "function" ? auth.getRoles() : [];
+      authenticated = !!(auth && typeof auth.isAuthenticated === "function" && auth.isAuthenticated());
     }catch(e){}
 
-    if (isOwnerOrAdmin(roles)) {
+    var roles = [];
+    if (authenticated) {
+      try{ roles = typeof auth.getRoles === "function" ? auth.getRoles() : []; }catch(e){}
+    }
+
+    /* Management exception is intentional: owner/admin may inspect every country. */
+    if (authenticated && isOwnerOrAdmin(roles)) {
       allow();
       return true;
     }
 
     var payload = null;
-    try{
-      payload = typeof auth.getIdTokenPayload === "function"
-        ? auth.getIdTokenPayload()
-        : null;
-    }catch(e){}
-
-    var hasClaim = !!(
+    if (authenticated) {
+      try{ payload = typeof auth.getIdTokenPayload === "function" ? auth.getIdTokenPayload() : null; }catch(e){}
+    }
+    var blockedByClaim = !!(
       payload &&
-      Object.prototype.hasOwnProperty.call(payload, BLOCK_CLAIM)
+      Object.prototype.hasOwnProperty.call(payload, BLOCK_CLAIM) &&
+      (payload[BLOCK_CLAIM] === true || String(payload[BLOCK_CLAIM]).toLowerCase() === "true")
     );
-
-    if (!hasClaim) {
-      if (finalCheck) deny("session");
-      return false;
+    if (blockedByClaim) {
+      deny();
+      return true;
     }
 
-    var blocked =
-      payload[BLOCK_CLAIM] === true ||
-      String(payload[BLOCK_CLAIM]).toLowerCase() === "true";
+    if (!geoReady) return false;
 
-    if (blocked) deny("country");
-    else allow();
+    if (geoExcluded) {
+      /* A restricted-country guest may still become an authenticated owner/admin
+         while auth storage initializes. Give that session a short grace window. */
+      if (!authenticated && !finalCheck && Date.now() - startedAt < 2500) return false;
+      deny();
+      return true;
+    }
 
+    /* Non-restricted country: guests and ordinary members are both allowed. */
+    allow();
     return true;
   }
 
   function start(){
+    beginGeo();
     if (check(false)) return;
     if (attempts < 25) {
       attempts += 1;
@@ -2605,7 +2625,7 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
 <a class="bc-tile" href="https://opensea.io" rel="noopener" target="_blank">AbrirSea</a>
 <a class="bc-tile" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a>
 <a class="bc-tile" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a>
-<button class="bc-tile orange" onclick="try{document.querySelector('.account-section')?.scrollIntoView({behavior:'smooth'});}catch(e){}" style="margin-left:8px">Doar</button>
+<button aria-controls="donationSectionMenuBackdrop" aria-haspopup="dialog" class="bc-tile orange" id="donationSectionMenuBtn" style="margin-left:8px" type="button">Doar</button>
 </section>
 <section class="hero">
 <h2>💝 Centro Global de Doações 💝</h2>
@@ -2666,43 +2686,43 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
          data-psom-key="donation-global"></div>
   </div>
 
-  <div class="feed-row" data-count="80">
+  <div class="feed-row" data-count="100">
     <div class="row-label">ONG</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-ngo"></div>
   </div>
 
-  <div class="feed-row" data-count="80">
+  <div class="feed-row" data-count="100">
     <div class="row-label">Missão</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-mission"></div>
   </div>
 
-  <div class="feed-row" data-count="80">
+  <div class="feed-row" data-count="100">
     <div class="row-label">Serviço</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-service"></div>
   </div>
 
-  <div class="feed-row" data-count="80">
+  <div class="feed-row" data-count="100">
     <div class="row-label">Socorro</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-relief"></div>
   </div>
 
-  <div class="feed-row" data-count="80">
+  <div class="feed-row" data-count="100">
     <div class="row-label">Educação</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-education"></div>
   </div>
 
-  <div class="feed-row" data-count="80">
+  <div class="feed-row" data-count="100">
     <div class="row-label">Meio Ambiente</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-environment"></div>
   </div>
 
-  <div class="feed-row" data-count="80">
+  <div class="feed-row" data-count="100">
     <div class="row-label">Outros</div>
     <div class="row-track thumb-grid thumb-scroller"
          data-psom-key="donation-others"></div>
@@ -2716,7 +2736,7 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
 <aside class="right">
 <div class="panel cafe-link"><a aria-label="Go to WAM NAVER Cafe" href="https://cafe.naver.com/wamworld" target="_blank"><span aria-hidden="true" class="arrow">→</span><span class="label">WAM NAVER Cafe</span></a></div>
 <div class="panel account-section" id="rightDonationOptions">
-<button class="button" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donations</button>
+<button class="button" data-action="donate" onclick="alert('The Donation system will be connected soon!')" style="margin-bottom:8px; padding:5px 14px;">Donations</button>
 <p><b>IESF (International Exchange Service Foundation)</b><br/>
         - General: NongHyup 301-0078-3333-51<br/>
         - Foreign Currency: NongHyup 452-0022-8173-81<br/><span>   SWIFT: NACFKRSE</span></p>
@@ -4149,6 +4169,170 @@ html[lang="ur"] #igdcDonationViewerV10 .attachments{
 })();
 </script>
 <script>(function(){try{document.querySelectorAll(".donation-inline,.donation-buttons").forEach(function(n){n.remove();});}catch(e){}})();</script>
+<style id="igdc-donation-section-menu-style">
+#donationSectionMenuBackdrop .donate-modal{width:min(760px,94vw);max-width:760px;max-height:78vh;overflow:hidden;display:flex;flex-direction:column;}
+#donationSectionMenuBody{display:grid;gap:10px;overflow:auto;padding-right:2px;}
+.donation-section-group{border-top:1px solid #e4e4e4;padding-top:9px;min-width:0;}
+.donation-section-group:first-child{border-top:0;padding-top:0;}
+.donation-section-head{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+.donation-section-head h4{flex:0 0 92px;margin:0;color:#004080;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.donation-section-search{flex:1 1 auto;min-width:0;height:32px;border:1px solid #cfd7e3;border-radius:8px;padding:0 10px;font-size:.88rem;outline:none;background:#fff;}
+.donation-section-search:focus{border-color:#7096c7;box-shadow:0 0 0 2px rgba(0,64,128,.08);}
+.donation-section-rail-wrap{display:grid;grid-template-columns:30px minmax(0,1fr) 30px;align-items:center;gap:5px;}
+.donation-section-scroll{border:0;background:#f7f9fc;color:#004080;border-radius:50%;width:30px;height:30px;cursor:pointer;font-weight:900;line-height:1;}
+.donation-section-scroll:disabled{opacity:.28;cursor:default;}
+.donation-section-orgs{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;scrollbar-width:thin;padding:2px 1px 5px;min-width:0;}
+.donation-section-orgs button{flex:0 0 auto;max-width:220px;border:1px solid #d7b06d;border-radius:8px;background:#fff4e0;color:#704000;padding:7px 10px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.donation-section-count{margin:5px 0 0 130px;color:#777;font-size:.76rem;min-height:1em;}
+#donationSectionMenuEmpty{margin:4px 0;color:#666;}
+@media(max-width:640px){
+  #donationSectionMenuBackdrop .donate-modal{width:94vw;max-height:82vh;}
+  .donation-section-head{align-items:stretch;flex-direction:column;gap:5px;}
+  .donation-section-head h4{flex:none;width:100%;}
+  .donation-section-count{margin-left:0;}
+}
+</style>
+<div aria-hidden="true" class="donate-modal-backdrop" id="donationSectionMenuBackdrop">
+  <div aria-labelledby="donationSectionMenuTitle" aria-modal="true" class="donate-modal" role="dialog">
+    <h3 id="donationSectionMenuTitle">Selecionar organização de doação</h3>
+    <div id="donationSectionMenuBody"></div>
+    <button class="donate-close" id="donationSectionMenuClose" type="button">Fechar</button>
+  </div>
+</div>
+<script id="igdc-donation-section-menu-js">
+(function(){
+  'use strict';
+  var trigger=document.getElementById('donationSectionMenuBtn');
+  var backdrop=document.getElementById('donationSectionMenuBackdrop');
+  var body=document.getElementById('donationSectionMenuBody');
+  var closeBtn=document.getElementById('donationSectionMenuClose');
+  if(!trigger||!backdrop||!body) return;
+
+  var sectionKeys=['donation-ngo','donation-mission','donation-service','donation-relief','donation-education','donation-environment','donation-others'];
+
+  function closeMenu(){
+    backdrop.style.display='none';
+    backdrop.setAttribute('aria-hidden','true');
+  }
+
+  function normalizeText(value){
+    return String(value==null?'':value).trim().toLowerCase();
+  }
+
+  function updateButtons(rail,left,right){
+    if(!rail) return;
+    var max=Math.max(0,rail.scrollWidth-rail.clientWidth-2);
+    left.disabled=rail.scrollLeft<=2;
+    right.disabled=rail.scrollLeft>=max;
+  }
+
+  function buildMenu(){
+    body.innerHTML='';
+    var total=0;
+    sectionKeys.forEach(function(key){
+      var track=document.querySelector('[data-psom-key="'+key+'"]');
+      if(!track) return;
+      var row=track.closest('.feed-row');
+      var label=(row&&row.querySelector('.row-label')&&row.querySelector('.row-label').textContent||key.replace(/^donation-/,'' )).trim();
+      var seen={};
+      var entries=[];
+      track.querySelectorAll('.donation-card').forEach(function(card,index){
+        var titleEl=card.querySelector('.card-title');
+        var title=String(titleEl&&titleEl.textContent||card.getAttribute('aria-label')||'').trim();
+        if(!title) return;
+        var dedupe=normalizeText(title);
+        if(seen[dedupe]) return;
+        seen[dedupe]=1;
+        entries.push({title:title,card:card,index:index+1});
+      });
+      if(!entries.length) return;
+      total+=entries.length;
+
+      var group=document.createElement('section');
+      group.className='donation-section-group';
+
+      var head=document.createElement('div');
+      head.className='donation-section-head';
+      var title=document.createElement('h4');
+      title.textContent=label;
+      var search=document.createElement('input');
+      search.type='search';
+      search.className='donation-section-search';
+      search.placeholder=label+' pesquisar';
+      search.setAttribute('aria-label',label+' pesquisar organização');
+      head.appendChild(title);
+      head.appendChild(search);
+
+      var wrap=document.createElement('div');
+      wrap.className='donation-section-rail-wrap';
+      var left=document.createElement('button');
+      left.type='button';
+      left.className='donation-section-scroll';
+      left.setAttribute('aria-label',label+' lista anterior');
+      left.textContent='‹';
+      var rail=document.createElement('div');
+      rail.className='donation-section-orgs';
+      var right=document.createElement('button');
+      right.type='button';
+      right.className='donation-section-scroll';
+      right.setAttribute('aria-label',label+' próxima lista');
+      right.textContent='›';
+      wrap.appendChild(left);wrap.appendChild(rail);wrap.appendChild(right);
+
+      var count=document.createElement('div');
+      count.className='donation-section-count';
+
+      function render(query){
+        var q=normalizeText(query);
+        rail.innerHTML='';
+        var filtered=entries.filter(function(entry){ return !q||normalizeText(entry.title).indexOf(q)!==-1; });
+        filtered.forEach(function(entry){
+          var btn=document.createElement('button');
+          btn.type='button';
+          btn.textContent=entry.title;
+          btn.title=entry.title;
+          btn.addEventListener('click',function(){
+            closeMenu();
+            try{ entry.card.scrollIntoView({behavior:'smooth',block:'center',inline:'center'}); }catch(_){ entry.card.scrollIntoView(); }
+            try{ entry.card.focus({preventScroll:true}); }catch(_){ try{ entry.card.focus(); }catch(__){} }
+          });
+          rail.appendChild(btn);
+        });
+        rail.scrollLeft=0;
+        count.textContent=q ? (filtered.length+' encontrados / total '+entries.length+'개') : ('Total '+entries.length+'개');
+        window.requestAnimationFrame(function(){ updateButtons(rail,left,right); });
+      }
+
+      left.addEventListener('click',function(){ rail.scrollBy({left:-Math.max(220,rail.clientWidth*.78),behavior:'smooth'}); });
+      right.addEventListener('click',function(){ rail.scrollBy({left:Math.max(220,rail.clientWidth*.78),behavior:'smooth'}); });
+      rail.addEventListener('scroll',function(){ updateButtons(rail,left,right); },{passive:true});
+      search.addEventListener('input',function(){ render(search.value); });
+
+      group.appendChild(head);
+      group.appendChild(wrap);
+      group.appendChild(count);
+      body.appendChild(group);
+      render('');
+    });
+    if(!total){
+      var empty=document.createElement('p');
+      empty.id='donationSectionMenuEmpty';
+      empty.textContent='Ainda não há organizações de doação registradas.';
+      body.appendChild(empty);
+    }
+  }
+
+  trigger.addEventListener('click',function(ev){
+    if(ev) ev.preventDefault();
+    buildMenu();
+    backdrop.style.display='flex';
+    backdrop.setAttribute('aria-hidden','false');
+  });
+  if(closeBtn) closeBtn.addEventListener('click',closeMenu);
+  backdrop.addEventListener('click',function(ev){ if(ev.target===backdrop) closeMenu(); });
+  document.addEventListener('keydown',function(ev){ if(ev.key==='Escape'&&backdrop.getAttribute('aria-hidden')==='false') closeMenu(); });
+})();
+</script>
 <div aria-hidden="true" class="donate-modal-backdrop" id="donateModalBackdrop">
 <div aria-labelledby="donateModalTitle" aria-modal="true" class="donate-modal" role="dialog">
 <h3 id="donateModalTitle">Selecionar organização de doação</h3>

@@ -4812,11 +4812,18 @@ function normLang(l){
         /* Ignore any GEO response that belongs to an older auth/VPN/network state. */
         if (generation !== geoGeneration) return null;
         var detectedCountry = String(data && (data.detectedCountry || data.country) || '').toUpperCase();
+        var resolvedAllowedCountry = !!(
+          data &&
+          data.resolved === true &&
+          data.excluded !== true &&
+          detectedCountry
+        );
         geoState = {
           ready:true,
-          /* Positive allow only. A 200/JSON response or excluded:false alone is
-             not an allow decision for an unauthenticated guest. */
-          allowed:!!(data && data.donationAllowed === true && detectedCountry),
+          /* Initial UI stays hidden. Reveal only after the CURRENT IP country
+             is actually resolved and the existing Donation country gate says
+             it is not excluded. Do not require a second allow-policy layer. */
+          allowed:resolvedAllowedCountry,
           excluded:!!(data && data.excluded === true),
           country:detectedCountry
         };
