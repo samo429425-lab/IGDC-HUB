@@ -1243,21 +1243,30 @@ async function youtubeOembed(value) {
   } catch (_error) { return { ok: false }; }
 }
 function decodeXml(value) {
-  return SocialStore.text(value)
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&#x([0-9a-f]+);/gi, function (_m, hex) {
-      const code = parseInt(hex, 16);
-      try { return Number.isFinite(code) ? String.fromCodePoint(code) : _m; } catch (_e) { return _m; }
-    })
-    .replace(/&#([0-9]+);/g, function (_m, dec) {
-      const code = parseInt(dec, 10);
-      try { return Number.isFinite(code) ? String.fromCodePoint(code) : _m; } catch (_e) { return _m; }
-    })
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
+  let current = SocialStore.text(value).replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  // Search engines and social previews sometimes return numeric entities one
+  // layer behind &amp; (for example &amp;#xd50c;). Decode a bounded number of
+  // rounds so Korean and other non-Latin titles are normalized before they are
+  // stored in the Social candidate/release pipeline.
+  for (let round = 0; round < 3 && /&(?:#x?[0-9a-f]+|quot|apos|lt|gt|amp);/i.test(current); round += 1) {
+    const next = current
+      .replace(/&#x([0-9a-f]+);/gi, function (_m, hex) {
+        const code = parseInt(hex, 16);
+        try { return Number.isFinite(code) ? String.fromCodePoint(code) : _m; } catch (_e) { return _m; }
+      })
+      .replace(/&#([0-9]+);/g, function (_m, dec) {
+        const code = parseInt(dec, 10);
+        try { return Number.isFinite(code) ? String.fromCodePoint(code) : _m; } catch (_e) { return _m; }
+      })
+      .replace(/&quot;/gi, '"')
+      .replace(/&apos;/gi, "'")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&amp;/gi, "&");
+    if (next === current) break;
+    current = next;
+  }
+  return current;
 }
 function xmlValue(xml, tag) {
   const match = String(xml || "").match(new RegExp("<" + tag.replace(":", "\\:") + "[^>]*>([\\s\\S]*?)<\\/" + tag.replace(":", "\\:") + ">", "i"));
@@ -1649,14 +1658,14 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
   // Non-YouTube platforms often block anonymous metadata/oEmbed requests even
   // when the public post itself is valid. Keep the candidate and let later
   // collection passes enrich its preview instead of collapsing the section to 0.
-  const title = firstText([
+  const title = decodeXml(firstText([
     latest.title,
     enrichment.title,
     publicMetadata.title,
     resolved.promotedFromContent ? resolved.suggestedTitle : "",
     originalTitle,
     resolved.suggestedTitle
-  ]);
+  ]));
   if (syntheticTitle(title)) return { ok: false, reason: "real_content_title_required" };
   const source = item && item.source;
   const creatorName = firstText([
@@ -2139,5 +2148,6 @@ exports.__test = {
   publicSearchQuery,
   rssItems,
   htmlPublicPostItems,
-  decodeSearchRedirectTarget
+  decodeSearchRedirectTarget,
+  decodeXml
 };

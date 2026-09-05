@@ -127,7 +127,11 @@ exports.handler = async function handler(event) {
     return response(400, { ok: false, error: 'invalid_video_id' });
   }
 
-  const cached = CACHE.get(videoId);
+  const requestedOrder = text(event.queryStringParameters && event.queryStringParameters.order).toLowerCase();
+  const order = requestedOrder === 'time' ? 'time' : 'relevance';
+  const cacheKey = videoId + ':' + order;
+
+  const cached = CACHE.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return response(200, cached.body, 'public, max-age=120, s-maxage=300, stale-while-revalidate=300');
   }
@@ -139,7 +143,7 @@ exports.handler = async function handler(event) {
 
   const base = 'https://www.googleapis.com/youtube/v3/';
   const videoUrl = base + 'videos?part=snippet,statistics&id=' + encodeURIComponent(videoId) + '&key=' + encodeURIComponent(key);
-  const commentsUrl = base + 'commentThreads?part=snippet&videoId=' + encodeURIComponent(videoId) + '&maxResults=20&order=relevance&textFormat=plainText&key=' + encodeURIComponent(key);
+  const commentsUrl = base + 'commentThreads?part=snippet&videoId=' + encodeURIComponent(videoId) + '&maxResults=20&order=' + encodeURIComponent(order) + '&textFormat=plainText&key=' + encodeURIComponent(key);
 
   try {
     const videoData = await fetchJson(videoUrl, 4500);
@@ -199,10 +203,11 @@ exports.handler = async function handler(event) {
         hiddenSubscriberCount: false
       },
       comments,
-      commentsAvailable: commentsResult.status === 'fulfilled'
+      commentsAvailable: commentsResult.status === 'fulfilled',
+      commentOrder: order
     };
 
-    CACHE.set(videoId, { at: Date.now(), body });
+    CACHE.set(cacheKey, { at: Date.now(), body });
     pruneCache();
     return response(200, body, 'public, max-age=120, s-maxage=300, stale-while-revalidate=300');
   } catch (error) {
