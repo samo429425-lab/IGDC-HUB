@@ -4605,6 +4605,10 @@ function normLang(l){
      null means no explicit event signal has been observed on this page yet. */
   var liveDonationBlocked = null;
   var lastGeoRefreshAt = 0;
+  /* Donation-only logout paint fence.  A logout is never allowed to increase
+     Donation visibility while the current document is transitioning to guest. */
+  var lastLiveAuthenticated = null;
+  var logoutVisibilityFence = 'none'; /* none | intent | confirmed | auth-drop */
 
   function normalize(value){
     return String(value == null ? '' : value)
@@ -4858,6 +4862,25 @@ function normLang(l){
 
     var livePayload = getLiveOsPayload();
     var authenticated = !!livePayload;
+
+    /* If the live session disappears, never let that loss of identity open
+       Donation for even one paint.  A non-logout transient (for example a token
+       refresh hand-off) may recover only when the live authenticated session
+       itself comes back. */
+    if (lastLiveAuthenticated === true && !authenticated) {
+      if (logoutVisibilityFence === 'intent') logoutVisibilityFence = 'confirmed';
+      else if (logoutVisibilityFence === 'none') logoutVisibilityFence = 'auth-drop';
+    } else if (authenticated && logoutVisibilityFence === 'auth-drop') {
+      logoutVisibilityFence = 'none';
+    }
+    lastLiveAuthenticated = authenticated;
+
+    if (logoutVisibilityFence !== 'none') {
+      applyUi(link, false);
+      document.documentElement.dataset.igdcDonationReady = '0';
+      return;
+    }
+
     var privileged = authenticated && isOwnerOrAdmin(rolesFromPayloadOnly(livePayload));
 
     if (!geoState.ready) {
@@ -4920,6 +4943,56 @@ function normLang(l){
     applyUi(link, false);
     refreshCurrentIp();
     schedule();
+
+    /* Logout transition fence: this does not replace or modify any auth/logout
+       handler.  It only prevents the Donation shortcut from being repainted
+       between logout intent/token removal and the next page/GEO decision. */
+    function hideForLogoutFence(){
+      var donationLink = document.querySelector('nav [data-igdc-donation-nav="1"]');
+      applyUi(donationLink, false);
+      document.documentElement.dataset.igdcDonationReady = '0';
+    }
+    function observeLogoutControl(ev){
+      var node = ev && ev.target;
+      if (!node || typeof node.closest !== 'function') return;
+
+      var yes = node.closest('#os-modal-ok,#oslogout-yes');
+      if (yes) {
+        logoutVisibilityFence = 'confirmed';
+        hideForLogoutFence();
+        return;
+      }
+
+      var no = node.closest('#os-modal-cancel,#oslogout-cancel,#os-modal-mask,#oslogout-mask');
+      if (no) {
+        if (logoutVisibilityFence === 'intent') {
+          logoutVisibilityFence = 'none';
+          schedule();
+        }
+        return;
+      }
+
+      var logout = node.closest('#osLoginBtn,#logoutBtn,[data-os-logout],a[href*="logout"],button[onclick*="logout"]');
+      if (!logout) return;
+      var livePayload = getLiveOsPayload();
+      if (!livePayload) return;
+
+      /* Only latch the first Logout touch when Donation is already restricted.
+         This makes the hidden state monotonic while the confirm modal is open,
+         but does not change the normal visible state in an allowed country. */
+      if (document.documentElement.dataset.igdcDonationAllowed === '0') {
+        logoutVisibilityFence = 'intent';
+        hideForLogoutFence();
+      }
+    }
+    document.addEventListener('pointerdown', observeLogoutControl, true);
+    document.addEventListener('click', observeLogoutControl, true);
+    document.addEventListener('keydown', function(ev){
+      if (ev && ev.key === 'Escape' && logoutVisibilityFence === 'intent') {
+        logoutVisibilityFence = 'none';
+        schedule();
+      }
+    }, true);
 
     /* Consume the actual OS0/Auth0 event payload instead of only re-reading storage. */
     document.addEventListener('osauth:ready', captureDonationSignal, true);

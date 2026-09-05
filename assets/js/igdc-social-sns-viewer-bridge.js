@@ -347,28 +347,28 @@
       '#igdcSocialViewerV2 .igsv-media[data-aspect="9/16"]{width:min(100%,720px);aspect-ratio:9/16}' +
       '#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(720px,calc(100dvh - 56px - 56px));min-height:720px}' +
       '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block;flex:0 0 auto}' +
-      '#igdcSocialViewerV2 .igsv-detail{width:min(100%,1280px);box-sizing:border-box;padding:18px 22px 22px;background:#111;color:#fff;border-top:1px solid rgba(255,255,255,.12);align-self:center}' +
+      '#igdcSocialViewerV2 .igsv-detail{width:100%;max-width:none;box-sizing:border-box;padding:22px clamp(18px,3vw,48px) 28px;background:#fff;color:#111;border-top:1px solid #e5e7eb;align-self:stretch}' +
       '#igdcSocialViewerV2 .igsv-detail-title{font:700 20px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;word-break:break-word}' +
-      '#igdcSocialViewerV2 .igsv-detail-desc{margin-top:10px;color:#d8d8d8;font:400 15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;white-space:pre-wrap;word-break:break-word}' +
-      '#igdcSocialViewerV2 .igsv-safe-space{width:100%;height:56px;min-height:56px;flex:0 0 56px;background:#000}' +
-      '#igdcSocialViewerV2 .igsv-yt-live{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12)}' +
+      '#igdcSocialViewerV2 .igsv-detail-desc{margin-top:10px;color:#333;font:400 15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;white-space:pre-wrap;word-break:break-word}' +
+      '#igdcSocialViewerV2 .igsv-safe-space{width:100%;height:90px;min-height:90px;flex:0 0 90px;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-yt-live{margin-top:16px;padding-top:14px;border-top:1px solid #e5e7eb}' +
       '#igdcSocialViewerV2 .igsv-yt-channel{display:flex;align-items:center;gap:10px;min-height:44px}' +
-      '#igdcSocialViewerV2 .igsv-yt-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#252525;flex:0 0 40px}' +
+      '#igdcSocialViewerV2 .igsv-yt-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#eef0f2;flex:0 0 40px}' +
       '#igdcSocialViewerV2 .igsv-yt-channel-copy{min-width:0;flex:1 1 auto}' +
       '#igdcSocialViewerV2 .igsv-yt-channel-name{font:700 15px/1.3 system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-      '#igdcSocialViewerV2 .igsv-yt-subs{margin-top:2px;color:#aaa;font:400 12px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-subs{margin-top:2px;color:#666;font:400 12px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-yt-stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}' +
-      '#igdcSocialViewerV2 .igsv-yt-pill{display:inline-flex;align-items:center;min-height:34px;padding:0 12px;border-radius:18px;background:#272727;color:#f3f3f3;font:600 13px/1 system-ui,-apple-system,Segoe UI,sans-serif}' +
-      '#igdcSocialViewerV2 .igsv-yt-comments{margin-top:14px;border-top:1px solid rgba(255,255,255,.12);padding-top:12px}' +
+      '#igdcSocialViewerV2 .igsv-yt-pill{display:inline-flex;align-items:center;min-height:34px;padding:0 12px;border-radius:18px;background:#f1f3f5;color:#111;font:600 13px/1 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-comments{margin-top:14px;border-top:1px solid #e5e7eb;padding-top:12px}' +
       '#igdcSocialViewerV2 .igsv-yt-comments>summary{cursor:pointer;list-style:none;font:700 14px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;user-select:none}' +
       '#igdcSocialViewerV2 .igsv-yt-comments>summary::-webkit-details-marker{display:none}' +
-      '#igdcSocialViewerV2 .igsv-yt-comment{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.08)}' +
-      '#igdcSocialViewerV2 .igsv-yt-comment-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#252525;flex:0 0 34px}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid #eceff1}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#eef0f2;flex:0 0 34px}' +
       '#igdcSocialViewerV2 .igsv-yt-comment-body{min-width:0;flex:1 1 auto}' +
-      '#igdcSocialViewerV2 .igsv-yt-comment-head{color:#bbb;font:600 12px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}' +
-      '#igdcSocialViewerV2 .igsv-yt-comment-text{margin-top:4px;white-space:pre-wrap;word-break:break-word;color:#eee;font:400 14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}' +
-      '#igdcSocialViewerV2 .igsv-yt-comment-like{margin-top:5px;color:#aaa;font:400 12px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
-      '#igdcSocialViewerV2 .igsv-yt-note{margin-top:10px;color:#9d9d9d;font:400 12px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-head{color:#555;font:600 12px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-text{margin-top:4px;white-space:pre-wrap;word-break:break-word;color:#111;font:400 14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-comment-like{margin-top:5px;color:#666;font:400 12px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-yt-note{margin-top:10px;color:#666;font:400 12px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"]{align-items:stretch;justify-content:stretch;overflow:hidden;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-shell{position:relative;width:100%;height:100%;overflow:auto;background:#fff;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}' +
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-fb-canvas{position:relative;margin:0 auto;transform-origin:top left;background:#fff}' +
@@ -614,7 +614,7 @@
        height for image + text and reserve visible breathing room below the post. */
     var visibleRawHeight = Math.ceil(rect.height / scale);
     var rawHeight = Math.max(620, visibleRawHeight + 70);
-    var bottomReservePx = 50;
+    var bottomReservePx = 90;
     var bottomReserveRaw = Math.max(1, Math.ceil(bottomReservePx / scale));
     var canvasRawHeight = rawHeight + bottomReserveRaw;
     var shell = iframe.closest('.igsv-fb-shell');
@@ -688,7 +688,7 @@
       bindViewerScrollHost(shell);
     } else {
       /* All nine main SNS viewers share one scroll contract: the provider media
-         sits in a full-width content document and a compact safe area remains
+         sits in a full-width content document and a consistent 90px safe area remains
          below it. The browser only paints a vertical scrollbar when that document
          is taller than the available viewer stage (overflow:auto). */
       var scroll = document.createElement('div');
