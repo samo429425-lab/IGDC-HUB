@@ -4609,6 +4609,10 @@ function normLang(l){
   /* Live OS0/Auth0 Donation restriction handed to index through auth events.
      null means no explicit event signal has been observed on this page yet. */
   var liveDonationBlocked = null;
+  /* Short, UI-only hold used only when a currently hidden non-privileged user
+     presses Login/Logout. It prevents a signal-less auth event from erasing an
+     already-active restricted-country decision during the popup/callback gap. */
+  var authIntentHoldUntil = 0;
   var lastGeoRefreshAt = 0;
 
   function normalize(value){
@@ -4766,10 +4770,17 @@ function normLang(l){
       nextSignal = blockedClaimValue(payload[CLAIM_BLOCKED]);
       signalSeen = true;
     }
-    /* Do not let a previous login's blocked/allowed signal leak into a later
-       guest/member session; current-IP GEO remains the reveal authority. */
-    liveDonationBlocked = signalSeen ? nextSignal : null;
-    /* Auth/login/logout transitions must never reuse an earlier allowed-IP result. */
+    /* A Login/Logout click can emit a generic auth event before OS0 includes
+       its Donation decision. During that very short gap, preserve an existing
+       hidden/restricted decision instead of turning it into null. Outside that
+       gap the original current-event scoping remains unchanged. */
+    if (signalSeen) {
+      liveDonationBlocked = nextSignal;
+      authIntentHoldUntil = 0;
+    } else if (Date.now() >= authIntentHoldUntil) {
+      liveDonationBlocked = null;
+    }
+    /* Auth/login/logout transitions still re-check the current IP normally. */
     refreshCurrentIp(true);
   }
 
@@ -4906,6 +4917,7 @@ function normLang(l){
 
     /* Owner/admin/super_admin are the only country-independent exception. */
     if (privileged) {
+      authIntentHoldUntil = 0;
       applyUi(link, true);
       document.documentElement.dataset.igdcDonationReady = '1';
       return;
@@ -4974,20 +4986,27 @@ function normLang(l){
     document.documentElement.dataset.igdcDonationReady = '0';
     refreshCurrentIp(true);
 
-    /* Login/Logout intent is fail-closed for every non-privileged session.
-       Hide from pointerdown, before any auth popup/callback can repaint the nav.
-       Country/IP policy itself is unchanged; the existing gate decides whether
-       the shortcut may be revealed again after the fresh current-IP check. */
-    function refreshOnAuthIntent(ev){
+    /* Login/Logout intent must never make a hidden Donation shortcut visible.
+       Do NOT restart GEO from pointerdown. Merely keep the already-hidden UI
+       hidden and protect its current restriction signal through the short auth
+       popup/callback gap. The normal auth events below perform the real re-check. */
+    function fenceAuthIntent(ev){
       var node = ev && ev.target;
       if (!node || typeof node.closest !== 'function') return;
       var authControl = node.closest('#osLoginBtn,#logoutBtn,[data-os-login],[data-os-logout],a[href*="login"],a[href*="logout"],button[onclick*="login"],button[onclick*="logout"]');
       if (!authControl) return;
       var livePayload = getLiveOsPayload();
       if (livePayload && isOwnerOrAdmin(rolesFromPayloadOnly(livePayload))) return;
-      refreshCurrentIp(true);
+
+      /* Only fence an already-hidden state. Allowed-country users are left
+         untouched, so this fix cannot create a new false block there. */
+      if (document.documentElement.dataset.igdcDonationAllowed !== '1') {
+        authIntentHoldUntil = Date.now() + 5000;
+        applyUi(link, false);
+        document.documentElement.dataset.igdcDonationReady = '0';
+      }
     }
-    document.addEventListener('pointerdown', refreshOnAuthIntent, true);
+    document.addEventListener('pointerdown', fenceAuthIntent, true);
 
     /* Consume the actual OS0/Auth0 event payload, then force a fresh current-IP
        decision instead of reusing the previous SPA GEO state. */
