@@ -4609,6 +4609,11 @@ function normLang(l){
   /* Live OS0/Auth0 Donation restriction handed to index through auth events.
      null means no explicit event signal has been observed on this page yet. */
   var liveDonationBlocked = null;
+  /* If OS0/Auth0 explicitly blocks Donation for the current country while a
+     non-privileged user is authenticated, remember that country through the
+     logout-to-guest transition.  The latch is valid only while GEO still says
+     the browser is in the exact same country; a country/IP change clears it. */
+  var guestBlockedCountry = '';
   /* Short, UI-only hold used only when a currently hidden non-privileged user
      presses Login/Logout. It prevents a signal-less auth event from erasing an
      already-active restricted-country decision during the popup/callback gap. */
@@ -4776,9 +4781,20 @@ function normLang(l){
        gap the original current-event scoping remains unchanged. */
     if (signalSeen) {
       liveDonationBlocked = nextSignal;
+      if (nextSignal === true && geoState.ready && geoState.country) {
+        guestBlockedCountry = String(geoState.country).toUpperCase();
+      } else if (nextSignal === false) {
+        guestBlockedCountry = '';
+      }
       authIntentHoldUntil = 0;
     } else if (Date.now() >= authIntentHoldUntil) {
-      liveDonationBlocked = null;
+      /* A generic logout/guest event must not erase a restriction that was
+         explicitly established for this same current-IP country. */
+      var guestCountryStillBlocked = !getLiveOsPayload() &&
+        !!guestBlockedCountry &&
+        geoState.ready === true &&
+        String(geoState.country || '').toUpperCase() === guestBlockedCountry;
+      liveDonationBlocked = guestCountryStillBlocked ? true : null;
     }
     /* Auth/login/logout transitions still re-check the current IP normally. */
     refreshCurrentIp(true);
@@ -4933,8 +4949,26 @@ function normLang(l){
     }
 
     var currentIpAllowed = geoState.ready === true && geoState.allowed === true && !!geoState.country;
+    var currentCountry = String(geoState.country || '').toUpperCase();
+
+    /* Never carry a restricted-country guest latch across a real IP-country
+       change.  This is what keeps allowed countries from inheriting an earlier
+       blocked session. */
+    if (guestBlockedCountry && currentCountry && guestBlockedCountry !== currentCountry) {
+      guestBlockedCountry = '';
+    }
+
+    var blockedByLivePayload = authenticated && isBlocked(livePayload);
+    if (blockedByLivePayload && currentCountry) guestBlockedCountry = currentCountry;
+
+    var guestInheritedBlock = !authenticated &&
+      !!guestBlockedCountry &&
+      !!currentCountry &&
+      guestBlockedCountry === currentCountry;
+
     var restrictedByOs0 = liveDonationBlocked === true ||
-      (authenticated && isBlocked(livePayload));
+      blockedByLivePayload ||
+      guestInheritedBlock;
     var allowed = currentIpAllowed && !restrictedByOs0;
 
     applyUi(link, allowed);
