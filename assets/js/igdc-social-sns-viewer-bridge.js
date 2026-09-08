@@ -380,17 +380,21 @@
       '#igdcSocialViewerV2 .igsv-fb-owned-media{width:100%;background:#111;display:flex;align-items:center;justify-content:center;overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-fb-owned-media img{display:block;width:100%;height:auto;max-width:100%;object-fit:contain;object-position:center;background:#111}' +
       '#igdcSocialViewerV2 .igsv-fb-official{width:100%;box-sizing:border-box;padding:0 clamp(18px,3vw,48px);background:#fff;color:#111;border-top:1px solid #e5e7eb}' +
-      '#igdcSocialViewerV2 .igsv-fb-nativebar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:center;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;background:#fff}' +
-      '#igdcSocialViewerV2 .igsv-fb-nativebtn{appearance:none;border:0;background:#fff;color:#4b5563;min-height:52px;padding:0 10px;font:700 15px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}' +
-      '#igdcSocialViewerV2 .igsv-fb-nativebtn:hover,#igdcSocialViewerV2 .igsv-fb-nativebtn:focus-visible{background:#f3f4f6;color:#111;outline:none}' +
-      '#igdcSocialViewerV2 .igsv-fb-reactions{display:flex;align-items:center;gap:4px;padding:8px 0 10px;border-bottom:1px solid #eef0f2}' +
-      '#igdcSocialViewerV2 .igsv-fb-reactbtn{appearance:none;border:0;background:transparent;cursor:pointer;font-size:22px;line-height:1;padding:4px 2px;border-radius:999px}' +
-      '#igdcSocialViewerV2 .igsv-fb-reactbtn:hover,#igdcSocialViewerV2 .igsv-fb-reactbtn:focus-visible{transform:scale(1.12);background:#f3f4f6;outline:none}' +
+      '#igdcSocialViewerV2 .igsv-fb-nativebar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;padding:10px 0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-fb-nativebtn{appearance:none;border:0;border-radius:18px;background:#f1f3f5;color:#4b5563;min-height:38px;padding:0 16px;font:700 14px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}' +
+      '#igdcSocialViewerV2 .igsv-fb-nativebtn:hover,#igdcSocialViewerV2 .igsv-fb-nativebtn:focus-visible{background:#e5e7eb;color:#111;outline:none}' +
+      '#igdcSocialViewerV2 .igsv-fb-reaction-cluster{position:relative;margin-left:auto;display:flex;align-items:center;gap:2px}' +
+      '#igdcSocialViewerV2 .igsv-fb-reactbtn{appearance:none;border:0;background:transparent;cursor:pointer;font-size:22px;line-height:1;padding:6px 5px;border-radius:999px}' +
+      '#igdcSocialViewerV2 .igsv-fb-reactbtn:hover,#igdcSocialViewerV2 .igsv-fb-reactbtn:focus-visible{transform:scale(1.1);background:#f3f4f6;outline:none}' +
+      '#igdcSocialViewerV2 .igsv-fb-reactmore{appearance:none;border:0;background:#f1f3f5;color:#555;border-radius:16px;min-width:32px;min-height:32px;padding:0 8px;font:700 15px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer}' +
+      '#igdcSocialViewerV2 .igsv-fb-reaction-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:7;display:flex;align-items:center;gap:2px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:22px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.15)}' +
+      '#igdcSocialViewerV2 .igsv-fb-reaction-menu[hidden]{display:none}' +
       '#igdcSocialViewerV2 .igsv-fb-interaction-wrap{width:100%;overflow:hidden;background:#fff;border-bottom:1px solid #eef0f2}' +
       '#igdcSocialViewerV2 .igsv-fb-interaction-frame{display:block;width:100%;height:min(72vh,780px);min-height:480px;border:0;background:#fff}' +
-      '#igdcSocialViewerV2 .igsv-fb-comments-head{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-height:44px;padding-top:8px}' +
-      '#igdcSocialViewerV2 .igsv-fb-comments-toggle{border:0;border-radius:18px;background:#f1f3f5;color:#111;min-height:34px;padding:0 14px;font:700 13px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer}' +
-      '#igdcSocialViewerV2 .igsv-fb-save{margin-left:0}' +
+      '#igdcSocialViewerV2 .igsv-fb-comments-section{margin-top:18px;border-top:1px solid #e5e7eb;padding-top:16px}' +
+      '#igdcSocialViewerV2 .igsv-fb-comments-head{display:flex;align-items:center;gap:16px;flex-wrap:wrap;min-height:44px;margin-bottom:10px}' +
+      '#igdcSocialViewerV2 .igsv-fb-comments-title{margin:0;font:700 20px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;color:#111}' +
+      '#igdcSocialViewerV2 .igsv-fb-comments-toggle{border:0;background:transparent;color:#111;min-height:34px;padding:0;font:700 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;white-space:nowrap}' +
       '#igdcSocialViewerV2 .igsv-fb-comments-wrap{width:100%;overflow:hidden;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-fb-comments-frame{display:block;width:100%;height:min(62vh,640px);min-height:360px;border:0;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-status{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font:500 15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:#ddd;background:#000}' +
@@ -622,34 +626,45 @@
     var box = document.createElement('div');
     box.className = 'igsv-fb-official';
     var width = Math.max(320, Math.floor((host.getBoundingClientRect().width || window.innerWidth || 750) - 96));
+    var l = labels();
 
-    /* Always keep the visible Facebook action row in the IGDC document. The former
-       version depended on Meta's like.php iframe being painted; browser privacy/cookie
-       state could make that iframe blank, which made the whole action surface appear
-       to be missing. Account-affecting actions below still delegate to Meta. */
+    /* Keep the Facebook action strip compact and familiar: Like + Share + the two
+       most common reaction affordances on one row. Less-common reactions live in
+       a small drop block so they do not turn the viewer into an emoji toolbar. */
     var bar = document.createElement('div');
     bar.className = 'igsv-fb-nativebar';
-    var likeBtn = makeText('button', 'igsv-fb-nativebtn igsv-fb-like-toggle', '👍 좋아요');
-    var commentBtn = makeText('button', 'igsv-fb-nativebtn igsv-fb-comment-toggle', '💬 댓글');
-    var shareBtn = makeText('button', 'igsv-fb-nativebtn igsv-fb-share-btn', '↗ 공유');
-    likeBtn.type = commentBtn.type = shareBtn.type = 'button';
+    var likeBtn = makeText('button', 'igsv-fb-nativebtn igsv-fb-like-toggle', '👍 ' + l.ytLikes);
+    var shareBtn = makeText('button', 'igsv-fb-nativebtn igsv-fb-share-btn', '↗ ' + l.ytShare);
+    likeBtn.type = shareBtn.type = 'button';
     bar.appendChild(likeBtn);
-    bar.appendChild(commentBtn);
     bar.appendChild(shareBtn);
-    box.appendChild(bar);
 
-    /* Familiar reaction affordances are always visible. They do not forge a reaction;
-       selecting one opens the exact post in Meta's contained official interaction
-       surface, where Facebook owns login and the final reaction choice. */
-    var reactions = document.createElement('div');
-    reactions.className = 'igsv-fb-reactions';
-    ['👍','❤️','😂','😮','😢','😡'].forEach(function (emoji) {
+    var reactionCluster = document.createElement('div');
+    reactionCluster.className = 'igsv-fb-reaction-cluster';
+    ['👍','❤️'].forEach(function (emoji) {
       var b = makeText('button', 'igsv-fb-reactbtn', emoji);
       b.type = 'button';
-      b.setAttribute('aria-label', 'Facebook reaction');
-      reactions.appendChild(b);
+      b.setAttribute('aria-label', 'Facebook reaction ' + emoji);
+      reactionCluster.appendChild(b);
     });
-    box.appendChild(reactions);
+    var reactionMore = makeText('button', 'igsv-fb-reactmore', '▾');
+    reactionMore.type = 'button';
+    reactionMore.setAttribute('aria-label', 'More Facebook reactions');
+    reactionMore.setAttribute('aria-expanded', 'false');
+    reactionCluster.appendChild(reactionMore);
+
+    var reactionMenu = document.createElement('div');
+    reactionMenu.className = 'igsv-fb-reaction-menu';
+    reactionMenu.hidden = true;
+    ['😂','😮','😢','😡'].forEach(function (emoji) {
+      var b = makeText('button', 'igsv-fb-reactbtn', emoji);
+      b.type = 'button';
+      b.setAttribute('aria-label', 'Facebook reaction ' + emoji);
+      reactionMenu.appendChild(b);
+    });
+    reactionCluster.appendChild(reactionMenu);
+    bar.appendChild(reactionCluster);
+    box.appendChild(bar);
 
     var interactionWrap = document.createElement('div');
     interactionWrap.className = 'igsv-fb-interaction-wrap';
@@ -676,19 +691,51 @@
     }
 
     likeBtn.addEventListener('click', function () { ensureInteraction(); });
-    Array.prototype.forEach.call(reactions.querySelectorAll('.igsv-fb-reactbtn'), function (btn) {
-      btn.addEventListener('click', function () { ensureInteraction(true); });
+    Array.prototype.forEach.call(reactionCluster.querySelectorAll('.igsv-fb-reactbtn'), function (btn) {
+      btn.addEventListener('click', function () {
+        reactionMenu.hidden = true;
+        reactionMore.setAttribute('aria-expanded', 'false');
+        ensureInteraction(true);
+      });
     });
+    reactionMore.addEventListener('click', function () {
+      reactionMenu.hidden = !reactionMenu.hidden;
+      reactionMore.setAttribute('aria-expanded', reactionMenu.hidden ? 'false' : 'true');
+    });
+
+    /* Facebook share stays in a user-initiated popup, so the IGDC viewer never gets
+       replaced by facebook.com. Fall back to Web Share/clipboard if a popup is blocked. */
+    shareBtn.addEventListener('click', function () {
+      var shareUrl = 'https://www.facebook.com/sharer/sharer.php?' + new URLSearchParams({ u: sourceUrl }).toString();
+      var popup = null;
+      try { popup = window.open(shareUrl, 'igdcFacebookShare', 'popup=yes,width=720,height=640,resizable=yes,scrollbars=yes'); } catch (_) {}
+      if (!popup) shareSource('Facebook', sourceUrl, shareBtn);
+    });
+
+    /* Comments are a separate document section, matching the YouTube viewer pattern.
+       The comments plugin is lazy-loaded only when the user opens the section. */
+    var commentsSection = document.createElement('section');
+    commentsSection.className = 'igsv-fb-comments-section';
+    var head = document.createElement('div');
+    head.className = 'igsv-fb-comments-head';
+    head.appendChild(makeText('h2', 'igsv-fb-comments-title', l.ytComments));
+    var toggle = makeText('button', 'igsv-fb-comments-toggle', l.ytOpenComments);
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    head.appendChild(toggle);
+    commentsSection.appendChild(head);
 
     var commentsWrap = document.createElement('div');
     commentsWrap.className = 'igsv-fb-comments-wrap';
     commentsWrap.hidden = true;
-    box.appendChild(commentsWrap);
+    commentsSection.appendChild(commentsWrap);
     var commentsFrame = null;
 
     function toggleComments(forceOpen) {
       var opening = typeof forceOpen === 'boolean' ? forceOpen : commentsWrap.hidden;
       commentsWrap.hidden = !opening;
+      toggle.textContent = opening ? l.ytCloseComments : l.ytOpenComments;
+      toggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
       if (opening && !commentsFrame) {
         var src = facebookPluginUrl('comments', sourceUrl, width);
         if (src) {
@@ -702,35 +749,8 @@
         }, 30);
       }
     }
-    commentBtn.addEventListener('click', function () { toggleComments(); });
-
-    /* Facebook share stays in a user-initiated popup, so the IGDC viewer never gets
-       replaced by facebook.com. Fall back to Web Share/clipboard if a popup is blocked. */
-    shareBtn.addEventListener('click', function () {
-      var shareUrl = 'https://www.facebook.com/sharer/sharer.php?' + new URLSearchParams({ u: sourceUrl }).toString();
-      var popup = null;
-      try { popup = window.open(shareUrl, 'igdcFacebookShare', 'popup=yes,width=720,height=640,resizable=yes,scrollbars=yes'); } catch (_) {}
-      if (!popup) shareSource('Facebook', sourceUrl, shareBtn);
-    });
-
-    var head = document.createElement('div');
-    head.className = 'igsv-fb-comments-head';
-    var toggle = makeText('button', 'igsv-fb-comments-toggle', labels().ytOpenComments);
-    toggle.type = 'button';
-    toggle.addEventListener('click', function () {
-      var opening = commentsWrap.hidden;
-      toggleComments(opening);
-      toggle.textContent = opening ? labels().ytCloseComments : labels().ytOpenComments;
-    });
-    head.appendChild(toggle);
-
-    var saveBtn = makeActionButton((isSavedUrl(sourceUrl) ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave), 'igsv-fb-save');
-    saveBtn.addEventListener('click', function () {
-      var saved = toggleSavedUrl(sourceUrl);
-      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave;
-    });
-    head.appendChild(saveBtn);
-    box.appendChild(head);
+    toggle.addEventListener('click', function () { toggleComments(); });
+    box.appendChild(commentsSection);
 
     host.appendChild(box);
   }
