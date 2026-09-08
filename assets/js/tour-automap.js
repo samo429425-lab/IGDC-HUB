@@ -1,7 +1,7 @@
 // tour-automap.js (PRODUCTION v6 - internal content page routing + thumb-grid hard disable)
 // - Right panel/mobile rail product slots open IGDC internal /content.html?id=...
 // - Legacy .thumb-grid[data-psom-key="tour"] is disabled so it cannot push the index/slots
-// - Main external tour .link-btn anchors use top navigation so browser Back returns to IGDC
+// - Main external tour .link-btn anchors open in the IGDC contained viewer; dynamic outbound rail links keep legacy top navigation
 // - Revenue autohook loader is preserved
 
 (function () {
@@ -106,6 +106,12 @@
       const href = a.href;
       if (!href) return;
       ev.preventDefault();
+      if (a.matches('a.link-btn[href^="http"]') && window.IGDCContainedViewer && typeof window.IGDCContainedViewer.open === 'function') {
+        ev.stopPropagation();
+        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+        window.IGDCContainedViewer.open(href, { label: String(a.textContent || '').replace(/\s+/g, ' ').trim() });
+        return;
+      }
       try { (window.top || window).location.assign(href); }
       catch(e){ window.location.href = href; }
     }, true);

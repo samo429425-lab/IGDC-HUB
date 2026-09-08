@@ -44,3 +44,15 @@
     + '@media (max-width:900px){.igdc-qa-modal .igdc-qa-panel,.igdc-qa-panel{top:12px !important;bottom:auto !important;left:12px !important;right:auto !important;width:min(92vw,560px) !important;}}';
   (document.head || document.documentElement).appendChild(style);
 })();
+
+(function loadIGDCContainedExternalViewer(){
+  if (window.__IGDC_CONTAINED_EXTERNAL_VIEWER_LOADER_V1__) return;
+  window.__IGDC_CONTAINED_EXTERNAL_VIEWER_LOADER_V1__ = true;
+  var id = 'igdc-contained-external-viewer-script';
+  if (document.getElementById(id)) return;
+  var script = document.createElement('script');
+  script.id = id;
+  script.src = '/assets/js/igdc-contained-external-viewer.js?v=20260908-contained-v1';
+  script.async = false;
+  (document.head || document.documentElement).appendChild(script);
+})();

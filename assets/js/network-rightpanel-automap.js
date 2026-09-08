@@ -1,7 +1,7 @@
 // network-rightpanel-automap.js (PRODUCTION v6 - internal content page routing + top external main links)
 // - Right panel product slots open IGDC internal /content.html?id=...
 // - Placeholder/# links are disabled unless an item id exists
-// - Main hub external .link-btn anchors use top navigation so browser Back returns to IGDC
+// - Main hub external .link-btn anchors open in the IGDC contained viewer; dynamic outbound rail links keep legacy top navigation
 // - Desktop/mobile rail rendering and revenue autohook are preserved
 
 (function () {
@@ -92,6 +92,12 @@
       const href = a.href;
       if (!href) return;
       ev.preventDefault();
+      if (a.matches('a.link-btn[href^="http"]') && window.IGDCContainedViewer && typeof window.IGDCContainedViewer.open === 'function') {
+        ev.stopPropagation();
+        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+        window.IGDCContainedViewer.open(href, { label: String(a.textContent || '').replace(/\s+/g, ' ').trim() });
+        return;
+      }
       try { (window.top || window).location.assign(href); }
       catch(e){ window.location.href = href; }
     }, true);
