@@ -383,11 +383,11 @@
       '#igdcSocialViewerV2 .igsv-fb-nativebar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;padding:10px 0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-fb-nativebtn{appearance:none;border:0;border-radius:18px;background:#f1f3f5;color:#4b5563;min-height:38px;padding:0 16px;font:700 14px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}' +
       '#igdcSocialViewerV2 .igsv-fb-nativebtn:hover,#igdcSocialViewerV2 .igsv-fb-nativebtn:focus-visible{background:#e5e7eb;color:#111;outline:none}' +
-      '#igdcSocialViewerV2 .igsv-fb-reaction-cluster{position:relative;margin-left:auto;display:flex;align-items:center;gap:2px}' +
+      '#igdcSocialViewerV2 .igsv-fb-reaction-cluster{position:relative;margin-left:auto;display:flex;align-items:center;gap:6px}' +
       '#igdcSocialViewerV2 .igsv-fb-reactbtn{appearance:none;border:0;background:transparent;cursor:pointer;font-size:22px;line-height:1;padding:6px 5px;border-radius:999px}' +
       '#igdcSocialViewerV2 .igsv-fb-reactbtn:hover,#igdcSocialViewerV2 .igsv-fb-reactbtn:focus-visible{transform:scale(1.1);background:#f3f4f6;outline:none}' +
-      '#igdcSocialViewerV2 .igsv-fb-reactmore{appearance:none;border:0;background:#f1f3f5;color:#555;border-radius:16px;min-width:32px;min-height:32px;padding:0 8px;font:700 15px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer}' +
-      '#igdcSocialViewerV2 .igsv-fb-reaction-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:7;display:flex;align-items:center;gap:2px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:22px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.15)}' +
+      '#igdcSocialViewerV2 .igsv-fb-reactmore{appearance:none;border:0;background:#f1f3f5;color:#555;border-radius:16px;min-width:32px;min-height:32px;margin-left:8px;padding:0 8px;font:700 15px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}' +
+      '#igdcSocialViewerV2 .igsv-fb-reaction-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:7;display:grid;grid-template-columns:repeat(8,minmax(32px,1fr));gap:3px;width:min(340px,82vw);max-height:220px;overflow:auto;padding:8px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.15)}' +
       '#igdcSocialViewerV2 .igsv-fb-reaction-menu[hidden]{display:none}' +
       '#igdcSocialViewerV2 .igsv-fb-interaction-wrap{width:100%;overflow:hidden;background:#fff;border-bottom:1px solid #eef0f2}' +
       '#igdcSocialViewerV2 .igsv-fb-interaction-frame{display:block;width:100%;height:min(72vh,780px);min-height:480px;border:0;background:#fff}' +
@@ -647,19 +647,29 @@
       b.setAttribute('aria-label', 'Facebook reaction ' + emoji);
       reactionCluster.appendChild(b);
     });
-    var reactionMore = makeText('button', 'igsv-fb-reactmore', '▾');
+    var reactionMore = makeText('button', 'igsv-fb-reactmore', '▼');
     reactionMore.type = 'button';
-    reactionMore.setAttribute('aria-label', 'More Facebook reactions');
+    reactionMore.setAttribute('aria-label', '댓글 이모지 열기');
     reactionMore.setAttribute('aria-expanded', 'false');
     reactionCluster.appendChild(reactionMore);
 
     var reactionMenu = document.createElement('div');
     reactionMenu.className = 'igsv-fb-reaction-menu';
     reactionMenu.hidden = true;
-    ['😂','😮','😢','😡'].forEach(function (emoji) {
-      var b = makeText('button', 'igsv-fb-reactbtn', emoji);
+    var commentEmojiPalette = [
+      '😀','😃','😄','😁','😂','🤣','😊','😍',
+      '🥰','😘','😎','🤩','🤔','😮','😲','😢',
+      '😭','😡','😤','🥳','👍','👎','👏','🙌',
+      '🙏','🤝','💪','👌','✌️','🤞','👊','🤟',
+      '❤️','🩷','🧡','💛','💚','💙','💜','🤍',
+      '💕','💖','💯','🔥','✨','🎉','🎊','⭐'
+    ];
+    commentEmojiPalette.forEach(function (emoji) {
+      var b = makeText('button', 'igsv-fb-reactbtn igsv-fb-emoji-option', emoji);
       b.type = 'button';
-      b.setAttribute('aria-label', 'Facebook reaction ' + emoji);
+      b.setAttribute('aria-label', '댓글 이모지 ' + emoji);
+      b.setAttribute('title', '댓글 이모지');
+      b.setAttribute('data-emoji', emoji);
       reactionMenu.appendChild(b);
     });
     reactionCluster.appendChild(reactionMenu);
@@ -691,11 +701,26 @@
     }
 
     likeBtn.addEventListener('click', function () { ensureInteraction(); });
-    Array.prototype.forEach.call(reactionCluster.querySelectorAll('.igsv-fb-reactbtn'), function (btn) {
+    Array.prototype.forEach.call(reactionCluster.querySelectorAll('.igsv-fb-reactbtn:not(.igsv-fb-emoji-option)'), function (btn) {
       btn.addEventListener('click', function () {
         reactionMenu.hidden = true;
         reactionMore.setAttribute('aria-expanded', 'false');
         ensureInteraction(true);
+      });
+    });
+    Array.prototype.forEach.call(reactionMenu.querySelectorAll('.igsv-fb-emoji-option'), function (btn) {
+      btn.addEventListener('click', function () {
+        var emoji = btn.getAttribute('data-emoji') || btn.textContent || '';
+        reactionMenu.hidden = true;
+        reactionMore.setAttribute('aria-expanded', 'false');
+        /* Facebook's official Comments plugin is cross-origin, so IGDC cannot
+           programmatically write into its textarea. Copy the selected Unicode emoji
+           and open the official comments section so the user can paste it without
+           leaving the Social viewer. */
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(emoji).catch(function () {});
+        } catch (_) {}
+        toggleComments(true);
       });
     });
     reactionMore.addEventListener('click', function () {
