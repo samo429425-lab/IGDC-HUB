@@ -1,4 +1,4 @@
-// network-rightpanel-automap.js (PRODUCTION v6 - internal content page routing + top external main links)
+// network-rightpanel-automap.js (PRODUCTION v7 - contained main-link reliability + internal content routing)
 // - Right panel product slots open IGDC internal /content.html?id=...
 // - Placeholder/# links are disabled unless an item id exists
 // - Main hub external .link-btn anchors open in the IGDC contained viewer; dynamic outbound rail links keep legacy top navigation
@@ -16,6 +16,82 @@
 
   const MOBILE_ID = 'nh-mobile-rail-list';
   const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v2';
+
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260909-network-tour-links-v3';
+  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v3';
+  const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v3';
+
+  function ensureContainedToolbarTheme(){
+    if (document.getElementById(CONTAINED_THEME_ID)) return;
+    const style = document.createElement('style');
+    style.id = CONTAINED_THEME_ID;
+    style.textContent = `
+#igdc-contained-external-viewer .igdc-contained-bar{
+  background:#cce89a !important;
+  color:#16365c !important;
+  border-bottom-color:#9dbd69 !important;
+}
+#igdc-contained-external-viewer .igdc-contained-back{
+  background:#eff8df !important;
+  color:#16365c !important;
+  border-color:#94b861 !important;
+}
+#igdc-contained-external-viewer .igdc-contained-back:hover{
+  background:#c3df86 !important;
+  border-color:#7fa34f !important;
+}
+#igdc-contained-external-viewer .igdc-contained-back:active{
+  background:#b7d679 !important;
+}
+#igdc-contained-external-viewer .igdc-contained-title{
+  color:#16365c !important;
+}
+#igdc-contained-external-viewer .igdc-contained-host{
+  color:#355b78 !important;
+}
+`;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function ensureContainedViewer(){
+    ensureContainedToolbarTheme();
+    if (window.IGDCContainedViewer && typeof window.IGDCContainedViewer.open === 'function') {
+      return Promise.resolve(window.IGDCContainedViewer);
+    }
+    if (window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__;
+
+    window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__ = new Promise(function(resolve, reject){
+      let script = document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
+      const finish = function(){
+        if (window.IGDCContainedViewer && typeof window.IGDCContainedViewer.open === 'function') {
+          ensureContainedToolbarTheme();
+          resolve(window.IGDCContainedViewer);
+        } else {
+          reject(new Error('IGDC contained viewer unavailable'));
+        }
+      };
+      if (script) {
+        if (script.dataset.loaded === '1') { finish(); return; }
+        script.addEventListener('load', finish, { once:true });
+        script.addEventListener('error', function(){ reject(new Error('IGDC contained viewer load failed')); }, { once:true });
+        return;
+      }
+      script = document.createElement('script');
+      script.id = CONTAINED_VIEWER_SCRIPT_ID;
+      script.src = CONTAINED_VIEWER_SRC;
+      script.async = true;
+      script.dataset.igdcContainedViewer = '1';
+      script.addEventListener('load', function(){ script.dataset.loaded = '1'; finish(); }, { once:true });
+      script.addEventListener('error', function(){ reject(new Error('IGDC contained viewer load failed')); }, { once:true });
+      (document.head || document.documentElement).appendChild(script);
+    }).catch(function(err){
+      window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__ = null;
+      throw err;
+    });
+
+    return window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__;
+  }
+
 
   function $(id){ return document.getElementById(id); }
 
@@ -92,10 +168,15 @@
       const href = a.href;
       if (!href) return;
       ev.preventDefault();
-      if (a.matches('a.link-btn[href^="http"]') && window.IGDCContainedViewer && typeof window.IGDCContainedViewer.open === 'function') {
+      if (a.matches('a.link-btn[href^="http"]')) {
         ev.stopPropagation();
         if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-        window.IGDCContainedViewer.open(href, { label: String(a.textContent || '').replace(/\s+/g, ' ').trim() });
+        const label = String(a.textContent || '').replace(/\s+/g, ' ').trim();
+        ensureContainedViewer().then(function(viewer){
+          viewer.open(href, { label: label });
+        }).catch(function(err){
+          console.warn('[IGDC][Network] contained viewer load failed:', err && err.message ? err.message : err);
+        });
         return;
       }
       try { (window.top || window).location.assign(href); }
