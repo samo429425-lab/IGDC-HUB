@@ -356,17 +356,48 @@ async function frameCheck(event, target){
   }
 }
 
-function copyRequestHeaders(event, target){
+function copyRequestHeaders(event, target, profile){
   const inHeaders = event.headers || {};
+  profile = profile || 'desktop';
+  const mobile = profile === 'mobile';
   const headers = {
-    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+    'User-Agent': mobile
+      ? 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0 Mobile Safari/537.36'
+      : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0 Safari/537.36',
     'Accept': inHeaders.accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
     'Accept-Language': inHeaders['accept-language'] || inHeaders['Accept-Language'] || 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Referer': target.origin + '/'
+    'Upgrade-Insecure-Requests':'1',
+    'Sec-Fetch-Dest':'document',
+    'Sec-Fetch-Mode':'navigate',
+    'Sec-Fetch-Site':'none'
   };
+  if(profile !== 'no-referer') headers['Referer'] = target.origin + '/';
   const ct = inHeaders['content-type'] || inHeaders['Content-Type'];
   if(ct) headers['Content-Type'] = ct;
   return headers;
+}
+
+function shouldRetryStatus(status){
+  return [401,403,406,408,409,425,429,451,500,502,503,504,520,521,522,523,524].includes(Number(status || 0));
+}
+
+async function fetchWithBrowserProfiles(event, target, fetchOpts){
+  const profiles = ['desktop','no-referer','mobile'];
+  let last = null;
+  let lastError = null;
+  for(const profile of profiles){
+    try{
+      const opts = Object.assign({}, fetchOpts || {});
+      opts.headers = Object.assign({}, copyRequestHeaders(event, target, profile), (fetchOpts && fetchOpts.headers) || {});
+      const res = await fetch(target.href, opts);
+      last = res;
+      if(!shouldRetryStatus(res.status)) return res;
+    }catch(e){
+      lastError = e;
+    }
+  }
+  if(last) return last;
+  throw lastError || new Error('upstream-fetch-failed');
 }
 
 exports.handler = async function(event){
@@ -404,7 +435,7 @@ exports.handler = async function(event){
       fetchOpts.body = event.isBase64Encoded ? Buffer.from(event.body, 'base64') : event.body;
     }
 
-    const upstream = await fetch(target.href, fetchOpts);
+    const upstream = await fetchWithBrowserProfiles(event, target, fetchOpts);
     const contentType = upstream.headers.get('content-type') || 'text/html; charset=utf-8';
     const finalUrl = upstream.url || target.href;
 

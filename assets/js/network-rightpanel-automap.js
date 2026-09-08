@@ -17,9 +17,9 @@
   const MOBILE_ID = 'nh-mobile-rail-list';
   const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v2';
 
-  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260909-network-tour-links-v3';
-  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v3';
-  const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v3';
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260909-network-tour-compat-v4';
+  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v4';
+  const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v4';
 
   function ensureContainedToolbarTheme(){
     if (document.getElementById(CONTAINED_THEME_ID)) return;
@@ -55,15 +55,15 @@
 
   function ensureContainedViewer(){
     ensureContainedToolbarTheme();
-    if (window.IGDCContainedViewer && typeof window.IGDCContainedViewer.open === 'function') {
+    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') {
       return Promise.resolve(window.IGDCContainedViewer);
     }
-    if (window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__;
+    if (window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__;
 
-    window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__ = new Promise(function(resolve, reject){
+    window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__ = new Promise(function(resolve, reject){
       let script = document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
       const finish = function(){
-        if (window.IGDCContainedViewer && typeof window.IGDCContainedViewer.open === 'function') {
+        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') {
           ensureContainedToolbarTheme();
           resolve(window.IGDCContainedViewer);
         } else {
@@ -85,11 +85,11 @@
       script.addEventListener('error', function(){ reject(new Error('IGDC contained viewer load failed')); }, { once:true });
       (document.head || document.documentElement).appendChild(script);
     }).catch(function(err){
-      window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__ = null;
+      window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__ = null;
       throw err;
     });
 
-    return window.__IGDC_NETWORK_TOUR_VIEWER_PROMISE__;
+    return window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__;
   }
 
 
@@ -173,7 +173,7 @@
         if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
         const label = String(a.textContent || '').replace(/\s+/g, ' ').trim();
         ensureContainedViewer().then(function(viewer){
-          viewer.open(href, { label: label });
+          viewer.open(href, { label: label, kind: 'market' });
         }).catch(function(err){
           console.warn('[IGDC][Network] contained viewer load failed:', err && err.message ? err.message : err);
         });

@@ -1,4 +1,4 @@
-/* IGDC contained external viewer v2
+/* IGDC contained external viewer v3
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
@@ -17,8 +17,10 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V2__) return;
-  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V2__ = true;
+  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V3__) return;
+  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V3__ = true;
+
+  var VIEWER_VERSION = 3;
 
   var PROXY_PATH = '/.netlify/functions/search-page-proxy';
   var ROOT_ID = 'igdc-contained-external-viewer';
@@ -50,7 +52,8 @@
     previousFocus: null,
     viewerMode: '',
     activeLoadSeq: 0,
-    pendingPolicyTarget: ''
+    pendingPolicyTarget: '',
+    kind: ''
   };
 
   function isHttpUrl(raw) {
@@ -105,10 +108,10 @@
     style.textContent = [
       '#' + ROOT_ID + '{position:fixed;inset:0;z-index:2147483200;display:none;background:#fff;color:#16365c;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}',
       '#' + ROOT_ID + '[data-open="1"]{display:flex;flex-direction:column;}',
-      '#' + ROOT_ID + ' .igdc-contained-bar{height:48px;min-height:48px;display:flex;align-items:center;gap:12px;padding:0 12px;background:#e8f5e9;color:#16365c;border-bottom:1px solid #b8d9c1;box-shadow:0 1px 2px rgba(15,23,42,.06);box-sizing:border-box;}',
-      '#' + ROOT_ID + ' .igdc-contained-back{appearance:none;border:1px solid #9fc9aa;background:#f7fff9;color:#16365c;border-radius:8px;padding:7px 12px;font-size:14px;font-weight:800;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease;}',
-      '#' + ROOT_ID + ' .igdc-contained-back:hover{background:#dff2e4;border-color:#86b995;}',
-      '#' + ROOT_ID + ' .igdc-contained-back:active{background:#d4ecd9;}',
+      '#' + ROOT_ID + ' .igdc-contained-bar{height:48px;min-height:48px;display:flex;align-items:center;gap:12px;padding:0 12px;background:#cce89a;color:#16365c;border-bottom:1px solid #9dbd69;box-shadow:0 1px 2px rgba(15,23,42,.06);box-sizing:border-box;}',
+      '#' + ROOT_ID + ' .igdc-contained-back{appearance:none;border:1px solid #9fc9aa;background:#eff8df;color:#16365c;border-radius:8px;padding:7px 12px;font-size:14px;font-weight:800;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease;}',
+      '#' + ROOT_ID + ' .igdc-contained-back:hover{background:#c3df86;border-color:#7fa34f;}',
+      '#' + ROOT_ID + ' .igdc-contained-back:active{background:#b7d679;}',
       '#' + ROOT_ID + ' .igdc-contained-back:focus-visible{outline:2px solid #315f87;outline-offset:2px;}',
       '#' + ROOT_ID + ' .igdc-contained-label{min-width:0;display:flex;align-items:baseline;gap:10px;overflow:hidden;}',
       '#' + ROOT_ID + ' .igdc-contained-title{font-size:14px;font-weight:800;color:#16365c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
@@ -183,8 +186,27 @@
     return PROXY_PATH + '?action=frame-check&url=' + encodeURIComponent(target);
   }
 
-  function proxyUrl(target, proxyId) {
-    return PROXY_PATH + '?safe=1&embed=1&mode=static&proxyId=' + encodeURIComponent(proxyId || '') + '&url=' + encodeURIComponent(target);
+  function proxyUrl(target, proxyId, mode) {
+    return PROXY_PATH + '?safe=1&embed=1&mode=' + encodeURIComponent(mode || 'static') + '&proxyId=' + encodeURIComponent(proxyId || '') + '&url=' + encodeURIComponent(target);
+  }
+
+  function hostMatches(host, suffix) {
+    host = String(host || '').toLowerCase();
+    suffix = String(suffix || '').toLowerCase();
+    return host === suffix || host.endsWith('.' + suffix);
+  }
+
+  function directKnownGood(target, kind) {
+    var host = hostOf(target).toLowerCase();
+    if (kind === 'market') {
+      return hostMatches(host, 'coupang.com') ||
+             hostMatches(host, 'jd.com') ||
+             host === 'amazon.com' || host === 'www.amazon.com';
+    }
+    if (kind === 'tour') {
+      return hostMatches(host, 'booking.com') || hostMatches(host, 'hanatour.com');
+    }
+    return false;
   }
 
   function loadPolicyStore() {
@@ -311,17 +333,18 @@
     frame.src = target;
   }
 
-  function setFrameProxy(target) {
+  function setFrameProxy(target, mode) {
     var frame = state.frame;
     if (!frame) return;
     frame.removeAttribute('srcdoc');
-    state.viewerMode = 'static-proxy';
-    frame.dataset.viewerMode = 'static-proxy';
+    mode = mode || 'static';
+    state.viewerMode = mode + '-proxy';
+    frame.dataset.viewerMode = state.viewerMode;
     /* Upstream scripts are stripped by search-page-proxy. allow-scripts is kept
      * only so IGDC's injected navigation bridge can post the next URL upward. */
     frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-downloads allow-presentation');
     frame.setAttribute('allow', 'clipboard-write; fullscreen');
-    frame.src = proxyUrl(target, state.proxyId);
+    frame.src = proxyUrl(target, state.proxyId, mode);
   }
 
   function updateBar(target, label) {
@@ -336,20 +359,34 @@
     if (!target || !state.open) return;
 
     state.target = target;
+    state.kind = String(options.kind || state.kind || '');
     state.activeLoadSeq += 1;
     var seq = state.activeLoadSeq;
     updateBar(target, options.label || state.label);
     showLoading('사이트를 불러오는 중입니다…');
 
+    /* Network/Tour compatibility path.
+     * Most large commerce/travel sites reject third-party iframe embedding even
+     * though their URL is valid.  Do not show a browser-level "refused to
+     * connect" page first.  Use IGDC's contained relay immediately unless the
+     * host is one of the few sources already verified by the operator to frame
+     * correctly.  The frame-policy check still runs in the background so the
+     * origin decision is cached without delaying first paint. */
+    if ((state.kind === 'market' || state.kind === 'tour') && !directKnownGood(target, state.kind)) {
+      setFrameProxy(target, 'static');
+      framePolicy(target).catch(function(){});
+      return;
+    }
+
     if (options.forceProxy || preferProxy(target)) {
-      setFrameProxy(target);
+      setFrameProxy(target, 'static');
       return;
     }
 
     var cached = getCachedPolicy(target);
     if (cached) {
       if (cached.directAllowed) setFrameDirect(target);
-      else setFrameProxy(target);
+      else setFrameProxy(target, 'static');
       return;
     }
 
@@ -366,7 +403,7 @@
         return;
       }
       showLoading('사이트를 안전하게 불러오는 중입니다…');
-      setFrameProxy(target);
+      setFrameProxy(target, 'static');
     });
   }
 
@@ -393,6 +430,7 @@
     base[HISTORY_TOKEN_KEY] = token;
     base.igdcContainedTarget = target;
     base.igdcContainedLabel = label || '';
+    base.igdcContainedKind = state.kind || '';
     return base;
   }
 
@@ -405,7 +443,8 @@
 
     if (state.open) {
       state.label = String(options.label || state.label || '').trim();
-      loadTarget(target, { label: state.label, forceProxy: !!options.forceProxy });
+      state.kind = String(options.kind || state.kind || '');
+      loadTarget(target, { label: state.label, forceProxy: !!options.forceProxy, kind: state.kind });
       return true;
     }
 
@@ -413,6 +452,7 @@
     state.previousFocus = document.activeElement;
     state.scrollY = global.scrollY || global.pageYOffset || 0;
     state.label = String(options.label || '').trim();
+    state.kind = String(options.kind || '');
     state.proxyId = 'igdc-contained-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     state.historyToken = String(options.historyToken || ('igdc-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)));
     state.open = true;
@@ -427,7 +467,7 @@
     }
 
     try { state.root.querySelector('.igdc-contained-back').focus({ preventScroll: true }); } catch (e) {}
-    loadTarget(target, { label: state.label, forceProxy: !!options.forceProxy });
+    loadTarget(target, { label: state.label, forceProxy: !!options.forceProxy, kind: state.kind });
     return true;
   }
 
@@ -477,6 +517,21 @@
     }
   }
 
+  /* v3 upgrade capture: this is attached at window level so it runs before
+   * the older v2 document-capture listener if a cached FrontBus loaded v2 first. */
+  global.addEventListener('click', function (ev) {
+    if (ev.defaultPrevented || !isNetworkOrTourPage()) return;
+    var a = ev.target && ev.target.closest ? ev.target.closest('a.link-btn[href]') : null;
+    if (!a) return;
+    var href = isHttpUrl(a.getAttribute('href') || a.href || '');
+    if (!href) return;
+    var kind = /(?:^|\/)tour(?:_|\.|\/|$)/i.test(global.location.pathname || '') ? 'tour' : 'market';
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+    open(href, { label: textOf(a), kind: kind });
+  }, true);
+
   document.addEventListener('click', function (ev) {
     if (ev.defaultPrevented) return;
     var found = eligibleAnchor(ev.target);
@@ -501,7 +556,7 @@
     showLoading('사이트를 불러오는 중입니다…');
     /* Once a source required proxy containment, keep subsequent navigation in
      * the same contained proxy instead of trying to promote it to top-level. */
-    setFrameProxy(next);
+    setFrameProxy(next, 'static');
   });
 
   global.addEventListener('popstate', function (ev) {
@@ -513,7 +568,8 @@
         open(target, {
           label: hs.igdcContainedLabel || '',
           historyToken: hs[HISTORY_TOKEN_KEY] || '',
-          pushHistory: false
+          pushHistory: false,
+          kind: hs.igdcContainedKind || ''
         });
       }
       return;
@@ -529,6 +585,7 @@
   }, true);
 
   global.IGDCContainedViewer = Object.freeze({
+    version: VIEWER_VERSION,
     open: open,
     close: requestClose,
     isOpen: function () { return !!state.open; }
