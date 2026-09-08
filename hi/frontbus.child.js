@@ -52,7 +52,7 @@
   if (document.getElementById(id)) return;
   var script = document.createElement('script');
   script.id = id;
-  script.src = '/assets/js/igdc-contained-external-viewer.js?v=20260908-contained-v1';
+  script.src = '/assets/js/igdc-contained-external-viewer.js?v=20260908-contained-v2';
   script.async = false;
   (document.head || document.documentElement).appendChild(script);
 })();
