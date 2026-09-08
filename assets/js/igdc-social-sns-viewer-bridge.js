@@ -12,6 +12,7 @@
  */
 (function () {
   'use strict';
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260908-fb-action-order-v2'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -380,13 +381,15 @@
       '#igdcSocialViewerV2 .igsv-fb-owned-media{width:100%;background:#111;display:flex;align-items:center;justify-content:center;overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-fb-owned-media img{display:block;width:100%;height:auto;max-width:100%;object-fit:contain;object-position:center;background:#111}' +
       '#igdcSocialViewerV2 .igsv-fb-official{width:100%;box-sizing:border-box;padding:0 clamp(18px,3vw,48px);background:#fff;color:#111;border-top:1px solid #e5e7eb}' +
-      '#igdcSocialViewerV2 .igsv-fb-nativebar{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;padding:10px 0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-fb-nativebar{display:flex;align-items:center;gap:0;flex-wrap:nowrap;padding:10px 0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-fb-nativebtn{appearance:none;border:0;border-radius:18px;background:#f1f3f5;color:#4b5563;min-height:38px;padding:0 16px;font:700 14px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}' +
       '#igdcSocialViewerV2 .igsv-fb-nativebtn:hover,#igdcSocialViewerV2 .igsv-fb-nativebtn:focus-visible{background:#e5e7eb;color:#111;outline:none}' +
-      '#igdcSocialViewerV2 .igsv-fb-reaction-cluster{position:relative;margin-left:auto;display:flex;align-items:center;gap:6px}' +
+      '#igdcSocialViewerV2 .igsv-fb-like-emoji{font-size:22px;line-height:1;display:inline-flex;align-items:center;justify-content:center}' +
+      '#igdcSocialViewerV2 .igsv-fb-reaction-cluster{position:relative;margin-left:14px;display:flex;align-items:center;gap:0}' +
+      '#igdcSocialViewerV2 .igsv-fb-share-btn{margin-left:18px}' +
       '#igdcSocialViewerV2 .igsv-fb-reactbtn{appearance:none;border:0;background:transparent;cursor:pointer;font-size:22px;line-height:1;padding:6px 5px;border-radius:999px}' +
       '#igdcSocialViewerV2 .igsv-fb-reactbtn:hover,#igdcSocialViewerV2 .igsv-fb-reactbtn:focus-visible{transform:scale(1.1);background:#f3f4f6;outline:none}' +
-      '#igdcSocialViewerV2 .igsv-fb-reactmore{appearance:none;border:0;background:#f1f3f5;color:#555;border-radius:16px;min-width:32px;min-height:32px;margin-left:8px;padding:0 8px;font:700 15px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}' +
+      '#igdcSocialViewerV2 .igsv-fb-reactmore{appearance:none;border:0;background:#f1f3f5;color:#555;border-radius:16px;min-width:32px;min-height:32px;margin-left:14px;padding:0 8px;font:700 15px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}' +
       '#igdcSocialViewerV2 .igsv-fb-reaction-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:7;display:grid;grid-template-columns:repeat(8,minmax(32px,1fr));gap:3px;width:min(340px,82vw);max-height:220px;overflow:auto;padding:8px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.15)}' +
       '#igdcSocialViewerV2 .igsv-fb-reaction-menu[hidden]{display:none}' +
       '#igdcSocialViewerV2 .igsv-fb-interaction-wrap{width:100%;overflow:hidden;background:#fff;border-bottom:1px solid #eef0f2}' +
@@ -633,15 +636,18 @@
        a small drop block so they do not turn the viewer into an emoji toolbar. */
     var bar = document.createElement('div');
     bar.className = 'igsv-fb-nativebar';
-    var likeBtn = makeText('button', 'igsv-fb-nativebtn igsv-fb-like-toggle', '👍 ' + l.ytLikes);
+    var likeBtn = document.createElement('button');
+    likeBtn.className = 'igsv-fb-nativebtn igsv-fb-like-toggle';
+    likeBtn.type = 'button';
+    likeBtn.appendChild(makeText('span', 'igsv-fb-like-emoji', '👍'));
+    likeBtn.appendChild(makeText('span', 'igsv-fb-like-label', l.ytLikes));
     var shareBtn = makeText('button', 'igsv-fb-nativebtn igsv-fb-share-btn', '↗ ' + l.ytShare);
-    likeBtn.type = shareBtn.type = 'button';
+    shareBtn.type = 'button';
     bar.appendChild(likeBtn);
-    bar.appendChild(shareBtn);
 
     var reactionCluster = document.createElement('div');
     reactionCluster.className = 'igsv-fb-reaction-cluster';
-    ['👍','❤️'].forEach(function (emoji) {
+    ['❤️'].forEach(function (emoji) {
       var b = makeText('button', 'igsv-fb-reactbtn', emoji);
       b.type = 'button';
       b.setAttribute('aria-label', 'Facebook reaction ' + emoji);
@@ -674,6 +680,7 @@
     });
     reactionCluster.appendChild(reactionMenu);
     bar.appendChild(reactionCluster);
+    bar.appendChild(shareBtn);
     box.appendChild(bar);
 
     var interactionWrap = document.createElement('div');
