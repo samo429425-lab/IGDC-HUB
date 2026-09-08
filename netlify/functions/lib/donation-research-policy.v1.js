@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.1.0-searchbank-frame";
+const VERSION = "donation-research-policy-v1.2.0-100slot-sync";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -24,13 +24,13 @@ const SECTIONS = Object.freeze([
 
 const SECTION_CAPACITY = Object.freeze({
   "donation-global":100,
-  "donation-ngo":80,
-  "donation-mission":80,
-  "donation-service":80,
-  "donation-relief":80,
-  "donation-education":80,
-  "donation-environment":80,
-  "donation-others":80
+  "donation-ngo":100,
+  "donation-mission":100,
+  "donation-service":100,
+  "donation-relief":100,
+  "donation-education":100,
+  "donation-environment":100,
+  "donation-others":100
 });
 
 const SECTION_LABELS = Object.freeze({

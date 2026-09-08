@@ -340,10 +340,12 @@
       mainTitle + '{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:3!important;overflow:hidden!important;white-space:normal!important;text-overflow:ellipsis!important;line-height:1.35!important;max-height:4.05em!important;word-break:break-word!important}' +
       '#igdcSocialViewerV2{position:fixed;inset:0;z-index:2147483640;display:none;background:#000;color:#fff;overscroll-behavior:none}' +
       '#igdcSocialViewerV2.open{display:flex;flex-direction:column}' +
-      '#igdcSocialViewerV2 .igsv-toolbar{height:56px;flex:0 0 56px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#090a0c;border-bottom:1px solid rgba(255,255,255,.14);box-sizing:border-box}' +
-      '#igdcSocialViewerV2 .igsv-back,#igdcSocialViewerV2 .igsv-full{border:0;border-radius:9px;min-height:40px;padding:0 13px;background:#17191d;color:#fff;font:600 14px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;white-space:nowrap}' +
+      '#igdcSocialViewerV2 .igsv-toolbar{height:56px;flex:0 0 56px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#e8f5e9;color:#16365c;border-bottom:1px solid #b8d9c1;box-shadow:0 1px 2px rgba(15,23,42,.06);box-sizing:border-box}' +
+      '#igdcSocialViewerV2 .igsv-back,#igdcSocialViewerV2 .igsv-full{border:1px solid #9fc9aa;border-radius:9px;min-height:40px;padding:0 13px;background:#f7fff9;color:#16365c;font:700 14px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease}' +
+      '#igdcSocialViewerV2 .igsv-back:hover,#igdcSocialViewerV2 .igsv-full:hover{background:#dff2e4;border-color:#86b995}' +
+      '#igdcSocialViewerV2 .igsv-back:active,#igdcSocialViewerV2 .igsv-full:active{background:#d4ecd9}' +
       '#igdcSocialViewerV2 .igsv-back{display:inline-flex;align-items:center;gap:7px}' +
-      '#igdcSocialViewerV2 .igsv-title{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
+      '#igdcSocialViewerV2 .igsv-title{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#16365c;font:700 14px/1.3 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-stage{position:relative;min-height:0;flex:1 1 auto;display:flex;align-items:stretch;justify-content:stretch;background:#000;overflow:hidden;overscroll-behavior:none}' +
       '#igdcSocialViewerV2 .igsv-scroll{position:relative;width:100%;height:100%;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;background:#000}' +
       '#igdcSocialViewerV2 .igsv-content{width:100%;min-height:100%;box-sizing:border-box;padding:0;background:#000;display:flex;flex-direction:column;align-items:center}' +

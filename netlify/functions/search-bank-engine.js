@@ -265,6 +265,12 @@ function writeModeEnabled(ctx){
   const mode = low(p.writeMode || p.persistMode || p.snapshotWriteMode || p.mode);
   const explicit = truthy(p.allowWrite || p.enableWrite || p.writeSnapshot || p.snapshotWrite || p.forceSnapshotWrite || p.persist || p.syncWrite) || ["write","sync","admin-write","snapshot-write","force"].includes(mode);
   if(!explicit || isReadOnlyMode(ctx)) return false;
+  /* Exact candidate publication arrives only through the module-level
+     ingestApprovedItems() path. The Symbol marker cannot be supplied through
+     HTTP/query JSON, so the already-authenticated Donation admin function does
+     not need a second environment token merely to hand its approved rows to
+     SearchBank's normal snapshot writer. */
+  if(p.__approvedInternalIngestToken === APPROVED_INTERNAL_INGEST_TOKEN) return true;
   return isAuthorizedAdmin(ctx && ctx.event, p) || truthy(process.env.MARU_SEARCH_BANK_WRITE_UNSAFE);
 }
 function searchBankSyncEnabled(ctx){
@@ -2169,6 +2175,56 @@ function summarizeSearchBankContracts(items, ctx){
   return out;
 }
 
+const APPROVED_INTERNAL_INGEST_TOKEN = Symbol("search-bank-approved-internal-ingest");
+
+function approvedInternalItems(params){
+  if(!params || params.__approvedInternalIngestToken !== APPROVED_INTERNAL_INGEST_TOKEN) return [];
+  if(!Array.isArray(params.__approvedInternalItems)) return [];
+  return params.__approvedInternalItems
+    .filter(item => item && typeof item === "object")
+    .slice(0, 300)
+    .map(item => {
+      const copy = cloneJsonish(item) || {};
+      copy.__adapter = "approved-admin";
+      return copy;
+    });
+}
+
+async function ingestApprovedItems(event, items, options={}){
+  const approved = (Array.isArray(items) ? items : [])
+    .filter(item => item && typeof item === "object")
+    .slice(0, 300);
+  if(!approved.length){
+    return { status:"ok", engine:"search-bank", approved_ingest:true, items:[], meta:{ approved_ingest_count:0, write_allowed:false, snapshot_persistence:{attempted:false,target_count:0,success_count:0,failed_count:0,targets:[]} } };
+  }
+
+  const first = approved[0] || {};
+  const section = s(options.section || first.psom_key || first.section || first.bind?.section || "donation-ngo").trim();
+  const q = s(options.query || options.q || `approved donation ${section}`).trim();
+  const params = {
+    q, query:q,
+    channel:"donation", page:"donation",
+    section, psom_key:section,
+    action:"front-supply", autoFill:"1",
+    external:"off", useExternalSources:"0", noExternal:"1",
+    writeMode:"write", mode:"write", allowWrite:"1",
+    writeSnapshot:"1", snapshotWrite:"1", forceSnapshotWrite:"1",
+    noSync:"1",
+    limit:String(Math.max(10, Math.min(300, Number(options.limit) || approved.length || 100))),
+    __approvedInternalIngestToken:APPROVED_INTERNAL_INGEST_TOKEN,
+    __approvedInternalItems:approved
+  };
+  const adminToken = firstNonEmpty(options.adminToken, options.token, options.sanmaruAdminToken, options.maruAdminToken);
+  if(adminToken) params.adminToken = adminToken;
+
+  const result = await runEngine(event, params);
+  if(result && typeof result === "object"){
+    result.approved_ingest = true;
+    result.meta = Object.assign({}, result.meta || {}, { approved_ingest_count:approved.length, approved_ingest_section:section });
+  }
+  return result;
+}
+
 async function runEngine(event, params={}){
   const ip =
   event?.headers?.["x-forwarded-for"] ||
@@ -2218,11 +2274,14 @@ const offset = safeInt(params.offset, 0, 0, 100000);
   };
 
   const collected = await collectFromAdapters(adapterCtx);
-  const rawItems = collected.items;
+  const approvedItems = approvedInternalItems(params);
+  const rawItems = (Array.isArray(collected.items) ? collected.items : []).concat(approvedItems);
+  const adapterReports = Array.isArray(collected.adapters) ? collected.adapters.slice() : [];
+  if(approvedItems.length) adapterReports.push({ name:"approved-admin", count:approvedItems.length, ok:true, internal:true });
   const served = {
-    served_from: collected.adapters.map(a => a.name).join("+") || "snapshot",
+    served_from: adapterReports.map(a => a.name).join("+") || "snapshot",
     data: { items: rawItems },
-    adapters: collected.adapters,
+    adapters: adapterReports,
     source_health: collected.health
   };
 
@@ -2440,6 +2499,7 @@ return {
 }
 
 exports.runEngine = runEngine;
+exports.ingestApprovedItems = ingestApprovedItems;
 exports.parseQueryIntent = parseQueryIntent;
 exports.resolveGeoContext = resolveGeoContext;
 exports.resolveSectorContext = resolveSectorContext;

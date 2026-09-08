@@ -4,13 +4,13 @@
   var ENDPOINT='/.netlify/functions/donation-candidate-admin';
   var DEFAULT_SECTIONS=[
     {key:'donation-global',label:'글로벌 뉴스',capacity:100},
-    {key:'donation-ngo',label:'NGO',capacity:80},
-    {key:'donation-mission',label:'선교',capacity:80},
-    {key:'donation-service',label:'봉사',capacity:80},
-    {key:'donation-relief',label:'구호',capacity:80},
-    {key:'donation-education',label:'교육',capacity:80},
-    {key:'donation-environment',label:'환경',capacity:80},
-    {key:'donation-others',label:'기타',capacity:80}
+    {key:'donation-ngo',label:'NGO',capacity:100},
+    {key:'donation-mission',label:'선교',capacity:100},
+    {key:'donation-service',label:'봉사',capacity:100},
+    {key:'donation-relief',label:'구호',capacity:100},
+    {key:'donation-education',label:'교육',capacity:100},
+    {key:'donation-environment',label:'환경',capacity:100},
+    {key:'donation-others',label:'기타',capacity:100}
   ];
   var rows=[],sections=DEFAULT_SECTIONS.slice(),stage='all',selected=new Set(),busy=false,policyBusy=false,policyWorkspace=null,recognition=null;
   var loadError='',storageState={available:null,error:null,degraded:false},loadedAt='',sectionPolicyCache={};
@@ -42,7 +42,7 @@
   }
   function stageCounts(list){var out={research:0,queue:0,front_candidate:0,published:0,hold:0,excluded:0};list.forEach(function(r){if(out[r.stage]!==undefined)out[r.stage]++});return out}
   function sectionAudit(secKey){
-    var sec=sections.find(function(x){return x.key===secKey})||{key:secKey,label:secKey,capacity:80};
+    var sec=sections.find(function(x){return x.key===secKey})||{key:secKey,label:secKey,capacity:100};
     var list=rows.filter(function(r){return r.section===secKey});var urls={},dup=[];
     list.forEach(function(r){var u=text(r.url);if(u){urls[u]=(urls[u]||0)+1}});Object.keys(urls).forEach(function(u){if(urls[u]>1)dup.push({url:u,count:urls[u]})});
     var missingUrl=list.filter(function(r){return !/^https:\/\//i.test(text(r.url))});
@@ -72,6 +72,11 @@
   function frameSummary(sec){var f=sec&&sec.researchFrame||{},a=Array.isArray(f.anchors)?f.anchors:[],parts=[];if(f.policyPurpose)parts.push(f.policyPurpose);if(Number(f.freshnessHours)>0)parts.push('신선도 '+Number(f.freshnessHours)+'h');if(f.preferVideo===true)parts.push('영상 우선');if(f.localizeByIp===true)parts.push('IP 지역화');if(Array.isArray(f.psomKeywords)&&f.psomKeywords.length)parts.push('PSOM '+f.psomKeywords.slice(0,5).join('/'));if(a.length)parts.push('기준 '+a.slice(0,5).map(function(x){return text(x&&x.name)}).filter(Boolean).join(' · '));return parts.length?'SearchBank 프레임 · '+parts.join(' · '):'SearchBank 프레임 연결 대기'}
   function searchBankStatus(j){
     var sb=j&&j.searchBank||(j&&j.result&&j.result.searchBank)||null;if(!sb)return '';
+    if(sb.exactSelectedCandidates){
+      var reports=Array.isArray(sb.reports)?sb.reports:[],count=reports.reduce(function(n,x){return n+Number(x&&x.count||0)},0),persisted=reports.filter(function(x){return x&&x.snapshotPersisted}).length;
+      if(sb.ok)return 'SearchBank 정확 매칭 '+count+'건 · snapshot 저장 '+persisted+'개 섹션 · Donation Builder 연결 완료';
+      return 'SearchBank 정확 매칭 시도 '+count+'건 · snapshot 저장 상태 점검 필요';
+    }
     var flat=[];function walk(x){if(!x)return;if(Array.isArray(x)){x.forEach(walk);return}if(x.reports){walk(x.reports);return}if(x.queries){flat.push(x);return}}walk(sb);
     var writable=flat.filter(function(x){return x&&x.writeAllowed}).length;var items=flat.reduce(function(n,x){return n+Number(x&&x.items||0)},0);
     if(sb.ok||writable)return 'SearchBank 정상 경로 실행 · 쓰기 허용 '+writable+'개 섹션 · 검색 결과 '+items+'건';
@@ -99,7 +104,7 @@
     sections.forEach(function(sec){
       var list=visibleRowsFor(sec.key);
       html+='<section class="section" data-section-block="'+esc(sec.key)+'"><div class="section-head"><label class="check"><input type="checkbox" data-section-check="'+esc(sec.key)+'"> 전체</label><h2>'+esc(sec.label)+'</h2><span class="badge">'+list.length+' / '+sec.capacity+'</span></div>'+
-        '<div class="section-actions"><button data-section-action="research" data-section="'+esc(sec.key)+'">다시 리서치</button><button data-section-action="ai_front_candidates" data-section="'+esc(sec.key)+'">AI 프론트 후보</button><button data-section-action="ai_auto_match" data-section="'+esc(sec.key)+'">프론트페이지 매칭 실행</button></div>'+
+        '<div class="section-actions"><button data-section-action="research" data-section="'+esc(sec.key)+'">다시 리서치</button><button data-section-action="ai_front_candidates" data-section="'+esc(sec.key)+'">AI 프론트 후보</button><button data-section-action="ai_auto_match" data-section="'+esc(sec.key)+'">프론트페이지 매칭 실행</button><button data-section-action="reconcile_published" data-section="'+esc(sec.key)+'">SearchBank 재연동</button></div>'+
         '<div class="section-audit"><button class="audit" type="button" data-audit-json="'+esc(sec.key)+'">JSON 점검 다운로드</button><button class="report" type="button" data-audit-report="'+esc(sec.key)+'">점검 보고서 다운로드</button><span class="audit-summary">'+esc(auditSummary(sec.key))+'</span></div>'+
         '<div class="section-audit"><span class="audit-summary">'+esc(frameSummary(sec))+'</span></div>'+
         sectionPolicyHtml(sec)+
@@ -139,6 +144,7 @@
     if(busy)return;
     var payload={action:action};if(ids)payload.ids=ids;if(section)payload.section=section;
     if(action==='publish'||action==='ai_auto_match'){if(!confirm('선택 범위를 실제 도네이션 프론트 매칭 상태로 확정할까요?'))return}
+    if(action==='reconcile_published'){if(!confirm('이 섹션의 기존 프론트 매칭 후보를 SearchBank snapshot 경로에 다시 정확히 연결할까요?'))return}
     setBusy(true,'처리 중…');
     try{var j=await api('POST',payload);selected.clear();await load();var sb=searchBankStatus(j);if(sb)$('state').textContent=sb}catch(e){$('state').textContent='오류: '+e.message;setBusy(false)}
   }
@@ -205,7 +211,7 @@
     var message=destination==='front'?'이 안건으로 리서치한 뒤 AI가 선별한 유효 후보를 실제 프론트 매칭 상태로 확정할까요?':destination==='front_candidate'?'이 안건으로 리서치하고 프론트 후보 단계까지 자동 선별할까요?':'이 안건으로 리서치하여 관리페이지 후보 원장에 반영할까요?';
     if(!confirm(message))return;
     setPolicyBusy(true,destination==='front'?'리서치 후 프론트페이지 매칭 실행 중…':'정책 안건 실행 중…');
-    try{var j=await api('POST',{action:'policy_execute',scope:policyScope(),agendaId:id,destination:destination,limit:80});var r=j.result||{};await load();var sb=searchBankStatus(j);$('policyState').textContent='실행 완료 · '+destinationLabel(destination)+' · 리서치 저장 '+Number(r.research&&r.research.savedCount||0)+'개'+(sb?' · '+sb:'')}
+    try{var j=await api('POST',{action:'policy_execute',scope:policyScope(),agendaId:id,destination:destination,limit:100});var r=j.result||{};await load();var sb=searchBankStatus(j);$('policyState').textContent='실행 완료 · '+destinationLabel(destination)+' · 리서치 저장 '+Number(r.research&&r.research.savedCount||0)+'개'+(sb?' · '+sb:'')}
     catch(e){$('policyState').textContent='정책 실행 오류: '+e.message}
     finally{setPolicyBusy(false)}
   }
@@ -229,7 +235,7 @@
     if(!agenda||!agenda.id){alert('먼저 이 블록에서 AI와 협의해 안건을 만들어 주세요.');return}
     var label=destinationLabel(destination);if(!confirm(sectionLabel(sec)+'의 최근 협의안을 '+label+'로 실행할까요?'))return;
     setSectionPolicyState(sec,label+' 실행 중…');
-    try{var j=await api('POST',{action:'policy_execute',scope:sec,agendaId:agenda.id,destination:destination,limit:80}),r=j.result||{};await load();var sb=searchBankStatus(j);setSectionPolicyState(sec,'실행 완료 · '+label+' · 리서치 저장 '+Number(r.research&&r.research.savedCount||0)+'개'+(sb?' · '+sb:''))}
+    try{var j=await api('POST',{action:'policy_execute',scope:sec,agendaId:agenda.id,destination:destination,limit:100}),r=j.result||{};await load();var sb=searchBankStatus(j);setSectionPolicyState(sec,'실행 완료 · '+label+' · 리서치 저장 '+Number(r.research&&r.research.savedCount||0)+'개'+(sb?' · '+sb:''))}
     catch(e){setSectionPolicyState(sec,'실행 오류: '+e.message)}
   }
   function startSectionVoice(sec){

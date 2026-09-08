@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.3.1-publish-ready-auto-stage";
+const VERSION = "donation-candidate-admin-v1.4.0-exact-searchbank-publish";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -150,7 +150,7 @@ async function applyResearchFrameToSearchBank(event,section,customQuery,limit){
     const detail=[];
     for(const q of queries){
       try{
-        const result=await SearchBank.runEngine(event,searchBankWriteParams(sec,q,limit||80));
+        const result=await SearchBank.runEngine(event,searchBankWriteParams(sec,q,limit||100));
         const meta=plain(result&&result.meta);
         const persistence=plain(meta.snapshot_persistence);
         detail.push({query:q,items:Array.isArray(result&&result.items)?result.items.length:0,writeAllowed:meta.write_allowed===true,snapshotPersisted:Number(persistence.success_count||0)>0,persistence, syncEnabled:meta.sync_enabled===true,servedFrom:text(result&&result.served_from),adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false})):[]});
@@ -160,6 +160,67 @@ async function applyResearchFrameToSearchBank(event,section,customQuery,limit){
   }
   return {ok:reports.some(r=>r.writeAllowed),snapshotPersisted:reports.some(r=>r.snapshotPersisted),directSnapshotEdit:false,durableCandidateLedger:"gslot_candidates/source_ref=donation-candidate-admin-v1",route:"Donation research frame -> SearchBank Engine -> SearchBank snapshot -> existing Donation Builder",reports};
 }
+function approvedCandidateForSearchBank(view){
+  const c=JSON.parse(JSON.stringify(plain(view&&view.candidate)));
+  const section=Policy.normalizeSection(view&&view.section||c.section||c.psom_key)||"donation-ngo";
+  const url=safeHttps(view&&view.url||c.url||plain(c.link).url||plain(c.org).homepage);
+  const thumb=safeHttps(view&&view.thumbnail||c.thumbnail||plain(c.media).thumb||c.image);
+  c.id=text(c.id||view&&view.id)||idFor(section,url,c.title||view&&view.title);
+  c.uid=text(c.uid||c.id);
+  c.title=limitText(c.title||view&&view.title||plain(c.org).name||url,300);
+  c.summary=limitText(c.summary||view&&view.summary||"",1800);
+  c.url=url;
+  c.thumbnail=thumb||c.thumbnail||null;
+  c.thumb=thumb||c.thumb||null;
+  c.image=thumb||c.image||null;
+  c.channel="donation"; c.page="donation"; c.section=section; c.psom_key=section;
+  c.bind=Object.assign({},plain(c.bind),{page:"donation",channel:"donation",section,psom_key:section,route:"donation."+section});
+  c.link=Object.assign({},plain(c.link),{mode:"org-homepage",url,target:"_blank"});
+  c.org=Object.assign({},plain(c.org),{name:limitText(plain(c.org).name||c.title,300)||null,homepage:safeHttps(plain(c.org).homepage)||url||null});
+  c.media=Object.assign({},plain(c.media),{kind:plain(c.media).kind||"image",thumb:thumb||plain(c.media).thumb||null});
+  c.donation=Object.assign({},plain(c.donation),{enabled:plain(c.donation).enabled===true,external:plain(c.donation).external!==false});
+  c.frontApproved=true;
+  c.frontSupplyAllowed=true; c.searchBankEligible=true; c.snapshotEligible=true; c.indexEligible=true;
+  c.adminApproved=true;
+  c.source_adapter="donation-admin";
+  c.donationQueue=Object.assign({},plain(c.donationQueue),{section,stage:"published",updatedAt:nowIso()});
+  return c;
+}
+
+async function publishExactCandidatesToSearchBank(event,ids,limit){
+  if(!SearchBank||typeof SearchBank.ingestApprovedItems!=="function") return {ok:false,error:"searchbank_exact_ingest_unavailable",reports:[]};
+  const bySection=new Map();
+  for(const id of Array.from(new Set((ids||[]).map(text).filter(Boolean))).slice(0,300)){
+    const row=await rowById(id);
+    if(!row) continue;
+    const view=rowView(row);
+    if(view.stage!=="published") continue;
+    if(!Policy.usablePublicCandidate(view.candidate,view.section)) continue;
+    const candidate=approvedCandidateForSearchBank(view);
+    if(!candidate.url||!candidate.media||!candidate.media.thumb) continue;
+    if(!bySection.has(view.section)) bySection.set(view.section,[]);
+    bySection.get(view.section).push(candidate);
+  }
+  const reports=[];
+  const token=serverSearchBankToken();
+  for(const [section,items] of bySection.entries()){
+    try{
+      const result=await SearchBank.ingestApprovedItems(event,items,{section,limit:limit||CAPACITY[section]||100,adminToken:token,query:"admin approved donation candidates"});
+      const meta=plain(result&&result.meta), persistence=plain(meta.snapshot_persistence);
+      reports.push({section,count:items.length,ok:result&&result.status==="ok",writeAllowed:meta.write_allowed===true,snapshotPersisted:Number(persistence.success_count||0)>0,persistence,approvedIngestCount:Number(meta.approved_ingest_count||0)});
+    }catch(error){
+      reports.push({section,count:items.length,ok:false,writeAllowed:false,snapshotPersisted:false,error:text(error&&error.message||error)});
+    }
+  }
+  return {ok:reports.length>0&&reports.every(r=>r.ok),snapshotPersisted:reports.some(r=>r.snapshotPersisted),exactSelectedCandidates:true,directSnapshotEdit:false,route:"Admin selected candidate -> SearchBank Engine exact ingest -> SearchBank snapshot -> Donation Builder -> Donation Automap",reports};
+}
+
+async function publishedIdsForScope(section){
+  const scope=lower(section)==="all" ? "all" : (Policy.normalizeSection(section)||"");
+  const rows=(await readRows()).map(rowView).filter(v=>v.stage==="published");
+  return rows.filter(v=>scope==="all"||v.section===scope).map(v=>v.id);
+}
+
 async function sectionsForIds(ids){
   const out=new Set();
   for(const id of (ids||[]).slice(0,300)){
@@ -215,6 +276,7 @@ async function updateStage(ids,stage,actor,note){
     if(stage==="published"&&section==="donation-mission"&&Policy.missionExcluded(c)){results.push({id,ok:false,error:"mission_policy_excluded"});continue;}
     const nextQ=Object.assign({},q,{section,stage,updatedAt:nowIso(),decidedAt:nowIso(),decidedBy:text(actor&&actor.sub),decisionNote:limitText(note,1500)});
     c.section=section;c.psom_key=section;c.channel="donation";c.page="donation";c.frontApproved=stage==="published";
+    if(stage==="published"){c.frontSupplyAllowed=true;c.searchBankEligible=true;c.snapshotEligible=true;c.indexEligible=true;c.adminApproved=true;c.source_adapter="donation-admin";}
     await Store.update("gslot_candidates","id=eq."+encodeURIComponent(id)+"&source_ref=eq."+encodeURIComponent(SOURCE_REF),{status:statusForStage(stage),source_payload:Object.assign({},payload,{candidate:c,donationQueue:nextQ}),owner_note:limitText(note,2000)||row.owner_note||null,updated_at:nowIso()});
     results.push({id,ok:true,stage});
   }
@@ -246,7 +308,7 @@ async function autoStage(section,targetStage,actor){
   const rows=(await readRows()).map(rowView).filter(v=>v.stage!=="excluded"&&v.stage!=="hold");
   const sections=section==="all"?Policy.SECTIONS:[Policy.normalizeSection(section)].filter(Boolean); const selected=[];
   for(const sec of sections){
-    const cap=CAPACITY[sec]||80;
+    const cap=CAPACITY[sec]||100;
     const eligible=rows.filter(v=>v.section===sec&&v.stage!=="published").sort((a,b)=>rankForAuto(b)-rankForAuto(a)||String(b.updatedAt).localeCompare(String(a.updatedAt)));
     for(const v of eligible){
       if(selected.filter(x=>x.section===sec).length>=cap) break;
@@ -258,8 +320,9 @@ async function autoStage(section,targetStage,actor){
       selected.push(v);
     }
   }
-  const results=await updateStage(selected.map(v=>v.id),targetStage,actor,"AI 자동 선별");
-  return {selected:selected.length,results};
+  const selectedIds=selected.map(v=>v.id);
+  const results=await updateStage(selectedIds,targetStage,actor,"AI 자동 선별");
+  return {selected:selected.length,selectedIds,results};
 }
 async function executePolicyAgenda(event,body,actor){
   const scope=PolicyDiscussion.normalizeScope(body.scope||body.section||"all");
@@ -267,19 +330,19 @@ async function executePolicyAgenda(event,body,actor){
   const destination=lower(body.destination||agenda.destination||"admin");
   if(!["admin","front_candidate","front"].includes(destination)){const e=new Error("정책 실행 대상이 올바르지 않습니다.");e.statusCode=400;throw e;}
   const query=PolicyDiscussion.executionQuery(agenda);
-  const research=await performResearch(event,scope,query,body.limit||80);
+  const research=await performResearch(event,scope,query,body.limit||100);
   let stageResult=null;
   if(destination==="front_candidate") stageResult=await autoStage(scope,"front_candidate",actor);
   let searchBank=null;
   if(destination==="front"){
     stageResult=await autoStage(scope,"published",actor);
-    searchBank=await applyResearchFrameToSearchBank(event,scope,query,body.limit||80);
+    searchBank=await publishExactCandidatesToSearchBank(event,stageResult.selectedIds||[],body.limit||100);
   }
   return {scope,agendaId:agenda.id,destination,query,research,stageResult,searchBank,publicPublication:destination==="front"};
 }
 function summary(rows){
   const out={total:rows.length,stages:{},sections:{}};
-  Policy.SECTIONS.forEach(sec=>out.sections[sec]={total:0,research:0,queue:0,front_candidate:0,published:0,hold:0,excluded:0,capacity:CAPACITY[sec]||80});
+  Policy.SECTIONS.forEach(sec=>out.sections[sec]={total:0,research:0,queue:0,front_candidate:0,published:0,hold:0,excluded:0,capacity:CAPACITY[sec]||100});
   rows.forEach(v=>{out.stages[v.stage]=(out.stages[v.stage]||0)+1;const s=out.sections[v.section]||(out.sections[v.section]={total:0});s.total=(s.total||0)+1;s[v.stage]=(s[v.stage]||0)+1;}); return out;
 }
 
@@ -297,7 +360,7 @@ exports.handler=async function(event){
       }
       return json(200,{
         ok:true,version:VERSION,sourceRef:SOURCE_REF,
-        sections:Policy.SECTIONS.map(k=>({key:k,label:Policy.SECTION_LABELS[k],capacity:CAPACITY[k]||80,researchFrame:Policy.researchFrameFor?Policy.researchFrameFor(k):null})),
+        sections:Policy.SECTIONS.map(k=>({key:k,label:Policy.SECTION_LABELS[k],capacity:CAPACITY[k]||100,researchFrame:Policy.researchFrameFor?Policy.researchFrameFor(k):null})),
         summary:summary(rows),items:rows,publicPublication:false,
         storage:{available:!storageError,error:storageError||null,degraded:!!storageError}
       });
@@ -334,10 +397,8 @@ exports.handler=async function(event){
       const results=await updateStage(ids,stageMap[action],actor,text(body.note));
       let searchBank=null;
       if(stageMap[action]==="published"){
-        const affected=await sectionsForIds(ids);
-        const reports=[];
-        for(const sec of affected){reports.push(await applyResearchFrameToSearchBank(event,sec,"",body.limit||80));}
-        searchBank={ok:reports.some(r=>r&&r.ok),reports};
+        const publishedIds=results.filter(r=>r&&r.ok&&r.stage==="published").map(r=>r.id);
+        searchBank=await publishExactCandidatesToSearchBank(event,publishedIds,body.limit||100);
       }
       return json(200,{ok:true,version:VERSION,action,stage:stageMap[action],results,searchBank,publicPublication:stageMap[action]==="published"});
     }
@@ -345,12 +406,18 @@ exports.handler=async function(event){
       const section=lower(body.section)==="all"?"all":Policy.normalizeSection(body.section||"all")||"all";
       const target=action==="ai_auto_match"?"published":"front_candidate";
       const result=await autoStage(section,target,actor);
-      const searchBank=target==="published"?await applyResearchFrameToSearchBank(event,section,"",body.limit||80):null;
+      const searchBank=target==="published"?await publishExactCandidatesToSearchBank(event,result.selectedIds||[],body.limit||100):null;
       return json(200,{ok:true,version:VERSION,action,targetStage:target,result,searchBank,publicPublication:target==="published"});
+    }
+    if(action==="reconcile_published"){
+      const section=lower(body.section)==="all"?"all":Policy.normalizeSection(body.section||"all")||"all";
+      const publishedIds=await publishedIdsForScope(section);
+      const searchBank=await publishExactCandidatesToSearchBank(event,publishedIds,body.limit||100);
+      return json(200,{ok:true,version:VERSION,action,section,publishedCount:publishedIds.length,searchBank,publicPublication:true});
     }
     if(action==="searchbank_apply"){
       const section=lower(body.section)==="all"?"all":Policy.normalizeSection(body.section||"all")||"all";
-      const searchBank=await applyResearchFrameToSearchBank(event,section,text(body.query),body.limit||80);
+      const searchBank=await applyResearchFrameToSearchBank(event,section,text(body.query),body.limit||100);
       return json(200,{ok:true,version:VERSION,action,searchBank,publicPublication:false});
     }
     return json(400,{ok:false,error:"unsupported_action"});
