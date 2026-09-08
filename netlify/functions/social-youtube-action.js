@@ -60,6 +60,12 @@ exports.handler = async function handler(event) {
       await youtubeFetch('videos/rate?id=' + encodeURIComponent(videoId) + '&rating=like', { method: 'POST' }, token);
       return response(200, { ok: true, action: 'like', videoId }, cookie);
     }
+    if (action === 'dislike') {
+      const videoId = OAuth.text(body.videoId);
+      if (!validVideoId(videoId)) return response(400, { ok: false, error: 'invalid_video_id' }, cookie);
+      await youtubeFetch('videos/rate?id=' + encodeURIComponent(videoId) + '&rating=dislike', { method: 'POST' }, token);
+      return response(200, { ok: true, action: 'dislike', videoId }, cookie);
+    }
     if (action === 'subscribe') {
       const channelId = OAuth.text(body.channelId);
       if (!validChannelId(channelId)) return response(400, { ok: false, error: 'invalid_channel_id' }, cookie);

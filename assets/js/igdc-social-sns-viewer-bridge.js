@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260908-fb-action-order-v2'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260908-yt-native-actions-v4'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -77,11 +77,11 @@
   }
 
   var LABELS = {
-    ko: { list:'목록으로', fullscreen:'전체 화면', exitFullscreen:'전체 화면 종료', loading:'콘텐츠를 불러오는 중입니다.', unavailable:'이 콘텐츠는 현재 내부 재생을 준비할 수 없습니다.', ytChecking:'YouTube 상세 정보를 확인하는 중입니다.', ytDetailUnavailable:'YouTube 공개 상세 정보를 불러오지 못해 현재 저장된 제목·설명만 표시합니다.', ytSubscriber:'구독자', ytViews:'조회수', ytLikes:'좋아요', ytComments:'댓글', ytOpenComments:'댓글 더보기', ytCloseComments:'댓글 접기', ytSort:'정렬 기준', ytSortTop:'인기순', ytSortNewest:'최신순', ytMore:'더보기', ytLess:'간략히', ytShare:'공유', ytSave:'저장', ytSaved:'저장됨', ytSubscribe:'구독', ytJoin:'가입', ytCommentAdd:'댓글 추가…', ytOAuth:'구독·좋아요·댓글 작성은 YouTube 계정 연결이 필요합니다.', ytConnect:'YouTube 계정 연결', ytConnecting:'계정 연결 중…', ytConnected:'계정 연결됨', ytCommentPost:'댓글', ytSubscribed:'구독됨', ytLiked:'좋아요 완료', ytActionFailed:'요청을 처리하지 못했습니다.', ytPublicNote:'조회수·좋아요·댓글은 YouTube 공개 데이터입니다.' },
-    en: { list:'Back to list', fullscreen:'Fullscreen', exitFullscreen:'Exit fullscreen', loading:'Loading content…', unavailable:'This content cannot currently be prepared for in-site playback.', ytChecking:'Loading YouTube details…', ytDetailUnavailable:'YouTube public details are unavailable; showing the stored title and description.', ytSubscriber:'Subscribers', ytViews:'Views', ytLikes:'Like', ytComments:'Comments', ytOpenComments:'Show more comments', ytCloseComments:'Show fewer comments', ytSort:'Sort by', ytSortTop:'Top comments', ytSortNewest:'Newest first', ytMore:'Show more', ytLess:'Show less', ytShare:'Share', ytSave:'Save', ytSaved:'Saved', ytSubscribe:'Subscribe', ytJoin:'Join', ytCommentAdd:'Add a comment…', ytOAuth:'Subscribe, like and comment posting require a YouTube account connection.', ytConnect:'Connect YouTube', ytConnecting:'Connecting…', ytConnected:'Connected', ytCommentPost:'Post', ytSubscribed:'Subscribed', ytLiked:'Liked', ytActionFailed:'Could not complete this action.', ytPublicNote:'Views, likes and comments are public YouTube data.' },
-    ja: { list:'一覧へ', fullscreen:'全画面', exitFullscreen:'全画面を終了', loading:'コンテンツを読み込み中です。', unavailable:'このコンテンツは現在サイト内再生を準備できません。', ytChecking:'YouTubeの詳細を読み込み中です。', ytDetailUnavailable:'YouTubeの公開詳細を取得できないため、保存済みのタイトルと説明を表示します。', ytSubscriber:'登録者', ytViews:'視聴回数', ytLikes:'高評価', ytComments:'コメント', ytOpenComments:'コメントをもっと見る', ytCloseComments:'コメントを閉じる', ytSort:'並べ替え', ytSortTop:'人気順', ytSortNewest:'新しい順', ytMore:'もっと見る', ytLess:'一部を表示', ytShare:'共有', ytSave:'保存', ytSaved:'保存済み', ytSubscribe:'登録', ytJoin:'メンバーになる', ytCommentAdd:'コメントを追加…', ytOAuth:'登録・高評価・コメント投稿には YouTube アカウント接続が必要です。', ytConnect:'YouTubeを接続', ytConnecting:'接続中…', ytConnected:'接続済み', ytCommentPost:'投稿', ytSubscribed:'登録済み', ytLiked:'高評価済み', ytActionFailed:'操作を完了できませんでした。', ytPublicNote:'視聴回数・高評価・コメントは YouTube の公開データです。' },
-    zh: { list:'返回列表', fullscreen:'全屏', exitFullscreen:'退出全屏', loading:'正在加载内容。', unavailable:'此内容目前无法在站内准备播放。', ytChecking:'正在加载 YouTube 详细信息。', ytDetailUnavailable:'无法获取 YouTube 公开详细信息，显示已保存的标题和说明。', ytSubscriber:'订阅者', ytViews:'观看次数', ytLikes:'点赞', ytComments:'评论', ytOpenComments:'查看更多评论', ytCloseComments:'收起评论', ytSort:'排序', ytSortTop:'热门', ytSortNewest:'最新', ytMore:'展开', ytLess:'收起', ytShare:'分享', ytSave:'保存', ytSaved:'已保存', ytSubscribe:'订阅', ytJoin:'加入', ytCommentAdd:'添加评论…', ytOAuth:'订阅、点赞和发表评论需要连接 YouTube 帐号。', ytConnect:'连接 YouTube', ytConnecting:'正在连接…', ytConnected:'已连接', ytCommentPost:'发布', ytSubscribed:'已订阅', ytLiked:'已点赞', ytActionFailed:'无法完成此操作。', ytPublicNote:'观看次数、点赞和评论来自 YouTube 公开数据。' },
-    zht:{ list:'返回列表', fullscreen:'全螢幕', exitFullscreen:'退出全螢幕', loading:'正在載入內容。', unavailable:'此內容目前無法在站內準備播放。', ytChecking:'正在載入 YouTube 詳細資訊。', ytDetailUnavailable:'無法取得 YouTube 公開詳細資訊，顯示已儲存的標題與說明。', ytSubscriber:'訂閱者', ytViews:'觀看次數', ytLikes:'喜歡', ytComments:'留言', ytOpenComments:'查看更多留言', ytCloseComments:'收起留言', ytSort:'排序', ytSortTop:'熱門', ytSortNewest:'最新', ytMore:'展開', ytLess:'收起', ytShare:'分享', ytSave:'儲存', ytSaved:'已儲存', ytSubscribe:'訂閱', ytJoin:'加入', ytCommentAdd:'新增留言…', ytOAuth:'訂閱、喜歡與留言發佈需要連接 YouTube 帳號。', ytConnect:'連接 YouTube', ytConnecting:'正在連接…', ytConnected:'已連接', ytCommentPost:'發佈', ytSubscribed:'已訂閱', ytLiked:'已喜歡', ytActionFailed:'無法完成此操作。', ytPublicNote:'觀看次數、喜歡和留言來自 YouTube 公開資料。' }
+    ko: { list:'목록으로', fullscreen:'전체 화면', exitFullscreen:'전체 화면 종료', loading:'콘텐츠를 불러오는 중입니다.', unavailable:'이 콘텐츠는 현재 내부 재생을 준비할 수 없습니다.', ytChecking:'YouTube 상세 정보를 확인하는 중입니다.', ytDetailUnavailable:'YouTube 공개 상세 정보를 불러오지 못해 현재 저장된 제목·설명만 표시합니다.', ytSubscriber:'구독자', ytViews:'조회수', ytLikes:'좋아요', ytDislike:'싫어요', ytDisliked:'싫어요 표시됨', ytComments:'댓글', ytOpenComments:'댓글 더보기', ytCloseComments:'댓글 접기', ytSort:'정렬 기준', ytSortTop:'인기순', ytSortNewest:'최신순', ytMore:'더보기', ytLess:'간략히', ytShare:'공유', ytSave:'IGDC 저장', ytSaved:'IGDC 저장됨', ytSubscribe:'구독', ytJoin:'가입', ytCommentAdd:'댓글 추가…', ytOAuth:'구독·좋아요·댓글 작성은 YouTube 계정 연결이 필요합니다.', ytConnect:'YouTube 계정 연결', ytConnecting:'계정 연결 중…', ytConnected:'계정 연결됨', ytCommentPost:'댓글', ytSubscribed:'구독됨', ytLiked:'좋아요 완료', ytActionFailed:'요청을 처리하지 못했습니다.', ytPublicNote:'조회수·좋아요·댓글은 YouTube 공개 데이터입니다.' },
+    en: { list:'Back to list', fullscreen:'Fullscreen', exitFullscreen:'Exit fullscreen', loading:'Loading content…', unavailable:'This content cannot currently be prepared for in-site playback.', ytChecking:'Loading YouTube details…', ytDetailUnavailable:'YouTube public details are unavailable; showing the stored title and description.', ytSubscriber:'Subscribers', ytViews:'Views', ytLikes:'Like', ytDislike:'Dislike', ytDisliked:'Disliked', ytComments:'Comments', ytOpenComments:'Show more comments', ytCloseComments:'Show fewer comments', ytSort:'Sort by', ytSortTop:'Top comments', ytSortNewest:'Newest first', ytMore:'Show more', ytLess:'Show less', ytShare:'Share', ytSave:'Save to IGDC', ytSaved:'Saved to IGDC', ytSubscribe:'Subscribe', ytJoin:'Join', ytCommentAdd:'Add a comment…', ytOAuth:'Subscribe, like and comment posting require a YouTube account connection.', ytConnect:'Connect YouTube', ytConnecting:'Connecting…', ytConnected:'Connected', ytCommentPost:'Post', ytSubscribed:'Subscribed', ytLiked:'Liked', ytActionFailed:'Could not complete this action.', ytPublicNote:'Views, likes and comments are public YouTube data.' },
+    ja: { list:'一覧へ', fullscreen:'全画面', exitFullscreen:'全画面を終了', loading:'コンテンツを読み込み中です。', unavailable:'このコンテンツは現在サイト内再生を準備できません。', ytChecking:'YouTubeの詳細を読み込み中です。', ytDetailUnavailable:'YouTubeの公開詳細を取得できないため、保存済みのタイトルと説明を表示します。', ytSubscriber:'登録者', ytViews:'視聴回数', ytLikes:'高評価', ytDislike:'低評価', ytDisliked:'低評価済み', ytComments:'コメント', ytOpenComments:'コメントをもっと見る', ytCloseComments:'コメントを閉じる', ytSort:'並べ替え', ytSortTop:'人気順', ytSortNewest:'新しい順', ytMore:'もっと見る', ytLess:'一部を表示', ytShare:'共有', ytSave:'IGDCに保存', ytSaved:'IGDCに保存済み', ytSubscribe:'登録', ytJoin:'メンバーになる', ytCommentAdd:'コメントを追加…', ytOAuth:'登録・高評価・コメント投稿には YouTube アカウント接続が必要です。', ytConnect:'YouTubeを接続', ytConnecting:'接続中…', ytConnected:'接続済み', ytCommentPost:'投稿', ytSubscribed:'登録済み', ytLiked:'高評価済み', ytActionFailed:'操作を完了できませんでした。', ytPublicNote:'視聴回数・高評価・コメントは YouTube の公開データです。' },
+    zh: { list:'返回列表', fullscreen:'全屏', exitFullscreen:'退出全屏', loading:'正在加载内容。', unavailable:'此内容目前无法在站内准备播放。', ytChecking:'正在加载 YouTube 详细信息。', ytDetailUnavailable:'无法获取 YouTube 公开详细信息，显示已保存的标题和说明。', ytSubscriber:'订阅者', ytViews:'观看次数', ytLikes:'点赞', ytDislike:'不喜欢', ytDisliked:'已标记不喜欢', ytComments:'评论', ytOpenComments:'查看更多评论', ytCloseComments:'收起评论', ytSort:'排序', ytSortTop:'热门', ytSortNewest:'最新', ytMore:'展开', ytLess:'收起', ytShare:'分享', ytSave:'保存到IGDC', ytSaved:'已保存到IGDC', ytSubscribe:'订阅', ytJoin:'加入', ytCommentAdd:'添加评论…', ytOAuth:'订阅、点赞和发表评论需要连接 YouTube 帐号。', ytConnect:'连接 YouTube', ytConnecting:'正在连接…', ytConnected:'已连接', ytCommentPost:'发布', ytSubscribed:'已订阅', ytLiked:'已点赞', ytActionFailed:'无法完成此操作。', ytPublicNote:'观看次数、点赞和评论来自 YouTube 公开数据。' },
+    zht:{ list:'返回列表', fullscreen:'全螢幕', exitFullscreen:'退出全螢幕', loading:'正在載入內容。', unavailable:'此內容目前無法在站內準備播放。', ytChecking:'正在載入 YouTube 詳細資訊。', ytDetailUnavailable:'無法取得 YouTube 公開詳細資訊，顯示已儲存的標題與說明。', ytSubscriber:'訂閱者', ytViews:'觀看次數', ytLikes:'喜歡', ytDislike:'不喜歡', ytDisliked:'已標記不喜歡', ytComments:'留言', ytOpenComments:'查看更多留言', ytCloseComments:'收起留言', ytSort:'排序', ytSortTop:'熱門', ytSortNewest:'最新', ytMore:'展開', ytLess:'收起', ytShare:'分享', ytSave:'儲存至IGDC', ytSaved:'已儲存至IGDC', ytSubscribe:'訂閱', ytJoin:'加入', ytCommentAdd:'新增留言…', ytOAuth:'訂閱、喜歡與留言發佈需要連接 YouTube 帳號。', ytConnect:'連接 YouTube', ytConnecting:'正在連接…', ytConnected:'已連接', ytCommentPost:'發佈', ytSubscribed:'已訂閱', ytLiked:'已喜歡', ytActionFailed:'無法完成此操作。', ytPublicNote:'觀看次數、喜歡和留言來自 YouTube 公開資料。' }
   };
   function labels() { return LABELS[language()] || LABELS.en; }
 
@@ -390,7 +390,7 @@
       '#igdcSocialViewerV2 .igsv-fb-reactbtn{appearance:none;border:0;background:transparent;cursor:pointer;font-size:22px;line-height:1;padding:6px 5px;border-radius:999px}' +
       '#igdcSocialViewerV2 .igsv-fb-reactbtn:hover,#igdcSocialViewerV2 .igsv-fb-reactbtn:focus-visible{transform:scale(1.1);background:#f3f4f6;outline:none}' +
       '#igdcSocialViewerV2 .igsv-fb-reactmore{appearance:none;border:0;background:#f1f3f5;color:#555;border-radius:16px;min-width:32px;min-height:32px;margin-left:14px;padding:0 8px;font:700 15px/1 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}' +
-      '#igdcSocialViewerV2 .igsv-fb-reaction-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:7;display:grid;grid-template-columns:repeat(8,minmax(32px,1fr));gap:3px;width:min(340px,82vw);max-height:220px;overflow:auto;padding:8px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.15)}' +
+      '#igdcSocialViewerV2 .igsv-fb-reaction-menu{position:absolute;left:calc(100% - 32px);right:auto;top:calc(100% + 8px);z-index:7;display:grid;grid-template-columns:repeat(8,minmax(32px,1fr));gap:3px;width:min(420px,72vw);max-width:calc(100vw - 32px);max-height:190px;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:8px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.15)}' +
       '#igdcSocialViewerV2 .igsv-fb-reaction-menu[hidden]{display:none}' +
       '#igdcSocialViewerV2 .igsv-fb-interaction-wrap{width:100%;overflow:hidden;background:#fff;border-bottom:1px solid #eef0f2}' +
       '#igdcSocialViewerV2 .igsv-fb-interaction-frame{display:block;width:100%;height:min(72vh,780px);min-height:480px;border:0;background:#fff}' +
@@ -578,7 +578,7 @@
     saveBtn.addEventListener('click', function () {
       var target = sourceUrl || state.lastUrl || '';
       var saved = toggleSavedUrl(target);
-      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave;
+      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '🔖 ' + labels().ytSave;
     });
     tools.appendChild(saveBtn);
 
@@ -730,9 +730,29 @@
         toggleComments(true);
       });
     });
+    function placeReactionMenu() {
+      var viewer = document.getElementById('igdcSocialViewerV2');
+      var bounds = viewer ? viewer.getBoundingClientRect() : { left: 0, right: window.innerWidth || 0 };
+      var buttonRect = reactionMore.getBoundingClientRect();
+      var clusterRect = reactionCluster.getBoundingClientRect();
+      var startX = Math.max(0, Math.round(buttonRect.left - clusterRect.left));
+      var availableRight = Math.max(180, Math.floor((bounds.right || window.innerWidth || 0) - buttonRect.left - 16));
+      var menuWidth = Math.min(420, availableRight);
+      reactionMenu.style.left = startX + 'px';
+      reactionMenu.style.right = 'auto';
+      reactionMenu.style.width = menuWidth + 'px';
+      reactionMenu.style.maxWidth = menuWidth + 'px';
+    }
+
     reactionMore.addEventListener('click', function () {
       reactionMenu.hidden = !reactionMenu.hidden;
       reactionMore.setAttribute('aria-expanded', reactionMenu.hidden ? 'false' : 'true');
+      if (!reactionMenu.hidden) {
+        placeReactionMenu();
+        window.setTimeout(function () {
+          try { reactionMenu.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); } catch (_) {}
+        }, 0);
+      }
     });
 
     /* Facebook share stays in a user-initiated popup, so the IGDC viewer never gets
@@ -1127,20 +1147,29 @@
     var actions = document.createElement('div');
     actions.className = 'igsv-yt-actions';
     if (stats.viewCount != null) actions.appendChild(makeText('div', 'igsv-yt-views', labels().ytViews + ' ' + formatCount(stats.viewCount)));
-    var likeBtn = makeActionButton('♡ ' + labels().ytLikes + (stats.likeCount != null ? ' ' + formatCount(stats.likeCount) : ''));
+    var likeBtn = makeActionButton('👍 ' + labels().ytLikes + (stats.likeCount != null ? ' ' + formatCount(stats.likeCount) : ''));
     likeBtn.addEventListener('click', function () {
       youtubeWriteAction('like', { videoId: video.id || videoIdYouTube(state.lastUrl || '') }, likeBtn, function () {
-        likeBtn.textContent = '♥ ' + labels().ytLiked + (stats.likeCount != null ? ' ' + formatCount(Number(stats.likeCount || 0) + 1) : '');
+        likeBtn.textContent = '👍 ' + labels().ytLiked + (stats.likeCount != null ? ' ' + formatCount(Number(stats.likeCount || 0) + 1) : '');
       });
     });
     actions.appendChild(likeBtn);
+
+    var dislikeBtn = makeActionButton('👎 ' + labels().ytDislike);
+    dislikeBtn.addEventListener('click', function () {
+      youtubeWriteAction('dislike', { videoId: video.id || videoIdYouTube(state.lastUrl || '') }, dislikeBtn, function () {
+        dislikeBtn.textContent = '👎 ' + labels().ytDisliked;
+      });
+    });
+    actions.appendChild(dislikeBtn);
+
     var shareBtn = makeActionButton('↗ ' + labels().ytShare);
     shareBtn.addEventListener('click', function () { shareSource(video.title || '', state.lastUrl || '', shareBtn); });
     actions.appendChild(shareBtn);
-    var saveBtn = makeActionButton((isSavedUrl(state.lastUrl || '') ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave));
+    var saveBtn = makeActionButton((isSavedUrl(state.lastUrl || '') ? '✓ ' + labels().ytSaved : '🔖 ' + labels().ytSave));
     saveBtn.addEventListener('click', function () {
       var saved = toggleSavedUrl(state.lastUrl || '');
-      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave;
+      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '🔖 ' + labels().ytSave;
     });
     actions.appendChild(saveBtn);
     if (video.publishedAt) {
