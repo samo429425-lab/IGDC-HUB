@@ -491,7 +491,7 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
   const org_name = cleanName(pickFirst(rec.org?.name, rec.org_name, rec.name, rec.title, rec.organization));
   const legal_name = cleanName(pickFirst(rec.org?.legal_name, rec.legal_name, rec.legalName));
   const summary = cleanName(pickFirst(rec.summary, rec.description, rec.about, rec.snippet));
-  const homepage = safeUrl(pickFirst(
+  const rawHomepage = safeUrl(pickFirst(
     rec.org?.homepage,
     rec.homepage,
     rec.website,
@@ -500,9 +500,12 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     rec.link,
     rec.href
   ));
+  const homepage = sectionKey !== "donation-global" && DonationResearchPolicy && typeof DonationResearchPolicy.organizationHomepageUrl === "function"
+    ? safeUrl(DonationResearchPolicy.organizationHomepageUrl(rec))
+    : rawHomepage;
 
   const youtubeThumb = DonationResearchPolicy ? DonationResearchPolicy.youtubeThumbnail(rec) : "";
-  const thumb = safeUrl(pickFirst(
+  const detectedThumb = safeUrl(pickFirst(
     rec.media?.thumb,
     rec.thumbnail,
     rec.thumb,
@@ -511,7 +514,10 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     rec.logo,
     rec.logo_url,
     youtubeThumb
-  )) || "/assets/img/placeholder.png";
+  ));
+  /* Organization lanes render the canonical homepage itself as the thumbnail;
+     a raster poster is optional metadata.  Global News still needs a video poster. */
+  const thumb = detectedThumb || (sectionKey === "donation-global" ? "/assets/img/placeholder.png" : "");
 
   const sourceName = pickFirst(rec.source?.name, rec.source, rec.collector?.engine, rec.engine, "bank");
   const sourceLooksSeed = /seed|sample|placeholder|demo|mock/i.test(String(sourceName || ""));
@@ -625,11 +631,11 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     },
 
     media:{
-      kind: videoLike ? "video" : (rec.media?.kind || "image"),
+      kind: videoLike ? "video" : "site-preview",
       thumb,
       src: mediaUrl || safeUrl(pickFirst(rec.media?.src, rec.video, rec.videoUrl, rec.url)) || null,
       embed_url: safeUrl(pickFirst(rec.media?.embed_url, rec.embedUrl)) || null,
-      ratio: rec.media?.ratio || (videoLike ? "16:9" : "1:1")
+      ratio: rec.media?.ratio || "16:9"
     },
 
     image: thumb,

@@ -48,7 +48,7 @@
     var missingUrl=list.filter(function(r){return !/^https:\/\//i.test(text(r.url))});
     var missingThumb=list.filter(function(r){return !/^https:\/\//i.test(text(r.thumbnail))});
     var placeholders=list.filter(function(r){return (r.issues||[]).indexOf('placeholder_or_seed')>=0||/\b(seed|placeholder|partner\s+\d+)\b/i.test(text(r.title)+' '+text(r.summary))});
-    var publishedNotReady=list.filter(function(r){return r.stage==='published'&&(!/^https:\/\//i.test(text(r.url))||!/^https:\/\//i.test(text(r.thumbnail)))});
+    var publishedNotReady=list.filter(function(r){return r.stage==='published'&&(!/^https:\/\//i.test(text(r.url))||(r.section==='donation-global'&&!/^https:\/\//i.test(text(r.thumbnail))))});
     return {section:sec.key,label:sec.label,capacity:sec.capacity,researchFrame:sec.researchFrame||null,total:list.length,stages:stageCounts(list),missingHttpsUrl:missingUrl.length,missingThumbnail:missingThumb.length,placeholderOrSeed:placeholders.length,duplicateUrls:dup,publishedNotReady:publishedNotReady.length,items:list};
   }
   function overallAudit(){
@@ -83,8 +83,9 @@
     return 'SearchBank 실행됨 · snapshot 직접 수정 없음 · 쓰기 권한/외부 수집 상태 점검 필요';
   }
   function renderTabs(){$('stageTabs').innerHTML=STAGES.map(function(x){return '<button type="button" data-stage="'+x[0]+'" class="'+(stage===x[0]?'active':'')+'">'+esc(x[1])+'</button>'}).join('')}
-  function card(row){var id=esc(row.id),img=text(row.thumbnail),issues=Array.isArray(row.issues)?row.issues:[];return '<article class="candidate">'+
-    '<div class="thumb">'+(img?'<img src="'+esc(img)+'" loading="lazy" alt="" onerror="this.remove()">':'<span class="fallback">'+esc((row.title||'?').slice(0,1))+'</span>')+(row.mediaKind==='video'?'<span class="video-mark">▶ VIDEO</span>':'')+'</div>'+
+  function sitePreviewSrc(url){var u=text(url);return /^https:\/\//i.test(u)?'/.netlify/functions/search-page-proxy?mode=static&safe=1&embed=1&url='+encodeURIComponent(u):''}
+  function card(row){var id=esc(row.id),img=text(row.thumbnail),issues=Array.isArray(row.issues)?row.issues:[],homepage=row.section!=='donation-global'&&/^https:\/\//i.test(text(row.url)),preview=homepage?sitePreviewSrc(row.url):'',thumbHtml=preview?'<iframe src="'+esc(preview)+'" loading="lazy" tabindex="-1" aria-hidden="true" sandbox="" referrerpolicy="no-referrer" title="" style="display:block;width:100%;height:100%;border:0;pointer-events:none;background:#fff"></iframe>':(img?'<img src="'+esc(img)+'" loading="lazy" alt="" onerror="this.remove()">':'<span class="fallback">'+(row.section==='donation-global'?'영상 미리보기 없음':'사이트 미리보기')+'</span>');return '<article class="candidate">'+
+    '<div class="thumb" style="overflow:hidden;'+(homepage?'background:#fff;':'')+'">'+thumbHtml+(row.mediaKind==='video'?'<span class="video-mark">▶ VIDEO</span>':'')+'</div>'+
     '<div class="candidate-body"><label class="check"><input type="checkbox" data-check="'+id+'" '+(selected.has(row.id)?'checked':'')+'> 선택 · '+esc(stageLabel(row.stage))+'</label><div class="candidate-title">'+esc(row.title)+'</div>'+
     '<div class="candidate-meta">관련도 '+Number(row.relevanceScore||0).toFixed(0)+' · '+esc(sectionLabel(row.section))+(issues.length?' · <span class="issue">'+esc(issues.join(', '))+'</span>':'')+'</div><div class="candidate-summary">'+esc(row.summary||'')+'</div>'+
     (row.url?'<a href="'+esc(row.url)+'" target="_blank" rel="noopener">'+esc(row.url)+'</a>':'')+
@@ -105,7 +106,7 @@
       var list=visibleRowsFor(sec.key),isOpen=openSection===sec.key,lane=sec.key==='donation-global'?'영상/글로벌 뉴스 · 주 3회 자동':'공식 홈페이지 우선';
       html+='<section class="section" data-section-block="'+esc(sec.key)+'"><div class="section-head"><label class="check"><input type="checkbox" data-section-check="'+esc(sec.key)+'"> 전체</label><h2>'+esc(sec.label)+'</h2><span class="section-kind">'+esc(lane)+'</span><span class="badge">'+list.length+' / '+sec.capacity+'</span><button type="button" class="section-toggle" data-section-toggle="'+esc(sec.key)+'" aria-expanded="'+(isOpen?'true':'false')+'">'+(isOpen?'접기':'펼치기')+'</button></div>'+
         '<div class="section-content" data-section-content="'+esc(sec.key)+'" '+(isOpen?'':'hidden')+'>'+
-        '<div class="section-actions"><button data-section-action="research" data-section="'+esc(sec.key)+'">다시 리서치</button><button data-section-action="ai_front_candidates" data-section="'+esc(sec.key)+'">AI 프론트 후보</button><button data-section-action="ai_auto_match" data-section="'+esc(sec.key)+'">프론트페이지 매칭 실행</button><button data-section-action="reconcile_published" data-section="'+esc(sec.key)+'">SearchBank 재연동</button></div>'+
+        '<div class="section-actions"><button data-section-action="policy_cleanup" data-section="'+esc(sec.key)+'">정책 위반 정리</button><button data-section-action="research" data-section="'+esc(sec.key)+'">다시 리서치</button><button data-section-action="ai_front_candidates" data-section="'+esc(sec.key)+'">AI 프론트 후보</button><button data-section-action="ai_auto_match" data-section="'+esc(sec.key)+'">프론트페이지 매칭 실행</button><button data-section-action="reconcile_published" data-section="'+esc(sec.key)+'">SearchBank 재연동</button></div>'+
         '<div class="section-audit"><b>섹션 점검</b><button class="audit" data-audit-json="'+esc(sec.key)+'">JSON 다운로드</button><button class="report" data-audit-report="'+esc(sec.key)+'">점검 보고서</button><span class="audit-summary">'+esc(auditSummary(sec.key))+'</span></div>'+
         sectionPolicyHtml(sec)+
         '<div class="grid">'+(list.length?list.map(card).join(''):'<div class="empty">현재 단계에 표시할 후보가 없습니다.</div>')+'</div></div></section>';
@@ -145,8 +146,9 @@
     var payload={action:action};if(ids)payload.ids=ids;if(section)payload.section=section;
     if(action==='publish'||action==='ai_auto_match'){if(!confirm('선택 범위를 실제 도네이션 프론트 매칭 상태로 확정할까요?'))return}
     if(action==='reconcile_published'){if(!confirm('이 섹션의 기존 프론트 매칭 후보를 SearchBank snapshot 경로에 다시 정확히 연결할까요?'))return}
+    if(action==='policy_cleanup'){if(!confirm('이 섹션에서 공식 홈페이지가 아닌 문서·PDF·위키·영상/소셜·검색결과 후보를 정리할까요?'))return}
     setBusy(true,'처리 중…');
-    try{var j=await api('POST',payload);selected.clear();await load();var sb=searchBankStatus(j);if(sb)$('state').textContent=sb}catch(e){$('state').textContent='오류: '+e.message;setBusy(false)}
+    try{var j=await api('POST',payload);selected.clear();await load();if(action==='policy_cleanup'){var c=j.cleanup||{};$('state').textContent='정책 정리 완료 · 검사 '+Number(c.checked||0)+'건 · 제거 '+Number(c.removed||0)+'건 · 홈페이지 정규화 '+Number(c.canonicalized||0)+'건';return}var sb=searchBankStatus(j);if(sb)$('state').textContent=sb}catch(e){$('state').textContent='오류: '+e.message;setBusy(false)}
   }
   async function research(section,all){
     if(busy)return;
@@ -155,8 +157,8 @@
     try{
       var j=await api('POST',{action:'research',section:all?'all':section,query:q,limit:50}),r=j.result||{},reports=Array.isArray(r.reports)?r.reports:[];
       await load();
-      var engine=reports.reduce(function(n,x){return n+Number(x.engineItems||0)},0),accepted=reports.reduce(function(n,x){return n+Number(x.accepted||0)},0),homepage=reports.reduce(function(n,x){return n+Number(x.officialHomepageCount||0)},0),fallback=reports.reduce(function(n,x){return n+Number(x.fallbackContentCount||0)},0),nonWebsite=reports.reduce(function(n,x){return n+Number(x.skippedNonWebsite||0)},0),searchSkip=reports.reduce(function(n,x){return n+Number(x.skippedSearchLanding||0)},0);
-      $('state').textContent='리서치 완료 · 엔진 '+engine+'건 → 저장 가능한 후보 '+accepted+'건 · 공식 홈페이지 '+homepage+' · 공식 콘텐츠 후순위 '+fallback+' · 사용가능 링크 없음 '+nonWebsite+' · 검색결과 링크 제외 '+searchSkip;
+      var engine=reports.reduce(function(n,x){return n+Number(x.engineItems||0)},0),accepted=reports.reduce(function(n,x){return n+Number(x.accepted||0)},0),homepage=reports.reduce(function(n,x){return n+Number(x.officialHomepageCount||0)},0),nonWebsite=reports.reduce(function(n,x){return n+Number(x.skippedNonWebsite||0)},0),searchSkip=reports.reduce(function(n,x){return n+Number(x.skippedSearchLanding||0)},0),clean=(r.cleanup||{});
+      $('state').textContent='리서치 완료 · 엔진 '+engine+'건 → 정책 적합 후보 '+accepted+'건 · 공식 홈페이지 '+homepage+' · 비사이트 제외 '+nonWebsite+' · 검색결과 제외 '+searchSkip+' · 기존 위반 제거 '+Number(clean.removed||0)+' · 홈페이지 정규화 '+Number(clean.canonicalized||0);
       if(!all&&section){openSection=section;renderSections()}
     }catch(e){$('state').textContent='리서치 오류: '+e.message;setBusy(false)}
   }

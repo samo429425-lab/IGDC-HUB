@@ -50,7 +50,7 @@
         </div>
         <div>
           <label for="policyInstruction" style="font-size:11px;color:#b9cce0">관리자 운영 의견·정책 지시·질문</label>
-          <textarea id="policyInstruction" placeholder="예: 각 기관 섹션은 공식 홈페이지를 최우선으로 찾고 대표/OG 이미지를 사용해 줘. 홈페이지가 확인되지 않는 특별한 경우에만 공식 영상·채널·콘텐츠를 후순위로 허용하고, 글로벌 뉴스는 최신 인도주의 영상을 중심으로 운영해 줘."></textarea>
+          <textarea id="policyInstruction" placeholder="예: 7개 기관 섹션은 각 기관의 공식 메인 홈페이지 자체를 찾아 사이트 카드로 사용하고 PDF·리포트·위키·유튜브/SNS·검색결과는 제외해 줘. 글로벌 뉴스만 최신 인도주의 영상을 중심으로 운영해 줘."></textarea>
           <div class="policy-actions">
             <button id="policyDiscussBtn" class="primary" type="button">AI와 협의</button>
             <button id="policyReloadBtn" type="button">협의 내용 다시 불러오기</button>
@@ -65,7 +65,7 @@
   </section>
 
   <div id="summary" class="summary"></div>
-  <div class="notice">글로벌 뉴스는 재난·전쟁 피해·난민·기아·아동·교육·보건·기후·환경 등 <b>실질적 인도주의 영상</b>을 중심으로 운영하며 월·수·금 기준 주 3회 자동 리서치/교체합니다. NGO·선교·봉사·구호·교육·환경·기타 7개 섹션은 <b>기관·단체의 공식 HTTPS 홈페이지를 최우선</b>으로 사용합니다. 홈페이지를 찾지 못하거나 공식 웹 존재 자체가 영상·채널 중심인 특별한 경우에는 그 공식 콘텐츠를 후순위 후보로 허용합니다.</div>
+  <div class="notice">글로벌 뉴스는 재난·전쟁 피해·난민·기아·아동·교육·보건·기후·환경 등 <b>실질적 인도주의 영상</b>을 중심으로 운영하며 월·수·금 기준 주 3회 자동 리서치/교체합니다. NGO·선교·봉사·구호·교육·환경·기타 7개 섹션은 <b>기관·단체의 공식 HTTPS 메인 홈페이지 자체</b>를 카드 원본으로 사용합니다. PDF·리포트·위키·개별 문서·유튜브/SNS·검색결과 페이지는 7개 기관 섹션의 대표 카드로 사용하지 않습니다.</div>
   <div class="stage-tabs" id="stageTabs"></div>
   <div class="actionbar">
     <button id="selectAllVisibleBtn">현재 화면 전체 선택</button>
@@ -81,6 +81,6 @@
   </div>
   <div id="sections"></div>
 </main>
-<script src="/assets/js/admin-donation-candidate-queue.js?v=5"></script>
+<script src="/assets/js/admin-donation-candidate-queue.js?v=6"></script>
 </body>
 </html>

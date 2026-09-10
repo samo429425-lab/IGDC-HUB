@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.5.1-homepage-first-global-news-schedule";
+const VERSION = "donation-candidate-admin-v1.6.0-strict-homepage-global-video-cleanup";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -105,7 +105,7 @@ function normalizeCandidate(item,section,query){
     channel:"donation",page:"donation",section:resolved,psom_key:resolved,
     category:Policy.categoryForSection(resolved),
     type:isVideo?"video":"organization",
-    media:{kind:isVideo?"video":"image",src:isVideo?url:null,thumb:thumb||null,ratio:isVideo?"16:9":"1:1"},
+    media:{kind:isVideo?"video":"site-preview",src:isVideo?url:null,thumb:thumb||null,ratio:"16:9"},
     org:{name:limitText(org.name||raw.name||title,300)||null,legal_name:limitText(org.legal_name||raw.legal_name||"",300)||null,homepage:(resolved==="donation-global"?safeHttps(org.homepage||raw.homepage||raw.website):homepage)||null,country:text(org.country||raw.country)||null},
     source:{name:sourceName(raw),url:safeHttps(source.url||raw.sourceUrl||raw.source_url||url)||url,authority:Number(source.authority||raw.authority||0)||0},
     published_at:publishedAt,
@@ -119,13 +119,13 @@ function normalizeCandidate(item,section,query){
   };
   const issues=[];
   if(!url) issues.push("https_url_missing");
-  if(!thumb) issues.push("thumbnail_missing");
+  if(resolved==="donation-global"&&!thumb) issues.push("thumbnail_missing");
   if(resolved==="donation-mission"&&Policy.missionExcluded(raw)) issues.push("mission_policy_excluded");
   if(Policy.isPlaceholder(raw)) issues.push("placeholder_or_seed");
   if(resolved==="donation-global"&&!isVideo) issues.push("video_not_detected");
-  if(resolved!=="donation-global"&&!homepage&&url) issues.push("homepage_missing_official_content_fallback");
+  if(resolved!=="donation-global"&&!homepage) issues.push("official_homepage_missing");
   if(resolved!=="donation-global"&&!url) issues.push("organization_destination_missing");
-  return {id,candidate,queue:{schema:"igdc-donation-candidate-queue.v1",section:resolved,stage:"research",researchQuery:limitText(query,600),discoveredAt:nowIso(),updatedAt:nowIso(),relevanceScore:relevance,issues,mediaKind:isVideo?"video":"link",sourceSearchBankId:candidate.searchBankId||null}};
+  return {id,candidate,queue:{schema:"igdc-donation-candidate-queue.v1",section:resolved,stage:"research",researchQuery:limitText(query,600),discoveredAt:nowIso(),updatedAt:nowIso(),relevanceScore:relevance,issues,mediaKind:isVideo?"video":"website",sourceSearchBankId:candidate.searchBankId||null}};
 }
 function rowView(row){
   const payload=plain(row&&row.source_payload), q=plain(payload.donationQueue), c=plain(payload.candidate);
@@ -146,10 +146,11 @@ async function upsertRows(rows){
   if(!rows.length) return [];
   return Store.request(Store.rest("gslot_candidates","on_conflict=id"),{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},body:JSON.stringify(rows)});
 }
-function researchParams(section,query,limit){
+function researchParams(section,query,limit,maruType){
   const q=text(query)||Policy.queryTerms(section)[0]||Policy.SECTION_LABELS[section]||"donation";
   const frame=Policy.researchFrameFor ? Policy.researchFrameFor(section) : {};
-  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"3000",discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:section==="donation-global"?"video":"web"};
+  const sourceTimeout=section==="donation-global"?6000:3500;
+  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:String(sourceTimeout),discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:maruType||(section==="donation-global"?"video":"web")};
   if(section==="donation-global"||Number(frame.freshnessHours)>0){params.freshnessHours=String(Number(frame.freshnessHours)||48);}
   if(section==="donation-global"||frame.preferVideo===true){params.mediaPreference="video";}
   if(section==="donation-mission"||frame.localizeByIp===true){params.localizeByIp="1";params.geoPreference="ip-preferred";}
@@ -207,14 +208,14 @@ function approvedCandidateForSearchBank(view){
   c.bind=Object.assign({},plain(c.bind),{page:"donation",channel:"donation",section,psom_key:section,route:"donation."+section});
   const homepage=safeHttps(Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(c):"");
   const homepageFirst=section!=="donation-global"&&!!homepage;
-  c.link=Object.assign({},plain(c.link),{mode:section==="donation-global"?"global-news-video":(homepageFirst?"org-homepage":"official-content-fallback"),url,target:"_blank"});
+  c.link=Object.assign({},plain(c.link),{mode:section==="donation-global"?"global-news-video":"org-homepage",url,target:"_blank"});
   c.org=Object.assign({},plain(c.org),{name:limitText(plain(c.org).name||c.title,300)||null,homepage:section==="donation-global"?(safeHttps(plain(c.org).homepage)||null):(homepage||null)});
-  c.media=Object.assign({},plain(c.media),{kind:section==="donation-global"?(plain(c.media).kind||"video"):"image",thumb:thumb||plain(c.media).thumb||null});
+  c.media=Object.assign({},plain(c.media),{kind:section==="donation-global"?(plain(c.media).kind||"video"):"site-preview",thumb:thumb||plain(c.media).thumb||null,ratio:"16:9"});
   if(section!=="donation-global"){
-    /* Non-global lanes remain organization cards even when the best available
-       official destination is a video/channel page.  The URL is clickable, but
-       we do not turn the Donation section into an embedded media player. */
     c.type="organization";
+    c.url=homepage;
+    c.link=Object.assign({},plain(c.link),{mode:"org-homepage",url:homepage,target:"_blank"});
+    c.org=Object.assign({},plain(c.org),{homepage:homepage||null});
     c.media.src=null;
   }
   c.donation=Object.assign({},plain(c.donation),{enabled:plain(c.donation).enabled===true,external:plain(c.donation).external!==false});
@@ -236,7 +237,8 @@ async function publishExactCandidatesToSearchBank(event,ids,limit){
     if(view.stage!=="published") continue;
     if(!Policy.usablePublicCandidate(view.candidate,view.section)) continue;
     const candidate=approvedCandidateForSearchBank(view);
-    if(!candidate.url||!candidate.media||!candidate.media.thumb) continue;
+    if(!candidate.url) continue;
+    if(view.section==="donation-global"&&(!candidate.media||!candidate.media.thumb)) continue;
     if(!bySection.has(view.section)) bySection.set(view.section,[]);
     bySection.get(view.section).push(candidate);
   }
@@ -269,25 +271,86 @@ async function sectionsForIds(ids){
   }
   return Array.from(out);
 }
+function structurallyCompliant(view){
+  if(!view||!view.candidate) return false;
+  const section=Policy.normalizeSection(view.section)||"donation-ngo";
+  try { return Policy.usablePublicCandidate(view.candidate,section) === true; }
+  catch(_error){ return false; }
+}
+function rowWithCanonicalHomepage(row,view,homepage){
+  const payload=JSON.parse(JSON.stringify(plain(row&&row.source_payload))), q=plain(payload.donationQueue), c=plain(payload.candidate);
+  c.url=homepage; c.section=view.section; c.psom_key=view.section; c.channel="donation"; c.page="donation"; c.type="organization";
+  c.org=Object.assign({},plain(c.org),{homepage});
+  c.link=Object.assign({},plain(c.link),{mode:"org-homepage",url:homepage,target:"_blank"});
+  c.media=Object.assign({},plain(c.media),{kind:"site-preview",src:null,ratio:"16:9"});
+  if(Policy.isVideoUrl&&Policy.isVideoUrl(c.media.thumb)) c.media.thumb=null;
+  q.issues=(Array.isArray(q.issues)?q.issues:[]).filter(x=>!["homepage_missing_official_content_fallback","official_homepage_missing","organization_destination_missing","thumbnail_missing"].includes(text(x)));
+  q.mediaKind="website"; q.updatedAt=nowIso();
+  payload.candidate=c; payload.donationQueue=q;
+  return Object.assign({},row,{official_url:homepage,thumbnail_url:c.thumbnail||plain(c.media).thumb||null,source_payload:payload,updated_at:nowIso()});
+}
+async function cleanupPolicyViolations(scopeSections){
+  const wanted=new Set((Array.isArray(scopeSections)?scopeSections:Policy.SECTIONS).map(Policy.normalizeSection).filter(Boolean));
+  const rows=await readRows(), removeIds=[], rewrites=[];
+  for(const row of rows){
+    const view=rowView(row); if(!wanted.has(view.section)) continue;
+    if(view.section==="donation-global"){
+      if(!structurallyCompliant(view)) removeIds.push(view.id);
+      continue;
+    }
+    const homepage=Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(view.candidate):"";
+    if(!homepage||!structurallyCompliant(view)){ removeIds.push(view.id); continue; }
+    const current=safeHttps(view.url), orgHome=safeHttps(plain(view.candidate.org).homepage), linkUrl=safeHttps(plain(view.candidate.link).url);
+    if(current!==homepage||orgHome!==homepage||linkUrl!==homepage||text(plain(view.candidate.media).kind)!=="site-preview") rewrites.push(rowWithCanonicalHomepage(row,view,homepage));
+  }
+  if(rewrites.length) await upsertRows(rewrites);
+  let removed=0;
+  for(let i=0;i<removeIds.length;i+=80){
+    const chunk=removeIds.slice(i,i+80).filter(id=>/^[A-Za-z0-9_-]+$/.test(id));
+    if(!chunk.length) continue;
+    await Store.remove("gslot_candidates","id=in.("+chunk.join(",")+")&source_ref=eq."+encodeURIComponent(SOURCE_REF));
+    removed+=chunk.length;
+  }
+  return {checked:rows.filter(r=>wanted.has(rowView(r).section)).length,removed,canonicalized:rewrites.length};
+}
+function defaultDiscoveryQuery(section,customQuery){
+  const custom=text(customQuery); if(custom) return custom;
+  const frame=Policy.researchFrameFor?Policy.researchFrameFor(section):{};
+  if(section==="donation-global") return text(frame.primaryQuery)||Policy.SECTION_LABELS[section]||"humanitarian video";
+  const names=(Array.isArray(frame.anchors)?frame.anchors:[]).map(a=>text(a&&a.name)).filter(Boolean).slice(0,7);
+  if(names.length){
+    return "("+names.map(name=>'\"'+name.replace(/\"/g,"")+'\"').join(" OR ")+") official organization homepage";
+  }
+  return text(frame.primaryQuery)||Policy.queryTerms(section)[0]||Policy.SECTION_LABELS[section]||"official organization homepage";
+}
 async function performResearch(event,section,customQuery,limit){
   if(!SearchBank||typeof SearchBank.runEngine!=="function"){const e=new Error("SearchBank Engine을 불러오지 못했습니다.");e.statusCode=503;throw e;}
   const sections=section==="all"?Policy.SECTIONS:[Policy.normalizeSection(section)].filter(Boolean);
   if(!sections.length){const e=new Error("도네이션 섹션을 선택해 주세요.");e.statusCode=400;throw e;}
+  const cleanup=await cleanupPolicyViolations(sections);
   const existing=await readRows(), existingMap=new Map(existing.map(r=>[text(r.id),r]));
 
   async function researchOne(sec){
     const frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
-    const terms=Policy.queryTerms(sec,sections.length===1?customQuery:"");
-    const query=text(customQuery&&sections.length===1?customQuery:frame.primaryQuery)||text(terms[0])||Policy.SECTION_LABELS[sec]||"donation";
+    const scopedCustom=sections.length===1?customQuery:"";
+    const query=defaultDiscoveryQuery(sec,scopedCustom);
     const seen=new Set(); let accepted=0, skippedExcluded=0, skippedSearchLanding=0, skippedNonWebsite=0, officialHomepageCount=0, fallbackContentCount=0;
     const started=Date.now();
-    let result;
-    try{
-      result=await SearchBank.runEngine(event,researchParams(sec,query,Math.min(60,Number(limit)||50)));
-    }catch(error){
-      return {section:sec,query,queries:[query],accepted:0,skippedExcluded:0,skippedSearchLanding:0,skippedVideoOutsideGlobal:0,skippedNonWebsite:0,officialHomepageCount:0,fallbackContentCount:0,engineItems:0,durationMs:Date.now()-started,error:text(error&&error.message||error),writes:[]};
+    const passes=[{query,type:sec==="donation-global"?"video":"web"}];
+    if(sec==="donation-global"&&!scopedCustom) passes.push({query:query+" site:youtube.com/watch",type:"web"});
+    const passResults=await Promise.all(passes.map(async pass=>{
+      try{return {pass,result:await SearchBank.runEngine(event,researchParams(sec,pass.query,Math.min(60,Number(limit)||50),pass.type))};}
+      catch(error){return {pass,error:text(error&&error.message||error),result:null};}
+    }));
+    const items=[]; const adapterMeta=[];
+    for(const pack of passResults){
+      const arr=Array.isArray(pack.result&&pack.result.items)?pack.result.items:[]; items.push(...arr);
+      const meta=plain(pack.result&&pack.result.meta);
+      adapterMeta.push(...(Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null,query:pack.pass.query,type:pack.pass.type})):[]));
     }
-    const items=Array.isArray(result&&result.items)?result.items:[];
+    if(!items.length&&passResults.every(x=>x.error)){
+      return {section:sec,query,queries:passes.map(x=>x.query),accepted:0,skippedExcluded:0,skippedSearchLanding:0,skippedVideoOutsideGlobal:0,skippedNonWebsite:0,officialHomepageCount:0,fallbackContentCount:0,engineItems:0,durationMs:Date.now()-started,error:passResults.map(x=>x.error).filter(Boolean).join(" | "),writes:[]};
+    }
     const writes=[];
     for(const item of items){
       if(Policy.isPlaceholder(item)) continue;
@@ -297,9 +360,13 @@ async function performResearch(event,section,customQuery,limit){
         else if(sec!=="donation-global") skippedNonWebsite++;
         continue;
       }
+      if(!Policy.usablePublicCandidate(norm.candidate,sec)){
+        if(sec!=="donation-global") skippedNonWebsite++;
+        continue;
+      }
       if(sec!=="donation-global"){
         if(Policy.organizationHomepageUrl&&Policy.organizationHomepageUrl(item||{})) officialHomepageCount++;
-        else fallbackContentCount++;
+        else { skippedNonWebsite++; continue; }
       }
       if(seen.has(norm.id)) continue;
       seen.add(norm.id);
@@ -313,11 +380,10 @@ async function performResearch(event,section,customQuery,limit){
       writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Donation-only private candidate; no public publication without final front matching.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       accepted++;
     }
-    const meta=plain(result&&result.meta);
     return {
-      section:sec,query,queries:[query],accepted,skippedExcluded,skippedSearchLanding,skippedVideoOutsideGlobal:0,skippedNonWebsite,officialHomepageCount,fallbackContentCount,
+      section:sec,query,queries:passes.map(x=>x.query),accepted,skippedExcluded,skippedSearchLanding,skippedVideoOutsideGlobal:0,skippedNonWebsite,officialHomepageCount,fallbackContentCount,
       engineItems:items.length,durationMs:Date.now()-started,writes,
-      adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]
+      adapters:adapterMeta
     };
   }
 
@@ -338,7 +404,7 @@ async function performResearch(event,section,customQuery,limit){
   }
   const dedup=new Map();writes.forEach(r=>dedup.set(r.id,r));
   const saved=dedup.size?await upsertRows(Array.from(dedup.values())):[];
-  return {reports,savedCount:Array.isArray(saved)?saved.length:dedup.size,searchBankPasses:sections.length,externalAdapter:"donation",adapterFence:["donation"],sourceTimeoutMs:3000,sectionMediaPolicy:"donation-global=video/news; other seven sections=official organization homepage first, official content fallback allowed"};
+  return {reports,savedCount:Array.isArray(saved)?saved.length:dedup.size,cleanup,searchBankPasses:sections.length,externalAdapter:"donation",adapterFence:["donation"],sourceTimeoutMs:{global:6000,organization:3500},sectionMediaPolicy:"donation-global=actual video/news; other seven sections=canonical official organization homepage only"};
 }
 async function updateStage(ids,stage,actor,note){
   if(!STAGES.has(stage)){const e=new Error("지원하지 않는 단계입니다.");e.statusCode=400;throw e;}
@@ -448,14 +514,19 @@ exports.handler=async function(event){
     try{ Store.config(); }catch(error){ storeConfigError=text(error&&error.message||error)||"donation_candidate_store_unavailable"; }
     if(method==="GET"){
       let rows=[],storageError=storeConfigError;
+      let policyFilteredCount=0;
       if(!storageError){
-        try{ rows=(await readRows()).map(rowView); }
+        try{
+          const allRows=(await readRows()).map(rowView);
+          rows=allRows.filter(structurallyCompliant);
+          policyFilteredCount=allRows.length-rows.length;
+        }
         catch(error){ storageError=text(error&&error.message||error)||"donation_candidate_store_read_failed"; }
       }
       return json(200,{
         ok:true,version:VERSION,sourceRef:SOURCE_REF,
         sections:Policy.SECTIONS.map(k=>({key:k,label:Policy.SECTION_LABELS[k],capacity:CAPACITY[k]||100,researchFrame:Policy.researchFrameFor?Policy.researchFrameFor(k):null})),
-        summary:summary(rows),items:rows,publicPublication:false,
+        summary:summary(rows),items:rows,policyFilteredCount,publicPublication:false,
         storage:{available:!storageError,error:storageError||null,degraded:!!storageError}
       });
     }
@@ -478,6 +549,12 @@ exports.handler=async function(event){
     if(action==="policy_execute"){
       const result=await executePolicyAgenda(event,body,actor);
       return json(200,{ok:true,version:VERSION,action,result,publicPublication:result.publicPublication===true});
+    }
+    if(action==="policy_cleanup"){
+      const section=lower(body.section)==="all"?"all":Policy.normalizeSection(body.section||"all")||"all";
+      const sections=section==="all"?Policy.SECTIONS:[section];
+      const cleanup=await cleanupPolicyViolations(sections);
+      return json(200,{ok:true,version:VERSION,action,section,cleanup,publicPublication:false});
     }
     if(action==="research"){
       const section=Policy.normalizeSection(body.section)|| (lower(body.section)==="all"?"all":"");
@@ -521,4 +598,6 @@ exports.handler=async function(event){
 exports.SOURCE_REF=SOURCE_REF;
 exports.CAPACITY=CAPACITY;
 exports.normalizeCandidate=normalizeCandidate;
+exports.structurallyCompliant=structurallyCompliant;
+exports.cleanupPolicyViolations=cleanupPolicyViolations;
 exports.runScheduledGlobalNewsRefresh=runScheduledGlobalNewsRefresh;

@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.3.1-homepage-first-official-content-fallback";
+const VERSION = "donation-research-policy-v1.4.0-official-homepage-only-global-video";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -176,9 +176,9 @@ function policyFor(value){
 function recordText(record){
   const r=plain(record), source=plain(r.source), org=plain(r.org), entity=plain(r.entity), media=plain(r.media), collector=plain(r.collector);
   return lower([
-    r.title,r.name,r.summary,r.description,r.about,r.content,r.category,r.semantic_category,r.type,r.mediaType,r.section,r.psom_key,
+    r.title,r.name,r.summary,r.description,r.about,r.content,r.category,r.semantic_category,r.type,r.mediaType,
     org.name,org.legal_name,org.homepage,entity.type,entity.subtype,media.kind,media.type,media.url,media.src,
-    source.name,source.platform,source.url,collector.query,r.url,r.link && r.link.url,
+    source.name,source.platform,source.url,r.url,r.link && r.link.url,
     ...array(r.tags),...array(r.keywords),...array(r.topics)
   ].filter(Boolean).join(" "));
 }
@@ -245,6 +245,37 @@ function isDirectMediaAssetUrl(value){
   const raw=httpsUrl(value); if(!raw) return false;
   try{ return /\.(?:jpg|jpeg|png|gif|webp|svg|avif|mp4|webm|mov|m3u8|mp3|wav)(?:$|[?#])/i.test(new URL(raw).pathname); }catch(_e){ return false; }
 }
+function isDocumentUrl(value){
+  const raw=httpsUrl(value); if(!raw) return false;
+  try{
+    const u=new URL(raw), path=u.pathname.toLowerCase();
+    return /\.(?:pdf|doc|docx|xls|xlsx|ppt|pptx|rtf|txt|csv|epub|mobi|odt|ods|odp|zip|rar|7z)(?:$|[?#])/i.test(path) ||
+      /\/(?:download|downloads|document|documents|publication|publications|report|reports|paper|papers|bitstream)(?:\/|$)/i.test(path);
+  }catch(_e){ return false; }
+}
+function isNonOrganizationHost(value){
+  const host=urlHost(value); if(!host) return true;
+  const blocked=[
+    "wikipedia.org","wikidata.org","wikimedia.org","namu.wiki","fandom.com","wikia.com","researchgate.net","academia.edu","scribd.com","slideshare.net","issuu.com",
+    "arxiv.org","doi.org","semanticscholar.org","jstor.org","sciencedirect.com","springer.com","tandfonline.com","pubmed.ncbi.nlm.nih.gov",
+    "cambridge.org","oup.com","oxfordacademic.com","worldscientific.com","wiley.com","mdpi.com","frontiersin.org","ssrn.com","zenodo.org","hal.science","core.ac.uk","proceedings.com","archive.org","web.archive.org",
+    "docs.google.com","drive.google.com","storage.googleapis.com","dropbox.com","box.com","onedrive.live.com","github.com","gitlab.com",
+    "medium.com","substack.com","blogspot.com","wordpress.com","notion.site","notion.so",
+    "reuters.com","apnews.com","cnn.com","bbc.com","bbc.co.uk","nytimes.com","washingtonpost.com","theguardian.com","forbes.com",
+    "news.google.com","news.yahoo.com","msn.com","reliefweb.int"
+  ];
+  return blocked.some(base=>host===base||host.endsWith("."+base));
+}
+function canonicalHomepageFromUrl(value){
+  const raw=httpsUrl(value); if(!raw) return "";
+  if(isSearchLandingUrl(raw)||isVideoUrl(raw)||isSocialUrl(raw)||isDirectMediaAssetUrl(raw)||isNonOrganizationHost(raw)) return "";
+  try{
+    const u=new URL(raw);
+    /* Organization cards represent the SITE, never an article/PDF/report path.
+       Even when discovery lands on an internal page, collapse to the HTTPS origin. */
+    return u.protocol==="https:" ? (u.origin+"/") : "";
+  }catch(_e){ return ""; }
+}
 function organizationWebsiteUrls(record){
   const r=plain(record), media=plain(r.media), link=plain(r.link), org=plain(r.org), source=plain(r.source), entity=plain(r.entity);
   return unique([
@@ -256,36 +287,37 @@ function organizationWebsiteUrls(record){
     media.pageUrl,media.page_url
   ]);
 }
-function isOrganizationWebsiteUrl(value){
-  const raw=httpsUrl(value); if(!raw) return false;
-  if(isSearchLandingUrl(raw)||isVideoUrl(raw)||isSocialUrl(raw)||isDirectMediaAssetUrl(raw)) return false;
-  return true;
-}
+function isOrganizationWebsiteUrl(value){ return !!canonicalHomepageFromUrl(value); }
 function organizationHomepageUrl(record){
+  /* Explicit homepage/site fields are authoritative and inspected first. If a
+     SearchBank result is an internal page on a safe host, use its origin root so
+     the Donation card always opens the organization's main site. */
   for(const value of organizationWebsiteUrls(record)){
-    const u=httpsUrl(value); if(u&&isOrganizationWebsiteUrl(u)) return u;
+    const homepage=canonicalHomepageFromUrl(value); if(homepage) return homepage;
+  }
+  return "";
+}
+function globalVideoUrl(record){
+  const r=plain(record), media=plain(r.media), link=plain(r.link);
+  const preferred=unique([r.video,r.videoUrl,r.watchUrl,r.embedUrl,media.videoUrl,media.watchUrl,media.embedUrl,media.src,media.url,link.url,r.url]);
+  for(const value of preferred){
+    const u=httpsUrl(value); if(u&&isVideoUrl(u)&&!isSearchLandingUrl(u)) return u;
+  }
+  const kind=lower(r.type||r.mediaType||media.kind||media.type);
+  if(["video","clip","broadcast","stream"].includes(kind)){
+    for(const value of preferred){
+      const u=httpsUrl(value); if(u&&!isSearchLandingUrl(u)&&!isDocumentUrl(u)&&!isDirectMediaAssetUrl(u)) return u;
+    }
   }
   return "";
 }
 function candidateUrlForSection(record, sectionValue){
   const section=normalizeSection(sectionValue)||inferSection(record);
-  if(section==="donation-global"){
-    for(const value of candidateUrls(record)){
-      const u=httpsUrl(value); if(u&&!isSearchLandingUrl(u)&&!isDirectMediaAssetUrl(u)) return u;
-    }
-    return "";
-  }
-  /* The seven organization lanes are HOMEPAGE-FIRST, not video-blocked.
-     Always choose a real organization/institution webpage when one is present.
-     Only when no such webpage can be resolved do we keep an official video,
-     social/channel, or other HTTPS content page as a lower-priority fallback. */
-  const homepage=organizationHomepageUrl(record);
-  if(homepage) return homepage;
-  for(const value of candidateUrls(record)){
-    const u=httpsUrl(value);
-    if(u&&!isSearchLandingUrl(u)&&!isDirectMediaAssetUrl(u)) return u;
-  }
-  return "";
+  if(section==="donation-global") return globalVideoUrl(record);
+  /* Seven organization lanes are strict organization-site cards. No PDF,
+     report, wiki, article portal, YouTube/SNS or other content fallback becomes
+     the representative destination. */
+  return organizationHomepageUrl(record);
 }
 function hasVideoDestination(record){
   const r=plain(record), media=plain(r.media), link=plain(r.link);
@@ -301,12 +333,11 @@ function representativeImageForSection(record, sectionValue){
   ];
   const mediaValues=[media.thumb,media.image,media.poster,r.thumbnail,r.thumb,r.image,r.og_image,r.ogImage,r.logo,r.logo_url,youtubeThumbnail(r)];
   const hasHomepage=section!=="donation-global"&&!!organizationHomepageUrl(r);
-  const values=section==="donation-global"?mediaValues:(hasHomepage?websiteValues:websiteValues.concat(mediaValues));
+  const values=section==="donation-global"?mediaValues:websiteValues;
   for(const value of values){
     const u=httpsUrl(value); if(!u||/placeholder|sample/i.test(u)) continue;
-    /* When a normal homepage exists, keep its representative image/logo ahead
-       of video thumbnails.  If no homepage exists, an official video/channel
-       thumbnail is a valid fallback instead of discarding the organization. */
+    /* Organization lanes use the homepage preview in the UI. A raster image is
+       optional metadata only and a YouTube poster must never impersonate a site. */
     if(hasHomepage&&/(?:i\.ytimg\.com|img\.youtube\.com)\//i.test(u)) continue;
     return u;
   }
@@ -332,11 +363,41 @@ function missionExcluded(record){
   const blob=recordText(record), policy=POLICY["donation-mission"];
   return (policy.excludedHints||[]).some(h=>excludedHintMatch(blob,h));
 }
+function anchorEvidenceCount(record, sectionValue){
+  const section=normalizeSection(sectionValue)||"donation-ngo", blob=recordText(record), frame=researchFrameFor(section);
+  let score=0;
+  for(const anchor of frame.anchors||[]){
+    const names=text(anchor&&anchor.name).split(/\s*\/\s*|\s+\/\s+/).map(lower).filter(x=>x.length>=4);
+    if(names.some(name=>blob.includes(name))) score+=1;
+  }
+  return score;
+}
+function organizationEvidenceCount(record, sectionValue){
+  const section=normalizeSection(sectionValue)||"donation-ngo", blob=recordText(record), policy=policyFor(section);
+  const semantic=countHints(blob,policy.semanticHints||[]);
+  const anchors=anchorEvidenceCount(record,section);
+  const orgHints=countHints(blob,["organization","organisation","nonprofit","non-profit","foundation","association","agency","ministry","fellowship","charity","relief","mission","university","school","institute","international"]);
+  return anchors*4 + Math.min(3,semantic) + Math.min(2,orgHints);
+}
+function hasOrganizationIdentityEvidence(record, sectionValue){
+  const section=normalizeSection(sectionValue)||"donation-ngo", blob=recordText(record), policy=policyFor(section);
+  const anchors=anchorEvidenceCount(record,section);
+  if(anchors>0) return true;
+  const semantic=countHints(blob,policy.semanticHints||[]);
+  const orgHints=countHints(blob,["organization","organisation","nonprofit","non-profit","foundation","association","agency","ministry","fellowship","charity","relief","mission","university","school","institute","international"]);
+  if(semantic<=0||orgHints<=0) return false;
+  if(["donation-mission","donation-service","donation-education","donation-environment","donation-others"].includes(section)){
+    const faith=countHints(blob,["christian","christianity","evangelical","protestant","faith based","faith-based","church","ministry","mission","gospel","bible","creation care"]);
+    if(faith<=0) return false;
+  }
+  return true;
+}
 function sectionRelevance(record, sectionValue){
   const section=normalizeSection(sectionValue) || normalizeSection(record && (record.psom_key||record.section||record.bind&&record.bind.section)) || "donation-ngo";
   const policy=policyFor(section), blob=recordText(record);
   const semanticMatches=countHints(blob,policy.semanticHints);
-  let score=semanticMatches*8;
+  const anchorMatches=anchorEvidenceCount(record,section);
+  let score=semanticMatches*8 + anchorMatches*28;
   const explicit=normalizeSection(record && (record.psom_key||record.section||record.bind&&record.bind.section));
   // The requested/front section is routing metadata, not proof that the content
   // is relevant.  Keep a small tie-breaker for global news and a stronger one
@@ -391,23 +452,23 @@ function usablePublicCandidate(record, sectionValue){
   const destination=candidateUrlForSection(record,section);
   if(!destination) return false;
   const representativeImage=representativeImageForSection(record,section);
-  if(!representativeImage) return false;
   const title=text(record.title||record.name||plain(record.org).name);
   if(!title) return false;
   if(section==="donation-global"){
-    // Global News is the one video lane: require both an actual video destination
-    // and a humanitarian/disaster/environment relevance signal.
-    if(!looksLikeVideo(record)) return false;
+    // Global News is the one video lane: require an actual video destination,
+    // a usable poster, and a humanitarian/disaster/environment relevance signal.
+    if(!globalVideoUrl(record)||!representativeImage||!looksLikeVideo(record)) return false;
     const blob=recordText(record), policy=policyFor(section);
     const genericMediaHints=new Set(["video","footage","broadcast","report","update","field report"]);
     const humanitarianHints=(policy.semanticHints||[]).filter(h=>!genericMediaHints.has(lower(h)));
     return countHints(blob,humanitarianHints)>0;
   }
-  /* The seven organization lanes are homepage-first.  A missing homepage does
-     not hard-block an otherwise relevant official video/channel/content page;
-     it simply ranks behind candidates that have a resolvable homepage. */
-  if(isSearchLandingUrl(destination)||isDirectMediaAssetUrl(destination)) return false;
-  return sectionRelevance(record,section)>-10;
+  /* Organization cards may have no raster thumbnail because the front/admin UI
+     renders a lazy static preview of the canonical homepage itself. */
+  if(!organizationHomepageUrl(record)) return false;
+  if(isSearchLandingUrl(destination)||isVideoUrl(destination)||isSocialUrl(destination)||isNonOrganizationHost(destination)) return false;
+  if(!hasOrganizationIdentityEvidence(record,section)) return false;
+  return sectionRelevance(record,section)>0;
 }
 function youtubeThumbnail(record){
   for(const u of candidateUrls(record)){
@@ -418,6 +479,6 @@ function youtubeThumbnail(record){
 
 module.exports={
   VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,researchFrameFor,researchAnchors,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,
-  missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls,
-  organizationWebsiteUrls,organizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection
+  missionExcluded,sectionRelevance,anchorEvidenceCount,organizationEvidenceCount,hasOrganizationIdentityEvidence,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls,
+  organizationWebsiteUrls,organizationHomepageUrl,canonicalHomepageFromUrl,globalVideoUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isDocumentUrl,isNonOrganizationHost,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection
 };
