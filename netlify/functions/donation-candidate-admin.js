@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.4.1-single-pass-research";
+const VERSION = "donation-candidate-admin-v1.4.2-bounded-searchbank-research";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -41,15 +41,15 @@ function sourceName(item){ const s=plain(item&&item.source); return limitText(s.
 function isSearchLandingUrl(value){
   const u=safeHttps(value); if(!u) return true;
   try{
-    const parsed=new URL(u), host=parsed.hostname.toLowerCase().replace(/^www\./,"");
-    const path=parsed.pathname.toLowerCase();
-    if(host==="google.com"||host.endsWith(".google.com")) return true;
-    if(host==="bing.com"||host.endsWith(".bing.com")) return true;
+    const parsed=new URL(u), host=parsed.hostname.toLowerCase().replace(/^www\./,""), path=parsed.pathname.toLowerCase();
+    if((host==="google.com"||host.endsWith(".google.com"))&&(path==="/search"||path.startsWith("/maps/search"))) return true;
+    if((host==="bing.com"||host.endsWith(".bing.com"))&&path.startsWith("/search")) return true;
     if(host==="search.yahoo.com"||host.endsWith(".search.yahoo.com")) return true;
     if(host==="duckduckgo.com"||host.endsWith(".duckduckgo.com")) return true;
-    if(host==="youtube.com"||host.endsWith(".youtube.com")){
-      if(path==="/results"||parsed.searchParams.has("search_query")) return true;
-    }
+    if(host==="search.naver.com"||host.endsWith(".search.naver.com")) return true;
+    if((host==="map.naver.com"||host.endsWith(".map.naver.com"))&&path.startsWith("/p/search")) return true;
+    if((host==="yandex.com"||host.endsWith(".yandex.com"))&&path.startsWith("/search")) return true;
+    if((host==="youtube.com"||host.endsWith(".youtube.com"))&&(path==="/results"||parsed.searchParams.has("search_query"))) return true;
     return false;
   }catch(_e){ return true; }
 }
@@ -57,7 +57,7 @@ function candidateUrl(item){
   const raw=plain(item), source=plain(raw.source);
   const sourceType=lower(raw.sourceType||raw.source_type||source.type||source.sourceType||"");
   const provider=lower(raw.provider||raw.source_adapter||raw.sourceAdapter||source.name||"");
-  if(sourceType==="search_link"||sourceType==="search-link"||/search_link|search-link/.test(provider)) return "";
+  if(sourceType==="search_link"||sourceType==="search-link"||/(?:^|_)(?:search_link|discovery|public_search|passthrough|provider_lane)(?:_|$)/.test(provider)) return "";
   for(const value of Policy.candidateUrls(raw)){
     const u=safeHttps(value); if(u&&!isSearchLandingUrl(u)) return u;
   }
@@ -138,7 +138,7 @@ async function upsertRows(rows){
 function researchParams(section,query,limit){
   const q=text(query)||Policy.queryTerms(section)[0]||Policy.SECTION_LABELS[section]||"donation";
   const frame=Policy.researchFrameFor ? Policy.researchFrameFor(section) : {};
-  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred"};
+  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"3000",discoveryOnly:"1"};
   if(section==="donation-global"||Number(frame.freshnessHours)>0){params.freshnessHours=String(Number(frame.freshnessHours)||48);}
   if(section==="donation-global"||frame.preferVideo===true){params.mediaPreference="video";}
   if(section==="donation-mission"||frame.localizeByIp===true){params.localizeByIp="1";params.geoPreference="ip-preferred";}
@@ -255,32 +255,19 @@ async function performResearch(event,section,customQuery,limit){
   if(!sections.length){const e=new Error("도네이션 섹션을 선택해 주세요.");e.statusCode=400;throw e;}
   const existing=await readRows(), existingMap=new Map(existing.map(r=>[text(r.id),r]));
 
-  /*
-   * One SearchBank pass per Donation section.
-   *
-   * The previous implementation ran up to six full SearchBank passes serially
-   * for one section (and two passes serially for every section in `all`).  A
-   * single SearchBank pass already fans out to snapshot/index/live/donation/
-   * regional adapters, so repeating it only multiplied serverless wall time and
-   * caused the admin `Inactivity Timeout` before any candidate ledger write.
-   *
-   * Keep the PSOM/research-frame primary query as the canonical discovery key.
-   * Anchor queries remain available to SearchBank policy/manager guidance, but
-   * they are not re-run as separate full engine invocations here.
-   */
   async function researchOne(sec){
     const frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
     const terms=Policy.queryTerms(sec,sections.length===1?customQuery:"");
     const query=text(customQuery&&sections.length===1?customQuery:frame.primaryQuery)||text(terms[0])||Policy.SECTION_LABELS[sec]||"donation";
-    const seen=new Set(); let accepted=0, skippedExcluded=0, skippedSearchLanding=0, engineItems=0;
+    const seen=new Set(); let accepted=0, skippedExcluded=0, skippedSearchLanding=0;
+    const started=Date.now();
     let result;
     try{
       result=await SearchBank.runEngine(event,researchParams(sec,query,Math.min(60,Number(limit)||50)));
     }catch(error){
-      return {section:sec,queries:[query],accepted:0,skippedExcluded:0,skippedSearchLanding:0,engineItems:0,error:text(error&&error.message||error)};
+      return {section:sec,query,queries:[query],accepted:0,skippedExcluded:0,skippedSearchLanding:0,engineItems:0,durationMs:Date.now()-started,error:text(error&&error.message||error),writes:[]};
     }
     const items=Array.isArray(result&&result.items)?result.items:[];
-    engineItems=items.length;
     const writes=[];
     for(const item of items){
       if(Policy.isPlaceholder(item)) continue;
@@ -296,26 +283,37 @@ async function performResearch(event,section,customQuery,limit){
       const previousQueue=plain(previousPayload.donationQueue), previousCandidate=plain(previousPayload.candidate);
       const stage=previous?previousStage:"research";
       const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
-      const candidate=Object.assign({},norm.candidate,previousCandidate); // preserve admin-corrected fields
+      const candidate=Object.assign({},norm.candidate,previousCandidate);
       candidate.section=sec;candidate.psom_key=sec;candidate.channel="donation";candidate.page="donation";
       writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Donation-only private candidate; no public publication without final front matching.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       accepted++;
     }
-    return {section:sec,queries:[query],accepted,skippedExcluded,skippedSearchLanding,engineItems,writes};
+    const meta=plain(result&&result.meta);
+    return {
+      section:sec,query,queries:[query],accepted,skippedExcluded,skippedSearchLanding,
+      engineItems:items.length,durationMs:Date.now()-started,writes,
+      adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]
+    };
   }
 
-  /* `8개 섹션 기본 리서치` must not serialize eight full external searches.
-     Run one independent SearchBank pass per section concurrently, then perform
-     one ledger upsert after all results have returned. */
-  const sectionResults=await Promise.all(sections.map(researchOne));
-  const reports=[]; const writes=[];
+  /* Four concurrent sections keep `8개 섹션 기본 리서치` well below the
+     serverless inactivity window without opening eight external provider bursts
+     at once.  A single-section request still executes exactly one SearchBank pass. */
+  const sectionResults=[];
+  const concurrency=section==="all"?4:1;
+  for(let i=0;i<sections.length;i+=concurrency){
+    const batch=sections.slice(i,i+concurrency);
+    sectionResults.push(...await Promise.all(batch.map(researchOne)));
+  }
+
+  const reports=[], writes=[];
   for(const r of sectionResults){
-    reports.push({section:r.section,queries:r.queries,accepted:r.accepted,skippedExcluded:r.skippedExcluded,skippedSearchLanding:r.skippedSearchLanding,engineItems:r.engineItems,error:r.error||null});
+    reports.push({section:r.section,queries:r.queries,accepted:r.accepted,skippedExcluded:r.skippedExcluded,skippedSearchLanding:r.skippedSearchLanding,engineItems:r.engineItems,durationMs:r.durationMs,adapters:r.adapters||[],error:r.error||null});
     if(Array.isArray(r.writes)) writes.push(...r.writes);
   }
   const dedup=new Map();writes.forEach(r=>dedup.set(r.id,r));
   const saved=dedup.size?await upsertRows(Array.from(dedup.values())):[];
-  return {reports,savedCount:Array.isArray(saved)?saved.length:dedup.size,searchBankPasses:sections.length,serialSearchPassesRemoved:true};
+  return {reports,savedCount:Array.isArray(saved)?saved.length:dedup.size,searchBankPasses:sections.length,externalAdapter:"donation",adapterFence:["donation"],sourceTimeoutMs:3000};
 }
 async function updateStage(ids,stage,actor,note){
   if(!STAGES.has(stage)){const e=new Error("지원하지 않는 단계입니다.");e.statusCode=400;throw e;}

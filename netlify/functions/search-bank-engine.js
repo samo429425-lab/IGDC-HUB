@@ -1861,6 +1861,13 @@ class CollectorSourceAdapter extends BaseSourceAdapter {
   }
 }
 
+function adapterAllowList(ctx){
+  const raw = ctx?.params?.adapterAllowList;
+  if(raw == null || raw === "") return null;
+  const values = Array.isArray(raw) ? raw : String(raw).split(/[|,\s]+/);
+  const set = new Set(values.map(low).filter(Boolean));
+  return set.size ? set : null;
+}
 function selectAdapters(ctx){
   const names = new Set(["snapshot", "index"]);
   if(!externalSuppressed(ctx) && (truthy(process.env.MARU_BANK_LIVE) || externalCollectionEnabled(ctx, "live"))) names.add("live");
@@ -1881,7 +1888,14 @@ function selectAdapters(ctx){
   if((major === "media" || channel === "media") && externalCollectionEnabled(ctx, "media")) names.add("media");
   if((major === "tourism" || channel === "tour" || channel === "tourism") && externalCollectionEnabled(ctx, "tourism")) names.add("tourism");
   if((major === "social" || channel === "social") && externalCollectionEnabled(ctx, "social")) names.add("social");
-  return Array.from(names).filter(name => !channelBlockedForPolicy(name, ctx.operationalPolicy));
+  let selected = Array.from(names).filter(name => !channelBlockedForPolicy(name, ctx.operationalPolicy));
+  /* Optional, request-scoped adapter fence.  Existing SearchBank callers do not
+     send adapterAllowList, so their adapter selection is byte-for-byte equivalent.
+     Donation admin research uses this to avoid running the same MaruSearch
+     gateway through live + donation + regional in one synchronous request. */
+  const allow = adapterAllowList(ctx);
+  if(allow) selected = selected.filter(name => allow.has(low(name)));
+  return selected;
 }
 
 function adapterRegistry(){
@@ -2265,7 +2279,11 @@ const offset = safeInt(params.offset, 0, 0, 100000);
     return { status:"fail", engine:"search-bank", request_id: rid, timestamp: ts, message: qCheck.code || "EMPTY_QUERY" };
   }
 
-  const persistedBank = await snapshotProvider(event);
+  /* Donation/admin discovery can opt out of loading the deployed SearchBank
+     corpus when it is doing a pure external research pass.  The default is
+     unchanged for every existing caller. */
+  const discoveryOnly = truthy(params.discoveryOnly || params.externalDiscoveryOnly);
+  const persistedBank = discoveryOnly ? { meta:{ generated_at:nowIso(), source:"discovery-only" }, items:[] } : await snapshotProvider(event);
   const operationalPolicy = resolveOperationalPolicy({ event, params, limit, q, queryIntent, geoContext, ipGeo, slotContext, channel, type, lang }, Array.isArray(persistedBank?.items) ? persistedBank.items : []);
   const slotDeficiency = resolveSlotDeficiency({ event, params, limit, q, queryIntent, geoContext, ipGeo, slotContext, operationalPolicy, channel, type, lang }, Array.isArray(persistedBank?.items) ? persistedBank.items : []);
   const adapterCtx = {
