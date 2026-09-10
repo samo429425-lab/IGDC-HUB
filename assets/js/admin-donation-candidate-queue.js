@@ -115,6 +115,13 @@
     sections.forEach(function(sec){var visible=visibleRowsFor(sec.key),box=document.querySelector('[data-section-check="'+sec.key+'"]');if(box&&visible.length)box.checked=visible.every(function(r){return selected.has(r.id)})});
   }
 
+  function populateScopes(){
+    if(!$('policyScope'))return;
+    var current=$('policyScope').value||'all';
+    $('policyScope').innerHTML='<option value="all">도네이션 전체</option>'+sections.map(function(s){return '<option value="'+esc(s.key)+'">'+esc(s.label)+'</option>'}).join('');
+    if(Array.from($('policyScope').options).some(function(o){return o.value===current}))$('policyScope').value=current;
+  }
+
   async function load(){
     setBusy(true,'도네이션 후보 원장을 불러오는 중…');
     try{
