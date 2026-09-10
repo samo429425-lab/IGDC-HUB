@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.4.0-exact-searchbank-publish";
+const VERSION = "donation-candidate-admin-v1.4.1-single-pass-research";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -38,9 +38,28 @@ function requireRole(actor,write){ const allow=write?WRITE_ROLES:READ_ROLES;if(!
 function limitText(value,max){ const v=text(value); return v.length>max?v.slice(0,max):v; }
 function safeHttps(value){ const v=text(value); if(!/^https:\/\//i.test(v)) return ""; try{const u=new URL(v);return u.protocol==="https:"?u.toString():"";}catch(_e){return "";} }
 function sourceName(item){ const s=plain(item&&item.source); return limitText(s.name||item&&item.source_name||item&&item.sourceAdapter||item&&item.source_adapter||item&&item.collector&&item.collector.engine||"SearchBank",160); }
+function isSearchLandingUrl(value){
+  const u=safeHttps(value); if(!u) return true;
+  try{
+    const parsed=new URL(u), host=parsed.hostname.toLowerCase().replace(/^www\./,"");
+    const path=parsed.pathname.toLowerCase();
+    if(host==="google.com"||host.endsWith(".google.com")) return true;
+    if(host==="bing.com"||host.endsWith(".bing.com")) return true;
+    if(host==="search.yahoo.com"||host.endsWith(".search.yahoo.com")) return true;
+    if(host==="duckduckgo.com"||host.endsWith(".duckduckgo.com")) return true;
+    if(host==="youtube.com"||host.endsWith(".youtube.com")){
+      if(path==="/results"||parsed.searchParams.has("search_query")) return true;
+    }
+    return false;
+  }catch(_e){ return true; }
+}
 function candidateUrl(item){
-  for(const value of Policy.candidateUrls(item||{})){
-    const u=safeHttps(value); if(u) return u;
+  const raw=plain(item), source=plain(raw.source);
+  const sourceType=lower(raw.sourceType||raw.source_type||source.type||source.sourceType||"");
+  const provider=lower(raw.provider||raw.source_adapter||raw.sourceAdapter||source.name||"");
+  if(sourceType==="search_link"||sourceType==="search-link"||/search_link|search-link/.test(provider)) return "";
+  for(const value of Policy.candidateUrls(raw)){
+    const u=safeHttps(value); if(u&&!isSearchLandingUrl(u)) return u;
   }
   return "";
 }
@@ -235,36 +254,68 @@ async function performResearch(event,section,customQuery,limit){
   const sections=section==="all"?Policy.SECTIONS:[Policy.normalizeSection(section)].filter(Boolean);
   if(!sections.length){const e=new Error("도네이션 섹션을 선택해 주세요.");e.statusCode=400;throw e;}
   const existing=await readRows(), existingMap=new Map(existing.map(r=>[text(r.id),r]));
-  const writes=[], reports=[];
-  for(const sec of sections){
-    const baseTerms=Policy.queryTerms(sec);
-    const queries=customQuery
-      ? (sections.length===1 ? Array.from(new Set([text(customQuery)].concat(baseTerms.slice(0,2)).filter(Boolean))) : [text([baseTerms[0]||"",customQuery].filter(Boolean).join(" "))])
-      : baseTerms.slice(0, section==="all"?2:6);
-    const seen=new Set(); let accepted=0, skippedExcluded=0;
-    for(const q of queries){
-      const result=await SearchBank.runEngine(event,researchParams(sec,q,limit));
-      const items=Array.isArray(result&&result.items)?result.items:[];
-      for(const item of items){
-        const norm=normalizeCandidate(item,sec,q);
-        if(!norm.candidate.url||seen.has(norm.id)||Policy.isPlaceholder(item)) continue;
-        seen.add(norm.id);
-        const previous=existingMap.get(norm.id), previousPayload=plain(previous&&previous.source_payload), previousStage=stageOfPayload(previousPayload);
-        if(previousStage==="excluded"){skippedExcluded++;continue;}
-        const previousQueue=plain(previousPayload.donationQueue), previousCandidate=plain(previousPayload.candidate);
-        const stage=previous?previousStage:"research";
-        const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
-        const candidate=Object.assign({},norm.candidate,previousCandidate); // preserve admin-corrected fields
-        candidate.section=sec;candidate.psom_key=sec;candidate.channel="donation";candidate.page="donation";
-        writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Donation-only private candidate; no public publication without final front matching.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
-        accepted++;
-      }
+
+  /*
+   * One SearchBank pass per Donation section.
+   *
+   * The previous implementation ran up to six full SearchBank passes serially
+   * for one section (and two passes serially for every section in `all`).  A
+   * single SearchBank pass already fans out to snapshot/index/live/donation/
+   * regional adapters, so repeating it only multiplied serverless wall time and
+   * caused the admin `Inactivity Timeout` before any candidate ledger write.
+   *
+   * Keep the PSOM/research-frame primary query as the canonical discovery key.
+   * Anchor queries remain available to SearchBank policy/manager guidance, but
+   * they are not re-run as separate full engine invocations here.
+   */
+  async function researchOne(sec){
+    const frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
+    const terms=Policy.queryTerms(sec,sections.length===1?customQuery:"");
+    const query=text(customQuery&&sections.length===1?customQuery:frame.primaryQuery)||text(terms[0])||Policy.SECTION_LABELS[sec]||"donation";
+    const seen=new Set(); let accepted=0, skippedExcluded=0, skippedSearchLanding=0, engineItems=0;
+    let result;
+    try{
+      result=await SearchBank.runEngine(event,researchParams(sec,query,Math.min(60,Number(limit)||50)));
+    }catch(error){
+      return {section:sec,queries:[query],accepted:0,skippedExcluded:0,skippedSearchLanding:0,engineItems:0,error:text(error&&error.message||error)};
     }
-    reports.push({section:sec,queries,accepted,skippedExcluded});
+    const items=Array.isArray(result&&result.items)?result.items:[];
+    engineItems=items.length;
+    const writes=[];
+    for(const item of items){
+      if(Policy.isPlaceholder(item)) continue;
+      const norm=normalizeCandidate(item,sec,query);
+      if(!norm.candidate.url){
+        if(Policy.candidateUrls(item||{}).some(u=>isSearchLandingUrl(u))) skippedSearchLanding++;
+        continue;
+      }
+      if(seen.has(norm.id)) continue;
+      seen.add(norm.id);
+      const previous=existingMap.get(norm.id), previousPayload=plain(previous&&previous.source_payload), previousStage=stageOfPayload(previousPayload);
+      if(previousStage==="excluded"){skippedExcluded++;continue;}
+      const previousQueue=plain(previousPayload.donationQueue), previousCandidate=plain(previousPayload.candidate);
+      const stage=previous?previousStage:"research";
+      const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
+      const candidate=Object.assign({},norm.candidate,previousCandidate); // preserve admin-corrected fields
+      candidate.section=sec;candidate.psom_key=sec;candidate.channel="donation";candidate.page="donation";
+      writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Donation-only private candidate; no public publication without final front matching.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
+      accepted++;
+    }
+    return {section:sec,queries:[query],accepted,skippedExcluded,skippedSearchLanding,engineItems,writes};
+  }
+
+  /* `8개 섹션 기본 리서치` must not serialize eight full external searches.
+     Run one independent SearchBank pass per section concurrently, then perform
+     one ledger upsert after all results have returned. */
+  const sectionResults=await Promise.all(sections.map(researchOne));
+  const reports=[]; const writes=[];
+  for(const r of sectionResults){
+    reports.push({section:r.section,queries:r.queries,accepted:r.accepted,skippedExcluded:r.skippedExcluded,skippedSearchLanding:r.skippedSearchLanding,engineItems:r.engineItems,error:r.error||null});
+    if(Array.isArray(r.writes)) writes.push(...r.writes);
   }
   const dedup=new Map();writes.forEach(r=>dedup.set(r.id,r));
-  const saved=await upsertRows(Array.from(dedup.values()));
-  return {reports,savedCount:Array.isArray(saved)?saved.length:dedup.size};
+  const saved=dedup.size?await upsertRows(Array.from(dedup.values())):[];
+  return {reports,savedCount:Array.isArray(saved)?saved.length:dedup.size,searchBankPasses:sections.length,serialSearchPassesRemoved:true};
 }
 async function updateStage(ids,stage,actor,note){
   if(!STAGES.has(stage)){const e=new Error("지원하지 않는 단계입니다.");e.statusCode=400;throw e;}
