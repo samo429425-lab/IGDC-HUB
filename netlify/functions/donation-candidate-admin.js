@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.4.2-bounded-searchbank-research";
+const VERSION = "donation-candidate-admin-v1.5.1-homepage-first-global-news-schedule";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -53,17 +53,24 @@ function isSearchLandingUrl(value){
     return false;
   }catch(_e){ return true; }
 }
-function candidateUrl(item){
+function candidateUrl(item,section){
   const raw=plain(item), source=plain(raw.source);
   const sourceType=lower(raw.sourceType||raw.source_type||source.type||source.sourceType||"");
   const provider=lower(raw.provider||raw.source_adapter||raw.sourceAdapter||source.name||"");
   if(sourceType==="search_link"||sourceType==="search-link"||/(?:^|_)(?:search_link|discovery|public_search|passthrough|provider_lane)(?:_|$)/.test(provider)) return "";
+  if(Policy.candidateUrlForSection){
+    return safeHttps(Policy.candidateUrlForSection(raw,section));
+  }
   for(const value of Policy.candidateUrls(raw)){
     const u=safeHttps(value); if(u&&!isSearchLandingUrl(u)) return u;
   }
   return "";
 }
-function candidateThumb(item){
+function candidateThumb(item,section){
+  if(Policy.representativeImageForSection){
+    const u=safeHttps(Policy.representativeImageForSection(item,section));
+    if(u) return u;
+  }
   const r=plain(item), media=plain(r.media);
   const values=[media.thumb,media.image,r.thumbnail,r.thumb,r.image,r.og_image,r.logo,r.logo_url,Policy.youtubeThumbnail(r)];
   for(const value of values){ const u=safeHttps(value); if(u && !/placeholder|sample/i.test(u)) return u; }
@@ -75,8 +82,10 @@ function idFor(section,url,title){ return "donation_"+sha([section,url,text(titl
 function statusForStage(stage){ if(stage==="hold") return "hold"; if(stage==="excluded") return "suppressed"; if(stage==="front_candidate"||stage==="published") return "enrollable"; return "approval_pending"; }
 function normalizeCandidate(item,section,query){
   const raw=plain(item), org=plain(raw.org), media=plain(raw.media), source=plain(raw.source);
-  const resolved=sectionOf(raw,section), url=candidateUrl(raw), title=limitText(raw.title||raw.name||org.name||url,300), thumb=candidateThumb(raw);
-  const isVideo=Policy.looksLikeVideo(raw), relevance=Policy.sectionRelevance(raw,resolved);
+  const resolved=sectionOf(raw,section), url=candidateUrl(raw,resolved), title=limitText(raw.title||raw.name||org.name||url,300), thumb=candidateThumb(raw,resolved);
+  const rawIsVideo=Policy.looksLikeVideo(raw), isVideo=resolved==="donation-global"&&rawIsVideo, relevance=Policy.sectionRelevance(raw,resolved);
+  const homepage=safeHttps(Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(raw):"");
+  const homepageFirst=resolved!=="donation-global"&&!!homepage;
   const publishedAt=raw.published_at||raw.publishedAt||raw.datePublished||null;
   let freshnessBonus=0;
   if(resolved==="donation-global"&&publishedAt){
@@ -86,7 +95,7 @@ function normalizeCandidate(item,section,query){
       freshnessBonus=ageHours<=24?100:ageHours<=48?70:ageHours<=72?30:ageHours<=168?5:-40;
     }
   }
-  const frontRank=relevance+(thumb?20:0)+(resolved==="donation-global"&&isVideo?50:0)+freshnessBonus;
+  const frontRank=relevance+(thumb?20:0)+(resolved==="donation-global"&&isVideo?50:0)+(homepageFirst?90:0)+freshnessBonus;
   const id=idFor(resolved,url,title);
   const candidate={
     id,title,
@@ -97,7 +106,7 @@ function normalizeCandidate(item,section,query){
     category:Policy.categoryForSection(resolved),
     type:isVideo?"video":"organization",
     media:{kind:isVideo?"video":"image",src:isVideo?url:null,thumb:thumb||null,ratio:isVideo?"16:9":"1:1"},
-    org:{name:limitText(org.name||raw.name||title,300)||null,legal_name:limitText(org.legal_name||raw.legal_name||"",300)||null,homepage:(!isVideo?url:safeHttps(org.homepage||raw.homepage||raw.website))||null,country:text(org.country||raw.country)||null},
+    org:{name:limitText(org.name||raw.name||title,300)||null,legal_name:limitText(org.legal_name||raw.legal_name||"",300)||null,homepage:(resolved==="donation-global"?safeHttps(org.homepage||raw.homepage||raw.website):homepage)||null,country:text(org.country||raw.country)||null},
     source:{name:sourceName(raw),url:safeHttps(source.url||raw.sourceUrl||raw.source_url||url)||url,authority:Number(source.authority||raw.authority||0)||0},
     published_at:publishedAt,
     rank:{score:Math.round(frontRank*100)/100},
@@ -114,6 +123,8 @@ function normalizeCandidate(item,section,query){
   if(resolved==="donation-mission"&&Policy.missionExcluded(raw)) issues.push("mission_policy_excluded");
   if(Policy.isPlaceholder(raw)) issues.push("placeholder_or_seed");
   if(resolved==="donation-global"&&!isVideo) issues.push("video_not_detected");
+  if(resolved!=="donation-global"&&!homepage&&url) issues.push("homepage_missing_official_content_fallback");
+  if(resolved!=="donation-global"&&!url) issues.push("organization_destination_missing");
   return {id,candidate,queue:{schema:"igdc-donation-candidate-queue.v1",section:resolved,stage:"research",researchQuery:limitText(query,600),discoveredAt:nowIso(),updatedAt:nowIso(),relevanceScore:relevance,issues,mediaKind:isVideo?"video":"link",sourceSearchBankId:candidate.searchBankId||null}};
 }
 function rowView(row){
@@ -138,7 +149,7 @@ async function upsertRows(rows){
 function researchParams(section,query,limit){
   const q=text(query)||Policy.queryTerms(section)[0]||Policy.SECTION_LABELS[section]||"donation";
   const frame=Policy.researchFrameFor ? Policy.researchFrameFor(section) : {};
-  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"3000",discoveryOnly:"1"};
+  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"3000",discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:section==="donation-global"?"video":"web"};
   if(section==="donation-global"||Number(frame.freshnessHours)>0){params.freshnessHours=String(Number(frame.freshnessHours)||48);}
   if(section==="donation-global"||frame.preferVideo===true){params.mediaPreference="video";}
   if(section==="donation-mission"||frame.localizeByIp===true){params.localizeByIp="1";params.geoPreference="ip-preferred";}
@@ -182,8 +193,8 @@ async function applyResearchFrameToSearchBank(event,section,customQuery,limit){
 function approvedCandidateForSearchBank(view){
   const c=JSON.parse(JSON.stringify(plain(view&&view.candidate)));
   const section=Policy.normalizeSection(view&&view.section||c.section||c.psom_key)||"donation-ngo";
-  const url=safeHttps(view&&view.url||c.url||plain(c.link).url||plain(c.org).homepage);
-  const thumb=safeHttps(view&&view.thumbnail||c.thumbnail||plain(c.media).thumb||c.image);
+  const url=safeHttps((Policy.candidateUrlForSection&&Policy.candidateUrlForSection(c,section))||view&&view.url||c.url||plain(c.link).url||plain(c.org).homepage);
+  const thumb=safeHttps((Policy.representativeImageForSection&&Policy.representativeImageForSection(c,section))||view&&view.thumbnail||c.thumbnail||plain(c.media).thumb||c.image);
   c.id=text(c.id||view&&view.id)||idFor(section,url,c.title||view&&view.title);
   c.uid=text(c.uid||c.id);
   c.title=limitText(c.title||view&&view.title||plain(c.org).name||url,300);
@@ -194,9 +205,18 @@ function approvedCandidateForSearchBank(view){
   c.image=thumb||c.image||null;
   c.channel="donation"; c.page="donation"; c.section=section; c.psom_key=section;
   c.bind=Object.assign({},plain(c.bind),{page:"donation",channel:"donation",section,psom_key:section,route:"donation."+section});
-  c.link=Object.assign({},plain(c.link),{mode:"org-homepage",url,target:"_blank"});
-  c.org=Object.assign({},plain(c.org),{name:limitText(plain(c.org).name||c.title,300)||null,homepage:safeHttps(plain(c.org).homepage)||url||null});
-  c.media=Object.assign({},plain(c.media),{kind:plain(c.media).kind||"image",thumb:thumb||plain(c.media).thumb||null});
+  const homepage=safeHttps(Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(c):"");
+  const homepageFirst=section!=="donation-global"&&!!homepage;
+  c.link=Object.assign({},plain(c.link),{mode:section==="donation-global"?"global-news-video":(homepageFirst?"org-homepage":"official-content-fallback"),url,target:"_blank"});
+  c.org=Object.assign({},plain(c.org),{name:limitText(plain(c.org).name||c.title,300)||null,homepage:section==="donation-global"?(safeHttps(plain(c.org).homepage)||null):(homepage||null)});
+  c.media=Object.assign({},plain(c.media),{kind:section==="donation-global"?(plain(c.media).kind||"video"):"image",thumb:thumb||plain(c.media).thumb||null});
+  if(section!=="donation-global"){
+    /* Non-global lanes remain organization cards even when the best available
+       official destination is a video/channel page.  The URL is clickable, but
+       we do not turn the Donation section into an embedded media player. */
+    c.type="organization";
+    c.media.src=null;
+  }
   c.donation=Object.assign({},plain(c.donation),{enabled:plain(c.donation).enabled===true,external:plain(c.donation).external!==false});
   c.frontApproved=true;
   c.frontSupplyAllowed=true; c.searchBankEligible=true; c.snapshotEligible=true; c.indexEligible=true;
@@ -259,13 +279,13 @@ async function performResearch(event,section,customQuery,limit){
     const frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
     const terms=Policy.queryTerms(sec,sections.length===1?customQuery:"");
     const query=text(customQuery&&sections.length===1?customQuery:frame.primaryQuery)||text(terms[0])||Policy.SECTION_LABELS[sec]||"donation";
-    const seen=new Set(); let accepted=0, skippedExcluded=0, skippedSearchLanding=0;
+    const seen=new Set(); let accepted=0, skippedExcluded=0, skippedSearchLanding=0, skippedNonWebsite=0, officialHomepageCount=0, fallbackContentCount=0;
     const started=Date.now();
     let result;
     try{
       result=await SearchBank.runEngine(event,researchParams(sec,query,Math.min(60,Number(limit)||50)));
     }catch(error){
-      return {section:sec,query,queries:[query],accepted:0,skippedExcluded:0,skippedSearchLanding:0,engineItems:0,durationMs:Date.now()-started,error:text(error&&error.message||error),writes:[]};
+      return {section:sec,query,queries:[query],accepted:0,skippedExcluded:0,skippedSearchLanding:0,skippedVideoOutsideGlobal:0,skippedNonWebsite:0,officialHomepageCount:0,fallbackContentCount:0,engineItems:0,durationMs:Date.now()-started,error:text(error&&error.message||error),writes:[]};
     }
     const items=Array.isArray(result&&result.items)?result.items:[];
     const writes=[];
@@ -274,7 +294,12 @@ async function performResearch(event,section,customQuery,limit){
       const norm=normalizeCandidate(item,sec,query);
       if(!norm.candidate.url){
         if(Policy.candidateUrls(item||{}).some(u=>isSearchLandingUrl(u))) skippedSearchLanding++;
+        else if(sec!=="donation-global") skippedNonWebsite++;
         continue;
+      }
+      if(sec!=="donation-global"){
+        if(Policy.organizationHomepageUrl&&Policy.organizationHomepageUrl(item||{})) officialHomepageCount++;
+        else fallbackContentCount++;
       }
       if(seen.has(norm.id)) continue;
       seen.add(norm.id);
@@ -290,7 +315,7 @@ async function performResearch(event,section,customQuery,limit){
     }
     const meta=plain(result&&result.meta);
     return {
-      section:sec,query,queries:[query],accepted,skippedExcluded,skippedSearchLanding,
+      section:sec,query,queries:[query],accepted,skippedExcluded,skippedSearchLanding,skippedVideoOutsideGlobal:0,skippedNonWebsite,officialHomepageCount,fallbackContentCount,
       engineItems:items.length,durationMs:Date.now()-started,writes,
       adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]
     };
@@ -308,12 +333,12 @@ async function performResearch(event,section,customQuery,limit){
 
   const reports=[], writes=[];
   for(const r of sectionResults){
-    reports.push({section:r.section,queries:r.queries,accepted:r.accepted,skippedExcluded:r.skippedExcluded,skippedSearchLanding:r.skippedSearchLanding,engineItems:r.engineItems,durationMs:r.durationMs,adapters:r.adapters||[],error:r.error||null});
+    reports.push({section:r.section,queries:r.queries,accepted:r.accepted,skippedExcluded:r.skippedExcluded,skippedSearchLanding:r.skippedSearchLanding,skippedVideoOutsideGlobal:0,skippedNonWebsite:r.skippedNonWebsite||0,officialHomepageCount:r.officialHomepageCount||0,fallbackContentCount:r.fallbackContentCount||0,engineItems:r.engineItems,durationMs:r.durationMs,adapters:r.adapters||[],error:r.error||null});
     if(Array.isArray(r.writes)) writes.push(...r.writes);
   }
   const dedup=new Map();writes.forEach(r=>dedup.set(r.id,r));
   const saved=dedup.size?await upsertRows(Array.from(dedup.values())):[];
-  return {reports,savedCount:Array.isArray(saved)?saved.length:dedup.size,searchBankPasses:sections.length,externalAdapter:"donation",adapterFence:["donation"],sourceTimeoutMs:3000};
+  return {reports,savedCount:Array.isArray(saved)?saved.length:dedup.size,searchBankPasses:sections.length,externalAdapter:"donation",adapterFence:["donation"],sourceTimeoutMs:3000,sectionMediaPolicy:"donation-global=video/news; other seven sections=official organization homepage first, official content fallback allowed"};
 }
 async function updateStage(ids,stage,actor,note){
   if(!STAGES.has(stage)){const e=new Error("지원하지 않는 단계입니다.");e.statusCode=400;throw e;}
@@ -348,6 +373,11 @@ function rankForAuto(view){
       else if(ageHours<=72) score+=12;
       else if(ageHours>168) score-=30;
     }
+  }
+  if(view.section!=="donation-global"){
+    const homepage=Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(view.candidate||{}):"";
+    if(homepage) score+=100;
+    else if(view.url) score+=5;
   }
   if((view.issues||[]).includes("mission_policy_excluded")) score-=1000;
   if((view.issues||[]).includes("placeholder_or_seed")) score-=1000;
@@ -389,6 +419,21 @@ async function executePolicyAgenda(event,body,actor){
   }
   return {scope,agendaId:agenda.id,destination,query,research,stageResult,searchBank,publicPublication:destination==="front"};
 }
+async function runScheduledGlobalNewsRefresh(event,options){
+  const opt=plain(options),limit=Math.max(10,Math.min(60,Number(opt.limit)||50));
+  Store.config();
+  const startedAt=nowIso();
+  const research=await performResearch(event||{},"donation-global","",limit);
+  const accepted=(research.reports||[]).reduce((n,r)=>n+Number(r&&r.accepted||0),0);
+  if(!accepted){
+    return {ok:true,version:VERSION,scope:"donation-global",schedule:"Mon/Wed/Fri",startedAt,finishedAt:nowIso(),research,published:0,searchBank:null,note:"no_new_global_video_candidates"};
+  }
+  const actor={sub:"donation-global-news-scheduler",roles:["super_admin"]};
+  const stageResult=await autoStage("donation-global","published",actor);
+  const searchBank=await publishExactCandidatesToSearchBank(event||{},stageResult.selectedIds||[],limit);
+  return {ok:true,version:VERSION,scope:"donation-global",schedule:"Mon/Wed/Fri",startedAt,finishedAt:nowIso(),research,published:Number(stageResult.selected||0),stageResult,searchBank};
+}
+
 function summary(rows){
   const out={total:rows.length,stages:{},sections:{}};
   Policy.SECTIONS.forEach(sec=>out.sections[sec]={total:0,research:0,queue:0,front_candidate:0,published:0,hold:0,excluded:0,capacity:CAPACITY[sec]||100});
@@ -476,3 +521,4 @@ exports.handler=async function(event){
 exports.SOURCE_REF=SOURCE_REF;
 exports.CAPACITY=CAPACITY;
 exports.normalizeCandidate=normalizeCandidate;
+exports.runScheduledGlobalNewsRefresh=runScheduledGlobalNewsRefresh;

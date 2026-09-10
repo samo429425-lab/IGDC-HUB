@@ -12,7 +12,7 @@
     {key:'donation-environment',label:'환경',capacity:100},
     {key:'donation-others',label:'기타',capacity:100}
   ];
-  var rows=[],sections=DEFAULT_SECTIONS.slice(),stage='all',selected=new Set(),busy=false,policyBusy=false,policyWorkspace=null,recognition=null;
+  var rows=[],sections=DEFAULT_SECTIONS.slice(),stage='all',selected=new Set(),busy=false,policyBusy=false,policyWorkspace=null,recognition=null,openSection=null;
   var loadError='',storageState={available:null,error:null,degraded:false},loadedAt='',sectionPolicyCache={};
   var STAGES=[['all','전체'],['research','리서치'],['queue','대기열'],['front_candidate','프론트 후보'],['published','프론트 매칭'],['hold','보류'],['excluded','제외']];
 
@@ -100,26 +100,19 @@
       '<div class="section-policy-latest" data-section-policy-latest="'+esc(sec.key)+'">'+(latest?'<b>'+esc(latest.title||'최근 안건')+'</b><br>'+esc(latest.summary||''):'최근 협의 안건 없음')+'</div></div>';
   }
   function renderSections(){
-    var html='';
+    var host=$('sections'),html='';
     sections.forEach(function(sec){
-      var list=visibleRowsFor(sec.key);
-      html+='<section class="section" data-section-block="'+esc(sec.key)+'"><div class="section-head"><label class="check"><input type="checkbox" data-section-check="'+esc(sec.key)+'"> 전체</label><h2>'+esc(sec.label)+'</h2><span class="badge">'+list.length+' / '+sec.capacity+'</span></div>'+
+      var list=visibleRowsFor(sec.key),isOpen=openSection===sec.key,lane=sec.key==='donation-global'?'영상/글로벌 뉴스 · 주 3회 자동':'공식 홈페이지 우선';
+      html+='<section class="section" data-section-block="'+esc(sec.key)+'"><div class="section-head"><label class="check"><input type="checkbox" data-section-check="'+esc(sec.key)+'"> 전체</label><h2>'+esc(sec.label)+'</h2><span class="section-kind">'+esc(lane)+'</span><span class="badge">'+list.length+' / '+sec.capacity+'</span><button type="button" class="section-toggle" data-section-toggle="'+esc(sec.key)+'" aria-expanded="'+(isOpen?'true':'false')+'">'+(isOpen?'접기':'펼치기')+'</button></div>'+
+        '<div class="section-content" data-section-content="'+esc(sec.key)+'" '+(isOpen?'':'hidden')+'>'+
         '<div class="section-actions"><button data-section-action="research" data-section="'+esc(sec.key)+'">다시 리서치</button><button data-section-action="ai_front_candidates" data-section="'+esc(sec.key)+'">AI 프론트 후보</button><button data-section-action="ai_auto_match" data-section="'+esc(sec.key)+'">프론트페이지 매칭 실행</button><button data-section-action="reconcile_published" data-section="'+esc(sec.key)+'">SearchBank 재연동</button></div>'+
-        '<div class="section-audit"><button class="audit" type="button" data-audit-json="'+esc(sec.key)+'">JSON 점검 다운로드</button><button class="report" type="button" data-audit-report="'+esc(sec.key)+'">점검 보고서 다운로드</button><span class="audit-summary">'+esc(auditSummary(sec.key))+'</span></div>'+
-        '<div class="section-audit"><span class="audit-summary">'+esc(frameSummary(sec))+'</span></div>'+
+        '<div class="section-audit"><b>섹션 점검</b><button class="audit" data-audit-json="'+esc(sec.key)+'">JSON 다운로드</button><button class="report" data-audit-report="'+esc(sec.key)+'">점검 보고서</button><span class="audit-summary">'+esc(auditSummary(sec.key))+'</span></div>'+
         sectionPolicyHtml(sec)+
-        (list.length?'<div class="grid">'+list.map(card).join('')+'</div>':'<div class="empty">현재 후보가 없습니다. 리서치 또는 저장소가 복구되면 이 블록에 후보 카드가 표시됩니다.</div>')+'</section>';
+        '<div class="grid">'+(list.length?list.map(card).join(''):'<div class="empty">현재 단계에 표시할 후보가 없습니다.</div>')+'</div></div></section>';
     });
-    $('sections').innerHTML=html;renderTabs();
-    if($('overallAuditState'))$('overallAuditState').textContent='8개 섹션 · 후보 '+rows.length+'개 · '+(storageState.available===false?'저장소 연결 확인 필요':'점검 가능');
-  }
-
-
-  function populateScopes(){
-    if(!$('policyScope'))return;
-    var current=$('policyScope').value||'all';
-    $('policyScope').innerHTML='<option value="all">도네이션 전체</option>'+sections.map(function(s){return '<option value="'+esc(s.key)+'">'+esc(s.label)+'</option>'}).join('');
-    if(Array.from($('policyScope').options).some(function(o){return o.value===current}))$('policyScope').value=current;
+    host.innerHTML=html;
+    selected.forEach(function(id){var c=document.querySelector('[data-check="'+CSS.escape(id)+'"]');if(c)c.checked=true});
+    sections.forEach(function(sec){var visible=visibleRowsFor(sec.key),box=document.querySelector('[data-section-check="'+sec.key+'"]');if(box&&visible.length)box.checked=visible.every(function(r){return selected.has(r.id)})});
   }
 
   async function load(){
@@ -152,7 +145,13 @@
     if(busy)return;
     var q=all?'':text($('researchQuery').value);
     setBusy(true,all?'8개 섹션 기본 리서치 중…':'리서치 중…');
-    try{await api('POST',{action:'research',section:all?'all':section,query:q,limit:50});await load()}catch(e){$('state').textContent='리서치 오류: '+e.message;setBusy(false)}
+    try{
+      var j=await api('POST',{action:'research',section:all?'all':section,query:q,limit:50}),r=j.result||{},reports=Array.isArray(r.reports)?r.reports:[];
+      await load();
+      var engine=reports.reduce(function(n,x){return n+Number(x.engineItems||0)},0),accepted=reports.reduce(function(n,x){return n+Number(x.accepted||0)},0),homepage=reports.reduce(function(n,x){return n+Number(x.officialHomepageCount||0)},0),fallback=reports.reduce(function(n,x){return n+Number(x.fallbackContentCount||0)},0),nonWebsite=reports.reduce(function(n,x){return n+Number(x.skippedNonWebsite||0)},0),searchSkip=reports.reduce(function(n,x){return n+Number(x.skippedSearchLanding||0)},0);
+      $('state').textContent='리서치 완료 · 엔진 '+engine+'건 → 저장 가능한 후보 '+accepted+'건 · 공식 홈페이지 '+homepage+' · 공식 콘텐츠 후순위 '+fallback+' · 사용가능 링크 없음 '+nonWebsite+' · 검색결과 링크 제외 '+searchSkip;
+      if(!all&&section){openSection=section;renderSections()}
+    }catch(e){$('state').textContent='리서치 오류: '+e.message;setBusy(false)}
   }
 
   function policyScope(){return text($('policyScope')&&$('policyScope').value)||'all'}
@@ -268,6 +267,7 @@
   document.addEventListener('click',function(e){
     var b=e.target.closest('button');if(!b)return;
     if(b.dataset.stage){stage=b.dataset.stage;renderSections();return}
+    if(b.dataset.sectionToggle){openSection=openSection===b.dataset.sectionToggle?null:b.dataset.sectionToggle;renderSections();return}
     if(b.dataset.one){act(b.dataset.one,[b.dataset.id]);return}
     if(b.dataset.bulk){var ids=Array.from(selected);if(!ids.length){alert('처리할 후보를 선택해 주세요.');return}act(b.dataset.bulk,ids);return}
     if(b.dataset.sectionAction){if(b.dataset.sectionAction==='research')research(b.dataset.section,false);else act(b.dataset.sectionAction,null,b.dataset.section);return}

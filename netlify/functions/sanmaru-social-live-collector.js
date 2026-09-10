@@ -17,8 +17,9 @@ const MaruSearch = require("./maru-search");
 const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
+const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.17.0-tiktok-metadata-recovery";
+const VERSION = "sanmaru-social-live-collector-v1.18.0-seven-platform-preview-recovery";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -36,6 +37,12 @@ const TIKTOK_METADATA_TIMEOUT_MS = 3000;
 const CHANNEL_RESOLUTION_BUDGET_MS = 4200;
 const TIKTOK_CHANNEL_RESOLUTION_BUDGET_MS = 8500;
 const CHANNEL_RESOLUTION_CONCURRENCY = 4;
+// YouTube and Facebook already have stable, working publication paths. Restrict
+// the new preview recovery path to the seven sections that were still collapsing
+// before front publication.
+const PREVIEW_RECOVERY_PLATFORMS = new Set([
+  "instagram", "tiktok", "wechat", "weibo", "pinterest", "reddit", "twitter"
+]);
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 
 /*
@@ -290,7 +297,7 @@ function contentKind(platform, value) {
       if (/^\/(shorts|live|embed)\/[^/]+/i.test(path)) return "latest_video";
     }
     if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
-    if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path))) return "latest_video";
+    if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^(?:vm|vt)\.tiktok\.com$/i.test(url.hostname))) return "latest_video";
     if (platform === "facebook" && (/^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (path === "/watch/" && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
     if (platform === "wechat" && (/^\/s(?:\/|$)/i.test(path) || url.searchParams.get("__biz"))) return "latest_post";
     if (platform === "weibo" && (/^\/(status|detail|tv\/show)\//i.test(path) || /^\/\d+\/[a-z0-9]+/i.test(path))) return "latest_post";
@@ -1471,21 +1478,52 @@ function usableThumbnail(value, contentUrl, platform) {
 }
 async function stablePublicThumbnail(platform, contentUrl, supplied) {
   let thumb = usableThumbnail(supplied, contentUrl, platform);
-  if (thumb) return { thumbnail: thumb, metadata: {} };
+  if (thumb) return { thumbnail: thumb, metadata: {}, resolvedUrl: contentUrl };
 
-  // Facebook/Instagram frequently expose the post image in the provider embed
-  // document even when the canonical page returns a login/interstitial shell.
-  // Resolve it during collection so the public front never needs per-card
-  // serverless metadata calls.
-  if (platform === "facebook" || platform === "instagram") {
+  // Keep the already-working Facebook path unchanged. Instagram and the other
+  // six disconnected providers use the shared Social preview resolver below so
+  // canonical redirects + oEmbed/public-page metadata are normalized once at
+  // collection time, never by the front renderer.
+  if (platform === "facebook") {
     const embedMetadata = await publicEmbedMetadata(platform, contentUrl);
     thumb = usableThumbnail(embedMetadata.thumbnail, contentUrl, platform);
-    if (thumb) return { thumbnail: thumb, metadata: embedMetadata };
+    if (thumb) return { thumbnail: thumb, metadata: embedMetadata, resolvedUrl: contentUrl };
+    const metadata = await publicPageMetadata(platform, contentUrl);
+    thumb = usableThumbnail(metadata.thumbnail, contentUrl, platform);
+    return { thumbnail: thumb, metadata, resolvedUrl: contentUrl };
+  }
+
+  if (PREVIEW_RECOVERY_PLATFORMS.has(platform) && SocialPreview && typeof SocialPreview.resolvePreview === "function") {
+    try {
+      const preview = await SocialPreview.resolvePreview(platform, contentUrl);
+      const candidateResolvedUrl = Policy.normalizeUrl(preview && preview.resolvedUrl);
+      const resolvedUrl = candidateResolvedUrl &&
+        Policy.platformFromHost(candidateResolvedUrl) === platform &&
+        contentKind(platform, candidateResolvedUrl)
+        ? candidateResolvedUrl
+        : contentUrl;
+      thumb = usableThumbnail(preview && preview.thumbnailUrl, resolvedUrl, platform);
+      return {
+        thumbnail: thumb,
+        resolvedUrl,
+        metadata: {
+          title: firstText([preview && preview.title]),
+          creatorName: firstText([preview && preview.creatorName]),
+          channelUrl: Policy.normalizeUrl(preview && preview.channelUrl),
+          thumbnail: thumb,
+          source: firstText([preview && preview.source, "social_preview_recovery"])
+        }
+      };
+    } catch (_error) {
+      // The existing collector metadata path remains a bounded fallback. A
+      // provider outage therefore preserves the candidate instead of failing
+      // the whole collection pass.
+    }
   }
 
   const metadata = await publicPageMetadata(platform, contentUrl);
   thumb = usableThumbnail(metadata.thumbnail, contentUrl, platform);
-  return { thumbnail: thumb, metadata };
+  return { thumbnail: thumb, metadata, resolvedUrl: contentUrl };
 }
 
 async function youtubeLatestFromFeed(channelId) {
@@ -1640,6 +1678,15 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     suppliedThumbnail,
   );
   const publicMetadata = thumbnailResolution.metadata || {};
+  const recoveredContentUrl = Policy.normalizeUrl(thumbnailResolution.resolvedUrl);
+  if (
+    recoveredContentUrl &&
+    Policy.platformFromHost(recoveredContentUrl) === platform &&
+    contentKind(platform, recoveredContentUrl)
+  ) {
+    resolved.latestContentUrl = recoveredContentUrl;
+    resolved.latestContentKind = contentKind(platform, recoveredContentUrl);
+  }
   let resolvedChannelUrl = firstText([resolved.channelUrl, enrichment.channelUrl, publicMetadata.channelUrl]);
   if (resolvedChannelUrl) {
     const channelCheck = ChannelLink.resolve(resolvedChannelUrl, {

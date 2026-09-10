@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.2.0-100slot-sync";
+const VERSION = "donation-research-policy-v1.3.1-homepage-first-official-content-fallback";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -200,8 +200,117 @@ function youtubeId(value){
   return "";
 }
 function candidateUrls(record){
-  const r=plain(record), media=plain(r.media), link=plain(r.link), org=plain(r.org), donation=plain(r.donation);
-  return unique([r.video,r.videoUrl,r.embedUrl,media.src,media.url,media.embedUrl,r.url,link.url,org.homepage,donation.checkout_url]);
+  const r=plain(record), media=plain(r.media), link=plain(r.link), org=plain(r.org), donation=plain(r.donation), source=plain(r.source);
+  return unique([
+    r.video,r.videoUrl,r.embedUrl,media.src,media.url,media.embedUrl,
+    org.homepage,org.website,r.homepage,r.website,r.official_url,r.officialUrl,r.organizationUrl,r.siteUrl,
+    link.url,r.url,r.pageUrl,r.page_url,r.sourcePageUrl,r.source_page_url,source.url,donation.checkout_url
+  ]);
+}
+function httpsUrl(value){
+  const raw=text(value); if(!/^https:\/\//i.test(raw)) return "";
+  try{ const u=new URL(raw); return u.protocol==="https:" ? u.toString() : ""; }catch(_e){ return ""; }
+}
+function urlHost(value){
+  const raw=httpsUrl(value); if(!raw) return "";
+  try{ return new URL(raw).hostname.toLowerCase().replace(/^www\./,""); }catch(_e){ return ""; }
+}
+function isSearchLandingUrl(value){
+  const raw=httpsUrl(value); if(!raw) return true;
+  try{
+    const u=new URL(raw), host=u.hostname.toLowerCase().replace(/^www\./,""), path=u.pathname.toLowerCase();
+    if((host==="google.com"||host.endsWith(".google.com"))&&(path==="/search"||path.startsWith("/maps/search"))) return true;
+    if((host==="bing.com"||host.endsWith(".bing.com"))&&path.startsWith("/search")) return true;
+    if(host==="search.yahoo.com"||host.endsWith(".search.yahoo.com")) return true;
+    if(host==="duckduckgo.com"||host.endsWith(".duckduckgo.com")) return true;
+    if(host==="search.naver.com"||host.endsWith(".search.naver.com")) return true;
+    if((host==="map.naver.com"||host.endsWith(".map.naver.com"))&&path.startsWith("/p/search")) return true;
+    if((host==="yandex.com"||host.endsWith(".yandex.com"))&&path.startsWith("/search")) return true;
+    if((host==="youtube.com"||host.endsWith(".youtube.com"))&&(path==="/results"||u.searchParams.has("search_query"))) return true;
+    return false;
+  }catch(_e){ return true; }
+}
+function isVideoUrl(value){
+  const raw=httpsUrl(value); if(!raw) return false;
+  const host=urlHost(raw);
+  if(host==="youtu.be"||host==="youtube.com"||host.endsWith(".youtube.com")||host==="vimeo.com"||host.endsWith(".vimeo.com")) return true;
+  try{ return /\.(?:mp4|webm|m3u8|mov)(?:$|[?#])/i.test(new URL(raw).pathname); }catch(_e){ return false; }
+}
+function isSocialUrl(value){
+  const host=urlHost(value); if(!host) return false;
+  return /^(?:m\.)?(?:facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|threads\.net|reddit\.com|pinterest\.com|weibo\.com)$/.test(host) ||
+    /\.(?:facebook\.com|instagram\.com|tiktok\.com|twitter\.com|reddit\.com|pinterest\.com|weibo\.com)$/.test(host);
+}
+function isDirectMediaAssetUrl(value){
+  const raw=httpsUrl(value); if(!raw) return false;
+  try{ return /\.(?:jpg|jpeg|png|gif|webp|svg|avif|mp4|webm|mov|m3u8|mp3|wav)(?:$|[?#])/i.test(new URL(raw).pathname); }catch(_e){ return false; }
+}
+function organizationWebsiteUrls(record){
+  const r=plain(record), media=plain(r.media), link=plain(r.link), org=plain(r.org), source=plain(r.source), entity=plain(r.entity);
+  return unique([
+    org.homepage,org.website,entity.homepage,entity.website,
+    r.homepage,r.website,r.official_url,r.officialUrl,r.organizationUrl,r.organization_url,r.siteUrl,r.site_url,
+    link.url,r.url,r.pageUrl,r.page_url,r.sourcePageUrl,r.source_page_url,r.contextLink,r.originalPageUrl,r.original_page_url,
+    source.url,
+    /* Some SearchBank result shapes store the destination under media.pageUrl, never use media.src as a website. */
+    media.pageUrl,media.page_url
+  ]);
+}
+function isOrganizationWebsiteUrl(value){
+  const raw=httpsUrl(value); if(!raw) return false;
+  if(isSearchLandingUrl(raw)||isVideoUrl(raw)||isSocialUrl(raw)||isDirectMediaAssetUrl(raw)) return false;
+  return true;
+}
+function organizationHomepageUrl(record){
+  for(const value of organizationWebsiteUrls(record)){
+    const u=httpsUrl(value); if(u&&isOrganizationWebsiteUrl(u)) return u;
+  }
+  return "";
+}
+function candidateUrlForSection(record, sectionValue){
+  const section=normalizeSection(sectionValue)||inferSection(record);
+  if(section==="donation-global"){
+    for(const value of candidateUrls(record)){
+      const u=httpsUrl(value); if(u&&!isSearchLandingUrl(u)&&!isDirectMediaAssetUrl(u)) return u;
+    }
+    return "";
+  }
+  /* The seven organization lanes are HOMEPAGE-FIRST, not video-blocked.
+     Always choose a real organization/institution webpage when one is present.
+     Only when no such webpage can be resolved do we keep an official video,
+     social/channel, or other HTTPS content page as a lower-priority fallback. */
+  const homepage=organizationHomepageUrl(record);
+  if(homepage) return homepage;
+  for(const value of candidateUrls(record)){
+    const u=httpsUrl(value);
+    if(u&&!isSearchLandingUrl(u)&&!isDirectMediaAssetUrl(u)) return u;
+  }
+  return "";
+}
+function hasVideoDestination(record){
+  const r=plain(record), media=plain(r.media), link=plain(r.link);
+  const kind=lower(r.type||r.mediaType||media.kind||media.type);
+  if(["video","clip","broadcast","stream"].includes(kind)) return true;
+  return unique([r.video,r.videoUrl,r.embedUrl,media.src,media.url,media.embedUrl,r.url,link.url]).some(isVideoUrl);
+}
+function representativeImageForSection(record, sectionValue){
+  const r=plain(record), media=plain(r.media), org=plain(r.org), section=normalizeSection(sectionValue)||inferSection(record);
+  const websiteValues=[
+    r.og_image,r.ogImage,r.twitter_image,r.twitterImage,r.thumbnail,r.thumb,r.image,
+    media.image,media.thumb,media.poster,org.logo,org.logo_url,r.logo,r.logo_url
+  ];
+  const mediaValues=[media.thumb,media.image,media.poster,r.thumbnail,r.thumb,r.image,r.og_image,r.ogImage,r.logo,r.logo_url,youtubeThumbnail(r)];
+  const hasHomepage=section!=="donation-global"&&!!organizationHomepageUrl(r);
+  const values=section==="donation-global"?mediaValues:(hasHomepage?websiteValues:websiteValues.concat(mediaValues));
+  for(const value of values){
+    const u=httpsUrl(value); if(!u||/placeholder|sample/i.test(u)) continue;
+    /* When a normal homepage exists, keep its representative image/logo ahead
+       of video thumbnails.  If no homepage exists, an official video/channel
+       thumbnail is a valid fallback instead of discarding the organization. */
+    if(hasHomepage&&/(?:i\.ytimg\.com|img\.youtube\.com)\//i.test(u)) continue;
+    return u;
+  }
+  return "";
 }
 function looksLikeVideo(record){
   const r=plain(record), media=plain(r.media), entity=plain(r.entity);
@@ -235,6 +344,7 @@ function sectionRelevance(record, sectionValue){
   // passing the global lane merely because SearchBank queried that lane.
   if(explicit===section) score += section==="donation-global" ? 2 : 24;
   if(section==="donation-global" && semanticMatches>0 && looksLikeVideo(record)) score+=18;
+  if(section!=="donation-global" && organizationHomepageUrl(record)) score+=32;
   if(section==="donation-mission" && missionExcluded(record)) score-=100;
   if((policy.excludedHints||[]).some(h=>excludedHintMatch(blob,h))) score-=40;
   const source=plain(record&&record.source); const authority=Number(source.authority||record&&record.authority||0);
@@ -278,23 +388,25 @@ function usablePublicCandidate(record, sectionValue){
   if(!record || isPlaceholder(record)) return false;
   const section=normalizeSection(sectionValue)||inferSection(record);
   if(section==="donation-mission" && missionExcluded(record)) return false;
-  const urls=candidateUrls(record).filter(u=>/^https:\/\//i.test(u));
-  if(!urls.length) return false;
-  const media=plain(record.media);
-  const representativeImage=text(record.thumbnail||record.thumb||record.image||record.og_image||record.logo||record.logo_url||media.thumb||youtubeThumbnail(record));
-  if(!/^https:\/\//i.test(representativeImage) || /placeholder|sample/i.test(representativeImage)) return false;
+  const destination=candidateUrlForSection(record,section);
+  if(!destination) return false;
+  const representativeImage=representativeImageForSection(record,section);
+  if(!representativeImage) return false;
   const title=text(record.title||record.name||plain(record.org).name);
   if(!title) return false;
   if(section==="donation-global"){
-    // Research is permissive, but publication requires at least one semantic
-    // humanitarian signal.  Video is preferred later in ranking; it is not by
-    // itself proof of relevance.  This remains label-agnostic because the match
-    // scans title/summary/tags/source/URL metadata, not an exact `news` field.
+    // Global News is the one video lane: require both an actual video destination
+    // and a humanitarian/disaster/environment relevance signal.
+    if(!looksLikeVideo(record)) return false;
     const blob=recordText(record), policy=policyFor(section);
     const genericMediaHints=new Set(["video","footage","broadcast","report","update","field report"]);
     const humanitarianHints=(policy.semanticHints||[]).filter(h=>!genericMediaHints.has(lower(h)));
     return countHints(blob,humanitarianHints)>0;
   }
+  /* The seven organization lanes are homepage-first.  A missing homepage does
+     not hard-block an otherwise relevant official video/channel/content page;
+     it simply ranks behind candidates that have a resolvable homepage. */
+  if(isSearchLandingUrl(destination)||isDirectMediaAssetUrl(destination)) return false;
   return sectionRelevance(record,section)>-10;
 }
 function youtubeThumbnail(record){
@@ -306,5 +418,6 @@ function youtubeThumbnail(record){
 
 module.exports={
   VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,researchFrameFor,researchAnchors,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,
-  missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls
+  missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls,
+  organizationWebsiteUrls,organizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection
 };

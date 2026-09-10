@@ -11,7 +11,7 @@ const crypto = require("crypto");
 const SlotStore = require("./global-slot-console-supabase");
 const DonationPolicy = require("./donation-research-policy.v1");
 
-const VERSION = "donation-policy-discussion-v1.0.0";
+const VERSION = "donation-policy-discussion-v1.1.0-eight-section-context";
 const PREFIX = "igdc_donation_policy_discussion_";
 const SCOPE_HUB = "donation-control";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -158,6 +158,14 @@ function sectionGuidance(scope){
   if(scope==="all") return all;
   return {[scope]:all[scope]||""};
 }
+function sectionPolicyBundle(scope){
+  const keys=scope==="all"?DonationPolicy.SECTIONS:[scope];
+  const out={};
+  for(const key of keys){
+    out[key]=DonationPolicy.policyFor(key);
+  }
+  return out;
+}
 function fallbackProposal(scope,instruction,error){
   const policy=scope==="all"?null:DonationPolicy.policyFor(scope);
   return {
@@ -196,12 +204,12 @@ async function aiProposal(scope,workspace,instruction,requestedLanguage){
   const timer=controller?setTimeout(()=>controller.abort(),45000):null;
   try{
     const recent=array(workspace.messages).slice(-12).map(m=>({role:m.role,content:m.content}));
-    const payload={scope,scopeLabel:scopeLabel(scope),sectionGuidance:sectionGuidance(scope),administratorInstruction:instruction,recentConversation:recent,sectionPolicy:scope==="all"?null:DonationPolicy.policyFor(scope)};
+    const payload={scope,scopeLabel:scopeLabel(scope),sectionGuidance:sectionGuidance(scope),sectionPolicies:sectionPolicyBundle(scope),administratorInstruction:instruction,recentConversation:recent};
     const response=await fetch((envFirst("OPENAI_BASE_URL")||"https://api.openai.com/v1").replace(/\/+$/g,"")+"/chat/completions",{
       method:"POST",signal:controller?controller.signal:undefined,
       headers:{"Content-Type":"application/json",Authorization:"Bearer "+key},
       body:JSON.stringify({model,temperature:0.15,response_format:{type:"json_object"},messages:[
-        {role:"system",content:"You are the IGDC Donation administrator AI policy discussion assistant. Work only on Donation. Do not modify or mix Distribution, Social, Media, Network, Tour, Home, shared snapshots, or shared UI. The administrator is deciding research and front-matching direction for eight Donation sections. Prefer official organization websites and their official OG/representative thumbnails; for global news prefer current humanitarian/disaster/environment videos. For mission content use Protestant/evangelical organizations and exclude Catholic, Orthodox, Islamic, cult/new-religious-movement content. Do not claim verification without evidence. Never publish automatically. Return JSON only with: title, summary, researchQuery, includeTerms[], avoidTerms[], preferredKinds[], destination(one of admin,front_candidate,front), freshnessHours, confidence. destination is only a recommendation; the browser asks the administrator before execution. All natural-language strings must use the administrator language: "+language+"."},
+        {role:"system",content:"You are the IGDC Donation administrator AI policy discussion assistant. Work only on Donation. Do not modify or mix Distribution, Social, Media, Network, Tour, Home, shared snapshots, or shared UI. The administrator is deciding research and front-matching direction for all eight Donation sections, and when scope=all you MUST consider every section policy in sectionPolicies together. donation-global is the video/news lane and should use current humanitarian/disaster/environment videos. donation-ngo, donation-mission, donation-service, donation-relief, donation-education, donation-environment, and donation-others are organization/institution HOMEPAGE-FIRST lanes: always recommend the official HTTPS organization homepage/webpage first and use its official OG/representative thumbnail. Do not hard-ban video or social/channel destinations in those seven lanes; if a legitimate organization has no resolvable homepage or its official web presence is video/channel-centered, keep that official destination as a lower-priority fallback. Search-result landing pages are never final destinations. For mission content use Protestant/evangelical organizations and exclude Catholic, Orthodox, Islamic, cult/new-religious-movement content. Do not claim verification without evidence. Never publish automatically. Return JSON only with: title, summary, researchQuery, includeTerms[], avoidTerms[], preferredKinds[], destination(one of admin,front_candidate,front), freshnessHours, confidence. destination is only a recommendation; the browser asks the administrator before execution. All natural-language strings must use the administrator language: "+language+"."},
         {role:"user",content:JSON.stringify(payload)}
       ]})
     });

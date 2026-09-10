@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260908-yt-native-actions-v4'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260910-seven-platform-connect-v1'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -312,10 +312,22 @@
       };
     }
 
-    /* WeChat / Weibo do not expose a stable public player endpoint.
-       Keep them inside IGDC and attempt the original public page in a contained frame.
-       No top-navigation/popups are granted to the frame. */
+    /* WeChat / Weibo do not expose a stable third-party embed/player endpoint.
+       Published rows already carry a verified public preview image. Prefer that
+       stored preview as the contained IGDC document instead of presenting a blank
+       "refused to connect" iframe. If an older row has no preview, keep the prior
+       restricted-frame attempt as a last resort. */
     if ((platform === 'wechat' || platform === 'weibo') && validHttp(url)) {
+      var storedPreview = previewUrlOf(card);
+      if (validHttp(storedPreview)) {
+        return {
+          mode: 'preview',
+          src: storedPreview,
+          aspect: '16/9',
+          provider: platform + '-contained-preview',
+          restrictedProvider: true
+        };
+      }
       return { mode: 'iframe', src: url, aspect: 'auto', restrictedProvider: true };
     }
 
@@ -354,6 +366,7 @@
       '#igdcSocialViewerV2 .igsv-media[data-aspect="9/16"]{width:min(100%,720px);aspect-ratio:9/16}' +
       '#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(720px,calc(100dvh - 56px - 56px));min-height:720px}' +
       '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block;flex:0 0 auto}' +
+      '#igdcSocialViewerV2 .igsv-contained-preview{width:100%;height:100%;display:block;object-fit:contain;object-position:center;background:#000}' +
       '#igdcSocialViewerV2 .igsv-detail{width:100%;max-width:none;box-sizing:border-box;padding:22px clamp(18px,3vw,48px) 28px;background:#fff;color:#111;border-top:1px solid #e5e7eb;align-self:stretch}' +
       '#igdcSocialViewerV2 .igsv-detail-title{font:700 20px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;word-break:break-word}' +
       '#igdcSocialViewerV2 .igsv-detail-desc{margin-top:10px;color:#333;font:400 15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif;white-space:pre-wrap;word-break:break-word}' +
@@ -1373,6 +1386,44 @@
     }
   }
 
+  function mountContainedPreview(stage, embed, title, description, platform) {
+    var scroll = document.createElement('div');
+    scroll.className = 'igsv-scroll';
+    var content = document.createElement('div');
+    content.className = 'igsv-content';
+    var media = document.createElement('div');
+    media.className = 'igsv-media';
+    media.setAttribute('data-aspect', embed.aspect || '16/9');
+    if (embed.provider) media.setAttribute('data-provider', embed.provider);
+
+    var image = document.createElement('img');
+    image.className = 'igsv-contained-preview';
+    image.src = embed.src;
+    image.alt = title || platform || 'Social content';
+    image.loading = 'eager';
+    image.referrerPolicy = 'no-referrer';
+    media.appendChild(image);
+    content.appendChild(media);
+
+    var detail = buildDetail(title || platform, description || '', platform);
+    content.appendChild(detail);
+    mountProviderUtilityActions(detail, platform, title || platform, state.lastUrl || '');
+
+    var safeSpace = document.createElement('div');
+    safeSpace.className = 'igsv-safe-space';
+    safeSpace.setAttribute('aria-hidden', 'true');
+    content.appendChild(safeSpace);
+    scroll.appendChild(content);
+    stage.appendChild(scroll);
+    bindViewerScrollHost(scroll);
+    image.addEventListener('load', function () { showStatus(''); }, { once: true });
+    image.addEventListener('error', function () { showStatus(labels().unavailable); }, { once: true });
+    window.setTimeout(function () {
+      if (state.open && stage.contains(image)) showStatus('');
+    }, 1800);
+    return true;
+  }
+
   function mountEmbed(root, embed, title, description, platform) {
     var stage = q('.igsv-stage', root);
     clearStage(stage);
@@ -1384,6 +1435,9 @@
     showStatus(labels().loading);
     stage.setAttribute('data-aspect', embed.aspect || 'auto');
     if (embed.provider) stage.setAttribute('data-provider', embed.provider);
+    if (embed.mode === 'preview') {
+      return mountContainedPreview(stage, embed, title, description, platform);
+    }
     if (embed.provider === 'facebook-post') {
       /* Do not render Facebook's cross-origin post shell as the visible document.
          Its internal `See more` link can only navigate within Facebook and its

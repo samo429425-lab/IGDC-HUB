@@ -1788,6 +1788,7 @@ class MaruSearchSourceAdapter extends BaseSourceAdapter {
       limit: Math.min(ctx.limit || 50, 200),
       lang: ctx.params.lang || ctx.queryIntent?.languageHint || undefined,
       mode: ctx.params.mode || "search",
+      type: ctx.params.maruSearchType || undefined,
       from: "search-bank",
       skipSearchBank: true
     });
@@ -1804,9 +1805,16 @@ class SectorExternalAdapter extends MaruSearchSourceAdapter {
     this.sectorTerms = Array.isArray(sectorTerms) ? sectorTerms : [];
   }
   buildQuery(ctx){
-    if(ctx.slotContext?.autoFill) return buildSlotQuery(ctx, this.name);
     const q = ctx.queryIntent?.raw || ctx.q || "";
     const geo = ctx.geoContext?.country || ctx.geoContext?.region || "";
+    /* Donation admin already supplies the PSOM/research-frame section query.
+       Honor it before the generic auto-fill query builder, otherwise a Donation
+       section query can be rewritten/duplicated and mixed with the generic `NGO`
+       lane.  This is request-scoped and leaves every existing SearchBank caller
+       unchanged. */
+    const preserveExact = truthy(ctx.params?.preserveExactResearchQuery);
+    if(preserveExact) return compactTokens([ctx.params?.exactResearchQuery || q, geo]);
+    if(ctx.slotContext?.autoFill) return buildSlotQuery(ctx, this.name);
     const sector = this.sectorTerms[0] || ctx.queryIntent?.sectorHint?.major || "";
     return expandQueryForLocale(ctx, compactTokens([q, geo, sector]));
   }
