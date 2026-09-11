@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.2.0-seven-platform-preview-recovery";
+const VERSION = "social-preview-metadata-v1.2.0-creator-preview";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -132,7 +132,7 @@ function htmlImage(html) {
   const raw = text(html);
   const patterns = [
     /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/i,
-    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"<>]*)"/i,
+    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com)[^"<>]*)"/i,
     /(?:poster|data-poster|data-thumb|data-thumbnail)=["'](https:\/\/[^"'<>]+)["']/i,
     /background-image\s*:\s*url\(["']?(https:\/\/[^"')<>]+)["']?\)/i
   ];
@@ -146,10 +146,36 @@ function htmlImage(html) {
 
   // Last-resort CDN URL scan. Keep the host close to the scheme so arbitrary
   // page text cannot be mistaken for an image URL.
-  const generic = raw.match(/https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"'<>\s]*/i);
+  const generic = raw.match(/https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com)[^"'<>\s]*/i);
   if (generic && generic[0]) {
     image = decodeHtml(generic[0]);
     if (/^https:\/\//i.test(image)) return image;
+  }
+  return "";
+}
+
+
+function htmlCreator(platform, html) {
+  const meta = metaMap(html);
+  const metaAuthor = firstMeta(meta, ["author", "article:author", "twitter:creator"]);
+  if (metaAuthor && !/^(instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|x|twitter)$/i.test(metaAuthor)) {
+    return stripTags(metaAuthor).replace(/^@/, "").trim();
+  }
+  const raw = text(html);
+  const patterns = platform === "instagram"
+    ? [/"username"\s*:\s*"([^"<>]{1,100})"/i, /"owner"\s*:\s*\{[^{}]{0,400}"username"\s*:\s*"([^"<>]{1,100})"/i]
+    : platform === "tiktok"
+      ? [/"uniqueId"\s*:\s*"([^"<>]{1,100})"/i, /"authorName"\s*:\s*"([^"<>]{1,120})"/i]
+      : platform === "twitter"
+        ? [/"screen_name"\s*:\s*"([^"<>]{1,100})"/i, /"username"\s*:\s*"([^"<>]{1,100})"/i]
+        : platform === "weibo"
+          ? [/"screen_name"\s*:\s*"([^"<>]{1,100})"/i]
+          : platform === "wechat"
+            ? [/"nickname"\s*:\s*"([^"<>]{1,120})"/i, /var\s+nickname\s*=\s*["']([^"'<>]{1,120})["']/i]
+            : [/"author_name"\s*:\s*"([^"<>]{1,120})"/i];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match && match[1]) return decodeHtml(match[1]).replace(/^@/, "").trim();
   }
   return "";
 }
@@ -223,19 +249,6 @@ async function oembed(platform, contentUrl) {
   return fetchJson(endpoint);
 }
 
-function shortProviderUrl(platform, value) {
-  try {
-    const url = new URL(value);
-    const host = url.hostname.toLowerCase().replace(/^www\./, "");
-    if (platform === "tiktok") return host === "vm.tiktok.com" || host === "vt.tiktok.com";
-    if (platform === "pinterest") return host === "pin.it";
-    if (platform === "reddit") return host === "redd.it";
-    return false;
-  } catch (_error) {
-    return false;
-  }
-}
-
 function youtubeThumbnail(url) {
   try {
     const parsed = new URL(url);
@@ -281,7 +294,7 @@ function providerEmbedPreviewUrl(platform, contentUrl) {
 }
 async function fetchEmbedPreview(platform, contentUrl) {
   const embedUrl = providerEmbedPreviewUrl(platform, contentUrl);
-  if (!embedUrl) return { title: "", thumbnailUrl: "", source: "" };
+  if (!embedUrl) return { title: "", thumbnailUrl: "", creatorName: "", source: "" };
   try {
     const response = await fetchWithTimeout(embedUrl, {
       method: "GET",
@@ -292,84 +305,58 @@ async function fetchEmbedPreview(platform, contentUrl) {
         "accept-language": "en-US,en;q=0.8"
       }
     }, TIMEOUT_MS);
-    if (!response.ok) return { title: "", thumbnailUrl: "", source: "embed-http-" + response.status };
+    if (!response.ok) return { title: "", thumbnailUrl: "", creatorName: "", source: "embed-http-" + response.status };
     let html = await response.text();
     if (html.length > MAX_HTML_BYTES) html = html.slice(0, MAX_HTML_BYTES);
     return {
       title: htmlTitle(html),
       thumbnailUrl: htmlImage(html),
+      creatorName: htmlCreator(platform, html),
       source: "provider-embed-meta"
     };
   } catch (_error) {
-    return { title: "", thumbnailUrl: "", source: "embed-error" };
+    return { title: "", thumbnailUrl: "", creatorName: "", source: "embed-error" };
   }
 }
 
 async function resolvePreview(platform, contentUrl) {
   if (platform === "youtube") {
-    return { resolvedUrl: contentUrl, title: "", thumbnailUrl: youtubeThumbnail(contentUrl), source: "youtube-id" };
+    return { resolvedUrl: contentUrl, title: "", thumbnailUrl: youtubeThumbnail(contentUrl), creatorName: "", source: "youtube-id" };
   }
 
-  // Short public share links (TikTok vm/vt, pin.it, redd.it) do not contain the
-  // stable post/video id required by the official player/embed. Resolve their
-  // same-provider redirect once at collection time and persist the canonical URL.
-  let workingUrl = contentUrl;
-  let prefetchedPage = null;
-  if (shortProviderUrl(platform, contentUrl)) {
-    try {
-      const redirected = await fetchProviderHtml(platform, contentUrl);
-      const safeRedirect = safeProviderUrl(platform, redirected && redirected.url);
-      if (safeRedirect) {
-        workingUrl = safeRedirect;
-        prefetchedPage = redirected;
-      }
-    } catch (_error) {}
-  }
-
-  const oe = await oembed(platform, workingUrl);
+  const oe = await oembed(platform, contentUrl);
   const oeTitle = stripTags(oe && (oe.title || oe.author_name || ""));
-  const oeCreatorName = stripTags(oe && (oe.author_name || ""));
-  const oeChannelUrl = safeProviderUrl(platform, oe && (oe.author_url || oe.authorUrl || ""));
+  const oeCreator = stripTags(oe && (oe.author_name || oe.author || ""));
   const oeThumb = decodeHtml(oe && (oe.thumbnail_url || oe.thumbnailUrl || ""));
   if (oeThumb && /^https:\/\//i.test(oeThumb)) {
-    return {
-      resolvedUrl: workingUrl,
-      title: oeTitle,
-      creatorName: oeCreatorName,
-      channelUrl: oeChannelUrl,
-      thumbnailUrl: oeThumb,
-      source: shortProviderUrl(platform, contentUrl) ? "redirect+oembed" : "oembed"
-    };
+    return { resolvedUrl: contentUrl, title: oeTitle, thumbnailUrl: oeThumb, creatorName: oeCreator, source: "oembed" };
   }
 
   // Facebook/Instagram often hide og:image from anonymous canonical-page
   // requests while their official embed document still contains the poster.
   // Resolve that document first, then fall back to the canonical public page.
-  const embed = await fetchEmbedPreview(platform, workingUrl);
+  const embed = await fetchEmbedPreview(platform, contentUrl);
   if (embed.thumbnailUrl && /^https:\/\//i.test(embed.thumbnailUrl)) {
     return {
-      resolvedUrl: workingUrl,
+      resolvedUrl: contentUrl,
       title: embed.title || oeTitle,
-      creatorName: oeCreatorName,
-      channelUrl: oeChannelUrl,
       thumbnailUrl: embed.thumbnailUrl,
+      creatorName: embed.creatorName || oeCreator,
       source: embed.source || "provider-embed-meta"
     };
   }
 
-  let page = prefetchedPage || { url: workingUrl, html: "" };
-  if (!prefetchedPage) {
-    try { page = await fetchProviderHtml(platform, workingUrl); } catch (_error) {}
-  }
+  let page = { url: contentUrl, html: "" };
+  try { page = await fetchProviderHtml(platform, contentUrl); } catch (_error) {}
   const title = htmlTitle(page.html) || embed.title || oeTitle;
+  const creatorName = htmlCreator(platform, page.html) || embed.creatorName || oeCreator;
   const thumbnailUrl = htmlImage(page.html) || embed.thumbnailUrl || oeThumb;
   return {
-    resolvedUrl: safeProviderUrl(platform, page.url) || workingUrl,
+    resolvedUrl: safeProviderUrl(platform, page.url) || contentUrl,
     title,
-    creatorName: oeCreatorName,
-    channelUrl: oeChannelUrl,
+    creatorName,
     thumbnailUrl: /^https:\/\//i.test(thumbnailUrl) ? thumbnailUrl : "",
-    source: page.html ? (shortProviderUrl(platform, contentUrl) ? "redirect+public-meta" : "public-meta") : (embed.source || (oe ? "oembed-no-image" : "unresolved"))
+    source: page.html ? "public-meta" : (embed.source || (oe ? "oembed-no-image" : "unresolved"))
   };
 }
 
@@ -390,7 +377,6 @@ exports.handler = async function handler(event) {
       resolvedUrl: preview.resolvedUrl || contentUrl,
       title: preview.title || "",
       creatorName: preview.creatorName || "",
-      channelUrl: preview.channelUrl || "",
       thumbnailUrl: preview.thumbnailUrl || "",
       source: preview.source || "unresolved"
     }, true);
@@ -401,16 +387,13 @@ exports.handler = async function handler(event) {
       resolved: false,
       resolvedUrl: contentUrl,
       title: "",
+      creatorName: "",
       thumbnailUrl: "",
       source: "resolver_error",
       error: text(error && error.name || "preview_error")
     }, true);
   }
 };
-
-// Social collector uses this same resolver server-side so preview recovery happens
-// before candidate publication; the browser/front never performs per-card metadata calls.
-exports.resolvePreview = resolvePreview;
 
 exports.__test = {
   normalizePlatform,
@@ -419,7 +402,7 @@ exports.__test = {
   metaMap,
   htmlTitle,
   htmlImage,
-  shortProviderUrl,
+  htmlCreator,
   facebookIsVideo,
   providerEmbedPreviewUrl,
   resolvePreview

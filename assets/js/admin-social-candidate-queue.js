@@ -45,7 +45,9 @@
     waitingViewMode = "all",
     latestContentIndex = new Map(),
     lastVisibleRows = [],
-    searchBankImportBusy = false;
+    searchBankImportBusy = false,
+    previewHydrationBusy = false,
+    previewHydratedIds = new Set();
   var $ = function (id) {
       return document.getElementById(id);
     },
@@ -1475,6 +1477,47 @@
     return publishedContentIds;
   }
 
+
+  function realPreviewMissing(row) {
+    if (!row || assetClass(row) !== "latest_content") return false;
+    var platform = lower(row.platform).replace(/^social-/, ""),
+      title = lower(row.title),
+      thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url)));
+    if (platform === "youtube" || platform === "facebook") return false;
+    var noThumb = !/^https:\/\//i.test(thumbUrl) || /placeholder|\/assets\/sample\//i.test(thumbUrl);
+    var genericTitle = !title || ["instagram","tiktok","wechat","weibo","pinterest","reddit","twitter","x"].indexOf(title) >= 0;
+    return noThumb || genericTitle;
+  }
+  function mergeHydratedRows(items) {
+    (Array.isArray(items) ? items : []).forEach(function (updated) {
+      var id = text(updated && updated.id);
+      if (!id) return;
+      var index = rows.findIndex(function (row) { return text(row && row.id) === id; });
+      if (index >= 0) rows[index] = Object.assign({}, rows[index], updated);
+      previewHydratedIds.add(id);
+    });
+  }
+  async function hydrateMissingPreviewsAsync() {
+    if (previewHydrationBusy) return;
+    var ids = rows.filter(realPreviewMissing).map(function (row) { return text(row.id); })
+      .filter(function (id) { return id && !previewHydratedIds.has(id); }).slice(0, 40);
+    if (!ids.length) return;
+    previewHydrationBusy = true;
+    ids.forEach(function (id) { previewHydratedIds.add(id); });
+    try {
+      var d = await post(ACTION, { action: "hydrate_preview", ids: ids });
+      mergeHydratedRows(d.items || []);
+      rebuildLatestContentIndex(rows);
+      renderSections();
+    } catch (_error) {
+      // Preview hydration is best-effort and must never block the administrator queue.
+    } finally {
+      previewHydrationBusy = false;
+      var more = rows.some(function (row) { return realPreviewMissing(row) && !previewHydratedIds.has(text(row.id)); });
+      if (more) setTimeout(hydrateMissingPreviewsAsync, 250);
+    }
+  }
+
   async function refresh() {
     hide();
     $("refreshBtn").disabled = true;
@@ -1487,6 +1530,7 @@
       filters(d.summary);
       renderSections();
       renderExclusions();
+      setTimeout(hydrateMissingPreviewsAsync, 0);
       $("state").textContent =
         "연결 정상 · " +
         ((d.source && d.source.candidateSourceMode) || "read_only");

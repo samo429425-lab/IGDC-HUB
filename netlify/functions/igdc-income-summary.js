@@ -10,8 +10,9 @@
 "use strict";
 
 const LedgerStore = require("./lib/revenue-ledger-supabase.v1");
+const ProviderRegistry = require("./lib/revenue-provider-registry.v1");
 
-const VERSION = "igdc-income-summary-v1.1.0-unified-supabase-key";
+const VERSION = "igdc-income-summary-v1.2.0-production-settlement-ingress";
 const DASHBOARD_KEYS = ["social","video","platform","distribution","donation","tour","ads","misc"];
 const TABLE = process.env.LEDGER_TABLE || process.env.LEGER_TABLE || "inflow_ledger";
 const KRW_PER_USD = Number(process.env.IGDC_FX_KRW_PER_USD || 1300);
@@ -136,11 +137,15 @@ exports.handler=async(event)=>{
     version:VERSION,
     generatedAt:new Date().toISOString(),
     readOnly:true,
-    dryRun:true,
-    settlementExecution:false,
+    productionMode:true,
+    simulationRevenueAccepted:false,
+    dryRun:false,
+    settlementExecution:(source.ok && ProviderRegistry.activeValid().length > 0) || !!String(process.env.IGDC_AFFILIATE_PARTNERS_JSON || "").trim() || !!String(process.env.IGDC_NONPG_SETTLEMENT_INGEST_TOKEN || "").trim(),
+    settlementIngestExecution:(source.ok && ProviderRegistry.activeValid().length > 0) || !!String(process.env.IGDC_AFFILIATE_PARTNERS_JSON || "").trim() || !!String(process.env.IGDC_NONPG_SETTLEMENT_INGEST_TOKEN || "").trim(),
     payoutExecution:false,
+    payoutMode:"external_provider_managed",
     pgExecution:false,
-    pgStatus:"pending_pg_approval",
+    pgStatus:"external_or_pending_provider_activation",
     currency:"USD",
     dataState,
     dataMessage:dataState === "confirmed_ledger_empty"

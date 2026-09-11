@@ -322,12 +322,6 @@ function groupBySection(items){
   }
 
 
-  function sitePreviewSrc(url){
-    const u = safeUrl(url);
-    if(!/^https:\/\//i.test(u)) return '';
-    return '/.netlify/functions/search-page-proxy?mode=static&safe=1&embed=1&url=' + encodeURIComponent(u);
-  }
-
   function renderCard(it){
     const img = safeUrl(it?.media?.thumb) || '';
     const title = escHtml(it?.org?.name || it?.title || '');
@@ -340,16 +334,11 @@ function groupBySection(items){
     const summary = escHtml(it?.summary || it?.org?.legal_name || '');
     const url = safeUrl(it?.donation?.checkout_url) || safeUrl(it?.link?.url) || safeUrl(it?.org?.homepage) || '';
     const uid = escAttr(it?.uid || it?.id || '');
-    const sectionKey = String(it?.psom_key || it?.section_category || it?.section || '');
-    const homepageCard = sectionKey !== 'donation-global' && /^https:\/\//i.test(url) && !isSeedItem(it);
-    const previewSrc = homepageCard ? sitePreviewSrc(url) : '';
-    const thumbHtml = previewSrc
-      ? `<iframe src="${escAttr(previewSrc)}" loading="lazy" tabindex="-1" aria-hidden="true" sandbox="" referrerpolicy="no-referrer" style="display:block;width:100%;height:100%;border:0;pointer-events:none;background:#fff" title=""></iframe>`
-      : (img ? `<img src="${escAttr(img)}" loading="lazy" alt="">` : '');
+    const thumbHtml = img ? `<img src="${escAttr(img)}" loading="lazy" alt="">` : '';
 
     return `
       <div class="card donation-card" data-uid="${uid}" data-url="${escAttr(url)}" role="link" tabindex="0" aria-label="${title}">
-        <div class="thumb" style="overflow:hidden;background:${homepageCard?'#fff':'inherit'}">${thumbHtml}</div>
+        <div class="thumb">${thumbHtml}</div>
         <div class="card-body">
           <div class="card-title">${title || '-'}</div>
           <div class="card-meta">${meta || '-'}</div>

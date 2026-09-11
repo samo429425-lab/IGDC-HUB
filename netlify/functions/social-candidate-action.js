@@ -7,6 +7,7 @@
  */
 const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
+const SocialPreview = require("./social-preview-metadata").__test;
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
 const VERSION = "social-candidate-action-v1.4.1-batched-admin-actions";
@@ -24,6 +25,7 @@ const ACTIONS = new Set([
   "move_to_replacement",
   "promote_candidate",
   "delete_waiting",
+  "hydrate_preview",
 ]);
 
 function text(value) {
@@ -313,6 +315,60 @@ exports.handler = async function (event) {
         recollectAllowed: true,
       });
     }
+
+    if (action === "hydrate_preview") {
+      const candidates = await requestedRows(ids);
+      const by = SocialStore.compact(actor.email || actor.memberId || "admin", 200);
+      const now = SocialStore.nowIso();
+      const updated = [];
+      const eligible = candidates.filter((row) => {
+        const raw = rawObject(row && row.raw);
+        const assetClass = SocialStore.text(row.asset_class || row.assetClass || raw.assetClass).toLowerCase();
+        return assetClass !== "influencer_registry" && assetClass !== "influencer-registry";
+      });
+      const concurrency = 4;
+      for (let index = 0; index < eligible.length; index += concurrency) {
+        const batch = eligible.slice(index, index + concurrency);
+        const hydrated = await Promise.all(batch.map(async (row) => {
+          const raw = rawObject(row.raw);
+          const platform = SocialStore.text(row.platform || raw.platform).toLowerCase().replace(/^social-/, "").replace(/^x$/, "twitter");
+          const contentUrl = SocialStore.text(row.source_url || row.sourceUrl || raw.latestContentUrl || raw.latest_content_url || raw.sourceUrl || raw.source_url || raw.url);
+          if (!platform || !/^https:\/\//i.test(contentUrl) || !SocialPreview || typeof SocialPreview.resolvePreview !== "function") return [];
+          let preview;
+          try { preview = await SocialPreview.resolvePreview(platform, contentUrl); } catch (_error) { return []; }
+          const thumb = SocialStore.text(preview && preview.thumbnailUrl);
+          const resolvedTitle = SocialStore.compact(preview && preview.title, 500);
+          const resolvedCreator = SocialStore.compact(preview && preview.creatorName, 220);
+          if (!/^https:\/\//i.test(thumb) && !resolvedTitle && !resolvedCreator) return [];
+          const currentTitle = SocialStore.text(row.title);
+          const genericTitle = !currentTitle || new RegExp("^(" + platform.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "|x|twitter|instagram|tiktok|wechat|weibo|pinterest|reddit)$", "i").test(currentTitle);
+          const currentCreator = SocialStore.text(row.creator_name || row.creatorName || row.creator_handle || row.creatorHandle);
+          const nextRaw = Object.assign({}, raw, {
+            previewHydratedAt: now,
+            previewHydratedSource: SocialStore.text(preview && preview.source),
+            previewResolvedUrl: SocialStore.text(preview && preview.resolvedUrl || contentUrl)
+          });
+          const patch = { raw: nextRaw, updated_by: by, updated_at: now };
+          if (/^https:\/\//i.test(thumb) && !/placeholder|\/assets\/sample\//i.test(thumb)) patch.thumbnail_url = thumb;
+          if (resolvedTitle && genericTitle) patch.title = resolvedTitle;
+          if (resolvedCreator && !currentCreator) patch.creator_name = resolvedCreator;
+          return SocialStore.updateCandidates([row.id], patch);
+        }));
+        hydrated.forEach((part) => { if (Array.isArray(part)) updated.push.apply(updated, part); });
+      }
+      return SocialStore.response(200, {
+        ok: true,
+        version: VERSION,
+        action,
+        requested: ids.length,
+        eligible: eligible.length,
+        updated: updated.length,
+        items: updated.map(SocialStore.normalizeDbRow),
+        sourceContentDeleted: false,
+        recollectAllowed: false,
+      });
+    }
+
     if (action === "delete_waiting") {
       if (
         body.confirmPermanentDelete !== true &&

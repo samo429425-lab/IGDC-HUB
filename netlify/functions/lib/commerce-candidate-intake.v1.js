@@ -18,8 +18,9 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
+const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-candidate-intake-v1.6.2-authoritative-admin-queue-fallback";
+const VERSION = "commerce-candidate-intake-v1.7.0-production-profitability-propagation";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -350,6 +351,45 @@ function administratorReferralRevenue(item,revenue,market){
     certainty:Math.max(40,Number(revenue&&revenue.certainty||0))
   });
 }
+function profitabilityPolicyFromEnv(){
+  const minNetRaw=text(process.env.COMMERCE_MIN_NET_PROFIT_MINOR);
+  const minMarginRaw=text(process.env.COMMERCE_MIN_MARGIN_BPS);
+  const minNet=/^-?\d+$/.test(minNetRaw)?minNetRaw:null;
+  const margin=Number(minMarginRaw);
+  return {
+    minimumNetProfitMinor:minNet,
+    minimumMarginBps:Number.isInteger(margin)&&margin>=0&&margin<=10000?margin:null,
+    requireVerifiedEconomics:true,
+    requireTaxResolved:true,
+    requireLegalRoleResolved:true
+  };
+}
+function profitabilityRevenueEvidence(item,tier,revenueInput){
+  const revenue=plain(revenueInput),type=lower(revenue.type),route=plain(revenue.route),publicRoute=plain(revenue.publicRoute);
+  const affiliateReady=revenue.payable===true && (route.kind==="affiliate" || type==="affiliate" || type==="manual_affiliate");
+  const sponsorReady=revenue.payable===true && type==="sponsor";
+  const directPayable=revenue.payable===true && !affiliateReady && !sponsorReady;
+  const trafficOnly=revenue.payable!==true && (revenue.explicitAdminReferral===true || revenue.explicitVerifiedReferral===true || type==="external_referral" || publicRoute.nonPayable===true);
+  const stage=affiliateReady?"online_affiliate_active":(directPayable?"formal_partner":(trafficOnly?"referral_verified":""));
+  return {
+    contractReady:revenue.payable===true,
+    directPayable,
+    sponsorReady,
+    affiliateReady,
+    referralReady:false,
+    trafficOnly,
+    affiliateSettlementStage:stage,
+    revenueType:type||null,
+    payoutBasisVerified:revenue.payoutBasisVerified===true,
+    disclosureReady:revenue.disclosureReady===true,
+    contractId:revenue.contractId||null,
+    counterparty:revenue.counterparty||null,
+    sourceTier:tier||null
+  };
+}
+function profitabilityAssessment(item,tier,revenue){
+  return ProfitabilityGate.assess(item,profitabilityRevenueEvidence(item,tier,revenue),{profitabilityPolicy:profitabilityPolicyFromEnv()});
+}
 function publicationMarkets(market, revenue){
   const allowed=unique((revenue&&revenue.allowedCountries||[]).map(normalizeCountry).filter(Boolean));
   const kept=allowed.length ? (market.validRecords||[]).filter(record=>allowed.includes(normalizeCountry(record&&record.country))) : (market.validRecords||[]).slice();
@@ -445,7 +485,12 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   const adminSoftReasons=new Set(["REVENUE_OPPORTUNITY_EVIDENCE_MISSING","PAYABLE_NON_PG_REVENUE_RIGHT_NOT_VERIFIED","REVENUE_ROUTE_HAS_NO_ALLOWED_VERIFIED_MARKET"]);
   const effectiveReasons=explicitAdministratorFrontMatch?reasons.filter(reason=>!adminSoftReasons.has(reason)):reasons.slice();
   const releaseEligible=effectiveReasons.length===0;
+  const profitability=profitabilityAssessment(item,tier,effectiveRevenue);
   const rank=ranking(item,tier,essential,trust,effectiveRevenue,market,policy);
+  rank.commercialPriority=profitability.commercialPriority;
+  rank.commercialClass=profitability.commercialClass;
+  rank.profitabilityGatePassed=profitability.gatePassed===true;
+  rank.profitabilityState=profitability.state;
   const result={
     candidateId:id, sourceTier:tier||null, origin:origin||"searchbank", releaseEligible,
     stageStatus:releaseEligible?"eligible_for_release":(effectiveRevenue.potential?"revenue_review_required":"hold"), reasons:effectiveReasons,
@@ -461,10 +506,11 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
     heldMarketReasons:market.invalidRecords.map(x=>({country:x.record.country,regions:(x.record.regions||[]).slice(),reasons:x.result.reasons.slice()})).concat(effectivePublishMarkets.blocked.map(x=>({country:x.country,regions:x.regions,reasons:[x.reason]}))),
     revenue:{type:effectiveRevenue.type,contractId:effectiveRevenue.contractId,counterparty:effectiveRevenue.counterparty,settlementMode:effectiveRevenue.settlementMode,disclosureReady:effectiveRevenue.disclosureReady,payoutBasisVerified:effectiveRevenue.payoutBasisVerified,payable:effectiveRevenue.payable,potential:effectiveRevenue.potential,verificationReasons:effectiveRevenue.verificationReasons,certainty:effectiveRevenue.certainty,affiliateEligible:effectiveRevenue.route&&effectiveRevenue.route.kind==="affiliate",outboundRoute:effectiveRevenue.publicRoute,monetizationState:effectiveRevenue.monetizationState,allowedCountries:effectiveRevenue.allowedCountries,estimatedNetRevenuePerOrder:effectiveRevenue.estimatedNetRevenuePerOrder,commissionRate:effectiveRevenue.commissionRate,expectedConversionRate:effectiveRevenue.expectedConversionRate},
     review:{ok:approval.ok,state:approval.state,assignment:approval.assignment||null,approvalId:approval.approvalId||null,approvedAt:approval.approvedAt||null,publicationStatus:approval.publicationStatus||null,explicitPublicationRequested:approval.explicitPublicationRequested===true},
+    profitabilityAssessment:profitability, commercialPriorityClass:profitability.commercialClass, commercialPriority:profitability.commercialPriority,
     ranking:rank, destinationHost:(()=>{try{return new URL(destination).hostname.toLowerCase()}catch(_e){return null}})(),
     item
   };
-  result.digest=sha256({candidateId:id,sourceTier:result.sourceTier,origin:result.origin,releaseEligible,reasons:effectiveReasons,administratorFrontMatch:result.administratorFrontMatch,essentialClass:result.essentialClass,placement:pos,marketKeys:result.marketKeys,heldMarketReasons:result.heldMarketReasons,revenue:result.revenue,review:result.review,ranking:rank,destination});
+  result.digest=sha256({candidateId:id,sourceTier:result.sourceTier,origin:result.origin,releaseEligible,reasons:effectiveReasons,administratorFrontMatch:result.administratorFrontMatch,essentialClass:result.essentialClass,placement:pos,marketKeys:result.marketKeys,heldMarketReasons:result.heldMarketReasons,revenue:result.revenue,profitability:result.profitabilityAssessment,review:result.review,ranking:rank,destination});
   return result;
 }
 function build(input){
@@ -500,7 +546,7 @@ function build(input){
     queue.items.forEach((entry,index)=>{ const item=queueRecordToItem(entry); if(item) all.push({item:createEnvelope(item,raw.length+index,sourceTier(item,entry.sourceTier),"admin_review_queue"),index:raw.length+index,origin:"admin_review_queue"}); });
   }
   const decisions=all.map(entry=>candidateDecision(entry.item,entry.index,sourceTier(entry.item),entry.origin,policy,affiliateRegistry));
-  decisions.sort((a,b)=>b.ranking.finalScore-a.ranking.finalScore||a.candidateId.localeCompare(b.candidateId));
+  decisions.sort((a,b)=>Number(b.commercialPriority||0)-Number(a.commercialPriority||0)||b.ranking.finalScore-a.ranking.finalScore||a.candidateId.localeCompare(b.candidateId));
   const releaseDecisions=decisions.filter((decision)=>{
     if(!decision.releaseEligible) return false;
     if(environmentGate.enabled===true) return true;
@@ -516,7 +562,7 @@ function build(input){
     candidate.commerceCandidate=Object.assign({},plain(candidate.commerceCandidate),{
       version:VERSION, candidateId:decision.candidateId, sourceTier:decision.sourceTier, origin:decision.origin,
       essentialClass:decision.essentialClass, releaseEligible:true, selectionDigest:decision.digest,
-      ranking:decision.ranking, revenue:decision.revenue, review:decision.review, verifiedMarketKeys:decision.marketKeys, heldMarketReasons:decision.heldMarketReasons, stagedAt:now()
+      ranking:decision.ranking, revenue:decision.revenue, profitabilityAssessment:decision.profitabilityAssessment, commercialPriorityClass:decision.commercialPriorityClass, commercialPriority:decision.commercialPriority, review:decision.review, verifiedMarketKeys:decision.marketKeys, heldMarketReasons:decision.heldMarketReasons, stagedAt:now()
     });
     candidate.outboundRoute=Object.assign({},decision.revenue.outboundRoute||{}, { candidateId:decision.candidateId, routeDigest:sha256({candidateId:decision.candidateId,revenue:decision.revenue,markets:decision.marketKeys}) });
     if(candidate.outboundRoute.mode==="approved_manual_affiliate") candidate.affiliateOutboundUrl="/.netlify/functions/affiliate-outbound?id="+encodeURIComponent(decision.candidateId);
@@ -525,14 +571,17 @@ function build(input){
         ? productDestination(candidate)
         : "/.netlify/functions/affiliate-outbound?id="+encodeURIComponent(decision.candidateId);
     }
-    candidate.candidateSelection={version:VERSION,releaseEligible:true,sourceTier:decision.sourceTier,selectionDigest:decision.digest,rankingScore:decision.ranking.finalScore,ranking:decision.ranking,revenue:decision.revenue,review:decision.review,stagedAt:now()};
-    candidate.priority=Math.max(number(candidate.priority,0),Math.round(decision.ranking.finalScore*100));
+    candidate.profitabilityAssessment=clone(decision.profitabilityAssessment);
+    candidate.commercialPriorityClass=decision.commercialPriorityClass;
+    candidate.commercialPriority=decision.commercialPriority;
+    candidate.candidateSelection={version:VERSION,releaseEligible:true,sourceTier:decision.sourceTier,selectionDigest:decision.digest,rankingScore:decision.ranking.finalScore,ranking:decision.ranking,revenue:decision.revenue,profitabilityAssessment:decision.profitabilityAssessment,commercialPriorityClass:decision.commercialPriorityClass,commercialPriority:decision.commercialPriority,review:decision.review,stagedAt:now()};
+    candidate.priority=Math.max(number(candidate.priority,0),Number(decision.commercialPriority||0)*100000+Math.round(decision.ranking.finalScore*100));
     if(decision.sourceTier==="approved_commerce_member") candidate.managedPriority=true;
     return candidate;
   });
-  const summary={receivedSearchBank:raw.length,skippedNonCommerce,receivedReviewQueue:queue.stale?0:queue.items.length,queueStale:queue.stale,queueAuthoritative:authoritativeAdminQueue,explicitAdminRequested:Number(queueAuthorization.requestedCount||0),explicitAdminWithdrawn:Number(queueAuthorization.withdrawnCount||0),considered:decisions.length,eligibleForRelease:decisions.filter(x=>x.releaseEligible).length,administratorFrontMatchEligible:decisions.filter(x=>x.administratorFrontMatch&&x.administratorFrontMatch.explicit&&x.releaseEligible).length,releasedToCanonical:outputItems.length,held:decisions.filter(x=>!x.releaseEligible).length,bySource:{},byReason:{}};
+  const summary={receivedSearchBank:raw.length,skippedNonCommerce,receivedReviewQueue:queue.stale?0:queue.items.length,queueStale:queue.stale,queueAuthoritative:authoritativeAdminQueue,explicitAdminRequested:Number(queueAuthorization.requestedCount||0),explicitAdminWithdrawn:Number(queueAuthorization.withdrawnCount||0),considered:decisions.length,eligibleForRelease:decisions.filter(x=>x.releaseEligible).length,administratorFrontMatchEligible:decisions.filter(x=>x.administratorFrontMatch&&x.administratorFrontMatch.explicit&&x.releaseEligible).length,releasedToCanonical:outputItems.length,held:decisions.filter(x=>!x.releaseEligible).length,profitabilityGatePassed:decisions.filter(x=>x.profitabilityAssessment&&x.profitabilityAssessment.gatePassed===true).length,profitabilityHeld:decisions.filter(x=>x.profitabilityAssessment&&x.profitabilityAssessment.applicable===true&&x.profitabilityAssessment.gatePassed!==true).length,directCommerceVerified:decisions.filter(x=>x.commercialPriorityClass==="DIRECT_COMMERCE_VERIFIED").length,formalPartnerPriority:decisions.filter(x=>x.commercialPriorityClass==="FORMAL_PARTNER").length,activeAffiliatePriority:decisions.filter(x=>x.commercialPriorityClass==="AFFILIATE_ACTIVE").length,bySource:{},byReason:{}};
   decisions.forEach(x=>{ summary.bySource[x.sourceTier||"unknown"]=(summary.bySource[x.sourceTier||"unknown"]||0)+1; x.reasons.forEach(r=>summary.byReason[r]=(summary.byReason[r]||0)+1); });
-  const stageDoc={schema:"commerce-candidate-staging.snapshot.v1",version:VERSION,generatedAt:now(),policy:{version:policy.version,fingerprint:policyPack.fingerprint},affiliateRegistry:{version:affiliateRegistry.raw&&affiliateRegistry.raw.version||AffiliateRegistry.VERSION,fingerprint:affiliateRegistry.fingerprint,ok:affiliateRegistry.ok,problems:affiliateRegistry.problems},releaseGate:{enabled:gate.enabled,mode:gate.mode,reason:gate.reason,keyPresent:gate.keyPresent,environmentEnabled:gate.environmentEnabled,authoritativeAdminQueue:gate.authoritativeAdminQueue,explicitAdminRequest:gate.explicitAdminRequest,explicitAdminWithdrawal:gate.explicitAdminWithdrawal,requestedCount:gate.requestedCount,withdrawnCount:gate.withdrawnCount,scopeKeys:gate.scopeKeys,withdrawalScopeKeys:gate.withdrawalScopeKeys,crossCountryFallback:false},source:{searchBankCount:raw.length,reviewQueueDigest:queue.digest,reviewQueueStale:queue.stale,reviewQueueAuthoritative:authoritativeAdminQueue},summary,candidates:decisions.map(x=>({candidateId:x.candidateId,sourceTier:x.sourceTier,origin:x.origin,stageStatus:x.stageStatus,releaseEligible:x.releaseEligible,reasons:x.reasons,administratorFrontMatch:x.administratorFrontMatch,essentialClass:x.essentialClass,placement:x.placement,marketKeys:x.marketKeys,heldMarketCount:x.heldMarketCount,heldMarketReasons:x.heldMarketReasons,revenue:x.revenue,review:x.review,ranking:x.ranking,destinationHost:x.destinationHost,digest:x.digest})),releaseCandidateIds:outputItems.map(x=>x.commerceCandidate.candidateId)};
+  const stageDoc={schema:"commerce-candidate-staging.snapshot.v1",version:VERSION,generatedAt:now(),policy:{version:policy.version,fingerprint:policyPack.fingerprint},affiliateRegistry:{version:affiliateRegistry.raw&&affiliateRegistry.raw.version||AffiliateRegistry.VERSION,fingerprint:affiliateRegistry.fingerprint,ok:affiliateRegistry.ok,problems:affiliateRegistry.problems},releaseGate:{enabled:gate.enabled,mode:gate.mode,reason:gate.reason,keyPresent:gate.keyPresent,environmentEnabled:gate.environmentEnabled,authoritativeAdminQueue:gate.authoritativeAdminQueue,explicitAdminRequest:gate.explicitAdminRequest,explicitAdminWithdrawal:gate.explicitAdminWithdrawal,requestedCount:gate.requestedCount,withdrawnCount:gate.withdrawnCount,scopeKeys:gate.scopeKeys,withdrawalScopeKeys:gate.withdrawalScopeKeys,crossCountryFallback:false},source:{searchBankCount:raw.length,reviewQueueDigest:queue.digest,reviewQueueStale:queue.stale,reviewQueueAuthoritative:authoritativeAdminQueue},summary,candidates:decisions.map(x=>({candidateId:x.candidateId,sourceTier:x.sourceTier,origin:x.origin,stageStatus:x.stageStatus,releaseEligible:x.releaseEligible,reasons:x.reasons,administratorFrontMatch:x.administratorFrontMatch,essentialClass:x.essentialClass,placement:x.placement,marketKeys:x.marketKeys,heldMarketCount:x.heldMarketCount,heldMarketReasons:x.heldMarketReasons,revenue:x.revenue,profitabilityAssessment:x.profitabilityAssessment,commercialPriorityClass:x.commercialPriorityClass,commercialPriority:x.commercialPriority,review:x.review,ranking:x.ranking,destinationHost:x.destinationHost,digest:x.digest})),releaseCandidateIds:outputItems.map(x=>x.commerceCandidate.candidateId)};
   const auditDoc={schema:"commerce-candidate-staging.audit.v1",version:VERSION,generatedAt:now(),policyFingerprint:policyPack.fingerprint,queueDigest:queue.digest,queueStale:queue.stale,releaseGate:{enabled:gate.enabled,mode:gate.mode,reason:gate.reason},summary,held:decisions.filter(x=>!x.releaseEligible).slice(0,50000).map(x=>({candidateId:x.candidateId,sourceTier:x.sourceTier,origin:x.origin,reasons:x.reasons,digest:x.digest}))};
   const digest=sha256({sourceItems:raw,queueDigest:queue.digest,policy:policyPack.fingerprint,affiliateRegistry:affiliateRegistry.fingerprint,stage:stageDoc.candidates,gate:{enabled:gate.enabled,mode:gate.mode}});
   if(input&&input.write!==false){ atomicWrite(outputPath(root,STAGING_FILE),stageDoc); atomicWrite(outputPath(root,AUDIT_FILE),auditDoc); }
@@ -540,4 +589,4 @@ function build(input){
 }
 function readStage(rootInput){ const root=rootOf({root:rootInput}); return safeRead(outputPath(root,STAGING_FILE)); }
 
-module.exports={VERSION,POLICY_FILE,REVIEW_QUEUE_FILE,STAGING_FILE,AUDIT_FILE,loadPolicy,loadReviewQueue,releaseGate,detectedEssentialClass,revenueRight,marketReady,publicationMarkets,candidateDecision,build,readStage,sha256};
+module.exports={VERSION,POLICY_FILE,REVIEW_QUEUE_FILE,STAGING_FILE,AUDIT_FILE,loadPolicy,loadReviewQueue,releaseGate,detectedEssentialClass,revenueRight,marketReady,publicationMarkets,profitabilityPolicyFromEnv,profitabilityRevenueEvidence,profitabilityAssessment,candidateDecision,build,readStage,sha256};

@@ -17,7 +17,7 @@
 
 const crypto = require("crypto");
 const Contract = require("./lib/nonpg-revenue-contract.core.v1");
-const LedgerStore = require("./lib/revenue-ledger-supabase.v1");
+const ConfirmedRevenue = require("./lib/confirmed-revenue-event.v1");
 
 const TABLE = process.env.LEDGER_TABLE || process.env.LEGER_TABLE || "inflow_ledger";
 
@@ -80,36 +80,6 @@ function eventState(value, config){
   if(reversed.has(raw)) return "reversed";
   return "pending";
 }
-async function supabaseRequest(method, route, body){
-  const config = LedgerStore.resolveConfig();
-  const result = await LedgerStore.request(config, route, {
-    method,
-    headers:{ Prefer:"return=representation" },
-    body:body == null ? undefined : JSON.stringify(body)
-  });
-  return {
-    ok:result.ok,
-    unavailable:result.unavailable,
-    status:result.status,
-    data:result.data,
-    errorCode:result.errorCode,
-    errorMessage:result.errorMessage
-  };
-}
-async function duplicateExists(note){
-  const route = `/rest/v1/${encodeURIComponent(TABLE)}?select=note&note=eq.${encodeURIComponent(note)}&limit=1`;
-  const result = await supabaseRequest("GET", route, null);
-  if(!result.ok) return { ok:false, result };
-  return { ok:true, exists:Array.isArray(result.data) && result.data.length > 0 };
-}
-async function writeLedger(row){
-  const duplicate = await duplicateExists(row.note);
-  if(!duplicate.ok) return { ok:false, stage:"lookup", result:duplicate.result };
-  if(duplicate.exists) return { ok:true, duplicate:true };
-  const result = await supabaseRequest("POST", `/rest/v1/${encodeURIComponent(TABLE)}`, [row]);
-  return result.ok ? { ok:true, duplicate:false, row:result.data } : { ok:false, stage:"insert", result };
-}
-
 exports.handler = async (event) => {
   if(String(event && event.httpMethod || "GET").toUpperCase() !== "POST") return json(405, { ok:false, error:"method_not_allowed" });
   const parsed = parseJson(event);
@@ -137,34 +107,41 @@ exports.handler = async (event) => {
 
   if(state === "pending") return json(202, { ok:true, status:"pending_confirmation", providerId, transactionId, itemId:click.id || null });
 
-  const amount = number(first(getPath(body, mapping.commissionAmount || "commissionAmount"), body.commissionAmount, body.commission_amount, body.amount));
+  const rawCommissionAmount = first(getPath(body, mapping.commissionAmount || "commissionAmount"), body.commissionAmount, body.commission_amount, body.amount);
   const currency = String(first(getPath(body, mapping.currency || "currency"), body.currency, config.currency, "USD")).toUpperCase();
-  if(!Number.isFinite(amount) || amount <= 0) return json(400, { ok:false, error:"invalid_commission_amount" });
+  const exactAmount = ConfirmedRevenue.parseDecimal(rawCommissionAmount, Number.isInteger(Number(config.maxAmountScale)) ? Number(config.maxAmountScale) : 8);
+  if(!exactAmount.ok || exactAmount.units <= 0n) return json(400, { ok:false, error:"invalid_commission_amount" });
 
-  const direction = state === "reversed" ? -1 : 1;
+  // Monetary ingestion is exact-decimal and append-only. Do not convert the
+  // provider amount through binary floating point before it reaches the ledger.
+  const rawAmount = rawCommissionAmount;
   const note = `affiliate:${providerId}:${transactionId}:${state}`;
-  const row = {
-    ts: new Date().toISOString(),
+  const originalNote = `affiliate:${providerId}:${transactionId}:confirmed`;
+  const saved = await ConfirmedRevenue.persist({
     source: providerId,
+    eventId: transactionId,
+    state,
     kind: state === "reversed" ? "affiliate_reversal" : "affiliate_commission",
-    amount: Number((direction * amount).toFixed(8)),
-    ccy: currency,
+    amount: rawAmount,
+    currency,
     channel: "affiliate",
-    note
-  };
-  const saved = await writeLedger(row);
+    note,
+    originalNote: state === "reversed" ? originalNote : null,
+    table: TABLE,
+    maxScale: Number.isInteger(Number(config.maxAmountScale)) ? Number(config.maxAmountScale) : 8
+  });
   if(!saved.ok){
-    const status = saved.result && saved.result.unavailable ? 503 : 502;
-    return json(status, { ok:false, error:"confirmed_commission_not_persisted", errorCode:saved.result && saved.result.errorCode || null, stage:saved.stage || null, providerId, transactionId });
+    return json(saved.status || 502, { ok:false, error:saved.error || "confirmed_commission_not_persisted", errorCode:saved.errorCode || null, blockers:saved.blockers || null, providerId, transactionId });
   }
   return json(200, {
     ok:true,
-    status:saved.duplicate ? "duplicate_ignored" : "confirmed_commission_recorded",
+    status:saved.duplicate ? "duplicate_ignored" : (state === "reversed" ? "confirmed_commission_reversal_recorded" : "confirmed_commission_recorded"),
     providerId,
     transactionId,
     itemId:click.id || null,
-    amount:row.amount,
+    amount:saved.row && saved.row.amount || null,
     currency,
-    ledgerTable:TABLE
+    ledgerTable:TABLE,
+    eventCoreVersion:ConfirmedRevenue.VERSION
   });
 };

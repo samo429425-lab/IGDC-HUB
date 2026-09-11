@@ -2350,9 +2350,27 @@ async function productRankingContext(scope) {
   catch (error) { policyControl = { ok: false, active: false, error: text(error && error.message), categoryWeights: {}, sources: [] }; }
   const marketPlan = plain(signalStatus && signalStatus.effective);
   const categoryWeights = PolicyDiscussion.mergeWithAutomaticWeights(plain(marketPlan.categoryWeights), policyControl);
+  // Production profitability thresholds are deployment policy, never invented
+  // by the ranking engine. Missing/invalid values intentionally leave the
+  // monetization gate unconfigured, which prevents revenue-priority promotion
+  // while keeping ordinary research/review available.
+  const minNetRaw = text(process.env.COMMERCE_MIN_NET_PROFIT_MINOR);
+  const minMarginRaw = text(process.env.COMMERCE_MIN_MARGIN_BPS);
+  const minNetProfitMinor = /^\d+$/.test(minNetRaw) ? minNetRaw : null;
+  const minMarginNumber = /^\d+$/.test(minMarginRaw) ? Number(minMarginRaw) : NaN;
+  const minimumMarginBps = Number.isInteger(minMarginNumber) && minMarginNumber >= 0 && minMarginNumber <= 10000 ? minMarginNumber : null;
   return {
     generatedAt: iso(),
     categoryWeights,
+    profitabilityPolicy: {
+      minimumNetProfitMinor: minNetProfitMinor,
+      minimumMarginBps,
+      requireVerifiedEconomics: true,
+      requireTaxResolved: true,
+      requireLegalRoleResolved: true,
+      thresholdConfigured: minNetProfitMinor !== null && minimumMarginBps !== null,
+      source: "server_environment"
+    },
     marketSignalActive: marketPlan.active === true,
     marketSignalSources: array(marketPlan.sourcePlans),
     administratorPolicyActive: policyControl && policyControl.active === true,

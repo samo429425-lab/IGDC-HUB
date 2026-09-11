@@ -11,8 +11,9 @@
  */
 
 const crypto = require("crypto");
+const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.14.3-administrator-policy-priority";
+const VERSION = "commerce-product-ranking-v1.15.0-production-profitability-priority";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -1105,8 +1106,26 @@ function evaluateProduct(rowInput, contextInput) {
   });
   const policyAssessment = administratorPolicyAssessment(row, contextInput);
   const commercial = commercialAssessment(row, category, risk, contextInput);
+  const profitability = ProfitabilityGate.assess(row, commercial.revenueEvidence, contextInput);
   const audience = audienceValueAssessment(row, category, risk, commercial, contextInput);
   const revenueValue = revenueValueAssessment(row, audience, commercial);
+  revenueValue.commercialClass = profitability.commercialClass;
+  revenueValue.commercialPriority = profitability.commercialPriority;
+  revenueValue.profitabilityGatePassed = profitability.gatePassed === true;
+  revenueValue.monetizationAllowed = profitability.monetizationAllowed === true;
+  // A contract without verified tax/legal/cost economics must never receive
+  // commercial priority. The product may still remain reviewable as ordinary
+  // content, but its monetization route stays on HOLD until the gate passes.
+  if (profitability.applicable === true && profitability.gatePassed !== true) {
+    revenueValue.sourcePriorityScore = Math.min(Number(revenueValue.sourcePriorityScore || 0), 24);
+    revenueValue.revenueCertaintyScore = Math.min(Number(revenueValue.revenueCertaintyScore || 0), 12);
+    revenueValue.unitRevenueScore = Math.min(Number(revenueValue.unitRevenueScore || 0), 12);
+    revenueValue.expectedNetRevenueScore = 0;
+    revenueValue.expectedNetRevenueValue = null;
+    revenueValue.expectedNetRevenueState = "blocked_until_verified_profitability";
+    revenueValue.revenueOpportunityScore = Math.min(Number(revenueValue.revenueOpportunityScore || 0), 18);
+    revenueValue.revenuePriorityState = "monetization_economics_hold";
+  }
   const value = portfolioValueAssessment(row, category, risk, supplier, audience, revenueValue, commercial);
   // Administrator policy changes priority, never the trust/risk gate.  Positive
   // matches can lift an otherwise comparable safe product; avoid/block matches
@@ -1137,6 +1156,9 @@ function evaluateProduct(rowInput, contextInput) {
     categoryScores: category.scores,
     riskAssessment: risk,
     commercialAssessment: commercial,
+    profitabilityAssessment: profitability,
+    commercialPriorityClass: profitability.commercialClass,
+    commercialPriority: profitability.commercialPriority,
     valueAssessment: value,
     releaseReadiness: release,
     rankingEligible: risk.gatePassed,
@@ -1219,7 +1241,7 @@ function mergeProductRows(existingInput, incomingInput, optionsInput) {
   return out;
 }
 
-function arrangeDiverse(rowsInput) {
+function arrangeDiverseBucket(rowsInput) {
   const pending = array(rowsInput).slice(), out = [];
   let supplierRun = 0, categoryRun = 0, lastSupplier = "", lastCategory = "", lastDisplayFamily = "";
   while (pending.length) {
@@ -1242,6 +1264,27 @@ function arrangeDiverse(rowsInput) {
     out.push(row);
   }
   return out;
+}
+
+function commercialPriorityOf(rowInput) {
+  const row = plain(rowInput);
+  const explicit = Number(row.commercialPriority);
+  if (Number.isFinite(explicit)) return explicit;
+  return ProfitabilityGate.priorityOf(row);
+}
+
+function arrangeDiverse(rowsInput) {
+  // Commercial class is authoritative before diversity. Diversity is applied
+  // only inside the same commercial-priority bucket so a lower-value generic
+  // row can never jump ahead of a verified direct/partner route merely to
+  // satisfy supplier/category alternation.
+  const buckets = new Map();
+  for (const row of array(rowsInput)) {
+    const priority = commercialPriorityOf(row);
+    if (!buckets.has(priority)) buckets.set(priority, []);
+    buckets.get(priority).push(row);
+  }
+  return Array.from(buckets.keys()).sort((a, b) => b - a).flatMap((priority) => arrangeDiverseBucket(buckets.get(priority)));
 }
 
 function assignmentKey(rowInput) {
@@ -1281,8 +1324,10 @@ function allocatePrimaryPlacements(rowsInput) {
     const bManual = assignmentKey(explicitAdministratorPlacement(b)) ? 1 : 0;
     const aValue = plain(a && a.valueAssessment).privatePlacementEligible === true ? 1 : 0;
     const bValue = plain(b && b.valueAssessment).privatePlacementEligible === true ? 1 : 0;
-    return bManual - aManual || bValue - aValue ||
+    return bManual - aManual ||
       Number(b && b.rankingEligible === true) - Number(a && a.rankingEligible === true) ||
+      commercialPriorityOf(b) - commercialPriorityOf(a) ||
+      bValue - aValue ||
       Number(b && b.familyRepresentative !== false) - Number(a && a.familyRepresentative !== false) ||
       Number(b && b.rankingScore || 0) - Number(a && a.rankingScore || 0) ||
       first(a && a.productName, a && a.title).localeCompare(first(b && b.productName, b && b.title));
@@ -1383,6 +1428,7 @@ function buildSectionQueues(rankedInput) {
   const output = {}, counts = {};
   for (const [key, rows] of Object.entries(queues)) {
     const ordered = arrangeDiverse(rows.sort((a, b) =>
+      commercialPriorityOf(b) - commercialPriorityOf(a) ||
       Number(b.targetAssignment && b.targetAssignment.score || 0) - Number(a.targetAssignment && a.targetAssignment.score || 0) ||
       Number(b.rankingScore || 0) - Number(a.rankingScore || 0) ||
       first(a.productName, a.title).localeCompare(first(b.productName, b.title))
@@ -1402,6 +1448,9 @@ function buildSectionQueues(rankedInput) {
       audienceDemandScore: Number(plain(row.valueAssessment).audience && plain(row.valueAssessment).audience.audienceDemandScore || 0),
       revenueOpportunityScore: Number(plain(row.valueAssessment).revenue && plain(row.valueAssessment).revenue.revenueOpportunityScore || 0),
       revenuePriorityState: text(plain(row.valueAssessment).revenue && plain(row.valueAssessment).revenue.revenuePriorityState),
+      commercialPriorityClass: text(row.commercialPriorityClass),
+      commercialPriority: commercialPriorityOf(row),
+      profitabilityState: text(plain(row.profitabilityAssessment).state),
       assignment: row.targetAssignment,
       proposalOnly: true,
       publicPublication: false
@@ -1436,6 +1485,7 @@ function buildPortfolio(rowsInput, contextInput) {
   const effectiveContext = portfolioContext(merged, contextInput);
   const evaluatedBase = merged.map((row) => evaluateProduct(row, effectiveContext)).sort((a, b) =>
     Number(b.rankingEligible === true) - Number(a.rankingEligible === true) ||
+    commercialPriorityOf(b) - commercialPriorityOf(a) ||
     Number(b.rankingScore || 0) - Number(a.rankingScore || 0) ||
     Number(b.riskAssessment && b.riskAssessment.qualityScore || 0) - Number(a.riskAssessment && a.riskAssessment.qualityScore || 0) ||
     first(a.productName, a.title).localeCompare(first(b.productName, b.title))
@@ -1471,6 +1521,11 @@ function buildPortfolio(rowsInput, contextInput) {
       privatePlacementValueEligible: ranked.filter((row) => plain(row.valueAssessment).privatePlacementEligible === true).length,
       revenueReviewRequired: ranked.filter((row) => plain(row.valueAssessment).privatePlacementEligible === true && !(row.commercialAssessment && row.commercialAssessment.contractReady === true)).length,
       highValuePriority: ranked.filter((row) => Number(row.rankingScore || 0) >= 58).length,
+      profitabilityGatePassed: ranked.filter((row) => plain(row.profitabilityAssessment).gatePassed === true).length,
+      profitabilityHeld: ranked.filter((row) => plain(row.profitabilityAssessment).applicable === true && plain(row.profitabilityAssessment).gatePassed !== true).length,
+      directCommerceVerified: ranked.filter((row) => text(row.commercialPriorityClass) === "DIRECT_COMMERCE_VERIFIED").length,
+      formalPartnersPriority: ranked.filter((row) => text(row.commercialPriorityClass) === "FORMAL_PARTNER").length,
+      activeAffiliatesPriority: ranked.filter((row) => text(row.commercialPriorityClass) === "AFFILIATE_ACTIVE").length,
       releaseReady: ranked.filter((row) => row.releaseReadiness && row.releaseReadiness.releaseEligible === true).length,
       proposedPlacementProducts: eligible.filter((row) => array(row.sectionAssignments).length > 0).length,
       assignedPlacementProducts: eligible.filter((row) => !!row.primaryPlacement).length,
@@ -1519,6 +1574,7 @@ module.exports = {
   portfolioContext,
   evaluateProduct,
   mergeProductRows,
+  commercialPriorityOf,
   arrangeDiverse,
   allocatePrimaryPlacements,
   buildSectionQueues,

@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.6.0-official-homepage-preview-cleanup";
+const VERSION = "donation-candidate-admin-v1.6.1-official-homepage-thumbnail-pipeline";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -75,16 +75,26 @@ function homepageDescription(meta){ return stripTags(firstMeta(meta,['og:descrip
 function homepageImage(html,meta,base){
   const direct=firstMeta(meta,['og:image:secure_url','og:image','twitter:image','twitter:image:src','thumbnailurl','thumbnail','image']);
   let out=resolveHttps(base,direct);if(out)return out;
+
+  const imgs=text(html).match(/<img\b[^>]*>/gi)||[];
+  // Prefer a real page/hero image before a favicon or logo.  The resulting URL
+  // is what SearchBank persists as the Donation slot thumbnail.
+  for(const tag of imgs){
+    const src=attrValue(tag,'src')||attrValue(tag,'data-src')||attrValue(tag,'data-lazy-src')||attrValue(tag,'data-original');
+    const marker=lower([src,attrValue(tag,'id'),attrValue(tag,'class'),attrValue(tag,'alt')].join(' '));
+    if(!src||/(?:favicon|sprite|blank|pixel|tracking|spacer|icon|logo|avatar)/.test(marker))continue;
+    out=resolveHttps(base,src);if(out)return out;
+  }
+  // A logo is still a valid representative thumbnail when no page hero exists.
+  for(const tag of imgs){
+    const marker=lower([attrValue(tag,'id'),attrValue(tag,'class'),attrValue(tag,'alt')].join(' '));
+    if(!/(?:logo|brand|header)/.test(marker))continue;
+    out=resolveHttps(base,attrValue(tag,'src')||attrValue(tag,'data-src')||attrValue(tag,'data-lazy-src')||attrValue(tag,'data-original'));if(out)return out;
+  }
   const links=text(html).match(/<link\b[^>]*>/gi)||[];
   for(const tag of links){
     const rel=lower(attrValue(tag,'rel')); if(!/(?:apple-touch-icon|icon|image_src)/.test(rel))continue;
     out=resolveHttps(base,attrValue(tag,'href'));if(out)return out;
-  }
-  const imgs=text(html).match(/<img\b[^>]*>/gi)||[];
-  for(const tag of imgs){
-    const marker=lower([attrValue(tag,'id'),attrValue(tag,'class'),attrValue(tag,'alt')].join(' '));
-    if(!/(?:logo|brand|header)/.test(marker))continue;
-    out=resolveHttps(base,attrValue(tag,'src')||attrValue(tag,'data-src')||attrValue(tag,'data-lazy-src'));if(out)return out;
   }
   return '';
 }
@@ -131,9 +141,25 @@ function policyVisibleCandidate(candidate,section){
   if(!sec)return false;
   try{return Policy.usablePublicCandidate(candidate||{},sec);}catch(_e){return false;}
 }
+function researchVisibleCandidate(candidate,section){
+  const c=plain(candidate),sec=Policy.normalizeSection(section)||Policy.inferSection(c,section);
+  if(!sec||Policy.isPlaceholder(c))return false;
+  if(sec==='donation-global')return policyVisibleCandidate(c,sec);
+  const homepage=safeHttps(Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(c):'');
+  const stored=safeHttps(plain(c.link).url||c.url||c.official_url||plain(c.org).homepage||c.homepage||c.website);
+  if(!homepage||stored!==homepage)return false;
+  if(Policy.sectionIdentityEligible&&!Policy.sectionIdentityEligible(c,sec))return false;
+  return !!text(c.title||c.name||plain(c.org).name);
+}
+function adminVisibleCandidate(view){
+  if(!view)return false;
+  return (view.stage==='published'||view.stage==='front_candidate')
+    ? policyVisibleCandidate(view.candidate,view.section)
+    : researchVisibleCandidate(view.candidate,view.section);
+}
 async function purgePolicyViolations(){
   const rows=await readRows(),bad=[];
-  for(const row of rows){const view=rowView(row);if(!policyVisibleCandidate(view.candidate,view.section))bad.push(view.id);}
+  for(const row of rows){const view=rowView(row);if(!adminVisibleCandidate(view))bad.push(view.id);}
   let removed=0;
   for(let i=0;i<bad.length;i+=75){
     const ids=bad.slice(i,i+75).filter(function(id){return /^[A-Za-z0-9_-]+$/.test(id);});if(!ids.length)continue;
@@ -380,10 +406,9 @@ async function performResearch(event,section,customQuery,limit){
   const sections=section==="all"?Policy.SECTIONS:[Policy.normalizeSection(section)].filter(Boolean);
   if(!sections.length){const e=new Error("도네이션 섹션을 선택해 주세요.");e.statusCode=400;throw e;}
 
-  /* Purge old PDF/report/article/video fallbacks before new research.  GET also
-     hides any remaining stale rows immediately, so the administrator never has
-     to manually clear policy-violating cards. */
-  const cleanup=await purgePolicyViolations();
+  // Do not purge the current queue before proving that new research produced
+  // usable official-homepage candidates.  This avoids a failed provider/preview
+  // pass turning an existing lane into an empty lane.
   const existing=await readRows(), existingMap=new Map(existing.map(r=>[text(r.id),r]));
 
   async function researchOne(sec){
@@ -428,23 +453,22 @@ async function performResearch(event,section,customQuery,limit){
       const enriched=await mapLimit(roots,sections.length>1?5:6,async function(entry){
         const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?900:1400);
         const image=safeHttps(preview.image||candidateThumb(entry.item,sec));
-        if(!image)return null;
         const raw=plain(entry.item),org=Object.assign({},plain(raw.org),{homepage:preview.homepage||entry.homepage,name:entry.anchor||plain(raw.org).name||raw.name||preview.title||raw.title});
         const media=Object.assign({},plain(raw.media),{kind:"image",src:null,thumb:image,image});
         return Object.assign({},raw,{
           title:limitText(entry.anchor||org.name||preview.title||raw.title||entry.homepage,300),
           summary:limitText(preview.description||raw.summary||raw.description||raw.about||"",1800),
           url:preview.homepage||entry.homepage,homepage:preview.homepage||entry.homepage,website:preview.homepage||entry.homepage,official_url:preview.homepage||entry.homepage,
-          thumbnail:image,thumb:image,image,og_image:image,site_preview_image:image,
+          thumbnail:image||null,thumb:image||null,image:image||null,og_image:image||null,site_preview_image:image||null,
           org,media,link:Object.assign({},plain(raw.link),{mode:"org-homepage",url:preview.homepage||entry.homepage,target:"_blank"}),
-          sitePreview:{resolved:true,kind:"homepage-meta",homepage:preview.homepage||entry.homepage,image,title:preview.title||null,capturedAt:nowIso()},
+          sitePreview:{resolved:!!image,kind:"homepage-meta",homepage:preview.homepage||entry.homepage,image:image||null,title:preview.title||null,capturedAt:nowIso()},
           sourcePageUrl:safeHttps(raw.url||plain(raw.link).url||plain(raw.source).url)||null
         });
       });
       for(const item of enriched.filter(Boolean)){
         const norm=normalizeCandidate(item,sec,query);
-        if(!norm.candidate.url||!norm.candidate.thumbnail||!policyVisibleCandidate(norm.candidate,sec)){skippedPolicy++;continue;}
-        if(seen.has(norm.id))continue;seen.add(norm.id);officialHomepageCount++;previewResolved++;
+        if(!norm.candidate.url||!researchVisibleCandidate(norm.candidate,sec)){skippedPolicy++;continue;}
+        if(seen.has(norm.id))continue;seen.add(norm.id);officialHomepageCount++;if(norm.candidate.thumbnail)previewResolved++;
         const previous=existingMap.get(norm.id),previousPayload=plain(previous&&previous.source_payload),previousStage=stageOfPayload(previousPayload);
         if(previousStage==="excluded"){skippedExcluded++;continue;}
         const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:"research";
@@ -463,7 +487,8 @@ async function performResearch(event,section,customQuery,limit){
   for(let i=0;i<sections.length;i+=concurrency){const batch=sections.slice(i,i+concurrency);sectionResults.push(...await Promise.all(batch.map(researchOne)));}
   const writes=[];sectionResults.forEach(function(r){writes.push(...(r.writes||[]));delete r.writes;});
   const dedup=new Map();writes.forEach(function(r){dedup.set(r.id,r);});
-  const saved=await upsertRows(Array.from(dedup.values()));
+  const saved=dedup.size?await upsertRows(Array.from(dedup.values())):[];
+  const cleanup=dedup.size?await purgePolicyViolations():{examined:existing.length,violations:0,removed:0,skipped:true,reason:'no_new_candidates'};
   return {reports:sectionResults,savedCount:Array.isArray(saved)?saved.length:dedup.size,cleanup};
 }
 async function updateStage(ids,stage,actor,note){
@@ -577,7 +602,7 @@ exports.handler=async function(event){
       if(!storageError){
         try{
           const allRows=(await readRows()).map(rowView);
-          rows=allRows.filter(function(v){return policyVisibleCandidate(v.candidate,v.section);});
+          rows=allRows.filter(adminVisibleCandidate);
           rows.policyHiddenCount=allRows.length-rows.length;
         }
         catch(error){ storageError=text(error&&error.message||error)||"donation_candidate_store_read_failed"; }
