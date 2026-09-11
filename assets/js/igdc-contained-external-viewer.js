@@ -1,4 +1,4 @@
-/* IGDC contained external viewer v3
+/* IGDC contained external viewer v4
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
@@ -17,10 +17,10 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V3__) return;
-  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V3__ = true;
+  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V4__) return;
+  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V4__ = true;
 
-  var VIEWER_VERSION = 3;
+  var VIEWER_VERSION = 4;
 
   var PROXY_PATH = '/.netlify/functions/search-page-proxy';
   var ROOT_ID = 'igdc-contained-external-viewer';
@@ -373,8 +373,10 @@
      * correctly.  The frame-policy check still runs in the background so the
      * origin decision is cached without delaying first paint. */
     if ((state.kind === 'market' || state.kind === 'tour') && !directKnownGood(target, state.kind)) {
+      /* Fast path: proxy is already the chosen compatibility route.  Do not run
+       * a second frame-policy request in parallel; that duplicated the same
+       * upstream work and made first paint slower on restrictive sites. */
       setFrameProxy(target, 'static');
-      framePolicy(target).catch(function(){});
       return;
     }
 

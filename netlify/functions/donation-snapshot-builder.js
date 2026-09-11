@@ -491,21 +491,26 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
   const org_name = cleanName(pickFirst(rec.org?.name, rec.org_name, rec.name, rec.title, rec.organization));
   const legal_name = cleanName(pickFirst(rec.org?.legal_name, rec.legal_name, rec.legalName));
   const summary = cleanName(pickFirst(rec.summary, rec.description, rec.about, rec.snippet));
-  const rawHomepage = safeUrl(pickFirst(
+  const globalVideo = sectionKey === "donation-global";
+  const policyHomepage = (!globalVideo && DonationResearchPolicy && typeof DonationResearchPolicy.organizationHomepageUrl === "function")
+    ? safeUrl(DonationResearchPolicy.organizationHomepageUrl(rec))
+    : "";
+  const homepage = globalVideo ? safeUrl(pickFirst(
     rec.org?.homepage,
     rec.homepage,
-    rec.website,
-    rec.url,
-    rec.link?.url,
-    rec.link,
-    rec.href
-  ));
-  const homepage = sectionKey !== "donation-global" && DonationResearchPolicy && typeof DonationResearchPolicy.organizationHomepageUrl === "function"
-    ? safeUrl(DonationResearchPolicy.organizationHomepageUrl(rec))
-    : rawHomepage;
+    rec.website
+  )) : policyHomepage;
 
+  const policyDestination = DonationResearchPolicy && typeof DonationResearchPolicy.candidateUrlForSection === "function"
+    ? safeUrl(DonationResearchPolicy.candidateUrlForSection(rec, sectionKey))
+    : "";
+  const policyThumb = DonationResearchPolicy && typeof DonationResearchPolicy.representativeImageForSection === "function"
+    ? safeUrl(DonationResearchPolicy.representativeImageForSection(rec, sectionKey))
+    : "";
   const youtubeThumb = DonationResearchPolicy ? DonationResearchPolicy.youtubeThumbnail(rec) : "";
-  const detectedThumb = safeUrl(pickFirst(
+  const thumb = policyThumb || safeUrl(pickFirst(
+    rec.site_preview_image,
+    rec.sitePreview?.image,
     rec.media?.thumb,
     rec.thumbnail,
     rec.thumb,
@@ -513,11 +518,8 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     rec.og_image,
     rec.logo,
     rec.logo_url,
-    youtubeThumb
-  ));
-  /* Organization lanes render the canonical homepage itself as the thumbnail;
-     a raster poster is optional metadata.  Global News still needs a video poster. */
-  const thumb = detectedThumb || (sectionKey === "donation-global" ? "/assets/img/placeholder.png" : "");
+    globalVideo ? youtubeThumb : ""
+  )) || "/assets/img/placeholder.png";
 
   const sourceName = pickFirst(rec.source?.name, rec.source, rec.collector?.engine, rec.engine, "bank");
   const sourceLooksSeed = /seed|sample|placeholder|demo|mock/i.test(String(sourceName || ""));
@@ -529,8 +531,8 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
   const uid = `donation:${sectionKey}:${sha1(uidBase).slice(0,12)}`;
 
   const managedPublished = rec.__donationManagedPublished === true || rec.frontApproved === true || rec.donationQueue?.stage === "published";
-  const videoLike = sectionKey === "donation-global" && DonationResearchPolicy && DonationResearchPolicy.looksLikeVideo(rec);
-  const mediaUrl = videoLike && DonationResearchPolicy ? (DonationResearchPolicy.candidateUrls(rec)[0] || homepage || null) : null;
+  const videoLike = globalVideo && DonationResearchPolicy && DonationResearchPolicy.looksLikeVideo(rec);
+  const mediaUrl = videoLike ? (policyDestination || null) : null;
 
   const sourceRankScore = sourceLooksSeed ? 0 : (rec.rank?.score ? Number(rec.rank.score) : 0);
   const rankScore =
@@ -631,19 +633,20 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     },
 
     media:{
-      kind: videoLike ? "video" : "site-preview",
+      kind: videoLike ? "video" : "image",
       thumb,
-      src: mediaUrl || safeUrl(pickFirst(rec.media?.src, rec.video, rec.videoUrl, rec.url)) || null,
-      embed_url: safeUrl(pickFirst(rec.media?.embed_url, rec.embedUrl)) || null,
-      ratio: rec.media?.ratio || "16:9"
+      /* Institution lanes are website shortcut cards, never embedded document/video cards. */
+      src: videoLike ? mediaUrl : null,
+      embed_url: videoLike ? (safeUrl(pickFirst(rec.media?.embed_url, rec.embedUrl)) || null) : null,
+      ratio: rec.media?.ratio || (videoLike ? "16:9" : "16:9")
     },
 
     image: thumb,
-    og_image: rec.og_image || null,
+    og_image: (!globalVideo ? thumb : (rec.og_image || thumb || null)),
 
     link:{
       mode: videoLike ? "content-video" : "org-homepage",
-      url: (videoLike ? mediaUrl : homepage) || homepage || null,
+      url: videoLike ? mediaUrl : (homepage || null),
       target: "_blank"
     },
 
@@ -660,7 +663,13 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     },
 
     evidence: rec.evidence || {
-      homepage_snapshot: null,
+      /* This is homepage metadata/representative preview evidence, not a browser screenshot. */
+      homepage_snapshot: (!globalVideo && homepage) ? {
+        kind: pickFirst(rec.sitePreview?.kind, rec.site_preview?.kind, "homepage-meta"),
+        homepage,
+        image: thumb || null,
+        captured_at: pickFirst(rec.sitePreview?.capturedAt, rec.site_preview?.capturedAt, rec.captured_at, null)
+      } : null,
       logo_url: thumb || null,
       documents: []
     },

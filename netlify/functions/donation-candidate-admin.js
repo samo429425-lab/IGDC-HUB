@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.6.0-strict-homepage-global-video-cleanup";
+const VERSION = "donation-candidate-admin-v1.6.0-official-homepage-preview-cleanup";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -38,6 +38,110 @@ function requireRole(actor,write){ const allow=write?WRITE_ROLES:READ_ROLES;if(!
 function limitText(value,max){ const v=text(value); return v.length>max?v.slice(0,max):v; }
 function safeHttps(value){ const v=text(value); if(!/^https:\/\//i.test(v)) return ""; try{const u=new URL(v);return u.protocol==="https:"?u.toString():"";}catch(_e){return "";} }
 function sourceName(item){ const s=plain(item&&item.source); return limitText(s.name||item&&item.source_name||item&&item.sourceAdapter||item&&item.source_adapter||item&&item.collector&&item.collector.engine||"SearchBank",160); }
+
+const homepagePreviewCache=new Map();
+function decodeHtml(value){
+  return text(value)
+    .replace(/&#x([0-9a-f]+);/gi,function(_m,h){try{return String.fromCodePoint(parseInt(h,16));}catch(_e){return _m;}})
+    .replace(/&#(\d+);/g,function(_m,d){try{return String.fromCodePoint(parseInt(d,10));}catch(_e){return _m;}})
+    .replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&amp;/gi,'&')
+    .replace(/\s+/g,' ').trim();
+}
+function stripTags(value){ return decodeHtml(text(value).replace(/<[^>]*>/g,' ')); }
+function attrValue(tag,name){ const m=text(tag).match(new RegExp('(?:^|\\s)'+name+'\\s*=\\s*(["\\\'])([\\s\\S]*?)\\1','i')); return m?decodeHtml(m[2]):''; }
+function homepageMeta(html){
+  const meta=Object.create(null), tags=text(html).match(/<meta\b[^>]*>/gi)||[];
+  tags.forEach(function(tag){const key=(attrValue(tag,'property')||attrValue(tag,'name')||attrValue(tag,'itemprop')).toLowerCase(),content=attrValue(tag,'content');if(key&&content&&!meta[key])meta[key]=content;});
+  return meta;
+}
+function firstMeta(meta,keys){ for(const key of keys){const v=text(meta&&meta[key]);if(v)return v;} return ''; }
+function resolveHttps(base,value){
+  try{const u=new URL(text(value),base);return u.protocol==='https:'?u.toString():'';}catch(_e){return '';}
+}
+function publicPreviewHost(homepage){
+  try{
+    const u=new URL(homepage),host=u.hostname.toLowerCase();
+    if(host==='localhost'||host.endsWith('.local')||host==='0.0.0.0'||host==='::1')return false;
+    if(/^127\./.test(host)||/^10\./.test(host)||/^192\.168\./.test(host)||/^169\.254\./.test(host))return false;
+    const m=host.match(/^172\.(\d+)\./);if(m&&Number(m[1])>=16&&Number(m[1])<=31)return false;
+    return true;
+  }catch(_e){return false;}
+}
+function homepageTitle(html,meta){
+  const og=firstMeta(meta,['og:title','twitter:title']);if(og)return stripTags(og);
+  const m=text(html).match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);return m?stripTags(m[1]):'';
+}
+function homepageDescription(meta){ return stripTags(firstMeta(meta,['og:description','twitter:description','description'])); }
+function homepageImage(html,meta,base){
+  const direct=firstMeta(meta,['og:image:secure_url','og:image','twitter:image','twitter:image:src','thumbnailurl','thumbnail','image']);
+  let out=resolveHttps(base,direct);if(out)return out;
+  const links=text(html).match(/<link\b[^>]*>/gi)||[];
+  for(const tag of links){
+    const rel=lower(attrValue(tag,'rel')); if(!/(?:apple-touch-icon|icon|image_src)/.test(rel))continue;
+    out=resolveHttps(base,attrValue(tag,'href'));if(out)return out;
+  }
+  const imgs=text(html).match(/<img\b[^>]*>/gi)||[];
+  for(const tag of imgs){
+    const marker=lower([attrValue(tag,'id'),attrValue(tag,'class'),attrValue(tag,'alt')].join(' '));
+    if(!/(?:logo|brand|header)/.test(marker))continue;
+    out=resolveHttps(base,attrValue(tag,'src')||attrValue(tag,'data-src')||attrValue(tag,'data-lazy-src'));if(out)return out;
+  }
+  return '';
+}
+async function fetchHomepagePreview(homepage,timeoutMs){
+  const canonical=safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(homepage):homepage);
+  if(!canonical||!publicPreviewHost(canonical))return {homepage:canonical||'',title:'',description:'',image:'',resolved:false};
+  if(homepagePreviewCache.has(canonical))return homepagePreviewCache.get(canonical);
+  const promise=(async function(){
+    const controller=typeof AbortController==='function'?new AbortController():null;
+    const previewTimeout=Math.max(650,Math.min(1800,Number(timeoutMs)||1400));
+    const timer=controller?setTimeout(function(){try{controller.abort();}catch(_e){}},previewTimeout):null;
+    try{
+      const res=await fetch(canonical,{method:'GET',redirect:'follow',headers:{'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36','accept':'text/html,application/xhtml+xml;q=0.9,*/*;q=0.2','accept-language':'en-US,en;q=0.8'},signal:controller?controller.signal:undefined});
+      if(!res||!res.ok)return {homepage:canonical,title:'',description:'',image:'',resolved:false,status:res&&res.status||0};
+      const ctype=lower(res.headers&&res.headers.get&&res.headers.get('content-type'));if(ctype&&ctype.indexOf('html')<0)return {homepage:canonical,title:'',description:'',image:'',resolved:false,status:res.status};
+      let html=await res.text();if(html.length>650000)html=html.slice(0,650000);
+      const finalHome=safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(res.url||canonical):canonical)||canonical;
+      const meta=homepageMeta(html),image=homepageImage(html,meta,res.url||finalHome);
+      return {homepage:finalHome,title:limitText(homepageTitle(html,meta),300),description:limitText(homepageDescription(meta),1800),image:safeHttps(image),resolved:!!image,status:res.status};
+    }catch(error){return {homepage:canonical,title:'',description:'',image:'',resolved:false,error:text(error&&error.name||error)};}
+    finally{if(timer)clearTimeout(timer);}
+  })();
+  homepagePreviewCache.set(canonical,promise);
+  return promise;
+}
+async function mapLimit(items,limit,worker){
+  const list=Array.isArray(items)?items:[],out=new Array(list.length);let cursor=0;
+  async function run(){for(;;){const i=cursor++;if(i>=list.length)return;out[i]=await worker(list[i],i);}}
+  await Promise.all(Array.from({length:Math.max(1,Math.min(Number(limit)||1,list.length||1))},run));return out;
+}
+function researchQuery(section,customQuery){
+  const sec=Policy.normalizeSection(section)||'donation-ngo',frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{},custom=text(customQuery);
+  if(custom)return custom+(sec==='donation-global'?' latest humanitarian disaster video':' official website homepage');
+  const names=(frame.anchors||[]).map(function(a){return text(a&&a.name);}).filter(Boolean).slice(0,7);
+  const anchorQuery=names.map(function(name){return '"'+name.replace(/"/g,'')+'"';}).join(' OR ');
+  /* One bounded SearchBank call per lane: OR the known organization anchors so
+     the web/video provider can return distinct official entities without the old
+     six sequential calls that caused serverless inactivity timeouts. */
+  if(sec==='donation-global')return [anchorQuery,text(frame.primaryQuery),'latest official humanitarian video'].filter(Boolean).join(' ');
+  return [anchorQuery,text(frame.primaryQuery),'official website homepage'].filter(Boolean).join(' ')||Policy.SECTION_LABELS[sec]||'donation';
+}
+function policyVisibleCandidate(candidate,section){
+  const sec=Policy.normalizeSection(section)||Policy.inferSection(candidate||{},section);
+  if(!sec)return false;
+  try{return Policy.usablePublicCandidate(candidate||{},sec);}catch(_e){return false;}
+}
+async function purgePolicyViolations(){
+  const rows=await readRows(),bad=[];
+  for(const row of rows){const view=rowView(row);if(!policyVisibleCandidate(view.candidate,view.section))bad.push(view.id);}
+  let removed=0;
+  for(let i=0;i<bad.length;i+=75){
+    const ids=bad.slice(i,i+75).filter(function(id){return /^[A-Za-z0-9_-]+$/.test(id);});if(!ids.length)continue;
+    const q='source_ref=eq.'+encodeURIComponent(SOURCE_REF)+'&id=in.('+ids.map(encodeURIComponent).join(',')+')';
+    const result=await Store.remove('gslot_candidates',q);removed+=Array.isArray(result)?result.length:ids.length;
+  }
+  return {examined:rows.length,violations:bad.length,removed};
+}
 function isSearchLandingUrl(value){
   const u=safeHttps(value); if(!u) return true;
   try{
@@ -105,7 +209,7 @@ function normalizeCandidate(item,section,query){
     channel:"donation",page:"donation",section:resolved,psom_key:resolved,
     category:Policy.categoryForSection(resolved),
     type:isVideo?"video":"organization",
-    media:{kind:isVideo?"video":"site-preview",src:isVideo?url:null,thumb:thumb||null,ratio:"16:9"},
+    media:{kind:isVideo?"video":"image",src:isVideo?url:null,thumb:thumb||null,ratio:isVideo?"16:9":"1:1"},
     org:{name:limitText(org.name||raw.name||title,300)||null,legal_name:limitText(org.legal_name||raw.legal_name||"",300)||null,homepage:(resolved==="donation-global"?safeHttps(org.homepage||raw.homepage||raw.website):homepage)||null,country:text(org.country||raw.country)||null},
     source:{name:sourceName(raw),url:safeHttps(source.url||raw.sourceUrl||raw.source_url||url)||url,authority:Number(source.authority||raw.authority||0)||0},
     published_at:publishedAt,
@@ -115,17 +219,20 @@ function normalizeCandidate(item,section,query){
     searchBankContract:plain(raw.searchBankContract||raw.sanmaruSearchBankContract),
     verify:plain(raw.verify),
     frontSupplyAllowed:raw.frontSupplyAllowed===true||plain(raw.searchBankContract).frontSupplyAllowed===true,
-    snapshotEligible:raw.snapshotEligible===true||plain(raw.searchBankContract).snapshotEligible===true
+    snapshotEligible:raw.snapshotEligible===true||plain(raw.searchBankContract).snapshotEligible===true,
+    link:plain(raw.link),
+    sitePreview:plain(raw.sitePreview||raw.site_preview)
   };
   const issues=[];
   if(!url) issues.push("https_url_missing");
-  if(resolved==="donation-global"&&!thumb) issues.push("thumbnail_missing");
+  if(!thumb) issues.push("thumbnail_missing");
   if(resolved==="donation-mission"&&Policy.missionExcluded(raw)) issues.push("mission_policy_excluded");
   if(Policy.isPlaceholder(raw)) issues.push("placeholder_or_seed");
   if(resolved==="donation-global"&&!isVideo) issues.push("video_not_detected");
   if(resolved!=="donation-global"&&!homepage) issues.push("official_homepage_missing");
+  if(resolved!=="donation-global"&&homepage&&!thumb) issues.push("homepage_preview_missing");
   if(resolved!=="donation-global"&&!url) issues.push("organization_destination_missing");
-  return {id,candidate,queue:{schema:"igdc-donation-candidate-queue.v1",section:resolved,stage:"research",researchQuery:limitText(query,600),discoveredAt:nowIso(),updatedAt:nowIso(),relevanceScore:relevance,issues,mediaKind:isVideo?"video":"website",sourceSearchBankId:candidate.searchBankId||null}};
+  return {id,candidate,queue:{schema:"igdc-donation-candidate-queue.v1",section:resolved,stage:"research",researchQuery:limitText(query,600),discoveredAt:nowIso(),updatedAt:nowIso(),relevanceScore:relevance,issues,mediaKind:isVideo?"video":"link",sourceSearchBankId:candidate.searchBankId||null}};
 }
 function rowView(row){
   const payload=plain(row&&row.source_payload), q=plain(payload.donationQueue), c=plain(payload.candidate);
@@ -146,13 +253,13 @@ async function upsertRows(rows){
   if(!rows.length) return [];
   return Store.request(Store.rest("gslot_candidates","on_conflict=id"),{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},body:JSON.stringify(rows)});
 }
-function researchParams(section,query,limit,maruType){
-  const q=text(query)||Policy.queryTerms(section)[0]||Policy.SECTION_LABELS[section]||"donation";
+function researchParams(section,query,limit){
+  const q=text(query)||researchQuery(section,'');
   const frame=Policy.researchFrameFor ? Policy.researchFrameFor(section) : {};
-  const sourceTimeout=section==="donation-global"?6000:3500;
-  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:String(sourceTimeout),discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:maruType||(section==="donation-global"?"video":"web")};
-  if(section==="donation-global"||Number(frame.freshnessHours)>0){params.freshnessHours=String(Number(frame.freshnessHours)||48);}
-  if(section==="donation-global"||frame.preferVideo===true){params.mediaPreference="video";}
+  const global=section==="donation-global";
+  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"3200",discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:global?"video":"web",type:global?"video":"web"};
+  if(global){params.mediaPreference="video";params.noMedia="0";params.freshnessHours=String(Number(frame.freshnessHours)||48);}
+  else{params.noMedia="1";params.mediaPreference="web";}
   if(section==="donation-mission"||frame.localizeByIp===true){params.localizeByIp="1";params.geoPreference="ip-preferred";}
   return params;
 }
@@ -207,16 +314,14 @@ function approvedCandidateForSearchBank(view){
   c.channel="donation"; c.page="donation"; c.section=section; c.psom_key=section;
   c.bind=Object.assign({},plain(c.bind),{page:"donation",channel:"donation",section,psom_key:section,route:"donation."+section});
   const homepage=safeHttps(Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(c):"");
-  const homepageFirst=section!=="donation-global"&&!!homepage;
   c.link=Object.assign({},plain(c.link),{mode:section==="donation-global"?"global-news-video":"org-homepage",url,target:"_blank"});
   c.org=Object.assign({},plain(c.org),{name:limitText(plain(c.org).name||c.title,300)||null,homepage:section==="donation-global"?(safeHttps(plain(c.org).homepage)||null):(homepage||null)});
-  c.media=Object.assign({},plain(c.media),{kind:section==="donation-global"?(plain(c.media).kind||"video"):"site-preview",thumb:thumb||plain(c.media).thumb||null,ratio:"16:9"});
+  c.media=Object.assign({},plain(c.media),{kind:section==="donation-global"?(plain(c.media).kind||"video"):"image",thumb:thumb||plain(c.media).thumb||null});
   if(section!=="donation-global"){
+    /* Institution lanes are official-homepage shortcut cards only. */
     c.type="organization";
-    c.url=homepage;
-    c.link=Object.assign({},plain(c.link),{mode:"org-homepage",url:homepage,target:"_blank"});
-    c.org=Object.assign({},plain(c.org),{homepage:homepage||null});
     c.media.src=null;
+    c.media.embed_url=null;
   }
   c.donation=Object.assign({},plain(c.donation),{enabled:plain(c.donation).enabled===true,external:plain(c.donation).external!==false});
   c.frontApproved=true;
@@ -237,8 +342,7 @@ async function publishExactCandidatesToSearchBank(event,ids,limit){
     if(view.stage!=="published") continue;
     if(!Policy.usablePublicCandidate(view.candidate,view.section)) continue;
     const candidate=approvedCandidateForSearchBank(view);
-    if(!candidate.url) continue;
-    if(view.section==="donation-global"&&(!candidate.media||!candidate.media.thumb)) continue;
+    if(!candidate.url||!candidate.media||!candidate.media.thumb) continue;
     if(!bySection.has(view.section)) bySection.set(view.section,[]);
     bySection.get(view.section).push(candidate);
   }
@@ -271,140 +375,96 @@ async function sectionsForIds(ids){
   }
   return Array.from(out);
 }
-function structurallyCompliant(view){
-  if(!view||!view.candidate) return false;
-  const section=Policy.normalizeSection(view.section)||"donation-ngo";
-  try { return Policy.usablePublicCandidate(view.candidate,section) === true; }
-  catch(_error){ return false; }
-}
-function rowWithCanonicalHomepage(row,view,homepage){
-  const payload=JSON.parse(JSON.stringify(plain(row&&row.source_payload))), q=plain(payload.donationQueue), c=plain(payload.candidate);
-  c.url=homepage; c.section=view.section; c.psom_key=view.section; c.channel="donation"; c.page="donation"; c.type="organization";
-  c.org=Object.assign({},plain(c.org),{homepage});
-  c.link=Object.assign({},plain(c.link),{mode:"org-homepage",url:homepage,target:"_blank"});
-  c.media=Object.assign({},plain(c.media),{kind:"site-preview",src:null,ratio:"16:9"});
-  if(Policy.isVideoUrl&&Policy.isVideoUrl(c.media.thumb)) c.media.thumb=null;
-  q.issues=(Array.isArray(q.issues)?q.issues:[]).filter(x=>!["homepage_missing_official_content_fallback","official_homepage_missing","organization_destination_missing","thumbnail_missing"].includes(text(x)));
-  q.mediaKind="website"; q.updatedAt=nowIso();
-  payload.candidate=c; payload.donationQueue=q;
-  return Object.assign({},row,{official_url:homepage,thumbnail_url:c.thumbnail||plain(c.media).thumb||null,source_payload:payload,updated_at:nowIso()});
-}
-async function cleanupPolicyViolations(scopeSections){
-  const wanted=new Set((Array.isArray(scopeSections)?scopeSections:Policy.SECTIONS).map(Policy.normalizeSection).filter(Boolean));
-  const rows=await readRows(), removeIds=[], rewrites=[];
-  for(const row of rows){
-    const view=rowView(row); if(!wanted.has(view.section)) continue;
-    if(view.section==="donation-global"){
-      if(!structurallyCompliant(view)) removeIds.push(view.id);
-      continue;
-    }
-    const homepage=Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(view.candidate):"";
-    if(!homepage||!structurallyCompliant(view)){ removeIds.push(view.id); continue; }
-    const current=safeHttps(view.url), orgHome=safeHttps(plain(view.candidate.org).homepage), linkUrl=safeHttps(plain(view.candidate.link).url);
-    if(current!==homepage||orgHome!==homepage||linkUrl!==homepage||text(plain(view.candidate.media).kind)!=="site-preview") rewrites.push(rowWithCanonicalHomepage(row,view,homepage));
-  }
-  if(rewrites.length) await upsertRows(rewrites);
-  let removed=0;
-  for(let i=0;i<removeIds.length;i+=80){
-    const chunk=removeIds.slice(i,i+80).filter(id=>/^[A-Za-z0-9_-]+$/.test(id));
-    if(!chunk.length) continue;
-    await Store.remove("gslot_candidates","id=in.("+chunk.join(",")+")&source_ref=eq."+encodeURIComponent(SOURCE_REF));
-    removed+=chunk.length;
-  }
-  return {checked:rows.filter(r=>wanted.has(rowView(r).section)).length,removed,canonicalized:rewrites.length};
-}
-function defaultDiscoveryQuery(section,customQuery){
-  const custom=text(customQuery); if(custom) return custom;
-  const frame=Policy.researchFrameFor?Policy.researchFrameFor(section):{};
-  if(section==="donation-global") return text(frame.primaryQuery)||Policy.SECTION_LABELS[section]||"humanitarian video";
-  const names=(Array.isArray(frame.anchors)?frame.anchors:[]).map(a=>text(a&&a.name)).filter(Boolean).slice(0,7);
-  if(names.length){
-    return "("+names.map(name=>'\"'+name.replace(/\"/g,"")+'\"').join(" OR ")+") official organization homepage";
-  }
-  return text(frame.primaryQuery)||Policy.queryTerms(section)[0]||Policy.SECTION_LABELS[section]||"official organization homepage";
-}
 async function performResearch(event,section,customQuery,limit){
   if(!SearchBank||typeof SearchBank.runEngine!=="function"){const e=new Error("SearchBank Engine을 불러오지 못했습니다.");e.statusCode=503;throw e;}
   const sections=section==="all"?Policy.SECTIONS:[Policy.normalizeSection(section)].filter(Boolean);
   if(!sections.length){const e=new Error("도네이션 섹션을 선택해 주세요.");e.statusCode=400;throw e;}
-  const cleanup=await cleanupPolicyViolations(sections);
+
+  /* Purge old PDF/report/article/video fallbacks before new research.  GET also
+     hides any remaining stale rows immediately, so the administrator never has
+     to manually clear policy-violating cards. */
+  const cleanup=await purgePolicyViolations();
   const existing=await readRows(), existingMap=new Map(existing.map(r=>[text(r.id),r]));
 
   async function researchOne(sec){
-    const frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
-    const scopedCustom=sections.length===1?customQuery:"";
-    const query=defaultDiscoveryQuery(sec,scopedCustom);
-    const seen=new Set(); let accepted=0, skippedExcluded=0, skippedSearchLanding=0, skippedNonWebsite=0, officialHomepageCount=0, fallbackContentCount=0;
-    const started=Date.now();
-    const passes=[{query,type:sec==="donation-global"?"video":"web"}];
-    if(sec==="donation-global"&&!scopedCustom) passes.push({query:query+" site:youtube.com/watch",type:"web"});
-    const passResults=await Promise.all(passes.map(async pass=>{
-      try{return {pass,result:await SearchBank.runEngine(event,researchParams(sec,pass.query,Math.min(60,Number(limit)||50),pass.type))};}
-      catch(error){return {pass,error:text(error&&error.message||error),result:null};}
-    }));
-    const items=[]; const adapterMeta=[];
-    for(const pack of passResults){
-      const arr=Array.isArray(pack.result&&pack.result.items)?pack.result.items:[]; items.push(...arr);
-      const meta=plain(pack.result&&pack.result.meta);
-      adapterMeta.push(...(Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null,query:pack.pass.query,type:pack.pass.type})):[]));
-    }
-    if(!items.length&&passResults.every(x=>x.error)){
-      return {section:sec,query,queries:passes.map(x=>x.query),accepted:0,skippedExcluded:0,skippedSearchLanding:0,skippedVideoOutsideGlobal:0,skippedNonWebsite:0,officialHomepageCount:0,fallbackContentCount:0,engineItems:0,durationMs:Date.now()-started,error:passResults.map(x=>x.error).filter(Boolean).join(" | "),writes:[]};
-    }
-    const writes=[];
-    for(const item of items){
-      if(Policy.isPlaceholder(item)) continue;
-      const norm=normalizeCandidate(item,sec,query);
-      if(!norm.candidate.url){
-        if(Policy.candidateUrls(item||{}).some(u=>isSearchLandingUrl(u))) skippedSearchLanding++;
-        else if(sec!=="donation-global") skippedNonWebsite++;
-        continue;
+    const query=researchQuery(sec,sections.length===1?customQuery:'');
+    const started=Date.now();let result;
+    try{result=await SearchBank.runEngine(event,researchParams(sec,query,Math.min(60,Number(limit)||50)));}
+    catch(error){return {section:sec,query,queries:[query],accepted:0,engineItems:0,officialHomepageCount:0,globalVideoCount:0,previewResolved:0,skippedPolicy:0,skippedSearchLanding:0,durationMs:Date.now()-started,error:text(error&&error.message||error),writes:[]};}
+    const items=Array.isArray(result&&result.items)?result.items:[];
+    const meta=plain(result&&result.meta),writes=[],seen=new Set();
+    let skippedPolicy=0,skippedSearchLanding=0,officialHomepageCount=0,globalVideoCount=0,previewResolved=0,skippedExcluded=0;
+
+    if(sec==="donation-global"){
+      for(const item of items){
+        if(Policy.isPlaceholder(item))continue;
+        const url=Policy.candidateUrlForSection?Policy.candidateUrlForSection(item,sec):candidateUrl(item,sec);
+        if(!url){if(Policy.candidateUrls(item||{}).some(function(u){return Policy.isSearchLandingUrl&&Policy.isSearchLandingUrl(u);}))skippedSearchLanding++;else skippedPolicy++;continue;}
+        const norm=normalizeCandidate(item,sec,query);
+        if(!norm.candidate.url||!Policy.looksLikeVideo(item)||!norm.candidate.thumbnail){skippedPolicy++;continue;}
+        if(!policyVisibleCandidate(norm.candidate,sec)){skippedPolicy++;continue;}
+        if(seen.has(norm.id))continue;seen.add(norm.id);globalVideoCount++;
+        const previous=existingMap.get(norm.id),previousPayload=plain(previous&&previous.source_payload),previousStage=stageOfPayload(previousPayload);
+        if(previousStage==="excluded"){skippedExcluded++;continue;}
+        const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:"research";
+        const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
+        const candidate=Object.assign({},norm.candidate,previousCandidate);candidate.section=sec;candidate.psom_key=sec;candidate.channel="donation";candidate.page="donation";
+        writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Donation Global News video candidate.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
-      if(!Policy.usablePublicCandidate(norm.candidate,sec)){
-        if(sec!=="donation-global") skippedNonWebsite++;
-        continue;
+    }else{
+      /* Convert every acceptable result to the institution's HTTPS origin first.
+         Deep articles, reports and PDF/document URLs may help discover a domain,
+         but they are never stored as the card destination. */
+      const byHomepage=new Map();
+      for(const item of items){
+        if(Policy.isPlaceholder(item))continue;
+        const homepage=Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(item):"";
+        if(!homepage){if(Policy.candidateUrls(item||{}).some(function(u){return Policy.isSearchLandingUrl&&Policy.isSearchLandingUrl(u);}))skippedSearchLanding++;else skippedPolicy++;continue;}
+        if(Policy.sectionIdentityEligible&&!Policy.sectionIdentityEligible(item,sec)){skippedPolicy++;continue;}
+        const key=homepage.toLowerCase(),score=Number(Policy.sectionRelevance?Policy.sectionRelevance(item,sec):0)||0,anchor=Policy.matchedResearchAnchorName?Policy.matchedResearchAnchorName(item,sec):"";
+        const current=byHomepage.get(key);if(!current||score+(anchor?100:0)>current.score)byHomepage.set(key,{item,homepage,score:score+(anchor?100:0),anchor});
       }
-      if(sec!=="donation-global"){
-        if(Policy.organizationHomepageUrl&&Policy.organizationHomepageUrl(item||{})) officialHomepageCount++;
-        else { skippedNonWebsite++; continue; }
+      const roots=Array.from(byHomepage.values()).sort(function(a,b){return b.score-a.score;}).slice(0,sections.length>1?10:24);
+      const enriched=await mapLimit(roots,sections.length>1?5:6,async function(entry){
+        const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?900:1400);
+        const image=safeHttps(preview.image||candidateThumb(entry.item,sec));
+        if(!image)return null;
+        const raw=plain(entry.item),org=Object.assign({},plain(raw.org),{homepage:preview.homepage||entry.homepage,name:entry.anchor||plain(raw.org).name||raw.name||preview.title||raw.title});
+        const media=Object.assign({},plain(raw.media),{kind:"image",src:null,thumb:image,image});
+        return Object.assign({},raw,{
+          title:limitText(entry.anchor||org.name||preview.title||raw.title||entry.homepage,300),
+          summary:limitText(preview.description||raw.summary||raw.description||raw.about||"",1800),
+          url:preview.homepage||entry.homepage,homepage:preview.homepage||entry.homepage,website:preview.homepage||entry.homepage,official_url:preview.homepage||entry.homepage,
+          thumbnail:image,thumb:image,image,og_image:image,site_preview_image:image,
+          org,media,link:Object.assign({},plain(raw.link),{mode:"org-homepage",url:preview.homepage||entry.homepage,target:"_blank"}),
+          sitePreview:{resolved:true,kind:"homepage-meta",homepage:preview.homepage||entry.homepage,image,title:preview.title||null,capturedAt:nowIso()},
+          sourcePageUrl:safeHttps(raw.url||plain(raw.link).url||plain(raw.source).url)||null
+        });
+      });
+      for(const item of enriched.filter(Boolean)){
+        const norm=normalizeCandidate(item,sec,query);
+        if(!norm.candidate.url||!norm.candidate.thumbnail||!policyVisibleCandidate(norm.candidate,sec)){skippedPolicy++;continue;}
+        if(seen.has(norm.id))continue;seen.add(norm.id);officialHomepageCount++;previewResolved++;
+        const previous=existingMap.get(norm.id),previousPayload=plain(previous&&previous.source_payload),previousStage=stageOfPayload(previousPayload);
+        if(previousStage==="excluded"){skippedExcluded++;continue;}
+        const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:"research";
+        const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
+        const candidate=Object.assign({},norm.candidate,previousCandidate);candidate.section=sec;candidate.psom_key=sec;candidate.channel="donation";candidate.page="donation";
+        /* A current official-homepage preview outranks stale document/video data
+           that may exist on an older row with the same id. */
+        candidate.url=norm.candidate.url;candidate.thumbnail=norm.candidate.thumbnail;candidate.org=norm.candidate.org;candidate.media=norm.candidate.media;candidate.link=norm.candidate.link||item.link;candidate.sitePreview=item.sitePreview;
+        writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Official organization homepage + homepage representative preview.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
-      if(seen.has(norm.id)) continue;
-      seen.add(norm.id);
-      const previous=existingMap.get(norm.id), previousPayload=plain(previous&&previous.source_payload), previousStage=stageOfPayload(previousPayload);
-      if(previousStage==="excluded"){skippedExcluded++;continue;}
-      const previousQueue=plain(previousPayload.donationQueue), previousCandidate=plain(previousPayload.candidate);
-      const stage=previous?previousStage:"research";
-      const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
-      const candidate=Object.assign({},norm.candidate,previousCandidate);
-      candidate.section=sec;candidate.psom_key=sec;candidate.channel="donation";candidate.page="donation";
-      writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Donation-only private candidate; no public publication without final front matching.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
-      accepted++;
     }
-    return {
-      section:sec,query,queries:passes.map(x=>x.query),accepted,skippedExcluded,skippedSearchLanding,skippedVideoOutsideGlobal:0,skippedNonWebsite,officialHomepageCount,fallbackContentCount,
-      engineItems:items.length,durationMs:Date.now()-started,writes,
-      adapters:adapterMeta
-    };
+    return {section:sec,query,queries:[query],accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,officialHomepageCount,globalVideoCount,previewResolved,engineItems:items.length,durationMs:Date.now()-started,writes,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
   }
 
-  /* Four concurrent sections keep `8개 섹션 기본 리서치` well below the
-     serverless inactivity window without opening eight external provider bursts
-     at once.  A single-section request still executes exactly one SearchBank pass. */
-  const sectionResults=[];
-  const concurrency=section==="all"?4:1;
-  for(let i=0;i<sections.length;i+=concurrency){
-    const batch=sections.slice(i,i+concurrency);
-    sectionResults.push(...await Promise.all(batch.map(researchOne)));
-  }
-
-  const reports=[], writes=[];
-  for(const r of sectionResults){
-    reports.push({section:r.section,queries:r.queries,accepted:r.accepted,skippedExcluded:r.skippedExcluded,skippedSearchLanding:r.skippedSearchLanding,skippedVideoOutsideGlobal:0,skippedNonWebsite:r.skippedNonWebsite||0,officialHomepageCount:r.officialHomepageCount||0,fallbackContentCount:r.fallbackContentCount||0,engineItems:r.engineItems,durationMs:r.durationMs,adapters:r.adapters||[],error:r.error||null});
-    if(Array.isArray(r.writes)) writes.push(...r.writes);
-  }
-  const dedup=new Map();writes.forEach(r=>dedup.set(r.id,r));
-  const saved=dedup.size?await upsertRows(Array.from(dedup.values())):[];
-  return {reports,savedCount:Array.isArray(saved)?saved.length:dedup.size,cleanup,searchBankPasses:sections.length,externalAdapter:"donation",adapterFence:["donation"],sourceTimeoutMs:{global:6000,organization:3500},sectionMediaPolicy:"donation-global=actual video/news; other seven sections=canonical official organization homepage only"};
+  const sectionResults=[];const concurrency=section==="all"?8:1;
+  for(let i=0;i<sections.length;i+=concurrency){const batch=sections.slice(i,i+concurrency);sectionResults.push(...await Promise.all(batch.map(researchOne)));}
+  const writes=[];sectionResults.forEach(function(r){writes.push(...(r.writes||[]));delete r.writes;});
+  const dedup=new Map();writes.forEach(function(r){dedup.set(r.id,r);});
+  const saved=await upsertRows(Array.from(dedup.values()));
+  return {reports:sectionResults,savedCount:Array.isArray(saved)?saved.length:dedup.size,cleanup};
 }
 async function updateStage(ids,stage,actor,note){
   if(!STAGES.has(stage)){const e=new Error("지원하지 않는 단계입니다.");e.statusCode=400;throw e;}
@@ -514,19 +574,19 @@ exports.handler=async function(event){
     try{ Store.config(); }catch(error){ storeConfigError=text(error&&error.message||error)||"donation_candidate_store_unavailable"; }
     if(method==="GET"){
       let rows=[],storageError=storeConfigError;
-      let policyFilteredCount=0;
       if(!storageError){
         try{
           const allRows=(await readRows()).map(rowView);
-          rows=allRows.filter(structurallyCompliant);
-          policyFilteredCount=allRows.length-rows.length;
+          rows=allRows.filter(function(v){return policyVisibleCandidate(v.candidate,v.section);});
+          rows.policyHiddenCount=allRows.length-rows.length;
         }
         catch(error){ storageError=text(error&&error.message||error)||"donation_candidate_store_read_failed"; }
       }
       return json(200,{
         ok:true,version:VERSION,sourceRef:SOURCE_REF,
         sections:Policy.SECTIONS.map(k=>({key:k,label:Policy.SECTION_LABELS[k],capacity:CAPACITY[k]||100,researchFrame:Policy.researchFrameFor?Policy.researchFrameFor(k):null})),
-        summary:summary(rows),items:rows,policyFilteredCount,publicPublication:false,
+        summary:summary(rows),items:rows,publicPublication:false,
+        policyCleanup:{hiddenInvalid:Number(rows&&rows.policyHiddenCount||0)},
         storage:{available:!storageError,error:storageError||null,degraded:!!storageError}
       });
     }
@@ -549,12 +609,6 @@ exports.handler=async function(event){
     if(action==="policy_execute"){
       const result=await executePolicyAgenda(event,body,actor);
       return json(200,{ok:true,version:VERSION,action,result,publicPublication:result.publicPublication===true});
-    }
-    if(action==="policy_cleanup"){
-      const section=lower(body.section)==="all"?"all":Policy.normalizeSection(body.section||"all")||"all";
-      const sections=section==="all"?Policy.SECTIONS:[section];
-      const cleanup=await cleanupPolicyViolations(sections);
-      return json(200,{ok:true,version:VERSION,action,section,cleanup,publicPublication:false});
     }
     if(action==="research"){
       const section=Policy.normalizeSection(body.section)|| (lower(body.section)==="all"?"all":"");
@@ -598,6 +652,4 @@ exports.handler=async function(event){
 exports.SOURCE_REF=SOURCE_REF;
 exports.CAPACITY=CAPACITY;
 exports.normalizeCandidate=normalizeCandidate;
-exports.structurallyCompliant=structurallyCompliant;
-exports.cleanupPolicyViolations=cleanupPolicyViolations;
 exports.runScheduledGlobalNewsRefresh=runScheduledGlobalNewsRefresh;
