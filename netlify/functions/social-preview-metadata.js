@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.2.0-creator-preview";
+const VERSION = "social-preview-metadata-v1.3.0-canonical-preview-creator";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -132,7 +132,7 @@ function htmlImage(html) {
   const raw = text(html);
   const patterns = [
     /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/i,
-    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com)[^"<>]*)"/i,
+    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"<>]*)"/i,
     /(?:poster|data-poster|data-thumb|data-thumbnail)=["'](https:\/\/[^"'<>]+)["']/i,
     /background-image\s*:\s*url\(["']?(https:\/\/[^"')<>]+)["']?\)/i
   ];
@@ -146,7 +146,7 @@ function htmlImage(html) {
 
   // Last-resort CDN URL scan. Keep the host close to the scheme so arbitrary
   // page text cannot be mistaken for an image URL.
-  const generic = raw.match(/https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com)[^"'<>\s]*/i);
+  const generic = raw.match(/https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"'<>\s]*/i);
   if (generic && generic[0]) {
     image = decodeHtml(generic[0]);
     if (/^https:\/\//i.test(image)) return image;
@@ -249,6 +249,20 @@ async function oembed(platform, contentUrl) {
   return fetchJson(endpoint);
 }
 
+
+function shortProviderUrl(platform, value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (platform === "tiktok") return host === "vm.tiktok.com" || host === "vt.tiktok.com";
+    if (platform === "pinterest") return host === "pin.it";
+    if (platform === "reddit") return host === "redd.it";
+    return false;
+  } catch (_error) {
+    return false;
+  }
+}
+
 function youtubeThumbnail(url) {
   try {
     const parsed = new URL(url);
@@ -321,42 +335,74 @@ async function fetchEmbedPreview(platform, contentUrl) {
 
 async function resolvePreview(platform, contentUrl) {
   if (platform === "youtube") {
-    return { resolvedUrl: contentUrl, title: "", thumbnailUrl: youtubeThumbnail(contentUrl), creatorName: "", source: "youtube-id" };
-  }
-
-  const oe = await oembed(platform, contentUrl);
-  const oeTitle = stripTags(oe && (oe.title || oe.author_name || ""));
-  const oeCreator = stripTags(oe && (oe.author_name || oe.author || ""));
-  const oeThumb = decodeHtml(oe && (oe.thumbnail_url || oe.thumbnailUrl || ""));
-  if (oeThumb && /^https:\/\//i.test(oeThumb)) {
-    return { resolvedUrl: contentUrl, title: oeTitle, thumbnailUrl: oeThumb, creatorName: oeCreator, source: "oembed" };
-  }
-
-  // Facebook/Instagram often hide og:image from anonymous canonical-page
-  // requests while their official embed document still contains the poster.
-  // Resolve that document first, then fall back to the canonical public page.
-  const embed = await fetchEmbedPreview(platform, contentUrl);
-  if (embed.thumbnailUrl && /^https:\/\//i.test(embed.thumbnailUrl)) {
     return {
       resolvedUrl: contentUrl,
+      title: "",
+      thumbnailUrl: youtubeThumbnail(contentUrl),
+      creatorName: "",
+      channelUrl: "",
+      source: "youtube-id"
+    };
+  }
+
+  // Short share links are canonicalized once during collection/enrichment.
+  let workingUrl = contentUrl;
+  let prefetchedPage = null;
+  if (shortProviderUrl(platform, contentUrl)) {
+    try {
+      const redirected = await fetchProviderHtml(platform, contentUrl);
+      const safeRedirect = safeProviderUrl(platform, redirected && redirected.url);
+      if (safeRedirect) {
+        workingUrl = safeRedirect;
+        prefetchedPage = redirected;
+      }
+    } catch (_error) {}
+  }
+
+  const oe = await oembed(platform, workingUrl);
+  const oeTitle = stripTags(oe && (oe.title || oe.author_name || ""));
+  const oeCreator = stripTags(oe && (oe.author_name || oe.author || ""));
+  const oeChannelUrl = safeProviderUrl(platform, oe && (oe.author_url || oe.authorUrl || ""));
+  const oeThumb = decodeHtml(oe && (oe.thumbnail_url || oe.thumbnailUrl || ""));
+  if (oeThumb && /^https:\/\//i.test(oeThumb)) {
+    return {
+      resolvedUrl: workingUrl,
+      title: oeTitle,
+      thumbnailUrl: oeThumb,
+      creatorName: oeCreator,
+      channelUrl: oeChannelUrl,
+      source: shortProviderUrl(platform, contentUrl) ? "redirect+oembed" : "oembed"
+    };
+  }
+
+  const embed = await fetchEmbedPreview(platform, workingUrl);
+  if (embed.thumbnailUrl && /^https:\/\//i.test(embed.thumbnailUrl)) {
+    return {
+      resolvedUrl: workingUrl,
       title: embed.title || oeTitle,
       thumbnailUrl: embed.thumbnailUrl,
       creatorName: embed.creatorName || oeCreator,
+      channelUrl: oeChannelUrl,
       source: embed.source || "provider-embed-meta"
     };
   }
 
-  let page = { url: contentUrl, html: "" };
-  try { page = await fetchProviderHtml(platform, contentUrl); } catch (_error) {}
+  let page = prefetchedPage || { url: workingUrl, html: "" };
+  if (!prefetchedPage) {
+    try { page = await fetchProviderHtml(platform, workingUrl); } catch (_error) {}
+  }
   const title = htmlTitle(page.html) || embed.title || oeTitle;
   const creatorName = htmlCreator(platform, page.html) || embed.creatorName || oeCreator;
   const thumbnailUrl = htmlImage(page.html) || embed.thumbnailUrl || oeThumb;
   return {
-    resolvedUrl: safeProviderUrl(platform, page.url) || contentUrl,
+    resolvedUrl: safeProviderUrl(platform, page.url) || workingUrl,
     title,
     creatorName,
+    channelUrl: oeChannelUrl,
     thumbnailUrl: /^https:\/\//i.test(thumbnailUrl) ? thumbnailUrl : "",
-    source: page.html ? "public-meta" : (embed.source || (oe ? "oembed-no-image" : "unresolved"))
+    source: page.html
+      ? (shortProviderUrl(platform, contentUrl) ? "redirect+public-meta" : "public-meta")
+      : (embed.source || (oe ? "oembed-no-image" : "unresolved"))
   };
 }
 
@@ -377,6 +423,7 @@ exports.handler = async function handler(event) {
       resolvedUrl: preview.resolvedUrl || contentUrl,
       title: preview.title || "",
       creatorName: preview.creatorName || "",
+      channelUrl: preview.channelUrl || "",
       thumbnailUrl: preview.thumbnailUrl || "",
       source: preview.source || "unresolved"
     }, true);
@@ -395,6 +442,9 @@ exports.handler = async function handler(event) {
   }
 };
 
+// Collector-side reuse: enrich before snapshot/front publication; no per-card browser fetch.
+exports.resolvePreview = resolvePreview;
+
 exports.__test = {
   normalizePlatform,
   safeProviderUrl,
@@ -403,6 +453,7 @@ exports.__test = {
   htmlTitle,
   htmlImage,
   htmlCreator,
+  shortProviderUrl,
   facebookIsVideo,
   providerEmbedPreviewUrl,
   resolvePreview

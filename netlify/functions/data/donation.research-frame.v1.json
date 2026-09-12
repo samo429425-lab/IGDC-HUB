@@ -1,6 +1,6 @@
 {
   "schema": "igdc-donation-searchbank-research-frame.v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "channel": "donation",
   "page": "donation",
   "policy": {
@@ -58,16 +58,52 @@
       "policyPurpose": "최신 재난·구호·인도주의 이슈, 영상 우선, 48시간 신선도"
     },
     "donation-ngo": {
-      "primaryQuery": "international NGO development humanitarian public aid organization official website homepage",
+      "primaryQuery": "NGO nonprofit humanitarian development children aid public interest organization official website homepage",
       "localizeByIp": false,
       "anchors": [
         {
-          "name": "KOICA",
-          "query": "KOICA Korea International Cooperation Agency official website"
+          "name": "World Vision International",
+          "query": "World Vision International official website"
+        },
+        {
+          "name": "World Vision Korea / 월드비전",
+          "query": "월드비전 공식 홈페이지 World Vision Korea"
+        },
+        {
+          "name": "Korea Food for the Hungry International / 기아대책",
+          "query": "기아대책 공식 홈페이지 Korea Food for the Hungry International"
         },
         {
           "name": "Good Neighbors International",
           "query": "Good Neighbors International official website"
+        },
+        {
+          "name": "Good Neighbors Korea / 굿네이버스",
+          "query": "굿네이버스 공식 홈페이지 Good Neighbors Korea"
+        },
+        {
+          "name": "Habitat for Humanity International",
+          "query": "Habitat for Humanity International official website"
+        },
+        {
+          "name": "Habitat for Humanity Korea / 한국해비타트",
+          "query": "한국해비타트 공식 홈페이지 Habitat for Humanity Korea"
+        },
+        {
+          "name": "ChildFund Korea / 초록우산",
+          "query": "초록우산 어린이재단 공식 홈페이지 ChildFund Korea"
+        },
+        {
+          "name": "Save the Children",
+          "query": "Save the Children official website"
+        },
+        {
+          "name": "Save the Children Korea / 세이브더칠드런",
+          "query": "세이브더칠드런 코리아 공식 홈페이지"
+        },
+        {
+          "name": "KOICA",
+          "query": "KOICA Korea International Cooperation Agency official website"
         },
         {
           "name": "UNICEF",
@@ -97,7 +133,7 @@
       "policyPurpose": "국제 NGO·공공원조·국제기구 공식 홈페이지"
     },
     "donation-mission": {
-      "primaryQuery": "Protestant evangelical Christian mission organization international official website homepage",
+      "primaryQuery": "Protestant evangelical Christian mission evangelism missionary campus Bible organization official website homepage",
       "localizeByIp": true,
       "anchors": [
         {
@@ -109,24 +145,48 @@
           "query": "PAUA Pan Asia Africa Universities Association Christian official website"
         },
         {
+          "name": "Child Evangelism Fellowship",
+          "query": "Child Evangelism Fellowship official website"
+        },
+        {
+          "name": "Child Evangelism Fellowship Korea / 어린이전도협회",
+          "query": "한국 어린이전도협회 공식 홈페이지 CEF Korea"
+        },
+        {
           "name": "Cru / Campus Crusade for Christ",
           "query": "Cru Campus Crusade for Christ official website"
+        },
+        {
+          "name": "Korea Campus Crusade for Christ / 한국대학생선교회",
+          "query": "한국대학생선교회 CCC 공식 홈페이지"
         },
         {
           "name": "InterVarsity / IVF",
           "query": "InterVarsity Christian Fellowship IVF official website"
         },
         {
-          "name": "Child Evangelism Fellowship",
-          "query": "Child Evangelism Fellowship official website"
+          "name": "Korea IVF / 한국기독학생회",
+          "query": "한국기독학생회 IVF 공식 홈페이지"
+        },
+        {
+          "name": "Youth With A Mission",
+          "query": "YWAM Youth With A Mission official website"
+        },
+        {
+          "name": "YWAM Korea / 예수전도단",
+          "query": "예수전도단 YWAM Korea 공식 홈페이지"
         },
         {
           "name": "Wycliffe Bible Translators",
           "query": "Wycliffe Bible Translators official website"
         },
         {
-          "name": "Youth With A Mission",
-          "query": "YWAM Youth With A Mission official website"
+          "name": "OMF International",
+          "query": "OMF International official website mission"
+        },
+        {
+          "name": "SIM International",
+          "query": "SIM International Christian mission official website"
         }
       ],
       "psomKey": "donation-mission",
@@ -140,28 +200,40 @@
       "policyPurpose": "개신교·복음주의 선교기관 중심, 타종교·이단성 후보 제외"
     },
     "donation-service": {
-      "primaryQuery": "Christian volunteer service medical housing clean water community organization official website homepage",
+      "primaryQuery": "volunteer service medical housing clean water community welfare nonprofit organization official website homepage",
       "localizeByIp": true,
       "anchors": [
         {
           "name": "Habitat for Humanity International",
-          "query": "Habitat for Humanity International official website Christian volunteer housing"
+          "query": "Habitat for Humanity International official website"
+        },
+        {
+          "name": "Habitat for Humanity Korea / 한국해비타트",
+          "query": "한국해비타트 공식 홈페이지 Habitat for Humanity Korea"
         },
         {
           "name": "Medical Teams International",
-          "query": "Medical Teams International official website Christian medical volunteer"
+          "query": "Medical Teams International official website"
         },
         {
           "name": "Living Water International",
-          "query": "Living Water International official website Christian clean water"
+          "query": "Living Water International official website"
         },
         {
           "name": "World Servants",
-          "query": "Christian volunteer service international official website"
+          "query": "World Servants Christian volunteer service official website"
         },
         {
-          "name": "Korea church volunteer service",
-          "query": "Korea church volunteer service organization official website"
+          "name": "Good Neighbors Volunteer",
+          "query": "굿네이버스 자원봉사 공식 홈페이지"
+        },
+        {
+          "name": "World Vision Volunteer",
+          "query": "월드비전 자원봉사 공식 홈페이지"
+        },
+        {
+          "name": "Korea Volunteer Center Association / 한국자원봉사센터협회",
+          "query": "한국자원봉사센터협회 공식 홈페이지"
         }
       ],
       "psomKey": "donation-service",
@@ -174,7 +246,7 @@
       "policyPurpose": "봉사·의료·주거·식수·지역사회 서비스 기관"
     },
     "donation-relief": {
-      "primaryQuery": "Christian humanitarian relief disaster emergency hunger refugee organization official website homepage",
+      "primaryQuery": "humanitarian relief disaster emergency hunger refugee rescue food aid organization official website homepage",
       "localizeByIp": false,
       "anchors": [
         {
@@ -182,8 +254,16 @@
           "query": "World Vision International official website humanitarian relief"
         },
         {
-          "name": "Food for the Hungry",
-          "query": "Food for the Hungry official website humanitarian relief"
+          "name": "World Vision Korea / 월드비전",
+          "query": "월드비전 공식 홈페이지 긴급구호"
+        },
+        {
+          "name": "Korea Food for the Hungry International / 기아대책",
+          "query": "기아대책 공식 홈페이지 긴급구호"
+        },
+        {
+          "name": "Good Neighbors International",
+          "query": "Good Neighbors International official website humanitarian relief"
         },
         {
           "name": "Samaritan's Purse",
@@ -191,15 +271,31 @@
         },
         {
           "name": "Tearfund",
-          "query": "Tearfund official website Christian humanitarian relief"
+          "query": "Tearfund official website humanitarian relief"
         },
         {
           "name": "World Relief",
-          "query": "World Relief official website Christian humanitarian"
+          "query": "World Relief official website humanitarian"
         },
         {
           "name": "Compassion International",
-          "query": "Compassion International official website children relief"
+          "query": "Compassion International official website"
+        },
+        {
+          "name": "Save the Children",
+          "query": "Save the Children official website emergency response"
+        },
+        {
+          "name": "Korean Red Cross / 대한적십자사",
+          "query": "대한적십자사 공식 홈페이지 긴급구호"
+        },
+        {
+          "name": "UNHCR",
+          "query": "UNHCR official website refugee emergency"
+        },
+        {
+          "name": "World Food Programme",
+          "query": "World Food Programme WFP official website emergency hunger"
         }
       ],
       "psomKey": "donation-relief",
@@ -214,7 +310,7 @@
       "policyPurpose": "재난·기아·난민·긴급구호 기관"
     },
     "donation-education": {
-      "primaryQuery": "Christian education children youth university literacy training organization official website homepage",
+      "primaryQuery": "education children youth literacy scholarship school university training nonprofit organization official website homepage",
       "localizeByIp": true,
       "anchors": [
         {
@@ -234,12 +330,28 @@
           "query": "PAUA Christian universities Asia Africa official website"
         },
         {
+          "name": "Child Evangelism Fellowship",
+          "query": "Child Evangelism Fellowship official website children education"
+        },
+        {
           "name": "Cru Campus Ministry",
           "query": "Cru campus ministry official website students"
         },
         {
           "name": "InterVarsity Christian Fellowship",
           "query": "InterVarsity Christian Fellowship official website students campus"
+        },
+        {
+          "name": "Room to Read",
+          "query": "Room to Read official website education literacy nonprofit"
+        },
+        {
+          "name": "Save the Children Education",
+          "query": "Save the Children official website education"
+        },
+        {
+          "name": "UNICEF Education",
+          "query": "UNICEF official website education children"
         }
       ],
       "psomKey": "donation-education",
@@ -254,24 +366,44 @@
       "policyPurpose": "기독교 교육·아동·청소년·대학·문해·훈련 기관"
     },
     "donation-environment": {
-      "primaryQuery": "Christian environmental stewardship conservation reforestation creation care organization official website homepage",
+      "primaryQuery": "environment conservation climate reforestation biodiversity clean water nonprofit organization official website homepage",
       "localizeByIp": false,
       "anchors": [
         {
           "name": "A Rocha International",
-          "query": "A Rocha International official website Christian conservation"
+          "query": "A Rocha International official website conservation"
+        },
+        {
+          "name": "A Rocha Korea / 아로차코리아",
+          "query": "아로차코리아 공식 홈페이지 환경 보전"
         },
         {
           "name": "Plant With Purpose",
-          "query": "Plant With Purpose official website Christian environmental restoration"
+          "query": "Plant With Purpose official website environmental restoration"
         },
         {
-          "name": "Creation Care organizations",
-          "query": "Christian creation care conservation nonprofit official website"
+          "name": "WWF",
+          "query": "WWF official website conservation"
         },
         {
-          "name": "Christian reforestation organizations",
-          "query": "Christian reforestation stewardship nonprofit official website"
+          "name": "WWF Korea",
+          "query": "WWF Korea 공식 홈페이지"
+        },
+        {
+          "name": "Greenpeace",
+          "query": "Greenpeace official website environment"
+        },
+        {
+          "name": "Greenpeace Korea / 그린피스 코리아",
+          "query": "그린피스 코리아 공식 홈페이지"
+        },
+        {
+          "name": "Korea Federation for Environmental Movements / 환경운동연합",
+          "query": "환경운동연합 공식 홈페이지"
+        },
+        {
+          "name": "Green Korea United / 녹색연합",
+          "query": "녹색연합 공식 홈페이지"
         }
       ],
       "psomKey": "donation-environment",
@@ -285,28 +417,40 @@
       "policyPurpose": "환경·창조세계 돌봄·보전·재조림, 비정파성"
     },
     "donation-others": {
-      "primaryQuery": "Christian nonprofit vulnerable people justice prison disability trafficking official organization website homepage",
+      "primaryQuery": "nonprofit vulnerable people justice disability anti trafficking prison family elderly orphan public interest organization official website homepage",
       "localizeByIp": true,
       "anchors": [
         {
           "name": "International Justice Mission",
-          "query": "International Justice Mission official website Christian justice trafficking"
+          "query": "International Justice Mission official website trafficking justice"
         },
         {
           "name": "Open Doors International",
-          "query": "Open Doors International official website persecuted Christians"
+          "query": "Open Doors International official website"
+        },
+        {
+          "name": "Open Doors Korea / 오픈도어선교회",
+          "query": "오픈도어선교회 코리아 공식 홈페이지"
         },
         {
           "name": "Prison Fellowship International",
           "query": "Prison Fellowship International official website"
         },
         {
-          "name": "Christian disability ministry",
-          "query": "international Christian disability ministry official website"
+          "name": "Prison Fellowship Korea / 기독교세진회",
+          "query": "기독교세진회 공식 홈페이지 prison fellowship Korea"
+        },
+        {
+          "name": "Joni and Friends",
+          "query": "Joni and Friends official website disability ministry"
         },
         {
           "name": "Christian anti-trafficking organization",
           "query": "Christian anti trafficking organization official website"
+        },
+        {
+          "name": "Christian disability ministry",
+          "query": "Christian disability ministry official website"
         }
       ],
       "psomKey": "donation-others",

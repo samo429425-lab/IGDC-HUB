@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.4.0-official-homepage-only-site-preview";
+const VERSION = "donation-research-policy-v1.4.1-broad-official-homepage-research";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -165,6 +165,10 @@ function researchFrameFor(value){
     freshnessHours:Number(frame.freshnessHours||0)||0,
     preferVideo:frame.preferVideo===true,
     localizeByIp:frame.localizeByIp===true,
+    psomKey:text(frame.psomKey),
+    psomLabel:text(frame.psomLabel),
+    psomKeywords:Array.isArray(frame.psomKeywords)?frame.psomKeywords.map(text).filter(Boolean):[],
+    policyPurpose:text(frame.policyPurpose),
     anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({name:text(a&&a.name),query:text(a&&a.query)})).filter(a=>a.name||a.query) : []
   };
 }
@@ -323,7 +327,7 @@ function sectionIdentityEligible(record,sectionValue){
   if(section==="donation-mission") return faith && semanticMatches>0;
   if(section==="donation-service") return semanticMatches>0 && (orgLike||faith);
   if(section==="donation-relief") return semanticMatches>0 && orgLike;
-  if(section==="donation-education") return semanticMatches>0 && faith;
+  if(section==="donation-education") return semanticMatches>0 && (orgLike||faith);
   if(section==="donation-environment") return semanticMatches>0 && (orgLike||faith);
   if(section==="donation-others") return semanticMatches>0 && (orgLike||faith);
   return semanticMatches>0&&orgLike;

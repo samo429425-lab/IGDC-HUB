@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.6.1-official-homepage-thumbnail-pipeline";
+const VERSION = "donation-candidate-admin-v1.7.0-broad-research-official-homepage-pipeline";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -128,13 +128,31 @@ async function mapLimit(items,limit,worker){
 function researchQuery(section,customQuery){
   const sec=Policy.normalizeSection(section)||'donation-ngo',frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{},custom=text(customQuery);
   if(custom)return custom+(sec==='donation-global'?' latest humanitarian disaster video':' official website homepage');
-  const names=(frame.anchors||[]).map(function(a){return text(a&&a.name);}).filter(Boolean).slice(0,7);
-  const anchorQuery=names.map(function(name){return '"'+name.replace(/"/g,'')+'"';}).join(' OR ');
-  /* One bounded SearchBank call per lane: OR the known organization anchors so
-     the web/video provider can return distinct official entities without the old
-     six sequential calls that caused serverless inactivity timeouts. */
-  if(sec==='donation-global')return [anchorQuery,text(frame.primaryQuery),'latest official humanitarian video'].filter(Boolean).join(' ');
-  return [anchorQuery,text(frame.primaryQuery),'official website homepage'].filter(Boolean).join(' ')||Policy.SECTION_LABELS[sec]||'donation';
+  /* Broad discovery stays broad. Named organizations are queried separately in
+     one bounded fallback call for an individual administrator re-search. */
+  const primary=text(frame.primaryQuery);
+  if(sec==='donation-global')return [primary,'latest official humanitarian video'].filter(Boolean).join(' ')||'latest humanitarian relief official video';
+  return [primary,'official website homepage'].filter(Boolean).join(' ')||Policy.SECTION_LABELS[sec]||'donation';
+}
+function researchAnchorQuery(section){
+  const sec=Policy.normalizeSection(section)||'donation-ngo',frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
+  const names=[];
+  (frame.anchors||[]).forEach(function(a){
+    text(a&&a.name).split(/[\/|]/).map(text).filter(Boolean).forEach(function(name){if(names.length<20&&!names.includes(name))names.push(name);});
+  });
+  if(!names.length)return '';
+  const bundle=names.map(function(name){return '"'+name.replace(/"/g,'')+'"';}).join(' OR ');
+  return sec==='donation-global'
+    ? [bundle,'latest official humanitarian video'].join(' ')
+    : [bundle,'official website homepage'].join(' ');
+}
+function researchQueries(section,customQuery,singleSection){
+  const primary=researchQuery(section,customQuery),out=[primary];
+  if(!text(customQuery)&&singleSection&&Policy.normalizeSection(section)!=='donation-global'){
+    const anchor=researchAnchorQuery(section);
+    if(anchor&&anchor!==primary)out.push(anchor);
+  }
+  return Array.from(new Set(out.filter(Boolean)));
 }
 function policyVisibleCandidate(candidate,section){
   const sec=Policy.normalizeSection(section)||Policy.inferSection(candidate||{},section);
@@ -412,12 +430,33 @@ async function performResearch(event,section,customQuery,limit){
   const existing=await readRows(), existingMap=new Map(existing.map(r=>[text(r.id),r]));
 
   async function researchOne(sec){
-    const query=researchQuery(sec,sections.length===1?customQuery:'');
-    const started=Date.now();let result;
-    try{result=await SearchBank.runEngine(event,researchParams(sec,query,Math.min(60,Number(limit)||50)));}
-    catch(error){return {section:sec,query,queries:[query],accepted:0,engineItems:0,officialHomepageCount:0,globalVideoCount:0,previewResolved:0,skippedPolicy:0,skippedSearchLanding:0,durationMs:Date.now()-started,error:text(error&&error.message||error),writes:[]};}
-    const items=Array.isArray(result&&result.items)?result.items:[];
-    const meta=plain(result&&result.meta),writes=[],seen=new Set();
+    const queries=researchQueries(sec,sections.length===1?customQuery:'',sections.length===1);
+    const query=queries[0]||researchQuery(sec,'');
+    const started=Date.now();let results=[];
+    try{
+      results=await Promise.all(queries.map(function(q){
+        return SearchBank.runEngine(event,researchParams(sec,q,Math.min(60,Number(limit)||50)))
+          .then(function(result){return {q,result};})
+          .catch(function(error){return {q,error};});
+      }));
+    }catch(error){
+      return {section:sec,query,queries,accepted:0,engineItems:0,officialHomepageCount:0,globalVideoCount:0,previewResolved:0,skippedPolicy:0,skippedSearchLanding:0,durationMs:Date.now()-started,error:text(error&&error.message||error),writes:[]};
+    }
+    const rawItems=[],adapterMeta=[],errors=[];
+    results.forEach(function(entry){
+      if(entry&&entry.error){errors.push(text(entry.error&&entry.error.message||entry.error));return;}
+      const result=entry&&entry.result,meta=plain(result&&result.meta);
+      if(Array.isArray(result&&result.items))rawItems.push(...result.items);
+      if(Array.isArray(meta.adapters))adapterMeta.push(...meta.adapters);
+    });
+    const itemMap=new Map();
+    rawItems.forEach(function(item,index){
+      const r=plain(item),link=plain(r.link),org=plain(r.org);
+      const key=text(r.id||r.uid||r.url||link.url||org.homepage||r.title||('row-'+index)).toLowerCase();
+      if(!itemMap.has(key))itemMap.set(key,item);
+    });
+    const items=Array.from(itemMap.values());
+    const meta={adapters:adapterMeta},writes=[],seen=new Set();
     let skippedPolicy=0,skippedSearchLanding=0,officialHomepageCount=0,globalVideoCount=0,previewResolved=0,skippedExcluded=0;
 
     if(sec==="donation-global"){
@@ -480,7 +519,7 @@ async function performResearch(event,section,customQuery,limit){
         writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Official organization homepage + homepage representative preview.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
     }
-    return {section:sec,query,queries:[query],accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,officialHomepageCount,globalVideoCount,previewResolved,engineItems:items.length,durationMs:Date.now()-started,writes,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
+    return {section:sec,query,queries,accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,officialHomepageCount,globalVideoCount,previewResolved,engineItems:items.length,durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
   }
 
   const sectionResults=[];const concurrency=section==="all"?8:1;

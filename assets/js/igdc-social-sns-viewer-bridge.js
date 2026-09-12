@@ -258,7 +258,7 @@
     if (platform === 'instagram') {
       var ig = instagramEmbed(url);
       if (!ig) return null;
-      return { mode: 'iframe', src: ig, aspect: '9/16' };
+      return { mode: 'iframe', src: ig, aspect: 'instagram', provider: 'instagram-post' };
     }
 
     if (platform === 'tiktok') {
@@ -364,6 +364,8 @@
       '#igdcSocialViewerV2 .igsv-media{position:relative;width:100%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-media[data-aspect="16/9"]{aspect-ratio:16/9}' +
       '#igdcSocialViewerV2 .igsv-media[data-aspect="9/16"]{width:min(100%,720px);aspect-ratio:9/16}' +
+      '#igdcSocialViewerV2 .igsv-media[data-aspect="instagram"]{width:min(100%,720px);aspect-ratio:720/1420;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="instagram-post"] .igsv-content{background:#fff}' +
       '#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(720px,calc(100dvh - 56px - 56px));min-height:720px}' +
       '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block;flex:0 0 auto}' +
       '#igdcSocialViewerV2 .igsv-contained-preview{width:100%;height:100%;display:block;object-fit:contain;object-position:center;background:#000}' +
@@ -1467,6 +1469,10 @@
     iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write; web-share';
     iframe.setAttribute('allowfullscreen', '');
     if (embed.provider === 'facebook-post') iframe.setAttribute('scrolling', 'yes');
+    if (embed.provider === 'instagram-post') {
+      iframe.setAttribute('scrolling', 'no');
+      iframe.style.background = '#fff';
+    }
     /* Provider embeds stay contained. They may use an in-sandbox user popup when the
        provider requires one, but cannot replace the IGDC tab and cannot create an
        unsandboxed external browsing context. */

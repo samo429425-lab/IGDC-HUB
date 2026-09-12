@@ -7,10 +7,10 @@
  */
 const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
-const SocialPreview = require("./social-preview-metadata").__test;
+const SocialPreview = require("./social-preview-metadata");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "social-candidate-action-v1.4.1-batched-admin-actions";
+const VERSION = "social-candidate-action-v1.4.2-public-preview-api";
 const ACTIONS = new Set([
   "approve",
   "hold",

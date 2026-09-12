@@ -321,6 +321,17 @@ function groupBySection(items){
     return s;
   }
 
+  function safeExternalUrl(u){
+    const s = safeUrl(u);
+    if(!/^https:\/\//i.test(s)) return '';
+    try{
+      const parsed = new URL(s);
+      return parsed.protocol === 'https:' ? parsed.href : '';
+    }catch(_e){
+      return '';
+    }
+  }
+
 
   function renderCard(it){
     const img = safeUrl(it?.media?.thumb) || '';
@@ -332,12 +343,16 @@ function groupBySection(items){
       ''
     );
     const summary = escHtml(it?.summary || it?.org?.legal_name || '');
-    const url = safeUrl(it?.donation?.checkout_url) || safeUrl(it?.link?.url) || safeUrl(it?.org?.homepage) || '';
+    // Institution cards always open the verified organization homepage.
+    const url = safeExternalUrl(it?.org?.homepage) || safeExternalUrl(it?.link?.url) || safeExternalUrl(it?.url) || '';
     const uid = escAttr(it?.uid || it?.id || '');
-    const thumbHtml = img ? `<img src="${escAttr(img)}" loading="lazy" alt="">` : '';
+    const thumbImage = img ? `<img src="${escAttr(img)}" loading="lazy" alt="${title}">` : '';
+    const thumbHtml = url
+      ? `<a class="donation-thumb-link" href="${escAttr(url)}" target="_blank" rel="noopener noreferrer" aria-label="${title}" style="display:block;width:100%;height:100%">${thumbImage}</a>`
+      : thumbImage;
 
     return `
-      <div class="card donation-card" data-uid="${uid}" data-url="${escAttr(url)}" role="link" tabindex="0" aria-label="${title}">
+      <div class="card donation-card" data-uid="${uid}" data-url="${escAttr(url)}" role="${url?'link':'group'}" ${url?'tabindex="0"':''} aria-label="${title}">
         <div class="thumb">${thumbHtml}</div>
         <div class="card-body">
           <div class="card-title">${title || '-'}</div>
@@ -459,9 +474,10 @@ function mountSection(key, items, limit){
 
   function bindClicks(){
     document.addEventListener('click', (e)=>{
+      if(e.target?.closest?.('a.donation-thumb-link')) return;
       const card = e.target?.closest?.('.donation-card');
       if(!card) return;
-      const url = card.getAttribute('data-url');
+      const url = safeExternalUrl(card.getAttribute('data-url'));
       if(url) window.open(url, '_blank', 'noopener');
     });
 
@@ -470,7 +486,7 @@ function mountSection(key, items, limit){
       const card = e.target?.closest?.('.donation-card');
       if(!card) return;
       e.preventDefault();
-      const url = card.getAttribute('data-url');
+      const url = safeExternalUrl(card.getAttribute('data-url'));
       if(url) window.open(url, '_blank', 'noopener');
     });
   }

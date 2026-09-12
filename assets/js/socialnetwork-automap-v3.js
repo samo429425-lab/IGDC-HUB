@@ -102,6 +102,33 @@
     );
   }
 
+  function pickCreator(it) {
+    return safeText(
+      it &&
+        (it.creatorName ||
+          it.creator_name ||
+          it.creator ||
+          it.creatorHandle ||
+          it.creator_handle ||
+          it.author ||
+          it.channelName ||
+          it.publisher ||
+          ""),
+    ).trim();
+  }
+
+  function cardIdentity(it) {
+    var creator = pickCreator(it);
+    var desc = pickDesc(it).trim();
+    var platform = safeText(it && (it.platform || (it.source && it.source.platform))).trim();
+    var parts = [];
+    if (creator) parts.push(creator);
+    if (desc && desc.toLowerCase() !== creator.toLowerCase() && desc.toLowerCase() !== platform.toLowerCase()) {
+      parts.push(desc);
+    }
+    return parts.join(" · ") || platform;
+  }
+
   function pickProductId(it) {
     return safeText(
       it &&
@@ -486,7 +513,7 @@
 
     const url = pickUrl(it);
     const title = pickTitle(it) || "Item";
-    const desc = pickDesc(it) || " ";
+    const desc = cardIdentity(it) || " ";
     const thumb = pickThumb(it);
 
     card.href = url || "#";
@@ -501,8 +528,20 @@
 
     if (metaTitle) metaTitle.textContent = title;
     if (metaDesc) {
+      var cardPlatform = safeText(it && (it.platform || (it.source && it.source.platform))).toLowerCase().replace(/^social-/, "");
       metaDesc.textContent = desc;
-      metaDesc.style.display = "none";
+      if (cardPlatform === "youtube" || cardPlatform === "facebook") {
+        // Keep the already-approved YouTube/Facebook card presentation unchanged.
+        metaDesc.style.display = "none";
+      } else {
+        metaDesc.style.display = "-webkit-box";
+        metaDesc.style.webkitBoxOrient = "vertical";
+        metaDesc.style.webkitLineClamp = "2";
+        metaDesc.style.overflow = "hidden";
+        metaDesc.style.whiteSpace = "normal";
+        metaDesc.style.lineHeight = "1.35";
+        metaDesc.style.marginTop = "4px";
+      }
     }
 
     if (pic) {

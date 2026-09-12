@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.18.0-seven-platform-preview-recovery";
+const VERSION = "sanmaru-social-live-collector-v1.19.0-registry-bootstrap-preview";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -34,6 +34,7 @@ const PROVIDER_GROUP_NAMES = Object.freeze([
 const CHANNEL_RESOLUTION_TIMEOUT_MS = 1500;
 const PUBLIC_METADATA_TIMEOUT_MS = 1500;
 const TIKTOK_METADATA_TIMEOUT_MS = 3000;
+const PROFILE_LATEST_TIMEOUT_MS = 2200;
 const CHANNEL_RESOLUTION_BUDGET_MS = 4200;
 const TIKTOK_CHANNEL_RESOLUTION_BUDGET_MS = 8500;
 const CHANNEL_RESOLUTION_CONCURRENCY = 4;
@@ -574,6 +575,10 @@ function registryHandleFromUrl(value, platform) {
       const index = parts.findIndex((part) => String(part).toLowerCase() === "r");
       if (index >= 0 && parts[index + 1]) return "r/" + parts[index + 1];
     }
+    if (platform === "wechat") {
+      const username = text(url.searchParams.get("username"));
+      if (username) return username;
+    }
     if (platform === "youtube") {
       const token = parts.find((part) => /^@/.test(part));
       return token || "";
@@ -1063,6 +1068,172 @@ async function directPublicPostSearch(plan, queryText, limit) {
   };
 }
 
+
+function providerRelativePostUrls(platform, html, baseUrl, limit) {
+  const source = String(html || "");
+  const out = [];
+  const seen = new Set();
+  const max = Math.max(1, Math.min(24, Number(limit || 10) || 10));
+
+  function accept(raw) {
+    if (out.length >= max) return;
+    let value = decodeXml(SocialStore.text(raw))
+      .replace(/\\u002f/gi, "/")
+      .replace(/\\\//g, "/")
+      .replace(/&amp;/gi, "&")
+      .trim();
+    if (!value) return;
+    try {
+      value = new URL(value, baseUrl).toString();
+    } catch (_error) {
+      return;
+    }
+    value = Policy.normalizeUrl(value);
+    if (!value || Policy.platformFromHost(value) !== platform || !contentKind(platform, value)) return;
+    const key = value.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(value);
+  }
+
+  const anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = anchorRe.exec(source))) accept(match[1]);
+
+  const absoluteRe = /https?(?:\\u002f|\\\/|\/)[^"'<>\s]{8,500}/gi;
+  (source.match(absoluteRe) || []).slice(0, 400).forEach(accept);
+
+  // Instagram profile HTML may expose shortcodes without a literal post URL.
+  if (platform === "instagram" && out.length < max) {
+    const shortcodeRe = /"shortcode"\s*:\s*"([A-Za-z0-9_-]{5,30})"/g;
+    while ((match = shortcodeRe.exec(source)) && out.length < max) {
+      accept("https://www.instagram.com/p/" + match[1] + "/");
+    }
+  }
+  return out;
+}
+
+async function registryNativeLatestSearch(plan, registrySeed, limit) {
+  const platform = plan && plan.platform;
+  const seedUrl = Policy.normalizeUrl(registrySeed && registrySeed.url);
+  const wanted = Math.max(1, Math.min(12, Number(limit || 10) || 10));
+  if (!platform || !seedUrl || Policy.platformFromHost(seedUrl) !== platform) {
+    return { provider: "registry-native-latest", status: "not_applicable", items: [] };
+  }
+
+  const headers = {
+    Accept: "text/html,application/json;q=0.9,*/*;q=0.5",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"
+  };
+
+  try {
+    if (platform === "reddit") {
+      const u = new URL(seedUrl);
+      const parts = u.pathname.split("/").filter(Boolean);
+      const r = parts.findIndex((part) => part.toLowerCase() === "r");
+      const user = parts.findIndex((part) => part.toLowerCase() === "user");
+      let feed = "";
+      if (r >= 0 && parts[r + 1]) feed = "https://www.reddit.com/r/" + encodeURIComponent(parts[r + 1]) + "/new.json?raw_json=1&limit=" + wanted;
+      else if (user >= 0 && parts[user + 1]) feed = "https://www.reddit.com/user/" + encodeURIComponent(parts[user + 1]) + "/submitted.json?raw_json=1&limit=" + wanted;
+      if (!feed) return { provider: "registry-native-latest", status: "unsupported_profile", items: [] };
+      const data = await fetchJson(feed, { headers: Object.assign({}, headers, { Accept: "application/json" }) }, PROFILE_LATEST_TIMEOUT_MS);
+      const children = data && data.data && Array.isArray(data.data.children) ? data.data.children : [];
+      const items = children.map((child) => child && child.data || {}).map((row) => {
+        const permalink = row.permalink ? "https://www.reddit.com" + row.permalink : "";
+        const preview = row.preview && row.preview.images && row.preview.images[0] && row.preview.images[0].source && row.preview.images[0].source.url;
+        const thumb = /^https:\/\//i.test(SocialStore.text(preview)) ? decodeXml(preview) :
+          (/^https:\/\//i.test(SocialStore.text(row.thumbnail)) ? row.thumbnail : "");
+        return {
+          provider: "reddit-public-new-json",
+          platform,
+          url: permalink,
+          sourceUrl: permalink,
+          latestContentUrl: permalink,
+          title: firstText([row.title, "Reddit post"]),
+          creatorName: firstText([row.author, registrySeed.title, registrySeed.handle]),
+          description: firstText([row.selftext]).slice(0, 1200),
+          thumbnail: thumb,
+          entityKind: "latest_post"
+        };
+      }).filter((row) => contentKind(platform, row.url));
+      return { provider: "registry-native-latest", status: items.length ? "ok" : "empty", items: items.slice(0, wanted), source: "reddit-public-json" };
+    }
+
+    if (platform === "weibo") {
+      const u = new URL(seedUrl);
+      const parts = u.pathname.split("/").filter(Boolean);
+      let uid = "";
+      if (parts[0] === "u" && /^\d+$/.test(parts[1] || "")) uid = parts[1];
+      else if (/^\d+$/.test(parts[0] || "")) uid = parts[0];
+      if (!uid) return { provider: "registry-native-latest", status: "unsupported_profile", items: [] };
+      const endpoint = "https://m.weibo.cn/api/container/getIndex?" + new URLSearchParams({
+        type: "uid", value: uid, containerid: "107603" + uid, page: "1"
+      }).toString();
+      const data = await fetchJson(endpoint, { headers: Object.assign({}, headers, { Accept: "application/json" }) }, PROFILE_LATEST_TIMEOUT_MS);
+      const cards = data && data.data && Array.isArray(data.data.cards) ? data.data.cards : [];
+      const items = [];
+      cards.forEach((card) => {
+        const post = card && card.mblog;
+        if (!post || items.length >= wanted) return;
+        const bid = firstText([post.bid, post.idstr, post.id]);
+        const authorId = firstText([post.user && post.user.idstr, post.user && post.user.id, uid]);
+        const url = post.bid
+          ? "https://weibo.com/" + encodeURIComponent(authorId) + "/" + encodeURIComponent(post.bid)
+          : (bid ? "https://m.weibo.cn/detail/" + encodeURIComponent(bid) : "");
+        const pics = Array.isArray(post.pics) ? post.pics : [];
+        const thumb = firstText([
+          pics[0] && pics[0].large && pics[0].large.url,
+          pics[0] && pics[0].url,
+          post.page_info && post.page_info.page_pic && post.page_info.page_pic.url,
+          post.user && post.user.profile_image_url
+        ]);
+        if (!contentKind(platform, url)) return;
+        items.push({
+          provider: "weibo-mobile-public-feed",
+          platform,
+          url,
+          sourceUrl: url,
+          latestContentUrl: url,
+          title: stripHtml(firstText([post.text, "Weibo post"])).slice(0, 240),
+          creatorName: firstText([post.user && post.user.screen_name, registrySeed.title]),
+          description: stripHtml(firstText([post.text])).slice(0, 1200),
+          thumbnail: /^https:\/\//i.test(thumb) ? thumb : "",
+          entityKind: "latest_post"
+        });
+      });
+      return { provider: "registry-native-latest", status: items.length ? "ok" : "empty", items, source: "weibo-mobile-public-feed" };
+    }
+
+    if (platform === "wechat") {
+      // WeChat official-account identifiers do not expose a stable public feed.
+      // Keep using targeted public-web/SearchBank discovery for real article URLs.
+      return { provider: "registry-native-latest", status: "provider_feed_unavailable", items: [] };
+    }
+
+    const html = await fetchText(seedUrl, { headers }, PROFILE_LATEST_TIMEOUT_MS);
+    const urls = providerRelativePostUrls(platform, html, seedUrl, wanted);
+    const items = urls.map((url) => ({
+      provider: "registry-public-profile-html",
+      platform,
+      url,
+      sourceUrl: url,
+      latestContentUrl: url,
+      title: firstText([registrySeed.title, registrySeed.handle, platform + " latest public content"]),
+      creatorName: firstText([registrySeed.title, registrySeed.handle]),
+      thumbnail: firstText([registrySeed.thumbnail]),
+      entityKind: contentKind(platform, url)
+    }));
+    return { provider: "registry-native-latest", status: items.length ? "ok" : "empty", items, source: "public-profile-html" };
+  } catch (error) {
+    return {
+      provider: "registry-native-latest",
+      status: error && error.name === "AbortError" ? "timeout" : "error",
+      error: error && error.message || "profile_latest_failed",
+      items: []
+    };
+  }
+}
+
 async function maruSearchOne(event, plan, queryText, limit, language, start) {
   try {
     const result = await withDeadline(
@@ -1157,10 +1328,15 @@ async function maruUnfilteredSearchOne(event, plan, queryText, limit, language, 
   }
 }
 
-async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup, registryTargeted) {
+async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup, registryTargeted, registrySeed) {
   let tasks = [];
+  if (registrySeed && plan.platform !== "youtube" && plan.platform !== "facebook") {
+    // Query the already-registered creator itself in parallel with web search.
+    // This is best-effort and bounded; it never runs on the front/card render path.
+    tasks.push(registryNativeLatestSearch(plan, registrySeed, limit));
+  }
   if (providerGroup === 0) {
-    tasks = [publicDirectorySearch(plan, route, limit, directoryOffset)];
+    tasks.push(publicDirectorySearch(plan, route, limit, directoryOffset));
     // A public-directory row is a creator profile, not a post. When a known
     // registry identity is being targeted, also ask the existing Maru/SearchBank
     // public search in the same pass so keyless deployments can still discover
@@ -1186,7 +1362,7 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
       tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
     }
   } else {
-    tasks = [maruSearchOne(event, plan, queryText, limit, language, start)];
+    tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
   }
   const settled = await Promise.allSettled(tasks);
   let providers = settled.map((entry, index) => {
@@ -1208,17 +1384,25 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
       candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
     ));
     if (!hasActualPost(providers)) {
-      // This rescue function already existed but was never connected to the
-      // execution path. Run the broad Maru/SearchBank read with a simple social
-      // query before going outside to public search engines.
-      const broad = await maruUnfilteredSearchOne(
-        event, plan, queryText, limit, language, start
-      );
-      providers = providers.concat([broad]);
-    }
-    if (!hasActualPost(providers)) {
-      const rescue = await directPublicPostSearch(plan, queryText, limit);
-      providers = providers.concat([rescue]);
+      if (plan.platform === "facebook") {
+        // Facebook is already stable in production; preserve its prior rescue order.
+        const broad = await maruUnfilteredSearchOne(
+          event, plan, queryText, limit, language, start
+        );
+        providers = providers.concat([broad]);
+        if (!hasActualPost(providers)) {
+          const rescue = await directPublicPostSearch(plan, queryText, limit);
+          providers = providers.concat([rescue]);
+        }
+      } else {
+        // For the seven recovering providers, run both rescue reads in parallel.
+        // The previous sequential broad->web fallback doubled empty-provider wait.
+        const rescuePair = await Promise.all([
+          maruUnfilteredSearchOne(event, plan, queryText, limit, language, start),
+          directPublicPostSearch(plan, queryText, limit)
+        ]);
+        providers = providers.concat(rescuePair);
+      }
     }
   }
   return {
@@ -1622,6 +1806,77 @@ async function resolveChannelAsset(item, platform, registrySeed) {
   const hasPlatformUrl = urls.some((url) => Policy.platformFromHost(url) === platform);
   return { ok: false, reason: hasPlatformUrl ? "channel_target_not_resolved" : "platform_host_mismatch" };
 }
+function registryOnlyFromItem(item, sectionKey, platform, queryText, route) {
+  if (!item || platform === "youtube" || platform === "facebook") return null;
+  const urls = candidateUrls(item);
+  const originalTitle = firstText([item.title, item.name, item.label, item.creatorName]);
+  let channel = null;
+  for (const value of urls) {
+    if (!value || contentKind(platform, value)) continue;
+    const resolved = ChannelLink.resolve(value, { platform, title: originalTitle });
+    if (resolved.ok && resolved.channelUrl) {
+      channel = resolved;
+      break;
+    }
+  }
+  if (!channel || !channel.channelUrl) return null;
+
+  const routeLanguages = route && route.languages || [];
+  const itemLanguage = CountryRouting.normalizeLanguage(item && (item.lang || item.language));
+  const language = itemLanguage && routeLanguages.includes(itemLanguage)
+    ? itemLanguage
+    : firstText([routeLanguages[0], itemLanguage, "und"]);
+  const explicitCountry = SocialStore.text(item && item.country).toUpperCase();
+  const creatorName = firstText([
+    item.creatorName, item.channelName, item.publisher, originalTitle, channel.suggestedTitle
+  ]).replace(/^(false|null|undefined)$/i, "");
+  if (!creatorName) return null;
+  const category = firstText([item.category, categoryFromQuery(platform, queryText)]);
+  const thumbnail = firstText([
+    item.channelThumbnail, item.channelThumbnailUrl, item.thumbnail, item.thumb,
+    item.image, item.imageUrl, deepThumbnail(item)
+  ]);
+
+  return {
+    assetClass: "influencer_registry",
+    sectionKey,
+    platform,
+    title: creatorName.slice(0, 240),
+    creatorName: creatorName.slice(0, 180),
+    sourceUrl: channel.channelUrl,
+    channelUrl: channel.channelUrl,
+    channelEvidenceUrl: channel.evidenceUrl || channel.channelUrl,
+    entityKind: channel.entityKind,
+    channelEntityKind: channel.entityKind,
+    channelAsset: true,
+    latestContentAsset: false,
+    thumbnailUrl: thumbnail,
+    description: firstText([item.description, item.summary, item.snippet]).slice(0, 1200),
+    language,
+    countryScopes: item.publicDirectoryCountryFallback
+      ? []
+      : (explicitCountry ? [explicitCountry] : (route && route.countryCode ? [route.countryCode] : [])),
+    languageScopes: routeLanguages,
+    category,
+    publicAccess: true,
+    loginRequired: false,
+    accessStatus: "public",
+    candidateOnly: true,
+    verificationStatus: "web_verification_required",
+    discoveryQuery: queryText,
+    source: {
+      name: itemSourceName(item),
+      platform,
+      mode: "social_hub_influencer_registry_bootstrap"
+    },
+    bind: { section: sectionKey, psom_key: sectionKey, platform },
+    tags: Array.from(new Set([
+      platform, category, channel.entityKind, "public", "influencer_registry", "bootstrap"
+    ])).slice(0, 12),
+    quality: { rank: Number(item && (item._finalScore || item.score || item.rank || (item.quality && item.quality.rank)) || 0) }
+  };
+}
+
 async function candidateFromItem(item, sectionKey, platform, queryText, route, registrySeed) {
   let resolved = await resolveChannelAsset(item, platform, registrySeed);
   const directLatestContentUrl = candidateUrls(item).find((url) => contentKind(platform, url)) || "";
@@ -1881,13 +2136,31 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
   const rejected = [];
   const candidates = [];
   const influencers = [];
+  const registryOnly = [];
   const seenUrls = new Set();
-  converted.forEach((result) => {
-    if (!result) return;
-    if (!result.ok) {
-      rejected.push({ reason: result.reason });
+  const seenRegistry = new Set();
+
+  converted.forEach((result, index) => {
+    const input = selectedInputs[index];
+    if (!result || !result.ok) {
+      // Public-directory rows are creator identities, not content rows. Persist
+      // them as the influencer registry so the very next collector batch can
+      // search that exact creator for a real latest post/video instead of
+      // repeatedly discarding the same profile as "latest content required".
+      const bootstrap = input && registryOnlyFromItem(
+        input.item, sectionKey, platform, input.query, route
+      );
+      if (bootstrap && bootstrap.channelUrl) {
+        const registryKey = SocialStore.text(bootstrap.channelUrl).toLowerCase();
+        if (registryKey && !seenRegistry.has(registryKey)) {
+          seenRegistry.add(registryKey);
+          registryOnly.push(bootstrap);
+        }
+      }
+      if (result) rejected.push({ reason: result.reason });
       return;
     }
+
     const key = SocialStore.text(result.candidate.sourceUrl || result.candidate.latestContentUrl).toLowerCase();
     if (!key) {
       rejected.push({ reason: "latest_public_content_required" });
@@ -1899,14 +2172,16 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
     }
     seenUrls.add(key);
     candidates.push(result.candidate);
-    // Keep candidate/influencer arrays index-aligned. Non-YouTube public posts
-    // often have no resolvable creator profile; collapsing nulls here previously
-    // attached a later creator record to the wrong content row.
     influencers.push(result.influencer || null);
+    if (result.influencer && result.influencer.channelUrl) {
+      seenRegistry.add(SocialStore.text(result.influencer.channelUrl).toLowerCase());
+    }
   });
+
   return {
     candidates,
     influencers,
+    registryOnly,
     rejected,
     inputRows: inputs.length,
     resolutionRows: converted.filter(Boolean).length,
@@ -2078,7 +2353,8 @@ exports.handler = async function(event) {
       const searchResult = await searchOne(
         event, plan, queryText, perQueryLimit,
         body.language || body.lang || route.languages[0],
-        searchStart, route, cfg, qualitySweep, directoryOffset, providerGroup, scoped.targeted
+        searchStart, route, cfg, qualitySweep, directoryOffset, providerGroup, scoped.targeted,
+        querySeeds[queryText] || null
       );
       searchResult.registrySeed = querySeeds[queryText] || null;
       searchResults.push(searchResult);
@@ -2093,6 +2369,7 @@ exports.handler = async function(event) {
     );
     const rejected = resolved.rejected;
     const candidates = resolved.candidates;
+    const registryOnly = Array.isArray(resolved.registryOnly) ? resolved.registryOnly : [];
     const policyAccepted = [];
     candidates.forEach((candidate, index) => {
       const verdict = AIPolicy.evaluate(candidate, aiPolicy);
@@ -2111,8 +2388,22 @@ exports.handler = async function(event) {
     const selectedPairs = policyAccepted.slice(0, target);
     const selected = selectedPairs.map((pair) => pair.candidate);
     const submitted = [];
+    const submittedRegistryUrls = new Set();
+    registryOnly.slice(0, target).forEach((row) => {
+      const key = SocialStore.text(row && row.channelUrl).toLowerCase();
+      if (key && !submittedRegistryUrls.has(key)) {
+        submittedRegistryUrls.add(key);
+        submitted.push(row);
+      }
+    });
     selectedPairs.forEach((pair) => {
-      if (pair.influencer) submitted.push(pair.influencer);
+      if (pair.influencer) {
+        const key = SocialStore.text(pair.influencer.channelUrl).toLowerCase();
+        if (!key || !submittedRegistryUrls.has(key)) {
+          if (key) submittedRegistryUrls.add(key);
+          submitted.push(pair.influencer);
+        }
+      }
       submitted.push(pair.candidate);
     });
     const gatewayResponse = await CandidateGateway.handler(
@@ -2161,7 +2452,8 @@ exports.handler = async function(event) {
       resolutionDeferredRows: resolved.deferredRows,
       directCandidates: candidates.length,
       submittedCandidates: selected.length,
-      submittedInfluencers: selectedPairs.filter((pair) => !!pair.influencer).length,
+      submittedInfluencers: submittedRegistryUrls.size,
+      registryBootstrapRows: registryOnly.length,
       submittedRecords: submitted.length,
       rejectedRows: rejected.length,
       rejectedByReason: rejectionSummary(rejected),
@@ -2195,6 +2487,10 @@ exports.__test = {
   publicSearchQuery,
   rssItems,
   htmlPublicPostItems,
+  providerRelativePostUrls,
+  registryNativeLatestSearch,
+  registryOnlyFromItem,
+  resolveSearchCandidates,
   decodeSearchRedirectTarget,
   decodeXml
 };
