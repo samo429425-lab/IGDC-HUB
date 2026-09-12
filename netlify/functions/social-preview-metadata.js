@@ -333,6 +333,14 @@ async function fetchEmbedPreview(platform, contentUrl) {
   }
 }
 
+function instagramMediaFallback(contentUrl) {
+  try {
+    const u = new URL(contentUrl);
+    const m = u.pathname.match(/^\/(?:p|reel|reels|tv)\/([^/?#]+)/i);
+    return m ? "https://www.instagram.com/p/" + encodeURIComponent(m[1]) + "/media/?size=l" : "";
+  } catch (_error) { return ""; }
+}
+
 async function resolvePreview(platform, contentUrl) {
   if (platform === "youtube") {
     return {
@@ -393,9 +401,11 @@ async function resolvePreview(platform, contentUrl) {
   }
   const title = htmlTitle(page.html) || embed.title || oeTitle;
   const creatorName = htmlCreator(platform, page.html) || embed.creatorName || oeCreator;
-  const thumbnailUrl = htmlImage(page.html) || embed.thumbnailUrl || oeThumb;
+  const resolvedUrl = safeProviderUrl(platform, page.url) || workingUrl;
+  const thumbnailUrl = htmlImage(page.html) || embed.thumbnailUrl || oeThumb ||
+    (platform === "instagram" ? instagramMediaFallback(resolvedUrl) : "");
   return {
-    resolvedUrl: safeProviderUrl(platform, page.url) || workingUrl,
+    resolvedUrl,
     title,
     creatorName,
     channelUrl: oeChannelUrl,

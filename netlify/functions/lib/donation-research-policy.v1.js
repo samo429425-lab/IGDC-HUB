@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.4.1-broad-official-homepage-research";
+const VERSION = "donation-research-policy-v1.5.0-homepage-identity-strict";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -298,39 +298,92 @@ function organizationHomepageUrl(record){
 function identityText(value){
   return lower(value).replace(/[^a-z0-9가-힣]+/g," ").replace(/\s+/g," ").trim();
 }
+function compactIdentity(value){ return identityText(value).replace(/\s+/g,""); }
+function homepageIdentityText(record){
+  const r=plain(record), org=plain(r.org), preview=plain(r.sitePreview||r.site_preview);
+  const homepage=organizationHomepageUrl(r), host=urlHost(homepage).replace(/^www\./,"").replace(/[._-]+/g," ");
+  /* Homepage identity must come from the homepage itself, never from the PDF,
+     article or search-result document that happened to discover the domain. */
+  return identityText([
+    preview.title, preview.description,
+    r.homepageTitle, r.homepageDescription,
+    r.site_title, r.site_description,
+    host,
+    (r.homepageIdentityVerified===true||preview.identityVerified===true) ? org.name : "",
+    (r.homepageIdentityVerified===true||preview.identityVerified===true) ? org.legal_name : ""
+  ].filter(Boolean).join(" "));
+}
+function anchorNameVariants(anchorName){
+  return text(anchorName).split(/[\/|]/).map(identityText).filter(Boolean);
+}
+function genericAnchorName(anchorName){
+  const v=identityText(anchorName);
+  if(!v) return true;
+  return /^(?:christian|faith based)?\s*(?:anti trafficking|disability|volunteer|relief|education|environment|humanitarian)\s*(?:organization|organisation|ministry|nonprofit)?$/.test(v);
+}
+function anchorIdentityScore(record,anchorName){
+  const homepage=organizationHomepageUrl(record), previewBlob=homepageIdentityText(record);
+  if(!homepage||!previewBlob||genericAnchorName(anchorName)) return 0;
+  const hay=identityText(previewBlob), compactHay=compactIdentity(previewBlob);
+  const stop=new Set(["international","organization","organisation","association","foundation","official","website","homepage","the","of","for","and","ministry","movement","korea","korean"]);
+  let best=0;
+  for(const variant of anchorNameVariants(anchorName)){
+    const compactVariant=compactIdentity(variant);
+    if(compactVariant && compactVariant.length>=4 && compactHay.includes(compactVariant)) best=Math.max(best,100);
+    const tokens=variant.split(" ").filter(t=>t.length>=2&&!stop.has(t));
+    if(!tokens.length) continue;
+    const hits=tokens.filter(t=>hay.includes(t)||compactHay.includes(t.replace(/\s+/g,""))).length;
+    const ratio=hits/tokens.length;
+    const tokenScore=Math.round(ratio*80)+(hits>=2?10:0);
+    best=Math.max(best,tokenScore);
+  }
+  return best;
+}
+function matchesResearchAnchor(record,anchorName){
+  const variants=anchorNameVariants(anchorName);
+  if(!variants.length||genericAnchorName(anchorName)) return false;
+  const score=anchorIdentityScore(record,anchorName);
+  /* One-token proper names/acronyms (KOICA, UNICEF, WWF, PAUA...) need an
+     exact homepage title/host hit. Multi-token names need a strong majority. */
+  const meaningful=variants.flatMap(v=>v.split(" ")).filter(t=>t.length>=2&&!/^(?:international|organization|organisation|official|website|homepage|korea|korean)$/.test(t));
+  return meaningful.length<=1 ? score>=80 : score>=60;
+}
 function matchedResearchAnchorName(record,sectionValue){
-  const section=normalizeSection(sectionValue)||inferSection(record), frame=researchFrameFor(section), r=plain(record), org=plain(r.org);
-  const homepage=organizationHomepageUrl(r), host=urlHost(homepage).replace(/\.(?:org|com|net|int|edu|ngo|co\.kr|or\.kr|kr)$/i,"").replace(/[^a-z0-9가-힣]+/g," ");
-  const hay=identityText([r.title,r.name,org.name,org.legal_name,host].filter(Boolean).join(" "));
-  const stop=new Set(["international","organization","organisation","association","foundation","official","website","homepage","the","of","for","and","ministry","movement"]);
+  const section=normalizeSection(sectionValue)||inferSection(record), frame=researchFrameFor(section), r=plain(record), preview=plain(r.sitePreview||r.site_preview);
+  const explicit=text(r.researchAnchor||r.matchedResearchAnchor||r.research_anchor||preview.researchAnchor);
+  if(explicit && matchesResearchAnchor(r,explicit)) return explicit;
   for(const anchor of frame.anchors||[]){
-    const name=text(anchor&&anchor.name); if(!name) continue;
-    const variants=name.split(/[\/|]/).map(identityText).filter(Boolean);
-    for(const variant of variants){
-      const tokens=variant.split(" ").filter(t=>t.length>=2&&!stop.has(t));
-      if(!tokens.length) continue;
-      const matched=tokens.filter(t=>hay.includes(t)).length;
-      if(matched>=Math.max(1,Math.ceil(tokens.length*0.6))) return name;
-    }
+    const name=text(anchor&&anchor.name); if(!name||genericAnchorName(name)) continue;
+    if(matchesResearchAnchor(r,name)) return name;
   }
   return "";
 }
 function sectionIdentityEligible(record,sectionValue){
   const section=normalizeSection(sectionValue)||inferSection(record);
   if(section==="donation-global") return true;
+  const homepage=organizationHomepageUrl(record); if(!homepage) return false;
   if(matchedResearchAnchorName(record,section)) return true;
-  const blob=recordText(record), policy=policyFor(section), semanticMatches=countHints(blob,policy.semanticHints||[]);
+
+  /* For broad discovery, classify only the canonical homepage metadata. Never
+     use the source PDF/article text; that was the cause of FamilyMart/POSCO/
+     university reports being misclassified as Donation organizations. */
+  const blob=homepageIdentityText(record), policy=policyFor(section);
+  if(!blob) return false;
+  const semanticMatches=countHints(blob,policy.semanticHints||[]);
   if(semanticMatches<=0) return false;
-  const orgLike=/(?:organization|organisation|foundation|association|nonprofit|non-profit|charity|agency|federation|alliance|network|programme|program|ministry|mission|movement|fellowship|relief|humanitarian|habitat|fund|international)/i.test(blob);
-  const faith=/(?:christian|evangelical|protestant|church|faith[- ]based|bible|gospel|mission|ministry|campus ministry)/i.test(blob);
-  if(section==="donation-ngo") return orgLike;
-  if(section==="donation-mission") return faith && semanticMatches>0;
-  if(section==="donation-service") return semanticMatches>0 && (orgLike||faith);
-  if(section==="donation-relief") return semanticMatches>0 && orgLike;
-  if(section==="donation-education") return semanticMatches>0 && (orgLike||faith);
-  if(section==="donation-environment") return semanticMatches>0 && (orgLike||faith);
-  if(section==="donation-others") return semanticMatches>0 && (orgLike||faith);
-  return semanticMatches>0&&orgLike;
+  const host=urlHost(homepage);
+  const orgDomain=/(?:\.org|\.ngo|\.int|\.or\.kr|\.go\.kr)$/.test(host);
+  const eduDomain=/(?:\.edu|\.ac\.kr)$/.test(host);
+  const orgLike=/(?:organization|organisation|foundation|association|nonprofit|non-profit|charity|agency|federation|alliance|network|programme|program|ministry|mission|movement|fellowship|relief|humanitarian|habitat|fund|international|ngo|비영리|재단|협회|구호|선교|봉사)/i.test(blob);
+  const faith=/(?:christian|evangelical|protestant|church|faith[- ]based|bible|gospel|기독|복음)/i.test(blob);
+  if(section==="donation-ngo") return orgLike||orgDomain;
+  if(section==="donation-mission") return faith&&semanticMatches>0;
+  if(section==="donation-service") return semanticMatches>0&&(orgLike||orgDomain||faith);
+  if(section==="donation-relief") return semanticMatches>0&&(orgLike||orgDomain);
+  if(section==="donation-education") return semanticMatches>0&&(orgLike||orgDomain||eduDomain||faith);
+  if(section==="donation-environment") return semanticMatches>0&&(orgLike||orgDomain||faith);
+  if(section==="donation-others") return semanticMatches>0&&(orgLike||orgDomain||faith);
+  return semanticMatches>0&&(orgLike||orgDomain);
 }
 function candidateUrlForSection(record, sectionValue){
   const section=normalizeSection(sectionValue)||inferSection(record);
@@ -357,9 +410,13 @@ function representativeImageForSection(record, sectionValue){
   ];
   const mediaValues=[media.thumb,media.image,media.poster,r.thumbnail,r.thumb,r.image,r.og_image,r.ogImage,r.logo,r.logo_url,youtubeThumbnail(r)];
   const values=section==="donation-global"?mediaValues:websiteValues;
+  const homepage=section!=="donation-global"?organizationHomepageUrl(r):"";
   for(const value of values){
     const u=httpsUrl(value); if(!u||/placeholder|sample/i.test(u)) continue;
     if(section!=="donation-global"&&/(?:i\.ytimg\.com|img\.youtube\.com)\//i.test(u)) continue;
+    /* A page URL is not an image. Older discovery code accidentally resolved an
+       empty image field back to the homepage root; never publish that as thumb. */
+    if(homepage&&u===homepage) continue;
     return u;
   }
   return "";
@@ -470,5 +527,5 @@ function youtubeThumbnail(record){
 module.exports={
   VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,researchFrameFor,researchAnchors,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,
   missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls,
-  organizationWebsiteUrls,organizationHomepageUrl,canonicalOrganizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isDocumentUrl,isContentAggregatorHost,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection,matchedResearchAnchorName,sectionIdentityEligible
+  organizationWebsiteUrls,organizationHomepageUrl,canonicalOrganizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isDocumentUrl,isContentAggregatorHost,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection,homepageIdentityText,anchorIdentityScore,matchesResearchAnchor,genericAnchorName,matchedResearchAnchorName,sectionIdentityEligible
 };

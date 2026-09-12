@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.7.0-broad-research-official-homepage-pipeline";
+const VERSION = "donation-candidate-admin-v1.8.0-anchor-homepage-identity-pipeline";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -56,7 +56,8 @@ function homepageMeta(html){
 }
 function firstMeta(meta,keys){ for(const key of keys){const v=text(meta&&meta[key]);if(v)return v;} return ''; }
 function resolveHttps(base,value){
-  try{const u=new URL(text(value),base);return u.protocol==='https:'?u.toString():'';}catch(_e){return '';}
+  const raw=text(value);if(!raw)return '';
+  try{const u=new URL(raw,base);return u.protocol==='https:'?u.toString():'';}catch(_e){return '';}
 }
 function publicPreviewHost(homepage){
   try{
@@ -100,22 +101,40 @@ function homepageImage(html,meta,base){
 }
 async function fetchHomepagePreview(homepage,timeoutMs){
   const canonical=safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(homepage):homepage);
-  if(!canonical||!publicPreviewHost(canonical))return {homepage:canonical||'',title:'',description:'',image:'',resolved:false};
+  if(!canonical||!publicPreviewHost(canonical))return {homepage:canonical||'',title:'',description:'',image:'',resolved:false,identityResolved:false};
   if(homepagePreviewCache.has(canonical))return homepagePreviewCache.get(canonical);
   const promise=(async function(){
-    const controller=typeof AbortController==='function'?new AbortController():null;
-    const previewTimeout=Math.max(650,Math.min(1800,Number(timeoutMs)||1400));
-    const timer=controller?setTimeout(function(){try{controller.abort();}catch(_e){}},previewTimeout):null;
-    try{
-      const res=await fetch(canonical,{method:'GET',redirect:'follow',headers:{'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36','accept':'text/html,application/xhtml+xml;q=0.9,*/*;q=0.2','accept-language':'en-US,en;q=0.8'},signal:controller?controller.signal:undefined});
-      if(!res||!res.ok)return {homepage:canonical,title:'',description:'',image:'',resolved:false,status:res&&res.status||0};
-      const ctype=lower(res.headers&&res.headers.get&&res.headers.get('content-type'));if(ctype&&ctype.indexOf('html')<0)return {homepage:canonical,title:'',description:'',image:'',resolved:false,status:res.status};
-      let html=await res.text();if(html.length>650000)html=html.slice(0,650000);
-      const finalHome=safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(res.url||canonical):canonical)||canonical;
-      const meta=homepageMeta(html),image=homepageImage(html,meta,res.url||finalHome);
-      return {homepage:finalHome,title:limitText(homepageTitle(html,meta),300),description:limitText(homepageDescription(meta),1800),image:safeHttps(image),resolved:!!image,status:res.status};
-    }catch(error){return {homepage:canonical,title:'',description:'',image:'',resolved:false,error:text(error&&error.name||error)};}
-    finally{if(timer)clearTimeout(timer);}
+    const total=Math.max(1800,Math.min(5200,Number(timeoutMs)||3600));
+    const attempts=[
+      {ms:Math.max(1200,Math.floor(total*0.68)),referer:true,mobile:false},
+      {ms:Math.max(800,Math.floor(total*0.32)),referer:false,mobile:true}
+    ];
+    let last={homepage:canonical,title:'',description:'',image:'',resolved:false,identityResolved:false,status:0};
+    for(const attempt of attempts){
+      const controller=typeof AbortController==='function'?new AbortController():null;
+      const timer=controller?setTimeout(function(){try{controller.abort();}catch(_e){}},attempt.ms):null;
+      try{
+        const target=new URL(canonical);
+        const headers={
+          'user-agent':attempt.mobile?'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0 Mobile Safari/537.36':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0 Safari/537.36',
+          'accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'accept-language':'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+          'upgrade-insecure-requests':'1'
+        };
+        if(attempt.referer)headers.referer=target.origin+'/';
+        const res=await fetch(canonical,{method:'GET',redirect:'follow',headers,signal:controller?controller.signal:undefined});
+        last.status=res&&res.status||0;
+        if(!res||!res.ok){if([401,403,406,408,425,429,451,500,502,503,504,520,521,522,523,524].includes(Number(last.status)))continue;return last;}
+        const ctype=lower(res.headers&&res.headers.get&&res.headers.get('content-type'));
+        if(ctype&&ctype.indexOf('html')<0)return last;
+        let html=await res.text();if(html.length>850000)html=html.slice(0,850000);
+        const finalHome=safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(res.url||canonical):canonical)||canonical;
+        const meta=homepageMeta(html),title=limitText(homepageTitle(html,meta),300),description=limitText(homepageDescription(meta),1800),image=safeHttps(homepageImage(html,meta,res.url||finalHome));
+        return {homepage:finalHome,title,description,image,resolved:!!image,identityResolved:!!(title||description),status:res.status};
+      }catch(error){last.error=text(error&&error.name||error);}
+      finally{if(timer)clearTimeout(timer);}
+    }
+    return last;
   })();
   homepagePreviewCache.set(canonical,promise);
   return promise;
@@ -128,31 +147,36 @@ async function mapLimit(items,limit,worker){
 function researchQuery(section,customQuery){
   const sec=Policy.normalizeSection(section)||'donation-ngo',frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{},custom=text(customQuery);
   if(custom)return custom+(sec==='donation-global'?' latest humanitarian disaster video':' official website homepage');
-  /* Broad discovery stays broad. Named organizations are queried separately in
-     one bounded fallback call for an individual administrator re-search. */
   const primary=text(frame.primaryQuery);
   if(sec==='donation-global')return [primary,'latest official humanitarian video'].filter(Boolean).join(' ')||'latest humanitarian relief official video';
-  return [primary,'official website homepage'].filter(Boolean).join(' ')||Policy.SECTION_LABELS[sec]||'donation';
+  return primary&&/(?:official\s+(?:website|site)|homepage)/i.test(primary)?primary:([primary,'official website homepage'].filter(Boolean).join(' ')||Policy.SECTION_LABELS[sec]||'donation');
 }
-function researchAnchorQuery(section){
-  const sec=Policy.normalizeSection(section)||'donation-ngo',frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
-  const names=[];
-  (frame.anchors||[]).forEach(function(a){
-    text(a&&a.name).split(/[\/|]/).map(text).filter(Boolean).forEach(function(name){if(names.length<20&&!names.includes(name))names.push(name);});
-  });
-  if(!names.length)return '';
-  const bundle=names.map(function(name){return '"'+name.replace(/"/g,'')+'"';}).join(' OR ');
-  return sec==='donation-global'
-    ? [bundle,'latest official humanitarian video'].join(' ')
-    : [bundle,'official website homepage'].join(' ');
-}
-function researchQueries(section,customQuery,singleSection){
-  const primary=researchQuery(section,customQuery),out=[primary];
-  if(!text(customQuery)&&singleSection&&Policy.normalizeSection(section)!=='donation-global'){
-    const anchor=researchAnchorQuery(section);
-    if(anchor&&anchor!==primary)out.push(anchor);
+function representedResearchAnchors(section,existingViews){
+  const out=new Set();
+  for(const view of Array.isArray(existingViews)?existingViews:[]){
+    if(!view||view.section!==section||!view.candidate)continue;
+    if(!safeHttps(view.thumbnail||view.candidate.thumbnail||plain(view.candidate.media).thumb))continue;
+    const name=Policy.matchedResearchAnchorName?Policy.matchedResearchAnchorName(view.candidate,section):'';
+    if(name)out.add(name);
   }
-  return Array.from(new Set(out.filter(Boolean)));
+  return out;
+}
+function researchQuerySpecs(section,customQuery,singleSection,existingViews){
+  const sec=Policy.normalizeSection(section)||'donation-ngo',custom=text(customQuery),frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
+  const out=[{query:researchQuery(sec,custom),kind:custom?'custom':'broad',anchorName:''}];
+  if(!custom&&singleSection&&sec!=='donation-global'){
+    const represented=representedResearchAnchors(sec,existingViews);
+    const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query)};}).filter(function(a){return a.name&&a.query;});
+    anchors.sort(function(a,b){return Number(represented.has(a.name))-Number(represented.has(b.name));});
+    /* Individual exact anchor searches are intentionally bounded. A second
+       re-search naturally advances to anchors that are still missing. */
+    anchors.slice(0,12).forEach(function(a){out.push({query:a.query,kind:'anchor',anchorName:a.name});});
+  }
+  const seen=new Set();
+  return out.filter(function(spec){const q=text(spec&&spec.query);if(!q||seen.has(q))return false;seen.add(q);return true;});
+}
+function researchQueries(section,customQuery,singleSection,existingViews){
+  return researchQuerySpecs(section,customQuery,singleSection,existingViews).map(function(x){return x.query;});
 }
 function policyVisibleCandidate(candidate,section){
   const sec=Policy.normalizeSection(section)||Policy.inferSection(candidate||{},section);
@@ -223,6 +247,19 @@ function candidateThumb(item,section){
   const values=[media.thumb,media.image,r.thumbnail,r.thumb,r.image,r.og_image,r.logo,r.logo_url,Policy.youtubeThumbnail(r)];
   for(const value of values){ const u=safeHttps(value); if(u && !/placeholder|sample/i.test(u)) return u; }
   return "";
+}
+function isDirectHomepageResult(item,homepage){
+  const r=plain(item),link=plain(r.link),source=plain(r.source),values=[r.url,link.url,r.homepage,r.website,r.official_url,r.officialUrl,source.url];
+  for(const value of values){
+    const u=safeHttps(value);if(!u)continue;
+    try{
+      const parsed=new URL(u),canonical=safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(u):u);
+      if(canonical!==homepage)continue;
+      const path=(parsed.pathname||'/').replace(/\/+$/,'/')||'/';
+      if(path==='/'&&!parsed.search)return true;
+    }catch(_e){}
+  }
+  return false;
 }
 function sectionOf(item,fallback){ return Policy.normalizeSection(item&& (item.psom_key||item.section||item.bind&&item.bind.section)) || Policy.normalizeSection(fallback) || Policy.inferSection(item,fallback); }
 function stageOfPayload(payload){ const q=plain(payload&&payload.donationQueue); const stage=lower(q.stage); return STAGES.has(stage)?stage:"research"; }
@@ -429,38 +466,39 @@ async function performResearch(event,section,customQuery,limit){
   // pass turning an existing lane into an empty lane.
   const existing=await readRows(), existingMap=new Map(existing.map(r=>[text(r.id),r]));
 
+  const existingViews=existing.map(rowView);
   async function researchOne(sec){
-    const queries=researchQueries(sec,sections.length===1?customQuery:'',sections.length===1);
+    const specs=researchQuerySpecs(sec,sections.length===1?customQuery:'',sections.length===1,existingViews);
+    const queries=specs.map(function(x){return x.query;});
     const query=queries[0]||researchQuery(sec,'');
     const started=Date.now();let results=[];
     try{
-      results=await Promise.all(queries.map(function(q){
-        return SearchBank.runEngine(event,researchParams(sec,q,Math.min(60,Number(limit)||50)))
-          .then(function(result){return {q,result};})
-          .catch(function(error){return {q,error};});
+      results=await Promise.all(specs.map(function(spec){
+        const perQueryLimit=spec.kind==='anchor'?12:Math.min(36,Number(limit)||36);
+        return SearchBank.runEngine(event,researchParams(sec,spec.query,perQueryLimit))
+          .then(function(result){return {spec,result};})
+          .catch(function(error){return {spec,error};});
       }));
     }catch(error){
       return {section:sec,query,queries,accepted:0,engineItems:0,officialHomepageCount:0,globalVideoCount:0,previewResolved:0,skippedPolicy:0,skippedSearchLanding:0,durationMs:Date.now()-started,error:text(error&&error.message||error),writes:[]};
     }
-    const rawItems=[],adapterMeta=[],errors=[];
+    const rawEntries=[],adapterMeta=[],errors=[];
     results.forEach(function(entry){
       if(entry&&entry.error){errors.push(text(entry.error&&entry.error.message||entry.error));return;}
-      const result=entry&&entry.result,meta=plain(result&&result.meta);
-      if(Array.isArray(result&&result.items))rawItems.push(...result.items);
+      const result=entry&&entry.result,meta=plain(result&&result.meta),spec=entry&&entry.spec||{query,kind:'broad',anchorName:''};
+      if(Array.isArray(result&&result.items))result.items.forEach(function(item){rawEntries.push({item,spec});});
       if(Array.isArray(meta.adapters))adapterMeta.push(...meta.adapters);
     });
-    const itemMap=new Map();
-    rawItems.forEach(function(item,index){
-      const r=plain(item),link=plain(r.link),org=plain(r.org);
-      const key=text(r.id||r.uid||r.url||link.url||org.homepage||r.title||('row-'+index)).toLowerCase();
-      if(!itemMap.has(key))itemMap.set(key,item);
-    });
-    const items=Array.from(itemMap.values());
     const meta={adapters:adapterMeta},writes=[],seen=new Set();
-    let skippedPolicy=0,skippedSearchLanding=0,officialHomepageCount=0,globalVideoCount=0,previewResolved=0,skippedExcluded=0;
+    let skippedPolicy=0,skippedSearchLanding=0,officialHomepageCount=0,globalVideoCount=0,previewResolved=0,skippedExcluded=0,identityRejected=0;
 
-    if(sec==="donation-global"){
-      for(const item of items){
+    if(sec==='donation-global'){
+      const itemMap=new Map();
+      rawEntries.forEach(function(entry,index){
+        const r=plain(entry.item),link=plain(r.link),org=plain(r.org),key=text(r.id||r.uid||r.url||link.url||org.homepage||r.title||('row-'+index)).toLowerCase();
+        if(!itemMap.has(key))itemMap.set(key,entry.item);
+      });
+      for(const item of itemMap.values()){
         if(Policy.isPlaceholder(item))continue;
         const url=Policy.candidateUrlForSection?Policy.candidateUrlForSection(item,sec):candidateUrl(item,sec);
         if(!url){if(Policy.candidateUrls(item||{}).some(function(u){return Policy.isSearchLandingUrl&&Policy.isSearchLandingUrl(u);}))skippedSearchLanding++;else skippedPolicy++;continue;}
@@ -469,57 +507,83 @@ async function performResearch(event,section,customQuery,limit){
         if(!policyVisibleCandidate(norm.candidate,sec)){skippedPolicy++;continue;}
         if(seen.has(norm.id))continue;seen.add(norm.id);globalVideoCount++;
         const previous=existingMap.get(norm.id),previousPayload=plain(previous&&previous.source_payload),previousStage=stageOfPayload(previousPayload);
-        if(previousStage==="excluded"){skippedExcluded++;continue;}
-        const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:"research";
+        if(previousStage==='excluded'){skippedExcluded++;continue;}
+        const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:'research';
         const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
-        const candidate=Object.assign({},norm.candidate,previousCandidate);candidate.section=sec;candidate.psom_key=sec;candidate.channel="donation";candidate.page="donation";
-        writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Donation Global News video candidate.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
+        const candidate=Object.assign({},norm.candidate,previousCandidate);candidate.section=sec;candidate.psom_key=sec;candidate.channel='donation';candidate.page='donation';
+        writes.push({id:norm.id,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Donation Global News video candidate.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
     }else{
-      /* Convert every acceptable result to the institution's HTTPS origin first.
-         Deep articles, reports and PDF/document URLs may help discover a domain,
-         but they are never stored as the card destination. */
-      const byHomepage=new Map();
-      for(const item of items){
+      /* Keep query context. A document can discover a domain, but only the
+         canonical homepage itself is allowed to prove organization identity. */
+      const bySpecHome=new Map();
+      for(const entry of rawEntries){
+        const item=plain(entry&&entry.item),spec=entry&&entry.spec||{kind:'broad',anchorName:'',query};
         if(Policy.isPlaceholder(item))continue;
-        const homepage=Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(item):"";
+        const homepage=Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(item):'';
         if(!homepage){if(Policy.candidateUrls(item||{}).some(function(u){return Policy.isSearchLandingUrl&&Policy.isSearchLandingUrl(u);}))skippedSearchLanding++;else skippedPolicy++;continue;}
-        if(Policy.sectionIdentityEligible&&!Policy.sectionIdentityEligible(item,sec)){skippedPolicy++;continue;}
-        const key=homepage.toLowerCase(),score=Number(Policy.sectionRelevance?Policy.sectionRelevance(item,sec):0)||0,anchor=Policy.matchedResearchAnchorName?Policy.matchedResearchAnchorName(item,sec):"";
-        const current=byHomepage.get(key);if(!current||score+(anchor?100:0)>current.score)byHomepage.set(key,{item,homepage,score:score+(anchor?100:0),anchor});
+        const score=Number(Policy.sectionRelevance?Policy.sectionRelevance(item,sec):0)||0;
+        const key=[spec.kind,spec.anchorName||'',homepage.toLowerCase()].join('|');
+        const current=bySpecHome.get(key);
+        if(!current||score>current.score)bySpecHome.set(key,{item,homepage,score,spec});
       }
-      const roots=Array.from(byHomepage.values()).sort(function(a,b){return b.score-a.score;}).slice(0,sections.length>1?10:24);
-      const enriched=await mapLimit(roots,sections.length>1?5:6,async function(entry){
-        const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?900:1400);
-        const image=safeHttps(preview.image||candidateThumb(entry.item,sec));
-        const raw=plain(entry.item),org=Object.assign({},plain(raw.org),{homepage:preview.homepage||entry.homepage,name:entry.anchor||plain(raw.org).name||raw.name||preview.title||raw.title});
-        const media=Object.assign({},plain(raw.media),{kind:"image",src:null,thumb:image,image});
+      const anchorGroups=new Map(),broad=[];
+      for(const entry of bySpecHome.values()){
+        if(entry.spec&&entry.spec.kind==='anchor'&&entry.spec.anchorName){
+          if(!anchorGroups.has(entry.spec.anchorName))anchorGroups.set(entry.spec.anchorName,[]);
+          anchorGroups.get(entry.spec.anchorName).push(entry);
+        }else broad.push(entry);
+      }
+      const roots=[];
+      for(const group of anchorGroups.values())roots.push(...group.sort(function(a,b){return b.score-a.score;}).slice(0,1));
+      roots.push(...broad.sort(function(a,b){return b.score-a.score;}).slice(0,sections.length>1?3:4));
+      const enriched=await mapLimit(roots,sections.length>1?6:16,async function(entry){
+        const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?1800:2800);
+        const home=preview.homepage||entry.homepage,raw=plain(entry.item),spec=entry.spec||{kind:'broad',anchorName:'',query};
+        const probe={url:home,homepage:home,official_url:home,org:{homepage:home},sitePreview:{homepage:home,title:preview.title||'',description:preview.description||'',identityVerified:false},homepageTitle:preview.title||'',homepageDescription:preview.description||''};
+        const namedAnchor=spec.kind==='anchor'&&!((Policy.genericAnchorName&&Policy.genericAnchorName(spec.anchorName))||!text(spec.anchorName));
+        const anchorVerified=namedAnchor&&Policy.matchesResearchAnchor&&Policy.matchesResearchAnchor(probe,spec.anchorName);
+        const matchedAnchor=anchorVerified?spec.anchorName:(Policy.matchedResearchAnchorName?Policy.matchedResearchAnchorName(probe,sec):'');
+        const identityVerified=!!(anchorVerified||matchedAnchor||(Policy.sectionIdentityEligible&&Policy.sectionIdentityEligible(probe,sec)));
+        if(!identityVerified)return {rejected:true,reason:'homepage_identity_mismatch'};
+        const directThumb=isDirectHomepageResult(raw,entry.homepage)?candidateThumb(raw,sec):'';
+        const image=safeHttps(preview.image||directThumb);
+        const org=Object.assign({},plain(raw.org),{homepage:home,name:limitText(matchedAnchor||preview.title||plain(raw.org).name||raw.name||home,300)});
+        const media=Object.assign({},plain(raw.media),{kind:'image',src:null,embed_url:null,thumb:image||null,image:image||null});
+        const summary=limitText(preview.description||(matchedAnchor?'Official organization homepage.':''),1800);
         return Object.assign({},raw,{
-          title:limitText(entry.anchor||org.name||preview.title||raw.title||entry.homepage,300),
-          summary:limitText(preview.description||raw.summary||raw.description||raw.about||"",1800),
-          url:preview.homepage||entry.homepage,homepage:preview.homepage||entry.homepage,website:preview.homepage||entry.homepage,official_url:preview.homepage||entry.homepage,
+          title:limitText(matchedAnchor||preview.title||org.name||home,300),summary,
+          url:home,homepage:home,website:home,official_url:home,
           thumbnail:image||null,thumb:image||null,image:image||null,og_image:image||null,site_preview_image:image||null,
-          org,media,link:Object.assign({},plain(raw.link),{mode:"org-homepage",url:preview.homepage||entry.homepage,target:"_blank"}),
-          sitePreview:{resolved:!!image,kind:"homepage-meta",homepage:preview.homepage||entry.homepage,image:image||null,title:preview.title||null,capturedAt:nowIso()},
-          sourcePageUrl:safeHttps(raw.url||plain(raw.link).url||plain(raw.source).url)||null
+          org,media,link:Object.assign({},plain(raw.link),{mode:'org-homepage',url:home,target:'_blank'}),
+          researchAnchor:matchedAnchor||null,homepageIdentityVerified:true,
+          sitePreview:{resolved:!!image,identityVerified:true,kind:'homepage-meta',homepage:home,image:image||null,title:preview.title||null,description:preview.description||null,researchAnchor:matchedAnchor||null,capturedAt:nowIso()},
+          donationResearch:{kind:spec.kind,query:spec.query,anchor:matchedAnchor||spec.anchorName||null,identityVerified:true},
+          sourcePageUrl:safeHttps(raw.url||plain(raw.link).url||plain(raw.source).url)||null,
+          __researchQuery:spec.query
         });
       });
-      for(const item of enriched.filter(Boolean)){
-        const norm=normalizeCandidate(item,sec,query);
+      identityRejected=enriched.filter(function(x){return x&&x.rejected;}).length;
+      for(const item of enriched.filter(function(x){return x&&!x.rejected;})){
+        const itemQuery=text(item.__researchQuery)||query;
+        const norm=normalizeCandidate(item,sec,itemQuery);
         if(!norm.candidate.url||!researchVisibleCandidate(norm.candidate,sec)){skippedPolicy++;continue;}
+        norm.candidate.researchAnchor=item.researchAnchor||null;
+        norm.candidate.homepageIdentityVerified=true;
+        norm.candidate.sitePreview=item.sitePreview;
+        norm.candidate.donationResearch=item.donationResearch;
         if(seen.has(norm.id))continue;seen.add(norm.id);officialHomepageCount++;if(norm.candidate.thumbnail)previewResolved++;
         const previous=existingMap.get(norm.id),previousPayload=plain(previous&&previous.source_payload),previousStage=stageOfPayload(previousPayload);
-        if(previousStage==="excluded"){skippedExcluded++;continue;}
-        const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:"research";
+        if(previousStage==='excluded'){skippedExcluded++;continue;}
+        const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:'research';
         const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
-        const candidate=Object.assign({},norm.candidate,previousCandidate);candidate.section=sec;candidate.psom_key=sec;candidate.channel="donation";candidate.page="donation";
-        /* A current official-homepage preview outranks stale document/video data
-           that may exist on an older row with the same id. */
-        candidate.url=norm.candidate.url;candidate.thumbnail=norm.candidate.thumbnail;candidate.org=norm.candidate.org;candidate.media=norm.candidate.media;candidate.link=norm.candidate.link||item.link;candidate.sitePreview=item.sitePreview;
-        writes.push({id:norm.id,kind:"donation",title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:"Official organization homepage + homepage representative preview.",source_payload:{schema:"igdc-donation-candidate.v1",candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
+        const candidate=Object.assign({},previousCandidate,norm.candidate);candidate.section=sec;candidate.psom_key=sec;candidate.channel='donation';candidate.page='donation';
+        /* Current canonical homepage data always wins over stale document data. */
+        candidate.url=norm.candidate.url;candidate.thumbnail=norm.candidate.thumbnail;candidate.org=norm.candidate.org;candidate.media=norm.candidate.media;candidate.link=norm.candidate.link||item.link;candidate.sitePreview=item.sitePreview;candidate.researchAnchor=item.researchAnchor||null;candidate.homepageIdentityVerified=true;candidate.donationResearch=item.donationResearch;
+        writes.push({id:norm.id,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Verified official organization homepage + homepage representative preview.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
     }
-    return {section:sec,query,queries,accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,officialHomepageCount,globalVideoCount,previewResolved,engineItems:items.length,durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
+    return {section:sec,query,queries,queryPlan:specs.map(function(x){return {kind:x.kind,anchorName:x.anchorName||null,query:x.query};}),accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,identityRejected,officialHomepageCount,globalVideoCount,previewResolved,engineItems:rawEntries.length,durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
   }
 
   const sectionResults=[];const concurrency=section==="all"?8:1;
@@ -706,8 +770,9 @@ exports.handler=async function(event){
     }
     if(action==="searchbank_apply"){
       const section=lower(body.section)==="all"?"all":Policy.normalizeSection(body.section||"all")||"all";
-      const searchBank=await applyResearchFrameToSearchBank(event,section,text(body.query),body.limit||100);
-      return json(200,{ok:true,version:VERSION,action,searchBank,publicPublication:false});
+      const publishedIds=await publishedIdsForScope(section);
+      const searchBank=await publishExactCandidatesToSearchBank(event,publishedIds,body.limit||100);
+      return json(200,{ok:true,version:VERSION,action,section,publishedCount:publishedIds.length,searchBank,publicPublication:false,mode:"approved-exact-reconcile"});
     }
     return json(400,{ok:false,error:"unsupported_action"});
   }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null,version:VERSION});}

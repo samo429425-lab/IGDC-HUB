@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260910-seven-platform-connect-v1'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260913-seven-platform-safe-v3'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;

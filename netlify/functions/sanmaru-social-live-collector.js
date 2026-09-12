@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.19.0-registry-bootstrap-preview";
+const VERSION = "sanmaru-social-live-collector-v1.19.1-safe-sample-preview";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;

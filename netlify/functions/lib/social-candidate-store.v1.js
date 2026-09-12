@@ -13,7 +13,7 @@ const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
 const VERSION =
-  "social-candidate-store-v1.9.1-tiktok-url-compat";
+  "social-candidate-store-v1.9.2-seven-sns-sample-safe";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1109,6 +1109,41 @@ function publishableThumbnail(row) {
   if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
   return thumb;
 }
+const SAMPLE_SAFE_PREVIEW_PLATFORMS = new Set([
+  "instagram",
+  "tiktok",
+  "wechat",
+  "weibo",
+  "pinterest",
+  "reddit",
+  "twitter",
+]);
+function publishableIdentity(row) {
+  const r = plain(row);
+  const raw = plain(r.raw);
+  const evidence = plain(r.evidence);
+  const values = [
+    r.creator_name,
+    r.creatorName,
+    r.creator_handle,
+    r.creatorHandle,
+    raw.creatorName,
+    raw.creator_name,
+    raw.creatorHandle,
+    raw.creator_handle,
+    evidence.creatorName,
+    evidence.creatorHandle,
+    r.title,
+    raw.title,
+    r.description,
+    raw.description,
+  ].map(text).filter(Boolean);
+  const generic = /^(?:instagram|tiktok|wechat|weibo|pinterest|reddit|twitter|x|social)(?:\s+(?:post|reel|video|pin|content|item))?$/i;
+  return values.some((value) => {
+    const clean = value.replace(/\s+/g, " ").trim();
+    return clean.length >= 2 && !generic.test(clean) && !/^loading[.…]*$/i.test(clean);
+  });
+}
 function isPublishEligibleContentRow(row) {
   const r = plain(row);
   if (!isApprovedForSnapshot(r)) return false;
@@ -1125,7 +1160,13 @@ function isPublishEligibleContentRow(row) {
       r.source_url ||
       r.sourceUrl,
   );
-  return !!contentUrl && !!publishableThumbnail(r);
+  if (!contentUrl || !publishableThumbnail(r)) return false;
+  // Safety rule for the seven recovering SNS sections:
+  // a SAMPLE slot is replaced only when the real content has enough identity
+  // to tell the viewer what/who it is. YouTube/Facebook keep their established
+  // publication contract unchanged.
+  if (SAMPLE_SAFE_PREVIEW_PLATFORMS.has(platform) && !publishableIdentity(r)) return false;
+  return true;
 }
 function approvedContentRows(rows) {
   // Influencer registry and latest-content publication are independent pools.
@@ -1287,6 +1328,13 @@ function publicSocialSlot(row, slotId, defaults) {
   const platformHint = text(
     r.platform || PLATFORM_BY_SECTION[text(r.section_key || r.sectionKey)] || "social",
   );
+  // Defensive SAMPLE-preserve gate. Even if a future caller invokes this
+  // mapper directly, an incomplete real row must not consume a SAMPLE slot.
+  if (SAMPLE_SAFE_PREVIEW_PLATFORMS.has(platformHint) && !isPublishEligibleContentRow(r)) {
+    return Object.assign({}, base, {
+      slotId: Number(slotId) || Number(base.slotId) || 1,
+    });
+  }
   const latestContentUrl = text(
     platformContentUrl(
       platformHint,
@@ -1741,6 +1789,7 @@ module.exports = {
   isApprovedForSnapshot,
   isPublishEligibleContentRow,
   publishableThumbnail,
+  publishableIdentity,
   rowScore,
   selectRotation,
   publicSocialSlot,

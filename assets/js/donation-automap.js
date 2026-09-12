@@ -1,5 +1,5 @@
 /**
- * donation-automap.integrated.v8.js
+ * donation-automap.integrated.v8.1-official-homepage-links.js
  * ------------------------------------------------------------
  * 목적:
  * - 기존 donation-automap.v7.enterprise.js 구조/역할 유지
@@ -334,7 +334,7 @@ function groupBySection(items){
 
 
   function renderCard(it){
-    const img = safeUrl(it?.media?.thumb) || '';
+    const rawImg = safeUrl(it?.media?.thumb) || '';
     const title = escHtml(it?.org?.name || it?.title || '');
     const meta = escHtml(
       it?.org?.country ||
@@ -346,9 +346,14 @@ function groupBySection(items){
     // Institution cards always open the verified organization homepage.
     const url = safeExternalUrl(it?.org?.homepage) || safeExternalUrl(it?.link?.url) || safeExternalUrl(it?.url) || '';
     const uid = escAttr(it?.uid || it?.id || '');
-    const thumbImage = img ? `<img src="${escAttr(img)}" loading="lazy" alt="${title}">` : '';
+    const sample = isSeedItem(it) || /(?:placeholder|sample)/i.test(rawImg);
+    const img = sample ? '' : safeExternalUrl(rawImg);
+    const neutralFallback = '<span class="donation-thumb-fallback" aria-hidden="true" style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;background:#e5e7eb;color:#9ca3af;font-size:24px">↗</span>';
+    const thumbImage = img
+      ? `<img class="donation-site-thumb" src="${escAttr(img)}" loading="lazy" alt="${title}"><span class="donation-thumb-fallback" aria-hidden="true" style="display:none;width:100%;height:100%;align-items:center;justify-content:center;background:#e5e7eb;color:#9ca3af;font-size:24px">↗</span>`
+      : neutralFallback;
     const thumbHtml = url
-      ? `<a class="donation-thumb-link" href="${escAttr(url)}" target="_blank" rel="noopener noreferrer" aria-label="${title}" style="display:block;width:100%;height:100%">${thumbImage}</a>`
+      ? `<a class="donation-thumb-link" href="${escAttr(url)}" target="_blank" rel="noopener noreferrer" aria-label="${title}" style="display:block;width:100%;height:100%;cursor:pointer">${thumbImage}</a>`
       : thumbImage;
 
     return `
@@ -361,6 +366,19 @@ function groupBySection(items){
         </div>
       </div>
     `;
+  }
+
+  function wireThumbnailFailures(box){
+    if(!box) return;
+    box.querySelectorAll('img.donation-site-thumb').forEach((img)=>{
+      const fail=()=>{
+        img.style.display='none';
+        const fallback=img.parentElement?.querySelector?.('.donation-thumb-fallback');
+        if(fallback) fallback.style.display='flex';
+      };
+      img.addEventListener('error', fail, { once:true });
+      if(img.complete && !img.naturalWidth) fail();
+    });
   }
 
 function mountSection(key, items, limit){
@@ -451,6 +469,7 @@ function mountSection(key, items, limit){
   for(const it of slice){
     box.insertAdjacentHTML('beforeend', renderCard(it));
   }
+  wireThumbnailFailures(box);
 }
 
   async function main(){
