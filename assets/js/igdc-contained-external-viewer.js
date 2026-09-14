@@ -1,4 +1,4 @@
-/* IGDC contained external viewer v6
+/* IGDC contained external viewer v7
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
@@ -17,10 +17,10 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V6__) return;
-  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V6__ = true;
+  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V7__) return;
+  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V7__ = true;
 
-  var VIEWER_VERSION = 6;
+  var VIEWER_VERSION = 7;
 
   var PROXY_PATH = '/.netlify/functions/search-page-proxy';
   var ROOT_ID = 'igdc-contained-external-viewer';
@@ -180,14 +180,34 @@
       requestClose();
     });
 
-    state.frame.addEventListener('load', function () {
-      /* Direct pages are allowed to paint as soon as the browser has them.  If
-       * the policy check later says framing is blocked we re-show the loader
-       * briefly and replace the frame with the contained proxy. */
-      hideLoadingSoon(state.viewerMode === 'direct' ? 60 : 120);
-    });
+    bindFrameLoad(state.frame);
 
     return root;
+  }
+
+  function bindFrameLoad(frame) {
+    if (!frame) return;
+    frame.addEventListener('load', function () {
+      /* Only the currently mounted iframe may clear the loader.  Replacing the
+       * iframe for every destination prevents a late load from the previous
+       * marketplace from painting under the next marketplace label. */
+      if (frame !== state.frame) return;
+      hideLoadingSoon(state.viewerMode === 'direct' ? 60 : 120);
+    });
+  }
+
+  function renewFrame() {
+    ensureDom();
+    var old = state.frame;
+    if (!old || !old.parentNode) return old;
+    var frame = document.createElement('iframe');
+    frame.className = 'igdc-contained-frame';
+    frame.title = '외부 사이트 내부 보기';
+    frame.referrerPolicy = 'no-referrer-when-downgrade';
+    old.parentNode.replaceChild(frame, old);
+    state.frame = frame;
+    bindFrameLoad(frame);
+    return frame;
   }
 
   function showLoading(message) {
@@ -384,37 +404,42 @@
     state.target = target;
     state.kind = String(options.kind || state.kind || '');
     state.activeLoadSeq += 1;
-    var seq = state.activeLoadSeq;
     updateBar(target, options.label || state.label);
     showLoading('사이트를 불러오는 중입니다…');
 
-    /* v6 speed/reliability path:
-     * Start the real destination immediately. In parallel inspect frame policy.
-     * Switch to the IGDC relay only when X-Frame-Options/CSP positively blocks
-     * framing. Probe timeout/network failure never replaces a working page. */
+    /* Deterministic compatibility routing.
+     * Do not start one marketplace directly and then replace it with another
+     * route after an asynchronous probe.  That direct->proxy race was what
+     * produced intermittent blank pages, previous-site bleed-through and
+     * different results for Amazon country buttons.
+     *
+     * Network/Tour keep the proven v4 rule: use the IGDC relay immediately for
+     * restrictive sites; only a very small verified allow-list is framed
+     * directly.  Every new destination gets a fresh iframe. */
+    renewFrame();
+
     if (options.forceProxy) {
       setFrameProxy(target, 'static');
       return;
     }
 
+    if (state.kind === 'market' || state.kind === 'tour') {
+      if (directKnownGood(target, state.kind) && !preferProxy(target)) {
+        setFrameDirect(target);
+      } else {
+        setFrameProxy(target, 'static');
+      }
+      return;
+    }
+
     var cached = getCachedPolicy(target);
-    if (cached && cached.ok && cached.directAllowed === false) {
-      setFrameProxy(target, 'static');
+    if (cached) {
+      if (cached.directAllowed) setFrameDirect(target);
+      else setFrameProxy(target, 'static');
       return;
     }
 
     setFrameDirect(target);
-    state.pendingPolicyTarget = target;
-
-    framePolicy(target).then(function (policy) {
-      if (!state.open || seq !== state.activeLoadSeq || state.target !== target) return;
-      state.pendingPolicyTarget = '';
-      if (!policy || policy.ok === false || policy.directAllowed !== false) return;
-      showLoading('사이트를 안전하게 불러오는 중입니다…');
-      setFrameProxy(target, 'static');
-    }).catch(function(){
-      state.pendingPolicyTarget = '';
-    });
   }
 
   function captureOverflowLock(doc) {
