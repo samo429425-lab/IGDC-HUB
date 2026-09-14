@@ -79,7 +79,7 @@ function proxyUrl(v, baseUrl, opts){
   sp.set('mode', (opts && opts.mode) || 'static');
   if(opts && opts.proxyId) sp.set('proxyId', opts.proxyId);
   sp.set('url', abs);
-  return '/.netlify/functions/network-page-proxy?' + sp.toString();
+  return '/.netlify/functions/tour-page-proxy?' + sp.toString();
 }
 
 function assetProxyUrl(v, baseUrl, kind){
@@ -89,7 +89,7 @@ function assetProxyUrl(v, baseUrl, kind){
   sp.set('asset', '1');
   if(kind) sp.set('kind', kind);
   sp.set('url', abs);
-  return '/.netlify/functions/network-page-proxy?' + sp.toString();
+  return '/.netlify/functions/tour-page-proxy?' + sp.toString();
 }
 
 function removeFrameAndRedirectTraps(markup){
@@ -262,11 +262,11 @@ function rewriteCssForRelay(cssText, finalUrl){
   return out;
 }
 
-function liveNetworkBridge(finalUrl){
+function liveTourBridge(finalUrl){
   const baseUrl = String(finalUrl || '');
   return `<script>(function(){
     var BASE_URL=${JSON.stringify(baseUrl)};
-    var RELAY='/.netlify/functions/network-page-proxy';
+    var RELAY='/.netlify/functions/tour-page-proxy';
     function abs(v){try{return new URL(v,BASE_URL||location.href).href}catch(e){return ''}}
     function relay(v,kind){var u=abs(v);if(!/^https?:/i.test(u))return v;return RELAY+'?asset=1&kind='+(kind||'api')+'&url='+encodeURIComponent(u)}
     try{
@@ -274,7 +274,7 @@ function liveNetworkBridge(finalUrl){
       if(nativeFetch) window.fetch=function(input,init){
         try{
           var raw=(typeof input==='string'||input instanceof URL)?String(input):(input&&input.url)||'';
-          if(/^\/?\.netlify\/functions\/network-page-proxy/i.test(raw)) return nativeFetch.call(this,input,init);
+          if(/^\/?\.netlify\/functions\/tour-page-proxy/i.test(raw)) return nativeFetch.call(this,input,init);
           var u=abs(raw);
           if(/^https?:/i.test(u)) return nativeFetch.call(this,relay(u,'api'),init);
         }catch(e){}
@@ -284,7 +284,7 @@ function liveNetworkBridge(finalUrl){
     try{
       var XO=XMLHttpRequest.prototype.open;
       XMLHttpRequest.prototype.open=function(method,url){
-        try{if(!/^\/?\.netlify\/functions\/network-page-proxy/i.test(String(url||''))) arguments[1]=relay(url,'api')}catch(e){}
+        try{if(!/^\/?\.netlify\/functions\/tour-page-proxy/i.test(String(url||''))) arguments[1]=relay(url,'api')}catch(e){}
         return XO.apply(this,arguments);
       };
     }catch(e){}
@@ -334,7 +334,7 @@ function injectShell(htmlText, finalUrl, opts){
     '<base href="' + escapeHtml(finalUrl) + '">',
     '<meta name="referrer" content="no-referrer-when-downgrade">',
     '<style>html,body{min-height:100%;margin:0;background:#fff!important;visibility:visible!important;opacity:1!important;}body{overflow:auto!important;}body.loading,body.preload,body.preloading{visibility:visible!important;opacity:1!important;}img,video,svg,canvas{max-width:100%;height:auto;}table{max-width:100%;}a{cursor:pointer;}</style>',
-    mode === 'live' ? liveNetworkBridge(finalUrl) : '',
+    mode === 'live' ? liveTourBridge(finalUrl) : '',
     lightweightBridge(finalUrl, opts)
   ].join('');
 
@@ -459,7 +459,7 @@ function shouldRetryStatus(status){
 async function fetchWithBrowserProfiles(event, target, fetchOpts){
   /* Render-speed path: profiles are staggered in parallel instead of waiting
    * for three full sequential upstream round-trips.  Nothing is prefetched;
-   * this runs only after a user actually opens a Network/Tour target. */
+   * this runs only after a user actually opens a Tour target. */
   const profiles = [
     { name:'desktop', delay:0 },
     { name:'no-referer', delay:220 },

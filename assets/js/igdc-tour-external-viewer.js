@@ -1,6 +1,6 @@
-/* IGDC Network external viewer v10 adaptive-compatibility
+/* IGDC Tour external viewer v10 adaptive-compatibility
  * Scope:
- *   - Network Hub main marketplace .link-btn links
+ *   - Tour main service .link-btn links
  *
  * v2 refinements:
  *   - Immediate direct-frame start (no frame-policy preflight stall)
@@ -14,17 +14,17 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_NETWORK_EXTERNAL_VIEWER_V10__) return;
-  global.__IGDC_NETWORK_EXTERNAL_VIEWER_V10__ = true;
+  if (global.__IGDC_TOUR_EXTERNAL_VIEWER_V10__) return;
+  global.__IGDC_TOUR_EXTERNAL_VIEWER_V10__ = true;
 
   var VIEWER_VERSION = 10;
 
-  var PROXY_PATH = '/.netlify/functions/network-page-proxy';
-  var ROOT_ID = 'igdc-network-external-viewer';
-  var STYLE_ID = 'igdc-network-external-viewer-style';
-  var HISTORY_KEY = '__igdcNetworkViewer';
-  var HISTORY_TOKEN_KEY = '__igdcNetworkViewerToken';
-  var POLICY_CACHE_KEY = '__igdcNetworkFramePolicyV10';
+  var PROXY_PATH = '/.netlify/functions/tour-page-proxy';
+  var ROOT_ID = 'igdc-tour-external-viewer';
+  var STYLE_ID = 'igdc-tour-external-viewer-style';
+  var HISTORY_KEY = '__igdcTourViewer';
+  var HISTORY_TOKEN_KEY = '__igdcTourViewerToken';
+  var POLICY_CACHE_KEY = '__igdcTourFramePolicyV10';
   var POLICY_TTL_MS = 30 * 60 * 1000;
   var POLICY_TIMEOUT_MS = 3600;
 
@@ -79,37 +79,18 @@
     return String((el && el.textContent) || '').replace(/\s+/g, ' ').trim();
   }
 
-  function isCoupangUrl(raw) {
-    try {
-      var u = new URL(String(raw || ''), global.location.href);
-      var host = String(u.hostname || '').toLowerCase();
-      return u.protocol === 'https:' && (host === 'coupang.com' || host.endsWith('.coupang.com'));
-    } catch (e) { return false; }
-  }
 
-  function resolveCoupangPartnersDestination(source) {
-    var endpoint = '/api/coupang-partners-entry?source=' + encodeURIComponent(source || 'networkhub') + '&format=json';
-    return fetch(endpoint, { cache:'no-store', credentials:'same-origin' }).then(function(r){
-      if (!r.ok) throw new Error('coupang-entry-' + r.status);
-      return r.json();
-    }).then(function(data){
-      var destination = isHttpUrl(data && data.destination || '');
-      if (!destination || !isCoupangUrl(destination)) throw new Error('invalid-coupang-destination');
-      return destination;
-    });
-  }
-
-  function isNetworkPage() {
+  function isTourPage() {
     var p = String(global.location.pathname || '').toLowerCase();
-    return /(?:^|\/)networkhub(?:_[a-z0-9-]+)?(?:\.html)?\/?$/.test(p);
+    return /(?:^|\/)tour(?:_[a-z0-9-]+)?(?:\.html)?\/?$/.test(p);
   }
 
   function eligibleAnchor(target) {
     var a = target && target.closest ? target.closest('a.link-btn[href]') : null;
-    if (!a || !isNetworkPage()) return null;
+    if (!a || !isTourPage()) return null;
     var href = isHttpUrl(a.getAttribute('href') || a.href || '');
     if (!href) return null;
-    return { anchor:a, href:href, kind:'market' };
+    return { anchor:a, href:href, kind:'tour' };
   }
 
   function ensureStyle() {
@@ -209,23 +190,33 @@
 
   function directKnownGood(target, kind) {
     var host = hostOf(target).toLowerCase();
-    if (kind === 'market') {
-      return hostMatches(host, 'coupang.com') ||
-             hostMatches(host, 'jd.com') ||
-             hostMatches(host, 'walmart.com') ||
-             host === 'amazon.com' || host === 'www.amazon.com';
-    }
-    return false;
+    if (kind !== 'tour') return false;
+    return hostMatches(host, 'hanatour.com') ||
+           hostMatches(host, 'modetour.com') ||
+           hostMatches(host, 'ybtour.co.kr') ||
+           hostMatches(host, 'jtb.co.jp') ||
+           hostMatches(host, 'knt.co.jp') ||
+           hostMatches(host, 'his.co.jp') ||
+           hostMatches(host, 'his-j.com') ||
+           hostMatches(host, 'almosafer.com');
   }
 
-  /* These hosts are script-shell/SPA heavy or were observed by the operator to
-   * stall, stay blank, or render only a skeleton in a direct third-party frame.
-   * They go through the Network live relay, which keeps scripts and relays the
-   * page's own script/CSS/fetch/XHR traffic instead of stripping it. */
+  /* Tour aggregators and booking SPAs commonly need their own JavaScript,
+   * CSS and XHR/fetch traffic to finish rendering. Static proxying strips the
+   * exact code these pages require, which produced blank pages, permanent
+   * spinners and "enable JS" screens. These hosts therefore use the dedicated
+   * Tour live relay from the first request. */
   var LIVE_RELAY_HOSTS = [
-    'smartstore.naver.com','gmarket.co.kr','taobao.com','tmall.com','pinduoduo.com',
-    'shopee.com','lazada.com','tokopedia.com','bukalapak.com','wildberries.ru',
-    'ozon.ru','lamoda.kz','lamoda.ru','takealot.com','kilimall.co.ke'
+    'trip.com','ctrip.com','qunar.com','fliggy.com',
+    'makemytrip.com','yatra.com','traveloka.com','agoda.com','klook.com',
+    'cleartrip.com','virtualtrips.io','kkday.com','booking.com','lastminute.com',
+    'tui.com','expedia.co.uk','trivago.co.uk','tui.co.uk','skyscanner.net',
+    'omio.com','thetrainline.com','kayak.com','holidaycheck.com','edreams.net',
+    'getyourguide.com','expedia.com','tripadvisor.com','priceline.com',
+    'travelocity.com','despegar.com','almundo.com','viajanet.com.br',
+    'rehlat.com','flynas.com','travelstart.com','safaribookings.com',
+    'travel.jumia.com','webjet.com.au','flightcentre.com.au','wotif.com',
+    'opodo.com','raileurope.com'
   ];
 
   function hostInList(host, list) {
@@ -236,7 +227,6 @@
   function compatibilityMode(target, kind) {
     var host = hostOf(target).toLowerCase();
     if (directKnownGood(target, kind)) return 'direct';
-    if (/^amazon\.(?!com$)/i.test(host) || /(^|\.)amazon\.(in|com\.au|de|sa|ae)$/i.test(host)) return 'live';
     if (hostInList(host, LIVE_RELAY_HOSTS)) return 'live';
     return 'auto';
   }
@@ -417,7 +407,7 @@
     }
 
     /* Auto mode keeps the fastest browser-native path first. Only a confirmed
-     * X-Frame/CSP denial promotes the same URL to the live Network relay. */
+     * X-Frame/CSP denial promotes the same URL to the live Tour relay. */
     setFrameDirect(target);
     state.pendingPolicyTarget = target;
 
@@ -536,17 +526,6 @@
     return true;
   }
 
-  function openCoupangPartners(fallbackTarget, options) {
-    options = options || {};
-    var fallback = isHttpUrl(fallbackTarget) || 'https://www.coupang.com/';
-    return resolveCoupangPartnersDestination(options.source || 'networkhub').then(function(destination){
-      open(destination, options);
-      return true;
-    }).catch(function(){
-      open(fallback, options);
-      return false;
-    });
-  }
 
   function clearViewerHistoryMarker() {
     try {
@@ -640,45 +619,16 @@
   }
 
   global.addEventListener('click', function (ev) {
-    if (ev.defaultPrevented || !isNetworkPage()) return;
-
-    if (state.open) {
-      var nav = ev.target && ev.target.closest ? ev.target.closest('nav a[href], .sidebar a[href], a[data-page-index][href]') : null;
-      if (isHubNavAnchor(nav)) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-        var navHref = nav.href;
-        closeForHubNavigation();
-        try { global.location.assign(navHref); }
-        catch (e) { global.location.href = navHref; }
-        return;
-      }
-    }
-
-    var a = ev.target && ev.target.closest ? ev.target.closest('a.link-btn[href]') : null;
-    if (!a) return;
-    var href = isHttpUrl(a.getAttribute('href') || a.href || '');
-    if (!href) return;
-    var kind = 'market';
+    if (!state.open || !isTourPage()) return;
+    var nav = ev.target && ev.target.closest ? ev.target.closest('nav a[href], .sidebar a[href], a[data-page-index][href]') : null;
+    if (!isHubNavAnchor(nav)) return;
     ev.preventDefault();
     ev.stopPropagation();
     if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-    if (kind === 'market' && isCoupangUrl(href)) {
-      openCoupangPartners(href, { label: textOf(a), kind: kind, source:'networkhub' });
-      return;
-    }
-    open(href, { label: textOf(a), kind: kind });
-  }, true);
-
-  document.addEventListener('click', function (ev) {
-    if (ev.defaultPrevented) return;
-    var found = eligibleAnchor(ev.target);
-    if (!found) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-    open(found.href, { label: textOf(found.anchor), kind: found.kind });
+    var navHref = nav.href;
+    closeForHubNavigation();
+    try { global.location.assign(navHref); }
+    catch (e) { global.location.href = navHref; }
   }, true);
 
   global.addEventListener('message', function (ev) {
@@ -694,7 +644,7 @@
     updateBar(next, hostOf(next));
     showLoading('사이트를 불러오는 중입니다…');
     /* Once a source required proxy containment, keep subsequent navigation in
-     * the same contained proxy instead of trying to promote it to top-level. */
+     * the same contained Tour relay instead of trying to promote it to top-level. */
     setFrameProxy(next, state.viewerMode === 'live-proxy' ? 'live' : 'live');
   });
 
@@ -726,10 +676,9 @@
   global.addEventListener('pagehide', function(){ if (state.open) unlockPage(); });
   global.addEventListener('beforeunload', function(){ if (state.open) unlockPage(); });
 
-  global.IGDCNetworkViewer = Object.freeze({
+  global.IGDCTourViewer = Object.freeze({
     version: VIEWER_VERSION,
     open: open,
-    openCoupangPartners: openCoupangPartners,
     close: requestClose,
     closeForHubNavigation: closeForHubNavigation,
     isOpen: function () { return !!state.open; }

@@ -1,4 +1,4 @@
-// network-rightpanel-automap.js (PRODUCTION v9 - isolated network viewer + internal content routing)
+// network-rightpanel-automap.js (PRODUCTION v10 - isolated network viewer + internal content routing)
 // - Right panel product slots open IGDC internal /content.html?id=...
 // - Placeholder/# links are disabled unless an item id exists
 // - Main hub external .link-btn anchors open in the IGDC contained viewer; dynamic outbound rail links keep legacy top navigation
@@ -17,9 +17,9 @@
   const MOBILE_ID = 'nh-mobile-rail-list';
   const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v2';
 
-  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-network-external-viewer.js?v=20260914-network-v9';
-  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-network-viewer-loader-v9';
-  const CONTAINED_THEME_ID = 'igdc-network-toolbar-theme-v9';
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-network-external-viewer.js?v=20260914-network-v10';
+  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-network-viewer-loader-v10';
+  const CONTAINED_THEME_ID = 'igdc-network-toolbar-theme-v10';
 
   function ensureContainedToolbarTheme(){
     if (document.getElementById(CONTAINED_THEME_ID)) return;
@@ -55,15 +55,15 @@
 
   function ensureContainedViewer(){
     ensureContainedToolbarTheme();
-    if (window.IGDCNetworkViewer && Number(window.IGDCNetworkViewer.version || 0) >= 9 && typeof window.IGDCNetworkViewer.open === 'function') {
+    if (window.IGDCNetworkViewer && Number(window.IGDCNetworkViewer.version || 0) >= 10 && typeof window.IGDCNetworkViewer.open === 'function') {
       return Promise.resolve(window.IGDCNetworkViewer);
     }
-    if (window.__IGDC_NETWORK_VIEWER_V9_PROMISE__) return window.__IGDC_NETWORK_VIEWER_V9_PROMISE__;
+    if (window.__IGDC_NETWORK_VIEWER_V10_PROMISE__) return window.__IGDC_NETWORK_VIEWER_V10_PROMISE__;
 
-    window.__IGDC_NETWORK_VIEWER_V9_PROMISE__ = new Promise(function(resolve, reject){
+    window.__IGDC_NETWORK_VIEWER_V10_PROMISE__ = new Promise(function(resolve, reject){
       let script = document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
       const finish = function(){
-        if (window.IGDCNetworkViewer && Number(window.IGDCNetworkViewer.version || 0) >= 9 && typeof window.IGDCNetworkViewer.open === 'function') {
+        if (window.IGDCNetworkViewer && Number(window.IGDCNetworkViewer.version || 0) >= 10 && typeof window.IGDCNetworkViewer.open === 'function') {
           ensureContainedToolbarTheme();
           resolve(window.IGDCNetworkViewer);
         } else {
@@ -85,11 +85,11 @@
       script.addEventListener('error', function(){ reject(new Error('IGDC contained viewer load failed')); }, { once:true });
       (document.head || document.documentElement).appendChild(script);
     }).catch(function(err){
-      window.__IGDC_NETWORK_VIEWER_V9_PROMISE__ = null;
+      window.__IGDC_NETWORK_VIEWER_V10_PROMISE__ = null;
       throw err;
     });
 
-    return window.__IGDC_NETWORK_VIEWER_V9_PROMISE__;
+    return window.__IGDC_NETWORK_VIEWER_V10_PROMISE__;
   }
 
 
