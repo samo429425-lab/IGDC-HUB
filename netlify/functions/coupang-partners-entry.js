@@ -2,8 +2,8 @@
 
 /**
  * IGDC -> Coupang Partners entry gateway.
- * Only the Coupang Network Hub button uses this endpoint.
- * Other marketplace and Tour links remain untouched.
+ * Scope is intentionally limited to the Coupang marketplace entry.
+ * No other Network Hub or Tour destination is rewritten here.
  */
 const DEFAULT_COUPANG_URL = "https://www.coupang.com/";
 

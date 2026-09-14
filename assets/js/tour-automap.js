@@ -181,18 +181,14 @@
       if (!a) return;
       const href = a.href;
       if (!href) return;
+
+      // Static Tour service links are authoritative. Let the browser follow
+      // their original href/target directly; never route them through the
+      // contained-viewer/proxy layer.
+      if (a.matches('a.link-btn[href^="http"]')) return;
+
+      // Preserve top-navigation only for dynamic outbound cards.
       ev.preventDefault();
-      if (a.matches('a.link-btn[href^="http"]')) {
-        ev.stopPropagation();
-        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-        const label = String(a.textContent || '').replace(/\s+/g, ' ').trim();
-        ensureContainedViewer().then(function(viewer){
-          viewer.open(href, { label: label, kind: 'tour' });
-        }).catch(function(err){
-          console.warn('[IGDC][Tour] contained viewer load failed:', err && err.message ? err.message : err);
-        });
-        return;
-      }
       try { (window.top || window).location.assign(href); }
       catch(e){ window.location.href = href; }
     }, true);

@@ -159,26 +159,44 @@
     }
   }
 
+  function rewriteCoupangEntryOnly(){
+    // PINPOINT SCOPE: rewrite only a genuine Coupang marketplace anchor.
+    // Every other marketplace href remains exactly as authored in HTML.
+    Array.prototype.slice.call(document.querySelectorAll('a.link-btn[href^="http"]')).forEach(function(a){
+      try{
+        const u = new URL(a.href, window.location.href);
+        const host = String(u.hostname || '').toLowerCase();
+        if (host === 'coupang.com' || host.endsWith('.coupang.com')){
+          a.href = '/api/coupang-partners-entry?source=networkhub';
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.setAttribute('data-affiliate-provider','coupang-partners-kr');
+          a.setAttribute('data-affiliate-entry','1');
+        }
+      }catch(_e){}
+    });
+  }
+
   function installExternalTopNavigation(){
+    // This may run before DOMContentLoaded. Re-run the Coupang-only rewrite
+    // whenever install is invoked so the real anchors are caught after parsing.
+    rewriteCoupangEntryOnly();
+
     if (window.__IGDC_NETWORK_TOP_NAV_INSTALLED__) return;
     window.__IGDC_NETWORK_TOP_NAV_INSTALLED__ = true;
+
     document.addEventListener('click', function(ev){
       const a = ev.target && ev.target.closest && ev.target.closest('a.link-btn[href^="http"], a[data-igdc-external="top"][href^="http"]');
       if (!a) return;
       const href = a.href;
       if (!href) return;
+
+      // Static marketplace links already contain their correct destination and
+      // target in HTML. Do not intercept them through the contained-viewer/proxy.
+      if (a.matches('a.link-btn[href^="http"]')) return;
+
+      // Keep the legacy top-navigation behavior only for dynamic outbound cards.
       ev.preventDefault();
-      if (a.matches('a.link-btn[href^="http"]')) {
-        ev.stopPropagation();
-        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-        const label = String(a.textContent || '').replace(/\s+/g, ' ').trim();
-        ensureContainedViewer().then(function(viewer){
-          viewer.open(href, { label: label, kind: 'market' });
-        }).catch(function(err){
-          console.warn('[IGDC][Network] contained viewer load failed:', err && err.message ? err.message : err);
-        });
-        return;
-      }
       try { (window.top || window).location.assign(href); }
       catch(e){ window.location.href = href; }
     }, true);
