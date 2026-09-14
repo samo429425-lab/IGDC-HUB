@@ -162,6 +162,32 @@
   function installExternalTopNavigation(){
     if (window.__IGDC_NETWORK_TOP_NAV_INSTALLED__) return;
     window.__IGDC_NETWORK_TOP_NAV_INSTALLED__ = true;
+
+    // Coupang marketplace entry is a provider-level affiliate gateway rather
+    // than a product card.  Keep the visible button label unchanged, but route
+    // it through a same-origin server endpoint.  The server endpoint redirects
+    // to the operator-configured Coupang Partners URL when available and falls
+    // back to the normal Coupang homepage until that URL is configured.
+    Array.prototype.slice.call(document.querySelectorAll('a.link-btn[href^="https://www.coupang.com"], a.link-btn[href^="https://coupang.com"]')).forEach(function(a){
+      a.href = '/api/coupang-partners-entry?source=networkhub';
+      a.target = '_top';
+      a.rel = 'noopener';
+      a.setAttribute('data-affiliate-provider', 'coupang-partners-kr');
+      a.setAttribute('data-affiliate-outbound', '1');
+      a.setAttribute('data-affiliate-entry', '1');
+      a.setAttribute('data-track-id', 'coupang-network-entry');
+      a.setAttribute('data-revenue-line', 'product_affiliate');
+
+      // Several translated Network Hub files inherited a stale Taobao label
+      // while their destination was already Coupang. Correct the brand label
+      // at runtime without rewriting 30 language HTML files.
+      var first = a.querySelector('div:first-child');
+      var second = a.querySelector('.en');
+      var lang = String((document.documentElement && document.documentElement.lang) || '').toLowerCase();
+      if (first) first.textContent = lang.indexOf('ko') === 0 ? '쿠팡' : 'Coupang';
+      if (second) second.textContent = 'Coupang';
+    });
+
     document.addEventListener('click', function(ev){
       const a = ev.target && ev.target.closest && ev.target.closest('a.link-btn[href^="http"], a[data-igdc-external="top"][href^="http"]');
       if (!a) return;

@@ -408,6 +408,13 @@ function ranking(item, tier, essentialClass, trust, revenue, market, policy){
   const revenueCertainty=revenue.certainty;
   const expectedNetRevenue=bounded(revenue.estimatedNetRevenuePerOrder,0,1000000000,0)>0?100:Math.round((revenue.commissionRate||0)*(revenue.expectedConversionRate||0)*10000);
   const trafficValue=revenue&&revenue.monetizationState==="traffic_value_only_review" ? 35 : 0;
+  // Provider popularity is accepted only as an initial discovery signal. It
+  // never overrides policy/trust/profitability gates, and existing products
+  // without a provider-signed score remain unchanged. Real conversion quality
+  // continues to come from the verified search/conversion signal path below.
+  const providerEvidence=plain(item&&item.providerEvidence);
+  const providerPopularity=(providerEvidence.apiVerified===true && isFresh(providerEvidence.policyVerifiedAt,30))
+    ? scoreOf(first(raw.providerPopularityScore,signal.providerPopularityScore),0) : 0;
   const signalSource=lower(first(signal.source,signal.origin,signal.engine));
   const verifiedSignals=(signalSource==="search-exposure-engine" || signalSource==="searchbank-ranking") &&
     (bool(signal.serverVerified)||bool(signal.signed)) && isFresh(first(signal.verifiedAt,signal.updatedAt),30) && !!text(first(signal.evidenceDigest,signal.signatureDigest));
@@ -420,10 +427,10 @@ function ranking(item, tier, essentialClass, trust, revenue, market, policy){
   const risk=scoreOf(first(raw.riskScore,signal.riskScore),0);
   const source=scoreOf(priorities[tier],0);
   const w=(name, fallback)=>Number.isFinite(Number(weights[name]))?Number(weights[name]):fallback;
-  const positive=source*w("sourcePriority",50)/100+essentiality*w("essentiality",24)/100+affordability*w("affordability",10)/100+repeatPurchase*w("repeatPurchase",8)/100+sellerTrust*w("sellerTrust",18)/100+marketReadiness*w("marketReadiness",22)/100+revenueCertainty*w("revenueCertainty",24)/100+expectedNetRevenue*w("expectedNetRevenue",12)/100+searchExposure*w("searchExposure",6)/100+conversionQuality*w("conversionQuality",8)/100+trafficValue*w("trafficValue",4)/100;
+  const positive=source*w("sourcePriority",50)/100+essentiality*w("essentiality",24)/100+affordability*w("affordability",10)/100+repeatPurchase*w("repeatPurchase",8)/100+sellerTrust*w("sellerTrust",18)/100+marketReadiness*w("marketReadiness",22)/100+revenueCertainty*w("revenueCertainty",24)/100+expectedNetRevenue*w("expectedNetRevenue",12)/100+searchExposure*w("searchExposure",6)/100+conversionQuality*w("conversionQuality",8)/100+providerPopularity*w("providerPopularity",6)/100+trafficValue*w("trafficValue",4)/100;
   const negative=operatorCost*w("operatorCostPenalty",14)/100+risk*w("riskPenalty",30)/100;
   const boost=Number(plain(policy.sources)[tier]&&plain(policy.sources)[tier].rankBoost||0);
-  return {score:Math.round((positive-negative)*100)/100,sourcePriority:source,essentiality,affordability,repeatPurchase,sellerTrust,marketReadiness,revenueCertainty,expectedNetRevenueScore:expectedNetRevenue,searchExposure,conversionQuality,operatorCost,risk,trafficValue,boost,finalScore:Math.round((positive-negative+boost)*100)/100,signalsAccepted:verifiedSignals};
+  return {score:Math.round((positive-negative)*100)/100,sourcePriority:source,essentiality,affordability,repeatPurchase,sellerTrust,marketReadiness,revenueCertainty,expectedNetRevenueScore:expectedNetRevenue,searchExposure,conversionQuality,providerPopularity,operatorCost,risk,trafficValue,boost,finalScore:Math.round((positive-negative+boost)*100)/100,signalsAccepted:verifiedSignals};
 }
 function queueRecordToItem(entry){
   const candidate=clone(plain(entry&&entry.candidate));

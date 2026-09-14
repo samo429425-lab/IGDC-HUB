@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.8.0-anchor-homepage-identity-pipeline";
+const VERSION = "donation-candidate-admin-v1.10.0-official-homepage-research-stable";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -57,7 +57,23 @@ function homepageMeta(html){
 function firstMeta(meta,keys){ for(const key of keys){const v=text(meta&&meta[key]);if(v)return v;} return ''; }
 function resolveHttps(base,value){
   const raw=text(value);if(!raw)return '';
-  try{const u=new URL(raw,base);return u.protocol==='https:'?u.toString():'';}catch(_e){return '';}
+  try{
+    const baseUrl=new URL(base),u=new URL(raw,baseUrl);
+    if(u.protocol==='https:')return u.toString();
+    /* A number of legitimate homepages still emit same-host http image URLs
+       inside otherwise HTTPS markup. Browsers would block those as mixed content;
+       upgrade only the same host and never rewrite a third-party HTTP asset. */
+    if(u.protocol==='http:'&&baseUrl.protocol==='https:'&&u.hostname===baseUrl.hostname){u.protocol='https:';return u.toString();}
+    return '';
+  }catch(_e){return '';}
+}
+function srcsetImage(base,value){
+  const parts=text(value).split(',').map(function(x){return x.trim();}).filter(Boolean);
+  for(let i=parts.length-1;i>=0;i--){
+    const src=text(parts[i].split(/\s+/)[0]);
+    const out=resolveHttps(base,src);if(out)return out;
+  }
+  return '';
 }
 function publicPreviewHost(homepage){
   try{
@@ -78,19 +94,29 @@ function homepageImage(html,meta,base){
   let out=resolveHttps(base,direct);if(out)return out;
 
   const imgs=text(html).match(/<img\b[^>]*>/gi)||[];
-  // Prefer a real page/hero image before a favicon or logo.  The resulting URL
-  // is what SearchBank persists as the Donation slot thumbnail.
+  const sources=text(html).match(/<source\b[^>]*>/gi)||[];
+  // <picture><source srcset> commonly contains the real high-resolution hero.
+  // Ignore plain <source src> here because it can be a video/audio asset.
+  for(const tag of sources){
+    out=srcsetImage(base,attrValue(tag,'srcset')||attrValue(tag,'data-srcset'));if(out)return out;
+  }
+  // Prefer a real page/hero image before a favicon or logo. Modern sites often
+  // keep the actual image only in srcset/data-srcset, so inspect those first.
   for(const tag of imgs){
     const src=attrValue(tag,'src')||attrValue(tag,'data-src')||attrValue(tag,'data-lazy-src')||attrValue(tag,'data-original');
-    const marker=lower([src,attrValue(tag,'id'),attrValue(tag,'class'),attrValue(tag,'alt')].join(' '));
-    if(!src||/(?:favicon|sprite|blank|pixel|tracking|spacer|icon|logo|avatar)/.test(marker))continue;
-    out=resolveHttps(base,src);if(out)return out;
+    const srcset=attrValue(tag,'srcset')||attrValue(tag,'data-srcset');
+    const marker=lower([src,srcset,attrValue(tag,'id'),attrValue(tag,'class'),attrValue(tag,'alt')].join(' '));
+    if(/(?:favicon|sprite|blank|pixel|tracking|spacer|icon|logo|avatar)/.test(marker))continue;
+    out=srcsetImage(base,srcset)||resolveHttps(base,src);if(out)return out;
   }
+  // CSS hero/background images are common on NGO homepages.
+  const cssRe=/url\(\s*(['"]?)(https?:\/\/[^'")\s]+|\/[^'")\s]+)\1\s*\)/gi;let m;
+  while((m=cssRe.exec(text(html)))){const raw=m[2]||'';if(/(?:favicon|sprite|blank|pixel|tracking|spacer|icon|logo|avatar)/i.test(raw))continue;out=resolveHttps(base,raw);if(out)return out;}
   // A logo is still a valid representative thumbnail when no page hero exists.
   for(const tag of imgs){
     const marker=lower([attrValue(tag,'id'),attrValue(tag,'class'),attrValue(tag,'alt')].join(' '));
     if(!/(?:logo|brand|header)/.test(marker))continue;
-    out=resolveHttps(base,attrValue(tag,'src')||attrValue(tag,'data-src')||attrValue(tag,'data-lazy-src')||attrValue(tag,'data-original'));if(out)return out;
+    out=resolveHttps(base,attrValue(tag,'src')||attrValue(tag,'data-src')||attrValue(tag,'data-lazy-src')||attrValue(tag,'data-original'))||srcsetImage(base,attrValue(tag,'srcset')||attrValue(tag,'data-srcset'));if(out)return out;
   }
   const links=text(html).match(/<link\b[^>]*>/gi)||[];
   for(const tag of links){
@@ -151,26 +177,31 @@ function researchQuery(section,customQuery){
   if(sec==='donation-global')return [primary,'latest official humanitarian video'].filter(Boolean).join(' ')||'latest humanitarian relief official video';
   return primary&&/(?:official\s+(?:website|site)|homepage)/i.test(primary)?primary:([primary,'official website homepage'].filter(Boolean).join(' ')||Policy.SECTION_LABELS[sec]||'donation');
 }
-function representedResearchAnchors(section,existingViews){
-  const out=new Set();
+function researchAnchorState(section,existingViews){
+  const found=new Set(),ready=new Set();
   for(const view of Array.isArray(existingViews)?existingViews:[]){
     if(!view||view.section!==section||!view.candidate)continue;
-    if(!safeHttps(view.thumbnail||view.candidate.thumbnail||plain(view.candidate.media).thumb))continue;
+    const homepage=safeHttps(Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(view.candidate):'');if(!homepage)continue;
     const name=Policy.matchedResearchAnchorName?Policy.matchedResearchAnchorName(view.candidate,section):'';
-    if(name)out.add(name);
+    if(!name)continue;
+    found.add(name);
+    const thumb=safeHttps(Policy.representativeImageForSection?Policy.representativeImageForSection(view.candidate,section):(view.thumbnail||view.candidate.thumbnail||plain(view.candidate.media).thumb));
+    if(thumb)ready.add(name);
   }
-  return out;
+  return {found,ready};
 }
 function researchQuerySpecs(section,customQuery,singleSection,existingViews){
   const sec=Policy.normalizeSection(section)||'donation-ngo',custom=text(customQuery),frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
   const out=[{query:researchQuery(sec,custom),kind:custom?'custom':'broad',anchorName:''}];
   if(!custom&&singleSection&&sec!=='donation-global'){
-    const represented=representedResearchAnchors(sec,existingViews);
+    const state=researchAnchorState(sec,existingViews);
     const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query)};}).filter(function(a){return a.name&&a.query;});
-    anchors.sort(function(a,b){return Number(represented.has(a.name))-Number(represented.has(b.name));});
-    /* Individual exact anchor searches are intentionally bounded. A second
-       re-search naturally advances to anchors that are still missing. */
-    anchors.slice(0,12).forEach(function(a){out.push({query:a.query,kind:'anchor',anchorName:a.name});});
+    function stateRank(name){return !state.found.has(name)?0:(!state.ready.has(name)?1:2);}
+    anchors.sort(function(a,b){return stateRank(a.name)-stateRank(b.name);});
+    /* Run only a bounded anchor window. Unseen institutions come first, then
+       known institutions whose homepage thumbnail still needs another preview
+       attempt, and finally already complete anchors. */
+    anchors.slice(0,6).forEach(function(a){out.push({query:a.query,kind:'anchor',anchorName:a.name});});
   }
   const seen=new Set();
   return out.filter(function(spec){const q=text(spec&&spec.query);if(!q||seen.has(q))return false;seen.add(q);return true;});
@@ -199,16 +230,22 @@ function adminVisibleCandidate(view){
     ? policyVisibleCandidate(view.candidate,view.section)
     : researchVisibleCandidate(view.candidate,view.section);
 }
-async function purgePolicyViolations(){
-  const rows=await readRows(),bad=[];
-  for(const row of rows){const view=rowView(row);if(!adminVisibleCandidate(view))bad.push(view.id);}
+async function purgePolicyViolations(scopeSections){
+  const scope=new Set((Array.isArray(scopeSections)?scopeSections:[]).map(Policy.normalizeSection).filter(Boolean));
+  const rows=await readRows(),bad=[];let examined=0;
+  for(const row of rows){
+    const view=rowView(row);
+    if(scope.size&&!scope.has(view.section))continue;
+    examined++;
+    if(!adminVisibleCandidate(view))bad.push(view.id);
+  }
   let removed=0;
   for(let i=0;i<bad.length;i+=75){
     const ids=bad.slice(i,i+75).filter(function(id){return /^[A-Za-z0-9_-]+$/.test(id);});if(!ids.length)continue;
     const q='source_ref=eq.'+encodeURIComponent(SOURCE_REF)+'&id=in.('+ids.map(encodeURIComponent).join(',')+')';
     const result=await Store.remove('gslot_candidates',q);removed+=Array.isArray(result)?result.length:ids.length;
   }
-  return {examined:rows.length,violations:bad.length,removed};
+  return {examined,violations:bad.length,removed,scope:Array.from(scope)};
 }
 function isSearchLandingUrl(value){
   const u=safeHttps(value); if(!u) return true;
@@ -260,6 +297,35 @@ function isDirectHomepageResult(item,homepage){
     }catch(_e){}
   }
   return false;
+}
+function directHomepageAnchorMatch(item,homepage,anchorName){
+  if(!text(anchorName)||!isDirectHomepageResult(item,homepage)||!Policy.matchesResearchAnchor)return false;
+  const r=plain(item),org=plain(r.org),display=plain(r.displayCard);
+  const title=limitText(r.title||r.name||org.name||display.title||'',300);
+  if(!title)return false;
+  const probe={url:homepage,homepage,official_url:homepage,org:{homepage},sitePreview:{homepage,title,description:'',identityVerified:false},homepageTitle:title,homepageDescription:''};
+  try{return Policy.matchesResearchAnchor(probe,anchorName);}catch(_e){return false;}
+}
+function anchorDiscoveryScore(entry){
+  const raw=plain(entry&&entry.item),homepage=safeHttps(entry&&entry.homepage),anchorName=text(entry&&entry.spec&&entry.spec.anchorName);
+  let score=Number(entry&&entry.score||0)||0;
+  if(!homepage||!anchorName)return score;
+  if(isDirectHomepageResult(raw,homepage))score+=240;
+  if(directHomepageAnchorMatch(raw,homepage,anchorName))score+=700;
+  /* Raw search-result identity is ranking evidence only. Final acceptance below
+     still requires homepage metadata, except for a direct-root named-anchor hit. */
+  if(Policy.matchesResearchAnchor){
+    const org=plain(raw.org),display=plain(raw.displayCard),title=limitText(raw.title||raw.name||org.name||display.title||'',300),summary=limitText(raw.summary||raw.description||raw.snippet||display.summary||'',600);
+    if(title){
+      const probe={url:homepage,homepage,official_url:homepage,org:{homepage},sitePreview:{homepage,title,description:summary,identityVerified:false},homepageTitle:title,homepageDescription:summary};
+      try{if(Policy.matchesResearchAnchor(probe,anchorName))score+=180;}catch(_e){}
+    }
+  }
+  return score;
+}
+function donationResearchEvent(event){
+  const src=event&&typeof event==='object'?event:{};
+  return Object.assign({},src,{queryStringParameters:Object.assign({},plain(src.queryStringParameters),{action:'front-supply',openPipe:'1',smoothIntake:'1',noBlockingWide:'1'})});
 }
 function sectionOf(item,fallback){ return Policy.normalizeSection(item&& (item.psom_key||item.section||item.bind&&item.bind.section)) || Policy.normalizeSection(fallback) || Policy.inferSection(item,fallback); }
 function stageOfPayload(payload){ const q=plain(payload&&payload.donationQueue); const stage=lower(q.stage); return STAGES.has(stage)?stage:"research"; }
@@ -338,7 +404,7 @@ function researchParams(section,query,limit){
   const q=text(query)||researchQuery(section,'');
   const frame=Policy.researchFrameFor ? Policy.researchFrameFor(section) : {};
   const global=section==="donation-global";
-  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"3200",discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:global?"video":"web",type:global?"video":"web"};
+  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"4000",discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:global?"video":"web",type:global?"video":"any"};
   if(global){params.mediaPreference="video";params.noMedia="0";params.freshnessHours=String(Number(frame.freshnessHours)||48);}
   else{params.noMedia="1";params.mediaPreference="web";}
   if(section==="donation-mission"||frame.localizeByIp===true){params.localizeByIp="1";params.geoPreference="ip-preferred";}
@@ -465,20 +531,23 @@ async function performResearch(event,section,customQuery,limit){
   // usable official-homepage candidates.  This avoids a failed provider/preview
   // pass turning an existing lane into an empty lane.
   const existing=await readRows(), existingMap=new Map(existing.map(r=>[text(r.id),r]));
-
-  const existingViews=existing.map(rowView);
+  const existingViews=existing.map(rowView),existingBySectionUrl=new Map();
+  existingViews.forEach(function(view,index){
+    const url=safeHttps(view&&view.url||view&&view.candidate&&Policy.organizationHomepageUrl&&Policy.organizationHomepageUrl(view.candidate));
+    if(url&&!existingBySectionUrl.has(view.section+'|'+url.toLowerCase()))existingBySectionUrl.set(view.section+'|'+url.toLowerCase(),existing[index]);
+  });
   async function researchOne(sec){
     const specs=researchQuerySpecs(sec,sections.length===1?customQuery:'',sections.length===1,existingViews);
     const queries=specs.map(function(x){return x.query;});
     const query=queries[0]||researchQuery(sec,'');
     const started=Date.now();let results=[];
     try{
-      results=await Promise.all(specs.map(function(spec){
-        const perQueryLimit=spec.kind==='anchor'?12:Math.min(36,Number(limit)||36);
-        return SearchBank.runEngine(event,researchParams(sec,spec.query,perQueryLimit))
-          .then(function(result){return {spec,result};})
-          .catch(function(error){return {spec,error};});
-      }));
+      const researchEvent=donationResearchEvent(event);
+      results=await mapLimit(specs,3,async function(spec){
+        const perQueryLimit=spec.kind==='anchor'?12:Math.min(30,Number(limit)||30);
+        try{return {spec,result:await SearchBank.runEngine(researchEvent,researchParams(sec,spec.query,perQueryLimit))};}
+        catch(error){return {spec,error};}
+      });
     }catch(error){
       return {section:sec,query,queries,accepted:0,engineItems:0,officialHomepageCount:0,globalVideoCount:0,previewResolved:0,skippedPolicy:0,skippedSearchLanding:0,durationMs:Date.now()-started,error:text(error&&error.message||error),writes:[]};
     }
@@ -535,29 +604,42 @@ async function performResearch(event,section,customQuery,limit){
         }else broad.push(entry);
       }
       const roots=[];
-      for(const group of anchorGroups.values())roots.push(...group.sort(function(a,b){return b.score-a.score;}).slice(0,1));
-      roots.push(...broad.sort(function(a,b){return b.score-a.score;}).slice(0,sections.length>1?3:4));
-      const enriched=await mapLimit(roots,sections.length>1?6:16,async function(entry){
+      for(const group of anchorGroups.values()){
+        /* Search engines can return a report/PDF ahead of the official homepage.
+           Prefer direct-root/name-matching hits and keep one backup domain so a
+           single noisy result cannot suppress the actual organization site. */
+        roots.push(...group.sort(function(a,b){return anchorDiscoveryScore(b)-anchorDiscoveryScore(a);}).slice(0,2));
+      }
+      roots.push(...broad.sort(function(a,b){return b.score-a.score;}).slice(0,sections.length>1?2:4));
+      const enriched=await mapLimit(roots,sections.length>1?4:6,async function(entry){
         const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?1800:2800);
         const home=preview.homepage||entry.homepage,raw=plain(entry.item),spec=entry.spec||{kind:'broad',anchorName:'',query};
+        const directResult=isDirectHomepageResult(raw,entry.homepage);
+        const rawTitle=limitText(raw.title||raw.name||plain(raw.org).name||plain(raw.displayCard).title||'',300);
+        const rawSummary=limitText(raw.summary||raw.description||raw.snippet||plain(raw.displayCard).summary||'',1800);
         const probe={url:home,homepage:home,official_url:home,org:{homepage:home},sitePreview:{homepage:home,title:preview.title||'',description:preview.description||'',identityVerified:false},homepageTitle:preview.title||'',homepageDescription:preview.description||''};
         const namedAnchor=spec.kind==='anchor'&&!((Policy.genericAnchorName&&Policy.genericAnchorName(spec.anchorName))||!text(spec.anchorName));
-        const anchorVerified=namedAnchor&&Policy.matchesResearchAnchor&&Policy.matchesResearchAnchor(probe,spec.anchorName);
+        const previewAnchorVerified=namedAnchor&&Policy.matchesResearchAnchor&&Policy.matchesResearchAnchor(probe,spec.anchorName);
+        /* If an official site blocks server-side preview fetches, a direct-root
+           search result may still prove a named anchor. Never use this fallback
+           for deep PDF/article URLs or broad discovery. */
+        const directAnchorVerified=namedAnchor&&!previewAnchorVerified&&directHomepageAnchorMatch(raw,entry.homepage,spec.anchorName);
+        const anchorVerified=!!(previewAnchorVerified||directAnchorVerified);
         const matchedAnchor=anchorVerified?spec.anchorName:(Policy.matchedResearchAnchorName?Policy.matchedResearchAnchorName(probe,sec):'');
         const identityVerified=!!(anchorVerified||matchedAnchor||(Policy.sectionIdentityEligible&&Policy.sectionIdentityEligible(probe,sec)));
         if(!identityVerified)return {rejected:true,reason:'homepage_identity_mismatch'};
-        const directThumb=isDirectHomepageResult(raw,entry.homepage)?candidateThumb(raw,sec):'';
+        const directThumb=directResult?candidateThumb(raw,sec):'';
         const image=safeHttps(preview.image||directThumb);
-        const org=Object.assign({},plain(raw.org),{homepage:home,name:limitText(matchedAnchor||preview.title||plain(raw.org).name||raw.name||home,300)});
+        const org=Object.assign({},plain(raw.org),{homepage:home,name:limitText(matchedAnchor||preview.title||(directResult?rawTitle:'')||plain(raw.org).name||home,300)});
         const media=Object.assign({},plain(raw.media),{kind:'image',src:null,embed_url:null,thumb:image||null,image:image||null});
-        const summary=limitText(preview.description||(matchedAnchor?'Official organization homepage.':''),1800);
+        const summary=limitText(preview.description||(directResult?rawSummary:'')||(matchedAnchor?'Official organization homepage.':''),1800);
         return Object.assign({},raw,{
-          title:limitText(matchedAnchor||preview.title||org.name||home,300),summary,
+          title:limitText(matchedAnchor||preview.title||(directResult?rawTitle:'')||org.name||home,300),summary,
           url:home,homepage:home,website:home,official_url:home,
           thumbnail:image||null,thumb:image||null,image:image||null,og_image:image||null,site_preview_image:image||null,
           org,media,link:Object.assign({},plain(raw.link),{mode:'org-homepage',url:home,target:'_blank'}),
           researchAnchor:matchedAnchor||null,homepageIdentityVerified:true,
-          sitePreview:{resolved:!!image,identityVerified:true,kind:'homepage-meta',homepage:home,image:image||null,title:preview.title||null,description:preview.description||null,researchAnchor:matchedAnchor||null,capturedAt:nowIso()},
+          sitePreview:{resolved:!!image,identityVerified:true,kind:'homepage-meta',homepage:home,image:image||null,title:preview.title||(directResult?rawTitle:null)||null,description:preview.description||(directResult?rawSummary:null)||null,researchAnchor:matchedAnchor||null,capturedAt:nowIso()},
           donationResearch:{kind:spec.kind,query:spec.query,anchor:matchedAnchor||spec.anchorName||null,identityVerified:true},
           sourcePageUrl:safeHttps(raw.url||plain(raw.link).url||plain(raw.source).url)||null,
           __researchQuery:spec.query
@@ -572,26 +654,32 @@ async function performResearch(event,section,customQuery,limit){
         norm.candidate.homepageIdentityVerified=true;
         norm.candidate.sitePreview=item.sitePreview;
         norm.candidate.donationResearch=item.donationResearch;
-        if(seen.has(norm.id))continue;seen.add(norm.id);officialHomepageCount++;if(norm.candidate.thumbnail)previewResolved++;
-        const previous=existingMap.get(norm.id),previousPayload=plain(previous&&previous.source_payload),previousStage=stageOfPayload(previousPayload);
+        const sameUrlPrevious=existingBySectionUrl.get(sec+'|'+norm.candidate.url.toLowerCase()),previous=sameUrlPrevious||existingMap.get(norm.id),previousPayload=plain(previous&&previous.source_payload),previousStage=stageOfPayload(previousPayload);
+        const rowId=text(previous&&previous.id)||norm.id;
+        if(seen.has(rowId))continue;seen.add(rowId);officialHomepageCount++;if(norm.candidate.thumbnail)previewResolved++;
         if(previousStage==='excluded'){skippedExcluded++;continue;}
         const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:'research';
-        const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
-        const candidate=Object.assign({},previousCandidate,norm.candidate);candidate.section=sec;candidate.psom_key=sec;candidate.channel='donation';candidate.page='donation';
-        /* Current canonical homepage data always wins over stale document data. */
-        candidate.url=norm.candidate.url;candidate.thumbnail=norm.candidate.thumbnail;candidate.org=norm.candidate.org;candidate.media=norm.candidate.media;candidate.link=norm.candidate.link||item.link;candidate.sitePreview=item.sitePreview;candidate.researchAnchor=item.researchAnchor||null;candidate.homepageIdentityVerified=true;candidate.donationResearch=item.donationResearch;
-        writes.push({id:norm.id,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Verified official organization homepage + homepage representative preview.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
+        const previousThumb=safeHttps(Policy.representativeImageForSection?Policy.representativeImageForSection(previousCandidate,sec):(previousCandidate.thumbnail||plain(previousCandidate.media).thumb));
+        const freshThumb=safeHttps(norm.candidate.thumbnail),finalThumb=freshThumb||previousThumb;
+        const issueSet=new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]);if(finalThumb){issueSet.delete('thumbnail_missing');issueSet.delete('homepage_preview_missing');}
+        const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(issueSet)});
+        const candidate=Object.assign({},previousCandidate,norm.candidate);candidate.id=rowId;candidate.section=sec;candidate.psom_key=sec;candidate.channel='donation';candidate.page='donation';
+        /* Current canonical homepage identity always wins. A transient preview
+           failure must not erase a previously verified thumbnail from a live card. */
+        candidate.url=norm.candidate.url;candidate.thumbnail=finalThumb||null;candidate.org=norm.candidate.org;candidate.media=Object.assign({},plain(previousCandidate.media),norm.candidate.media,{kind:'image',src:null,embed_url:null,thumb:finalThumb||null,image:finalThumb||null});candidate.link=norm.candidate.link||item.link;candidate.sitePreview=freshThumb?item.sitePreview:(plain(previousCandidate.sitePreview).image?previousCandidate.sitePreview:item.sitePreview);candidate.researchAnchor=item.researchAnchor||previousCandidate.researchAnchor||null;candidate.homepageIdentityVerified=true;candidate.donationResearch=item.donationResearch;
+        writes.push({id:rowId,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Verified official organization homepage + homepage representative preview.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
     }
     return {section:sec,query,queries,queryPlan:specs.map(function(x){return {kind:x.kind,anchorName:x.anchorName||null,query:x.query};}),accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,identityRejected,officialHomepageCount,globalVideoCount,previewResolved,engineItems:rawEntries.length,durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
   }
 
-  const sectionResults=[];const concurrency=section==="all"?8:1;
+  const sectionResults=[];const concurrency=section==="all"?2:1;
   for(let i=0;i<sections.length;i+=concurrency){const batch=sections.slice(i,i+concurrency);sectionResults.push(...await Promise.all(batch.map(researchOne)));}
   const writes=[];sectionResults.forEach(function(r){writes.push(...(r.writes||[]));delete r.writes;});
   const dedup=new Map();writes.forEach(function(r){dedup.set(r.id,r);});
   const saved=dedup.size?await upsertRows(Array.from(dedup.values())):[];
-  const cleanup=dedup.size?await purgePolicyViolations():{examined:existing.length,violations:0,removed:0,skipped:true,reason:'no_new_candidates'};
+  const successfulSections=sectionResults.filter(function(r){return Number(r&&r.accepted||0)>0;}).map(function(r){return r.section;});
+  const cleanup=dedup.size?await purgePolicyViolations(successfulSections):{examined:existing.length,violations:0,removed:0,skipped:true,reason:'no_new_candidates'};
   return {reports:sectionResults,savedCount:Array.isArray(saved)?saved.length:dedup.size,cleanup};
 }
 async function updateStage(ids,stage,actor,note){

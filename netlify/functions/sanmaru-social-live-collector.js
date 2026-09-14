@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.19.1-safe-sample-preview";
+const VERSION = "sanmaru-social-live-collector-v1.20.0-diverse-quality-discovery";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -127,6 +127,13 @@ const PUBLIC_POST_SEARCH = Object.freeze({
   reddit: { host: "reddit.com", hint: "comments" },
   twitter: { host: "x.com", hint: "status" }
 });
+
+const DISCOVERY_INTENT_TERMS = Object.freeze([
+  "popular high quality public creator",
+  "trending recent active public content",
+  "useful trusted official creator",
+  "popular culture travel education performance",
+]);
 
 const LATEST_QUERY_TERMS = Object.freeze({
   ko: "한국어 최신 영상 새 게시물",
@@ -551,8 +558,14 @@ function scopedQueries(plan, cursor, passes, route) {
   const count = Math.max(1, Math.min(MAX_QUERY_PASSES, Number(passes || DEFAULT_QUERY_PASSES) || DEFAULT_QUERY_PASSES));
   const queries = [];
   for (let index = 0; index < count; index += 1) {
-    const baseQuery = base[(offset + index) % base.length] || (plan.platform + " useful creator");
-    queries.push([baseQuery, countryQueryTerm(route), languageQueryTerm(route)].filter(Boolean).join(" "));
+    const absoluteIndex = offset + index;
+    const baseQuery = base[absoluteIndex % base.length] || (plan.platform + " useful creator");
+    // Generic discovery must continuously escape stale creator registries and
+    // low-value seed results. Rotate a broad popularity/quality intent instead
+    // of relying only on literal platform/category phrases. Safety is still
+    // enforced later by the existing hard-block, AI-policy and safe-search gates.
+    const discoveryIntent = DISCOVERY_INTENT_TERMS[absoluteIndex % DISCOVERY_INTENT_TERMS.length];
+    queries.push([baseQuery, discoveryIntent, countryQueryTerm(route), languageQueryTerm(route)].filter(Boolean).join(" "));
   }
   return Array.from(new Set(queries));
 }

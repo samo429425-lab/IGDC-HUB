@@ -83,8 +83,18 @@ const PLATFORM_POLICIES = Object.freeze({
     publicPreference: "official_embed_or_link_card",
     categories: ["education", "music", "travel", "culture", "art", "technology", "documentary", "creator", "tutorial", "shorts"],
     collectionQueries: [
-      "youtube education channel", "youtube music performance", "youtube travel documentary", "youtube art creator",
-      "youtube technology tutorial", "youtube culture documentary", "youtube learning shorts", "youtube official artist channel"
+      "youtube popular music live performance official",
+      "youtube trending entertainment performance official",
+      "youtube travel tourism culture documentary",
+      "youtube local travel food culture creator",
+      "youtube education knowledge documentary",
+      "youtube science technology tutorial creator",
+      "youtube art design museum culture creator",
+      "youtube sports lifestyle healthy creator",
+      "youtube traditional culture heritage performance",
+      "youtube learning shorts useful creator",
+      "youtube official artist singer musician channel",
+      "youtube high quality documentary creator"
     ]
   },
   instagram: {
@@ -93,8 +103,9 @@ const PLATFORM_POLICIES = Object.freeze({
     publicPreference: "public_profile_or_post_card",
     categories: ["celebrity", "artist", "designer", "travel", "fashion", "brand", "creator", "gallery", "performance"],
     collectionQueries: [
-      "instagram artist creator", "instagram celebrity official", "instagram travel creator", "instagram fashion designer",
-      "instagram art gallery", "instagram brand creator", "instagram musician official"
+      "instagram popular artist creator reel", "instagram celebrity official reel", "instagram travel tourism creator reel",
+      "instagram food culture creator reel", "instagram fashion designer creator", "instagram art gallery museum creator",
+      "instagram musician singer performance official", "instagram healthy lifestyle creator", "instagram useful education creator"
     ]
   },
   tiktok: {
@@ -103,8 +114,9 @@ const PLATFORM_POLICIES = Object.freeze({
     publicPreference: "public_video_card",
     categories: ["music", "dance", "travel", "lifestyle", "creator", "short_video", "culture", "tutorial"],
     collectionQueries: [
-      "tiktok music creator", "tiktok travel creator", "tiktok lifestyle creator", "tiktok culture video",
-      "tiktok art creator", "tiktok tutorial short video"
+      "tiktok popular music performance creator", "tiktok travel tourism creator", "tiktok food culture creator",
+      "tiktok healthy lifestyle creator", "tiktok culture heritage video", "tiktok art design creator",
+      "tiktok useful tutorial education short video", "tiktok science technology creator"
     ]
   },
   facebook: {
@@ -113,12 +125,14 @@ const PLATFORM_POLICIES = Object.freeze({
     publicPreference: "public_creator_post_reel_or_major_issue",
     categories: ["influencer", "creator", "celebrity", "artist", "athlete", "music", "travel", "food", "culture", "lifestyle", "major_issue", "reel", "video"],
     collectionQueries: [
-      "facebook influencer creator reel trending public post",
+      "facebook popular influencer creator reel public post",
       "facebook artist athlete musician creator public video",
-      "facebook travel food culture creator reel",
-      "facebook popular creator lifestyle public post",
-      "facebook major issue creator public discussion",
-      "facebook viral creator public video"
+      "facebook travel tourism food culture creator reel",
+      "facebook healthy lifestyle useful creator public post",
+      "facebook education science technology creator public video",
+      "facebook art culture heritage creator reel",
+      "facebook major public interest creator discussion",
+      "facebook trending creator public video"
     ]
   },
   wechat: {
@@ -127,7 +141,8 @@ const PLATFORM_POLICIES = Object.freeze({
     publicPreference: "public_article_or_official_account",
     categories: ["official_account", "article", "culture", "travel", "education", "brand", "creator"],
     collectionQueries: [
-      "wechat public article culture", "wechat official account travel", "wechat public account education", "wechat article art",
+      "wechat popular public article culture", "wechat official account travel tourism", "wechat public account education knowledge",
+      "wechat article art design", "wechat public account food culture", "wechat science technology article",
       "wechat brand official account"
     ]
   },
@@ -137,7 +152,8 @@ const PLATFORM_POLICIES = Object.freeze({
     publicPreference: "public_post_or_verified_account",
     categories: ["celebrity", "culture", "art", "entertainment", "official", "creator", "travel"],
     collectionQueries: [
-      "weibo celebrity official", "weibo artist official", "weibo culture account", "weibo travel creator",
+      "weibo popular celebrity official", "weibo artist singer performance official", "weibo culture heritage account",
+      "weibo travel tourism creator", "weibo food lifestyle creator", "weibo education technology creator",
       "weibo entertainment official account"
     ]
   },
@@ -147,8 +163,9 @@ const PLATFORM_POLICIES = Object.freeze({
     publicPreference: "public_pin_or_board",
     categories: ["design", "interior", "fashion", "food", "travel", "art", "product_inspiration", "craft"],
     collectionQueries: [
-      "pinterest design board", "pinterest interior design", "pinterest travel board", "pinterest food inspiration",
-      "pinterest fashion board", "pinterest art board", "pinterest product inspiration"
+      "pinterest popular design inspiration pin", "pinterest interior architecture design pin", "pinterest travel tourism destination pin",
+      "pinterest food recipe culture pin", "pinterest fashion style board", "pinterest art craft museum pin",
+      "pinterest education infographic knowledge pin", "pinterest healthy lifestyle inspiration pin", "pinterest product inspiration pin"
     ]
   },
   reddit: {
@@ -157,8 +174,9 @@ const PLATFORM_POLICIES = Object.freeze({
     publicPreference: "public_thread",
     categories: ["learning", "technology", "culture", "hobby", "community", "discussion", "travel", "books"],
     collectionQueries: [
-      "reddit learning community", "reddit technology discussion", "reddit travel guide thread", "reddit culture community",
-      "reddit hobby community", "reddit books discussion", "reddit art community"
+      "reddit popular learning community useful discussion", "reddit science technology discussion", "reddit travel tourism guide thread",
+      "reddit culture history community", "reddit hobby healthy lifestyle community", "reddit books education discussion",
+      "reddit art design community", "reddit food local culture discussion"
     ]
   },
   twitter: {
@@ -167,8 +185,9 @@ const PLATFORM_POLICIES = Object.freeze({
     publicPreference: "public_post_or_profile_card",
     categories: ["creator", "institution", "culture", "technology", "art", "travel", "brand", "official"],
     collectionQueries: [
-      "x twitter creator culture", "x twitter technology institution", "x twitter artist official", "x twitter travel creator",
-      "twitter brand official", "twitter museum official", "twitter education creator"
+      "x twitter popular creator culture", "x twitter science technology institution", "x twitter artist musician official",
+      "x twitter travel tourism creator", "twitter museum culture official", "twitter education knowledge creator",
+      "twitter healthy lifestyle creator", "twitter brand official"
     ]
   }
 });
