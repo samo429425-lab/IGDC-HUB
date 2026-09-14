@@ -61,10 +61,7 @@ function normaliseProgram(program){
     api:{
       mode:lower(object(p.api).mode||"disabled") || "disabled",
       enabledEnv:text(object(p.api).enabledEnv||""),
-      requiredSecrets:uniq(arr(object(p.api).requiredSecrets).map(text)),
-      policyVerifiedAtEnv:text(object(p.api).policyVerifiedAtEnv||""),
-      policyMaxAgeDays:Math.max(1,Number(object(p.api).policyMaxAgeDays||14)||14),
-      disclosureApprovedEnv:text(object(p.api).disclosureApprovedEnv||"")
+      requiredSecrets:uniq(arr(object(p.api).requiredSecrets).map(text))
     }
   };
 }
@@ -106,57 +103,32 @@ function allowedCountriesFor(record, candidateCountries){
   if(!allowed.length) return wanted;
   return wanted.filter(country=>allowed.includes(country));
 }
-function apiRuntime(program){
-  const api=program&&program.api||{};
-  const env=process.env||{};
-  const enabled=api.mode==="api_enabled" || (api.mode==="prepared" && bool(env[api.enabledEnv]));
-  const missingSecrets=arr(api.requiredSecrets).filter(name=>!text(env[name]));
-  const policyVerifiedAt=api.policyVerifiedAtEnv?text(env[api.policyVerifiedAtEnv]):"";
-  const policyVerified=isFresh(policyVerifiedAt,api.policyMaxAgeDays||14);
-  const disclosureApproved=!api.disclosureApprovedEnv || bool(env[api.disclosureApprovedEnv]);
-  return {
-    mode:api.mode||"disabled", enabled, ready:!!(enabled&&!missingSecrets.length&&policyVerified&&disclosureApproved),
-    missingSecrets, policyVerifiedAt:policyVerifiedAt||null, policyVerified, disclosureApproved
-  };
-}
 function manualAffiliate(item, registry, candidateCountries){
   const pack=programFor(item,registry||{}); const affiliate=pack.affiliate; const raw=pack.raw; const program=pack.program;
-  const integrationMode=lower(raw.integrationMode||raw.integration_mode||"manual") || "manual";
-  const runtime=apiRuntime(program);
-  let policyState=lower(raw.policyStatus||raw.policy_state||program&&program.policyStatus);
-  let policyCheckedAt=text(raw.policyCheckedAt||raw.policy_checked_at||program&&program.policyCheckedAt);
+  const policyState=lower(raw.policyStatus||raw.policy_state||program&&program.policyStatus);
+  const policyCheckedAt=text(raw.policyCheckedAt||raw.policy_checked_at||program&&program.policyCheckedAt);
   const policyAge=Number(raw.policyMaxAgeDays||raw.policy_max_age_days||program&&program.policyMaxAgeDays||14);
   const manualApproved=bool(raw.manualLinkApproved||raw.manual_link_approved||raw.operatorApproved||raw.operator_approved);
   const providerGenerated=bool(raw.providerGenerated||raw.provider_generated||raw.generatedByProvider||raw.generated_by_provider);
   const disclosure=bool(raw.disclosureReady||raw.disclosure_ready||raw.disclosureApproved||raw.disclosure_approved);
   const countries=allowedCountriesFor(pack,candidateCountries);
   const reasons=[];
-  const apiMode=integrationMode==="api";
   if(!program) reasons.push("AFFILIATE_PROGRAM_NOT_REGISTERED");
   else {
     if(!program.enabled) reasons.push("AFFILIATE_PROGRAM_DISABLED");
-    if(apiMode){
-      if(!runtime.enabled) reasons.push("AFFILIATE_API_NOT_ENABLED");
-      if(runtime.missingSecrets.length) reasons.push("AFFILIATE_API_SECRET_MISSING");
-      if(!runtime.policyVerified) reasons.push("AFFILIATE_API_POLICY_VERIFICATION_STALE");
-      if(!runtime.disclosureApproved) reasons.push("AFFILIATE_API_DISCLOSURE_NOT_APPROVED");
-      if(!providerGenerated) reasons.push("AFFILIATE_PROVIDER_GENERATED_LINK_EVIDENCE_MISSING");
-      if(program.manualLink.requireDisclosure && !disclosure) reasons.push("AFFILIATE_DISCLOSURE_NOT_APPROVED");
-      if(runtime.policyVerified){ policyState="verified"; policyCheckedAt=runtime.policyVerifiedAt||policyCheckedAt; }
-    } else {
-      if(program.mode!=="manual_link_only" && program.mode!=="api_enabled") reasons.push("AFFILIATE_PROGRAM_MODE_NOT_PERMITTED");
-      if(!program.manualLink.enabled) reasons.push("AFFILIATE_MANUAL_LINK_DISABLED");
-      if(!ACTIVE.has(policyState)) reasons.push("AFFILIATE_POLICY_NOT_CONFIRMED");
-      else if(!isFresh(policyCheckedAt,policyAge)) reasons.push("AFFILIATE_POLICY_CHECK_STALE");
-      if(program.manualLink.requireOperatorApproval && !manualApproved) reasons.push("AFFILIATE_MANUAL_LINK_OPERATOR_APPROVAL_MISSING");
-      if(program.manualLink.requireProviderGeneratedUrl && !providerGenerated) reasons.push("AFFILIATE_PROVIDER_GENERATED_LINK_EVIDENCE_MISSING");
-      if(program.manualLink.requireDisclosure && !disclosure) reasons.push("AFFILIATE_DISCLOSURE_NOT_APPROVED");
-    }
+    if(program.mode!=="manual_link_only" && program.mode!=="api_enabled") reasons.push("AFFILIATE_PROGRAM_MODE_NOT_PERMITTED");
+    if(!program.manualLink.enabled) reasons.push("AFFILIATE_MANUAL_LINK_DISABLED");
+    if(API_DISABLED.has(program.api.mode) && lower(raw.integrationMode||raw.integration_mode||"manual")!=="manual") reasons.push("AFFILIATE_API_DISABLED_MANUAL_LINK_ONLY");
+    if(!ACTIVE.has(policyState)) reasons.push("AFFILIATE_POLICY_NOT_CONFIRMED");
+    else if(!isFresh(policyCheckedAt,policyAge)) reasons.push("AFFILIATE_POLICY_CHECK_STALE");
+    if(program.manualLink.requireOperatorApproval && !manualApproved) reasons.push("AFFILIATE_MANUAL_LINK_OPERATOR_APPROVAL_MISSING");
+    if(program.manualLink.requireProviderGeneratedUrl && !providerGenerated) reasons.push("AFFILIATE_PROVIDER_GENERATED_LINK_EVIDENCE_MISSING");
+    if(program.manualLink.requireDisclosure && !disclosure) reasons.push("AFFILIATE_DISCLOSURE_NOT_APPROVED");
   }
   if(!affiliate.eligible || !affiliate.trackingUrl) reasons.push("AFFILIATE_TRACKING_LINK_NOT_APPROVED");
   if(!countries.length) reasons.push("AFFILIATE_MARKET_NOT_ALLOWED");
   return {
-    mode:apiMode?"approved_api_affiliate":"approved_manual_affiliate",
+    mode:"approved_manual_affiliate",
     ok:reasons.length===0,
     reasons,
     providerId:affiliate.providerId||null,
@@ -169,9 +141,7 @@ function manualAffiliate(item, registry, candidateCountries){
     manualLinkApproved:manualApproved,
     providerGenerated,
     disclosureReady:disclosure,
-    integrationMode,
-    apiMode:runtime.ready?"api_enabled":(program&&program.api.mode||"disabled"),
-    apiRuntime:runtime
+    apiMode:program&&program.api.mode||"disabled"
   };
 }
 function externalReferral(item, registry, candidateCountries){
@@ -201,8 +171,8 @@ function routeForItem(item, registry, candidateCountries){
 }
 function publicRoute(route){
   if(!route||!route.ok) return {mode:"blocked",reason:"OUTBOUND_ROUTE_NOT_APPROVED"};
-  if(route.kind==="affiliate") return {mode:"approved_manual_affiliate",providerId:route.affiliate.providerId,programId:route.affiliate.programId,trackingHost:route.affiliate.trackingHost,allowedCountries:route.allowedCountries,policyCheckedAt:route.affiliate.policyCheckedAt,apiMode:route.affiliate.apiMode,integrationMode:route.affiliate.integrationMode||"manual",disclosureReady:true};
+  if(route.kind==="affiliate") return {mode:"approved_manual_affiliate",providerId:route.affiliate.providerId,programId:route.affiliate.programId,trackingHost:route.affiliate.trackingHost,allowedCountries:route.allowedCountries,policyCheckedAt:route.affiliate.policyCheckedAt,apiMode:route.affiliate.apiMode,disclosureReady:true};
   return {mode:"verified_external_referral",allowedCountries:route.allowedCountries,verifiedAt:route.referral.verifiedAt,officialDestination:true,disclosureReady:true,trafficMonetization:"not_claimed"};
 }
 
-module.exports={VERSION,REGISTRY_FILE,load,programFor,manualAffiliate,externalReferral,routeForItem,publicRoute,registryPaths,isFresh,apiRuntime};
+module.exports={VERSION,REGISTRY_FILE,load,programFor,manualAffiliate,externalReferral,routeForItem,publicRoute,registryPaths,isFresh};

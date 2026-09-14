@@ -7,9 +7,7 @@
       "name": "Coupang Partners Korea",
       "enabled": true,
       "mode": "manual_link_only",
-      "allowedCountries": [
-        "KR"
-      ],
+      "allowedCountries": ["KR"],
       "policyStatus": "operator_review_required",
       "policyCheckedAt": "",
       "policyMaxAgeDays": 14,
@@ -20,15 +18,9 @@
         "requireDisclosure": true
       },
       "api": {
-        "mode": "prepared",
+        "mode": "disabled",
         "enabledEnv": "COUPANG_API_ENABLED",
-        "requiredSecrets": [
-          "COUPANG_ACCESS_KEY",
-          "COUPANG_SECRET_KEY"
-        ],
-        "policyVerifiedAtEnv": "COUPANG_API_POLICY_VERIFIED_AT",
-        "policyMaxAgeDays": 14,
-        "disclosureApprovedEnv": "COUPANG_DISCLOSURE_APPROVED"
+        "requiredSecrets": ["COUPANG_ACCESS_KEY", "COUPANG_SECRET_KEY"]
       }
     }
   ],

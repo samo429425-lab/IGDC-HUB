@@ -273,9 +273,6 @@
       externalUrl,
       affiliateOutbound: !!affiliateOutboundUrl,
       affiliateProviderId: item && item.affiliate && item.affiliate.providerId ? String(item.affiliate.providerId) : '',
-      seoLandingEnabled: !!(item && item.seoLandingEnabled === true),
-      seo: item && item.seo && typeof item.seo === 'object' ? item.seo : {},
-      affiliateDisclosure: item && item.affiliateDisclosure && typeof item.affiliateDisclosure === 'object' ? item.affiliateDisclosure : {},
       page: (ctx && ctx.page) || pick(item, ['page','hub']) || '',
       section: (ctx && ctx.section) || pick(item, ['section','key']) || '',
       raw: item || {}
@@ -510,11 +507,7 @@
   }
 
   function openResolvedOriginalInsideIgdc(data){
-    // Provider-backed SEO landing products intentionally remain on the IGDC
-    // detail page so search engines and users can see the product context,
-    // disclosure and structured data before choosing the external checkout.
-    // Existing ordinary products preserve their prior direct-navigation UX.
-    if (!data || data.seoLandingEnabled === true || !data.externalUrl || isPreparationOnlyContent(data)) return false;
+    if (!data || !data.externalUrl || isPreparationOnlyContent(data)) return false;
     try {
       const target = new URL(String(data.externalUrl), window.location.href);
       if (!/^https?:$/.test(target.protocol)) return false;
@@ -529,56 +522,7 @@
     }
   }
 
-  function upsertMeta(name, content, attr){
-    if (!content) return;
-    const key = attr || 'name';
-    let el = document.head.querySelector('meta[' + key + '="' + name + '"]');
-    if (!el){ el = document.createElement('meta'); el.setAttribute(key, name); document.head.appendChild(el); }
-    el.setAttribute('content', String(content));
-  }
-
-  function applySeoMetadata(data){
-    if (!data) return;
-    const seo = data.seo && typeof data.seo === 'object' ? data.seo : {};
-    const title = String(seo.title || data.title || tr('pageTitle')).trim();
-    const description = String(seo.description || data.description || '').trim().slice(0, 320);
-    if (title) document.title = title;
-    upsertMeta('description', description);
-    upsertMeta('og:title', title, 'property');
-    upsertMeta('og:description', description, 'property');
-    if (data.image) upsertMeta('og:image', data.image, 'property');
-    upsertMeta('og:type', data.type === 'commerce' ? 'product' : 'website', 'property');
-    try{
-      const canonicalPath = String(seo.canonicalPath || ('/content.html?id=' + encodeURIComponent(data.id || '')));
-      const canonicalUrl = new URL(canonicalPath, window.location.origin).toString();
-      let link = document.head.querySelector('link[rel="canonical"]');
-      if (!link){ link = document.createElement('link'); link.rel = 'canonical'; document.head.appendChild(link); }
-      link.href = canonicalUrl;
-      upsertMeta('og:url', canonicalUrl, 'property');
-    }catch(_e){}
-    if (data.type === 'commerce' && seo.productSchema !== false){
-      const raw = data.raw && typeof data.raw === 'object' ? data.raw : {};
-      const schema = {
-        '@context':'https://schema.org',
-        '@type':'Product',
-        name:data.title,
-        description:description || undefined,
-        image:data.image ? [data.image] : undefined,
-        sku:String(raw.providerProductId || raw.productId || data.id || ''),
-        url:window.location.href
-      };
-      if (data.price){
-        schema.offers = { '@type':'Offer', price:String(data.price), priceCurrency:String(data.currency || 'KRW'), availability:'https://schema.org/InStock', url:window.location.href };
-      }
-      Object.keys(schema).forEach(function(k){ if(schema[k] === undefined || schema[k] === '') delete schema[k]; });
-      let script = document.getElementById('igdc-product-jsonld');
-      if (!script){ script = document.createElement('script'); script.id='igdc-product-jsonld'; script.type='application/ld+json'; document.head.appendChild(script); }
-      script.textContent = JSON.stringify(schema);
-    }
-  }
-
   function renderContent(data){
-    applySeoMetadata(data);
     if (openResolvedOriginalInsideIgdc(data)) return;
     installBaseStyle();
     const root = rootEl();
@@ -609,7 +553,6 @@
           </section>
           <div class="igdc-content-note">
             ${esc(tr('note'))}
-            ${data.affiliateDisclosure && data.affiliateDisclosure.approved === true && data.affiliateDisclosure.text ? `<div style="margin-top:8px;font-weight:700;">${esc(data.affiliateDisclosure.text)}</div>` : ''}
           </div>
         </article>
       </main>
