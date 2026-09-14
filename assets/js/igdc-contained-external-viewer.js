@@ -1,4 +1,4 @@
-/* IGDC contained external viewer v5
+/* IGDC contained external viewer v6
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
@@ -17,10 +17,10 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V5__) return;
-  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V5__ = true;
+  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V6__) return;
+  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V6__ = true;
 
-  var VIEWER_VERSION = 5;
+  var VIEWER_VERSION = 6;
 
   var PROXY_PATH = '/.netlify/functions/search-page-proxy';
   var ROOT_ID = 'igdc-contained-external-viewer';
@@ -53,7 +53,10 @@
     viewerMode: '',
     activeLoadSeq: 0,
     pendingPolicyTarget: '',
-    kind: ''
+    kind: '',
+    ownStyleLock: null,
+    parentStyleLock: null,
+    parentNavBound: false
   };
 
   function isHttpUrl(raw) {
@@ -84,9 +87,7 @@
       var u = new URL(String(raw || ''), global.location.href);
       var host = String(u.hostname || '').toLowerCase();
       return u.protocol === 'https:' && (host === 'coupang.com' || host.endsWith('.coupang.com'));
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
   function resolveCoupangPartnersDestination(source) {
@@ -128,7 +129,7 @@
     var style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = [
-      '#' + ROOT_ID + '{position:fixed;inset:0;z-index:2147483200;display:none;background:#fff;color:#16365c;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;}',
+      '#' + ROOT_ID + '{position:fixed!important;inset:0!important;width:100%!important;height:100dvh!important;z-index:2147483200;display:none;background:#fff;color:#16365c;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden!important;overscroll-behavior:none!important;}',
       '#' + ROOT_ID + '[data-open="1"]{display:flex;flex-direction:column;}',
       '#' + ROOT_ID + ' .igdc-contained-bar{height:48px;min-height:48px;display:flex;align-items:center;gap:12px;padding:0 12px;background:#cce89a;color:#16365c;border-bottom:1px solid #9dbd69;box-shadow:0 1px 2px rgba(15,23,42,.06);box-sizing:border-box;}',
       '#' + ROOT_ID + ' .igdc-contained-back{appearance:none;border:1px solid #9fc9aa;background:#eff8df;color:#16365c;border-radius:8px;padding:7px 12px;font-size:14px;font-weight:800;cursor:pointer;white-space:nowrap;transition:background .12s ease,border-color .12s ease;}',
@@ -387,58 +388,86 @@
     updateBar(target, options.label || state.label);
     showLoading('사이트를 불러오는 중입니다…');
 
-    /* Network/Tour compatibility path.
-     * Most large commerce/travel sites reject third-party iframe embedding even
-     * though their URL is valid.  Do not show a browser-level "refused to
-     * connect" page first.  Use IGDC's contained relay immediately unless the
-     * host is one of the few sources already verified by the operator to frame
-     * correctly.  The frame-policy check still runs in the background so the
-     * origin decision is cached without delaying first paint. */
-    if ((state.kind === 'market' || state.kind === 'tour') && !directKnownGood(target, state.kind)) {
-      setFrameProxy(target, 'static');
-      framePolicy(target).catch(function(){});
-      return;
-    }
-
-    if (options.forceProxy || preferProxy(target)) {
+    /* v6 speed/reliability path:
+     * Start the real destination immediately. In parallel inspect frame policy.
+     * Switch to the IGDC relay only when X-Frame-Options/CSP positively blocks
+     * framing. Probe timeout/network failure never replaces a working page. */
+    if (options.forceProxy) {
       setFrameProxy(target, 'static');
       return;
     }
 
     var cached = getCachedPolicy(target);
-    if (cached) {
-      if (cached.directAllowed) setFrameDirect(target);
-      else setFrameProxy(target, 'static');
+    if (cached && cached.ok && cached.directAllowed === false) {
+      setFrameProxy(target, 'static');
       return;
     }
 
-    /* v2 speed path: start the actual source immediately instead of waiting
-     * several seconds for the server-side frame-policy probe. */
     setFrameDirect(target);
     state.pendingPolicyTarget = target;
 
     framePolicy(target).then(function (policy) {
       if (!state.open || seq !== state.activeLoadSeq || state.target !== target) return;
       state.pendingPolicyTarget = '';
-      if (policy && policy.directAllowed) {
-        /* Direct page is already loading/rendered. Nothing else to do. */
-        return;
-      }
+      if (!policy || policy.ok === false || policy.directAllowed !== false) return;
       showLoading('사이트를 안전하게 불러오는 중입니다…');
       setFrameProxy(target, 'static');
+    }).catch(function(){
+      state.pendingPolicyTarget = '';
     });
+  }
+
+  function captureOverflowLock(doc) {
+    if (!doc) return null;
+    var rows = [];
+    [doc.documentElement, doc.body].forEach(function(el){
+      if (!el) return;
+      rows.push({
+        el:el,
+        overflow:el.style.getPropertyValue('overflow'),
+        overflowPriority:el.style.getPropertyPriority('overflow'),
+        overscroll:el.style.getPropertyValue('overscroll-behavior'),
+        overscrollPriority:el.style.getPropertyPriority('overscroll-behavior')
+      });
+      el.style.setProperty('overflow','hidden','important');
+      el.style.setProperty('overscroll-behavior','none','important');
+    });
+    return rows;
+  }
+
+  function restoreOverflowLock(rows) {
+    (rows || []).forEach(function(row){
+      try {
+        if (row.overflow) row.el.style.setProperty('overflow', row.overflow, row.overflowPriority || '');
+        else row.el.style.removeProperty('overflow');
+        if (row.overscroll) row.el.style.setProperty('overscroll-behavior', row.overscroll, row.overscrollPriority || '');
+        else row.el.style.removeProperty('overscroll-behavior');
+      } catch (e) {}
+    });
+  }
+
+  function sameOriginParentDocument() {
+    try {
+      if (global.parent && global.parent !== global && global.parent.location.origin === global.location.origin) {
+        return global.parent.document;
+      }
+    } catch (e) {}
+    return null;
   }
 
   function lockPage() {
     state.prevBodyOverflow = document.body ? document.body.style.overflow : '';
     state.prevHtmlOverflow = document.documentElement ? document.documentElement.style.overflow : '';
-    if (document.body) document.body.style.overflow = 'hidden';
-    if (document.documentElement) document.documentElement.style.overflow = 'hidden';
+    state.ownStyleLock = captureOverflowLock(document);
+    var pd = sameOriginParentDocument();
+    state.parentStyleLock = pd ? captureOverflowLock(pd) : null;
   }
 
   function unlockPage() {
-    if (document.body) document.body.style.overflow = state.prevBodyOverflow || '';
-    if (document.documentElement) document.documentElement.style.overflow = state.prevHtmlOverflow || '';
+    restoreOverflowLock(state.ownStyleLock);
+    restoreOverflowLock(state.parentStyleLock);
+    state.ownStyleLock = null;
+    state.parentStyleLock = null;
   }
 
   function historyStateFor(target, label, token) {
@@ -481,6 +510,7 @@
     state.root.setAttribute('data-open', '1');
     state.root.setAttribute('aria-hidden', 'false');
     lockPage();
+    installParentNavBridge();
 
     if (options.pushHistory !== false) {
       try {
@@ -503,6 +533,26 @@
       open(fallback, options);
       return false;
     });
+  }
+
+  function clearViewerHistoryMarker() {
+    try {
+      var hs = history.state;
+      if (!hs || hs[HISTORY_KEY] !== 1) return;
+      var next = {};
+      Object.keys(hs).forEach(function(k){
+        if (k === HISTORY_KEY || k === HISTORY_TOKEN_KEY || k === 'igdcContainedTarget' || k === 'igdcContainedLabel' || k === 'igdcContainedKind') return;
+        next[k] = hs[k];
+      });
+      history.replaceState(next, '', global.location.href);
+    } catch (e) {}
+  }
+
+  function closeForHubNavigation() {
+    if (!state.open) return;
+    hideViewer();
+    clearViewerHistoryMarker();
+    state.closePending = false;
   }
 
   function hideViewer() {
@@ -551,25 +601,45 @@
     }
   }
 
-  /* v5 recovery capture: preserve the original contained-viewer behavior,
-   * route only Coupang through the Partners gateway, and let the visible hub
-   * navigation leave an open viewer without requiring the green Back button. */
+  /* v6: hub navigation always exits the external detail first. */
+  function isHubNavAnchor(a) {
+    if (!a) return false;
+    var raw = String(a.getAttribute('href') || '');
+    if (!raw || /^javascript:/i.test(raw)) return false;
+    try {
+      var u = new URL(a.href || raw, global.location.href);
+      if (u.origin !== global.location.origin) return false;
+      return /(?:^|\/)(?:home|networkhub|distributionhub|socialnetwork|mediahub|tour)(?:_[a-z0-9-]+)?(?:\.html)?\/?$/i.test(u.pathname);
+    } catch (e) { return false; }
+  }
+
+  function installParentNavBridge() {
+    if (state.parentNavBound) return;
+    var pd = sameOriginParentDocument();
+    if (!pd) return;
+    state.parentNavBound = true;
+    pd.addEventListener('click', function(ev){
+      if (!state.open) return;
+      var a = ev.target && ev.target.closest ? ev.target.closest('nav a[href], a[data-page-index][href], .sidebar a[href]') : null;
+      if (!isHubNavAnchor(a)) return;
+      closeForHubNavigation();
+    }, true);
+  }
+
   global.addEventListener('click', function (ev) {
     if (ev.defaultPrevented || !isNetworkOrTourPage()) return;
 
     if (state.open) {
-      var nav = ev.target && ev.target.closest ? ev.target.closest('.sidebar a[href]') : null;
-      if (nav && !/^javascript:/i.test(String(nav.getAttribute('href') || ''))) {
+      var nav = ev.target && ev.target.closest ? ev.target.closest('nav a[href], .sidebar a[href], a[data-page-index][href]') : null;
+      if (isHubNavAnchor(nav)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
         var navHref = nav.href;
-        if (navHref) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-          hideViewer();
-          try { global.location.assign(navHref); }
-          catch (e) { global.location.href = navHref; }
-          return;
-        }
+        closeForHubNavigation();
+        try { global.location.assign(navHref); }
+        catch (e) { global.location.href = navHref; }
+        return;
       }
     }
 
@@ -640,11 +710,15 @@
     requestClose();
   }, true);
 
+  global.addEventListener('pagehide', function(){ if (state.open) unlockPage(); });
+  global.addEventListener('beforeunload', function(){ if (state.open) unlockPage(); });
+
   global.IGDCContainedViewer = Object.freeze({
     version: VIEWER_VERSION,
     open: open,
     openCoupangPartners: openCoupangPartners,
     close: requestClose,
+    closeForHubNavigation: closeForHubNavigation,
     isOpen: function () { return !!state.open; }
   });
 })(window);

@@ -382,22 +382,56 @@ function shouldRetryStatus(status){
 }
 
 async function fetchWithBrowserProfiles(event, target, fetchOpts){
-  const profiles = ['desktop','no-referer','mobile'];
-  let last = null;
+  /* Render-speed path: profiles are staggered in parallel instead of waiting
+   * for three full sequential upstream round-trips.  Nothing is prefetched;
+   * this runs only after a user actually opens a Network/Tour target. */
+  const profiles = [
+    { name:'desktop', delay:0 },
+    { name:'no-referer', delay:220 },
+    { name:'mobile', delay:440 }
+  ];
+  const controllers = [];
+  let settled = false;
+  let pending = profiles.length;
+  let bestRetry = null;
   let lastError = null;
-  for(const profile of profiles){
-    try{
-      const opts = Object.assign({}, fetchOpts || {});
-      opts.headers = Object.assign({}, copyRequestHeaders(event, target, profile), (fetchOpts && fetchOpts.headers) || {});
-      const res = await fetch(target.href, opts);
-      last = res;
-      if(!shouldRetryStatus(res.status)) return res;
-    }catch(e){
-      lastError = e;
+
+  return await new Promise((resolve, reject) => {
+    function finish(res){
+      if(settled) return;
+      settled = true;
+      for(const c of controllers){ try{ c.abort(); }catch(e){} }
+      resolve(res);
     }
-  }
-  if(last) return last;
-  throw lastError || new Error('upstream-fetch-failed');
+    function failOne(err){
+      if(err) lastError = err;
+      pending -= 1;
+      if(pending > 0 || settled) return;
+      if(bestRetry) finish(bestRetry);
+      else reject(lastError || new Error('upstream-fetch-failed'));
+    }
+
+    for(const item of profiles){
+      setTimeout(async () => {
+        if(settled){ failOne(); return; }
+        const ctrl = new AbortController();
+        controllers.push(ctrl);
+        const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 6500);
+        try{
+          const opts = Object.assign({}, fetchOpts || {}, { signal: ctrl.signal });
+          opts.headers = Object.assign({}, copyRequestHeaders(event, target, item.name), (fetchOpts && fetchOpts.headers) || {});
+          const res = await fetch(target.href, opts);
+          clearTimeout(timer);
+          if(!shouldRetryStatus(res.status)) { finish(res); return; }
+          if(!bestRetry || Number(res.status || 999) < Number(bestRetry.status || 999)) bestRetry = res;
+          failOne();
+        }catch(e){
+          clearTimeout(timer);
+          failOne(e);
+        }
+      }, item.delay);
+    }
+  });
 }
 
 exports.handler = async function(event){
@@ -422,7 +456,7 @@ exports.handler = async function(event){
   }
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 16000);
+  const timer = setTimeout(() => ctrl.abort(), 7600);
   try{
     const method = String(event.httpMethod || 'GET').toUpperCase();
     const fetchOpts = {
