@@ -167,24 +167,6 @@
       if (!a) return;
       const href = a.href;
       if (!href) return;
-
-      // PINSET: Coupang only. Preserve every other marketplace link exactly
-      // as the original Network Hub behavior. Route the Coupang entry at the
-      // TOP window so the external checkout is never trapped inside an iframe.
-      try {
-        const u = new URL(href, window.location.href);
-        const host = String(u.hostname || '').toLowerCase();
-        if (host === 'coupang.com' || host === 'www.coupang.com' || host.endsWith('.coupang.com')) {
-          ev.preventDefault();
-          ev.stopPropagation();
-          if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-          const gateway = '/api/coupang-partners-entry?source=networkhub';
-          try { (window.top || window).location.assign(gateway); }
-          catch (_e) { window.location.href = gateway; }
-          return;
-        }
-      } catch (_e) {}
-
       ev.preventDefault();
       if (a.matches('a.link-btn[href^="http"]')) {
         ev.stopPropagation();
