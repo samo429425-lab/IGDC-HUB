@@ -17,9 +17,9 @@
   const MOBILE_ID = 'nh-mobile-rail-list';
   const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v2';
 
-  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260909-network-tour-compat-v4';
-  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v4';
-  const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v4';
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260914-network-tour-recovery-v5';
+  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v5';
+  const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v5';
 
   function ensureContainedToolbarTheme(){
     if (document.getElementById(CONTAINED_THEME_ID)) return;
@@ -55,15 +55,15 @@
 
   function ensureContainedViewer(){
     ensureContainedToolbarTheme();
-    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') {
+    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 5 && typeof window.IGDCContainedViewer.open === 'function') {
       return Promise.resolve(window.IGDCContainedViewer);
     }
-    if (window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__;
+    if (window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__;
 
-    window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__ = new Promise(function(resolve, reject){
+    window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__ = new Promise(function(resolve, reject){
       let script = document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
       const finish = function(){
-        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') {
+        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 5 && typeof window.IGDCContainedViewer.open === 'function') {
           ensureContainedToolbarTheme();
           resolve(window.IGDCContainedViewer);
         } else {
@@ -85,11 +85,11 @@
       script.addEventListener('error', function(){ reject(new Error('IGDC contained viewer load failed')); }, { once:true });
       (document.head || document.documentElement).appendChild(script);
     }).catch(function(err){
-      window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__ = null;
+      window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__ = null;
       throw err;
     });
 
-    return window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__;
+    return window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__;
   }
 
 
@@ -159,44 +159,32 @@
     }
   }
 
-  function rewriteCoupangEntryOnly(){
-    // PINPOINT SCOPE: rewrite only a genuine Coupang marketplace anchor.
-    // Every other marketplace href remains exactly as authored in HTML.
-    Array.prototype.slice.call(document.querySelectorAll('a.link-btn[href^="http"]')).forEach(function(a){
-      try{
-        const u = new URL(a.href, window.location.href);
-        const host = String(u.hostname || '').toLowerCase();
-        if (host === 'coupang.com' || host.endsWith('.coupang.com')){
-          a.href = '/api/coupang-partners-entry?source=networkhub';
-          a.target = '_blank';
-          a.rel = 'noopener';
-          a.setAttribute('data-affiliate-provider','coupang-partners-kr');
-          a.setAttribute('data-affiliate-entry','1');
-        }
-      }catch(_e){}
-    });
-  }
-
   function installExternalTopNavigation(){
-    // This may run before DOMContentLoaded. Re-run the Coupang-only rewrite
-    // whenever install is invoked so the real anchors are caught after parsing.
-    rewriteCoupangEntryOnly();
-
     if (window.__IGDC_NETWORK_TOP_NAV_INSTALLED__) return;
     window.__IGDC_NETWORK_TOP_NAV_INSTALLED__ = true;
-
     document.addEventListener('click', function(ev){
       const a = ev.target && ev.target.closest && ev.target.closest('a.link-btn[href^="http"], a[data-igdc-external="top"][href^="http"]');
       if (!a) return;
       const href = a.href;
       if (!href) return;
-
-      // Static marketplace links already contain their correct destination and
-      // target in HTML. Do not intercept them through the contained-viewer/proxy.
-      if (a.matches('a.link-btn[href^="http"]')) return;
-
-      // Keep the legacy top-navigation behavior only for dynamic outbound cards.
       ev.preventDefault();
+      if (a.matches('a.link-btn[href^="http"]')) {
+        ev.stopPropagation();
+        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+        const label = String(a.textContent || '').replace(/\s+/g, ' ').trim();
+        ensureContainedViewer().then(function(viewer){
+          try {
+            const host = new URL(href, window.location.href).hostname.toLowerCase();
+            if ((host === 'coupang.com' || host.endsWith('.coupang.com')) && typeof viewer.openCoupangPartners === 'function') {
+              return viewer.openCoupangPartners(href, { label: label, kind: 'market', source: 'networkhub' });
+            }
+          } catch (_e) {}
+          return viewer.open(href, { label: label, kind: 'market' });
+        }).catch(function(err){
+          console.warn('[IGDC][Network] contained viewer load failed:', err && err.message ? err.message : err);
+        });
+        return;
+      }
       try { (window.top || window).location.assign(href); }
       catch(e){ window.location.href = href; }
     }, true);

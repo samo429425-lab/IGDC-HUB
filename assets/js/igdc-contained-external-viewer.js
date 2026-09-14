@@ -1,4 +1,4 @@
-/* IGDC contained external viewer v4
+/* IGDC contained external viewer v5
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
@@ -17,10 +17,10 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V4__) return;
-  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V4__ = true;
+  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V5__) return;
+  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V5__ = true;
 
-  var VIEWER_VERSION = 4;
+  var VIEWER_VERSION = 5;
 
   var PROXY_PATH = '/.netlify/functions/search-page-proxy';
   var ROOT_ID = 'igdc-contained-external-viewer';
@@ -77,6 +77,28 @@
 
   function textOf(el) {
     return String((el && el.textContent) || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function isCoupangUrl(raw) {
+    try {
+      var u = new URL(String(raw || ''), global.location.href);
+      var host = String(u.hostname || '').toLowerCase();
+      return u.protocol === 'https:' && (host === 'coupang.com' || host.endsWith('.coupang.com'));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function resolveCoupangPartnersDestination(source) {
+    var endpoint = '/api/coupang-partners-entry?source=' + encodeURIComponent(source || 'networkhub') + '&format=json';
+    return fetch(endpoint, { cache:'no-store', credentials:'same-origin' }).then(function(r){
+      if (!r.ok) throw new Error('coupang-entry-' + r.status);
+      return r.json();
+    }).then(function(data){
+      var destination = isHttpUrl(data && data.destination || '');
+      if (!destination || !isCoupangUrl(destination)) throw new Error('invalid-coupang-destination');
+      return destination;
+    });
   }
 
   function isNetworkOrTourPage() {
@@ -373,10 +395,8 @@
      * correctly.  The frame-policy check still runs in the background so the
      * origin decision is cached without delaying first paint. */
     if ((state.kind === 'market' || state.kind === 'tour') && !directKnownGood(target, state.kind)) {
-      /* Fast path: proxy is already the chosen compatibility route.  Do not run
-       * a second frame-policy request in parallel; that duplicated the same
-       * upstream work and made first paint slower on restrictive sites. */
       setFrameProxy(target, 'static');
+      framePolicy(target).catch(function(){});
       return;
     }
 
@@ -473,6 +493,18 @@
     return true;
   }
 
+  function openCoupangPartners(fallbackTarget, options) {
+    options = options || {};
+    var fallback = isHttpUrl(fallbackTarget) || 'https://www.coupang.com/';
+    return resolveCoupangPartnersDestination(options.source || 'networkhub').then(function(destination){
+      open(destination, options);
+      return true;
+    }).catch(function(){
+      open(fallback, options);
+      return false;
+    });
+  }
+
   function hideViewer() {
     if (!state.open) return;
     state.open = false;
@@ -519,10 +551,28 @@
     }
   }
 
-  /* v3 upgrade capture: this is attached at window level so it runs before
-   * the older v2 document-capture listener if a cached FrontBus loaded v2 first. */
+  /* v5 recovery capture: preserve the original contained-viewer behavior,
+   * route only Coupang through the Partners gateway, and let the visible hub
+   * navigation leave an open viewer without requiring the green Back button. */
   global.addEventListener('click', function (ev) {
     if (ev.defaultPrevented || !isNetworkOrTourPage()) return;
+
+    if (state.open) {
+      var nav = ev.target && ev.target.closest ? ev.target.closest('.sidebar a[href]') : null;
+      if (nav && !/^javascript:/i.test(String(nav.getAttribute('href') || ''))) {
+        var navHref = nav.href;
+        if (navHref) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+          hideViewer();
+          try { global.location.assign(navHref); }
+          catch (e) { global.location.href = navHref; }
+          return;
+        }
+      }
+    }
+
     var a = ev.target && ev.target.closest ? ev.target.closest('a.link-btn[href]') : null;
     if (!a) return;
     var href = isHttpUrl(a.getAttribute('href') || a.href || '');
@@ -531,6 +581,10 @@
     ev.preventDefault();
     ev.stopPropagation();
     if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+    if (kind === 'market' && isCoupangUrl(href)) {
+      openCoupangPartners(href, { label: textOf(a), kind: kind, source:'networkhub' });
+      return;
+    }
     open(href, { label: textOf(a), kind: kind });
   }, true);
 
@@ -589,6 +643,7 @@
   global.IGDCContainedViewer = Object.freeze({
     version: VIEWER_VERSION,
     open: open,
+    openCoupangPartners: openCoupangPartners,
     close: requestClose,
     isOpen: function () { return !!state.open; }
   });

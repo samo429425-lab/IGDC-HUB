@@ -23,9 +23,9 @@
 
   const MOBILE_CSS_ID = "tour-mobile-rail-cap-v2";
 
-  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260909-network-tour-compat-v4';
-  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v4';
-  const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v4';
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260914-network-tour-recovery-v5';
+  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v5';
+  const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v5';
 
   function ensureContainedToolbarTheme(){
     if (document.getElementById(CONTAINED_THEME_ID)) return;
@@ -61,15 +61,15 @@
 
   function ensureContainedViewer(){
     ensureContainedToolbarTheme();
-    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') {
+    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 5 && typeof window.IGDCContainedViewer.open === 'function') {
       return Promise.resolve(window.IGDCContainedViewer);
     }
-    if (window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__;
+    if (window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__;
 
-    window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__ = new Promise(function(resolve, reject){
+    window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__ = new Promise(function(resolve, reject){
       let script = document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
       const finish = function(){
-        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') {
+        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 5 && typeof window.IGDCContainedViewer.open === 'function') {
           ensureContainedToolbarTheme();
           resolve(window.IGDCContainedViewer);
         } else {
@@ -91,11 +91,11 @@
       script.addEventListener('error', function(){ reject(new Error('IGDC contained viewer load failed')); }, { once:true });
       (document.head || document.documentElement).appendChild(script);
     }).catch(function(err){
-      window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__ = null;
+      window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__ = null;
       throw err;
     });
 
-    return window.__IGDC_NETWORK_TOUR_VIEWER_V4_PROMISE__;
+    return window.__IGDC_NETWORK_TOUR_VIEWER_V5_PROMISE__;
   }
 
 
@@ -181,14 +181,18 @@
       if (!a) return;
       const href = a.href;
       if (!href) return;
-
-      // Static Tour service links are authoritative. Let the browser follow
-      // their original href/target directly; never route them through the
-      // contained-viewer/proxy layer.
-      if (a.matches('a.link-btn[href^="http"]')) return;
-
-      // Preserve top-navigation only for dynamic outbound cards.
       ev.preventDefault();
+      if (a.matches('a.link-btn[href^="http"]')) {
+        ev.stopPropagation();
+        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+        const label = String(a.textContent || '').replace(/\s+/g, ' ').trim();
+        ensureContainedViewer().then(function(viewer){
+          viewer.open(href, { label: label, kind: 'tour' });
+        }).catch(function(err){
+          console.warn('[IGDC][Tour] contained viewer load failed:', err && err.message ? err.message : err);
+        });
+        return;
+      }
       try { (window.top || window).location.assign(href); }
       catch(e){ window.location.href = href; }
     }, true);

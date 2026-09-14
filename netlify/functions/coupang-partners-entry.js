@@ -32,6 +32,26 @@ exports.handler = async function handler(event) {
   const enabled = /^(1|true|yes|on|enabled)$/i.test(text(process.env.COUPANG_PARTNERS_ENABLED));
   const affiliateActive = enabled && isAllowedCoupangUrl(configured);
   const destination = affiliateActive ? configured : DEFAULT_COUPANG_URL;
+  const format = text(event && event.queryStringParameters && event.queryStringParameters.format).toLowerCase();
+
+  if (format === "json") {
+    return {
+      statusCode: 200,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store, private",
+        "x-igdc-outbound-provider": "coupang-partners-kr",
+        "x-igdc-affiliate-state": affiliateActive ? "configured" : "fallback-unconfigured"
+      },
+      body: JSON.stringify({
+        ok: true,
+        destination,
+        affiliateActive,
+        provider: "coupang-partners-kr",
+        source: sourceFromEvent(event)
+      })
+    };
+  }
 
   return {
     statusCode: 302,
