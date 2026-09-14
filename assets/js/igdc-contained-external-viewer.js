@@ -1,4 +1,4 @@
-/* IGDC contained external viewer v6
+/* IGDC contained external viewer v8 stable-restore
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
@@ -17,10 +17,10 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V6__) return;
-  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V6__ = true;
+  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V8__) return;
+  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V8__ = true;
 
-  var VIEWER_VERSION = 6;
+  var VIEWER_VERSION = 8;
 
   var PROXY_PATH = '/.netlify/functions/search-page-proxy';
   var ROOT_ID = 'igdc-contained-external-viewer';
@@ -388,32 +388,45 @@
     updateBar(target, options.label || state.label);
     showLoading('사이트를 불러오는 중입니다…');
 
-    /* v6 speed/reliability path:
-     * Start the real destination immediately. In parallel inspect frame policy.
-     * Switch to the IGDC relay only when X-Frame-Options/CSP positively blocks
-     * framing. Probe timeout/network failure never replaces a working page. */
-    if (options.forceProxy) {
+    /* Network/Tour compatibility path.
+     * Most large commerce/travel sites reject third-party iframe embedding even
+     * though their URL is valid.  Do not show a browser-level "refused to
+     * connect" page first.  Use IGDC's contained relay immediately unless the
+     * host is one of the few sources already verified by the operator to frame
+     * correctly.  The frame-policy check still runs in the background so the
+     * origin decision is cached without delaying first paint. */
+    if ((state.kind === 'market' || state.kind === 'tour') && !directKnownGood(target, state.kind)) {
+      setFrameProxy(target, 'static');
+      framePolicy(target).catch(function(){});
+      return;
+    }
+
+    if (options.forceProxy || preferProxy(target)) {
       setFrameProxy(target, 'static');
       return;
     }
 
     var cached = getCachedPolicy(target);
-    if (cached && cached.ok && cached.directAllowed === false) {
-      setFrameProxy(target, 'static');
+    if (cached) {
+      if (cached.directAllowed) setFrameDirect(target);
+      else setFrameProxy(target, 'static');
       return;
     }
 
+    /* v2 speed path: start the actual source immediately instead of waiting
+     * several seconds for the server-side frame-policy probe. */
     setFrameDirect(target);
     state.pendingPolicyTarget = target;
 
     framePolicy(target).then(function (policy) {
       if (!state.open || seq !== state.activeLoadSeq || state.target !== target) return;
       state.pendingPolicyTarget = '';
-      if (!policy || policy.ok === false || policy.directAllowed !== false) return;
+      if (policy && policy.directAllowed) {
+        /* Direct page is already loading/rendered. Nothing else to do. */
+        return;
+      }
       showLoading('사이트를 안전하게 불러오는 중입니다…');
       setFrameProxy(target, 'static');
-    }).catch(function(){
-      state.pendingPolicyTarget = '';
     });
   }
 

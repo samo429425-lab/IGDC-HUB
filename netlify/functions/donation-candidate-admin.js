@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.10.0-official-homepage-research-stable";
+const VERSION = "donation-candidate-admin-v1.10.1-official-homepage-research-coverage";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -201,7 +201,7 @@ function researchQuerySpecs(section,customQuery,singleSection,existingViews){
     /* Run only a bounded anchor window. Unseen institutions come first, then
        known institutions whose homepage thumbnail still needs another preview
        attempt, and finally already complete anchors. */
-    anchors.slice(0,6).forEach(function(a){out.push({query:a.query,kind:'anchor',anchorName:a.name});});
+    anchors.slice(0,10).forEach(function(a){out.push({query:a.query,kind:'anchor',anchorName:a.name});});
   }
   const seen=new Set();
   return out.filter(function(spec){const q=text(spec&&spec.query);if(!q||seen.has(q))return false;seen.add(q);return true;});
@@ -543,8 +543,8 @@ async function performResearch(event,section,customQuery,limit){
     const started=Date.now();let results=[];
     try{
       const researchEvent=donationResearchEvent(event);
-      results=await mapLimit(specs,3,async function(spec){
-        const perQueryLimit=spec.kind==='anchor'?12:Math.min(30,Number(limit)||30);
+      results=await mapLimit(specs,4,async function(spec){
+        const perQueryLimit=spec.kind==='anchor'?8:Math.min(30,Number(limit)||30);
         try{return {spec,result:await SearchBank.runEngine(researchEvent,researchParams(sec,spec.query,perQueryLimit))};}
         catch(error){return {spec,error};}
       });

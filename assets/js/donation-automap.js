@@ -1,5 +1,5 @@
 /**
- * donation-automap.integrated.v8.1-official-homepage-links.js
+ * donation-automap.integrated.v8.2-direct-homepage-navigation.js
  * ------------------------------------------------------------
  * 목적:
  * - 기존 donation-automap.v7.enterprise.js 구조/역할 유지
@@ -353,7 +353,7 @@ function groupBySection(items){
       ? `<img class="donation-site-thumb" src="${escAttr(img)}" loading="lazy" alt="${title}"><span class="donation-thumb-fallback" aria-hidden="true" style="display:none;width:100%;height:100%;align-items:center;justify-content:center;background:#e5e7eb;color:#9ca3af;font-size:24px">↗</span>`
       : neutralFallback;
     const thumbHtml = url
-      ? `<a class="donation-thumb-link" href="${escAttr(url)}" target="_blank" rel="noopener noreferrer" aria-label="${title}" style="display:block;width:100%;height:100%;cursor:pointer">${thumbImage}</a>`
+      ? `<a class="donation-thumb-link" href="${escAttr(url)}" target="_top" rel="noopener noreferrer" aria-label="${title}" style="display:block;width:100%;height:100%;cursor:pointer">${thumbImage}</a>`
       : thumbImage;
 
     return `
@@ -368,6 +368,16 @@ function groupBySection(items){
     `;
   }
 
+  function navigateToHomepage(url){
+    const safe = safeExternalUrl(url);
+    if(!safe) return false;
+    try{
+      if(window.top && window.top.location){ window.top.location.assign(safe); return true; }
+    }catch(_e){}
+    try{ window.location.assign(safe); return true; }catch(_e){}
+    return false;
+  }
+
   function wireThumbnailFailures(box){
     if(!box) return;
     box.querySelectorAll('img.donation-site-thumb').forEach((img)=>{
@@ -378,6 +388,22 @@ function groupBySection(items){
       };
       img.addEventListener('error', fail, { once:true });
       if(img.complete && !img.naturalWidth) fail();
+    });
+
+    /* The thumbnail itself is the official-homepage shortcut.  Bind directly
+       on the rendered anchor so unrelated page-level card/modal handlers cannot
+       swallow the navigation.  _top also makes the shortcut work when Donation
+       is rendered inside the platform frame. */
+    box.querySelectorAll('a.donation-thumb-link').forEach((a)=>{
+      if(a.dataset.donationHomepageBound === '1') return;
+      a.dataset.donationHomepageBound = '1';
+      a.addEventListener('click', (e)=>{
+        const url = safeExternalUrl(a.getAttribute('href'));
+        if(!url) return;
+        e.preventDefault();
+        e.stopPropagation();
+        navigateToHomepage(url);
+      });
     });
   }
 
@@ -497,7 +523,7 @@ function mountSection(key, items, limit){
       const card = e.target?.closest?.('.donation-card');
       if(!card) return;
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url) window.open(url, '_blank', 'noopener');
+      if(url){ e.preventDefault(); e.stopPropagation(); navigateToHomepage(url); }
     });
 
     document.addEventListener('keydown', (e)=>{
@@ -506,7 +532,7 @@ function mountSection(key, items, limit){
       if(!card) return;
       e.preventDefault();
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url) window.open(url, '_blank', 'noopener');
+      if(url) navigateToHomepage(url);
     });
   }
 
