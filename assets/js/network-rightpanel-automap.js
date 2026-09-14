@@ -1,4 +1,4 @@
-// network-rightpanel-automap.js (PRODUCTION v7 - contained main-link reliability + internal content routing)
+// network-rightpanel-automap.js (PRODUCTION v9 - isolated network viewer + internal content routing)
 // - Right panel product slots open IGDC internal /content.html?id=...
 // - Placeholder/# links are disabled unless an item id exists
 // - Main hub external .link-btn anchors open in the IGDC contained viewer; dynamic outbound rail links keep legacy top navigation
@@ -17,36 +17,36 @@
   const MOBILE_ID = 'nh-mobile-rail-list';
   const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v2';
 
-  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260914-network-tour-stable-v8';
-  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v8';
-  const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v6';
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-network-external-viewer.js?v=20260914-network-v9';
+  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-network-viewer-loader-v9';
+  const CONTAINED_THEME_ID = 'igdc-network-toolbar-theme-v9';
 
   function ensureContainedToolbarTheme(){
     if (document.getElementById(CONTAINED_THEME_ID)) return;
     const style = document.createElement('style');
     style.id = CONTAINED_THEME_ID;
     style.textContent = `
-#igdc-contained-external-viewer .igdc-contained-bar{
+#igdc-network-external-viewer .igdc-contained-bar{
   background:#cce89a !important;
   color:#16365c !important;
   border-bottom-color:#9dbd69 !important;
 }
-#igdc-contained-external-viewer .igdc-contained-back{
+#igdc-network-external-viewer .igdc-contained-back{
   background:#eff8df !important;
   color:#16365c !important;
   border-color:#94b861 !important;
 }
-#igdc-contained-external-viewer .igdc-contained-back:hover{
+#igdc-network-external-viewer .igdc-contained-back:hover{
   background:#c3df86 !important;
   border-color:#7fa34f !important;
 }
-#igdc-contained-external-viewer .igdc-contained-back:active{
+#igdc-network-external-viewer .igdc-contained-back:active{
   background:#b7d679 !important;
 }
-#igdc-contained-external-viewer .igdc-contained-title{
+#igdc-network-external-viewer .igdc-contained-title{
   color:#16365c !important;
 }
-#igdc-contained-external-viewer .igdc-contained-host{
+#igdc-network-external-viewer .igdc-contained-host{
   color:#355b78 !important;
 }
 `;
@@ -55,17 +55,17 @@
 
   function ensureContainedViewer(){
     ensureContainedToolbarTheme();
-    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 8 && typeof window.IGDCContainedViewer.open === 'function') {
-      return Promise.resolve(window.IGDCContainedViewer);
+    if (window.IGDCNetworkViewer && Number(window.IGDCNetworkViewer.version || 0) >= 9 && typeof window.IGDCNetworkViewer.open === 'function') {
+      return Promise.resolve(window.IGDCNetworkViewer);
     }
-    if (window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__;
+    if (window.__IGDC_NETWORK_VIEWER_V9_PROMISE__) return window.__IGDC_NETWORK_VIEWER_V9_PROMISE__;
 
-    window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__ = new Promise(function(resolve, reject){
+    window.__IGDC_NETWORK_VIEWER_V9_PROMISE__ = new Promise(function(resolve, reject){
       let script = document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
       const finish = function(){
-        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 8 && typeof window.IGDCContainedViewer.open === 'function') {
+        if (window.IGDCNetworkViewer && Number(window.IGDCNetworkViewer.version || 0) >= 9 && typeof window.IGDCNetworkViewer.open === 'function') {
           ensureContainedToolbarTheme();
-          resolve(window.IGDCContainedViewer);
+          resolve(window.IGDCNetworkViewer);
         } else {
           reject(new Error('IGDC contained viewer unavailable'));
         }
@@ -85,11 +85,11 @@
       script.addEventListener('error', function(){ reject(new Error('IGDC contained viewer load failed')); }, { once:true });
       (document.head || document.documentElement).appendChild(script);
     }).catch(function(err){
-      window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__ = null;
+      window.__IGDC_NETWORK_VIEWER_V9_PROMISE__ = null;
       throw err;
     });
 
-    return window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__;
+    return window.__IGDC_NETWORK_VIEWER_V9_PROMISE__;
   }
 
 
