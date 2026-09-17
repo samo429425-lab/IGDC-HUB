@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.7.0-dynamic-policy-news-discovery";
+const VERSION = "donation-research-policy-v1.8.0-fresh-global-video";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -68,6 +68,8 @@ const POLICY = Object.freeze({
       "humanitarian","crisis","disaster","earthquake","flood","wildfire","drought","famine","hunger","food insecurity",
       "refugee","displacement","displaced","civilian","conflict","war","children","child","orphan","health","hospital",
       "education","school","water","sanitation","climate","environment","emergency","relief","aid","response","field report",
+      "storm","cyclone","typhoon","tornado","tsunami","landslide","survivor","rescue","evacuee","shelter","malnutrition",
+      "aid convoy","food distribution","medical aid","medical team","vaccination","humanitarian corridor","relief operation","relief mission","volunteer",
       "video","footage","broadcast","report","update","news","news report","breaking news","civilian impact","evacuation"
     ],
     preferredKinds:["video","article","feed_item"],
@@ -175,7 +177,9 @@ function researchFrameFor(value){
     psomKeywords:Array.isArray(frame.psomKeywords)?frame.psomKeywords.map(text).filter(Boolean):[],
     policyPurpose:text(frame.policyPurpose),
     anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({name:text(a&&a.name),query:text(a&&a.query),homepage:httpsUrl(a&&a.homepage),searchType:["web","video"].includes(lower(a&&a.searchType))?lower(a.searchType):""})).filter(a=>a.name||a.query||a.homepage) : [],
-    discoveryQueries:Array.isArray(frame.discoveryQueries) ? frame.discoveryQueries.map(text).filter(Boolean) : []
+    discoveryQueries:Array.isArray(frame.discoveryQueries) ? frame.discoveryQueries.map(text).filter(Boolean) : [],
+    youtubeQueries:Array.isArray(frame.youtubeQueries) ? frame.youtubeQueries.map(text).filter(Boolean) : [],
+    youtubeTrustedChannels:Array.isArray(frame.youtubeTrustedChannels) ? frame.youtubeTrustedChannels.map(text).filter(Boolean) : []
   };
 }
 function policyFor(value){
@@ -254,8 +258,8 @@ function isVideoUrl(value){
     return /\.(?:mp4|webm|m3u8|mov)(?:$|[?#])/i.test(path);
   }catch(_e){ return false; }
 }
-const GLOBAL_NEWS_HOST_RE = /(?:^|\.)(?:bbc\.com|bbc\.co\.uk|reuters\.com|apnews\.com|arirang\.com|arirang\.co\.kr|aljazeera\.com|dw\.com|france24\.com|cnn\.com|nbcnews\.com|abcnews\.go\.com|cbsnews\.com|npr\.org|nhk\.or\.jp|reliefweb\.int|news\.un\.org|unicef\.org|unhcr\.org|wfp\.org|ifrc\.org)$/i;
-const GLOBAL_NEWS_SOURCE_RE = /\b(?:bbc(?: news)?|reuters|associated press|ap news|arirang(?: tv)?|al jazeera(?: english)?|dw news|deutsche welle|france 24|cnn|nbc news|abc news|cbs news|npr|nhk world|reliefweb|ocha|un news|unicef|unhcr|world food programme|wfp|ifrc)\b/i;
+const GLOBAL_NEWS_HOST_RE = /(?:^|\.)(?:bbc\.com|bbc\.co\.uk|reuters\.com|apnews\.com|arirang\.com|arirang\.co\.kr|aljazeera\.com|dw\.com|france24\.com|cnn\.com|nbcnews\.com|abcnews\.go\.com|cbsnews\.com|npr\.org|pbs\.org|news\.sky\.com|channelnewsasia\.com|trtworld\.com|nhk\.or\.jp|reliefweb\.int|news\.un\.org|un\.org|unicef\.org|unhcr\.org|wfp\.org|ifrc\.org)$/i;
+const GLOBAL_NEWS_SOURCE_RE = /\b(?:bbc(?: news)?|reuters|associated press|ap news|arirang(?: tv| news)?|al jazeera(?: english)?|dw news|deutsche welle|france 24|cnn|nbc news|abc news|cbs news|pbs newshour|sky news|cna|channel newsasia|trt world|npr|nhk world(?: japan)?|reliefweb|ocha|un news|united nations|unicef|unhcr|world food programme|wfp|ifrc)\b/i;
 function isAuthoritativeGlobalNewsUrl(value){
   const raw=httpsUrl(value); if(!raw) return false;
   const host=urlHost(raw); return !!host && GLOBAL_NEWS_HOST_RE.test(host);

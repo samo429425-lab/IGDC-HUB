@@ -1,4 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
+// build: 20260918-thumbnail-proxy-title-only-v1
 // 목적:
 // 1) Social 메인 9섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -494,8 +495,64 @@
       pic.style.backgroundImage = "";
       pic.style.backgroundSize = "";
       pic.style.backgroundPosition = "";
+      while (pic.firstChild) pic.removeChild(pic.firstChild);
       pic.textContent = label;
     }
+  }
+
+  function cleanCardTitle(it, platform) {
+    var title = pickTitle(it).trim();
+    var desc = safeText(it && (it.description || it.summary)).trim();
+    if (/^(instagram|instagram\s*[·-]\s*reel|tiktok|tiktok\s*[·-]\s*video|facebook|facebook\s*[·-]\s*post)$/i.test(title)) {
+      title = safeText(it && (it.creatorName || it.creator || it.creatorHandle)).trim() || title;
+    }
+    // Search/oEmbed providers sometimes prefix a useful title with metrics.
+    title = title.replace(/^\s*[\d,.]+\s*[kmb]?\s*likes?\s*,\s*[\d,.]+\s*comments?\s*[-–—:]\s*/i, "");
+    if (!title && desc) title = desc.replace(/^\s*[\d,.]+\s*[kmb]?\s*likes?[^:]*:\s*/i, "");
+    if (!title) title = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "Social";
+    return title.replace(/\s+/g, " ").trim();
+  }
+
+  function thumbnailRenderUrl(platform, contentUrl, thumb) {
+    if (!thumb) return "";
+    if (["instagram", "tiktok", "facebook"].indexOf(platform) < 0) return thumb;
+    var q = new URLSearchParams({ platform: platform, url: contentUrl || "", thumb: thumb });
+    return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
+  }
+
+  function paintThumb(pic, platform, contentUrl, thumb) {
+    if (!pic) return;
+    pic.style.backgroundImage = "";
+    pic.style.backgroundSize = "";
+    pic.style.backgroundPosition = "";
+    while (pic.firstChild) pic.removeChild(pic.firstChild);
+    if (!thumb) {
+      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
+      return;
+    }
+    var img = document.createElement("img");
+    img.alt = "";
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.display = "block";
+    img.style.objectFit = "cover";
+    img.style.objectPosition = "center";
+    var proxied = thumbnailRenderUrl(platform, contentUrl, thumb);
+    img.dataset.directThumb = thumb;
+    img.src = proxied;
+    img.addEventListener("error", function () {
+      if (img.dataset.triedDirect !== "1" && proxied !== thumb) {
+        img.dataset.triedDirect = "1";
+        img.src = thumb;
+        return;
+      }
+      if (img.parentNode === pic) pic.removeChild(img);
+      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
+    });
+    pic.appendChild(img);
   }
 
   function paintMainCard(card, it) {
@@ -512,12 +569,16 @@
     card.removeAttribute("data-snapshot-sample");
 
     const url = pickUrl(it);
-    const title = pickTitle(it) || "Item";
+    const platform = safeText(it && (it.platform || (it.social && it.social.platform) || (it.source && it.source.platform))).toLowerCase().replace(/^social-/, "");
+    const title = cleanCardTitle(it, platform);
     const desc = cardIdentity(it) || " ";
     const thumb = pickThumb(it);
 
     card.href = url || "#";
     card.dataset.contentUrl = url || "#";
+    card.dataset.socialUrl = url || "#";
+    card.dataset.thumbnailUrl = thumb || "";
+    card.dataset.embedUrl = safeText(it && it.embedUrl);
     card.target = url && url !== "#" ? "_blank" : "_self";
     card.rel = "noopener";
     card.removeAttribute("data-dummy");
@@ -526,35 +587,23 @@
     const metaTitle = qs(".title", card);
     const metaDesc = qs(".desc", card);
 
-    if (metaTitle) metaTitle.textContent = title;
+    if (metaTitle) {
+      metaTitle.textContent = title;
+      metaTitle.style.display = "-webkit-box";
+      metaTitle.style.webkitBoxOrient = "vertical";
+      metaTitle.style.webkitLineClamp = "2";
+      metaTitle.style.overflow = "hidden";
+      metaTitle.style.whiteSpace = "normal";
+      metaTitle.style.lineHeight = "1.35";
+    }
     if (metaDesc) {
-      var cardPlatform = safeText(it && (it.platform || (it.source && it.source.platform))).toLowerCase().replace(/^social-/, "");
+      // Grid cards stay clean and YouTube-like: thumbnail + concise title only.
+      // The full provider description remains available inside the contained viewer.
       metaDesc.textContent = desc;
-      if (cardPlatform === "youtube" || cardPlatform === "facebook") {
-        // Keep the already-approved YouTube/Facebook card presentation unchanged.
-        metaDesc.style.display = "none";
-      } else {
-        metaDesc.style.display = "-webkit-box";
-        metaDesc.style.webkitBoxOrient = "vertical";
-        metaDesc.style.webkitLineClamp = "2";
-        metaDesc.style.overflow = "hidden";
-        metaDesc.style.whiteSpace = "normal";
-        metaDesc.style.lineHeight = "1.35";
-        metaDesc.style.marginTop = "4px";
-      }
+      metaDesc.style.display = "none";
     }
 
-    if (pic) {
-      if (thumb) {
-        pic.textContent = "";
-        pic.style.backgroundImage = "url('" + thumb.replace(/'/g, "%27") + "')";
-        pic.style.backgroundSize = "cover";
-        pic.style.backgroundPosition = "center";
-      } else {
-        pic.style.backgroundImage = "";
-        pic.textContent = "•";
-      }
-    }
+    paintThumb(pic, platform, url, thumb);
   }
 
 

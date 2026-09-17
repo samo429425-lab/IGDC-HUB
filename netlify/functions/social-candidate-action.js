@@ -10,7 +10,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialPreview = require("./social-preview-metadata");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "social-candidate-action-v1.5.1-preview-expiry-repair";
+const VERSION = "social-candidate-action-v1.6.0-preview-canonicalize";
 const ACTIONS = new Set([
   "approve",
   "hold",
@@ -356,9 +356,22 @@ exports.handler = async function (event) {
             previewResolvedUrl: SocialStore.text(preview && preview.resolvedUrl || contentUrl)
           });
           const patch = { raw: nextRaw, updated_by: by, updated_at: now };
-          if (resolvedThumb) patch.thumbnail_url = resolvedThumb;
-          else if (currentPublishable && currentPublishable !== currentThumb) patch.thumbnail_url = currentPublishable;
-          else if (currentThumb && !currentPublishable) patch.thumbnail_url = null;
+          if (resolvedThumb) {
+            patch.thumbnail_url = resolvedThumb;
+            nextRaw.thumbnailUrl = resolvedThumb;
+            nextRaw.thumbnail_url = resolvedThumb;
+            nextRaw.thumbnailState = "resolved";
+          } else if (currentPublishable && currentPublishable !== currentThumb) {
+            patch.thumbnail_url = currentPublishable;
+            nextRaw.thumbnailUrl = currentPublishable;
+            nextRaw.thumbnail_url = currentPublishable;
+            nextRaw.thumbnailState = "resolved";
+          } else if (currentThumb && !currentPublishable) {
+            patch.thumbnail_url = null;
+            delete nextRaw.thumbnailUrl;
+            delete nextRaw.thumbnail_url;
+            nextRaw.thumbnailState = "retryable_unresolved";
+          }
           if (resolvedTitle && genericTitle && !(SocialStore.genericContentTitle && SocialStore.genericContentTitle(platform, resolvedTitle))) patch.title = resolvedTitle;
           if (resolvedCreator && !currentCreator) patch.creator_name = resolvedCreator;
           return SocialStore.updateCandidates([row.id], patch);

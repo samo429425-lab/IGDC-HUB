@@ -17,8 +17,8 @@
   },
   "sections": {
     "donation-global": {
-      "primaryQuery": "latest humanitarian disaster flood earthquake wildfire famine hunger refugee displacement civilian war impact authoritative international news broadcast video report",
-      "freshnessHours": 96,
+      "primaryQuery": "latest major humanitarian disaster earthquake flood wildfire storm famine hunger refugee displacement civilians war impact rescue relief international authoritative news video today",
+      "freshnessHours": 120,
       "preferVideo": true,
       "localizeByIp": false,
       "anchors": [
@@ -71,6 +71,26 @@
           "name": "Arirang TV",
           "query": "Arirang TV latest disaster humanitarian refugee war civilians Korea world news video",
           "searchType": "video"
+        },
+        {
+          "name": "Al Jazeera English",
+          "query": "Al Jazeera English latest humanitarian disaster refugee civilians aid video report",
+          "searchType": "web"
+        },
+        {
+          "name": "DW News",
+          "query": "DW News latest humanitarian disaster refugee civilians aid video report",
+          "searchType": "web"
+        },
+        {
+          "name": "FRANCE 24",
+          "query": "France 24 latest humanitarian disaster refugee civilians aid video report",
+          "searchType": "web"
+        },
+        {
+          "name": "NHK WORLD-JAPAN",
+          "query": "NHK WORLD-JAPAN latest disaster humanitarian refugee aid video report",
+          "searchType": "web"
         }
       ],
       "psomKey": "donation-global",
@@ -87,12 +107,45 @@
         "authoritative news",
         "broadcast"
       ],
-      "policyPurpose": "전 세계 재난·홍수·지진·산불·기아·난민·전쟁으로 인한 민간인·인도주의 피해 등 지원 필요 이슈. UN/OCHA 계열과 BBC·Reuters·AP·Arirang TV 등 권위 있는 방송·뉴스 및 공식 YouTube/영상 보도를 우선하며 영상 중심이되 신뢰 가능한 뉴스 리포트도 허용.",
+      "policyPurpose": "당일·최근 국제 주요 인도주의 이슈 중심. 지진·홍수·산불·폭풍·기아·난민·강제이주·전쟁으로 인한 민간인 피해와 구조·구호·의료·식량지원 등 가치 있는 국제 활동을 다룬 권위 있는 방송/통신사 및 UN·구호기관의 뉴스 영상 우선.",
       "discoveryQueries": [
-        "Al Jazeera English latest flood earthquake refugee hunger war civilian humanitarian video news",
-        "DW News France 24 latest humanitarian disaster refugee conflict civilian impact video report",
-        "CNN NBC ABC CBS latest earthquake flood wildfire refugee humanitarian crisis video report",
-        "official YouTube news latest flood earthquake famine refugee displacement war civilians humanitarian report"
+        "latest earthquake flood wildfire storm tsunami landslide humanitarian rescue international news video",
+        "latest famine hunger refugee displacement humanitarian aid international news video",
+        "latest war civilians hospital evacuation humanitarian aid international news video",
+        "latest rescue relief medical aid food distribution humanitarian operation international news video",
+        "BBC Reuters AP latest humanitarian disaster refugee civilians aid video",
+        "Al Jazeera DW France 24 Arirang latest humanitarian disaster refugee aid video"
+      ],
+      "youtubeQueries": [
+        "BBC News|Reuters|Associated Press earthquake flood wildfire storm humanitarian",
+        "Al Jazeera English|DW News|FRANCE 24 English refugee displacement war civilians humanitarian aid",
+        "Arirang News|NHK WORLD-JAPAN|CNA disaster relief refugee humanitarian",
+        "UN News|UNICEF|UNHCR|World Food Programme|IFRC humanitarian emergency aid relief",
+        "CNN|NBC News|ABC News|CBS News|PBS NewsHour disaster humanitarian refugee civilians aid"
+      ],
+      "youtubeTrustedChannels": [
+        "BBC News",
+        "Reuters",
+        "Associated Press",
+        "Arirang News",
+        "Al Jazeera English",
+        "DW News",
+        "FRANCE 24 English",
+        "CNN",
+        "NBC News",
+        "ABC News",
+        "CBS News",
+        "PBS NewsHour",
+        "Sky News",
+        "NHK WORLD-JAPAN",
+        "CNA",
+        "TRT World",
+        "UN News",
+        "United Nations",
+        "UNICEF",
+        "UNHCR, the UN Refugee Agency",
+        "World Food Programme",
+        "IFRC"
       ]
     },
     "donation-ngo": {

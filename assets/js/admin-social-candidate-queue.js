@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.6.0 - differentiated publish reports + deploy dedupe awareness */
+/* IGDC Social Hub Content Operations v3.7.0 - runtime release direct + front quality recovery */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -8,6 +8,7 @@
     AUTO = "/.netlify/functions/social-candidate-auto-curator",
     ROTATION = "/.netlify/functions/social-rotation-selector",
     PUBLISH = "/.netlify/functions/social-snapshot-publish",
+    CURRENT_SOCIAL = "/.netlify/functions/social-snapshot-current",
     STATIC_SOCIAL_SNAPSHOT = "/data/social.snapshot.json",
     COUNTRY = "/.netlify/functions/social-country-route";
   var SECTIONS = [
@@ -2983,57 +2984,59 @@
             "개만 실제 적용 대상으로 확인했습니다.",
         );
       }
-      if (!(d.buildTrigger && d.buildTrigger.ok))
+      var runtimeDirect = d.runtimeFrontReady === true && d.releaseStoredVerified === true;
+      var buildAccepted = !!(d.buildTrigger && d.buildTrigger.ok);
+      if (!runtimeDirect && !buildAccepted)
         throw new Error(
-          "실제 적용 후보는 확인됐지만 SearchBank 반영 빌드가 접수되지 않았습니다.",
+          "실제 적용 후보는 확인됐지만 저장 Release 또는 배포 경로가 준비되지 않았습니다.",
         );
 
       download(publishResultFileName(actionMode), d);
       diagnostic(d);
 
-      var verifyQ = new URLSearchParams({
-        action: "pipeline_diagnostic",
-        countryCode: scope.countryCode,
-        scopeMode: scopeMode(),
-        regionId: text($("collectorRegion").value),
-      });
-      var verify = await getReport(PUBLISH + "?" + verifyQ.toString());
-      diagnostic({ actualApply: d, searchBankHandoff: verify });
+      var verify = null;
+      if (runtimeDirect && d.releaseId) {
+        for (var verifyTry = 0; verifyTry < 4; verifyTry++) {
+          try {
+            verify = await getReport(CURRENT_SOCIAL + "?view=front&_=" + Date.now());
+            if (verify && verify.ok && text(verify.releaseId) === text(d.releaseId) && verify.hashVerified !== false) break;
+          } catch (_verifyError) {}
+          await new Promise(function (resolve) { setTimeout(resolve, 450); });
+        }
+        diagnostic({ actualApply: d, runtimeFront: verify });
+        if (!verify || !verify.ok || text(verify.releaseId) !== text(d.releaseId)) {
+          throw new Error("승인 Release는 저장됐지만 프론트 실시간 readback이 아직 같은 Release를 반환하지 않습니다. 잠시 후 다시 확인해 주세요.");
+        }
+      } else {
+        var verifyQ = new URLSearchParams({
+          action: "pipeline_diagnostic",
+          countryCode: scope.countryCode,
+          scopeMode: scopeMode(),
+          regionId: text($("collectorRegion").value),
+        });
+        verify = await getReport(PUBLISH + "?" + verifyQ.toString());
+        diagnostic({ actualApply: d, searchBankHandoff: verify });
+      }
 
       if ($("frontApplyState"))
         $("frontApplyState").textContent = d.noChange === true
-          ? "변경 없음 · 중복 배포 생략"
-          : d.buildTrigger && d.buildTrigger.ok
-            ? (d.releaseStoredVerified
-                ? "승인본 저장 · SearchBank 빌드 접수"
-                : "게시 계획 확정 · SearchBank 빌드 접수")
-            : "SearchBank 빌드 대기";
+          ? "변경 없음"
+          : runtimeDirect
+            ? "승인본 저장 · 프론트 즉시 적용"
+            : buildAccepted
+              ? "승인본 저장 · 정적 빌드 접수"
+              : "적용 대기";
 
       if (d.noChange === true) {
+        show(scopeName + " 범위의 " + applyLabel + " 결과가 마지막 정상 게시본과 동일합니다.", "ok");
+      } else if (runtimeDirect) {
         show(
-          scopeName +
-            " 범위의 " +
-            applyLabel +
-            " 결과가 마지막 정상 게시본과 동일하여 새 Release 저장과 Netlify 중복 배포를 생략했습니다.",
+          scopeName + " 범위의 " + applyLabel +
+          " 승인본을 저장했고 프론트가 같은 Release를 직접 읽는 것까지 확인했습니다. 콘텐츠 변경만으로는 Netlify 재배포가 필요하지 않습니다.",
           "ok",
         );
-      } else if (d.buildTrigger && d.buildTrigger.ok) {
-        show(
-          scopeName +
-            " 범위의 " +
-            applyLabel +
-            (d.releaseStoredVerified
-              ? " 승인본을 저장했고 SearchBank 반영 빌드를 접수했습니다. "
-              : " 게시 계획을 확정했고 SearchBank 반영 빌드를 접수했습니다. ") +
-            "소셜 작업은 SearchBank Snapshot JSON 도달까지만 담당하며 그 아래 렌더링 체인은 기존 시스템이 처리합니다.",
-          "ok",
-        );
-      } else {
-        show(
-          scopeName +
-            " 범위의 승인본은 저장됐지만 SearchBank 반영 빌드가 시작되지 않았습니다. Build Hook 설정을 확인해 주세요.",
-          "warn",
-        );
+      } else if (buildAccepted) {
+        show(scopeName + " 범위의 " + applyLabel + " 정적 반영 빌드를 접수했습니다.", "ok");
       }
       return true;
     } catch (e) {
@@ -3496,10 +3499,11 @@
         scopeMode: scopeMode(),
         regionId: text($("collectorRegion").value),
       });
-      var candidateReport = null, latestReport = null, pipelineReport = null, snapshot = null;
+      var candidateReport = null, latestReport = null, pipelineReport = null, runtimeFront = null, snapshot = null;
       try { candidateReport = await getReport(REVIEW + "?action=diagnostic&" + params.toString()); } catch (e) { candidateReport = { ok:false, error:e.message || String(e) }; }
       try { latestReport = await getReport(REVIEW + "?action=latest_content_diagnostic&" + params.toString()); } catch (e) { latestReport = { ok:false, error:e.message || String(e) }; }
       try { pipelineReport = await getReport(PUBLISH + "?action=pipeline_diagnostic&" + params.toString()); } catch (e) { pipelineReport = { ok:false, error:e.message || String(e) }; }
+      try { runtimeFront = await getReport(CURRENT_SOCIAL + "?view=front&_=" + Date.now()); } catch (e) { runtimeFront = { ok:false, error:e.message || String(e) }; }
       try { snapshot = await staticJson(STATIC_SOCIAL_SNAPSHOT + "?_=" + Date.now()); } catch (e) { snapshot = null; }
       var contentRows = rows.filter(function (r) { return assetClass(r) === "latest_content" && !excluded(r); });
       var approvedRows = contentRows.filter(function (r) { return lower(r.reviewStatus) === "approved" && r.candidateOnly === false; });
@@ -3515,7 +3519,7 @@
       });
       var canonical = summarizeCanonicalSnapshot(snapshot);
       var result = {
-        ok: !!(candidateReport && candidateReport.ok !== false && pipelineReport && pipelineReport.ok === true),
+        ok: !!(candidateReport && candidateReport.ok !== false && runtimeFront && runtimeFront.ok === true && runtimeFront.hashVerified !== false),
         reportType: "igdc-social-full-system-diagnostic",
         generatedAt: new Date().toISOString(),
         scope: currentScope(),
@@ -3523,7 +3527,8 @@
           candidateResearchAndRegistry: candidateReport,
           latestContentQueue: latestReport,
           candidateState: { total: contentRows.length, approved: approvedRows.length, bySection: bySection },
-          searchBankHandoff: pipelineReport,
+          runtimeStoredReleaseFront: runtimeFront,
+          staticSearchBankHandoffAdvisory: pipelineReport,
           canonicalFrontSnapshotReadOnly: canonical,
           separation: {
             managedMainSections: order.slice(),
@@ -3535,7 +3540,9 @@
       result.summary = {
         candidateTotal: contentRows.length,
         approvedCandidateTotal: approvedRows.length,
-        searchBankHandoff: pipelineReport && pipelineReport.pipeline ? pipelineReport.pipeline.searchBankSnapshotHandoff : "unknown",
+        runtimeFrontRelease: runtimeFront && runtimeFront.releaseId || null,
+        runtimeFrontHashVerified: !!(runtimeFront && runtimeFront.hashVerified),
+        staticSearchBankHandoffAdvisory: pipelineReport && pipelineReport.pipeline ? pipelineReport.pipeline.searchBankSnapshotHandoff : "unknown",
         canonicalMainRealTotal: canonical.mainSocial.realTotal,
         rightPanelTotal: canonical.rightPanel.total,
         rightPanelWithThumbnail: canonical.rightPanel.withThumbnail,

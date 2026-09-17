@@ -3,9 +3,9 @@
 /**
  * Builds and validates a Social release from approved Supabase candidates.
  * Runtime functions never write deployed static files. A confirmed release is
- * stored first, then the configured Netlify build hook runs the existing line:
- * Social release -> Social/PSOM policy gate -> dedicated Social SearchBank handoff ->
- * existing Snapshot Engine (social target only) -> social.snapshot.json.
+ * stored in the durable Social release store and becomes visible immediately via
+ * social-snapshot-current. A static Netlify rebuild is optional (forceBuild=true)
+ * and is no longer required for normal Social content rotation/publication.
  * Commerce/Distribution canonical SearchBank is never rewritten by this path.
  */
 const fs = require("fs");
@@ -16,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.17.0-main-reconcile";
+  "social-snapshot-publish-v1.18.0-runtime-release-direct";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -995,8 +995,7 @@ exports.handler = async function (event) {
       actualApplyOperation &&
       !unpublishSelected &&
       hasDurablePreviousRelease &&
-      publicationPlanHash === previousPublicationPlanHash &&
-      publicationPlanHash === deployedPublicationPlanHash
+      publicationPlanHash === previousPublicationPlanHash
     ) {
       return SocialStore.response(200, {
         ok: true,
@@ -1028,6 +1027,7 @@ exports.handler = async function (event) {
         noChange: true,
         duplicateDeploymentPrevented: true,
         deploymentRequired: false,
+        runtimeFrontReady: true,
         releaseStored: false,
         releaseStoredVerified: false,
         actualFrontApplyStored: false,
@@ -1041,7 +1041,7 @@ exports.handler = async function (event) {
           status: "skipped_unchanged",
           queued: false,
           duplicateDeploymentPrevented: true,
-          message: "마지막 정상 Social 게시 계획과 동일하여 새 Release 저장 및 Netlify 배포를 생략했습니다.",
+          message: "마지막 정상 Social 게시 계획과 동일하여 새 Release 저장과 Netlify 배포를 모두 생략했습니다.",
         },
         route,
         safety: {
@@ -1112,30 +1112,37 @@ exports.handler = async function (event) {
     }
 
     let buildTrigger = null;
+    const forceStaticBuild = params.forceBuild === true || params.forceBuild === "true" || params.forceBuild === "1" || process.env.SOCIAL_FORCE_STATIC_BUILD === "1";
     if (storeRelease && storedVerified) {
-      buildTrigger = await triggerCanonicalBuild(
-        release,
-        unpublishSelected ? "unpublish" : "publish",
-        route,
-        {
-          publicationPlan,
-          publicationPlanHash,
-          publishMode,
-          requestedSections,
-        },
-      );
+      if (forceStaticBuild) {
+        buildTrigger = await triggerCanonicalBuild(
+          release,
+          unpublishSelected ? "unpublish" : "publish",
+          route,
+          {
+            publicationPlan,
+            publicationPlanHash,
+            publishMode,
+            requestedSections,
+          },
+        );
+      } else {
+        buildTrigger = {
+          ok: true,
+          queued: false,
+          status: "skipped_runtime_release_live",
+          releaseId: text(release && release.release_id) || null,
+          message: "저장된 Social Release를 프론트가 직접 읽으므로 일반 콘텐츠 적용에서는 Netlify 재배포를 생략했습니다.",
+        };
+      }
     } else if (storeRelease) {
-      // A build without a durable stored release creates exactly the failure
-      // observed in production: the current browser can show the just-built
-      // artifact, but a later visit has no persistent release to read back.
-      // Never queue an ephemeral front publication. Keep the existing front
-      // unchanged until the release row is stored and hash-verified.
       buildTrigger = {
         ok: false,
+        queued: false,
         status: "durable_release_required",
         releaseId: text(release && release.release_id) || null,
         message:
-          "승인 Social Release의 영구 저장·해시 검증이 완료되지 않아 기존 프론트를 보존하고 Netlify 배포를 시작하지 않았습니다.",
+          "승인 Social Release의 영구 저장·해시 검증이 완료되지 않아 기존 프론트를 보존했습니다.",
       };
     }
     if (
@@ -1154,7 +1161,9 @@ exports.handler = async function (event) {
         body: JSON.stringify(snapshot, null, 2) + "\n",
       };
     }
-    return SocialStore.response(storeRelease && buildTrigger && buildTrigger.ok ? 202 : 200, {
+    const runtimeFrontReady = !!(storeRelease && storedVerified);
+    const staticBuildQueued = !!(buildTrigger && buildTrigger.ok && buildTrigger.queued !== false && buildTrigger.status !== "skipped_runtime_release_live");
+    return SocialStore.response(staticBuildQueued ? 202 : 200, {
       ok: true,
       version: VERSION,
       reportType,
@@ -1187,8 +1196,10 @@ exports.handler = async function (event) {
         : [],
       removedSlots: unpublish ? unpublish.removedSlots : 0,
       removedBySection: unpublish ? unpublish.removedBySection : {},
+      releaseId: text(release && release.release_id) || null,
       releaseStored: !!stored,
       releaseStoredVerified: storedVerified,
+      runtimeFrontReady,
       releaseStoreWarning,
       previousPublicationPlanHash,
       deployedPublicationPlanHash,
@@ -1197,7 +1208,7 @@ exports.handler = async function (event) {
       publicationDiff,
       noChange: false,
       duplicateDeploymentPrevented: false,
-      deploymentRequired: true,
+      deploymentRequired: forceStaticBuild,
       publicationPlanBySection: Object.fromEntries(
         Object.entries(publicationPlan).map(([key, list]) => [key, Array.isArray(list) ? list.length : 0]),
       ),
@@ -1205,16 +1216,18 @@ exports.handler = async function (event) {
       actualFrontApplyStored: !!stored && storedVerified && !unpublishSelected,
       actualFrontUnpublishStored: !!stored && storedVerified && unpublishSelected,
       actualFrontApplyQueued:
-        !!buildTrigger && buildTrigger.ok && !unpublishSelected,
+        staticBuildQueued && !unpublishSelected,
       actualFrontUnpublishQueued:
-        !!buildTrigger && buildTrigger.ok && unpublishSelected,
+        staticBuildQueued && unpublishSelected,
       actualApplyRequested: actualApplyOperation,
       storeReleaseRequested: storeRelease,
       frontPublicationStatus: !storeRelease
         ? "preview_only"
-        : buildTrigger && buildTrigger.ok
-          ? "canonical_build_queued"
-          : "release_stored_waiting_for_build",
+        : runtimeFrontReady && !forceStaticBuild
+          ? "stored_release_live"
+          : staticBuildQueued
+            ? "canonical_build_queued"
+            : "release_stored_waiting_for_build",
       buildHook: buildHookStatus(),
       buildTrigger,
       stored,
@@ -1228,9 +1241,10 @@ exports.handler = async function (event) {
       safety: {
         runtimeFileWrite: false,
         socialSnapshotMutation: false,
-        frontReadsLatestStoredSnapshot: false,
+        frontReadsLatestStoredSnapshot: true,
         adminReadsLatestStoredReleaseState: true,
-        canonicalBuildPipeline: true,
+        canonicalBuildPipeline: forceStaticBuild,
+        normalContentPublicationRequiresDeploy: false,
         socialSearchBankIsolated: true,
         sharedCommerceSearchBankMutation: false,
         publicSnapshotSource: "/data/social.snapshot.json",

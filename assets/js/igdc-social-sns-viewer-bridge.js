@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260913-seven-platform-safe-v3'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260918-premium-actions-facebook-play-v4'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -435,6 +435,8 @@
       '#igdcSocialViewerV2 .igsv-yt-action[aria-disabled=true]{opacity:.72}' +
       '#igdcSocialViewerV2 .igsv-yt-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 0}' +
       '#igdcSocialViewerV2 .igsv-provider-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:14px;padding:14px 0 2px;border-top:1px solid #e5e7eb}' +
+      '#igdcSocialViewerV2 .igsv-provider-label{margin-right:2px;color:#555;font:800 12px/1 system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.04em}' +
+      '#igdcSocialViewerV2 .igsv-local-react.is-active{background:#111;color:#fff}' +
       '#igdcSocialViewerV2 .igsv-yt-views{margin-right:auto;color:#444;font:600 14px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-yt-oauth-hint{display:none;margin:6px 0 0;color:#666;font:500 12px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}' +
       '#igdcSocialViewerV2 .igsv-yt-oauth-hint.show{display:block}' +
@@ -580,22 +582,60 @@
     return btn;
   }
 
+  function reactionState() {
+    try {
+      var data = JSON.parse(localStorage.getItem('IGDC_SOCIAL_REACTIONS_V1') || '{}');
+      return data && typeof data === 'object' ? data : {};
+    } catch (_) { return {}; }
+  }
+
+  function reactionActive(url, kind) {
+    var data = reactionState();
+    return !!(data[url] && data[url][kind]);
+  }
+
+  function toggleReaction(url, kind) {
+    if (!validHttp(url)) return false;
+    var data = reactionState();
+    var row = data[url] && typeof data[url] === 'object' ? data[url] : {};
+    row[kind] = !row[kind];
+    row.updatedAt = new Date().toISOString();
+    data[url] = row;
+    try { localStorage.setItem('IGDC_SOCIAL_REACTIONS_V1', JSON.stringify(data)); } catch (_) {}
+    try {
+      window.dispatchEvent(new CustomEvent('igdc:social-reaction', { detail: { url: url, type: kind, active: !!row[kind], platform: state.platform || '' } }));
+    } catch (_) {}
+    return !!row[kind];
+  }
+
   function mountProviderUtilityActions(detail, platform, title, sourceUrl) {
-    if (!detail || platform === 'youtube') return;
+    if (!detail || platform === 'youtube' || platform === 'facebook') return;
     var tools = document.createElement('div');
     tools.className = 'igsv-provider-tools';
+    tools.appendChild(makeText('span', 'igsv-provider-label', 'IGDC'));
+    var target = sourceUrl || state.lastUrl || '';
+
+    [['like','👍'], ['heart','❤️'], ['recommend','★ 추천']].forEach(function (pair) {
+      var btn = makeActionButton(pair[1], 'igsv-local-react' + (reactionActive(target, pair[0]) ? ' is-active' : ''));
+      btn.setAttribute('aria-pressed', reactionActive(target, pair[0]) ? 'true' : 'false');
+      btn.addEventListener('click', function () {
+        var active = toggleReaction(target, pair[0]);
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      tools.appendChild(btn);
+    });
 
     var shareBtn = makeActionButton('↗ ' + labels().ytShare);
     shareBtn.addEventListener('click', function () {
-      shareSource(title || platform || document.title, sourceUrl || state.lastUrl || '', shareBtn);
+      shareSource(title || platform || document.title, target, shareBtn);
     });
     tools.appendChild(shareBtn);
 
-    var saveBtn = makeActionButton((isSavedUrl(sourceUrl || state.lastUrl || '') ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave));
+    var saveBtn = makeActionButton((isSavedUrl(target) ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave));
     saveBtn.addEventListener('click', function () {
-      var target = sourceUrl || state.lastUrl || '';
       var saved = toggleSavedUrl(target);
-      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '🔖 ' + labels().ytSave;
+      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave;
     });
     tools.appendChild(saveBtn);
 
@@ -698,6 +738,22 @@
     reactionCluster.appendChild(reactionMenu);
     bar.appendChild(reactionCluster);
     bar.appendChild(shareBtn);
+
+    var igdcRecommend = makeText('button', 'igsv-fb-nativebtn igsv-local-react', '★ 추천');
+    igdcRecommend.type = 'button';
+    var igdcSaved = makeText('button', 'igsv-fb-nativebtn', isSavedUrl(sourceUrl) ? '✓ ' + l.ytSaved : '▣ ' + l.ytSave);
+    igdcSaved.type = 'button';
+    if (reactionActive(sourceUrl, 'recommend')) igdcRecommend.classList.add('is-active');
+    igdcRecommend.addEventListener('click', function () {
+      var active = toggleReaction(sourceUrl, 'recommend');
+      igdcRecommend.classList.toggle('is-active', active);
+    });
+    igdcSaved.addEventListener('click', function () {
+      var saved = toggleSavedUrl(sourceUrl);
+      igdcSaved.textContent = saved ? '✓ ' + l.ytSaved : '▣ ' + l.ytSave;
+    });
+    bar.appendChild(igdcRecommend);
+    bar.appendChild(igdcSaved);
     box.appendChild(bar);
 
     var interactionWrap = document.createElement('div');
@@ -834,15 +890,32 @@
 
     var media = document.createElement('div');
     media.className = 'igsv-fb-owned-media';
+    media.style.background = '#fff';
+    media.style.minHeight = '520px';
     var preview = text(state.lastPreview || '').trim();
     var image = null;
-    media.hidden = !validHttp(preview);
+
+    /* Keep the official Facebook document interactive inside IGDC. The former
+       static-only document made video posts look clickable but could never play. */
+    var pluginSrc = 'https://www.facebook.com/plugins/post.php?' + new URLSearchParams({
+      href: sourceUrl,
+      show_text: 'false',
+      width: '750'
+    }).toString();
+    var postFrame = facebookPluginFrame(pluginSrc, 'igsv-fb-interaction-frame', title || 'Facebook post', 720);
+    postFrame.style.width = 'min(100%,750px)';
+    postFrame.style.maxWidth = '750px';
+    postFrame.style.margin = '0 auto';
+    postFrame.style.background = '#fff';
+    media.appendChild(postFrame);
+
     if (validHttp(preview)) {
       image = document.createElement('img');
       image.src = preview;
-      image.alt = title || 'Facebook post';
+      image.alt = title || 'Facebook post preview';
       image.loading = 'eager';
       image.referrerPolicy = 'no-referrer';
+      image.style.display = 'none';
       media.appendChild(image);
     }
     content.appendChild(media);
