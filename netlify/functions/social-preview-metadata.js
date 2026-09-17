@@ -1,7 +1,7 @@
 "use strict";
 
 /*
- * IGDC Social main-card public preview resolver v1.0.0
+ * IGDC Social main-card public preview resolver.
  * Scope: Social main 9 sections only. This function never reads/writes rightPanel,
  * Distribution, snapshots, releases, candidate state, or deployment state.
  *
@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.3.0-canonical-preview-creator";
+const VERSION = "social-preview-metadata-v1.4.0-real-media-only";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -121,39 +121,76 @@ function htmlTitle(html) {
   return match ? stripTags(match[1]) : "";
 }
 
-function htmlImage(html) {
-  const meta = metaMap(html);
-  let image = firstMeta(meta, [
-    "og:image:secure_url", "og:image", "twitter:image", "twitter:image:src",
-    "thumbnailurl", "thumbnail", "image"
-  ]);
-  if (image && /^https:\/\//i.test(image)) return decodeHtml(image);
+function thumbnailAssetReason(platform, value) {
+  const raw = decodeHtml(value).trim();
+  if (!/^https:\/\//i.test(raw)) return "not_https";
+  let url;
+  try { url = new URL(raw); } catch (_error) { return "invalid_url"; }
+  const host = url.hostname.toLowerCase();
+  const pathname = url.pathname.toLowerCase();
+  const full = (host + pathname + url.search).toLowerCase();
 
-  const raw = text(html);
-  const patterns = [
-    /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/i,
-    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"<>]*)"/i,
-    /(?:poster|data-poster|data-thumb|data-thumbnail)=["'](https:\/\/[^"'<>]+)["']/i,
-    /background-image\s*:\s*url\(["']?(https:\/\/[^"')<>]+)["']?\)/i
-  ];
-  for (const pattern of patterns) {
-    const match = raw.match(pattern);
-    if (match && match[1]) {
-      image = decodeHtml(match[1]);
-      if (/^https:\/\//i.test(image)) return image;
-    }
+  // Never let executable/style resources or obvious provider chrome consume a
+  // real-content slot. This is the exact failure that produced Instagram logo/
+  // glyph cards and even .js URLs marked as resolved thumbnails.
+  if (/\.(?:js|mjs|css|map|json|html?|xml)(?:$|[?#])/i.test(raw)) return "non_image_extension";
+  if (/(?:^|[\/_-])(?:favicon|sprite|glyph|logo|icon|badge|spinner|loading)(?:[\/_\-.]|$)/i.test(full)) return "provider_ui_asset";
+
+  if (platform === "instagram") {
+    if (host === "static.cdninstagram.com" || /(^|\.)static\.cdninstagram\.com$/i.test(host)) return "instagram_static_ui_asset";
+    if (/\/rsrc\.php(?:$|[/?#])/i.test(pathname)) return "instagram_rsrc_ui_asset";
+    // Public /media/ is a provider-owned redirect to the post image and is a
+    // valid durable fallback when anonymous HTML exposes only provider chrome.
+    if (/(^|\.)instagram\.com$/i.test(host) && /\/(?:p|reel|reels|tv)\/[^/]+\/media\/?$/i.test(pathname)) return "";
   }
 
-  // Last-resort CDN URL scan. Keep the host close to the scheme so arbitrary
-  // page text cannot be mistaken for an image URL.
-  const generic = raw.match(/https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"'<>\s]*/i);
-  if (generic && generic[0]) {
-    image = decodeHtml(generic[0]);
-    if (/^https:\/\//i.test(image)) return image;
+  if (platform === "facebook") {
+    if (/^(?:static|lookaside)\.facebook\.com$/i.test(host) && /(?:icon|logo|emoji|rsrc)/i.test(full)) return "facebook_ui_asset";
   }
+
   return "";
 }
 
+function usableThumbnail(platform, value) {
+  return thumbnailAssetReason(platform, value) === "" ? decodeHtml(value).trim() : "";
+}
+
+function htmlImage(html, platform) {
+  const meta = metaMap(html);
+  const metaCandidates = [
+    "og:image:secure_url", "og:image", "twitter:image", "twitter:image:src",
+    "thumbnailurl", "thumbnail", "image"
+  ];
+  for (const key of metaCandidates) {
+    const candidate = usableThumbnail(platform, meta[key]);
+    if (candidate) return candidate;
+  }
+
+  const raw = text(html);
+  const patterns = [
+    /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/ig,
+    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"<>]*)"/ig,
+    /(?:poster|data-poster|data-thumb|data-thumbnail)=["'](https:\/\/[^"'<>]+)["']/ig,
+    /background-image\s*:\s*url\(["']?(https:\/\/[^"')<>]+)["']?\)/ig
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(raw))) {
+      const candidate = usableThumbnail(platform, match[1]);
+      if (candidate) return candidate;
+    }
+  }
+
+  // Last-resort CDN scan is intentionally bounded and filtered. The old first-
+  // match behavior accepted Instagram's static UI bundle before post media.
+  const genericRe = /https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"'<>\s]*/ig;
+  let generic;
+  while ((generic = genericRe.exec(raw))) {
+    const candidate = usableThumbnail(platform, generic[0]);
+    if (candidate) return candidate;
+  }
+  return "";
+}
 
 function htmlCreator(platform, html) {
   const meta = metaMap(html);
@@ -171,7 +208,7 @@ function htmlCreator(platform, html) {
         : platform === "weibo"
           ? [/"screen_name"\s*:\s*"([^"<>]{1,100})"/i]
           : platform === "wechat"
-            ? [/"nickname"\s*:\s*"([^"<>]{1,120})"/i, /var\s+nickname\s*=\s*["']([^"'<>]{1,120})["']/i]
+            ? [/"nickname"\s*:\s*["']([^"'<>]{1,120})["']/i, /var\s+nickname\s*=\s*["']([^"'<>]{1,120})["']/i]
             : [/"author_name"\s*:\s*"([^"<>]{1,120})"/i];
   for (const pattern of patterns) {
     const match = raw.match(pattern);
@@ -249,7 +286,6 @@ async function oembed(platform, contentUrl) {
   return fetchJson(endpoint);
 }
 
-
 function shortProviderUrl(platform, value) {
   try {
     const url = new URL(value);
@@ -324,7 +360,7 @@ async function fetchEmbedPreview(platform, contentUrl) {
     if (html.length > MAX_HTML_BYTES) html = html.slice(0, MAX_HTML_BYTES);
     return {
       title: htmlTitle(html),
-      thumbnailUrl: htmlImage(html),
+      thumbnailUrl: htmlImage(html, platform),
       creatorName: htmlCreator(platform, html),
       source: "provider-embed-meta"
     };
@@ -353,7 +389,6 @@ async function resolvePreview(platform, contentUrl) {
     };
   }
 
-  // Short share links are canonicalized once during collection/enrichment.
   let workingUrl = contentUrl;
   let prefetchedPage = null;
   if (shortProviderUrl(platform, contentUrl)) {
@@ -371,8 +406,8 @@ async function resolvePreview(platform, contentUrl) {
   const oeTitle = stripTags(oe && (oe.title || oe.author_name || ""));
   const oeCreator = stripTags(oe && (oe.author_name || oe.author || ""));
   const oeChannelUrl = safeProviderUrl(platform, oe && (oe.author_url || oe.authorUrl || ""));
-  const oeThumb = decodeHtml(oe && (oe.thumbnail_url || oe.thumbnailUrl || ""));
-  if (oeThumb && /^https:\/\//i.test(oeThumb)) {
+  const oeThumb = usableThumbnail(platform, oe && (oe.thumbnail_url || oe.thumbnailUrl || ""));
+  if (oeThumb) {
     return {
       resolvedUrl: workingUrl,
       title: oeTitle,
@@ -384,11 +419,12 @@ async function resolvePreview(platform, contentUrl) {
   }
 
   const embed = await fetchEmbedPreview(platform, workingUrl);
-  if (embed.thumbnailUrl && /^https:\/\//i.test(embed.thumbnailUrl)) {
+  const embedThumb = usableThumbnail(platform, embed.thumbnailUrl);
+  if (embedThumb) {
     return {
       resolvedUrl: workingUrl,
       title: embed.title || oeTitle,
-      thumbnailUrl: embed.thumbnailUrl,
+      thumbnailUrl: embedThumb,
       creatorName: embed.creatorName || oeCreator,
       channelUrl: oeChannelUrl,
       source: embed.source || "provider-embed-meta"
@@ -402,17 +438,18 @@ async function resolvePreview(platform, contentUrl) {
   const title = htmlTitle(page.html) || embed.title || oeTitle;
   const creatorName = htmlCreator(platform, page.html) || embed.creatorName || oeCreator;
   const resolvedUrl = safeProviderUrl(platform, page.url) || workingUrl;
-  const thumbnailUrl = htmlImage(page.html) || embed.thumbnailUrl || oeThumb ||
-    (platform === "instagram" ? instagramMediaFallback(resolvedUrl) : "");
+  const pageThumb = htmlImage(page.html, platform);
+  const fallback = platform === "instagram" ? instagramMediaFallback(resolvedUrl) : "";
+  const thumbnailUrl = usableThumbnail(platform, pageThumb) || embedThumb || oeThumb || usableThumbnail(platform, fallback);
   return {
     resolvedUrl,
     title,
     creatorName,
     channelUrl: oeChannelUrl,
-    thumbnailUrl: /^https:\/\//i.test(thumbnailUrl) ? thumbnailUrl : "",
+    thumbnailUrl: thumbnailUrl || "",
     source: page.html
       ? (shortProviderUrl(platform, contentUrl) ? "redirect+public-meta" : "public-meta")
-      : (embed.source || (oe ? "oembed-no-image" : "unresolved"))
+      : (thumbnailUrl && platform === "instagram" ? "instagram-media-fallback" : (embed.source || (oe ? "oembed-no-image" : "unresolved")))
   };
 }
 
@@ -452,8 +489,9 @@ exports.handler = async function handler(event) {
   }
 };
 
-// Collector-side reuse: enrich before snapshot/front publication; no per-card browser fetch.
 exports.resolvePreview = resolvePreview;
+exports.usableThumbnail = usableThumbnail;
+exports.thumbnailAssetReason = thumbnailAssetReason;
 
 exports.__test = {
   normalizePlatform,
@@ -463,8 +501,11 @@ exports.__test = {
   htmlTitle,
   htmlImage,
   htmlCreator,
+  thumbnailAssetReason,
+  usableThumbnail,
   shortProviderUrl,
   facebookIsVideo,
   providerEmbedPreviewUrl,
+  instagramMediaFallback,
   resolvePreview
 };
