@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.12.0-global-anchor-video-research";
+const VERSION = "donation-candidate-admin-v1.13.0-persistent-ai-policy-news-discovery";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -172,7 +172,7 @@ async function mapLimit(items,limit,worker){
 }
 function researchQuery(section,customQuery){
   const sec=Policy.normalizeSection(section)||'donation-ngo',frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{},custom=text(customQuery);
-  if(custom)return custom+(sec==='donation-global'?' latest humanitarian disaster video':' official website homepage');
+  if(custom)return custom+(sec==='donation-global'?' latest humanitarian disaster refugee conflict authoritative news video report':' official website homepage');
   const primary=text(frame.primaryQuery);
   if(sec==='donation-global')return [primary,'latest official humanitarian video'].filter(Boolean).join(' ')||'latest humanitarian relief official video';
   return primary&&/(?:official\s+(?:website|site)|homepage)/i.test(primary)?primary:([primary,'official website homepage'].filter(Boolean).join(' ')||Policy.SECTION_LABELS[sec]||'donation');
@@ -190,35 +190,30 @@ function researchAnchorState(section,existingViews){
   }
   return {found,ready};
 }
-function researchQuerySpecs(section,customQuery,singleSection,existingViews){
-  const sec=Policy.normalizeSection(section)||'donation-ngo',custom=text(customQuery),frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
-  const out=[{query:researchQuery(sec,custom),kind:custom?'custom':'broad',anchorName:''}];
-  if(!custom&&singleSection){
+function researchQuerySpecs(section,customQuery,singleSection,existingViews,policyQuery){
+  const sec=Policy.normalizeSection(section)||'donation-ngo',custom=text(customQuery),policy=text(policyQuery),frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
+  const out=[{query:researchQuery(sec,''),kind:'broad',anchorName:'',homepage:'',searchType:sec==='donation-global'?'video':'web'}];
+  if(custom) out.push({query:researchQuery(sec,custom),kind:'custom',anchorName:'',homepage:'',searchType:sec==='donation-global'?'web':'web'});
+  if(policy) out.push({query:researchQuery(sec,policy),kind:'policy',anchorName:'',homepage:'',searchType:sec==='donation-global'?'web':'web'});
+  if(singleSection){
     const state=researchAnchorState(sec,existingViews);
-    const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query),homepage:safeHttps(a&&a.homepage)};}).filter(function(a){return a.name&&a.query;});
+    const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query),homepage:safeHttps(a&&a.homepage),searchType:['web','video'].includes(lower(a&&a.searchType))?lower(a.searchType):(sec==='donation-global'?'video':'web')};}).filter(function(a){return a.name&&a.query;});
     function stateRank(name){return !state.found.has(name)?0:(!state.ready.has(name)?1:2);}
     if(sec==='donation-global'){
-      /* Global News was previously running only one broad query; the curated
-         humanitarian video anchors in the Research Frame were never queried.
-         Use every bounded anchor query so official OCHA/UN/UNICEF/UNHCR/WFP/IFRC
-         video results can enter the normal video validation path. */
-      anchors.slice(0,8).forEach(function(a){out.push({query:a.query,kind:'global-anchor',anchorName:a.name,homepage:''});});
+      anchors.slice(0,10).forEach(function(a){out.push({query:a.query,kind:'global-anchor',anchorName:a.name,homepage:'',searchType:a.searchType||'video'});});
     }else{
       anchors.sort(function(a,b){const d=stateRank(a.name)-stateRank(b.name);if(d)return d;return (a.homepage?0:1)-(b.homepage?0:1);});
-      /* Run only a bounded anchor window. Unseen institutions come first, then
-         known institutions whose homepage thumbnail still needs another preview
-         attempt, and finally already complete anchors. */
-      anchors.slice(0,10).forEach(function(a){out.push({query:a.query||a.name,kind:'anchor',anchorName:a.name,homepage:a.homepage||''});});
+      anchors.slice(0,10).forEach(function(a){out.push({query:a.query||a.name,kind:'anchor',anchorName:a.name,homepage:a.homepage||'',searchType:'web'});});
     }
-  }
-  if(!custom&&singleSection&&Array.isArray(frame.discoveryQueries)){
-    frame.discoveryQueries.slice(0,4).map(text).filter(Boolean).forEach(function(q){out.push({query:q,kind:'discovery',anchorName:'',homepage:''});});
+    if(Array.isArray(frame.discoveryQueries)){
+      frame.discoveryQueries.slice(0,4).map(text).filter(Boolean).forEach(function(q){out.push({query:q,kind:'discovery',anchorName:'',homepage:'',searchType:'web'});});
+    }
   }
   const seen=new Set();
   return out.filter(function(spec){const q=text(spec&&spec.query);if(!q||seen.has(q))return false;seen.add(q);return true;});
 }
 function researchQueries(section,customQuery,singleSection,existingViews){
-  return researchQuerySpecs(section,customQuery,singleSection,existingViews).map(function(x){return x.query;});
+  return researchQuerySpecs(section,customQuery,singleSection,existingViews,"").map(function(x){return x.query;});
 }
 function policyVisibleCandidate(candidate,section){
   const sec=Policy.normalizeSection(section)||Policy.inferSection(candidate||{},section);
@@ -345,7 +340,7 @@ function statusForStage(stage){ if(stage==="hold") return "hold"; if(stage==="ex
 function normalizeCandidate(item,section,query){
   const raw=plain(item), org=plain(raw.org), media=plain(raw.media), source=plain(raw.source);
   const resolved=sectionOf(raw,section), url=candidateUrl(raw,resolved), title=limitText(raw.title||raw.name||org.name||url,300), thumb=candidateThumb(raw,resolved);
-  const rawIsVideo=Policy.looksLikeVideo(raw), isVideo=resolved==="donation-global"&&rawIsVideo, relevance=Policy.sectionRelevance(raw,resolved);
+  const rawIsVideo=Policy.looksLikeVideo(raw), authoritativeNews=resolved==="donation-global"&&Policy.isAuthoritativeGlobalNews&&Policy.isAuthoritativeGlobalNews(raw), isVideo=resolved==="donation-global"&&rawIsVideo, relevance=Policy.sectionRelevance(raw,resolved);
   const homepage=safeHttps(Policy.organizationHomepageUrl?Policy.organizationHomepageUrl(raw):"");
   const homepageFirst=resolved!=="donation-global"&&!!homepage;
   const publishedAt=raw.published_at||raw.publishedAt||raw.datePublished||null;
@@ -366,8 +361,8 @@ function normalizeCandidate(item,section,query){
     thumbnail:thumb,
     channel:"donation",page:"donation",section:resolved,psom_key:resolved,
     category:Policy.categoryForSection(resolved),
-    type:isVideo?"video":"organization",
-    media:{kind:isVideo?"video":"image",src:isVideo?url:null,thumb:thumb||null,ratio:isVideo?"16:9":"1:1"},
+    type:isVideo?"video":(resolved==="donation-global"?"article":"organization"),
+    media:{kind:isVideo?"video":"image",src:isVideo?url:null,thumb:thumb||null,ratio:resolved==="donation-global"?"16:9":"1:1"},
     org:{name:limitText(org.name||raw.name||title,300)||null,legal_name:limitText(org.legal_name||raw.legal_name||"",300)||null,homepage:(resolved==="donation-global"?safeHttps(org.homepage||raw.homepage||raw.website):homepage)||null,country:text(org.country||raw.country)||null},
     source:{name:sourceName(raw),url:safeHttps(source.url||raw.sourceUrl||raw.source_url||url)||url,authority:Number(source.authority||raw.authority||0)||0},
     published_at:publishedAt,
@@ -386,11 +381,11 @@ function normalizeCandidate(item,section,query){
   if(!thumb) issues.push("thumbnail_missing");
   if(resolved==="donation-mission"&&Policy.missionExcluded(raw)) issues.push("mission_policy_excluded");
   if(Policy.isPlaceholder(raw)) issues.push("placeholder_or_seed");
-  if(resolved==="donation-global"&&!isVideo) issues.push("video_not_detected");
+  if(resolved==="donation-global"&&!isVideo&&!authoritativeNews) issues.push("authoritative_news_not_detected");
   if(resolved!=="donation-global"&&!homepage) issues.push("official_homepage_missing");
   if(resolved!=="donation-global"&&homepage&&!thumb) issues.push("homepage_preview_missing");
   if(resolved!=="donation-global"&&!url) issues.push("organization_destination_missing");
-  return {id,candidate,queue:{schema:"igdc-donation-candidate-queue.v1",section:resolved,stage:"research",researchQuery:limitText(query,600),discoveredAt:nowIso(),updatedAt:nowIso(),relevanceScore:relevance,issues,mediaKind:isVideo?"video":"link",sourceSearchBankId:candidate.searchBankId||null}};
+  return {id,candidate,queue:{schema:"igdc-donation-candidate-queue.v1",section:resolved,stage:"research",researchQuery:limitText(query,600),discoveredAt:nowIso(),updatedAt:nowIso(),relevanceScore:relevance,issues,mediaKind:isVideo?"video":(resolved==="donation-global"?"news":"link"),sourceSearchBankId:candidate.searchBankId||null}};
 }
 function rowView(row){
   const payload=plain(row&&row.source_payload), q=plain(payload.donationQueue), c=plain(payload.candidate);
@@ -411,12 +406,12 @@ async function upsertRows(rows){
   if(!rows.length) return [];
   return Store.request(Store.rest("gslot_candidates","on_conflict=id"),{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},body:JSON.stringify(rows)});
 }
-function researchParams(section,query,limit){
+function researchParams(section,query,limit,options){
   const q=text(query)||researchQuery(section,'');
-  const frame=Policy.researchFrameFor ? Policy.researchFrameFor(section) : {};
-  const global=section==="donation-global";
-  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"4000",discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:global?"video":"web",type:"any"};
-  if(global){params.mediaPreference="video";params.noMedia="0";params.freshnessHours=String(Number(frame.freshnessHours)||48);}
+  const frame=Policy.researchFrameFor ? Policy.researchFrameFor(section) : {},opt=plain(options);
+  const global=section==="donation-global",searchType=global&&['web','video'].includes(lower(opt.searchType))?lower(opt.searchType):(global?'video':'web');
+  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"4000",discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:searchType,type:"any"};
+  if(global){params.mediaPreference="video";params.noMedia="0";params.freshnessHours=String(Math.max(24,Math.min(168,Number(opt.freshnessHours)||Number(frame.freshnessHours)||96)));}
   else{params.noMedia="1";params.mediaPreference="web";}
   if(section==="donation-mission"||frame.localizeByIp===true){params.localizeByIp="1";params.geoPreference="ip-preferred";}
   return params;
@@ -533,10 +528,20 @@ async function sectionsForIds(ids){
   }
   return Array.from(out);
 }
-async function performResearch(event,section,customQuery,limit){
+async function performResearch(event,section,customQuery,limit,options){
   if(!SearchBank||typeof SearchBank.runEngine!=="function"){const e=new Error("SearchBank Engine을 불러오지 못했습니다.");e.statusCode=503;throw e;}
   const sections=section==="all"?Policy.SECTIONS:[Policy.normalizeSection(section)].filter(Boolean);
   if(!sections.length){const e=new Error("도네이션 섹션을 선택해 주세요.");e.statusCode=400;throw e;}
+  const opt=plain(options);
+  let activeAgenda=plain(opt.policyAgenda),policySource=activeAgenda.id?'explicit':null;
+  if(!activeAgenda.id){
+    try{
+      const policyScope=section==="all"?"all":sections[0],workspaceResult=await PolicyDiscussion.getWorkspace(policyScope),agendas=array(workspaceResult&&workspaceResult.workspace&&workspaceResult.workspace.agendas);
+      if(agendas.length){activeAgenda=plain(agendas[agendas.length-1]);policySource='saved-latest';}
+    }catch(_policyError){}
+  }
+  const activePolicyQuery=activeAgenda.id?PolicyDiscussion.executionQuery(activeAgenda):"";
+  const activePolicyFreshness=activeAgenda.id?Number(activeAgenda.freshnessHours||0)||0:0;
 
   // Do not purge the current queue before proving that new research produced
   // usable official-homepage candidates.  This avoids a failed provider/preview
@@ -548,7 +553,7 @@ async function performResearch(event,section,customQuery,limit){
     if(url&&!existingBySectionUrl.has(view.section+'|'+url.toLowerCase()))existingBySectionUrl.set(view.section+'|'+url.toLowerCase(),existing[index]);
   });
   async function researchOne(sec){
-    const specs=researchQuerySpecs(sec,sections.length===1?customQuery:'',sections.length===1,existingViews);
+    const specs=researchQuerySpecs(sec,sections.length===1?customQuery:'',sections.length===1,existingViews,activePolicyQuery);
     const queries=specs.map(function(x){return x.query;});
     const query=queries[0]||researchQuery(sec,'');
     const started=Date.now();let results=[];
@@ -560,8 +565,8 @@ async function performResearch(event,section,customQuery,limit){
          directly and then enter the same candidate -> SearchBank publish path. */
       const searchableSpecs=specs.filter(function(spec){return !(spec.kind==='anchor'&&safeHttps(spec.homepage));});
       results=await mapLimit(searchableSpecs,4,async function(spec){
-        const perQueryLimit=spec.kind==='anchor'?8:Math.min(30,Number(limit)||30);
-        try{return {spec,result:await SearchBank.runEngine(researchEvent,researchParams(sec,spec.query,perQueryLimit))};}
+        const perQueryLimit=(spec.kind==='anchor'||spec.kind==='global-anchor'||spec.kind==='discovery')?8:(spec.kind==='policy'?12:Math.min(24,Number(limit)||24));
+        try{return {spec,result:await SearchBank.runEngine(researchEvent,researchParams(sec,spec.query,perQueryLimit,{searchType:spec.searchType,freshnessHours:activePolicyFreshness}))};}
         catch(error){return {spec,error};}
       });
     }catch(error){
@@ -590,7 +595,7 @@ async function performResearch(event,section,customQuery,limit){
       });
     }
     const meta={adapters:adapterMeta},writes=[],seen=new Set();
-    let skippedPolicy=0,skippedSearchLanding=0,officialHomepageCount=0,globalVideoCount=0,previewResolved=0,skippedExcluded=0,identityRejected=0;
+    let skippedPolicy=0,skippedSearchLanding=0,officialHomepageCount=0,globalVideoCount=0,globalNewsCount=0,previewResolved=0,skippedExcluded=0,identityRejected=0;
 
     if(sec==='donation-global'){
       const itemMap=new Map();
@@ -603,9 +608,9 @@ async function performResearch(event,section,customQuery,limit){
         const url=Policy.candidateUrlForSection?Policy.candidateUrlForSection(item,sec):candidateUrl(item,sec);
         if(!url){if(Policy.candidateUrls(item||{}).some(function(u){return Policy.isSearchLandingUrl&&Policy.isSearchLandingUrl(u);}))skippedSearchLanding++;else skippedPolicy++;continue;}
         const norm=normalizeCandidate(item,sec,query);
-        if(!norm.candidate.url||!Policy.looksLikeVideo(item)||!norm.candidate.thumbnail){skippedPolicy++;continue;}
+        if(!norm.candidate.url||!norm.candidate.thumbnail){skippedPolicy++;continue;}
         if(!policyVisibleCandidate(norm.candidate,sec)){skippedPolicy++;continue;}
-        if(seen.has(norm.id))continue;seen.add(norm.id);globalVideoCount++;
+        if(seen.has(norm.id))continue;seen.add(norm.id);globalNewsCount++;if(Policy.looksLikeVideo(item))globalVideoCount++;
         const previous=existingMap.get(norm.id),previousPayload=plain(previous&&previous.source_payload),previousStage=stageOfPayload(previousPayload);
         if(previousStage==='excluded'){skippedExcluded++;continue;}
         const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:'research';
@@ -703,7 +708,7 @@ async function performResearch(event,section,customQuery,limit){
         writes.push({id:rowId,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Verified official organization homepage + homepage representative preview.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
     }
-    return {section:sec,query,queries,queryPlan:specs.map(function(x){return {kind:x.kind,anchorName:x.anchorName||null,homepage:x.homepage||null,query:x.query};}),accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,identityRejected,officialHomepageCount,globalVideoCount,previewResolved,engineItems:rawEntries.length,durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
+    return {section:sec,query,queries,queryPlan:specs.map(function(x){return {kind:x.kind,anchorName:x.anchorName||null,homepage:x.homepage||null,query:x.query};}),accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,identityRejected,officialHomepageCount,globalNewsCount,globalVideoCount,previewResolved,engineItems:rawEntries.length,durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
   }
 
   const sectionResults=[];const concurrency=section==="all"?2:1;
@@ -713,7 +718,7 @@ async function performResearch(event,section,customQuery,limit){
   const saved=dedup.size?await upsertRows(Array.from(dedup.values())):[];
   const successfulSections=sectionResults.filter(function(r){return Number(r&&r.accepted||0)>0;}).map(function(r){return r.section;});
   const cleanup=dedup.size?await purgePolicyViolations(successfulSections):{examined:existing.length,violations:0,removed:0,skipped:true,reason:'no_new_candidates'};
-  return {reports:sectionResults,savedCount:Array.isArray(saved)?saved.length:dedup.size,cleanup};
+  return {reports:sectionResults,savedCount:Array.isArray(saved)?saved.length:dedup.size,cleanup,appliedPolicy:activeAgenda.id?{source:policySource,agendaId:text(activeAgenda.id),title:text(activeAgenda.title),scope:text(activeAgenda.scope),freshnessHours:activePolicyFreshness,query:activePolicyQuery}:null};
 }
 async function updateStage(ids,stage,actor,note){
   if(!STAGES.has(stage)){const e=new Error("지원하지 않는 단계입니다.");e.statusCode=400;throw e;}
@@ -739,6 +744,7 @@ function rankForAuto(view){
   if(view.url&&/^https:\/\//i.test(view.url)) score+=30;
   if(view.thumbnail&&/^https:\/\//i.test(view.thumbnail)) score+=15;
   if(view.mediaKind==="video"&&view.section==="donation-global") score+=25;
+  if(view.section==="donation-global"&&Policy.isAuthoritativeGlobalNews&&Policy.isAuthoritativeGlobalNews(view.candidate||{})) score+=18;
   if(view.section==="donation-global"){
     const published = Date.parse(view.candidate&&view.candidate.published_at||"");
     if(Number.isFinite(published)){
@@ -789,7 +795,7 @@ async function executePolicyAgenda(event,body,actor){
   const destination=lower(body.destination||agenda.destination||"admin");
   if(!["admin","front_candidate","front"].includes(destination)){const e=new Error("정책 실행 대상이 올바르지 않습니다.");e.statusCode=400;throw e;}
   const query=PolicyDiscussion.executionQuery(agenda);
-  const research=await performResearch(event,scope,query,body.limit||100);
+  const research=await performResearch(event,scope,query,body.limit||100,{policyAgenda:agenda});
   let stageResult=null;
   if(destination==="front_candidate") stageResult=await autoStage(scope,"front_candidate",actor);
   let searchBank=null;

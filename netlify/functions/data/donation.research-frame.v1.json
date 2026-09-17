@@ -17,34 +17,60 @@
   },
   "sections": {
     "donation-global": {
-      "primaryQuery": "humanitarian crisis disaster earthquake flood wildfire famine refugee children emergency relief official video latest",
-      "freshnessHours": 48,
+      "primaryQuery": "latest humanitarian disaster flood earthquake wildfire famine hunger refugee displacement civilian war impact authoritative international news broadcast video report",
+      "freshnessHours": 96,
       "preferVideo": true,
       "localizeByIp": false,
       "anchors": [
         {
           "name": "UN OCHA / ReliefWeb",
-          "query": "ReliefWeb OCHA latest humanitarian emergency disaster official video"
+          "query": "ReliefWeb OCHA latest humanitarian emergency disaster refugee conflict civilians news report",
+          "searchType": "web"
         },
         {
           "name": "UN News",
-          "query": "UN News latest humanitarian crisis disaster official video"
+          "query": "UN News latest humanitarian crisis disaster refugee hunger conflict civilians report",
+          "searchType": "web"
         },
         {
           "name": "UNICEF Emergencies",
-          "query": "UNICEF emergencies latest children humanitarian official video"
+          "query": "UNICEF emergencies latest children humanitarian disaster refugee official video",
+          "searchType": "video"
         },
         {
           "name": "UNHCR Emergencies",
-          "query": "UNHCR emergencies refugees displacement latest official video"
+          "query": "UNHCR emergencies refugees displacement conflict latest official video",
+          "searchType": "video"
         },
         {
           "name": "World Food Programme",
-          "query": "WFP emergency hunger famine latest official video"
+          "query": "WFP emergency hunger famine conflict displacement latest official video",
+          "searchType": "video"
         },
         {
           "name": "IFRC",
-          "query": "IFRC disaster response earthquake flood latest official video"
+          "query": "IFRC disaster response earthquake flood wildfire latest official video",
+          "searchType": "video"
+        },
+        {
+          "name": "BBC News",
+          "query": "BBC News latest flood earthquake wildfire famine refugee war civilians humanitarian video report",
+          "searchType": "web"
+        },
+        {
+          "name": "Reuters",
+          "query": "Reuters latest flood earthquake wildfire famine refugee war civilians humanitarian video report",
+          "searchType": "web"
+        },
+        {
+          "name": "AP News",
+          "query": "AP News latest flood earthquake wildfire famine refugee war civilians humanitarian video report",
+          "searchType": "web"
+        },
+        {
+          "name": "Arirang TV",
+          "query": "Arirang TV latest disaster humanitarian refugee war civilians Korea world news video",
+          "searchType": "video"
         }
       ],
       "psomKey": "donation-global",
@@ -53,13 +79,20 @@
         "donation",
         "news",
         "humanitarian",
-        "emergency"
+        "emergency",
+        "disaster",
+        "refugee",
+        "hunger",
+        "war impact",
+        "authoritative news",
+        "broadcast"
       ],
-      "policyPurpose": "최신 재난·구호·인도주의 이슈, 영상 우선, 48시간 신선도",
+      "policyPurpose": "전 세계 재난·홍수·지진·산불·기아·난민·전쟁으로 인한 민간인·인도주의 피해 등 지원 필요 이슈. UN/OCHA 계열과 BBC·Reuters·AP·Arirang TV 등 권위 있는 방송·뉴스 및 공식 YouTube/영상 보도를 우선하며 영상 중심이되 신뢰 가능한 뉴스 리포트도 허용.",
       "discoveryQueries": [
-        "latest humanitarian crisis relief official video UN OCHA UNICEF UNHCR WFP IFRC",
-        "latest disaster emergency response official video humanitarian organization",
-        "latest refugee hunger children humanitarian field report official video"
+        "Al Jazeera English latest flood earthquake refugee hunger war civilian humanitarian video news",
+        "DW News France 24 latest humanitarian disaster refugee conflict civilian impact video report",
+        "CNN NBC ABC CBS latest earthquake flood wildfire refugee humanitarian crisis video report",
+        "official YouTube news latest flood earthquake famine refugee displacement war civilians humanitarian report"
       ]
     },
     "donation-ngo": {
@@ -153,7 +186,7 @@
       "policyPurpose": "국제 NGO·공공원조·국제기구 공식 홈페이지"
     },
     "donation-mission": {
-      "primaryQuery": "Protestant evangelical Christian mission evangelism missionary campus Bible organization official website homepage",
+      "primaryQuery": "Protestant evangelical Christian mission evangelism missionary campus Bible education university higher education association network organization official website homepage",
       "localizeByIp": true,
       "anchors": [
         {
@@ -225,9 +258,19 @@
         "mission",
         "donation",
         "protestant",
-        "evangelical"
+        "evangelical",
+        "university mission",
+        "higher education",
+        "education mission",
+        "campus ministry"
       ],
-      "policyPurpose": "개신교·복음주의 선교기관 중심, 타종교·이단성 후보 제외"
+      "policyPurpose": "개신교·복음주의 선교기관 중심. 해외 대학·기독교 대학 협의체, 교육선교, 캠퍼스·청년·성경·의료·문화·디지털 등 건전한 선교 네트워크를 폭넓게 탐색하되 타종교·이단성 후보는 제외.",
+      "discoveryQueries": [
+        "international Christian university association evangelical mission education official website",
+        "Christian higher education network university consortium mission official website",
+        "evangelical education mission university network Asia Africa official website",
+        "Christian cross cultural education mission campus youth organization official website"
+      ]
     },
     "donation-service": {
       "primaryQuery": "volunteer service medical housing clean water community welfare nonprofit organization official website homepage",
@@ -430,7 +473,9 @@
         "Korea Christian multicultural education nonprofit official website",
         "대한민국 기독교 다문화 교육 사역 비영리 공식 홈페이지",
         "Christian multicultural family education ministry Korea official website",
-        "migrant children Christian education Korea nonprofit official website"
+        "migrant children Christian education Korea nonprofit official website",
+        "international Christian university association higher education mission official website",
+        "Christian higher education network education mission official website"
       ]
     },
     "donation-environment": {
@@ -491,7 +536,7 @@
       "policyPurpose": "환경·창조세계 돌봄·보전·재조림, 비정파성"
     },
     "donation-others": {
-      "primaryQuery": "nonprofit vulnerable people justice disability anti trafficking prison family elderly orphan public interest organization official website homepage",
+      "primaryQuery": "Christian nonprofit vulnerable people justice disability anti trafficking prison migrant refugee family multicultural elderly orphan addiction recovery counseling public interest organization official website homepage",
       "localizeByIp": true,
       "anchors": [
         {
@@ -538,9 +583,20 @@
         "donation",
         "justice",
         "disability",
-        "anti-trafficking"
+        "anti-trafficking",
+        "migrant",
+        "refugee family",
+        "multicultural",
+        "elderly",
+        "addiction recovery"
       ],
-      "policyPurpose": "기타 공익·정의·장애·교정·인신매매 방지 등"
+      "policyPurpose": "기타 공익·정의·장애·교정·인신매매 방지뿐 아니라 이주민·난민가정·다문화·노인·고아·가족지원·상담·중독회복 등 다른 7개 섹션에 정확히 들어가지 않는 건전한 공익 사역.",
+      "discoveryQueries": [
+        "Christian nonprofit migrant refugee family support multicultural official website",
+        "faith based disability elderly orphan family support nonprofit official website",
+        "Christian prison anti trafficking addiction recovery counseling nonprofit official website",
+        "Korea Christian multicultural migrant family community support nonprofit official website"
+      ]
     }
   }
 }

@@ -155,8 +155,9 @@
     try{
       var j=await api('POST',{action:'research',section:all?'all':section,query:q,limit:50}),r=j.result||{},reports=Array.isArray(r.reports)?r.reports:[];
       await load();
-      var engine=reports.reduce(function(n,x){return n+Number(x.engineItems||0)},0),accepted=reports.reduce(function(n,x){return n+Number(x.accepted||0)},0),homepage=reports.reduce(function(n,x){return n+Number(x.officialHomepageCount||0)},0),globalVideo=reports.reduce(function(n,x){return n+Number(x.globalVideoCount||0)},0),policySkip=reports.reduce(function(n,x){return n+Number(x.skippedPolicy||0)},0),searchSkip=reports.reduce(function(n,x){return n+Number(x.skippedSearchLanding||0)},0);
-      $('state').textContent='리서치 완료 · 엔진 '+engine+'건 → 저장 '+accepted+'건 · 공식 홈페이지 '+homepage+' · 글로벌 영상 '+globalVideo+' · 정책 제외 '+policySkip+' · 검색결과 링크 제외 '+searchSkip;
+      var engine=reports.reduce(function(n,x){return n+Number(x.engineItems||0)},0),accepted=reports.reduce(function(n,x){return n+Number(x.accepted||0)},0),homepage=reports.reduce(function(n,x){return n+Number(x.officialHomepageCount||0)},0),globalNews=reports.reduce(function(n,x){return n+Number(x.globalNewsCount||0)},0),globalVideo=reports.reduce(function(n,x){return n+Number(x.globalVideoCount||0)},0),policySkip=reports.reduce(function(n,x){return n+Number(x.skippedPolicy||0)},0),searchSkip=reports.reduce(function(n,x){return n+Number(x.skippedSearchLanding||0)},0);
+      var applied=r.appliedPolicy&&r.appliedPolicy.agendaId?(' · AI 정책 자동 반영: '+text(r.appliedPolicy.title||r.appliedPolicy.agendaId)):'';
+      $('state').textContent='리서치 완료 · 엔진 '+engine+'건 → 저장 '+accepted+'건 · 공식 홈페이지 '+homepage+' · 글로벌 뉴스 '+globalNews+' (영상 '+globalVideo+') · 정책 제외 '+policySkip+' · 검색결과 링크 제외 '+searchSkip+applied;
       if(!all&&section){openSection=section;renderSections()}
     }catch(e){$('state').textContent='리서치 오류: '+e.message;setBusy(false)}
   }
@@ -194,7 +195,7 @@
     var instruction=text($('policyInstruction').value);if(!instruction){alert('AI와 협의할 내용을 말씀하거나 입력해 주세요.');return}
     stopVoice();
     setPolicyBusy(true,'AI와 도네이션 운영 방향을 협의 중…');
-    try{var j=await api('POST',{action:'policy_ai_discuss',scope:policyScope(),instruction:instruction,language:policyLanguage()});renderPolicy(j.workspace);$('policyState').textContent='AI 협의 안건 저장 완료 · 관리자 실행 전에는 프론트에 반영되지 않습니다.';speakAnswer(latestAssistantText(j.workspace))}
+    try{var j=await api('POST',{action:'policy_ai_discuss',scope:policyScope(),instruction:instruction,language:policyLanguage()});renderPolicy(j.workspace);$('policyState').textContent='AI 협의 안건 저장 완료 · 다음 다시 리서치에 자동 반영됩니다. 프론트 확정은 관리자 실행 전에는 반영되지 않습니다.';speakAnswer(latestAssistantText(j.workspace))}
     catch(e){$('policyState').textContent='AI 협의 오류: '+e.message}
     finally{setPolicyBusy(false)}
   }
@@ -233,7 +234,7 @@
   async function discussSectionPolicy(sec){
     var box=sectionInput(sec),instruction=text(box&&box.value);if(!instruction){alert('이 섹션에서 AI와 협의할 내용을 입력하거나 말해 주세요.');return}
     setSectionPolicyState(sec,'AI와 협의 중…');
-    try{var j=await api('POST',{action:'policy_ai_discuss',scope:sec,instruction:instruction,language:policyLanguage()}),agenda=j.agenda||null;renderSectionLatest(sec,agenda);setSectionPolicyState(sec,'협의 안건 저장 완료 · 실행 버튼으로 적용할 수 있습니다.')}
+    try{var j=await api('POST',{action:'policy_ai_discuss',scope:sec,instruction:instruction,language:policyLanguage()}),agenda=j.agenda||null;renderSectionLatest(sec,agenda);setSectionPolicyState(sec,'협의 안건 저장 완료 · 다음 다시 리서치부터 자동 반영됩니다. 필요하면 실행 버튼으로 즉시 적용할 수 있습니다.')}
     catch(e){setSectionPolicyState(sec,'AI 협의 오류: '+e.message)}
   }
   async function runSectionPolicy(sec,destination){

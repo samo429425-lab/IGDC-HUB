@@ -357,6 +357,7 @@ exports.handler = async function (event) {
           });
           const patch = { raw: nextRaw, updated_by: by, updated_at: now };
           if (resolvedThumb) patch.thumbnail_url = resolvedThumb;
+          else if (currentPublishable && currentPublishable !== currentThumb) patch.thumbnail_url = currentPublishable;
           else if (currentThumb && !currentPublishable) patch.thumbnail_url = null;
           if (resolvedTitle && genericTitle && !(SocialStore.genericContentTitle && SocialStore.genericContentTitle(platform, resolvedTitle))) patch.title = resolvedTitle;
           if (resolvedCreator && !currentCreator) patch.creator_name = resolvedCreator;

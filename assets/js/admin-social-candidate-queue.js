@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.5.0 - differentiated publish reports + deploy dedupe awareness */
+/* IGDC Social Hub Content Operations v3.6.0 - differentiated publish reports + deploy dedupe awareness */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -1478,15 +1478,20 @@
   }
 
 
-  function facebookPreviewExpired(value) {
+  function signedPreviewExpired(platform, value) {
     try {
       var u = new URL(text(value), location.href),
-        host = text(u.hostname).toLowerCase();
-      if (!/(^|\.)fbcdn\.net$/i.test(host)) return false;
-      var token = text(u.searchParams.get("oe"));
-      if (!/^[0-9a-f]+$/i.test(token)) return false;
-      var ms = parseInt(token, 16) * 1000;
-      return isFinite(ms) && ms <= Date.now() + 24 * 60 * 60 * 1000;
+        host = text(u.hostname).toLowerCase(),
+        token = "",
+        ms = 0;
+      if (platform === "facebook" && /(^|\.)fbcdn\.net$/i.test(host)) {
+        token = text(u.searchParams.get("oe"));
+        if (/^[0-9a-f]+$/i.test(token)) ms = parseInt(token, 16) * 1000;
+      } else if (platform === "tiktok") {
+        token = text(u.searchParams.get("x-expires") || u.searchParams.get("x_expires"));
+        if (/^\d+$/.test(token)) ms = Number(token) * 1000;
+      }
+      return isFinite(ms) && ms > 0 && ms <= Date.now() + 24 * 60 * 60 * 1000;
     } catch (_e) { return false; }
   }
   function genericProviderPreviewThumb(platform, value) {
@@ -1501,7 +1506,7 @@
       if (platform === "instagram" && (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host) || /\/rsrc\.php(?:$|[/?#])/i.test(u.pathname))) return true;
       if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return true;
       if (platform === "facebook" && /(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path)) return true;
-      return facebookPreviewExpired(raw);
+      return signedPreviewExpired(platform, raw);
     } catch (_e) { return false; }
   }
   function realPreviewMissing(row) {
@@ -2678,6 +2683,13 @@
     var selectedIds = Array.from(selectedContents);
     if (!selectedIds.length)
       return show("프론트 등록할 콘텐츠를 먼저 선택해 주세요.", "warn");
+    var requestedKeys = order.filter(function (key) {
+      return rows.some(function (row) {
+        return row && row.sectionKey === key && selectedContents.has(text(row.id));
+      });
+    });
+    if (!(await prepareFrontPublication(requestedKeys))) return false;
+    selectedIds = Array.from(selectedContents);
 
     var completed = autoCompletePublishSelection(selectedIds, "");
     var registeredIds = completed.ids;
@@ -2711,9 +2723,46 @@
     return actualApply("", true, registeredIds, "selected_content_front_publish", keys);
   }
 
+  async function hydrateFrontPublicationPreviews(sectionKeys) {
+    var allowed = Array.isArray(sectionKeys) && sectionKeys.length ? new Set(sectionKeys) : null;
+    var ids = rows.filter(function (row) {
+      return row && assetClass(row) === "latest_content" &&
+        (!allowed || allowed.has(row.sectionKey)) && realPreviewMissing(row);
+    }).map(function (row) { return text(row.id); }).filter(Boolean);
+    ids = Array.from(new Set(ids));
+    if (!ids.length) return 0;
+    var updated = 0, chunkSize = 12;
+    for (var offset = 0; offset < ids.length; offset += chunkSize) {
+      var batch = ids.slice(offset, offset + chunkSize);
+      try {
+        var result = await post(ACTION, { action: "hydrate_preview", ids: batch });
+        mergeHydratedRows(result.items || []);
+        updated += Number(result.updated || 0);
+      } catch (_error) {
+        // A single provider batch may fail while the rest remain usable.
+        // Continue so one SNS cannot block all other sections.
+      }
+    }
+    return updated;
+  }
+  async function prepareFrontPublication(sectionKeys) {
+    var keys = Array.isArray(sectionKeys) && sectionKeys.length ? sectionKeys.slice() : order.slice();
+    show(keys.map(label).join(", ") + " 실제 콘텐츠 썸네일을 최종 점검하고 있습니다.", "warn");
+    await hydrateFrontPublicationPreviews(keys);
+    // Pull back server-side preview repairs before AI registration. This makes
+    // front publication deterministic instead of racing the background preview
+    // hydrator that runs after refresh().
+    await refresh();
+    var oneSection = keys.length === 1 ? keys[0] : "";
+    var curated = await autoCurate(oneSection, true);
+    if (!curated) return false;
+    return true;
+  }
+
   async function actualApplyAllRegistered(skipConfirm, publishMode) {
     var repaired = await repairLegacyFrontUnpublishHolds("");
     if (repaired) await refresh();
+    if (!(await prepareFrontPublication(order.slice()))) return false;
     var ids = registeredContentIds("");
     if (!ids.length)
       return show("SearchBank 인계 가능한 최신 콘텐츠 후보가 없습니다.", "warn");
@@ -2734,6 +2783,7 @@
       repaired += await repairLegacyFrontUnpublishHolds(keys[repairIndex]);
     }
     if (repaired) await refresh();
+    if (!(await prepareFrontPublication(keys))) return false;
     var ids = [];
     keys.forEach(function (key) { ids = ids.concat(registeredContentIds(key)); });
     ids = Array.from(new Set(ids));
@@ -2764,6 +2814,7 @@
   async function actualApplySection(sectionKey, skipConfirm) {
     var repaired = await repairLegacyFrontUnpublishHolds(sectionKey);
     if (repaired) await refresh();
+    if (!(await prepareFrontPublication([sectionKey]))) return false;
     var selectedInSectionAll = Array.from(selectedContents).filter(function (id) {
       return rows.some(function (row) {
         return text(row && row.id) === id && row.sectionKey === sectionKey;

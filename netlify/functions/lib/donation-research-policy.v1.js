@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.6.0-curated-homepage-identity";
+const VERSION = "donation-research-policy-v1.7.0-dynamic-policy-news-discovery";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -61,13 +61,14 @@ const POLICY = Object.freeze({
     researchTerms:[
       "humanitarian crisis disaster conflict displacement hunger children climate emergency video",
       "earthquake flood wildfire famine refugee civilian aid field report video",
-      "humanitarian response children health education water sanitation climate impact footage"
+      "humanitarian response children health education water sanitation climate impact footage",
+      "authoritative international news broadcaster disaster refugee hunger conflict civilian humanitarian report video"
     ],
     semanticHints:[
       "humanitarian","crisis","disaster","earthquake","flood","wildfire","drought","famine","hunger","food insecurity",
       "refugee","displacement","displaced","civilian","conflict","war","children","child","orphan","health","hospital",
       "education","school","water","sanitation","climate","environment","emergency","relief","aid","response","field report",
-      "video","footage","broadcast","report","update"
+      "video","footage","broadcast","report","update","news","news report","breaking news","civilian impact","evacuation"
     ],
     preferredKinds:["video","article","feed_item"],
     videoPreferred:true
@@ -86,9 +87,10 @@ const POLICY = Object.freeze({
     researchTerms:[
       "Protestant evangelical Christian mission organization international official",
       "evangelical mission agency missions ministry Protestant official",
-      "Christian medical mission campus mission Bible mission Protestant organization"
+      "Christian medical mission campus mission Bible mission Protestant organization",
+      "Christian university association higher education education mission campus network official organization"
     ],
-    semanticHints:["protestant","evangelical","christian mission","missions","mission agency","gospel","evangelism","missionary","campus ministry","bible translation","medical mission","church mission"],
+    semanticHints:["protestant","evangelical","christian mission","missions","mission agency","gospel","evangelism","missionary","campus ministry","bible translation","medical mission","church mission","christian university","university association","higher education mission","education mission","student mission","campus network","teacher mission","academic mission"],
     excludedHints:["catholic","roman catholic","orthodox church","mosque","islamic mission","temple","hindu mission","new religious movement","cult"]
   },
   "donation-service": {
@@ -135,9 +137,10 @@ const POLICY = Object.freeze({
     researchTerms:[
       "Christian nonprofit vulnerable people justice prison disability official organization",
       "faith based nonprofit legal aid human rights trafficking prison ministry official",
-      "international charity vulnerable community disability justice organization official"
+      "international charity vulnerable community disability justice organization official",
+      "Christian migrant refugee family multicultural elderly orphan addiction recovery counseling nonprofit official"
     ],
-    semanticHints:["justice","legal aid","prison","prisoner","trafficking","disability","vulnerable","human rights","persecution","family support","elderly","widow","orphan"]
+    semanticHints:["justice","legal aid","prison","prisoner","trafficking","disability","vulnerable","human rights","persecution","family support","elderly","widow","orphan","migrant","refugee family","multicultural","multicultural family","addiction recovery","counseling","community support"]
   }
 });
 
@@ -171,7 +174,8 @@ function researchFrameFor(value){
     psomLabel:text(frame.psomLabel),
     psomKeywords:Array.isArray(frame.psomKeywords)?frame.psomKeywords.map(text).filter(Boolean):[],
     policyPurpose:text(frame.policyPurpose),
-    anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({name:text(a&&a.name),query:text(a&&a.query),homepage:httpsUrl(a&&a.homepage)})).filter(a=>a.name||a.query||a.homepage) : []
+    anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({name:text(a&&a.name),query:text(a&&a.query),homepage:httpsUrl(a&&a.homepage),searchType:["web","video"].includes(lower(a&&a.searchType))?lower(a.searchType):""})).filter(a=>a.name||a.query||a.homepage) : [],
+    discoveryQueries:Array.isArray(frame.discoveryQueries) ? frame.discoveryQueries.map(text).filter(Boolean) : []
   };
 }
 function policyFor(value){
@@ -250,6 +254,23 @@ function isVideoUrl(value){
     return /\.(?:mp4|webm|m3u8|mov)(?:$|[?#])/i.test(path);
   }catch(_e){ return false; }
 }
+const GLOBAL_NEWS_HOST_RE = /(?:^|\.)(?:bbc\.com|bbc\.co\.uk|reuters\.com|apnews\.com|arirang\.com|arirang\.co\.kr|aljazeera\.com|dw\.com|france24\.com|cnn\.com|nbcnews\.com|abcnews\.go\.com|cbsnews\.com|npr\.org|nhk\.or\.jp|reliefweb\.int|news\.un\.org|unicef\.org|unhcr\.org|wfp\.org|ifrc\.org)$/i;
+const GLOBAL_NEWS_SOURCE_RE = /\b(?:bbc(?: news)?|reuters|associated press|ap news|arirang(?: tv)?|al jazeera(?: english)?|dw news|deutsche welle|france 24|cnn|nbc news|abc news|cbs news|npr|nhk world|reliefweb|ocha|un news|unicef|unhcr|world food programme|wfp|ifrc)\b/i;
+function isAuthoritativeGlobalNewsUrl(value){
+  const raw=httpsUrl(value); if(!raw) return false;
+  const host=urlHost(raw); return !!host && GLOBAL_NEWS_HOST_RE.test(host);
+}
+function isAuthoritativeGlobalNews(record){
+  const r=plain(record);
+  if(candidateUrls(r).some(isAuthoritativeGlobalNewsUrl)) return true;
+  return GLOBAL_NEWS_SOURCE_RE.test(recordText(r));
+}
+function globalNewsRelevant(record){
+  const policy=policyFor("donation-global"),blob=recordText(record),generic=new Set(["video","footage","broadcast","report","update","news","news report","breaking news"]);
+  const humanitarian=(policy.semanticHints||[]).filter(h=>!generic.has(lower(h)));
+  return countHints(blob,humanitarian)>0 && (looksLikeVideo(record)||isAuthoritativeGlobalNews(record));
+}
+
 function isSocialUrl(value){
   const host=urlHost(value); if(!host) return false;
   return /^(?:m\.)?(?:facebook\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|threads\.net|reddit\.com|pinterest\.com|weibo\.com)$/.test(host) ||
@@ -417,8 +438,12 @@ function sectionIdentityEligible(record,sectionValue){
 function candidateUrlForSection(record, sectionValue){
   const section=normalizeSection(sectionValue)||inferSection(record);
   if(section==="donation-global"){
-    for(const value of candidateUrls(record)){
+    const urls=candidateUrls(record);
+    for(const value of urls){
       const u=httpsUrl(value); if(u&&isVideoUrl(u)&&!isSearchLandingUrl(u)&&!isDirectMediaAssetUrl(u)) return u;
+    }
+    for(const value of urls){
+      const u=httpsUrl(value); if(u&&isAuthoritativeGlobalNewsUrl(u)&&!isSearchLandingUrl(u)&&!isDirectMediaAssetUrl(u)&&!isDocumentUrl(u)) return u;
     }
     return "";
   }
@@ -476,6 +501,7 @@ function sectionRelevance(record, sectionValue){
   const semanticMatches=countHints(blob,policy.semanticHints);
   let score=semanticMatches*8;
   if(section==="donation-global" && semanticMatches>0 && looksLikeVideo(record)) score+=24;
+  if(section==="donation-global" && semanticMatches>0 && isAuthoritativeGlobalNews(record)) score+=20;
   if(section!=="donation-global" && organizationHomepageUrl(record)) score+=24;
   if(section!=="donation-global" && matchedResearchAnchorName(record,section)) score+=80;
   if(section!=="donation-global" && !sectionIdentityEligible(record,section)) score-=80;
@@ -529,11 +555,9 @@ function usablePublicCandidate(record, sectionValue){
   const title=text(record.title||record.name||plain(record.org).name);
   if(!title) return false;
   if(section==="donation-global"){
-    if(!looksLikeVideo(record)||!isVideoUrl(destination)) return false;
-    const blob=recordText(record), policy=policyFor(section);
-    const genericMediaHints=new Set(["video","footage","broadcast","report","update","field report"]);
-    const humanitarianHints=(policy.semanticHints||[]).filter(h=>!genericMediaHints.has(lower(h)));
-    return countHints(blob,humanitarianHints)>0;
+    if(!globalNewsRelevant(record)) return false;
+    if(isVideoUrl(destination)) return true;
+    return isAuthoritativeGlobalNewsUrl(destination)&&isAuthoritativeGlobalNews(record);
   }
   const homepage=organizationHomepageUrl(record);
   if(!homepage||!sectionIdentityEligible(record,section)) return false;
@@ -555,6 +579,6 @@ function youtubeThumbnail(record){
 
 module.exports={
   VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,researchFrameFor,researchAnchors,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,
-  missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls,
+  missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls,isAuthoritativeGlobalNewsUrl,isAuthoritativeGlobalNews,globalNewsRelevant,
   organizationWebsiteUrls,organizationHomepageUrl,canonicalOrganizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isDocumentUrl,isContentAggregatorHost,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection,homepageIdentityText,anchorIdentityScore,researchAnchorHomepage,matchesResearchAnchor,genericAnchorName,matchedResearchAnchorName,sectionIdentityEligible
 };

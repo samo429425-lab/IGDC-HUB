@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.5.0-real-media-validated";
+const VERSION = "social-preview-metadata-v1.6.0-expiry-aware";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -74,6 +74,17 @@ function facebookSignedThumbnailExpiry(value) {
     return Number.isFinite(seconds) ? seconds * 1000 : 0;
   } catch (_error) { return 0; }
 }
+function signedPreviewExpiry(platform, value) {
+  try {
+    const url = new URL(text(value).trim());
+    if (platform === "facebook") return facebookSignedThumbnailExpiry(value);
+    if (platform === "tiktok") {
+      const seconds = Number(url.searchParams.get("x-expires") || url.searchParams.get("x_expires") || 0);
+      return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+    }
+    return 0;
+  } catch (_error) { return 0; }
+}
 
 function previewImageUrl(platform, value) {
   const raw = decodeHtml(text(value)).trim();
@@ -105,9 +116,9 @@ function previewImageUrl(platform, value) {
     if (platform === "facebook") {
       // facebook.com post/watch URLs are pages, not image previews.
       if (/(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path + url.search)) return "";
-      const expiry = facebookSignedThumbnailExpiry(url.toString());
-      if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
     }
+    const expiry = signedPreviewExpiry(platform, url.toString());
+    if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
 
     if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return "";
     return url.toString();
@@ -561,6 +572,7 @@ exports.handler = async function handler(event) {
 exports.resolvePreview = resolvePreview;
 exports.previewImageUrl = previewImageUrl;
 exports.facebookSignedThumbnailExpiry = facebookSignedThumbnailExpiry;
+exports.signedPreviewExpiry = signedPreviewExpiry;
 
 exports.__test = {
   normalizePlatform,
@@ -571,6 +583,7 @@ exports.__test = {
   htmlImage,
   htmlCreator,
   facebookSignedThumbnailExpiry,
+  signedPreviewExpiry,
   previewImageUrl,
   instagramMediaUrl,
   resolveInstagramMedia,

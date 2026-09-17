@@ -13,7 +13,7 @@ const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
 const VERSION =
-  "social-candidate-store-v1.10.1-preview-expiry-recovery";
+  "social-candidate-store-v1.11.0-front-slot-reconcile";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -83,6 +83,22 @@ function nowIso() {
 }
 function unique(values) {
   return Array.from(new Set(array(values).map(text).filter(Boolean)));
+}
+function decodeEntityText(value) {
+  return text(value)
+    .replace(/&#x([0-9a-f]+);/gi, function (_m, hex) {
+      const cp = parseInt(hex, 16);
+      return Number.isFinite(cp) ? String.fromCodePoint(cp) : _m;
+    })
+    .replace(/&#(\d+);/g, function (_m, dec) {
+      const cp = parseInt(dec, 10);
+      return Number.isFinite(cp) ? String.fromCodePoint(cp) : _m;
+    })
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&");
 }
 function sameHttpsUrl(a, b) {
   const left = Policy.normalizeUrl(a);
@@ -1108,6 +1124,37 @@ function facebookSignedThumbnailExpiry(value) {
     return 0;
   }
 }
+function signedThumbnailExpiry(platform, value) {
+  try {
+    const url = new URL(text(value));
+    if (platform === "facebook") return facebookSignedThumbnailExpiry(value);
+    if (platform === "tiktok") {
+      const raw = url.searchParams.get("x-expires") || url.searchParams.get("x_expires") || "";
+      const seconds = Number(raw);
+      return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 0;
+    }
+    return 0;
+  } catch (_error) {
+    return 0;
+  }
+}
+function stableFacebookExternalImage(value) {
+  try {
+    const url = new URL(text(value));
+    if (!/(^|\.)fbcdn\.net$/i.test(url.hostname)) return "";
+    const nested = text(url.searchParams.get("url"));
+    if (!nested) return "";
+    const image = new URL(nested);
+    if (!/^https?:$/.test(image.protocol)) return "";
+    if (!/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(image.pathname + image.search)) return "";
+    // The original external image is more durable than Facebook's expiring
+    // proxy wrapper. Prefer HTTPS to avoid mixed-content blocking on IGDC.
+    image.protocol = "https:";
+    return image.toString();
+  } catch (_error) {
+    return "";
+  }
+}
 function publishableThumbnail(row) {
   const r = plain(row);
   const raw = plain(r.raw);
@@ -1133,7 +1180,11 @@ function publishableThumbnail(row) {
   if (!/^https:\/\//i.test(thumb) || sameHttpsUrl(thumb, contentUrl)) return "";
   if (/placeholder|\/assets\/sample\//i.test(thumb)) return "";
   if (providerBrandThumbnail(platform, thumb)) return "";
-  const expiry = facebookSignedThumbnailExpiry(thumb);
+  if (platform === "facebook") {
+    const original = stableFacebookExternalImage(thumb);
+    if (original) return original;
+  }
+  const expiry = signedThumbnailExpiry(platform, thumb);
   if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
   return thumb;
 }
@@ -1189,12 +1240,11 @@ function isPublishEligibleContentRow(row) {
       r.sourceUrl,
   );
   if (!contentUrl || !publishableThumbnail(r)) return false;
-  if (SAMPLE_SAFE_PREVIEW_PLATFORMS.has(platform) && genericContentTitle(platform, r.title || raw.title)) return false;
-  // Safety rule for the seven recovering SNS sections:
-  // a SAMPLE slot is replaced only when the real content has enough identity
-  // to tell the viewer what/who it is. YouTube/Facebook keep their established
-  // publication contract unchanged.
-  if (SAMPLE_SAFE_PREVIEW_PLATFORMS.has(platform) && !publishableIdentity(r)) return false;
+  // A verified latest-content row is allowed to replace its SAMPLE slot when
+  // the real platform URL and a real, non-provider-chrome thumbnail are both
+  // present. Some providers expose only a generic title/anonymous creator to
+  // server-side metadata requests; that must not discard otherwise valid real
+  // content. The slot mapper supplies a conservative display-title fallback.
   return true;
 }
 function approvedContentRows(rows) {
@@ -1378,12 +1428,14 @@ function publicSocialSlot(row, slotId, defaults) {
     ),
   );
   const sourceUrl = latestContentUrl || text(r.source_url || r.sourceUrl);
+  const publishThumb = publishableThumbnail(r);
   const thumb = text(
-    thumbnailFromCandidate(Object.assign({}, raw, r), {
-      platform: platformHint,
-      sourceUrl,
-      thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
-    }) ||
+    publishThumb ||
+      thumbnailFromCandidate(Object.assign({}, raw, r), {
+        platform: platformHint,
+        sourceUrl,
+        thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
+      }) ||
       base.thumb ||
       base.thumbnail ||
       base.image ||
@@ -1402,12 +1454,28 @@ function publicSocialSlot(row, slotId, defaults) {
       raw.published_at ||
       plain(r.evidence).contentPublishedAt,
   );
+  const rawTitle = decodeEntityText(r.title || raw.title);
+  const creatorLabel = text(
+    r.creator_name || r.creatorName || r.creator_handle || r.creatorHandle,
+  );
+  const providerCreator = /^(?:bing-rss-social|duckduckgo-lite-social|naver(?:-web|-rss)?-social|google(?:-rss)?-social)$/i.test(creatorLabel);
+  const fallbackTitle = decodeEntityText(r.description || raw.description) ||
+    (!providerCreator ? creatorLabel : "") ||
+    (platform === "instagram" ? "Instagram · Reel" :
+      platform === "tiktok" ? "TikTok · Video" :
+      platform === "facebook" ? "Facebook · Post" :
+      platform === "reddit" ? "Reddit · Post" :
+      platform === "pinterest" ? "Pinterest · Pin" :
+      platform === "twitter" ? "X · Post" :
+      platform === "wechat" ? "WeChat · Post" :
+      platform === "weibo" ? "Weibo · Post" : rawTitle);
+  const displayTitle = genericContentTitle(platform, rawTitle) ? fallbackTitle : rawTitle;
   return Object.assign({}, base, {
     slotId: Number(slotId) || Number(base.slotId) || 1,
     id: text(r.id) || "social_" + shortHash({ section, platform, sourceUrl }),
     contentId: text(r.id) || text(base.contentId),
     type: "external_social",
-    title: text(r.title),
+    title: displayTitle,
     url: sourceUrl,
     link: sourceUrl,
     href: sourceUrl,
@@ -1824,6 +1892,8 @@ module.exports = {
   publicSocialSlot,
   providerBrandThumbnail,
   genericContentTitle,
+  signedThumbnailExpiry,
+  stableFacebookExternalImage,
   buildSnapshot,
   slotCandidateId,
   unpublishSnapshot,

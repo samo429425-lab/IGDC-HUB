@@ -11,7 +11,7 @@ const crypto = require("crypto");
 const SlotStore = require("./global-slot-console-supabase");
 const DonationPolicy = require("./donation-research-policy.v1");
 
-const VERSION = "donation-policy-discussion-v1.2.0-official-homepage-strict";
+const VERSION = "donation-policy-discussion-v1.3.0-persistent-research-guidance";
 const PREFIX = "igdc_donation_policy_discussion_";
 const SCOPE_HUB = "donation-control";
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -146,14 +146,14 @@ async function persist(actorId,workspaceInput){
 
 function sectionGuidance(scope){
   const all={
-    "donation-global":"24~48시간 내 전 세계 지진·홍수·산불·전쟁피해·난민·기아·아동·보건·교육·기후·환경 등 지원 필요 이슈. 영상 우선, 실제 인도주의 의미가 있어야 함.",
+    "donation-global":"전 세계 지진·홍수·산불·기아·난민·전쟁으로 인한 민간인·인도주의 피해 등 지원 필요 이슈. UN/OCHA 계열뿐 아니라 BBC·Reuters·AP·Arirang TV·Al Jazeera·DW·France24 등 권위 있는 방송·뉴스와 공식 YouTube/영상 보도를 활용. 영상 우선이되 신뢰 가능한 뉴스 리포트도 허용.",
     "donation-ngo":"국제적·범국가적 공익기관/NGO/국제개발·구호기관. KOICA, UN 계열, Good Neighbors 같은 유형을 연구 앵커로 사용할 수 있으나 공식 출처를 확인.",
-    "donation-mission":"개신교/복음주의 기반의 국제·국가별 선교기관. Lausanne, PAUA, CCC, IVF/InterVarsity, Child Evangelism Fellowship 같은 유형. 접속 국가/IP를 지역화 힌트로 사용. 가톨릭·정교회·이슬람·사이비/이단성 단체 제외.",
+    "donation-mission":"개신교/복음주의 기반의 국제·국가별 선교기관. Lausanne, PAUA, CCC, IVF/InterVarsity, Child Evangelism Fellowship뿐 아니라 해외 기독교 대학·대학협의체·교육선교·캠퍼스·청년·의료·문화·디지털 선교 네트워크도 탐색. 접속 국가/IP를 지역화 힌트로 사용. 타종교·사이비/이단성 단체 제외.",
     "donation-service":"기독교 기반 또는 공익성이 분명한 봉사·의료·주거·지역사회·자원봉사 기관. 공식 홈페이지와 대표 이미지/OG 썸네일 우선.",
     "donation-relief":"World Vision, Food for the Hungry, Samaritan's Purse 같은 재난·기아·난민·긴급구호 유형. 공식 기관 링크·대표 썸네일 우선.",
-    "donation-education":"기독교 교육·아동·청소년·문해·대학·훈련 및 4/14 Window 같은 교육운동 유형. 공식 출처 우선.",
+    "donation-education":"기독교 교육·아동·청소년·문해·대학·훈련·다문화·이주배경 가정 교육 및 기독교 대학/교육선교 네트워크까지 탐색. 공식 출처 우선.",
     "donation-environment":"A Rocha, Plant With Purpose 같은 기독교적 창조보전·산림·물·환경봉사 유형. 정당·선거·당파 캠페인 제외.",
-    "donation-others":"위 7개에 정확히 들어가지 않는 기독교 기반 공익 NGO/비영리 기관. 인권·장애·교정·인신매매 방지·취약계층 지원 등."
+    "donation-others":"위 7개에 정확히 들어가지 않는 기독교 기반 또는 공익성이 분명한 NGO/비영리 기관. 인권·장애·교정·인신매매 방지·이주민·난민가정·다문화·노인·고아·가족지원·상담·중독회복 등."
   };
   if(scope==="all") return all;
   return {[scope]:all[scope]||""};
@@ -209,7 +209,7 @@ async function aiProposal(scope,workspace,instruction,requestedLanguage){
       method:"POST",signal:controller?controller.signal:undefined,
       headers:{"Content-Type":"application/json",Authorization:"Bearer "+key},
       body:JSON.stringify({model,temperature:0.15,response_format:{type:"json_object"},messages:[
-        {role:"system",content:"You are the IGDC Donation administrator AI policy discussion assistant. Work only on Donation. Do not modify or mix Distribution, Social, Media, Network, Tour, Home, shared snapshots, or shared UI. The administrator is deciding research and front-matching direction for all eight Donation sections, and when scope=all you MUST consider every section policy in sectionPolicies together. donation-global is the video/news lane and should use current humanitarian/disaster/environment videos. donation-ngo, donation-mission, donation-service, donation-relief, donation-education, donation-environment, and donation-others are organization/institution OFFICIAL-HOMEPAGE lanes: the final card destination must be the organization or institution official HTTPS homepage root, and the card thumbnail should use that homepage official OG/representative preview image. PDF/report/document URLs, individual article pages, search-result landing pages, YouTube/video URLs, and social/channel URLs may be research evidence only and must not be final card destinations in those seven lanes. For mission content use Protestant/evangelical organizations and exclude Catholic, Orthodox, Islamic, cult/new-religious-movement content. Do not claim verification without evidence. Never publish automatically. Return JSON only with: title, summary, researchQuery, includeTerms[], avoidTerms[], preferredKinds[], destination(one of admin,front_candidate,front), freshnessHours, confidence. destination is only a recommendation; the browser asks the administrator before execution. All natural-language strings must use the administrator language: "+language+"."},
+        {role:"system",content:"You are the IGDC Donation administrator AI policy discussion assistant. Work only on Donation. Do not modify or mix Distribution, Social, Media, Network, Tour, Home, shared snapshots, or shared UI. The administrator is deciding research and front-matching direction for all eight Donation sections, and when scope=all you MUST consider every section policy in sectionPolicies together. donation-global is the humanitarian/news lane: research current floods, earthquakes, wildfire, famine/hunger, refugees/displacement, and civilian hardship caused by major conflicts, using official humanitarian sources plus authoritative broadcasters/newsrooms such as BBC, Reuters, AP, Arirang TV, Al Jazeera, DW and France24; official YouTube/video reports are preferred, but credible authoritative news reports may also be used. donation-ngo, donation-mission, donation-service, donation-relief, donation-education, donation-environment, and donation-others are organization/institution OFFICIAL-HOMEPAGE lanes: the final card destination must be the organization or institution official HTTPS homepage root, and the card thumbnail should use that homepage official OG/representative preview image. PDF/report/document URLs, individual article pages, search-result landing pages, YouTube/video URLs, and social/channel URLs may be research evidence only and must not be final card destinations in those seven lanes. Mission/education research may include Protestant/evangelical university associations, Christian higher-education and cross-cultural education mission networks, while excluding Catholic, Orthodox, Islamic, cult/new-religious-movement content. A saved section agenda is persistent research guidance and should be phrased so later re-research can reuse researchQuery/includeTerms/avoidTerms/preferredKinds/freshnessHours without replacing the section's base anchors. Do not claim verification without evidence. Never publish automatically. Return JSON only with: title, summary, researchQuery, includeTerms[], avoidTerms[], preferredKinds[], destination(one of admin,front_candidate,front), freshnessHours, confidence. destination is only a recommendation; the browser asks the administrator before execution. All natural-language strings must use the administrator language: "+language+"."},
         {role:"user",content:JSON.stringify(payload)}
       ]})
     });
@@ -255,6 +255,7 @@ async function getAgenda(scopeValue,id){
 function executionQuery(agenda){
   const a=plain(agenda),parts=[clean(a.researchQuery,1200)];
   if(array(a.includeTerms).length) parts.push(array(a.includeTerms).slice(0,12).join(" "));
+  if(array(a.preferredKinds).length) parts.push(array(a.preferredKinds).slice(0,6).join(" "));
   if(array(a.avoidTerms).length) parts.push(array(a.avoidTerms).slice(0,10).map(v=>"-"+clean(v,80).replace(/\s+/g," ")).join(" "));
   return clean(parts.filter(Boolean).join(" "),1800);
 }

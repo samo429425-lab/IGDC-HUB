@@ -532,6 +532,7 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
 
   const managedPublished = rec.__donationManagedPublished === true || rec.frontApproved === true || rec.donationQueue?.stage === "published";
   const videoLike = globalVideo && DonationResearchPolicy && DonationResearchPolicy.looksLikeVideo(rec);
+  const authoritativeNewsLike = globalVideo && !videoLike && DonationResearchPolicy && typeof DonationResearchPolicy.isAuthoritativeGlobalNews === "function" && DonationResearchPolicy.isAuthoritativeGlobalNews(rec) && Boolean(policyDestination);
   const mediaUrl = videoLike ? (policyDestination || null) : null;
 
   const sourceRankScore = sourceLooksSeed ? 0 : (rec.rank?.score ? Number(rec.rank.score) : 0);
@@ -554,7 +555,7 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     psom_key: sectionKey,
     category: semanticCategory,
     section_category: sectionKey,
-    type: videoLike ? "video" : "org-slot",
+    type: videoLike ? "video" : (authoritativeNewsLike ? "news" : "org-slot"),
 
     title: pickFirst(rec.title, org_name) || org_name || `Donation Partner ${idx+1}`,
     summary,
@@ -645,8 +646,8 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
     og_image: (!globalVideo ? thumb : (rec.og_image || thumb || null)),
 
     link:{
-      mode: videoLike ? "content-video" : "org-homepage",
-      url: videoLike ? mediaUrl : (homepage || null),
+      mode: videoLike ? "content-video" : (authoritativeNewsLike ? "content-news" : "org-homepage"),
+      url: globalVideo ? (policyDestination || null) : (homepage || null),
       target: "_blank"
     },
 
