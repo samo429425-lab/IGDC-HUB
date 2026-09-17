@@ -332,6 +332,49 @@ function groupBySection(items){
     }
   }
 
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260909-network-tour-compat-v4';
+  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-donation-v1';
+
+  function ensureContainedViewer(){
+    if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') {
+      return Promise.resolve(window.IGDCContainedViewer);
+    }
+    if(window.__IGDC_DONATION_VIEWER_PROMISE__) return window.__IGDC_DONATION_VIEWER_PROMISE__;
+    window.__IGDC_DONATION_VIEWER_PROMISE__ = new Promise(function(resolve,reject){
+      let script=document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
+      const finish=function(){
+        if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') resolve(window.IGDCContainedViewer);
+        else reject(new Error('IGDC contained viewer unavailable'));
+      };
+      if(script){
+        if(script.dataset.loaded==='1'){finish();return;}
+        script.addEventListener('load',finish,{once:true});
+        script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
+        return;
+      }
+      script=document.createElement('script');
+      script.id=CONTAINED_VIEWER_SCRIPT_ID;
+      script.src=CONTAINED_VIEWER_SRC;
+      script.async=true;
+      script.addEventListener('load',function(){script.dataset.loaded='1';finish();},{once:true});
+      script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
+      (document.head||document.documentElement).appendChild(script);
+    }).catch(function(err){ window.__IGDC_DONATION_VIEWER_PROMISE__=null; throw err; });
+    return window.__IGDC_DONATION_VIEWER_PROMISE__;
+  }
+
+  function openContainedHomepage(url,label){
+    const href=safeExternalUrl(url);
+    if(!href) return Promise.resolve(false);
+    return ensureContainedViewer().then(function(viewer){
+      viewer.open(href,{label:String(label||'').trim()||new URL(href).hostname,kind:'donation'});
+      return true;
+    }).catch(function(err){
+      console.warn('[IGDC][Donation] contained viewer unavailable:',err&&err.message?err.message:err);
+      return false;
+    });
+  }
+
 
   function renderCard(it){
     const rawImg = safeUrl(it?.media?.thumb) || '';
@@ -353,7 +396,7 @@ function groupBySection(items){
       ? `<img class="donation-site-thumb" src="${escAttr(img)}" loading="lazy" alt="${title}"><span class="donation-thumb-fallback" aria-hidden="true" style="display:none;width:100%;height:100%;align-items:center;justify-content:center;background:#e5e7eb;color:#9ca3af;font-size:24px">↗</span>`
       : neutralFallback;
     const thumbHtml = url
-      ? `<a class="donation-thumb-link" href="${escAttr(url)}" target="_blank" rel="noopener noreferrer" aria-label="${title}" style="display:block;width:100%;height:100%;cursor:pointer;position:relative;z-index:4;pointer-events:auto">${thumbImage}</a>`
+      ? `<a class="donation-thumb-link" href="${escAttr(url)}" target="_self" rel="noopener noreferrer" aria-label="${title}" style="display:block;width:100%;height:100%;cursor:pointer;position:relative;z-index:4;pointer-events:auto">${thumbImage}</a>`
       : thumbImage;
 
     return `
@@ -388,13 +431,22 @@ function groupBySection(items){
     box.querySelectorAll('a.donation-thumb-link').forEach((a)=>{
       if(a.dataset.donationHomepageBound === '1') return;
       a.dataset.donationHomepageBound = '1';
-      const keepNativeLink = (e)=>{
+      const stopDragBubble = (e)=>{
         if(!safeExternalUrl(a.getAttribute('href'))) return;
         e.stopPropagation();
       };
-      a.addEventListener('pointerdown', keepNativeLink);
-      a.addEventListener('pointerup', keepNativeLink);
-      a.addEventListener('click', keepNativeLink);
+      a.addEventListener('pointerdown', stopDragBubble);
+      a.addEventListener('pointerup', stopDragBubble);
+      a.addEventListener('click', function(e){
+        const url=safeExternalUrl(a.getAttribute('href'));
+        if(!url) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if(typeof e.stopImmediatePropagation==='function') e.stopImmediatePropagation();
+        const card=a.closest('.donation-card');
+        const label=card&&card.querySelector('.card-title')?card.querySelector('.card-title').textContent:'';
+        openContainedHomepage(url,label);
+      });
     });
   }
 
@@ -514,7 +566,7 @@ function mountSection(key, items, limit){
       const card = e.target?.closest?.('.donation-card');
       if(!card) return;
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url){ e.preventDefault(); e.stopPropagation(); window.open(url, '_blank', 'noopener'); }
+      if(url){ e.preventDefault(); e.stopPropagation(); openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || ''); }
     });
 
     document.addEventListener('keydown', (e)=>{
@@ -523,7 +575,7 @@ function mountSection(key, items, limit){
       if(!card) return;
       e.preventDefault();
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url) window.open(url, '_blank', 'noopener');
+      if(url) openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || '');
     });
   }
 

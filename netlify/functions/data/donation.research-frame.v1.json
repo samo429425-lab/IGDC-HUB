@@ -55,7 +55,12 @@
         "humanitarian",
         "emergency"
       ],
-      "policyPurpose": "최신 재난·구호·인도주의 이슈, 영상 우선, 48시간 신선도"
+      "policyPurpose": "최신 재난·구호·인도주의 이슈, 영상 우선, 48시간 신선도",
+      "discoveryQueries": [
+        "latest humanitarian crisis relief official video UN OCHA UNICEF UNHCR WFP IFRC",
+        "latest disaster emergency response official video humanitarian organization",
+        "latest refugee hunger children humanitarian field report official video"
+      ]
     },
     "donation-ngo": {
       "primaryQuery": "NGO nonprofit humanitarian development children aid public interest organization official website homepage",
@@ -354,7 +359,7 @@
       "policyPurpose": "재난·기아·난민·긴급구호 기관"
     },
     "donation-education": {
-      "primaryQuery": "education children youth literacy scholarship school university training nonprofit organization official website homepage",
+      "primaryQuery": "Christian education children youth literacy multicultural migrant family community school university training nonprofit official website homepage",
       "localizeByIp": true,
       "anchors": [
         {
@@ -413,9 +418,20 @@
         "donation",
         "children",
         "youth",
-        "university"
+        "university",
+        "multicultural",
+        "migrant family",
+        "Christian education",
+        "다문화",
+        "이주민 교육"
       ],
-      "policyPurpose": "기독교 교육·아동·청소년·대학·문해·훈련 기관"
+      "policyPurpose": "기독교 교육·아동·청소년·대학·문해·훈련·다문화·이주배경 가정 교육 기관",
+      "discoveryQueries": [
+        "Korea Christian multicultural education nonprofit official website",
+        "대한민국 기독교 다문화 교육 사역 비영리 공식 홈페이지",
+        "Christian multicultural family education ministry Korea official website",
+        "migrant children Christian education Korea nonprofit official website"
+      ]
     },
     "donation-environment": {
       "primaryQuery": "environment conservation climate reforestation biodiversity clean water nonprofit organization official website homepage",

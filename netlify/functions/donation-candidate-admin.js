@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.11.0-curated-homepage-direct-research";
+const VERSION = "donation-candidate-admin-v1.12.0-global-anchor-video-research";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -193,15 +193,26 @@ function researchAnchorState(section,existingViews){
 function researchQuerySpecs(section,customQuery,singleSection,existingViews){
   const sec=Policy.normalizeSection(section)||'donation-ngo',custom=text(customQuery),frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{};
   const out=[{query:researchQuery(sec,custom),kind:custom?'custom':'broad',anchorName:''}];
-  if(!custom&&singleSection&&sec!=='donation-global'){
+  if(!custom&&singleSection){
     const state=researchAnchorState(sec,existingViews);
-    const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query),homepage:safeHttps(a&&a.homepage)};}).filter(function(a){return a.name&&(a.query||a.homepage);});
+    const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query),homepage:safeHttps(a&&a.homepage)};}).filter(function(a){return a.name&&a.query;});
     function stateRank(name){return !state.found.has(name)?0:(!state.ready.has(name)?1:2);}
-    anchors.sort(function(a,b){const d=stateRank(a.name)-stateRank(b.name);if(d)return d;return (a.homepage?0:1)-(b.homepage?0:1);});
-    /* Run only a bounded anchor window. Unseen institutions come first, then
-       known institutions whose homepage thumbnail still needs another preview
-       attempt, and finally already complete anchors. */
-    anchors.slice(0,10).forEach(function(a){out.push({query:a.query||a.name,kind:'anchor',anchorName:a.name,homepage:a.homepage||''});});
+    if(sec==='donation-global'){
+      /* Global News was previously running only one broad query; the curated
+         humanitarian video anchors in the Research Frame were never queried.
+         Use every bounded anchor query so official OCHA/UN/UNICEF/UNHCR/WFP/IFRC
+         video results can enter the normal video validation path. */
+      anchors.slice(0,8).forEach(function(a){out.push({query:a.query,kind:'global-anchor',anchorName:a.name,homepage:''});});
+    }else{
+      anchors.sort(function(a,b){const d=stateRank(a.name)-stateRank(b.name);if(d)return d;return (a.homepage?0:1)-(b.homepage?0:1);});
+      /* Run only a bounded anchor window. Unseen institutions come first, then
+         known institutions whose homepage thumbnail still needs another preview
+         attempt, and finally already complete anchors. */
+      anchors.slice(0,10).forEach(function(a){out.push({query:a.query||a.name,kind:'anchor',anchorName:a.name,homepage:a.homepage||''});});
+    }
+  }
+  if(!custom&&singleSection&&Array.isArray(frame.discoveryQueries)){
+    frame.discoveryQueries.slice(0,4).map(text).filter(Boolean).forEach(function(q){out.push({query:q,kind:'discovery',anchorName:'',homepage:''});});
   }
   const seen=new Set();
   return out.filter(function(spec){const q=text(spec&&spec.query);if(!q||seen.has(q))return false;seen.add(q);return true;});
@@ -404,7 +415,7 @@ function researchParams(section,query,limit){
   const q=text(query)||researchQuery(section,'');
   const frame=Policy.researchFrameFor ? Policy.researchFrameFor(section) : {};
   const global=section==="donation-global";
-  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"4000",discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:global?"video":"web",type:global?"video":"any"};
+  const params={q,query:q,channel:"donation",page:"donation",section,psom_key:section,action:"front-supply",autoFill:"1",external:"force",useExternalSources:"1",limit:String(Math.max(10,Math.min(120,Number(limit)||50))),writeMode:"readonly",mode:"preview",geoPreference:"ip-preferred",adapterAllowList:"donation",sourceTimeoutMs:"4000",discoveryOnly:"1",preserveExactResearchQuery:"1",exactResearchQuery:q,maruSearchType:global?"video":"web",type:"any"};
   if(global){params.mediaPreference="video";params.noMedia="0";params.freshnessHours=String(Number(frame.freshnessHours)||48);}
   else{params.noMedia="1";params.mediaPreference="web";}
   if(section==="donation-mission"||frame.localizeByIp===true){params.localizeByIp="1";params.geoPreference="ip-preferred";}

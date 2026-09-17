@@ -873,6 +873,78 @@ async function main() {
     }
   }
 
+  // Explicit Social publication is isolated from Commerce/Distribution candidate
+  // admission. Preserve the currently-live Distribution/IP artifacts byte-for-byte,
+  // then materialize only the nine managed Social sections from the dedicated Social
+  // bank. A stale or held Commerce review queue must never block an unrelated Social
+  // release. If live Distribution carry-forward cannot be verified, fail closed so
+  // Netlify keeps the previous production deploy instead of rebuilding Distribution
+  // from an unrelated/invalid Commerce queue.
+  if (explicitSocialPublicationInBuild) {
+    const carriedDistribution = await carryForwardPublishedScopedOutputs();
+    if (!carriedDistribution || carriedDistribution.ok !== true) {
+      const error = new Error(
+        "Explicit Social publication could not preserve the currently-live Distribution scoped outputs: " +
+        JSON.stringify(carriedDistribution || null)
+      );
+      error.code = "SOCIAL_DISTRIBUTION_CARRY_FORWARD_FAILED";
+      throw error;
+    }
+
+    let socialSnapshotReport = null;
+    const socialStatus = String(explicitSocialPublication && explicitSocialPublication.status || "").toLowerCase();
+    if (socialStatus === "searchbank_handoff_complete") {
+      const socialBank = loadDedicatedSocialBank();
+      if (!socialBank.ok) {
+        const error = new Error("Explicit Social release completed but its dedicated bank cannot be read.");
+        error.code = "SOCIAL_DEDICATED_BANK_UNAVAILABLE";
+        error.details = socialBank.errors;
+        throw error;
+      }
+      socialSnapshotReport = snapshots.run({ targetPage: "social", bank: socialBank.bank });
+      if (!socialSnapshotReport || socialSnapshotReport.ok !== true) {
+        const error = new Error("Explicit Social Snapshot materialization failed.");
+        error.code = "SOCIAL_SNAPSHOT_MATERIALIZATION_FAILED";
+        throw error;
+      }
+    } else if (socialStatus !== "preserved") {
+      const error = new Error(
+        "Explicit Social publication reached isolated materialization with unexpected status: " +
+        socialStatus
+      );
+      error.code = "EXPLICIT_SOCIAL_UNEXPECTED_STATUS";
+      throw error;
+    }
+
+    process.stdout.write(JSON.stringify({
+      socialIsolation: {
+        incomingSocialIntent,
+        explicitPublication: compactSocialReport(explicitSocialPublication),
+        canonicalCommerceSearchBankMutation: false,
+        commerceCandidateIntake: "not_run_for_social_release",
+        distribution: {
+          mode: "live-byte-for-byte-carry-forward",
+          source: carriedDistribution.source || null,
+          canonicalReleaseId: carriedDistribution.canonicalReleaseId || null,
+          scopedOutputCount: Number(carriedDistribution.scopedOutputCount || 0),
+          rootFallbackCount: Number(carriedDistribution.rootFallbackCount || 0)
+        },
+        dedicatedBank: "data/social-searchbank.release.snapshot.json",
+        socialSnapshot: socialSnapshotReport,
+        rightPanelOwnedBy: "distribution-carried-forward"
+      },
+      snapshotEngine: {
+        ok: !socialSnapshotReport || socialSnapshotReport.ok === true,
+        mode: "social-only-isolated-materialization",
+        socialTarget: socialSnapshotReport,
+        distribution: "carried-forward-unchanged",
+        media: "untouched",
+        donation: "untouched"
+      }
+    }, null, 2) + "\n");
+    return;
+  }
+
   const commerceCheckpoint = createCommerceCheckpoint();
   try {
 

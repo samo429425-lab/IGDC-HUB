@@ -114,9 +114,11 @@ const POLICY = Object.freeze({
     researchTerms:[
       "Christian education mission university children literacy organization official",
       "international education nonprofit school youth student training official",
-      "campus ministry education literacy university mission organization"
+      "campus ministry education literacy university mission organization",
+      "Christian multicultural education migrant family children youth nonprofit official",
+      "faith based multicultural family education migrant children community learning official"
     ],
-    semanticHints:["education","school","student","youth","child","children","scholarship","university","college","training","literacy","campus","teacher","learning"]
+    semanticHints:["education","school","student","youth","child","children","scholarship","university","college","training","literacy","campus","teacher","learning","multicultural","multicultural family","migrant","immigrant","refugee education","다문화","이주민","이주배경","다문화가정","대안교육","방과후"]
   },
   "donation-environment": {
     category:"environment",
