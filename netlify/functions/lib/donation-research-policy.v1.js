@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.5.0-homepage-identity-strict";
+const VERSION = "donation-research-policy-v1.6.0-curated-homepage-identity";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -169,7 +169,7 @@ function researchFrameFor(value){
     psomLabel:text(frame.psomLabel),
     psomKeywords:Array.isArray(frame.psomKeywords)?frame.psomKeywords.map(text).filter(Boolean):[],
     policyPurpose:text(frame.policyPurpose),
-    anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({name:text(a&&a.name),query:text(a&&a.query)})).filter(a=>a.name||a.query) : []
+    anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({name:text(a&&a.name),query:text(a&&a.query),homepage:httpsUrl(a&&a.homepage)})).filter(a=>a.name||a.query||a.homepage) : []
   };
 }
 function policyFor(value){
@@ -339,22 +339,43 @@ function anchorIdentityScore(record,anchorName){
   }
   return best;
 }
-function matchesResearchAnchor(record,anchorName){
+function researchAnchorHomepage(sectionValue,anchorName){
+  const section=normalizeSection(sectionValue); if(!section||!text(anchorName)) return "";
+  const wanted=identityText(anchorName);
+  for(const anchor of researchFrameFor(section).anchors||[]){
+    if(identityText(anchor&&anchor.name)!==wanted) continue;
+    const homepage=canonicalOrganizationHomepageUrl(anchor&&anchor.homepage);
+    if(homepage) return homepage;
+  }
+  return "";
+}
+function sameHomepageHost(a,b){
+  const aa=canonicalOrganizationHomepageUrl(a),bb=canonicalOrganizationHomepageUrl(b);
+  if(!aa||!bb) return false;
+  return urlHost(aa).replace(/^www\./,"")===urlHost(bb).replace(/^www\./,"");
+}
+function matchesResearchAnchor(record,anchorName,sectionValue){
   const variants=anchorNameVariants(anchorName);
   if(!variants.length||genericAnchorName(anchorName)) return false;
+  /* If the research frame already knows the institution's official homepage,
+     host equality is the identity proof. This prevents an anchor such as
+     "International Justice Mission" from matching justice.gov merely because
+     a report contains the words justice/mission. */
+  const expected=researchAnchorHomepage(sectionValue,anchorName);
+  if(expected) return sameHomepageHost(organizationHomepageUrl(record),expected);
   const score=anchorIdentityScore(record,anchorName);
   /* One-token proper names/acronyms (KOICA, UNICEF, WWF, PAUA...) need an
      exact homepage title/host hit. Multi-token names need a strong majority. */
   const meaningful=variants.flatMap(v=>v.split(" ")).filter(t=>t.length>=2&&!/^(?:international|organization|organisation|official|website|homepage|korea|korean)$/.test(t));
-  return meaningful.length<=1 ? score>=80 : score>=60;
+  return meaningful.length<=1 ? score>=80 : score>=70;
 }
 function matchedResearchAnchorName(record,sectionValue){
   const section=normalizeSection(sectionValue)||inferSection(record), frame=researchFrameFor(section), r=plain(record), preview=plain(r.sitePreview||r.site_preview);
   const explicit=text(r.researchAnchor||r.matchedResearchAnchor||r.research_anchor||preview.researchAnchor);
-  if(explicit && matchesResearchAnchor(r,explicit)) return explicit;
+  if(explicit && matchesResearchAnchor(r,explicit,section)) return explicit;
   for(const anchor of frame.anchors||[]){
     const name=text(anchor&&anchor.name); if(!name||genericAnchorName(name)) continue;
-    if(matchesResearchAnchor(r,name)) return name;
+    if(matchesResearchAnchor(r,name,section)) return name;
   }
   return "";
 }
@@ -362,6 +383,12 @@ function sectionIdentityEligible(record,sectionValue){
   const section=normalizeSection(sectionValue)||inferSection(record);
   if(section==="donation-global") return true;
   const homepage=organizationHomepageUrl(record); if(!homepage) return false;
+  const r=plain(record),preview=plain(r.sitePreview||r.site_preview);
+  const explicit=text(r.researchAnchor||r.matchedResearchAnchor||r.research_anchor||preview.researchAnchor);
+  /* A named anchor must never be silently reclassified as broad discovery when
+     it resolves to the wrong host. Keep it in research/hold instead of allowing
+     a false-positive official card onto the public snapshot. */
+  if(explicit && !genericAnchorName(explicit) && !matchesResearchAnchor(r,explicit,section)) return false;
   if(matchedResearchAnchorName(record,section)) return true;
 
   /* For broad discovery, classify only the canonical homepage metadata. Never
@@ -527,5 +554,5 @@ function youtubeThumbnail(record){
 module.exports={
   VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,researchFrameFor,researchAnchors,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,
   missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls,
-  organizationWebsiteUrls,organizationHomepageUrl,canonicalOrganizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isDocumentUrl,isContentAggregatorHost,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection,homepageIdentityText,anchorIdentityScore,matchesResearchAnchor,genericAnchorName,matchedResearchAnchorName,sectionIdentityEligible
+  organizationWebsiteUrls,organizationHomepageUrl,canonicalOrganizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isDocumentUrl,isContentAggregatorHost,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection,homepageIdentityText,anchorIdentityScore,researchAnchorHomepage,matchesResearchAnchor,genericAnchorName,matchedResearchAnchorName,sectionIdentityEligible
 };

@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.3.0-canonical-preview-creator";
+const VERSION = "social-preview-metadata-v1.5.0-real-media-validated";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -61,6 +61,114 @@ function safeProviderUrl(platform, value) {
   } catch (_error) {
     return "";
   }
+}
+
+
+function facebookSignedThumbnailExpiry(value) {
+  try {
+    const url = new URL(text(value).trim());
+    if (!/(^|\.)fbcdn\.net$/i.test(url.hostname)) return 0;
+    const token = url.searchParams.get("oe");
+    if (!token || !/^[0-9a-f]+$/i.test(token)) return 0;
+    const seconds = parseInt(token, 16);
+    return Number.isFinite(seconds) ? seconds * 1000 : 0;
+  } catch (_error) { return 0; }
+}
+
+function previewImageUrl(platform, value) {
+  const raw = decodeHtml(text(value)).trim();
+  if (!/^https:\/\//i.test(raw)) return "";
+  try {
+    const url = new URL(raw);
+    if (url.username || url.password) return "";
+    if (url.port && url.port !== "443") return "";
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const path = url.pathname.toLowerCase();
+    const full = (host + path + url.search).toLowerCase();
+
+    // Search/provider pages frequently expose JavaScript, CSS, sprites or brand
+    // chrome in the same fields that normally contain a post image. None of
+    // those may consume a real Social slot.
+    if (/\.(?:js|mjs|css|map|json|html?|xml)(?:$|[?#])/i.test(raw)) return "";
+    if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(full)) return "";
+
+    if (platform === "instagram") {
+      if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return "";
+      if (/\/rsrc\.php(?:$|[/?#])/i.test(path)) return "";
+      const allowed = /(^|\.)cdninstagram\.com$/i.test(host) || /(^|\.)fbcdn\.net$/i.test(host) || /(^|\.)instagram\.com$/i.test(host);
+      if (!allowed) return "";
+      // A normal Instagram post/reel page is HTML, not an image. Only its
+      // provider-owned /media/ endpoint is acceptable on instagram.com itself.
+      if (/(^|\.)instagram\.com$/i.test(host) && !/^\/(?:p|reel|reels|tv)\/[^/]+\/media\/?$/i.test(path)) return "";
+    }
+
+    if (platform === "facebook") {
+      // facebook.com post/watch URLs are pages, not image previews.
+      if (/(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path + url.search)) return "";
+      const expiry = facebookSignedThumbnailExpiry(url.toString());
+      if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
+    }
+
+    if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return "";
+    return url.toString();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function instagramMediaUrl(contentUrl) {
+  try {
+    const u = new URL(contentUrl);
+    const m = u.pathname.match(/^\/(?:p|reel|reels|tv)\/([^/?#]+)/i);
+    return m ? "https://www.instagram.com/p/" + encodeURIComponent(m[1]) + "/media/?size=l" : "";
+  } catch (_error) { return ""; }
+}
+
+function safeInstagramMediaTarget(value) {
+  const raw = text(value).trim();
+  if (!/^https:\/\//i.test(raw)) return "";
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const allowed = /(^|\.)instagram\.com$/i.test(host) || /(^|\.)cdninstagram\.com$/i.test(host) || /(^|\.)fbcdn\.net$/i.test(host);
+    if (!allowed || host === "static.cdninstagram.com") return "";
+    return url.toString();
+  } catch (_error) { return ""; }
+}
+
+async function resolveInstagramMedia(contentUrl) {
+  let current = instagramMediaUrl(contentUrl);
+  if (!current) return "";
+  for (let hop = 0; hop < 4; hop += 1) {
+    try {
+      const response = await fetchWithTimeout(current, {
+        method: "GET",
+        redirect: "manual",
+        headers: {
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+          "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          "accept-language": "en-US,en;q=0.8"
+        }
+      }, TIMEOUT_MS);
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers && response.headers.get ? response.headers.get("location") : "";
+        if (!location) return "";
+        const next = safeInstagramMediaTarget(new URL(location, current).toString());
+        if (!next) return "";
+        current = next;
+        continue;
+      }
+      const type = text(response.headers && response.headers.get && response.headers.get("content-type")).toLowerCase();
+      if (response.body && typeof response.body.cancel === "function") {
+        try { await response.body.cancel(); } catch (_error) {}
+      }
+      if (!response.ok || !/^image\//i.test(type)) return "";
+      return previewImageUrl("instagram", response.url || current) || current;
+    } catch (_error) {
+      return "";
+    }
+  }
+  return "";
 }
 
 function decodeHtml(value) {
@@ -121,39 +229,43 @@ function htmlTitle(html) {
   return match ? stripTags(match[1]) : "";
 }
 
-function htmlImage(html) {
+function htmlImage(html, platform) {
   const meta = metaMap(html);
-  let image = firstMeta(meta, [
+  const metaKeys = [
     "og:image:secure_url", "og:image", "twitter:image", "twitter:image:src",
     "thumbnailurl", "thumbnail", "image"
-  ]);
-  if (image && /^https:\/\//i.test(image)) return decodeHtml(image);
+  ];
+  for (const key of metaKeys) {
+    const image = previewImageUrl(platform, meta && meta[key]);
+    if (image) return image;
+  }
 
   const raw = text(html);
   const patterns = [
-    /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/i,
-    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"<>]*)"/i,
-    /(?:poster|data-poster|data-thumb|data-thumbnail)=["'](https:\/\/[^"'<>]+)["']/i,
-    /background-image\s*:\s*url\(["']?(https:\/\/[^"')<>]+)["']?\)/i
+    /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/ig,
+    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"<>]*)"/ig,
+    /(?:poster|data-poster|data-thumb|data-thumbnail)=["'](https:\/\/[^"'<>]+)["']/ig,
+    /background-image\s*:\s*url\(["']?(https:\/\/[^"')<>]+)["']?\)/ig
   ];
   for (const pattern of patterns) {
-    const match = raw.match(pattern);
-    if (match && match[1]) {
-      image = decodeHtml(match[1]);
-      if (/^https:\/\//i.test(image)) return image;
+    let match;
+    while ((match = pattern.exec(raw))) {
+      const image = previewImageUrl(platform, match[1]);
+      if (image) return image;
     }
   }
 
-  // Last-resort CDN URL scan. Keep the host close to the scheme so arbitrary
-  // page text cannot be mistaken for an image URL.
-  const generic = raw.match(/https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"'<>\s]*/i);
-  if (generic && generic[0]) {
-    image = decodeHtml(generic[0]);
-    if (/^https:\/\//i.test(image)) return image;
+  // Last-resort CDN scan: keep walking after a bad provider UI asset. The old
+  // first-match behavior is what allowed Instagram rsrc/.js and Weibo login
+  // bundles to win before the actual media URL later in the document.
+  const genericRe = /https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"'<>\s]*/ig;
+  let generic;
+  while ((generic = genericRe.exec(raw))) {
+    const image = previewImageUrl(platform, generic[0]);
+    if (image) return image;
   }
   return "";
 }
-
 
 function htmlCreator(platform, html) {
   const meta = metaMap(html);
@@ -324,21 +436,13 @@ async function fetchEmbedPreview(platform, contentUrl) {
     if (html.length > MAX_HTML_BYTES) html = html.slice(0, MAX_HTML_BYTES);
     return {
       title: htmlTitle(html),
-      thumbnailUrl: htmlImage(html),
+      thumbnailUrl: htmlImage(html, platform),
       creatorName: htmlCreator(platform, html),
       source: "provider-embed-meta"
     };
   } catch (_error) {
     return { title: "", thumbnailUrl: "", creatorName: "", source: "embed-error" };
   }
-}
-
-function instagramMediaFallback(contentUrl) {
-  try {
-    const u = new URL(contentUrl);
-    const m = u.pathname.match(/^\/(?:p|reel|reels|tv)\/([^/?#]+)/i);
-    return m ? "https://www.instagram.com/p/" + encodeURIComponent(m[1]) + "/media/?size=l" : "";
-  } catch (_error) { return ""; }
 }
 
 async function resolvePreview(platform, contentUrl) {
@@ -371,8 +475,8 @@ async function resolvePreview(platform, contentUrl) {
   const oeTitle = stripTags(oe && (oe.title || oe.author_name || ""));
   const oeCreator = stripTags(oe && (oe.author_name || oe.author || ""));
   const oeChannelUrl = safeProviderUrl(platform, oe && (oe.author_url || oe.authorUrl || ""));
-  const oeThumb = decodeHtml(oe && (oe.thumbnail_url || oe.thumbnailUrl || ""));
-  if (oeThumb && /^https:\/\//i.test(oeThumb)) {
+  const oeThumb = previewImageUrl(platform, decodeHtml(oe && (oe.thumbnail_url || oe.thumbnailUrl || "")));
+  if (oeThumb) {
     return {
       resolvedUrl: workingUrl,
       title: oeTitle,
@@ -384,7 +488,8 @@ async function resolvePreview(platform, contentUrl) {
   }
 
   const embed = await fetchEmbedPreview(platform, workingUrl);
-  if (embed.thumbnailUrl && /^https:\/\//i.test(embed.thumbnailUrl)) {
+  embed.thumbnailUrl = previewImageUrl(platform, embed.thumbnailUrl);
+  if (embed.thumbnailUrl) {
     return {
       resolvedUrl: workingUrl,
       title: embed.title || oeTitle,
@@ -402,8 +507,8 @@ async function resolvePreview(platform, contentUrl) {
   const title = htmlTitle(page.html) || embed.title || oeTitle;
   const creatorName = htmlCreator(platform, page.html) || embed.creatorName || oeCreator;
   const resolvedUrl = safeProviderUrl(platform, page.url) || workingUrl;
-  const thumbnailUrl = htmlImage(page.html) || embed.thumbnailUrl || oeThumb ||
-    (platform === "instagram" ? instagramMediaFallback(resolvedUrl) : "");
+  let thumbnailUrl = htmlImage(page.html, platform) || previewImageUrl(platform, embed.thumbnailUrl) || previewImageUrl(platform, oeThumb);
+  if (!thumbnailUrl && platform === "instagram") thumbnailUrl = await resolveInstagramMedia(resolvedUrl);
   return {
     resolvedUrl,
     title,
@@ -454,6 +559,8 @@ exports.handler = async function handler(event) {
 
 // Collector-side reuse: enrich before snapshot/front publication; no per-card browser fetch.
 exports.resolvePreview = resolvePreview;
+exports.previewImageUrl = previewImageUrl;
+exports.facebookSignedThumbnailExpiry = facebookSignedThumbnailExpiry;
 
 exports.__test = {
   normalizePlatform,
@@ -463,6 +570,10 @@ exports.__test = {
   htmlTitle,
   htmlImage,
   htmlCreator,
+  facebookSignedThumbnailExpiry,
+  previewImageUrl,
+  instagramMediaUrl,
+  resolveInstagramMedia,
   shortProviderUrl,
   facebookIsVideo,
   providerEmbedPreviewUrl,

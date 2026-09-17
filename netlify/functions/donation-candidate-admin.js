@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.10.1-official-homepage-research-coverage";
+const VERSION = "donation-candidate-admin-v1.11.0-curated-homepage-direct-research";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -195,13 +195,13 @@ function researchQuerySpecs(section,customQuery,singleSection,existingViews){
   const out=[{query:researchQuery(sec,custom),kind:custom?'custom':'broad',anchorName:''}];
   if(!custom&&singleSection&&sec!=='donation-global'){
     const state=researchAnchorState(sec,existingViews);
-    const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query)};}).filter(function(a){return a.name&&a.query;});
+    const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query),homepage:safeHttps(a&&a.homepage)};}).filter(function(a){return a.name&&(a.query||a.homepage);});
     function stateRank(name){return !state.found.has(name)?0:(!state.ready.has(name)?1:2);}
-    anchors.sort(function(a,b){return stateRank(a.name)-stateRank(b.name);});
+    anchors.sort(function(a,b){const d=stateRank(a.name)-stateRank(b.name);if(d)return d;return (a.homepage?0:1)-(b.homepage?0:1);});
     /* Run only a bounded anchor window. Unseen institutions come first, then
        known institutions whose homepage thumbnail still needs another preview
        attempt, and finally already complete anchors. */
-    anchors.slice(0,10).forEach(function(a){out.push({query:a.query,kind:'anchor',anchorName:a.name});});
+    anchors.slice(0,10).forEach(function(a){out.push({query:a.query||a.name,kind:'anchor',anchorName:a.name,homepage:a.homepage||''});});
   }
   const seen=new Set();
   return out.filter(function(spec){const q=text(spec&&spec.query);if(!q||seen.has(q))return false;seen.add(q);return true;});
@@ -298,27 +298,27 @@ function isDirectHomepageResult(item,homepage){
   }
   return false;
 }
-function directHomepageAnchorMatch(item,homepage,anchorName){
+function directHomepageAnchorMatch(item,homepage,anchorName,section){
   if(!text(anchorName)||!isDirectHomepageResult(item,homepage)||!Policy.matchesResearchAnchor)return false;
   const r=plain(item),org=plain(r.org),display=plain(r.displayCard);
   const title=limitText(r.title||r.name||org.name||display.title||'',300);
   if(!title)return false;
   const probe={url:homepage,homepage,official_url:homepage,org:{homepage},sitePreview:{homepage,title,description:'',identityVerified:false},homepageTitle:title,homepageDescription:''};
-  try{return Policy.matchesResearchAnchor(probe,anchorName);}catch(_e){return false;}
+  try{return Policy.matchesResearchAnchor(probe,anchorName,section);}catch(_e){return false;}
 }
-function anchorDiscoveryScore(entry){
+function anchorDiscoveryScore(entry,section){
   const raw=plain(entry&&entry.item),homepage=safeHttps(entry&&entry.homepage),anchorName=text(entry&&entry.spec&&entry.spec.anchorName);
   let score=Number(entry&&entry.score||0)||0;
   if(!homepage||!anchorName)return score;
   if(isDirectHomepageResult(raw,homepage))score+=240;
-  if(directHomepageAnchorMatch(raw,homepage,anchorName))score+=700;
+  if(directHomepageAnchorMatch(raw,homepage,anchorName,section))score+=700;
   /* Raw search-result identity is ranking evidence only. Final acceptance below
      still requires homepage metadata, except for a direct-root named-anchor hit. */
   if(Policy.matchesResearchAnchor){
     const org=plain(raw.org),display=plain(raw.displayCard),title=limitText(raw.title||raw.name||org.name||display.title||'',300),summary=limitText(raw.summary||raw.description||raw.snippet||display.summary||'',600);
     if(title){
       const probe={url:homepage,homepage,official_url:homepage,org:{homepage},sitePreview:{homepage,title,description:summary,identityVerified:false},homepageTitle:title,homepageDescription:summary};
-      try{if(Policy.matchesResearchAnchor(probe,anchorName))score+=180;}catch(_e){}
+      try{if(Policy.matchesResearchAnchor(probe,anchorName,section))score+=180;}catch(_e){}
     }
   }
   return score;
@@ -543,7 +543,12 @@ async function performResearch(event,section,customQuery,limit){
     const started=Date.now();let results=[];
     try{
       const researchEvent=donationResearchEvent(event);
-      results=await mapLimit(specs,4,async function(spec){
+      /* Curated frame homepages do not need a search-engine round trip. SearchBank
+         remains the discovery engine for the broad query and for anchors whose
+         homepage is not yet known, while known official roots are verified
+         directly and then enter the same candidate -> SearchBank publish path. */
+      const searchableSpecs=specs.filter(function(spec){return !(spec.kind==='anchor'&&safeHttps(spec.homepage));});
+      results=await mapLimit(searchableSpecs,4,async function(spec){
         const perQueryLimit=spec.kind==='anchor'?8:Math.min(30,Number(limit)||30);
         try{return {spec,result:await SearchBank.runEngine(researchEvent,researchParams(sec,spec.query,perQueryLimit))};}
         catch(error){return {spec,error};}
@@ -554,10 +559,25 @@ async function performResearch(event,section,customQuery,limit){
     const rawEntries=[],adapterMeta=[],errors=[];
     results.forEach(function(entry){
       if(entry&&entry.error){errors.push(text(entry.error&&entry.error.message||entry.error));return;}
-      const result=entry&&entry.result,meta=plain(result&&result.meta),spec=entry&&entry.spec||{query,kind:'broad',anchorName:''};
+      const result=entry&&entry.result,meta=plain(result&&result.meta),spec=entry&&entry.spec||{query,kind:'broad',anchorName:'',homepage:''};
       if(Array.isArray(result&&result.items))result.items.forEach(function(item){rawEntries.push({item,spec});});
       if(Array.isArray(meta.adapters))adapterMeta.push(...meta.adapters);
     });
+    if(sec!=='donation-global'){
+      specs.filter(function(spec){return spec.kind==='anchor'&&safeHttps(spec.homepage);}).forEach(function(spec){
+        const homepage=safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(spec.homepage):spec.homepage);
+        if(!homepage)return;
+        rawEntries.push({
+          spec:Object.assign({},spec,{kind:'anchor-direct'}),
+          item:{
+            title:spec.anchorName,name:spec.anchorName,url:homepage,homepage,official_url:homepage,section:sec,psom_key:sec,channel:'donation',page:'donation',
+            org:{name:spec.anchorName,homepage},link:{url:homepage,mode:'org-homepage',target:'_blank'},
+            source:{name:'donation-research-frame',url:homepage,authority:1},
+            donationResearch:{kind:'anchor-direct',query:spec.query,anchor:spec.anchorName,identityVerified:true}
+          }
+        });
+      });
+    }
     const meta={adapters:adapterMeta},writes=[],seen=new Set();
     let skippedPolicy=0,skippedSearchLanding=0,officialHomepageCount=0,globalVideoCount=0,previewResolved=0,skippedExcluded=0,identityRejected=0;
 
@@ -598,7 +618,7 @@ async function performResearch(event,section,customQuery,limit){
       }
       const anchorGroups=new Map(),broad=[];
       for(const entry of bySpecHome.values()){
-        if(entry.spec&&entry.spec.kind==='anchor'&&entry.spec.anchorName){
+        if(entry.spec&&/^anchor/.test(text(entry.spec.kind))&&entry.spec.anchorName){
           if(!anchorGroups.has(entry.spec.anchorName))anchorGroups.set(entry.spec.anchorName,[]);
           anchorGroups.get(entry.spec.anchorName).push(entry);
         }else broad.push(entry);
@@ -608,23 +628,25 @@ async function performResearch(event,section,customQuery,limit){
         /* Search engines can return a report/PDF ahead of the official homepage.
            Prefer direct-root/name-matching hits and keep one backup domain so a
            single noisy result cannot suppress the actual organization site. */
-        roots.push(...group.sort(function(a,b){return anchorDiscoveryScore(b)-anchorDiscoveryScore(a);}).slice(0,2));
+        roots.push(...group.sort(function(a,b){return anchorDiscoveryScore(b,sec)-anchorDiscoveryScore(a,sec);}).slice(0,2));
       }
       roots.push(...broad.sort(function(a,b){return b.score-a.score;}).slice(0,sections.length>1?2:4));
       const enriched=await mapLimit(roots,sections.length>1?4:6,async function(entry){
-        const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?1800:2800);
+        const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?2200:4800);
         const home=preview.homepage||entry.homepage,raw=plain(entry.item),spec=entry.spec||{kind:'broad',anchorName:'',query};
         const directResult=isDirectHomepageResult(raw,entry.homepage);
         const rawTitle=limitText(raw.title||raw.name||plain(raw.org).name||plain(raw.displayCard).title||'',300);
         const rawSummary=limitText(raw.summary||raw.description||raw.snippet||plain(raw.displayCard).summary||'',1800);
         const probe={url:home,homepage:home,official_url:home,org:{homepage:home},sitePreview:{homepage:home,title:preview.title||'',description:preview.description||'',identityVerified:false},homepageTitle:preview.title||'',homepageDescription:preview.description||''};
-        const namedAnchor=spec.kind==='anchor'&&!((Policy.genericAnchorName&&Policy.genericAnchorName(spec.anchorName))||!text(spec.anchorName));
-        const previewAnchorVerified=namedAnchor&&Policy.matchesResearchAnchor&&Policy.matchesResearchAnchor(probe,spec.anchorName);
+        const namedAnchor=/^anchor/.test(text(spec.kind))&&!((Policy.genericAnchorName&&Policy.genericAnchorName(spec.anchorName))||!text(spec.anchorName));
+        const expectedHomepage=safeHttps(spec.homepage||(Policy.researchAnchorHomepage&&Policy.researchAnchorHomepage(sec,spec.anchorName)));
+        const expectedHostVerified=!!(namedAnchor&&expectedHomepage&&safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(home):home)===safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(expectedHomepage):expectedHomepage));
+        const previewAnchorVerified=namedAnchor&&Policy.matchesResearchAnchor&&Policy.matchesResearchAnchor(probe,spec.anchorName,sec);
         /* If an official site blocks server-side preview fetches, a direct-root
            search result may still prove a named anchor. Never use this fallback
            for deep PDF/article URLs or broad discovery. */
-        const directAnchorVerified=namedAnchor&&!previewAnchorVerified&&directHomepageAnchorMatch(raw,entry.homepage,spec.anchorName);
-        const anchorVerified=!!(previewAnchorVerified||directAnchorVerified);
+        const directAnchorVerified=namedAnchor&&!expectedHostVerified&&!previewAnchorVerified&&directHomepageAnchorMatch(raw,entry.homepage,spec.anchorName,sec);
+        const anchorVerified=!!(expectedHostVerified||previewAnchorVerified||directAnchorVerified);
         const matchedAnchor=anchorVerified?spec.anchorName:(Policy.matchedResearchAnchorName?Policy.matchedResearchAnchorName(probe,sec):'');
         const identityVerified=!!(anchorVerified||matchedAnchor||(Policy.sectionIdentityEligible&&Policy.sectionIdentityEligible(probe,sec)));
         if(!identityVerified)return {rejected:true,reason:'homepage_identity_mismatch'};
@@ -670,7 +692,7 @@ async function performResearch(event,section,customQuery,limit){
         writes.push({id:rowId,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Verified official organization homepage + homepage representative preview.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
     }
-    return {section:sec,query,queries,queryPlan:specs.map(function(x){return {kind:x.kind,anchorName:x.anchorName||null,query:x.query};}),accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,identityRejected,officialHomepageCount,globalVideoCount,previewResolved,engineItems:rawEntries.length,durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
+    return {section:sec,query,queries,queryPlan:specs.map(function(x){return {kind:x.kind,anchorName:x.anchorName||null,homepage:x.homepage||null,query:x.query};}),accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,identityRejected,officialHomepageCount,globalVideoCount,previewResolved,engineItems:rawEntries.length,durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
   }
 
   const sectionResults=[];const concurrency=section==="all"?2:1;
@@ -737,6 +759,11 @@ async function autoStage(section,targetStage,actor){
       // official HTTPS destination + representative thumbnail + section policy.
       // Manual review stages remain available for incomplete research records.
       if((targetStage==="front_candidate"||targetStage==="published")&&!Policy.usablePublicCandidate(v.candidate,sec)) continue;
+      if(sec!=="donation-global"&&(targetStage==="front_candidate"||targetStage==="published")){
+        const anchor=Policy.matchedResearchAnchorName?Policy.matchedResearchAnchorName(v.candidate,sec):"";
+        const research=plain(v.candidate&&v.candidate.donationResearch);
+        if(!anchor && /^broad$/i.test(text(research.kind))) continue;
+      }
       if(sec==="donation-mission"&&Policy.missionExcluded(v.candidate)) continue;
       selected.push(v);
     }

@@ -10,7 +10,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialPreview = require("./social-preview-metadata");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "social-candidate-action-v1.4.2-public-preview-api";
+const VERSION = "social-candidate-action-v1.5.1-preview-expiry-repair";
 const ACTIONS = new Set([
   "approve",
   "hold",
@@ -339,18 +339,26 @@ exports.handler = async function (event) {
           const thumb = SocialStore.text(preview && preview.thumbnailUrl);
           const resolvedTitle = SocialStore.compact(preview && preview.title, 500);
           const resolvedCreator = SocialStore.compact(preview && preview.creatorName, 220);
-          if (!/^https:\/\//i.test(thumb) && !resolvedTitle && !resolvedCreator) return [];
+          const currentThumb = SocialStore.text(row.thumbnail_url || row.thumbnailUrl || raw.thumbnailUrl || raw.thumbnail_url);
+          const currentPublishable = SocialStore.publishableThumbnail
+            ? SocialStore.publishableThumbnail(row)
+            : currentThumb;
+          const resolvedThumb = SocialPreview && typeof SocialPreview.previewImageUrl === "function"
+            ? SocialPreview.previewImageUrl(platform, thumb)
+            : (/^https:\/\//i.test(thumb) && !/placeholder|\/assets\/sample\//i.test(thumb) ? thumb : "");
+          if (!resolvedThumb && !resolvedTitle && !resolvedCreator && !currentThumb) return [];
           const currentTitle = SocialStore.text(row.title);
           const genericTitle = !currentTitle || new RegExp("^(" + platform.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "|x|twitter|instagram|tiktok|wechat|weibo|pinterest|reddit)$", "i").test(currentTitle);
-          const currentCreator = SocialStore.text(row.creator_name || row.creatorName || row.creator_handle || row.creatorHandle);
+          const currentCreator = SocialStore.text(row.creator_name || row.creatorName || row.creator_handle || row.creatorHandle).replace(/^(false|null|undefined)$/i, "");
           const nextRaw = Object.assign({}, raw, {
             previewHydratedAt: now,
             previewHydratedSource: SocialStore.text(preview && preview.source),
             previewResolvedUrl: SocialStore.text(preview && preview.resolvedUrl || contentUrl)
           });
           const patch = { raw: nextRaw, updated_by: by, updated_at: now };
-          if (/^https:\/\//i.test(thumb) && !/placeholder|\/assets\/sample\//i.test(thumb)) patch.thumbnail_url = thumb;
-          if (resolvedTitle && genericTitle) patch.title = resolvedTitle;
+          if (resolvedThumb) patch.thumbnail_url = resolvedThumb;
+          else if (currentThumb && !currentPublishable) patch.thumbnail_url = null;
+          if (resolvedTitle && genericTitle && !(SocialStore.genericContentTitle && SocialStore.genericContentTitle(platform, resolvedTitle))) patch.title = resolvedTitle;
           if (resolvedCreator && !currentCreator) patch.creator_name = resolvedCreator;
           return SocialStore.updateCandidates([row.id], patch);
         }));

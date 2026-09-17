@@ -13,7 +13,7 @@ const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
 
 const VERSION =
-  "social-candidate-store-v1.9.2-seven-sns-sample-safe";
+  "social-candidate-store-v1.10.1-preview-expiry-recovery";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1069,6 +1069,33 @@ function isApprovedInfluencer(row) {
     !!channelIdentity(r)
   );
 }
+function providerBrandThumbnail(platform, value) {
+  const raw = text(value);
+  if (!/^https:\/\//i.test(raw)) return false;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const path = (url.pathname + url.search).toLowerCase();
+    if (/\.(?:js|mjs|css|map|json|html?|xml)(?:$|[?#])/i.test(raw)) return true;
+    if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(path)) return true;
+    if (platform === "instagram") {
+      if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return true;
+      if (/\/rsrc\.php(?:$|[/?#])/i.test(url.pathname)) return true;
+      if (/instagram[^/]*(?:logo|glyph)|(?:logo|glyph)[^/]*instagram/i.test(path)) return true;
+    }
+    if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return true;
+    if (platform === "facebook" && /(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path)) return true;
+    return false;
+  } catch (_error) { return true; }
+}
+function genericContentTitle(platform, value) {
+  const title = text(value).replace(/\s+/g, " ").trim();
+  if (!title) return true;
+  if (/^loading[.…]*$/i.test(title)) return true;
+  if (/^(?:instagram|tiktok|wechat|weibo|pinterest|reddit|twitter|x|facebook|youtube)(?:\s+(?:post|reel|video|pin|content|item))?$/i.test(title)) return true;
+  const p = text(platform).replace(/^social-/, "").replace(/^x$/, "twitter");
+  return !!p && title.toLowerCase() === p.toLowerCase();
+}
 function facebookSignedThumbnailExpiry(value) {
   try {
     const url = new URL(text(value));
@@ -1105,6 +1132,7 @@ function publishableThumbnail(row) {
   });
   if (!/^https:\/\//i.test(thumb) || sameHttpsUrl(thumb, contentUrl)) return "";
   if (/placeholder|\/assets\/sample\//i.test(thumb)) return "";
+  if (providerBrandThumbnail(platform, thumb)) return "";
   const expiry = facebookSignedThumbnailExpiry(thumb);
   if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
   return thumb;
@@ -1161,6 +1189,7 @@ function isPublishEligibleContentRow(row) {
       r.sourceUrl,
   );
   if (!contentUrl || !publishableThumbnail(r)) return false;
+  if (SAMPLE_SAFE_PREVIEW_PLATFORMS.has(platform) && genericContentTitle(platform, r.title || raw.title)) return false;
   // Safety rule for the seven recovering SNS sections:
   // a SAMPLE slot is replaced only when the real content has enough identity
   // to tell the viewer what/who it is. YouTube/Facebook keep their established
@@ -1793,6 +1822,8 @@ module.exports = {
   rowScore,
   selectRotation,
   publicSocialSlot,
+  providerBrandThumbnail,
+  genericContentTitle,
   buildSnapshot,
   slotCandidateId,
   unpublishSnapshot,

@@ -1478,13 +1478,45 @@
   }
 
 
+  function facebookPreviewExpired(value) {
+    try {
+      var u = new URL(text(value), location.href),
+        host = text(u.hostname).toLowerCase();
+      if (!/(^|\.)fbcdn\.net$/i.test(host)) return false;
+      var token = text(u.searchParams.get("oe"));
+      if (!/^[0-9a-f]+$/i.test(token)) return false;
+      var ms = parseInt(token, 16) * 1000;
+      return isFinite(ms) && ms <= Date.now() + 24 * 60 * 60 * 1000;
+    } catch (_e) { return false; }
+  }
+  function genericProviderPreviewThumb(platform, value) {
+    var raw = text(value);
+    if (!/^https:\/\//i.test(raw)) return false;
+    try {
+      var u = new URL(raw, location.href),
+        host = text(u.hostname).toLowerCase().replace(/^www\./, ""),
+        path = text(u.pathname + u.search).toLowerCase();
+      if (/\.(?:js|mjs|css|map|json|html?|xml)(?:$|[?#])/i.test(raw)) return true;
+      if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(path)) return true;
+      if (platform === "instagram" && (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host) || /\/rsrc\.php(?:$|[/?#])/i.test(u.pathname))) return true;
+      if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return true;
+      if (platform === "facebook" && /(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path)) return true;
+      return facebookPreviewExpired(raw);
+    } catch (_e) { return false; }
+  }
   function realPreviewMissing(row) {
     if (!row || assetClass(row) !== "latest_content") return false;
-    var platform = lower(row.platform).replace(/^social-/, ""),
+    var platform = lower(row.platform).replace(/^social-/, "").replace(/^x$/, "twitter"),
       title = lower(row.title),
-      thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url)));
-    if (platform === "youtube" || platform === "facebook") return false;
-    var noThumb = !/^https:\/\//i.test(thumbUrl) || /placeholder|\/assets\/sample\//i.test(thumbUrl);
+      raw = row.raw || {},
+      sourceUrl = text(row.sourceUrl || row.source_url || raw.latestContentUrl || raw.latest_content_url || raw.sourceUrl || raw.source_url),
+      thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || raw.thumbnailUrl || raw.thumbnail_url);
+    if (platform === "youtube") return false;
+    var noThumb = !/^https:\/\//i.test(thumbUrl) ||
+      /placeholder|\/assets\/sample\//i.test(thumbUrl) ||
+      (sourceUrl && thumbUrl === sourceUrl) ||
+      genericProviderPreviewThumb(platform, thumbUrl);
+    if (platform === "facebook") return noThumb;
     var genericTitle = !title || ["instagram","tiktok","wechat","weibo","pinterest","reddit","twitter","x"].indexOf(title) >= 0;
     return noThumb || genericTitle;
   }

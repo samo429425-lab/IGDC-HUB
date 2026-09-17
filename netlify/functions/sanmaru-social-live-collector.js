@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.20.0-diverse-quality-discovery";
+const VERSION = "sanmaru-social-live-collector-v1.21.1-preview-recovery";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -42,7 +42,7 @@ const CHANNEL_RESOLUTION_CONCURRENCY = 4;
 // the new preview recovery path to the seven sections that were still collapsing
 // before front publication.
 const PREVIEW_RECOVERY_PLATFORMS = new Set([
-  "instagram", "tiktok", "wechat", "weibo", "pinterest", "reddit", "twitter"
+  "instagram", "tiktok", "facebook", "wechat", "weibo", "pinterest", "reddit", "twitter"
 ]);
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 
@@ -326,9 +326,22 @@ function channelIdFromItem(item) {
   }
   return "";
 }
-function syntheticTitle(value) {
-  const title = SocialStore.text(value);
-  return !title || /^\[[^\]]+\].*(검색|공개 게시물|공개 글|공개 영상)/i.test(title) || /(검색 결과|search results?)$/i.test(title);
+function syntheticTitle(value, platform) {
+  const title = SocialStore.text(value).replace(/\s+/g, " ").trim();
+  if (!title || /^\[[^\]]+\].*(검색|공개 게시물|공개 글|공개 영상)/i.test(title) || /(검색 결과|search results?)$/i.test(title)) return true;
+  const generic = /^(?:instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|youtube|x|twitter)(?:\s+(?:post|reel|video|pin|content|item))?$/i;
+  if (generic.test(title)) return true;
+  const p = SocialStore.text(platform).replace(/^social-/, "").replace(/^x$/, "twitter");
+  return !!p && title.toLowerCase() === p.toLowerCase();
+}
+function creatorNameFromSource(item, source) {
+  const mode = SocialStore.text(source && source.mode).toLowerCase();
+  const name = SocialStore.text(source && source.name);
+  if (!name) return "";
+  if (mode === "public_post_search") return "";
+  if (/^(?:bing|duckduckgo|google|naver|yahoo|maru|sanmaru|searchbank)(?:[-_\s].*)?$/i.test(name)) return "";
+  if (/(?:rss|search|provider|crawler|collector)/i.test(name)) return "";
+  return name;
 }
 function categoryFromQuery(platform, queryText) {
   const policy = Policy.PLATFORM_POLICIES[platform] || {};
@@ -808,11 +821,55 @@ function youtubeLanguageCode(route) {
   const primary = CountryRouting.normalizeLanguages(route && route.languages)[0] || "";
   return primary === "zht" ? "zh-TW" : primary;
 }
-async function youtubeChannelSearch(queryText, limit, cfg, qualitySweep, route) {
-  if (!cfg.youtubeKey) return { provider: "youtube-data-api-channel", status: "not_configured", items: [] };
+function youtubeThumb(snippet) {
+  const thumbs = snippet && snippet.thumbnails || {};
+  const row = thumbs.maxres || thumbs.standard || thumbs.high || thumbs.medium || thumbs.default || null;
+  return row && row.url || "";
+}
+function youtubeSafeCategoryId(queryText) {
+  const q = SocialStore.text(queryText).toLowerCase();
+  if (/(music|song|singer|artist|performance|concert|음악|노래|가수|공연|무대)/i.test(q)) return "10";
+  if (/(travel|tour|tourism|trip|관광|여행|명소)/i.test(q)) return "19";
+  if (/(sport|fitness|healthy|health|스포츠|운동|건강)/i.test(q)) return "17";
+  if (/(education|learning|knowledge|documentary|교육|학습|지식|다큐)/i.test(q)) return "27";
+  if (/(science|technology|tech|과학|기술)/i.test(q)) return "28";
+  if (/(howto|tutorial|lifestyle|food|요리|음식|생활|튜토리얼)/i.test(q)) return "26";
+  return "24";
+}
+function youtubeVideoItem(row, provider) {
+  const snippet = row && row.snippet || {};
+  const stats = row && row.statistics || {};
+  const videoId = firstText([row && row.id && row.id.videoId, row && row.id]);
+  if (!videoId) return null;
+  return {
+    provider,
+    platform: "youtube",
+    url: "https://www.youtube.com/watch?v=" + encodeURIComponent(videoId),
+    sourceUrl: "https://www.youtube.com/watch?v=" + encodeURIComponent(videoId),
+    latestContentUrl: "https://www.youtube.com/watch?v=" + encodeURIComponent(videoId),
+    channelUrl: snippet.channelId ? "https://www.youtube.com/channel/" + snippet.channelId : "",
+    channelId: snippet.channelId || "",
+    title: decodeXml(snippet.title || ""),
+    creatorName: decodeXml(snippet.channelTitle || ""),
+    description: decodeXml(snippet.description || ""),
+    thumbnail: youtubeThumb(snippet),
+    contentPublishedAt: snippet.publishedAt || "",
+    publishedAt: snippet.publishedAt || "",
+    language: snippet.defaultLanguage || snippet.defaultAudioLanguage || "",
+    engagement: {
+      views: Number(stats.viewCount || 0),
+      likes: Number(stats.likeCount || 0),
+      comments: Number(stats.commentCount || 0)
+    },
+    entityKind: "latest_video"
+  };
+}
+async function youtubeVideoSearch(queryText, limit, cfg, qualitySweep, route) {
+  if (!cfg.youtubeKey) return { provider: "youtube-data-api-video", status: "not_configured", items: [] };
   const params = new URLSearchParams({
-    part: "snippet", type: "channel", maxResults: String(Math.min(25, limit)),
-    q: queryText, key: cfg.youtubeKey, safeSearch: "strict", order: qualitySweep ? "viewCount" : "relevance"
+    part: "snippet", type: "video", maxResults: String(Math.min(25, limit)),
+    q: queryText, key: cfg.youtubeKey, safeSearch: "strict",
+    order: qualitySweep ? "viewCount" : "relevance", videoEmbeddable: "true", videoSyndicated: "true"
   });
   const regionCode = SocialStore.text(route && route.countryCode).toUpperCase();
   const relevanceLanguage = youtubeLanguageCode(route);
@@ -820,38 +877,35 @@ async function youtubeChannelSearch(queryText, limit, cfg, qualitySweep, route) 
   if (relevanceLanguage) params.set("relevanceLanguage", relevanceLanguage);
   try {
     const data = await fetchJson("https://www.googleapis.com/youtube/v3/search?" + params.toString(), {}, 2600);
-    const base = (data.items || []).map((row) => ({
-      provider: "youtube-data-api-channel",
-      platform: "youtube",
-      channelUrl: row && row.id && row.id.channelId ? "https://www.youtube.com/channel/" + row.id.channelId : "",
-      channelId: row && row.id && row.id.channelId,
-      title: row && row.snippet && row.snippet.channelTitle || row && row.snippet && row.snippet.title,
-      creatorName: row && row.snippet && row.snippet.channelTitle,
-      description: row && row.snippet && row.snippet.description,
-      thumbnail: row && row.snippet && row.snippet.thumbnails && (row.snippet.thumbnails.high || row.snippet.thumbnails.medium || row.snippet.thumbnails.default) && (row.snippet.thumbnails.high || row.snippet.thumbnails.medium || row.snippet.thumbnails.default).url,
-      channelThumbnail: row && row.snippet && row.snippet.thumbnails && (row.snippet.thumbnails.high || row.snippet.thumbnails.medium || row.snippet.thumbnails.default) && (row.snippet.thumbnails.high || row.snippet.thumbnails.medium || row.snippet.thumbnails.default).url,
-      language: row && row.snippet && row.snippet.defaultLanguage,
-      entityKind: "channel"
-    })).filter((row) => row.channelUrl);
-    const ids = base.map((row) => row.channelId).filter(Boolean);
+    const ids = (data.items || []).map((row) => row && row.id && row.id.videoId).filter(Boolean);
+    let details = new Map();
     if (ids.length) {
       try {
-        const statsParams = new URLSearchParams({ part: "snippet,statistics", id: ids.join(","), key: cfg.youtubeKey });
-        const stats = await fetchJson("https://www.googleapis.com/youtube/v3/channels?" + statsParams.toString(), {}, 1200);
-        const byId = new Map((stats.items || []).map((row) => [row.id, row]));
-        base.forEach((row) => {
-          const detail = byId.get(row.channelId);
-          if (!detail) return;
-          const s = detail.statistics || {};
-          row.engagement = { subscriberCount: Number(s.subscriberCount || 0), viewCount: Number(s.viewCount || 0), videoCount: Number(s.videoCount || 0) };
-          row.language = row.language || detail.snippet && detail.snippet.defaultLanguage;
-          row.country = detail.snippet && detail.snippet.country;
-        });
-      } catch (_error) { /* Search results remain useful when statistics quota fails. */ }
+        const detailParams = new URLSearchParams({ part: "snippet,statistics", id: ids.join(","), key: cfg.youtubeKey });
+        const detailData = await fetchJson("https://www.googleapis.com/youtube/v3/videos?" + detailParams.toString(), {}, 1600);
+        details = new Map((detailData.items || []).map((row) => [row.id, row]));
+      } catch (_error) {}
     }
-    return { provider: "youtube-data-api-channel", status: "ok", items: base };
+    const items = (data.items || []).map((row) => youtubeVideoItem(details.get(row && row.id && row.id.videoId) || row, "youtube-data-api-video")).filter(Boolean);
+    return { provider: "youtube-data-api-video", status: items.length ? "ok" : "empty", items };
   } catch (error) {
-    return { provider: "youtube-data-api-channel", status: error.statusCode === 403 ? "quota_or_api_disabled" : "error", error: error.message, items: [] };
+    return { provider: "youtube-data-api-video", status: error.statusCode === 403 ? "quota_or_api_disabled" : "error", error: error.message, items: [] };
+  }
+}
+async function youtubePopularChart(queryText, limit, cfg, route) {
+  if (!cfg.youtubeKey) return { provider: "youtube-most-popular", status: "not_configured", items: [] };
+  const regionCode = SocialStore.text(route && route.countryCode).toUpperCase();
+  const params = new URLSearchParams({
+    part: "snippet,statistics", chart: "mostPopular", maxResults: String(Math.min(25, limit)),
+    key: cfg.youtubeKey, videoCategoryId: youtubeSafeCategoryId(queryText)
+  });
+  if (/^[A-Z]{2}$/.test(regionCode)) params.set("regionCode", regionCode);
+  try {
+    const data = await fetchJson("https://www.googleapis.com/youtube/v3/videos?" + params.toString(), {}, 2200);
+    const items = (data.items || []).map((row) => youtubeVideoItem(row, "youtube-most-popular")).filter(Boolean);
+    return { provider: "youtube-most-popular", status: items.length ? "ok" : "empty", items };
+  } catch (error) {
+    return { provider: "youtube-most-popular", status: error.statusCode === 403 ? "quota_or_api_disabled" : "error", error: error.message, items: [] };
   }
 }
 async function googleChannelSearch(plan, queryText, limit, start, cfg) {
@@ -982,20 +1036,40 @@ function publicSearchQuery(plan, queryText) {
   return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"]
     .filter(Boolean).join(" ");
 }
+function publicSearchTitle(platform, title, description) {
+  const primary = stripHtml(decodeXml(title)).replace(/\s+/g, " ").trim();
+  if (primary && !syntheticTitle(primary, platform)) return primary;
+  const snippet = stripHtml(decodeXml(description)).replace(/\s+/g, " ").trim();
+  if (!snippet || syntheticTitle(snippet, platform)) return primary || platform + " public content";
+  // Search providers often return a generic page title such as "Instagram"
+  // while the result snippet contains the actual post caption/engagement text.
+  // Preserve that real snippet instead of publishing the provider shell title.
+  return snippet.slice(0, 220);
+}
+function publicSearchCreator(platform, description) {
+  const snippet = stripHtml(decodeXml(description)).replace(/\s+/g, " ").trim();
+  if (!snippet) return "";
+  const platformName = platform === "twitter" ? "(?:X|Twitter)" : platform.charAt(0).toUpperCase() + platform.slice(1);
+  const re = new RegExp("(?:^|[-·|]\\s*)@?([A-Za-z0-9._]{2,40})\\s+on\\s+" + platformName + "(?:\\b|:)", "i");
+  const match = snippet.match(re);
+  return match && match[1] ? match[1] : "";
+}
 function pushPublicPost(out, seen, plan, provider, rawUrl, title, description) {
   const link = searchResultUrl(rawUrl);
   if (!link || Policy.platformFromHost(link) !== plan.platform || !contentKind(plan.platform, link)) return;
   const key = link.toLowerCase();
   if (seen.has(key)) return;
   seen.add(key);
+  const cleanDescription = firstText([stripHtml(decodeXml(description))]);
   out.push({
     provider,
     platform: plan.platform,
     url: link,
     sourceUrl: link,
     latestContentUrl: link,
-    title: firstText([stripHtml(decodeXml(title)), plan.platform + " public content"]),
-    description: firstText([stripHtml(decodeXml(description))]),
+    title: publicSearchTitle(plan.platform, title, cleanDescription),
+    creatorName: publicSearchCreator(plan.platform, cleanDescription),
+    description: cleanDescription,
     entityKind: contentKind(plan.platform, link),
     source: { name: provider, platform: plan.platform, mode: "public_post_search" }
   });
@@ -1363,7 +1437,12 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     }
   } else if (providerGroup === 1) {
     if (plan.platform === "youtube") {
-      tasks.push(youtubeChannelSearch(queryText, limit, cfg, qualitySweep, route));
+      // Generic discovery must search real videos, not channels. The previous
+      // channel search could match a creator and then publish that creator's
+      // unrelated latest upload. Pair query relevance with the regional
+      // most-popular chart so current high-interest videos enter the candidate pool.
+      tasks.push(youtubeVideoSearch(queryText, limit, cfg, qualitySweep, route));
+      tasks.push(youtubePopularChart(queryText, limit, cfg, route));
     }
     tasks.push(googleChannelSearch(plan, queryText, limit, start, cfg));
     tasks.push(naverChannelSearch(plan, queryText, limit, start, route, cfg));
@@ -1648,10 +1727,30 @@ function signedFacebookThumbnailExpiry(value) {
     return Number.isFinite(seconds) ? seconds * 1000 : 0;
   } catch (_error) { return 0; }
 }
+function genericProviderThumbnail(value, platform) {
+  const normalized = Policy.normalizeUrl(value);
+  if (!normalized) return true;
+  try {
+    const url = new URL(normalized);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const path = (url.pathname + url.search).toLowerCase();
+    if (/\.(?:js|mjs|css|map|json|html?|xml)(?:$|[?#])/i.test(normalized)) return true;
+    if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(path)) return true;
+    if (platform === "instagram") {
+      if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return true;
+      if (/\/rsrc\.php(?:$|[/?#])/i.test(url.pathname)) return true;
+      if (/instagram[^/]*(?:logo|glyph)|(?:logo|glyph)[^/]*instagram/i.test(path)) return true;
+    }
+    if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return true;
+    if (platform === "facebook" && /(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path)) return true;
+    return false;
+  } catch (_error) { return true; }
+}
 function usableThumbnail(value, contentUrl, platform) {
   const normalized = Policy.normalizeUrl(value);
   if (!normalized || !/^https:\/\//i.test(normalized)) return "";
   if (contentUrl && normalized === Policy.normalizeUrl(contentUrl)) return "";
+  if (genericProviderThumbnail(normalized, platform)) return "";
   try {
     const url = new URL(normalized);
     const host = url.hostname.toLowerCase();
@@ -1667,7 +1766,8 @@ function usableThumbnail(value, contentUrl, platform) {
     };
     const pageHost = platformHosts[platform];
     const imagePath = /\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(url.pathname + url.search);
-    if (pageHost && pageHost.test(host) && !imagePath) return "";
+    const instagramMediaPath = platform === "instagram" && /^\/(?:p|reel|reels|tv)\/[^/]+\/media\/?$/i.test(url.pathname);
+    if (pageHost && pageHost.test(host) && !imagePath && !instagramMediaPath) return "";
     const expiry = signedFacebookThumbnailExpiry(normalized);
     if (expiry && expiry <= Date.now() + 30 * 60 * 1000) return "";
     return normalized;
@@ -1677,19 +1777,10 @@ async function stablePublicThumbnail(platform, contentUrl, supplied) {
   let thumb = usableThumbnail(supplied, contentUrl, platform);
   if (thumb) return { thumbnail: thumb, metadata: {}, resolvedUrl: contentUrl };
 
-  // Keep the already-working Facebook path unchanged. Instagram and the other
-  // six disconnected providers use the shared Social preview resolver below so
-  // canonical redirects + oEmbed/public-page metadata are normalized once at
-  // collection time, never by the front renderer.
-  if (platform === "facebook") {
-    const embedMetadata = await publicEmbedMetadata(platform, contentUrl);
-    thumb = usableThumbnail(embedMetadata.thumbnail, contentUrl, platform);
-    if (thumb) return { thumbnail: thumb, metadata: embedMetadata, resolvedUrl: contentUrl };
-    const metadata = await publicPageMetadata(platform, contentUrl);
-    thumb = usableThumbnail(metadata.thumbnail, contentUrl, platform);
-    return { thumbnail: thumb, metadata, resolvedUrl: contentUrl };
-  }
-
+  // Resolve through the shared preview normalizer first. Facebook is included
+  // here as well because its fbcdn preview URLs are signed and can expire; a
+  // stale signed URL must be refreshed instead of making every approved row
+  // fail publication later.
   if (PREVIEW_RECOVERY_PLATFORMS.has(platform) && SocialPreview && typeof SocialPreview.resolvePreview === "function") {
     try {
       const preview = await SocialPreview.resolvePreview(platform, contentUrl);
@@ -1718,6 +1809,11 @@ async function stablePublicThumbnail(platform, contentUrl, supplied) {
     }
   }
 
+  if (platform === "facebook") {
+    const embedMetadata = await publicEmbedMetadata(platform, contentUrl);
+    thumb = usableThumbnail(embedMetadata.thumbnail, contentUrl, platform);
+    if (thumb) return { thumbnail: thumb, metadata: embedMetadata, resolvedUrl: contentUrl };
+  }
   const metadata = await publicPageMetadata(platform, contentUrl);
   thumb = usableThumbnail(metadata.thumbnail, contentUrl, platform);
   return { thumbnail: thumb, metadata, resolvedUrl: contentUrl };
@@ -1981,12 +2077,12 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     originalTitle,
     resolved.suggestedTitle
   ]));
-  if (syntheticTitle(title)) return { ok: false, reason: "real_content_title_required" };
+  if (syntheticTitle(title, platform)) return { ok: false, reason: "real_content_title_required" };
   const source = item && item.source;
   const creatorName = firstText([
     latest.creatorName, enrichment.creatorName, publicMetadata.creatorName,
     item && item.creatorName, item && item.channelName,
-    item && item.channel, item && item.publisher, source && typeof source === "object" && source.name,
+    item && item.channel, item && item.publisher, creatorNameFromSource(item, source),
     resolved.suggestedTitle
   ]).replace(/^(false|null|undefined)$/i, "") || firstText([resolved.suggestedTitle, title]);
   if (platform === "facebook" && facebookPressPublisher([
@@ -2500,6 +2596,12 @@ exports.__test = {
   publicSearchQuery,
   rssItems,
   htmlPublicPostItems,
+  publicSearchTitle,
+  publicSearchCreator,
+  youtubeSafeCategoryId,
+  youtubeVideoItem,
+  genericProviderThumbnail,
+  usableThumbnail,
   providerRelativePostUrls,
   registryNativeLatestSearch,
   registryOnlyFromItem,

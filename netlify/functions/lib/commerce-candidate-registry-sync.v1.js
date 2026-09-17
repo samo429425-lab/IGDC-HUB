@@ -15,7 +15,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.13.6-exact-scope-admin-front-bridge";
+const VERSION = "commerce-candidate-registry-sync-v1.13.7-service-evidence-hardening";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -282,7 +282,34 @@ function sourcePayload(candidate){
   if(isObject(payload.candidate)) return Object.assign({},payload.candidate);
   return Object.assign({},payload);
 }
-function serviceProof(url, evidence){ return { verified:true, evidenceUrl:safeUrl(url)||null, evidence:[text(evidence)].filter(Boolean) }; }
+const SERVICE_EVIDENCE_RX = Object.freeze({
+  shipping: /(?:shipping|delivery|dispatch|fulfil(?:l)?ment|ship\s*to|배송|배달|출고|택배|配送|配達|発送|送貨|送货|env[ií]o|entrega|livraison|expédition|lieferung|versand|spedizione|bezorging|доставка|توصيل|شحن|डिलीवरी|वितरण|ডেলিভারি|ترسیل|pengiriman|penghantaran|giao\s*hàng|จัดส่ง|teslimat|usafirishaji)/i,
+  returns: /(?:returns?|refunds?|exchange|cancell?ation|반품|교환|환불|返品|返金|交換|退貨|退款|换货|devoluci[oó]n|reembolso|retour|remboursement|rückgabe|erstattung|reso|rimborso|retourneren|terugbetaling|возврат|возмещение|إرجاع|استرداد|वापसी|रिफंड|ফেরত|রিফান্ড|واپسی|ریفنڈ|pengembalian|refund|hoàn\s*trả|คืนสินค้า|คืนเงิน|iade|geri\s*ödeme|marejesho)/i,
+  support: /(?:customer\s*(?:service|support|care)|support|contact|help\s*center|고객센터|고객지원|문의|客服|客户服务|カスタマーサポート|お問い合わせ|atenci[oó]n\s+al\s+cliente|servicio\s+al\s+cliente|service\s+client|kundendienst|kundenservice|servizio\s+clienti|klantenservice|поддержка|служба\s+поддержки|خدمة\s+العملاء|دعم|ग्राहक\s+सेवा|সহায়তা|کسٹمر\s+سروس|layanan\s+pelanggan|khách\s+hàng|บริการลูกค้า|müşteri\s+hizmetleri|huduma\s+kwa\s+wateja)/i
+});
+function serviceEvidenceRows(rows, kind){
+  const rx=SERVICE_EVIDENCE_RX[kind];
+  return array(rows).filter(verifiedEvidenceRow).filter((row)=>{
+    // Evidence notes can contain negations such as "does not assert delivery".
+    // Classify only by the evidence type and the policy URL itself so a generic
+    // administrator note can never become a false service verification.
+    const hay=[row&&row.evidence_type,row&&row.evidence_url].map(text).join(" ");
+    return !!(rx&&rx.test(hay));
+  });
+}
+function serviceProof(kind, explicitUrl, evidence, evidenceRows){
+  const direct=safeUrl(explicitUrl);
+  const rows=serviceEvidenceRows(evidenceRows,kind);
+  const rowUrl=first.apply(null,rows.map(row=>safeUrl(row&&row.evidence_url)));
+  const proofUrl=direct||rowUrl||"";
+  const notes=unique([text(evidence)].concat(rows.flatMap(row=>[text(row&&row.evidence_type),text(row&&row.note)])).filter(Boolean));
+  // A generic supplier/product URL plus a broad administrator note is not
+  // shipping/return/support proof.  Research remains broad, but public market
+  // evidence is verified only by an explicit policy URL or a verified
+  // service-specific evidence row.
+  const verified=!!proofUrl && (!!direct || rows.length>0);
+  return { verified, evidenceUrl:proofUrl||null, evidence:verified?notes:[] };
+}
 function marketRecord(candidate, availability, evidenceRows, options){
   const payload=sourcePayload(candidate), adminExternalSeller=plain(options).administratorExternalSeller===true, supplier=supplierIdentity(candidate,payload);
   const country=MarketSaleScope.normalizeCountry(availability.country_code);
@@ -303,9 +330,9 @@ function marketRecord(candidate, availability, evidenceRows, options){
     nationwide,
     active:true,
     verifiedAt:first(availability.updated_at,candidate.updated_at),
-    shipping:serviceProof(first(payload.shippingPolicyUrl,commonUrl),first(deliveryEvidence,legalBasis)),
-    returns:serviceProof(first(payload.returnsPolicyUrl,commonUrl),first(legalBasis,deliveryEvidence)),
-    support:serviceProof(first(payload.supportUrl,commonUrl),first(legalBasis,deliveryEvidence)),
+    shipping:serviceProof("shipping",payload.shippingPolicyUrl,first(deliveryEvidence,legalBasis),evidenceRows),
+    returns:serviceProof("returns",payload.returnsPolicyUrl,first(legalBasis,deliveryEvidence),evidenceRows),
+    support:serviceProof("support",payload.supportUrl,first(legalBasis,deliveryEvidence),evidenceRows),
     // explicitAdminReferralReady() has already verified the exact seller
     // identity, product destination, image, scope availability and hard-risk
     // state.  That authenticated Front Match is authoritative evidence that
