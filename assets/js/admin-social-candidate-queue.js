@@ -1763,6 +1763,12 @@
       "건 · 신규 " +
       j.newlyFound +
       "건" +
+      (j.registrySweepActive
+        ? " · 등록 인플루언서 필수 조사 " +
+          Number(j.registrySweepBatches || 0) +
+          "/" +
+          Math.max(1, Number(j.registrySweepTotal || 1))
+        : "") +
       (j.qualitySweepActive
         ? " · 인기·품질 보강 " +
           j.qualitySweepBatches +
@@ -1795,6 +1801,9 @@
       action: "collect_live",
       dryRun: !!dryRun,
       qualitySweep: !!j.qualitySweepActive,
+      registryOnly: !!j.registrySweepActive,
+      registryCursor: Number(j.registryCursor || 0),
+      registryBatchSize: 4,
       sectionKey: section,
       limit: j.batchSize,
       batchSize: j.batchSize,
@@ -1847,7 +1856,20 @@
         public_directory: "공개 디렉터리",
         configured_search_apis: "YouTube·Google·Naver",
         sanmaru_searchbank: "산마루·SearchBank",
+        influencer_registry_mandatory: "등록 인플루언서 필수 조사",
       }[text(live.providerGroupName)] || text(live.providerGroupName);
+    if (live.registryOnly && live.registrySweep) {
+      j.registrySeedCount = Number(live.registrySweep.totalSeeds || j.registrySeedCount || 0);
+      j.registrySweepTotal = Number(live.registrySweep.totalBatches || j.registrySweepTotal || 0);
+      j.registrySweepBatches = Number(j.registrySweepBatches || 0) + 1;
+      j.registryCursor = Number(
+        live.nextRegistryCursor == null
+          ? Number(j.registryCursor || 0) + 1
+          : live.nextRegistryCursor,
+      );
+      j.registrySweepDone = !!live.registrySweep.done;
+      j.providerGroupName = "등록 인플루언서 필수 조사";
+    }
     return d;
   }
   async function collectSection(section, dryRun, j) {
@@ -1861,6 +1883,30 @@
     j.section = section;
     j.sectionCount = sectionCount(section);
     j.qualitySweepBatches = Number(j.qualitySweepBatches || 0);
+    j.registrySweepBatches = Number(j.registrySweepBatches || 0);
+    j.registryCursor = Number(j.registryCursor || 0);
+    // Registered influencers are not decorative metadata. Every normal section
+    // run must research every policy-allowed registered creator first, even when
+    // 120+ latest-content rows already exist. Only then does generic discovery
+    // continue filling or rotating the section.
+    if (!dryRun && !j.registrySweepDone) {
+      j.registrySweepActive = true;
+      var registrySafety = 0;
+      while (!stopRequested && !j.registrySweepDone && registrySafety < 500) {
+        registrySafety += 1;
+        j.batch += 1;
+        progress(j);
+        var registryResult = await collectOne(section, false, j);
+        var registryNew = newIds(registryResult, known);
+        j.newlyFound += registryNew;
+        j.sectionCount += registryNew;
+        progress(j);
+        saveJob(j);
+        if (!j.registrySweepDone && !stopRequested) await wait(450);
+      }
+      j.registrySweepActive = false;
+      saveJob(j);
+    }
     var maxEmpty = Math.max(6, Number(j.catalogSize || 15));
     while (
       !stopRequested &&
@@ -1953,6 +1999,12 @@
       skipped: 0,
       newlyFound: 0,
       emptyBatches: 0,
+      registryCursor: 0,
+      registrySeedCount: 0,
+      registrySweepBatches: 0,
+      registrySweepTotal: 0,
+      registrySweepDone: false,
+      registrySweepActive: false,
       qualitySweepBatches: 0,
       qualitySweepTarget: /^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section) ? 8 : 6,
       qualitySweepDone: false,
@@ -2030,7 +2082,7 @@
       !skipConfirm && !confirm(
         "각 SNS 섹션을 " +
           $("collectorBatchSize").value +
-          "개 단위로 120개(공개 100 + 예비 20) 운영 풀을 채운 뒤 인기·품질 보강 검색을 추가 실행하고 상위 100개를 다시 정리해 다음 섹션으로 진행할까요?",
+          "개 단위로 등록 인플루언서 전원을 먼저 조사하고, 120개(공개 100 + 예비 20) 운영 풀을 채운 뒤 인기·품질 보강 검색을 추가 실행하고 상위 100개를 다시 정리해 다음 섹션으로 진행할까요?",
       )
     )
       return;
@@ -2066,8 +2118,14 @@
           j.queryCursor = 0;
           j.emptyBatches = 0;
           j.newlyFound = 0;
+          j.registryCursor = 0;
+          j.registrySeedCount = 0;
+          j.registrySweepBatches = 0;
+          j.registrySweepTotal = 0;
+          j.registrySweepDone = false;
+          j.registrySweepActive = false;
           j.qualitySweepBatches = 0;
-          j.qualitySweepTarget = 6;
+          j.qualitySweepTarget = /^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(j.section) ? 8 : 6;
           j.qualitySweepDone = false;
           j.qualitySweepActive = false;
         }

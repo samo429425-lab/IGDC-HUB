@@ -19,11 +19,12 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.24.0-broad-registry-discovery";
+const VERSION = "sanmaru-social-live-collector-v1.25.0-mandatory-registry-sweep";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
 const MAX_BATCH_SIZE = 12;
+const REGISTRY_SWEEP_BATCH_SIZE = 4;
 const REQUEST_TIMEOUT_MS = 3800;
 const PROVIDER_GROUP_COUNT = 3;
 const PROVIDER_GROUP_NAMES = Object.freeze([
@@ -738,7 +739,7 @@ async function influencerRegistrySeeds(sectionKey, platform) {
       .filter((seed) => platform !== "facebook" || !facebookPressPublisher(
         [seed.title, seed.handle, seed.url].filter(Boolean).join(" ")
       ))
-      .filter((seed) => !["wechat", "weibo", "twitter"].includes(platform) || !registrySeedBlocked(seed))
+      .filter((seed) => !registrySeedBlocked(seed))
       .filter((seed) => {
         const key = String(seed.url || (seed.title + "|" + seed.handle)).toLowerCase();
         if (!key || seen.has(key)) return false;
@@ -797,6 +798,29 @@ function scopedQueriesWithRegistry(plan, cursor, passes, route, registrySeeds) {
     targeted: Object.keys(seedByQuery).length > 0,
     seed: selectedSeed,
     seedByQuery,
+  };
+}
+
+
+function registrySweepWindow(registrySeeds, cursor, requestedBatchSize) {
+  const seeds = Array.isArray(registrySeeds) ? registrySeeds : [];
+  const batchSize = Math.max(1, Math.min(
+    REGISTRY_SWEEP_BATCH_SIZE,
+    Number(requestedBatchSize || REGISTRY_SWEEP_BATCH_SIZE) || REGISTRY_SWEEP_BATCH_SIZE
+  ));
+  const batchIndex = Math.max(0, Number(cursor || 0) || 0);
+  const start = batchIndex * batchSize;
+  const end = Math.min(seeds.length, start + batchSize);
+  return {
+    batchIndex,
+    batchSize,
+    start,
+    end,
+    total: seeds.length,
+    seeds: seeds.slice(start, end),
+    done: end >= seeds.length,
+    nextCursor: end >= seeds.length ? batchIndex : batchIndex + 1,
+    totalBatches: seeds.length ? Math.ceil(seeds.length / batchSize) : 0,
   };
 }
 
@@ -2617,41 +2641,82 @@ exports.handler = async function(event) {
     const target = batchSize;
     const passes = Math.max(1, Math.min(MAX_QUERY_PASSES, Number(body.queryPasses || body.passes || DEFAULT_QUERY_PASSES) || DEFAULT_QUERY_PASSES));
     const queryCursor = Math.max(0, Number(body.queryCursor || body.cursor || 0) || 0);
-    const providerGroup = queryCursor % PROVIDER_GROUP_COUNT;
-    const researchCursor = Math.floor(queryCursor / PROVIDER_GROUP_COUNT);
     const qualitySweep = flag(body.qualitySweep || body.quality_sweep);
-    // Existing influencer registry is the primary identity source for latest
-    // content collection. Generic discovery remains the fallback. This closes
-    // the previous gap where hundreds of registered Instagram/TikTok/X/etc.
-    // profiles existed but collection searched unrelated generic web results.
+    const registrySweepMode = flag(body.registryOnly || body.registry_only || body.registrySweep || body.registry_sweep);
     const registrySeeds = await influencerRegistrySeeds(sectionKey, plan.platform);
-    const scoped = scopedQueriesWithRegistry(plan, researchCursor, passes, route, registrySeeds);
-    const aiQuerySuffix = AIPolicy.querySuffix(aiPolicy);
+    const registryWindow = registrySweepWindow(
+      registrySeeds,
+      body.registryCursor == null ? 0 : body.registryCursor,
+      body.registryBatchSize || body.registry_batch_size
+    );
+    let providerGroup = queryCursor % PROVIDER_GROUP_COUNT;
+    let researchCursor = Math.floor(queryCursor / PROVIDER_GROUP_COUNT);
+    let scoped = null;
+    let queries = [];
     const querySeeds = {};
-    const queries = scoped.queries.map((query) => {
-      var value = qualitySweep ? query + " popular high quality active official" : query;
-      value = aiQuerySuffix ? value + " " + aiQuerySuffix : value;
-      querySeeds[value] = scoped.seedByQuery && scoped.seedByQuery[query] || null;
-      return value;
-    });
+    const aiQuerySuffix = AIPolicy.querySuffix(aiPolicy);
+
+    if (registrySweepMode) {
+      // Mandatory registry-first sweep. Every registered influencer/profile that
+      // survives the policy block list receives an explicit latest-content
+      // research pass before generic discovery is allowed to satisfy the section.
+      // This is intentionally independent of the current number of latest-content
+      // rows: a section with 120+ rows still rechecks its approved creator registry.
+      providerGroup = 1; // Google/Naver + canonical Maru + direct-post rescue.
+      researchCursor = registryWindow.batchIndex;
+      scoped = {
+        targeted: true,
+        seed: registryWindow.seeds[0] || null,
+        seedByQuery: {},
+      };
+      queries = registryWindow.seeds.map((seed) => {
+        let value = registryLatestQuery(seed, route, plan.platform);
+        value = qualitySweep ? value + " popular high quality active official" : value;
+        value = aiQuerySuffix ? value + " " + aiQuerySuffix : value;
+        if (value) querySeeds[value] = seed;
+        return value;
+      }).filter(Boolean);
+    } else {
+      scoped = scopedQueriesWithRegistry(plan, researchCursor, passes, route, registrySeeds);
+      queries = scoped.queries.map((query) => {
+        let value = qualitySweep ? query + " popular high quality active official" : query;
+        value = aiQuerySuffix ? value + " " + aiQuerySuffix : value;
+        querySeeds[value] = scoped.seedByQuery && scoped.seedByQuery[query] || null;
+        return value;
+      });
+    }
+
+    // Empty registries must not block ordinary discovery.
+    if (!queries.length) {
+      scoped = { targeted: false, seed: null, seedByQuery: {} };
+      queries = scopedQueries(plan, researchCursor, passes, route).map((query) => {
+        let value = qualitySweep ? query + " popular high quality active official" : query;
+        value = aiQuerySuffix ? value + " " + aiQuerySuffix : value;
+        return value;
+      });
+    }
+
     const perQueryLimit = Math.max(1, Math.min(MAX_BATCH_SIZE, Math.ceil(target / Math.max(1, queries.length))));
     const baseCatalogSize = Math.max(1, plan.policy.collectionQueries.length);
-    const registryCatalogSize = registrySeeds.length ? Math.min(45, registrySeeds.length) : 0;
-    const catalogSize = Math.max(baseCatalogSize, registryCatalogSize);
-    const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || (Math.floor(researchCursor / catalogSize) * perQueryLimit + 1)) || 1));
-    const searchResults = [];
-    for (let queryIndex = 0; queryIndex < queries.length; queryIndex += 1) {
-      const queryText = queries[queryIndex];
+    const normalCatalogSize = Math.max(baseCatalogSize, registrySeeds.length || 0);
+    const catalogSize = registrySweepMode
+      ? Math.max(1, registryWindow.totalBatches)
+      : normalCatalogSize;
+    const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || (Math.floor(researchCursor / Math.max(1, catalogSize)) * perQueryLimit + 1)) || 1));
+
+    const language = body.language || body.lang || route.languages[0];
+    const searchResults = await Promise.all(queries.map(async (queryText, queryIndex) => {
       const directoryOffset = Math.max(0, (researchCursor + queryIndex) * perQueryLimit);
       const searchResult = await searchOne(
         event, plan, queryText, perQueryLimit,
-        body.language || body.lang || route.languages[0],
-        searchStart, route, cfg, qualitySweep, directoryOffset, providerGroup, scoped.targeted,
+        language,
+        searchStart, route, cfg, qualitySweep, directoryOffset, providerGroup,
+        registrySweepMode ? true : scoped.targeted,
         querySeeds[queryText] || null
       );
       searchResult.registrySeed = querySeeds[queryText] || null;
-      searchResults.push(searchResult);
-    }
+      return searchResult;
+    }));
 
     const resolved = await resolveSearchCandidates(
       searchResults,
@@ -2726,8 +2791,19 @@ exports.handler = async function(event) {
       qualitySweep,
       broadDiscovery: SPARSE_DISCOVERY_PLATFORMS.has(plan.platform),
       broadDiscoveryTermCount: (SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || []).length,
-      registryTargeted: scoped.targeted,
+      registryTargeted: registrySweepMode ? true : scoped.targeted,
+      registryOnly: registrySweepMode,
       registrySeedCount: registrySeeds.length,
+      registrySweep: registrySweepMode ? {
+        cursor: registryWindow.batchIndex,
+        batchSize: registryWindow.batchSize,
+        start: registryWindow.start,
+        end: registryWindow.end,
+        totalSeeds: registryWindow.total,
+        totalBatches: registryWindow.totalBatches,
+        done: registryWindow.done,
+        nextCursor: registryWindow.nextCursor,
+      } : null,
       registrySeed: scoped.seed ? {
         title: scoped.seed.title || null,
         handle: scoped.seed.handle || null,
@@ -2753,7 +2829,8 @@ exports.handler = async function(event) {
       rejectedRows: rejected.length,
       rejectedByReason: rejectionSummary(rejected),
       providerTrace: searchResults.map((result) => ({ query: result.query, providers: result.providers })),
-      nextQueryCursor: queryCursor + 1,
+      nextQueryCursor: registrySweepMode ? queryCursor : queryCursor + 1,
+      nextRegistryCursor: registrySweepMode ? registryWindow.nextCursor : null,
       providerReadiness: providerReadiness(cfg),
       candidateAssetType: "influencer_registry_plus_latest_content",
       publicSnapshotMutation: false,
@@ -2794,6 +2871,7 @@ exports.__test = {
   registryLatestQuery,
   registrySeedBlocked,
   registrySeedQualityScore,
+  registrySweepWindow,
   resolveSearchCandidates,
   decodeSearchRedirectTarget,
   decodeXml
