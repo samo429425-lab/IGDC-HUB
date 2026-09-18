@@ -6,9 +6,10 @@
  * snapshot itself and it never exposes the build hook URL.
  */
 
-const VERSION = "commerce-release-dispatch-v1.3.1-patient-front-match-hook-retry";
+const VERSION = "commerce-release-dispatch-v1.3.2-igdc-hook-fallback";
 const HOOK_ENVS = Object.freeze([
   "COMMERCE_RELEASE_BUILD_HOOK_URL",
+  "IGDC_NETLIFY_BUILD_HOOK_URL",
   "NETLIFY_BUILD_HOOK_URL",
   "NETLIFY_DEPLOY_HOOK_URL",
   "BUILD_HOOK_URL"
