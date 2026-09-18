@@ -536,10 +536,18 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
   const mediaUrl = videoLike ? (policyDestination || null) : null;
 
   const sourceRankScore = sourceLooksSeed ? 0 : (rec.rank?.score ? Number(rec.rank.score) : 0);
+  const globalTopic = globalVideo && DonationResearchPolicy && typeof DonationResearchPolicy.globalNewsTopic === "function"
+    ? DonationResearchPolicy.globalNewsTopic(rec) : "other";
+  const globalVideoBonus = globalVideo && videoLike ? 120000 : 0;
+  const globalTopicBonus = globalVideo
+    ? (globalTopic === "disaster" ? 70000 : ((globalTopic === "hunger" || globalTopic === "relief" || globalTopic === "displacement") ? 50000 : (globalTopic === "conflict" ? 12000 : 0)))
+    : 0;
   const rankScore =
     (vh.score * 10) +
     (bankId ? 500 : 0) +
     (managedPublished ? 2000000 : 0) +
+    globalVideoBonus +
+    globalTopicBonus +
     sourceRankScore;
 
   const i18n = {
@@ -720,6 +728,21 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
 /* =========================
    Deduplication
 ========================= */
+function globalContentDedupeKey(it){
+  const raw = safeUrl(pickFirst(it?.media?.src, it?.link?.url, it?.url, it?.source?.url));
+  if(!raw) return "";
+  try{
+    const u = new URL(raw);
+    const host = u.hostname.replace(/^www\./i, "").toLowerCase();
+    // Same video/article can arrive through SearchBank, managed overlay and an
+    // RSS/social source.  Remove only known tracking parameters; never collapse
+    // different stories merely because they share a newsroom host.
+    ["utm_source","utm_medium","utm_campaign","utm_term","utm_content","at_medium","at_campaign","traffic_source","ref","ref_src"].forEach(k=>u.searchParams.delete(k));
+    u.hash = "";
+    const normalized = host + u.pathname.replace(/\/$/, "") + (u.searchParams.toString() ? "?" + u.searchParams.toString() : "");
+    return normalizeKey(normalized);
+  }catch(_e){ return normalizeKey(raw); }
+}
 function dedupe(items){
   const best = new Map();
 
@@ -728,7 +751,8 @@ function dedupe(items){
     const keyName = normalizeKey(it?.org?.name || it?.title || "");
 
     const sectionKey = toStr(it?.psom_key || it?.section_category || it?.section || DEFAULT_SECTION_KEY).trim() || DEFAULT_SECTION_KEY;
-    const k = keyHost ? `${sectionKey}|h:${keyHost}` : `${sectionKey}|n:${keyName}`;
+    const globalKey = sectionKey === DEFAULT_GLOBAL_SECTION_KEY ? globalContentDedupeKey(it) : "";
+    const k = globalKey ? `${sectionKey}|u:${globalKey}` : (keyHost ? `${sectionKey}|h:${keyHost}` : `${sectionKey}|n:${keyName}`);
     if(!k || k.endsWith("|n:")) continue;
 
     const prev = best.get(k);
@@ -1029,10 +1053,10 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
     meta:{
       schema:"donation.snapshot.enterprise.v7",
       generated_at: generatedAt,
-      producer:"donation-snapshot-builder.enterprise.v8.upgraded",
+      producer:"donation-snapshot-builder.enterprise.v8.6-global-content-dedupe",
       mode:"bank-first-seed-fallback",
       version: 7,
-      builder_version: 8.5,
+      builder_version: 8.6,
       input_sources:{
         search_bank: Boolean(bank),
         managed_priority_overlay: Boolean(managed && Array.isArray(managed.items)),

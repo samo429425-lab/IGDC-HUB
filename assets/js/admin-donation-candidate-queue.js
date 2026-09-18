@@ -102,7 +102,7 @@
   function renderSections(){
     var host=$('sections'),html='';
     sections.forEach(function(sec){
-      var list=visibleRowsFor(sec.key),isOpen=openSection===sec.key,lane=sec.key==='donation-global'?'영상/글로벌 뉴스 · 주 3회 자동':'공식 홈페이지';
+      var list=visibleRowsFor(sec.key),isOpen=openSection===sec.key,lane=sec.key==='donation-global'?'영상/글로벌 뉴스 · 매일 자동':'공식 홈페이지';
       html+='<section class="section" data-section-block="'+esc(sec.key)+'"><div class="section-head"><label class="check"><input type="checkbox" data-section-check="'+esc(sec.key)+'"> 전체</label><h2>'+esc(sec.label)+'</h2><span class="section-kind">'+esc(lane)+'</span><span class="badge">'+list.length+' / '+sec.capacity+'</span><button type="button" class="section-toggle" data-section-toggle="'+esc(sec.key)+'" aria-expanded="'+(isOpen?'true':'false')+'">'+(isOpen?'접기':'펼치기')+'</button></div>'+
         '<div class="section-content" data-section-content="'+esc(sec.key)+'" '+(isOpen?'':'hidden')+'>'+
         '<div class="section-actions"><button data-section-action="research" data-section="'+esc(sec.key)+'">다시 리서치</button><button data-section-action="ai_front_candidates" data-section="'+esc(sec.key)+'">AI 프론트 후보</button><button data-section-action="ai_auto_match" data-section="'+esc(sec.key)+'">프론트페이지 매칭 실행</button><button data-section-action="reconcile_published" data-section="'+esc(sec.key)+'">SearchBank 재연동</button></div>'+
@@ -162,7 +162,7 @@
         if(policyLabels.length)applied=' · AI 정책 자동 반영: '+policyLabels.slice(0,4).join(' + ')+(policyLabels.length>4?' 외 '+(policyLabels.length-4)+'건':'');
       }else if(r.appliedPolicy&&r.appliedPolicy.agendaId)applied=' · AI 정책 자동 반영: '+text(r.appliedPolicy.title||r.appliedPolicy.agendaId);
       var gr=reports.find(function(x){return x&&x.section==='donation-global'}),collector='';
-      if(gr){var yd=gr.youtubeDirect||{},yw=gr.youtubeWebFallback||{},rf=gr.rssFallback||{},pool=Number(gr.homeNewsSourcePool||yd.homeSourcePool||yw.homeSourcePool||0),planned=Array.isArray(gr.homeNewsSourcesPlanned)?gr.homeNewsSourcesPlanned.length:0;collector=' · 글로벌수집 YT '+Number(yd.items||0)+'['+text(yd.status||'-')+'] / WebVideo '+Number(yw.items||0)+'['+text(yw.status||'-')+'] / NewsFeed '+Number(rf.items||0)+'['+text(rf.status||'-')+']'+(pool?' · 홈뉴스 '+pool+'개 중 '+planned+'개 순환검색':'');}
+      if(gr){var yd=gr.youtubeDirect||{},yw=gr.youtubeWebFallback||{},rf=gr.rssFallback||{},sr=gr.socialVideoReuse||{},pool=Number(gr.homeNewsSourcePool||yd.homeSourcePool||yw.homeSourcePool||0),planned=Array.isArray(gr.homeNewsSourcesPlanned)?gr.homeNewsSourcesPlanned.length:0;collector=' · 글로벌수집 YT '+Number(yd.items||0)+'['+text(yd.status||'-')+'] / WebVideo '+Number(yw.items||0)+'['+text(yw.status||'-')+'] / SocialYT '+Number(sr.items||0)+'['+text(sr.status||'-')+'] / NewsFeed '+Number(rf.items||0)+'['+text(rf.status||'-')+']'+(pool?' · 홈뉴스 '+pool+'개 중 '+planned+'개 순환검색':'');}
       $('state').textContent='리서치 완료 · 엔진 '+engine+'건 → 저장 '+accepted+'건 · 공식 홈페이지 '+homepage+' · 글로벌 뉴스 '+globalNews+' (영상 '+globalVideo+') · 정책 제외 '+policySkip+' · 검색결과 링크 제외 '+searchSkip+collector+applied;
       if(!all&&section){openSection=section;renderSections()}
     }catch(e){$('state').textContent='리서치 오류: '+e.message;setBusy(false)}

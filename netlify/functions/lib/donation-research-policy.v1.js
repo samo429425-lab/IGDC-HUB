@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.11.0-home-news-video-pool";
+const VERSION = "donation-research-policy-v1.12.0-global-video-topic-safe";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -208,9 +208,23 @@ function recordText(record){
     ...array(r.tags),...array(r.keywords),...array(r.topics)
   ].filter(Boolean).join(" "));
 }
+function hintMatches(blob,hint){
+  const hay=lower(blob), needle=lower(hint);
+  if(!hay||!needle) return false;
+  // Latin short words such as "aid" and "war" must not match "said" or
+  // "forward".  Non-Latin languages do not use the same word-boundary model,
+  // so keep exact substring matching for those scripts.
+  if(/^[a-z0-9][a-z0-9 _-]*$/i.test(needle)){
+    const escaped=needle.replace(/[.*+?^${}()|[\]\\]/g,"\\$&").replace(/[ _-]+/g,"[\\s_-]+");
+    const singleWord=/^[a-z0-9]+$/i.test(needle);
+    const suffix=singleWord?"(?:s|es|ed|ing)?":"";
+    try{return new RegExp("(?:^|[^a-z0-9])"+escaped+suffix+"(?=$|[^a-z0-9])","i").test(hay);}catch(_e){return hay.includes(needle);}
+  }
+  return hay.includes(needle);
+}
 function countHints(blob,hints){
   let score=0;
-  for(const hint of hints||[]){ if(hint && blob.includes(lower(hint))) score += hint.includes(" ") ? 2 : 1; }
+  for(const hint of hints||[]){ if(hint && hintMatches(blob,hint)) score += hint.includes(" ") ? 2 : 1; }
   return score;
 }
 function youtubeId(value){
@@ -285,20 +299,56 @@ function isAuthoritativeGlobalNews(record){
   if(candidateUrls(r).some(isAuthoritativeGlobalNewsUrl)) return true;
   return GLOBAL_NEWS_SOURCE_RE.test(recordText(r));
 }
+const GLOBAL_DISASTER_HINTS=Object.freeze([
+  "earthquake","flood","wildfire","drought","storm","cyclone","typhoon","tornado","tsunami","landslide","disaster",
+  "지진","홍수","산불","태풍","쓰나미","산사태","재난","地震","洪水","山火","台風","津波","災害","台风","海啸",
+  "terremoto","inundación","incendio forestal","séisme","inondation","incendie","erdbeben","überschwemmung","waldbrand",
+  "inundação","incêndio","زلزال","فيضان","حريق"
+]);
+const GLOBAL_RELIEF_HINTS=Object.freeze([
+  "humanitarian","famine","hunger","food insecurity","refugee","displacement","displaced","civilian","conflict","war",
+  "emergency","relief","aid","rescue","evacuee","shelter","malnutrition","aid convoy","food distribution","medical aid","medical team",
+  "vaccination","humanitarian corridor","relief operation","relief mission","civilian casualties","humanitarian access","aid delivery",
+  "aid workers","displaced families","emergency shelter","search and rescue","food crisis","malnutrition crisis","hospital evacuation",
+  "airstrike civilian","bombing civilian","ceasefire aid","siege humanitarian","evacuation order","disaster response",
+  "기아","난민","피란민","전쟁","민간인","구호","구조","긴급지원","인도주의","의료지원","식량지원",
+  "難民","飢餓","戦争","救援","人道支援","难民","饥荒","战争","救援","人道援助",
+  "refugiados","hambre","guerra","ayuda humanitaria","rescate","réfugiés","famine","guerre","aide humanitaire","secours",
+  "flüchtlinge","hunger","krieg","humanitäre hilfe","rettung","refugiados","fome","guerra","ajuda humanitária","resgate",
+  "لاجئين","مجاعة","حرب","مساعدات إنسانية","إنقاذ"
+
+]);
+const GLOBAL_CONFLICT_ONLY_HINTS=Object.freeze([
+  "war","conflict","전쟁","戦争","战争","guerra","guerre","krieg","حرب"
+]);
+function globalNewsTopic(record){
+  const r=plain(record),source=plain(r.source),media=plain(r.media),org=plain(r.org);
+  const blob=lower([r.title,r.name,r.summary,r.description,r.about,r.content,r.category,r.semantic_category,r.type,r.mediaType,source.name,source.platform,org.name,media.kind,media.type,...array(r.tags),...array(r.keywords),...array(r.topics)].filter(Boolean).join(" "));
+  if(countHints(blob,GLOBAL_DISASTER_HINTS)>0) return "disaster";
+  if(countHints(blob,["famine","hunger","food insecurity","malnutrition","food crisis","food distribution","기아","飢餓","饥荒","hambre","famine","hunger","fome","مجاعة"])>0) return "hunger";
+  if(countHints(blob,["refugee","displacement","displaced","evacuee","shelter","displaced families","난민","피란민","難民","难民","refugiados","réfugiés","flüchtlinge","لاجئين"])>0) return "displacement";
+  if(countHints(blob,["relief","aid","rescue","medical aid","humanitarian","humanitarian corridor","aid delivery","search and rescue","구호","구조","긴급지원","인도주의","의료지원","救援","人道支援","人道援助","ayuda humanitaria","aide humanitaire","humanitäre hilfe","ajuda humanitária","مساعدات إنسانية","إنقاذ"])>0) return "relief";
+  if(countHints(blob,["war","conflict","civilian","airstrike civilian","bombing civilian","siege humanitarian","ceasefire aid","전쟁","민간인","戦争","战争","guerra","guerre","krieg","حرب"])>0) return "conflict";
+  return "other";
+}
 function globalNewsRelevant(record){
   const r=plain(record),source=plain(r.source),media=plain(r.media),org=plain(r.org);
   /* Relevance must come from the returned content itself, not from the research
-     query stored in collector.query/donationResearch.query. Otherwise an
-     unrelated Reuters market clip can inherit words like "humanitarian" from
-     the query and be falsely accepted. */
+     query stored in collector.query/donationResearch.query. Boundary-aware
+     matching also prevents short terms such as aid/war from matching said/forward. */
   const blob=lower([
     r.title,r.name,r.summary,r.description,r.about,r.content,r.category,r.semantic_category,r.type,r.mediaType,
     source.name,source.platform,org.name,media.kind,media.type,
     ...array(r.tags),...array(r.keywords),...array(r.topics)
   ].filter(Boolean).join(" "));
-  const policy=policyFor("donation-global"),generic=new Set(["video","footage","broadcast","report","update","news","news report","breaking news"]);
-  const humanitarian=(policy.semanticHints||[]).filter(h=>!generic.has(lower(h)));
-  return countHints(blob,humanitarian)>0 && (looksLikeVideo(record)||isAuthoritativeGlobalNews(record));
+  const disasterHits=countHints(blob,GLOBAL_DISASTER_HINTS);
+  const reliefHits=countHints(blob,GLOBAL_RELIEF_HINTS);
+  const conflictOnlyHits=countHints(blob,GLOBAL_CONFLICT_ONLY_HINTS);
+  // War/conflict by itself is not a Donation Global News signal. It must carry
+  // a concrete humanitarian impact such as civilians, displacement, hunger,
+  // rescue, shelter or aid. Disaster and relief signals remain sufficient.
+  const nonConflictHumanitarian=Math.max(0,reliefHits-conflictOnlyHits);
+  return (disasterHits>0||nonConflictHumanitarian>0) && (looksLikeVideo(record)||isAuthoritativeGlobalNews(record));
 }
 
 function isSocialUrl(value){
@@ -611,7 +661,7 @@ function youtubeThumbnail(record){
 }
 
 module.exports={
-  VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,researchFrameFor,researchAnchors,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,
+  VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,researchFrameFor,researchAnchors,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,globalNewsTopic,hintMatches,
   missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls,isAuthoritativeGlobalNewsUrl,isAuthoritativeGlobalNews,globalNewsRelevant,
   organizationWebsiteUrls,organizationHomepageUrl,canonicalOrganizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isDocumentUrl,isContentAggregatorHost,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection,homepageIdentityText,anchorIdentityScore,researchAnchorHomepage,matchesResearchAnchor,genericAnchorName,matchedResearchAnchorName,sectionIdentityEligible
 };
