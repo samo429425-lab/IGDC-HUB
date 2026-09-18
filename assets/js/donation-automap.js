@@ -284,6 +284,12 @@ function groupBySection(items){
         if(an !== bn) return an - bn;
       }
 
+      if(!aSeed && !bSeed && (String(a?.psom_key||'')==='donation-global' || String(b?.psom_key||'')==='donation-global')){
+        const av=(String(a?.type||'').toLowerCase()==='video'||String(a?.media?.kind||'').toLowerCase()==='video'||String(a?.link?.mode||'').toLowerCase()==='content-video')?1:0;
+        const bv=(String(b?.type||'').toLowerCase()==='video'||String(b?.media?.kind||'').toLowerCase()==='video'||String(b?.link?.mode||'').toLowerCase()==='content-video')?1:0;
+        if(bv!==av) return bv-av;
+      }
+
       if((b.__score || 0) !== (a.__score || 0)){
         return (b.__score || 0) - (a.__score || 0);
       }
@@ -332,18 +338,18 @@ function groupBySection(items){
     }
   }
 
-  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260909-network-tour-compat-v4';
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260918-donation-speed-history-v9';
   const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-donation-v1';
 
   function ensureContainedViewer(){
-    if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') {
+    if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 9 && typeof window.IGDCContainedViewer.open === 'function') {
       return Promise.resolve(window.IGDCContainedViewer);
     }
     if(window.__IGDC_DONATION_VIEWER_PROMISE__) return window.__IGDC_DONATION_VIEWER_PROMISE__;
     window.__IGDC_DONATION_VIEWER_PROMISE__ = new Promise(function(resolve,reject){
       let script=document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
       const finish=function(){
-        if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 3 && typeof window.IGDCContainedViewer.open === 'function') resolve(window.IGDCContainedViewer);
+        if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 9 && typeof window.IGDCContainedViewer.open === 'function') resolve(window.IGDCContainedViewer);
         else reject(new Error('IGDC contained viewer unavailable'));
       };
       if(script){
@@ -363,11 +369,12 @@ function groupBySection(items){
     return window.__IGDC_DONATION_VIEWER_PROMISE__;
   }
 
-  function openContainedHomepage(url,label){
+  function openContainedHomepage(url,label,options){
     const href=safeExternalUrl(url);
     if(!href) return Promise.resolve(false);
+    options=options||{};
     return ensureContainedViewer().then(function(viewer){
-      viewer.open(href,{label:String(label||'').trim()||new URL(href).hostname,kind:'donation'});
+      viewer.open(href,{label:String(label||'').trim()||new URL(href).hostname,kind:String(options.kind||'donation'),forceProxy:options.forceProxy!==false});
       return true;
     }).catch(function(err){
       console.warn('[IGDC][Donation] contained viewer unavailable:',err&&err.message?err.message:err);
@@ -401,6 +408,21 @@ function groupBySection(items){
     return window.__IGDC_DONATION_MEDIA_PROMISE__;
   }
 
+  function primeDonationInteractionEngines(){
+    const run=function(){
+      ensureContainedViewer().catch(function(){});
+      ensureDonationMediaPlayback().catch(function(){});
+      try{
+        ['https://www.youtube-nocookie.com','https://i.ytimg.com'].forEach(function(href){
+          if(document.querySelector('link[data-igdc-donation-preconnect="'+href+'"]')) return;
+          const link=document.createElement('link');link.rel='preconnect';link.href=href;link.crossOrigin='anonymous';link.dataset.igdcDonationPreconnect=href;(document.head||document.documentElement).appendChild(link);
+        });
+      }catch(_e){}
+    };
+    if(typeof window.requestIdleCallback==='function') window.requestIdleCallback(run,{timeout:1200});
+    else window.setTimeout(run,280);
+  }
+
   function looksPlayableVideoUrl(value){
     const url=safeExternalUrl(value);if(!url)return false;
     return /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?v=|embed\/|shorts\/)|\.(?:mp4|webm|ogv|ogg|m4v)(?:[?#]|$))/i.test(url);
@@ -412,7 +434,7 @@ function groupBySection(items){
     if(!source) return Promise.resolve(false);
     return ensureDonationMediaPlayback().then(function(player){player.open(card,{autoPlay:true});return true;}).catch(function(err){
       console.warn('[IGDC][Donation] media playback unavailable:',err&&err.message?err.message:err);
-      return openContainedHomepage(source,card.querySelector?.('.card-title')?.textContent||'Global News');
+      return openContainedHomepage(source,card.querySelector?.('.card-title')?.textContent||'Global News',{kind:'donation-news'});
     });
   }
 
@@ -492,7 +514,7 @@ function groupBySection(items){
         const card=a.closest('.donation-card');
         const label=card&&card.querySelector('.card-title')?card.querySelector('.card-title').textContent:'';
         if(card&&card.dataset.donationVideo==='1') openDonationVideo(card);
-        else openContainedHomepage(url,label);
+        else openContainedHomepage(url,label,{kind:card&&card.dataset.section==='donation-global'?'donation-news':'donation'});
       });
     });
   }
@@ -613,7 +635,7 @@ function mountSection(key, items, limit){
       const card = e.target?.closest?.('.donation-card');
       if(!card) return;
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url){ e.preventDefault(); e.stopPropagation(); if(card.dataset.donationVideo==='1')openDonationVideo(card);else openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || ''); }
+      if(url){ e.preventDefault(); e.stopPropagation(); if(card.dataset.donationVideo==='1')openDonationVideo(card);else openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || '',{kind:card.dataset.section==='donation-global'?'donation-news':'donation'}); }
     });
 
     document.addEventListener('keydown', (e)=>{
@@ -622,13 +644,14 @@ function mountSection(key, items, limit){
       if(!card) return;
       e.preventDefault();
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url){if(card.dataset.donationVideo==='1')openDonationVideo(card);else openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || '');}
+      if(url){if(card.dataset.donationVideo==='1')openDonationVideo(card);else openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || '',{kind:card.dataset.section==='donation-global'?'donation-news':'donation'});}
     });
   }
 
   function boot(){
     bindClicks();
-    main();
+    primeDonationInteractionEngines();
+  main();
 
     let reran = false;
     const mo = new MutationObserver(()=>{

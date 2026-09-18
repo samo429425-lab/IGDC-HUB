@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260918-profile-fallback-contained-v6'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260918-content-link-video-failsafe-v7'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -130,14 +130,15 @@
     if (!card || placeholderCard(card)) return '';
     var d = card.dataset || {};
     var values = [
-      d.socialUrl,
       d.latestContentUrl,
       d.contentUrl,
+      d.viewerUrl,
+      d.socialUrl,
       d.canonicalUrl,
       d.permalink,
-      d.embedUrl,
       d.href,
       d.url,
+      d.embedUrl,
       card.getAttribute('data-social-url'),
       card.getAttribute('data-latest-content-url'),
       card.getAttribute('data-content-url'),
@@ -246,9 +247,50 @@
     return validHttp(src) || /^data:image\/(?:svg\+xml|png|jpe?g|webp|gif)(?:;|,)/i.test(src);
   }
 
+  function explicitEmbedOf(platform, card, contentUrl) {
+    if (!card) return null;
+    var raw = text((card.dataset && card.dataset.embedUrl) || card.getAttribute('data-embed-url')).trim();
+    if (!validHttp(raw)) return null;
+    try {
+      var u = new URL(raw, location.href);
+      var host = u.hostname.replace(/^www\./, '').toLowerCase();
+      var path = u.pathname || '/';
+      platform = text(platform).toLowerCase();
+      if (platform === 'youtube' && /(?:^|\.)youtube(?:-nocookie)?\.com$/.test(host) && /^\/embed\//i.test(path)) {
+        return { mode: 'iframe', src: raw, aspect: '16/9', provider: 'youtube-video' };
+      }
+      if (platform === 'instagram' && host === 'instagram.com' && /\/embed\/?$/i.test(path)) {
+        return { mode: 'iframe', src: raw, aspect: 'instagram', provider: 'instagram-post' };
+      }
+      if (platform === 'tiktok' && /(?:^|\.)tiktok\.com$/.test(host) && /^\/player\/v1\//i.test(path)) {
+        return { mode: 'iframe', src: raw, aspect: '9/16', provider: 'tiktok-video' };
+      }
+      if (platform === 'facebook' && host === 'facebook.com' && /^\/plugins\/(?:video|post)\.php$/i.test(path)) {
+        var isVideo = /\/plugins\/video\.php$/i.test(path) || facebookIsVideo(contentUrl);
+        return { mode: 'iframe', src: raw, aspect: isVideo ? '16/9' : 'auto', provider: isVideo ? 'facebook-video' : 'facebook-post' };
+      }
+      if (platform === 'twitter' && host === 'platform.twitter.com' && /\/embed\/Tweet\.html$/i.test(path)) {
+        return { mode: 'iframe', src: raw, aspect: 'auto', provider: 'twitter-post' };
+      }
+      if (platform === 'pinterest' && host === 'assets.pinterest.com' && /\/ext\/embed\.html$/i.test(path)) {
+        return { mode: 'iframe', src: raw, aspect: 'auto', provider: 'pinterest-pin' };
+      }
+      if (platform === 'reddit' && /(?:^|\.)redditmedia\.com$/.test(host)) {
+        return { mode: 'iframe', src: raw, aspect: 'auto', provider: 'reddit-post' };
+      }
+    } catch (_) {}
+    return null;
+  }
+
   function buildEmbed(platform, url, card) {
     platform = text(platform).toLowerCase();
     url = text(url).trim();
+
+    // The release already carries the server-resolved official embed URL. Prefer it
+    // when it is a known provider endpoint; this avoids losing playable videos when
+    // a provider changes the shape of the public share/content URL.
+    var explicit = explicitEmbedOf(platform, card, url);
+    if (explicit) return explicit;
 
     if (platform === 'youtube') {
       var yid = videoIdYouTube(url) || videoIdYouTubeFromThumb(card);
@@ -1527,6 +1569,16 @@
     image.alt = title || platform || 'Social content';
     image.loading = 'eager';
     image.referrerPolicy = 'no-referrer';
+    if (validHttp(state.lastUrl || '')) {
+      image.style.cursor = 'pointer';
+      image.setAttribute('title', 'Open original content');
+      image.addEventListener('click', function () {
+        try {
+          var popup = window.open(state.lastUrl, '_blank', 'noopener,noreferrer');
+          if (popup) popup.opener = null;
+        } catch (_) {}
+      });
+    }
     media.appendChild(image);
     content.appendChild(media);
 
@@ -1683,6 +1735,7 @@
     var title = titleOf(card) || platform;
     var description = descOf(card);
     var embed = buildEmbed(platform, url, card);
+    if (!embed || !embed.src) return false;
 
     state.previousFocus = document.activeElement;
     state.lastUrl = url;
@@ -1928,6 +1981,14 @@
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    openCard(card);
+    if (!openCard(card)) {
+      // Last-resort continuity: if a provider URL variant cannot be embedded, never
+      // leave a real thumbnail as a dead card. Open the verified original source in
+      // a user-initiated isolated tab. Normal supported videos/posts stay contained.
+      try {
+        var popup = window.open(url, '_blank', 'noopener,noreferrer');
+        if (popup) popup.opener = null;
+      } catch (_) {}
+    }
   }, true);
 })();

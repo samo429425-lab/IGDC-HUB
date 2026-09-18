@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.8.0 - influencer fallback + AI policy binding */
+/* IGDC Social Hub Content Operations v3.8.1 - server-authoritative publish + profile fallback */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -1061,7 +1061,11 @@
       .map(function (key) {
         var part = list.filter(function (r) {
             return r.sectionKey === key;
-          });
+          }),
+          sourceCount = part.length,
+          frontCount = rows.filter(function (row) {
+            return row && row.sectionKey === key && publishedContentIds.has(text(row.id));
+          }).length;
         if (queue === "waiting" && part.length > 120) part = part.slice(0, 120);
         var isOpen = openKey === key,
           toggleAttribute =
@@ -1090,8 +1094,9 @@
           '"><span class="section-toggle-main"><span class="section-toggle-title">' +
           esc(label(key)) +
           '</span><span class="section-count">' +
-          part.length +
-          (queue === "registry" ? "명" : "개") +
+          (queue === "waiting"
+            ? "후보 " + sourceCount + " · 프론트 " + frontCount
+            : sourceCount + (queue === "registry" ? "명" : "개")) +
           '</span></span><span class="section-chevron">⌄</span></button></div>' +
           (isOpen
             ? '<div class="section-body">' +
@@ -1793,7 +1798,7 @@
       sectionKey: section,
       limit: j.batchSize,
       batchSize: j.batchSize,
-      queryPasses: 1,
+      queryPasses: j.qualitySweepActive ? 2 : 1,
       queryCursor: j.queryCursor || 0,
       countryCode: j.countryCode || "",
       regionId: j.regionId || "",
@@ -1947,7 +1952,7 @@
       newlyFound: 0,
       emptyBatches: 0,
       qualitySweepBatches: 0,
-      qualitySweepTarget: 3,
+      qualitySweepTarget: 6,
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
@@ -2023,7 +2028,7 @@
       !skipConfirm && !confirm(
         "각 SNS 섹션을 " +
           $("collectorBatchSize").value +
-          "개 단위로 100개까지 수집한 뒤 인기·품질 보강 검색과 상위 100개 정리를 거쳐 다음 섹션으로 진행할까요?",
+          "개 단위로 120개(공개 100 + 예비 20) 운영 풀을 채운 뒤 인기·품질 보강 검색을 추가 실행하고 상위 100개를 다시 정리해 다음 섹션으로 진행할까요?",
       )
     )
       return;
@@ -2060,7 +2065,7 @@
           j.emptyBatches = 0;
           j.newlyFound = 0;
           j.qualitySweepBatches = 0;
-          j.qualitySweepTarget = 3;
+          j.qualitySweepTarget = 6;
           j.qualitySweepDone = false;
           j.qualitySweepActive = false;
         }
@@ -2774,10 +2779,14 @@
     var ids = registeredContentIds("");
     if (!ids.length)
       return show("SearchBank 인계 가능한 최신 콘텐츠 후보가 없습니다.", "warn");
+    // Full-section publication is server-authoritative. The browser list is only
+    // an operator view and may be capped/stale, so never freeze publication to
+    // the currently rendered IDs. The server re-reads the latest approved rows
+    // plus approved sparse-section influencer/profile fallbacks.
     return actualApply(
       "",
       skipConfirm === true,
-      ids,
+      null,
       publishMode || "all_sections_front_publish",
       order.slice(),
     );
@@ -2796,8 +2805,8 @@
     keys.forEach(function (key) { ids = ids.concat(registeredContentIds(key)); });
     ids = Array.from(new Set(ids));
     if (!ids.length) return show("선택한 SNS 섹션에 SearchBank 인계 가능한 후보가 없습니다.", "warn");
-    if (!confirm(keys.map(label).join(", ") + " 섹션의 후보 " + ids.length + "개를 프론트 등록 대상으로 보낼까요?")) return false;
-    return actualApply("", true, ids, "selected_sections_front_publish", keys);
+    if (!confirm(keys.map(label).join(", ") + " 섹션의 현재 정상 후보를 서버 최신 상태 기준으로 프론트 등록할까요?")) return false;
+    return actualApply("", true, null, "selected_sections_front_publish", keys);
   }
 
   async function actualUnapplySelectedFrontSections() {
@@ -3302,7 +3311,7 @@
           : keys.length === 1
             ? "single_section_front_publish"
             : "selected_sections_front_publish";
-        var applied = await actualApply("", true, applyIds, autoMode, keys);
+        var applied = await actualApply(keys.length === 1 ? keys[0] : "", true, null, autoMode, keys);
         if (!applied) throw new Error("AI 자동 운영 프론트 실제 적용을 완료하지 못했습니다.");
       }
       if (statusEl) statusEl.textContent = "완료 · " + keys.length + "개 SNS";

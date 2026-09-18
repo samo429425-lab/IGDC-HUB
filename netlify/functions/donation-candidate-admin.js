@@ -20,7 +20,7 @@ try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBan
 let SocialStore = null;
 try { SocialStore = require("./lib/social-candidate-store.v1"); } catch (_error) { SocialStore = null; }
 
-const VERSION = "donation-candidate-admin-v1.17.0-social-video-reuse-topic-balance";
+const VERSION = "donation-candidate-admin-v1.18.0-video-first-article-probe";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -1096,8 +1096,15 @@ async function performResearch(event,section,customQuery,limit,options){
         /* Search providers often return a clean BBC/Reuters/AP article URL but no
            image.  Fetch only that authoritative article page and recover its own
            OG image/title/description so a valid news card is not discarded. */
-        if(!isVideo&&authoritativePage&&(!hasThumb||!(Policy.globalNewsRelevant&&Policy.globalNewsRelevant(raw)))){
-          const preview=await fetchContentPreview(url,3200);
+        const globalTopic = Policy.globalNewsTopic ? Policy.globalNewsTopic(raw) : 'other';
+        const highValueVideoProbe = ['disaster','hunger','relief','displacement'].includes(globalTopic);
+        const shouldProbeArticleVideo = !isVideo && authoritativePage && (
+          !hasThumb ||
+          !(Policy.globalNewsRelevant&&Policy.globalNewsRelevant(raw)) ||
+          (spec.kind==='authoritative-rss' && highValueVideoProbe)
+        );
+        if(shouldProbeArticleVideo){
+          const preview=await fetchContentPreview(url,2600);
           if(preview&&preview.resolved){
             const image=safeHttps(preview.image)||candidateThumb(raw,sec);
             const playable=safeHttps(preview.videoUrl);

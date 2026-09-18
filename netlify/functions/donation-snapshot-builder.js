@@ -960,6 +960,11 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
 
   function sortSection(list){
     return list.sort((a,b)=>{
+      if(String(a?.psom_key||'') === 'donation-global' || String(b?.psom_key||'') === 'donation-global'){
+        const av = (String(a?.type||'').toLowerCase()==='video' || String(a?.media?.kind||'').toLowerCase()==='video' || String(a?.link?.mode||'').toLowerCase()==='content-video') ? 1 : 0;
+        const bv = (String(b?.type||'').toLowerCase()==='video' || String(b?.media?.kind||'').toLowerCase()==='video' || String(b?.link?.mode||'').toLowerCase()==='content-video') ? 1 : 0;
+        if(bv !== av) return bv - av;
+      }
       const sa = Number(a?.rank?.score || 0);
       const sb = Number(b?.rank?.score || 0);
       if(sb !== sa) return sb - sa;
@@ -1053,10 +1058,10 @@ function buildSnapshot({ seed, psomList, bank, optional, managed }){
     meta:{
       schema:"donation.snapshot.enterprise.v7",
       generated_at: generatedAt,
-      producer:"donation-snapshot-builder.enterprise.v8.6-global-content-dedupe",
+      producer:"donation-snapshot-builder.enterprise.v8.7-global-video-first",
       mode:"bank-first-seed-fallback",
       version: 7,
-      builder_version: 8.6,
+      builder_version: 8.7,
       input_sources:{
         search_bank: Boolean(bank),
         managed_priority_overlay: Boolean(managed && Array.isArray(managed.items)),

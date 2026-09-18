@@ -1,4 +1,4 @@
-/* IGDC contained external viewer v8 stable-restore
+/* IGDC contained external viewer v9 donation-history-speed
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
@@ -17,10 +17,10 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V8__) return;
-  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V8__ = true;
+  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V9__) return;
+  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V9__ = true;
 
-  var VIEWER_VERSION = 8;
+  var VIEWER_VERSION = 9;
 
   var PROXY_PATH = '/.netlify/functions/search-page-proxy';
   var ROOT_ID = 'igdc-contained-external-viewer';
@@ -370,6 +370,26 @@
     frame.src = proxyUrl(target, state.proxyId, mode);
   }
 
+  function setDonationProxyFresh(target, mode) {
+    mode = mode || 'static';
+    var oldFrame = state.frame;
+    if (!oldFrame || !oldFrame.parentNode) { setFrameProxy(target, mode); return; }
+    var frame = document.createElement('iframe');
+    frame.className = 'igdc-contained-frame';
+    frame.title = '외부 사이트 내부 보기';
+    frame.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-downloads allow-presentation');
+    frame.setAttribute('allow', 'clipboard-write; fullscreen');
+    state.viewerMode = mode + '-proxy';
+    frame.dataset.viewerMode = state.viewerMode;
+    frame.addEventListener('load', function () { hideLoadingSoon(70); });
+    /* Set src before insertion so this browsing context starts on the proxy page
+     * instead of creating an extra about:blank entry in the joint history. */
+    frame.src = proxyUrl(target, state.proxyId, mode);
+    oldFrame.parentNode.replaceChild(frame, oldFrame);
+    state.frame = frame;
+  }
+
   function updateBar(target, label) {
     var host = hostOf(target);
     if (state.host) state.host.textContent = host;
@@ -402,7 +422,8 @@
     }
 
     if (options.forceProxy || preferProxy(target)) {
-      setFrameProxy(target, 'static');
+      if (/^donation(?:-|$)/i.test(state.kind || '')) setDonationProxyFresh(target, 'static');
+      else setFrameProxy(target, 'static');
       return;
     }
 
@@ -693,9 +714,12 @@
     state.activeLoadSeq += 1;
     updateBar(next, hostOf(next));
     showLoading('사이트를 불러오는 중입니다…');
-    /* Once a source required proxy containment, keep subsequent navigation in
-     * the same contained proxy instead of trying to promote it to top-level. */
-    setFrameProxy(next, 'static');
+    /* Donation external pages replace the nested browsing context on each
+     * in-view navigation. This keeps Chrome/Edge's native Back button attached
+     * to the IGDC viewer history marker instead of walking an iframe history
+     * entry that can surface an upstream "invalid access" page. */
+    if (/^donation(?:-|$)/i.test(state.kind || '')) setDonationProxyFresh(next, 'static');
+    else setFrameProxy(next, 'static');
   });
 
   global.addEventListener('popstate', function (ev) {

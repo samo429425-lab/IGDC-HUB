@@ -16,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.18.0-runtime-release-direct";
+  "social-snapshot-publish-v1.18.1-server-authoritative-front";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -789,6 +789,17 @@ exports.handler = async function (event) {
     const omittedSections = SocialStore.Policy.SECTION_KEYS.filter(
       (key) => !requestedSections.includes(key),
     );
+    // Full and multi-section publication is recalculated from the durable
+    // server store. Browser lists are capped/operator views and must not define
+    // the authoritative front plan. Exact IDs remain only for deliberately
+    // selected content (or explicitly selected rows in one section).
+    const serverAuthoritativeCandidateSelection =
+      publishMode === "social_full_run" ||
+      publishMode === "all_sections_front_publish" ||
+      publishMode === "selected_sections_front_publish" ||
+      (publishMode === "single_section_front_publish" && candidateIds.length === 0);
+    const exactCandidateSelection =
+      !serverAuthoritativeCandidateSelection && candidateIds.length > 0;
     const reportType = publishReportType(publishMode);
     const route = CountryRouting.resolve(event, params);
     if (operation === "pipeline_diagnostic" || operation === "pipeline_verification") {
@@ -874,20 +885,18 @@ exports.handler = async function (event) {
       );
       const approvedRows = Array.isArray(allRows) ? allRows : [];
       const requestedIds = new Set(candidateIds);
+      const requestedSectionSet = new Set(requestedSections);
       rows = approvedRows.filter((row) => {
         const rowId = SocialStore.text(row && row.id);
         const rowSection = SocialStore.text(
           row && (row.section_key || row.sectionKey),
         );
-        if (requestedIds.size > 0 && !requestedIds.has(rowId)) return false;
+        if (exactCandidateSelection && requestedIds.size > 0 && !requestedIds.has(rowId)) return false;
         if (sectionKey && rowSection !== sectionKey) return false;
+        if (publishMode === "selected_sections_front_publish" && !requestedSectionSet.has(rowSection)) return false;
         return true;
       });
-      const authoritativeReconcile =
-        publishMode === "social_full_run" ||
-        publishMode === "all_sections_front_publish" ||
-        publishMode === "selected_sections_front_publish" ||
-        (publishMode === "single_section_front_publish" && candidateIds.length === 0);
+      const authoritativeReconcile = serverAuthoritativeCandidateSelection;
       snapshot = SocialStore.buildSnapshot(
         base.doc,
         Array.isArray(rows) ? rows : [],
@@ -1009,7 +1018,8 @@ exports.handler = async function (event) {
         requestedSections,
         omittedSections,
         requestedCandidateIds: candidateIds.length,
-        exactCandidateSelectionApplied: candidateIds.length > 0,
+        exactCandidateSelectionApplied: exactCandidateSelection,
+        serverAuthoritativeCandidateSelection,
         resolvedCandidateRows: Array.isArray(rows) ? rows.length : 0,
         resolvedCandidateIds: Array.isArray(rows)
           ? rows.map((row) => SocialStore.text(row && row.id)).filter(Boolean)
@@ -1189,7 +1199,8 @@ exports.handler = async function (event) {
           : (operation || "preview"),
       requestedCandidateIds: candidateIds.length,
       exactCandidateSelectionApplied:
-        !unpublishSelected && candidateIds.length > 0,
+        !unpublishSelected && exactCandidateSelection,
+      serverAuthoritativeCandidateSelection,
       resolvedCandidateRows: Array.isArray(rows) ? rows.length : 0,
       resolvedCandidateIds: Array.isArray(rows)
         ? rows.map((row) => SocialStore.text(row && row.id)).filter(Boolean)

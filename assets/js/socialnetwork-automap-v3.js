@@ -51,13 +51,15 @@
     return (
       safeText(
         it &&
-          (it.sourceUrl ||
-            it.source_url ||
-            it.latestContentUrl ||
+          (it.latestContentUrl ||
             it.latest_content_url ||
             it.sourceContentUrl ||
             it.source_content_url ||
+            (it.social && it.social.latestContentUrl) ||
+            it.viewerUrl ||
             it.permalink ||
+            it.sourceUrl ||
+            it.source_url ||
             it.affiliateOutboundUrl ||
             it.affiliate_outbound_url ||
             it.externalOutboundUrl ||
@@ -574,11 +576,20 @@
     const desc = cardIdentity(it) || " ";
     const thumb = pickThumb(it);
 
+    const latestContentUrl = safeText(it && (it.latestContentUrl || it.latest_content_url || (it.social && it.social.latestContentUrl)));
+    const viewerUrl = safeText(it && (it.viewerUrl || it.permalink || it.href || it.link));
+    const embedUrl = safeText(it && (it.embedUrl || it.embed_url));
+
     card.href = url || "#";
     card.dataset.contentUrl = url || "#";
     card.dataset.socialUrl = url || "#";
+    card.dataset.latestContentUrl = latestContentUrl || url || "";
+    card.dataset.viewerUrl = viewerUrl || url || "";
     card.dataset.thumbnailUrl = thumb || "";
-    card.dataset.embedUrl = safeText(it && it.embedUrl);
+    card.dataset.embedUrl = embedUrl;
+    card.dataset.profileFallback = it && it.social && it.social.profileFallback ? "1" : "0";
+    // Viewer bridge intercepts normal clicks. _blank remains only as a fail-safe
+    // when the bridge itself is unavailable, so a real video/post is never dead.
     card.target = url && url !== "#" ? "_blank" : "_self";
     card.rel = "noopener";
     card.removeAttribute("data-dummy");
