@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.21.0-revenue-aware-full-rebalance";
+const VERSION = "commerce-country-automation-v3.20.2-global-country-adaptive-discovery";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1579,7 +1579,9 @@ async function advanceResearchJob(actorId, input, event) {
       const task = array(job.searchTasks)[Number(job.searchCursor || 0)];
       if (!task) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 4)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       else {
-        const result = await RegionalSelector.searchSupplierResearchStep(event || {}, Object.assign({}, selectorInput, { task, limit: Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES), timeoutMs: 7000 }));
+        const matchingGoogleTrace = task.lane === "sanmaru" ? array(job.trace).slice().reverse().find((row) => row && row.source === "google" && text(row.query) === text(task.query)) : null;
+        const externalFallback = scope.country !== "KR" && task.lane === "sanmaru" && (!matchingGoogleTrace || matchingGoogleTrace.status !== "ok" || Number(matchingGoogleTrace.count || matchingGoogleTrace.returned || 0) <= 0);
+        const result = await RegionalSelector.searchSupplierResearchStep(event || {}, Object.assign({}, selectorInput, { task, externalFallback, limit: Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES), timeoutMs: 7000 }));
         const novelItems=filterKnownSupplierItems(result.items,new Set(array(job.knownSupplierKeys)));
         job.supplierHoldingCandidates=mergeSupplierHolding(job.supplierHoldingCandidates,novelItems,job.blockedSupplierKeys,300); job.supplierBlockedCandidates=mergeSupplierBlocked(job.supplierBlockedCandidates,novelItems,job.blockedSupplierKeys,300); job.rawCandidates = mergeResearchItems(job.rawCandidates, novelItems, SUPPLIER_RAW_LIMIT, job.blockedSupplierKeys); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0), returned:Number(array(result.items).length), novel:Number(novelItems.length), duplicateExistingSkipped:Math.max(0,array(result.items).length-novelItems.length) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
         if (retryableResearchStatus(result.status) && Number(task.attempt || 0) < 1) job.searchTasks.push(Object.assign({}, task, { attempt: Number(task.attempt || 0) + 1, retryOf: Number(job.searchCursor || 0) - 1 }));
@@ -3957,22 +3959,18 @@ async function productAiAutomation(actorId, input) {
     delete next.approvedPlacement; delete next.selectedPlacement;
     return next;
   });
-  const placementOnly = requestedMode === "placement", placementBatch = requestedMode === "placement_batch", rebalanceBatch = requestedMode === "rebalance_batch", selectedProductIds = new Set(array(input && input.productIds).map((id) => text(id)).filter(Boolean)), selectionOnly = requestedMode === "products" || placementBatch || rebalanceBatch, repairOnly = requestedMode === "repair", mode = requestedMode === "section" ? "section" : (repairOnly ? "repair" : ((requestedMode === "products" || rebalanceBatch) ? "products" : "all")), sectionKey = text(input && input.sectionKey);
+  const placementOnly = requestedMode === "placement", placementBatch = requestedMode === "placement_batch", selectedProductIds = new Set(array(input && input.productIds).map((id) => text(id)).filter(Boolean)), selectionOnly = requestedMode === "products" || placementBatch, repairOnly = requestedMode === "repair", mode = requestedMode === "section" ? "section" : (repairOnly ? "repair" : (requestedMode === "products" ? "products" : "all")), sectionKey = text(input && input.sectionKey);
   const deferQueueSync=placementBatch&&input&&input.deferQueueSync===true,aiRunToken=placementBatch?text(input&&input.aiRunToken)||("ai_draft_"+sha256(iso()+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20)):"";
   if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   if (selectionOnly && !selectedProductIds.size) { const error = new Error("AI 자동 배치할 선택 후보를 확인하세요."); error.statusCode = 400; throw error; }
-  // Explicit placement modes are intentionally limited to undecided rows.
-  // The normal AI "all" pass is a true re-evaluation pass: unlocked AI-managed
-  // placements are allowed to compete again with newly researched candidates.
-  // This prevents a permanently-listed, low-value/non-monetizable candidate from
-  // occupying a section forever merely because one undecided row still exists.
-  // Administrator/manual and active Front publication locks remain authoritative.
-  const unassignedPlacementOnly = placementOnly || placementBatch;
+  const unassignedPlacementOnly = placementOnly || placementBatch || (mode === "all" && array(job.products).some((row) =>
+    lower(row && row.slotDecision || "undecided") === "undecided" && !productAdministratorLocked(row)
+  ));
   const runId = "product_ai_management_" + sha256(iso() + "|" + scope.country + "|" + scope.region + "|" + mode + "|" + sectionKey + "|" + Math.random()).slice(0, 20);
   const enrichment = (unassignedPlacementOnly || placementOnly || selectionOnly || repairOnly)
     ? { attempted: 0, completed: 0, changed: 0, remaining: 0 }
     : await enrichAutomationProducts(job, mode);
-  const planningSource = (placementBatch || rebalanceBatch) ? productAutomationPlanningSource(job).filter((row) => selectedProductIds.has(text(row && row.id))) : productAutomationPlanningSource(job);
+  const planningSource = placementBatch ? productAutomationPlanningSource(job).filter((row) => selectedProductIds.has(text(row && row.id))) : productAutomationPlanningSource(job);
   const portfolio = ProductRanking.buildPortfolio(planningSource, plain(job.rankingContext));
   const evaluatedByIdentity = new Map(array(portfolio.products).map((row) => {
     const assessment = productPrivateReviewAssessment(row), combined = combinedProductAssignments(row);
@@ -3984,17 +3982,12 @@ async function productAiAutomation(actorId, input) {
   for (const row of currentRows) {
     const decision = lower(row && row.slotDecision || "undecided"), key = productPlacementKey(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement));
     if (productAdministratorLocked(row)) manualPreserved += 1;
-    // During a bounded rebalance batch, every non-selected AI placement is
-    // part of the current capacity baseline.  Selected rows are released and
-    // reconsidered inside this request; outside rows must continue to count so
-    // a 10-row batch cannot silently overfill a 100-item section.
-    const rebalanceBaseline = rebalanceBatch && !selectedProductIds.has(text(row && row.id));
-    if ((unassignedPlacementOnly || productAdministratorLocked(row) || rebalanceBaseline) && decision === "slot_candidate" && validProductSectionKey(key)) manualCounts[key] += 1;
+    if ((unassignedPlacementOnly || productAdministratorLocked(row)) && decision === "slot_candidate" && validProductSectionKey(key)) manualCounts[key] += 1;
   }
   let tourDiningAutomaticCount = currentRows.filter((row) => {
     const decision=lower(row&&row.slotDecision||"undecided"), key=productPlacementKey(row&&(row.approvedPlacement||row.selectedPlacement||row.primaryPlacement));
     if(decision!=="slot_candidate"||key!=="tour|tour") return false;
-    if(!(productAdministratorLocked(row)||unassignedPlacementOnly||(rebalanceBatch&&!selectedProductIds.has(text(row&&row.id))))) return false;
+    if(!(productAdministratorLocked(row)||unassignedPlacementOnly)) return false;
     return ProductRanking.tourRightProfile(row).diningAuxiliary===true;
   }).length;
   const selectedPlacementByIdentity = new Map(), workingCounts = Object.assign({}, manualCounts), allocationReasons = new Map();
@@ -4094,10 +4087,10 @@ async function productAiAutomation(actorId, input) {
     const priorDraft=plain(job.aiAutomationDraft),sameDraft=text(priorDraft.runToken)===aiRunToken,now=iso();
     job.aiAutomationDraft={schema:"igdc-product-ai-automation-draft.v1",runToken:aiRunToken,status:"temporary",mode:text(input&&input.draftMode)||"manual",startedAt:sameDraft?priorDraft.startedAt||now:now,updatedAt:now,targetItems:Math.max(Number(priorDraft.targetItems||0),Number(input&&input.targetTotal||0)),completedBatches:(sameDraft?Number(priorDraft.completedBatches||0):0)+1,completedItems:(sameDraft?Number(priorDraft.completedItems||0):0)+selectedProductIds.size,finalizedItems:sameDraft?Number(priorDraft.finalizedItems||0):0,pendingItems:boundedQueueSync.remaining,lastBatchSize:selectedProductIds.size,lastBatchCompletedAt:now,automaticFinalize:input&&input.automaticFinalize===true,automaticPublication:false};
   }
-  job.trace = array(job.trace).concat([{ at: iso(), source: repairOnly ? "product-ai-assignment-repair" : (rebalanceBatch ? "product-ai-revenue-aware-rebalance-batch" : (placementBatch ? "product-ai-unassigned-batch-placement" : (placementOnly ? "product-ai-stored-evidence-placement" : (unassignedPlacementOnly ? "product-ai-unassigned-auto-section-placement" : "product-ai-private-placement-management")))), status: deferQueueSync ? "temporary_saved" : (queueFailures.length ? "completed_with_queue_warnings" : "complete"), runId, mode: rebalanceBatch ? "rebalance_batch" : (placementBatch ? "placement_batch" : (placementOnly ? "placement" : mode)), sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, recoveredMissingPlacements, manualPreserved, queueFailures: queueFailures.length, queueSyncDeferred: unassignedPlacementOnly ? boundedQueueSync.remaining : 0, queueSyncAttempted: unassignedPlacementOnly ? boundedQueueSync.attempted : syncResults.length, queueSynced: syncResults.filter((row)=>row.ok===true).length, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
+  job.trace = array(job.trace).concat([{ at: iso(), source: repairOnly ? "product-ai-assignment-repair" : (placementBatch ? "product-ai-unassigned-batch-placement" : (placementOnly ? "product-ai-stored-evidence-placement" : (unassignedPlacementOnly ? "product-ai-unassigned-auto-section-placement" : "product-ai-private-placement-management"))), status: deferQueueSync ? "temporary_saved" : (queueFailures.length ? "completed_with_queue_warnings" : "complete"), runId, mode: placementBatch ? "placement_batch" : (placementOnly ? "placement" : mode), sectionKey: mode === "section" ? sectionKey : null, changed: changed.length, recoveredMissingPlacements, manualPreserved, queueFailures: queueFailures.length, queueSyncDeferred: unassignedPlacementOnly ? boundedQueueSync.remaining : 0, queueSyncAttempted: unassignedPlacementOnly ? boundedQueueSync.attempted : syncResults.length, queueSynced: syncResults.filter((row)=>row.ok===true).length, enrichmentAttempted: enrichment.attempted, enrichmentCompleted: enrichment.completed, enrichmentChanged: enrichment.changed, enrichmentRemaining: enrichment.remaining, automaticPublication: false, automaticProductImport: false }]).slice(-240);
   if (queueFailures.length) job.errors = array(job.errors).concat(queueFailures.slice(0, 30).map((row) => ({ at: iso(), stage: "product_ai_automation_queue_sync", productId: row.productId, message: row.error }))).slice(-60);
   await saveProductJob(job, actorId);
-  const compactResponse = placementBatch || rebalanceBatch || plain(input).compactResponse === true;
+  const compactResponse = placementBatch || plain(input).compactResponse === true;
   const result = compactResponse ? compactProductResearchStep(job) : publicProductJob(job), finalRows = compactResponse ? array(job.products) : array(result.products);
   const resultScopeRows = mode === "section" ? finalRows.filter((row) => productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement) === sectionKey || (productAutomationManaged(row) && plain(row.managementControl).sectionKey === sectionKey)) : ((selectionOnly || repairOnly) ? finalRows.filter((row) => (selectionOnly ? selectedProductIds : repairProductIds).has(text(row && row.id))) : finalRows);
   const unassignedReasonCounts = {};
@@ -4107,7 +4100,7 @@ async function productAiAutomation(actorId, input) {
   });
   result.aiAutomationResult = {
     schema: "igdc-product-ai-private-placement-result.v4-draft-finalize",
-    runId, mode: rebalanceBatch ? "rebalance_batch" : (placementBatch ? "placement_batch" : mode), sectionKey: mode === "section" ? sectionKey : null,
+    runId, mode: placementBatch ? "placement_batch" : mode, sectionKey: mode === "section" ? sectionKey : null,
     aiRunToken: aiRunToken || null, temporary: deferQueueSync === true, temporaryCompletedItems: deferQueueSync ? Number(plain(job.aiAutomationDraft).completedItems || 0) : 0, temporaryPendingItems: deferQueueSync ? Number(plain(job.aiAutomationDraft).pendingItems || 0) : 0,
     recoveredMissingPlacements,
     considered: repairOnly ? repairProductIds.size : (selectionOnly ? currentRows.filter((row) => selectedProductIds.has(text(row && row.id)) && !productAdministratorLocked(row)).length : (unassignedPlacementOnly ? currentRows.filter((row) => lower(row && row.slotDecision || "undecided") === "undecided" && !productAdministratorLocked(row)).length : currentRows.length)),

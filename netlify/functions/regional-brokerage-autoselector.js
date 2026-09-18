@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.6.4-bounded-staged-network-timeouts";
+const VERSION="regional-brokerage-autoselector-v2.6.5-global-country-resilient-discovery";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -72,6 +72,8 @@ const LOCAL_QUERY_PACKS=Object.freeze({
   ms:{commerce:"kedai dalam talian rasmi produk beli penghantaran pemulangan khidmat pelanggan",categories:["pengeluar koperasi produk tempatan","pengilang produk jenama","makanan barangan runcit rumah","kecantikan penjagaan diri","pakaian kasut beg","elektronik aksesori","perkakas rumah dapur","bayi keluarga pendidikan","produk pertanian perikanan perhutanan","produk pelancongan tempatan tempahan"]},
   vi:{commerce:"cửa hàng trực tuyến chính thức sản phẩm mua giao hàng đổi trả chăm sóc khách hàng",categories:["nhà sản xuất hợp tác xã sản phẩm địa phương","nhà sản xuất sản phẩm thương hiệu","thực phẩm tạp hóa đồ gia dụng","làm đẹp chăm sóc cá nhân","quần áo giày túi","điện tử phụ kiện","đồ gia dụng nhà bếp","trẻ em gia đình giáo dục","sản phẩm nông lâm ngư nghiệp","sản phẩm du lịch địa phương đặt chỗ"]},
   th:{commerce:"ร้านค้าออนไลน์ทางการ สินค้า ซื้อ จัดส่ง คืนสินค้า บริการลูกค้า",categories:["ผู้ผลิต สหกรณ์ สินค้าท้องถิ่น","ผู้ผลิต สินค้าแบรนด์","อาหาร ของชำ ของใช้ในบ้าน","ความงาม ของใช้ส่วนบุคคล","เสื้อผ้า รองเท้า กระเป๋า","อิเล็กทรอนิกส์ อุปกรณ์เสริม","เครื่องใช้ไฟฟ้า ห้องครัว บ้าน","เด็ก ครอบครัว การศึกษา","สินค้าเกษตร ประมง ป่าไม้","สินค้าท่องเที่ยวท้องถิ่น จอง"]},
+  fil:{commerce:"opisyal na online store produkto bumili delivery pagpapadala pagbabalik refund customer service",categories:["producer kooperatiba lokal na produkto","tagagawa brand produkto","pagkain grocery pangunahing pangangailangan gamit sa bahay","beauty personal care","damit sapatos bag","electronics accessories","home kitchen appliances","baby family education products","agrikultura pangisdaan kagubatan produkto","lokal na travel products booking"]},
+  ceb:{commerce:"opisyal nga online store produkto palit delivery pagpadala pagbalik refund customer service",categories:["producer kooperatiba lokal nga produkto","tiggama brand produkto","pagkaon grocery pangunang panginahanglan gamit sa balay","beauty personal care","sinina sapatos bag","electronics accessories","home kitchen appliances","baby family education products","agrikultura pangisda kalasangan produkto","lokal nga travel products booking"]},
   sw:{commerce:"duka rasmi mtandaoni bidhaa nunua usafirishaji marejesho huduma kwa wateja",categories:["mzalishaji ushirika bidhaa za eneo","mtengenezaji bidhaa za chapa","chakula mboga vifaa vya nyumbani","urembo huduma binafsi","nguo viatu mifuko","elektroniki vifaa","vifaa vya nyumbani jikoni","mtoto familia elimu","bidhaa za kilimo uvuvi misitu","bidhaa za utalii wa eneo kuhifadhi"]}
 });
 
@@ -104,23 +106,25 @@ const SUPPLIER_ROLE_TERMS=Object.freeze({
   ms:"pengeluar koperasi penjual bertanggungjawab pengedar tempatan kedai rasmi",
   vi:"nhà sản xuất hợp tác xã người bán chịu trách nhiệm nhà phân phối địa phương cửa hàng chính thức",
   th:"ผู้ผลิต สหกรณ์ ผู้ขายที่รับผิดชอบ ผู้จัดจำหน่ายท้องถิ่น ร้านค้าอย่างเป็นทางการ",
+  fil:"tagagawa producer kooperatiba responsableng nagbebenta lokal na distributor opisyal na tindahan",
+  ceb:"tiggama producer kooperatiba responsable nga tigbaligya lokal nga distributor opisyal nga tindahan",
   tr:"üretici kooperatif sorumlu satıcı yerel distribütör resmi mağaza",
   sw:"mtengenezaji mzalishaji ushirika muuzaji anayewajibika msambazaji wa eneo duka rasmi"
 });
-const SUPPLIER_TEXT_RX=/(manufacturer|producer|cooperative|supplier|authorized distributor|local distributor|responsible seller|official store|제조사|생산자|협동조합|책임 판매|지역 유통|공식 판매처|メーカー|生産者|協同組合|責任販売|地域流通|製造商|制造商|生產者|生产者|合作社|責任銷售|责任销售|經銷商|经销商|fabricante|productor|coopérative|producteur|hersteller|erzeuger|genossenschaft|produttore|producent|производитель|поставщик|кооператив|مصنع|منتج|تعاونية|निर्माता|उत्पादक|सहकारी|প্রস্তুতকারক|উৎপাদক|সমবায়|مینوفیکچرر|پروڈیوسر|کوآپریٹو|produsen|koperasi|pengeluar|nhà sản xuất|hợp tác xã|ผู้ผลิต|สหกรณ์|üretici|kooperatif|mtengenezaji|mzalishaji|ushirika)/i;
-const DIRECT_SALE_TEXT_RX=/(add to cart|buy now|checkout|shop now|online store|catalog|products|장바구니|바로구매|구매하기|온라인몰|상품목록|カート|購入|オンラインストア|购物车|立即购买|網上商店|网上商城|añadir al carrito|comprar ahora|cesta|loja online|acheter maintenant|panier|jetzt kaufen|warenkorb|acquista ora|carrello|winkelwagen|купить сейчас|корзина|اشتر الآن|سلة|अभी खरीदें|कार्ट|এখনই কিনুন|কার্ট|ابھی خریدیں|ٹوکری|beli sekarang|keranjang|mua ngay|giỏ hàng|ซื้อเลย|ตะกร้า|hemen al|sepet)/i;
-const PAYMENT_TEXT_RX=/(payment|pay by|credit card|debit card|visa|mastercard|paypal|결제|신용카드|카드결제|支払い|決済|付款|支付|pago|paiement|zahlung|pagamento|betaling|оплата|الدفع|भुगतान|পেমেন্ট|ادائیگی|pembayaran|thanh toán|ชำระเงิน|ödeme)/i;
+const SUPPLIER_TEXT_RX=/(manufacturer|producer|cooperative|supplier|authorized distributor|local distributor|responsible seller|official store|제조사|생산자|협동조합|책임 판매|지역 유통|공식 판매처|メーカー|生産者|協同組合|責任販売|地域流通|製造商|制造商|生產者|生产者|合作社|責任銷售|责任销售|經銷商|经销商|fabricante|productor|coopérative|producteur|hersteller|erzeuger|genossenschaft|produttore|producent|производитель|поставщик|кооператив|مصنع|منتج|تعاونية|निर्माता|उत्पादक|सहकारी|প্রস্তুতকারক|উৎপাদক|সমবায়|مینوفیکچرر|پروڈیوسر|کوآپریٹو|produsen|koperasi|pengeluar|nhà sản xuất|hợp tác xã|ผู้ผลิต|สหกรณ์|üretici|kooperatif|mtengenezaji|mzalishaji|ushirika|tagagawa|kooperatiba|responsableng nagbebenta|opisyal na tindahan|tiggama|responsable nga tigbaligya|opisyal nga tindahan)/i;
+const DIRECT_SALE_TEXT_RX=/(add to cart|buy now|checkout|shop now|online store|catalog|products|장바구니|바로구매|구매하기|온라인몰|상품목록|カート|購入|オンラインストア|购物车|立即购买|網上商店|网上商城|añadir al carrito|comprar ahora|cesta|loja online|acheter maintenant|panier|jetzt kaufen|warenkorb|acquista ora|carrello|winkelwagen|купить сейчас|корзина|اشتر الآن|سلة|अभी खरीदें|कार्ट|এখনই কিনুন|কার্ট|ابھی خریدیں|ٹوکری|beli sekarang|keranjang|mua ngay|giỏ hàng|ซื้อเลย|ตะกร้า|hemen al|sepet|bumili ngayon|idagdag sa cart|opisyal na online store|palit karon|idugang sa cart|opisyal nga online store)/i;
+const PAYMENT_TEXT_RX=/(payment|pay by|credit card|debit card|visa|mastercard|paypal|결제|신용카드|카드결제|支払い|決済|付款|支付|pago|paiement|zahlung|pagamento|betaling|оплата|الدفع|भुगतान|পেমেন্ট|ادائیگی|pembayaran|thanh toán|ชำระเงิน|ödeme|pagbabayad|bayad|pagbayad)/i;
 const LEGAL_IDENTITY_TEXT_RX=/(company registration|business registration|registered office|legal notice|terms and conditions|사업자등록|통신판매업|회사소개|법적 고지|特定商取引法|会社概要|企業信息|企业信息|工商信息|aviso legal|registro mercantil|mentions légales|impressum|registro imprese|bedrijfsgegevens|регистрац|реквизит|السجل التجاري|company profile)/i;
-const REFUND_TEXT_RX=/(refund(?:s| policy)?|money[- ]back|환불|退款|返金|reembolso|remboursement|erstattung|rimborso|terugbetaling|возврат средств|استرداد|रिफंड|রিফান্ড|ریفنڈ|pengembalian dana|hoàn tiền|คืนเงิน|para iade)/i;
+const REFUND_TEXT_RX=/(refund(?:s| policy)?|money[- ]back|환불|退款|返金|reembolso|remboursement|erstattung|rimborso|terugbetaling|возврат средств|استرداد|रिफंड|রিফান্ড|ریفنڈ|pengembalian dana|hoàn tiền|คืนเงิน|para iade|ibalik ang bayad|pagbalik sa bayad)/i;
 const EXCHANGE_TEXT_RX=/(exchange(?:s| policy)?|replacement|교환|交換|换货|換貨|cambio|échange|umtausch|sostituzione|omruilen|обмен|استبدال|विनिमय|বদল|تبدیلی|penukaran|đổi hàng|เปลี่ยนสินค้า|değişim)/i;
 const WARRANTY_TEXT_RX=/(warranty|guarantee|after[- ]sales|service center|repair service|보증|품질보증|AS센터|애프터서비스|保証|售后|售後|garantía|garantie|garantiebedingungen|garanzia|garantie|гарантия|ضمان|वारंटी|ওয়ারেন্টি|وارنٹی|garansi|bảo hành|รับประกัน|garanti)/i;
 const TRACKING_TEXT_RX=/(order tracking|track(?:ing)? number|shipment tracking|배송조회|운송장|배송 추적|追跡|配送追蹤|配送追踪|seguimiento del pedido|rastreamento|suivi de commande|sendungsverfolgung|tracciamento|track en trace|отслеживание|تتبع الشحنة|ऑर्डर ट्रैकिंग|অর্ডার ট্র্যাকিং|آرڈر ٹریکنگ|pelacakan pesanan|theo dõi đơn hàng|ติดตามคำสั่งซื้อ|sipariş takibi)/i;
 const DELIVERY_COMMITMENT_TEXT_RX=/(estimated delivery|delivery time|ships within|business days|영업일 이내|배송 예정|도착 예정|お届け予定|発送予定|预计送达|預計送達|plazo de entrega|prazo de entrega|délai de livraison|lieferzeit|tempi di consegna|levertijd|срок доставки|موعد التسليم|डिलीवरी समय|ডেলিভারি সময়|ترسیل کا وقت|waktu pengiriman|thời gian giao hàng|ระยะเวลาจัดส่ง|teslimat süresi)/i;
-const CONTACT_CHANNEL_TEXT_RX=/(mailto:|tel:|customer service|customer support|contact us|live chat|help desk|고객센터|문의하기|전화 상담|채팅 상담|お問い合わせ|客服|客戶服務|atención al cliente|service client|kundenservice|assistenza clienti|klantenservice|поддержка клиентов|خدمة العملاء|ग्राहक सेवा|কাস্টমার সেবা|کسٹمر سروس|layanan pelanggan|chăm sóc khách hàng|บริการลูกค้า|müşteri hizmetleri)/i;
+const CONTACT_CHANNEL_TEXT_RX=/(mailto:|tel:|customer service|customer support|contact us|live chat|help desk|고객센터|문의하기|전화 상담|채팅 상담|お問い合わせ|客服|客戶服務|atención al cliente|service client|kundenservice|assistenza clienti|klantenservice|поддержка клиентов|خدمة العملاء|ग्राहक सेवा|কাস্টমার সেবা|کسٹمر سروس|layanan pelanggan|chăm sóc khách hàng|บริการลูกค้า|müşteri hizmetleri|serbisyo sa customer|serbisyo sa kustomer)/i;
 const TERMS_PRIVACY_TEXT_RX=/(privacy policy|terms of service|terms and conditions|consumer terms|개인정보처리방침|이용약관|구매약관|プライバシーポリシー|利用規約|隐私政策|隱私政策|服务条款|服務條款|política de privacidad|termos e condições|politique de confidentialité|conditions générales|datenschutz|allgemeine geschäftsbedingungen|informativa sulla privacy|algemene voorwaarden|политика конфиденциальности|شروط الاستخدام|سياسة الخصوصية|गोपनीयता नीति|শর্তাবলী|شرائط و ضوابط|kebijakan privasi|chính sách bảo mật|นโยบายความเป็นส่วนตัว|gizlilik politikası)/i;
 const AFFILIATE_TEXT_RX=/(affiliate|partner program|referral program|dealer program|wholesale inquiry|제휴|파트너스|추천인|도매문의|販売パートナー|提携|联盟计划|聯盟計畫|programa de afiliados|programme d'affiliation|partnerprogramm|programma di affiliazione|партнерская программа|برنامج الشركاء|सहबद्ध कार्यक्रम|অ্যাফিলিয়েট|افیلیئیٹ|program afiliasi|chương trình liên kết|โปรแกรมพันธมิตร|ortaklık programı)/i;
 const CATALOG_BREADTH_TEXT_RX=/(all categories|shop by category|product categories|catalog|collections|전체 카테고리|상품 카테고리|제품군|カテゴリー|商品一覧|全部分类|全部分類|categorías|catálogo|catégories|catalogue|kategorien|produktkatalog|categorie|collecties|каталог|الفئات|الكتالوج|श्रेणियाँ|ক্যাটাগরি|زمرہ جات|kategori produk|danh mục sản phẩm|หมวดหมู่สินค้า|ürün kategorileri)/i;
-const POLICY_LINK_TEXT_RX=/(return|refund|exchange|shipping|delivery|warranty|support|contact|terms|privacy|legal|반품|환불|교환|배송|보증|고객|문의|약관|개인정보|返品|返金|配送|保証|お問い合わせ|利用規約|退货|退款|配送|售后|客服|条款|隐私|devoluci|reembols|envío|entrega|garant|contact|privacidad|retour|rembourse|livraison|garantie|kundenservice|rückgabe|lieferung|datenschutz|resi|rimborso|spedizione|garanzia|возврат|доставка|гарантия|إرجاع|استرداد|توصيل|ضمان|वापसी|रिफंड|डिलीवरी|वारंटी|ফেরত|রিফান্ড|ডেলিভারি|واپسی|ریفنڈ|ترسیل|pengembalian|pengiriman|garansi|đổi trả|hoàn tiền|giao hàng|bảo hành|คืนสินค้า|คืนเงิน|จัดส่ง|รับประกัน|iade|teslimat|garanti)/i;
+const POLICY_LINK_TEXT_RX=/(return|refund|exchange|shipping|delivery|warranty|support|contact|terms|privacy|legal|반품|환불|교환|배송|보증|고객|문의|약관|개인정보|返品|返金|配送|保証|お問い合わせ|利用規約|退货|退款|配送|售后|客服|条款|隐私|devoluci|reembols|envío|entrega|garant|contact|privacidad|retour|rembourse|livraison|garantie|kundenservice|rückgabe|lieferung|datenschutz|resi|rimborso|spedizione|garanzia|возврат|доставка|гарантия|إرجاع|استرداد|توصيل|ضمان|वापसी|रिफंड|डिलीवरी|वारंटी|ফেরত|রিফান্ড|ডেলিভারি|واپسی|ریفنڈ|ترسیل|pengembalian|pengiriman|garansi|đổi trả|hoàn tiền|giao hàng|bảo hành|คืนสินค้า|คืนเงิน|จัดส่ง|รับประกัน|iade|teslimat|garanti|pagbabalik|pagpapadala|pagpadala|pagbalik|garantiya|serbisyo sa customer|serbisyo sa kustomer)/i;
 const PRODUCT_DETAIL_URL_RX=/\/(?:product|products|item|items|goods|detail|p|dp)\/[A-Za-z0-9._~-]+(?:\/|$|[?#])/i;
 
 
@@ -362,23 +366,27 @@ function researchFirst(items){
 async function googleCountrySearch(planRow,geo,limit){
   const query=planRow&&planRow.query||text(planRow);const locale=planRow&&planRow.locale||"en";
   const keys=googleKeys();if(!keys.key||!keys.cx)return{provider:"google",query,locale,status:"not_configured",detail:"GOOGLE_API_KEY_or_GOOGLE_CSE_ID_missing",items:[]};
-  const googleLang=googleLocale(locale);const negative=" -filetype:pdf -filetype:doc -filetype:ppt -filetype:xls -wikipedia -wiki -report -research -news";
+  const googleLang=googleLocale(locale),negative=" -filetype:pdf -filetype:doc -filetype:ppt -filetype:xls -wikipedia -wiki -report -research -news";
   const params=new URLSearchParams({key:keys.key,cx:keys.cx,q:(query+negative).slice(0,900),num:String(Math.max(1,Math.min(10,limit||10))),start:"1",safe:"active",filter:"1",hl:googleLang,lr:"lang_"+googleLang});
-  if(/^[A-Z]{2}$/.test(geo.country||"")){params.set("gl",geo.country.toLowerCase());params.set("cr","country"+geo.country);}
+  const hasCountry=/^[A-Z]{2}$/.test(geo.country||"");if(hasCountry){params.set("gl",geo.country.toLowerCase());params.set("cr","country"+geo.country);}
+  function rows(data){return researchFirst((Array.isArray(data&&data.items)?data.items:[]).map(row=>{const map=row&&row.pagemap||{},thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);return{title:stripHtml(row&&row.title),url:text(row&&row.link),link:text(row&&row.link),summary:stripHtml(row&&row.snippet),snippet:stripHtml(row&&row.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query,queryLocale:locale,queryOrigin:planRow&&planRow.origin||"unknown"}};}).filter(row=>row.title&&row.url));}
   try{
-    let data;
+    let data,relaxed=false;
     try{data=await fetchJson("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,PROVIDER_FETCH_TIMEOUT);}
     catch(error){
-      // Some Google language-restrict codes are narrower than real market usage.
-      // Keep the local-language query and country scope, but retry once without lr.
+      // Some language restrictions are narrower than the country's real commerce web.
       if(providerErrorCode(error)==="http_400"&&params.has("lr")){params.delete("lr");data=await fetchJson("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,PROVIDER_FETCH_TIMEOUT);}
       else throw error;
     }
-    const items=researchFirst((Array.isArray(data.items)?data.items:[]).map(row=>{
-      const map=row&&row.pagemap||{};const thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);
-      return{title:stripHtml(row&&row.title),url:text(row&&row.link),link:text(row&&row.link),summary:stripHtml(row&&row.snippet),snippet:stripHtml(row&&row.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query,queryLocale:locale,queryOrigin:planRow&&planRow.origin||"unknown"}};
-    }).filter(row=>row.title&&row.url));
-    return{provider:"google",query,locale,status:items.length?"ok":"empty",detail:null,items};
+    let items=rows(data);
+    // Empty strict-country results must not make a valid country look unsupported.
+    // Keep the country-biased gl and country/local query words, relax only cr/lr once.
+    if(!items.length&&hasCountry&&params.has("cr")){
+      params.delete("cr");params.delete("lr");relaxed=true;
+      data=await fetchJson("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,PROVIDER_FETCH_TIMEOUT);
+      items=rows(data);
+    }
+    return{provider:"google",query,locale,status:items.length?"ok":"empty",detail:relaxed?"country_scope_relaxed":null,items};
   }catch(error){return{provider:"google",query,locale,status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
 async function naverCountrySearch(planRow,geo,limit){
@@ -440,14 +448,14 @@ function safeHttpUrl(raw){
 function htmlTextScore(value){
   const t=String(value||"");
   return{
-    shipping:/(shipping|delivery|ship to|dispatch|배송|배달|출고|配達|配送|発送|送貨|送货|envío|entrega|livraison|expédition|lieferung|versand|spedizione|bezorging|доставка|توصيل|شحن|डिलीवरी|वितरण|ডেলিভারি|ترسیل|pengiriman|penghantaran|giao hàng|จัดส่ง|usafirishaji)/i.test(t),
-    returns:/(return(?:s| policy)?|exchange(?:s)?|반품|교환|返品|交換|退貨|退货|devoluciones|retours|rückgabe|resi|retourneren|возврат|обмен|إرجاع|वापसी|ফেরত|واپسی|pengembalian|pemulangan|đổi trả|คืนสินค้า|marejesho)/i.test(t),
+    shipping:/(shipping|delivery|ship to|dispatch|배송|배달|출고|配達|配送|発送|送貨|送货|envío|entrega|livraison|expédition|lieferung|versand|spedizione|bezorging|доставка|توصيل|شحن|डिलीवरी|वितरण|ডেলিভারি|ترسیل|pengiriman|penghantaran|giao hàng|จัดส่ง|usafirishaji|pagpapadala|pagpadala)/i.test(t),
+    returns:/(return(?:s| policy)?|exchange(?:s)?|반품|교환|返品|交換|退貨|退货|devoluciones|retours|rückgabe|resi|retourneren|возврат|обмен|إرجاع|वापसी|ফেরত|واپسی|pengembalian|pemulangan|đổi trả|คืนสินค้า|marejesho|pagbabalik|pagbalik)/i.test(t),
     refund:REFUND_TEXT_RX.test(t),
     exchange:EXCHANGE_TEXT_RX.test(t),
     warranty:WARRANTY_TEXT_RX.test(t),
     tracking:TRACKING_TEXT_RX.test(t),
     deliveryCommitment:DELIVERY_COMMITMENT_TEXT_RX.test(t),
-    service:/(customer service|customer support|contact us|support center|help desk|고객센터|고객 지원|문의|カスタマーサービス|お問い合わせ|客服|客戶服務|atención al cliente|servicio al cliente|service client|kundenservice|assistenza clienti|klantenservice|поддержка клиентов|خدمة العملاء|ग्राहक सेवा|কাস্টমার সেবা|کسٹمر سروس|layanan pelanggan|khidmat pelanggan|chăm sóc khách hàng|บริการลูกค้า|huduma kwa wateja)/i.test(t),
+    service:/(customer service|customer support|contact us|support center|help desk|고객센터|고객 지원|문의|カスタマーサービス|お問い合わせ|客服|客戶服務|atención al cliente|servicio al cliente|service client|kundenservice|assistenza clienti|klantenservice|поддержка клиентов|خدمة العملاء|ग्राहक सेवा|কাস্টমার সেবা|کسٹمر سروس|layanan pelanggan|khidmat pelanggan|chăm sóc khách hàng|บริการลูกค้า|huduma kwa wateja|serbisyo sa customer|serbisyo sa kustomer)/i.test(t),
     contactChannel:CONTACT_CHANNEL_TEXT_RX.test(t),
     payment:PAYMENT_TEXT_RX.test(t),
     securePayment:/(secure checkout|secure payment|ssl payment|3d secure|pci dss|안전결제|보안결제|安全な支払い|安全支付|pago seguro|paiement sécurisé|sichere zahlung|pagamento sicuro|veilige betaling|безопасная оплата|دفع آمن|सुरक्षित भुगतान|নিরাপদ পেমেন্ট|محفوظ ادائیگی|pembayaran aman|thanh toán an toàn|ชำระเงินปลอดภัย|güvenli ödeme)/i.test(t),
@@ -730,12 +738,31 @@ async function stagedNaver(row,geo,limit,timeoutMs){
 }
 async function stagedGoogle(row,geo,limit,timeoutMs){
   const keys=googleKeys();if(!keys.key||!keys.cx)return{provider:"google",status:"not_configured",detail:"GOOGLE_API_KEY_or_GOOGLE_CSE_ID_missing",items:[]};
-  const lang=googleLocale(row.locale||"en"),params=new URLSearchParams({key:keys.key,cx:keys.cx,q:(row.query+" -filetype:pdf -filetype:doc -filetype:ppt -filetype:xls -wikipedia -wiki -report -research -news").slice(0,900),num:String(Math.max(1,Math.min(10,limit||10))),start:"1",safe:"active",filter:"1",hl:lang});if(/^[A-Z]{2}$/.test(geo.country||"")){params.set("gl",geo.country.toLowerCase());params.set("cr","country"+geo.country);}
-  try{const data=await fetchJsonStaged("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,boundedResearchTimeout(timeoutMs,7500,5000,10000));const items=researchFirst(array(data.items).map(x=>{const map=x&&x.pagemap||{},thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);return{title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.snippet),snippet:stripHtml(x&&x.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane||"general"}};}).filter(x=>x.title&&x.url));return{provider:"google",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"google",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
+  const lang=googleLocale(row.locale||"en"),params=new URLSearchParams({key:keys.key,cx:keys.cx,q:(row.query+" -filetype:pdf -filetype:doc -filetype:ppt -filetype:xls -wikipedia -wiki -report -research -news").slice(0,900),num:String(Math.max(1,Math.min(10,limit||10))),start:"1",safe:"active",filter:"1",hl:lang}),hasCountry=/^[A-Z]{2}$/.test(geo.country||"");
+  if(hasCountry){params.set("gl",geo.country.toLowerCase());params.set("cr","country"+geo.country);}
+  function rows(data){return researchFirst(array(data&&data.items).map(x=>{const map=x&&x.pagemap||{},thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);return{title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.snippet),snippet:stripHtml(x&&x.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane||"general"}};}).filter(x=>x.title&&x.url));}
+  try{
+    const wait=boundedResearchTimeout(timeoutMs,7500,5000,10000);
+    let data=await fetchJsonStaged("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,wait),items=rows(data),relaxed=false;
+    if(!items.length&&hasCountry&&params.has("cr")){
+      params.delete("cr");relaxed=true;
+      data=await fetchJsonStaged("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,wait);
+      items=rows(data);
+    }
+    return{provider:"google",status:items.length?"ok":"empty",detail:relaxed?"country_scope_relaxed":null,items};
+  }catch(error){return{provider:"google",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
-async function stagedSanmaru(event,row,geo,limit,timeoutMs){
+async function stagedSanmaru(event,row,geo,limit,timeoutMs,externalFallback){
   let Sanmaru=null;try{Sanmaru=require("./sanmaru_engine_v2");}catch(_e){}if(!Sanmaru||typeof Sanmaru.runEngine!=="function")return{provider:"sanmaru",status:"unavailable",detail:null,items:[]};
-  try{const wait=boundedResearchTimeout(timeoutMs,7500,5000,10000),result=await withTimeout(Sanmaru.runEngine(event||{},{q:row.query,query:row.query,country:geo.country,region:geo.region||undefined,limit:Math.min(20,limit||18),candidatePool:48,language:row.locale,locale:row.locale,type:"site",channel:"commerce",entity:"supplier",external:"off",directExternal:"0",noExternal:"1",noMedia:"1",deep:"0",timeoutMs:wait,from:"regional-brokerage-autoselector-staged",source:"regional-brokerage-autoselector-staged",regionalBrokerageSupply:"1",noAnalytics:"1",noRevenue:"1",readOnly:"1",noWrite:"1",noSync:"1",writeMode:"readonly"}),wait+800);const items=researchFirst(extractItems(result));return{provider:"sanmaru",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"sanmaru",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
+  const useExternal=externalFallback===true;
+  try{
+    const wait=boundedResearchTimeout(timeoutMs,7500,5000,10000),result=await withTimeout(Sanmaru.runEngine(event||{},{
+      q:row.query,query:row.query,country:geo.country,region:geo.region||undefined,limit:Math.min(20,limit||18),candidatePool:48,language:row.locale,locale:row.locale,
+      type:"site",channel:"commerce",entity:"supplier",external:useExternal?"force":"off",directExternal:"0",noExternal:useExternal?"0":"1",noMedia:"1",deep:"0",expansion:useExternal?"wide":"balanced",timeoutMs:wait,
+      from:"regional-brokerage-autoselector-staged",source:"regional-brokerage-autoselector-staged",regionalBrokerageSupply:"1",noAnalytics:"1",noRevenue:"1",readOnly:"1",noWrite:"1",noSync:"1",writeMode:"readonly"
+    }),wait+800);
+    const items=researchFirst(extractItems(result));return{provider:"sanmaru",status:items.length?"ok":"empty",detail:useExternal?"adaptive_external_fallback":null,items};
+  }catch(error){return{provider:"sanmaru",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
 function directoryBridgeCandidate(label,url,sourceUrl,geo,row){
   const clean=stripHtml(label).replace(/\s+/g," ").trim();
@@ -745,7 +772,7 @@ function directoryBridgeCandidate(label,url,sourceUrl,geo,row){
   if(/(?:facebook|instagram|youtube|youtu\.be|twitter|x\.com|pinterest|tiktok|linkedin|naver\.com|daum\.net|google\.|kakao\.|blog\.|news\.)/i.test(host))return null;
   if(/\.(?:pdf|hwp|hwpx|docx?|xlsx?|pptx?|zip)(?:$|[?#])/i.test(u.toString()))return null;
   const hay=lower(clean+" "+u.pathname);
-  if(!/(?:농장|농원|농협|축협|수협|산림조합|영농조합|협동조합|농업회사|생산자|제조|공장|기업|회사|공식몰|쇼핑몰|직매장|로컬푸드|farm|grower|producer|manufacturer|factory|cooperative|company|official\s*(?:shop|store)|online\s*(?:shop|store)|direct\s*sale)/i.test(hay))return null;
+  if(!/(?:농장|농원|농협|축협|수협|산림조합|영농조합|협동조합|농업회사|생산자|제조|공장|기업|회사|공식몰|쇼핑몰|직매장|로컬푸드|farm|grower|producer|manufacturer|factory|cooperative|company|official\s*(?:shop|store)|online\s*(?:shop|store)|direct\s*sale|tagagawa|tiggama|kooperatiba|opisyal\s*(?:na|nga)\s*tindahan)/i.test(hay))return null;
   return compactResearchItem({title:clean,name:clean,url:u.toString(),link:u.toString(),source:"official_directory_bridge",provider:"directory-bridge",type:"site",summary:"Official directory outbound supplier candidate",payload:{source:"official_directory_bridge",directoryUrl:sourceUrl,country:geo.country,region:geo.region||"NATIONWIDE",query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane||"public_directory_bridge"}});
 }
 async function bridgeOfficialDirectory(item,geo,row,max){
@@ -768,7 +795,7 @@ async function bridgeOfficialDirectory(item,geo,row,max){
 async function searchSupplierResearchStep(event,params){
   const geo=stagedGeo(params),task=plain(params&&params.task),row={query:text(task.query),locale:text(task.locale)||"en",origin:text(task.origin)||"searchbank-psom-policy-plan",supplyLane:text(task.supplyLane)||"general"};
   const providerTimeoutMs=boundedResearchTimeout(params&&params.timeoutMs,7500,5000,10000);
-  let result;if(task.lane==="naver")result=await stagedNaver(row,geo,Math.max(20,Number(params&&params.limit)||20),providerTimeoutMs);else if(task.lane==="google")result=await stagedGoogle(row,geo,Math.min(10,Number(params&&params.limit)||10),providerTimeoutMs);else result=await stagedSanmaru(event,row,geo,Math.max(18,Number(params&&params.limit)||18),providerTimeoutMs);
+  let result;if(task.lane==="naver")result=await stagedNaver(row,geo,Math.max(20,Number(params&&params.limit)||20),providerTimeoutMs);else if(task.lane==="google")result=await stagedGoogle(row,geo,Math.min(10,Number(params&&params.limit)||10),providerTimeoutMs);else result=await stagedSanmaru(event,row,geo,Math.max(18,Number(params&&params.limit)||18),providerTimeoutMs,params&&params.externalFallback===true);
   let items=researchFirst(result.items||[]).filter(item=>!blockedByAdministratorPolicy(item,geo)).map((item)=>{const compact=compactResearchItem(item);if(compact){compact.payload=Object.assign({},plain(compact.payload),{supplyLane:row.supplyLane});}return compact;}).filter(Boolean);
   let bridged=[];
   if(row.supplyLane==="public_directory_bridge"&&items.length){bridged=await bridgeOfficialDirectory(items[0],geo,row,12);items=items.concat(bridged);}
@@ -1015,16 +1042,22 @@ function catalogPageUrls(html,baseUrl){
   const out=[],seen=new Set(),rx=/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let m;
   while((m=rx.exec(String(html||"")))){
     const label=stripHtml(m[2]).replace(/\s+/g," ").trim(),href=absoluteHttpUrl(baseUrl,m[1]);if(!href||!sameSite(baseUrl,href))continue;
-    if(!isProductDetailUrl(href)&&!/(상품|제품|쇼핑|스토어|공식몰|카탈로그|농산물|축산물|수산물|임산물|버섯|식품|생필품|생활용품|뷰티|화장품|로컬푸드|product|products|shop|store|catalog|collection|beauty|cosmetic)/i.test(label+" "+href))continue;
+    if(!isProductDetailUrl(href)&&!/(상품|제품|쇼핑|스토어|공식몰|카탈로그|농산물|축산물|수산물|임산물|버섯|식품|생필품|생활용품|뷰티|화장품|로컬푸드|product|products|shop|store|catalog|collection|beauty|cosmetic|produkto|mga produkto|tindahan|pamilihan|kagandahan|pangangalaga|baligya|merkado)/i.test(label+" "+href))continue;
     if(seen.has(href)||href===baseUrl)continue;seen.add(href);out.push(href);if(out.length>=8)break;
   }
   return out;
 }
-async function fetchProductHtml(url,controller){
+function productAcceptLanguage(country){
+  const locales=localeList(text(country).toUpperCase()).slice(0,4),out=[];
+  locales.forEach((locale,index)=>{const clean=text(locale);if(!clean)return;out.push(index===0?clean:(clean+";q="+Math.max(0.55,0.95-index*0.1).toFixed(2)));});
+  if(!locales.some(locale=>baseLocale(locale)==="en"))out.push("en;q=0.55");
+  return out.join(",")||"en";
+}
+async function fetchProductHtml(url,controller,country){
   const headers={
     "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0 Safari/537.36 IGDC-MARU-ProductReferenceResearch/1.0",
     "accept":"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-    "accept-language":"ko-KR,ko;q=0.9,en-US;q=0.7,en;q=0.6",
+    "accept-language":productAcceptLanguage(country),
     "cache-control":"no-cache",
     "pragma":"no-cache"
   };
@@ -1034,11 +1067,11 @@ async function discoverSupplierProductsStep(supplier,params){
   const source=plain(supplier),supplierSiteUrl=absoluteHttpUrl(first(source.url,source.supplierSiteUrl),first(source.url,source.supplierSiteUrl));if(!supplierSiteUrl)return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:"supplier_url_missing",count:0}};
   const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,7000,3500,9000),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
     const initialUrls=[supplierSiteUrl],candidateUrl=absoluteHttpUrl(supplierSiteUrl,source.sourceCandidateUrl);if(candidateUrl&&sameSite(supplierSiteUrl,candidateUrl)&&candidateUrl!==supplierSiteUrl)initialUrls.push(candidateUrl);
-    const initialPages=await Promise.all(initialUrls.map(url=>fetchProductHtml(url,controller))),validInitial=initialPages.filter(page=>page.ok);if(!validInitial.length){const firstFailure=initialPages[0]||{},status=firstFailure.status||"unavailable",retryable=retryableProviderStatus(status);return{ok:true,items:[],retryable,trace:{source:"supplier-product-discovery",status,detail:firstFailure.detail||null,supplierSiteUrl,count:0,retryable,timeoutMs}};}
+    const initialPages=await Promise.all(initialUrls.map(url=>fetchProductHtml(url,controller,params&&params.country))),validInitial=initialPages.filter(page=>page.ok);if(!validInitial.length){const firstFailure=initialPages[0]||{},status=firstFailure.status||"unavailable",retryable=retryableProviderStatus(status);return{ok:true,items:[],retryable,trace:{source:"supplier-product-discovery",status,detail:firstFailure.detail||null,supplierSiteUrl,count:0,retryable,timeoutMs}};}
     const supplierInfo={supplierId:text(source.supplierId),supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),trustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),approvalReady:source.approvalReady===true,evidenceReady:source.evidenceReady===true,supplyLane:text(source.supplyLane)||"general",discoverySource:text(source.discoverySource)||"official_public_page",officialDirectoryUrl:text(source.officialDirectoryUrl)};let items=[],extraUrls=[];
     for(const page of validInitial){items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));extraUrls=extraUrls.concat(catalogPageUrls(page.html,page.url));}
     const uniqueExtras=[];for(const url of extraUrls){if(!url||initialUrls.includes(url)||uniqueExtras.includes(url))continue;uniqueExtras.push(url);if(uniqueExtras.length>=12)break;}
-    const extras=await Promise.all(uniqueExtras.map(url=>fetchProductHtml(url,controller)));for(const page of extras)if(page.ok)items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));
+    const extras=await Promise.all(uniqueExtras.map(url=>fetchProductHtml(url,controller,params&&params.country)));for(const page of extras)if(page.ok)items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,50));
     let sitemapCount=0;if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)).length<5){const sitemapUrls=await fetchProductSitemapUrls(supplierSiteUrl,controller,80);sitemapCount=sitemapUrls.length;for(const url of sitemapUrls){const priority=productPriorityInfo(supplierInfo.supplierName+" "+url);items.push({id:productIdSeed(url,"상품명 확인 중"),entityKind:"product_reference",productName:"상품명 확인 중",title:"상품명 확인 중",productUrl:url,url,imageUrl:"",imageOriginalUrl:"",imageSource:"sitemap_pending_inspection",videoUrl:"",videoContentUrl:"",videoEmbedUrl:"",videoThumbnailUrl:"",videoSource:"unresolved",supplierId:supplierInfo.supplierId,supplierName:supplierInfo.supplierName,supplierSiteUrl,supplierType:supplierInfo.supplierType,supplierTrustScore:supplierInfo.trustScore,supplierDecision:supplierInfo.supplierDecision,supplierApprovalReady:supplierInfo.approvalReady===true,supplierEvidenceReady:supplierInfo.evidenceReady===true,sourcePageUrl:supplierSiteUrl,jsonLdProduct:false,offerPresent:false,provisionalName:true,priorityScore:priority.score,priorityLabel:priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});}}
     const dedup=[],seen=new Set();for(const row of items){const key=ProductRanking.productIdentity(row);if(!key||seen.has(key)||!isProductDetailUrl(row.productUrl))continue;seen.add(key);dedup.push(row);if(dedup.length>=Math.max(10,Math.min(120,Number(params&&params.limit)||80)))break;}
     return{ok:true,items:dedup,retryable:false,trace:{source:"supplier-product-discovery",status:"ok",supplierName:supplierInfo.supplierName,supplierSiteUrl,sourceCandidateChecked:initialUrls.length>1,catalogPagesChecked:validInitial.length+extras.filter(x=>x.ok).length,sitemapProductUrls:sitemapCount,count:dedup.length,retryable:false,timeoutMs}};
@@ -1091,7 +1124,7 @@ function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
 async function inspectProductCandidate(item,params){
   const row=plain(item),productUrl=ProductRanking.canonicalProductUrl(absoluteHttpUrl(row.productUrl,row.productUrl)),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
   const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,6000,3500,8000),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
-    const page=await fetchProductHtml(productUrl,controller);if(!page.ok){const retryable=retryableProviderStatus(page.status);return Object.assign({},row,{researchStatus:retryable?"inspection_deferred":page.status,productPageLive:false,inspectionComplete:!retryable,inspectionDeferred:retryable,inspectedAt:new Date().toISOString(),inspectionError:retryable?{code:text(page.status)||"TRANSIENT_FETCH",message:page.detail||"temporary product-page fetch failure"}:row.inspectionError});}
+    const page=await fetchProductHtml(productUrl,controller,params&&params.country);if(!page.ok){const retryable=retryableProviderStatus(page.status);return Object.assign({},row,{researchStatus:retryable?"inspection_deferred":page.status,productPageLive:false,inspectionComplete:!retryable,inspectionDeferred:retryable,inspectedAt:new Date().toISOString(),inspectionError:retryable?{code:text(page.status)||"TRANSIENT_FETCH",message:page.detail||"temporary product-page fetch failure"}:row.inspectionError});}
     const invalidPage=productPageInvalidState(page.html,productUrl,page.url,supplierSiteUrl);
     if(invalidPage.invalid)return Object.assign({},row,{researchStatus:invalidPage.reason,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString(),inspectionError:{code:"PRODUCT_PAGE_INVALID",message:invalidPage.detail||invalidPage.reason},publicPublication:false,automaticImport:false});
     const supplierMeta={supplierId:row.supplierId,supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady,evidenceReady:row.supplierEvidenceReady,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
@@ -1102,7 +1135,7 @@ async function inspectProductCandidate(item,params){
 }
 
 async function inspectProductResearchStep(rawItems,params){
-  const options=plain(params),timeoutMs=boundedResearchTimeout(options.timeoutMs,6000,3500,8000),items=array(rawItems).slice(0,4),results=await Promise.allSettled(items.map((item)=>withTimeout(inspectProductCandidate(item,{timeoutMs}),timeoutMs+900)));
+  const options=plain(params),timeoutMs=boundedResearchTimeout(options.timeoutMs,6000,3500,8000),items=array(rawItems).slice(0,4),results=await Promise.allSettled(items.map((item)=>withTimeout(inspectProductCandidate(item,{timeoutMs,country:options.country,region:options.region}),timeoutMs+900)));
   const inspected=results.map((result,index)=>{
     if(result.status==="fulfilled")return result.value;
     const row=plain(items[index]),error=result.reason,status=providerErrorCode(error),retryable=retryableProviderStatus(status);

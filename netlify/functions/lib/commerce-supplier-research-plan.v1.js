@@ -11,7 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "commerce-supplier-research-plan-v1.4.1-global-plus-restored-kr-supply-mesh";
+const VERSION = "commerce-supplier-research-plan-v1.4.2-global-country-resilient-discovery";
 
 function text(value){ return String(value == null ? "" : value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
@@ -323,6 +323,28 @@ const PACKS = Object.freeze({
     small_business:"लघु व्यवसाय सामाजिक उद्यम सहकारी निर्माता आधिकारिक स्टोर",
     public_directory:"आधिकारिक उत्पादक निर्देशिका वाणिज्य मंडल सहकारी सदस्य निर्माता रजिस्टर"
   }},
+  fil:{commerce:"opisyal na online store direktang bentahan delivery pagpapadala pagbabalik refund customer service",lanes:{
+    agri_cooperative:"producer magsasaka sakahan agrikultura pangisdaan kagubatan kooperatiba lokal na produkto",
+    manufacturer_brand:"tagagawa pabrika may-ari ng brand opisyal na produkto",
+    food_essentials:"pagkain grocery pangunahing pangangailangan gamit sa bahay responsableng nagbebenta",
+    consumer_goods:"beauty personal care damit sapatos bag electronics bahay kusina sanggol edukasyon",
+    industrial_goods:"industrial goods tools piyesa makina materyales tagagawa product catalog",
+    regional_market:"lokal na produkto pamilihan samahan ng producer lokal na ecommerce",
+    wholesale_distribution:"awtorisadong distributor wholesaler lokal na supplier opisyal na order",
+    small_business:"maliit na negosyo social enterprise kooperatiba tagagawa opisyal na tindahan",
+    public_directory:"opisyal na directory ng producer chamber of commerce kooperatiba manufacturer registry"
+  }},
+  ceb:{commerce:"opisyal nga online store direktang baligya delivery pagpadala pagbalik refund customer service",lanes:{
+    agri_cooperative:"producer mag-uuma uma agrikultura pangisda kalasangan kooperatiba lokal nga produkto",
+    manufacturer_brand:"tiggama pabrika tag-iya sa brand opisyal nga produkto",
+    food_essentials:"pagkaon grocery pangunang panginahanglan gamit sa balay responsable nga tigbaligya",
+    consumer_goods:"beauty personal care sinina sapatos bag electronics balay kusina bata edukasyon",
+    industrial_goods:"industrial goods tools piyesa makina materyales tiggama product catalog",
+    regional_market:"lokal nga produkto merkado grupo sa producer lokal nga ecommerce",
+    wholesale_distribution:"awtorisadong distributor wholesaler lokal nga supplier opisyal nga order",
+    small_business:"gamay nga negosyo social enterprise kooperatiba tiggama opisyal nga tindahan",
+    public_directory:"opisyal nga directory sa producer chamber of commerce kooperatiba manufacturer registry"
+  }},
   sw:{commerce:"duka rasmi mtandaoni mauzo ya moja kwa moja usafirishaji marejesho huduma kwa wateja",lanes:{
     agri_cooperative:"mzalishaji shamba ushirika kilimo uvuvi misitu bidhaa za eneo",
     manufacturer_brand:"mtengenezaji kiwanda mmiliki wa chapa bidhaa rasmi",
@@ -344,6 +366,7 @@ const COUNTRY_BOOSTS = Object.freeze({
   BR:["cooperativa de produtores agricultura familiar loja oficial", "SEBRAE indústria local fabricante loja virtual"],
   IN:["farmer producer organisation cooperative manufacturer official store", "MSME manufacturer directory direct online sales"],
   ID:["koperasi produsen UMKM pabrik toko resmi", "kamar dagang daftar produsen penjualan online"],
+  PH:["Pilipinas manufacturer producer cooperative official online store delivery returns refunds customer support", "Pilipinas food groceries household essentials beauty personal care responsible seller distributor official store"],
   VN:["hợp tác xã nông nghiệp nhà sản xuất địa phương cửa hàng chính thức", "phòng thương mại danh bạ doanh nghiệp sản xuất bán hàng trực tuyến"],
   TH:["สหกรณ์การเกษตร ผู้ผลิตชุมชน ร้านค้าออนไลน์ทางการ", "หอการค้า รายชื่อโรงงาน ผู้ผลิต จำหน่ายออนไลน์"],
   RU:["сельскохозяйственный кооператив региональный производитель официальный магазин", "торгово промышленная палата реестр производителей интернет магазин"],
