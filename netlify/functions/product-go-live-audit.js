@@ -1053,7 +1053,9 @@ exports.handler = async function(event){
     const body=method==="POST"?parseBody(event):{};
     const action=low(first(body.action,getParam(event,"action"),method==="POST"?"request_publication":"audit"));
     const scope=resolveScope(event,body);
-    const liveDoc=await CandidateReview.stage(process.cwd());
+    const liveDoc=(method==="GET"&&CandidateReview.scopedStage)
+      ? await CandidateReview.scopedStage(process.cwd(),scope.country,scope.region,600)
+      : await CandidateReview.stage(process.cwd());
     if(method==="POST"){
       if(action!=="request_publication")return json(404,{ok:false,error:"unsupported_action"});
       const result=await requestPublication(event,actor,body,scope,liveDoc);
