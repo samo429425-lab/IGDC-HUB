@@ -1,6 +1,6 @@
 {
   "schema": "igdc-donation-searchbank-research-frame.v1",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "channel": "donation",
   "page": "donation",
   "policy": {
@@ -117,11 +117,14 @@
         "Al Jazeera DW France 24 Arirang latest humanitarian disaster refugee aid video"
       ],
       "youtubeQueries": [
-        "BBC News|Reuters|Associated Press earthquake flood wildfire storm humanitarian",
-        "Al Jazeera English|DW News|FRANCE 24 English refugee displacement war civilians humanitarian aid",
-        "Arirang News|NHK WORLD-JAPAN|CNA disaster relief refugee humanitarian",
-        "UN News|UNICEF|UNHCR|World Food Programme|IFRC humanitarian emergency aid relief",
-        "CNN|NBC News|ABC News|CBS News|PBS NewsHour disaster humanitarian refugee civilians aid"
+        "BBC News earthquake flood wildfire storm humanitarian relief",
+        "Reuters refugee displacement civilians war humanitarian aid",
+        "Associated Press disaster rescue relief humanitarian",
+        "Arirang News international disaster refugee humanitarian aid",
+        "Al Jazeera English refugee civilians war humanitarian relief",
+        "DW News disaster refugee humanitarian aid",
+        "UN News humanitarian emergency relief civilians",
+        "UNICEF UNHCR World Food Programme IFRC humanitarian emergency aid"
       ],
       "youtubeTrustedChannels": [
         "BBC News",
@@ -145,7 +148,10 @@
         "UNICEF",
         "UNHCR, the UN Refugee Agency",
         "World Food Programme",
-        "IFRC"
+        "IFRC",
+        "Voice of America",
+        "VOA",
+        "Euronews"
       ]
     },
     "donation-ngo": {
@@ -236,7 +242,13 @@
         "nonprofit",
         "public aid"
       ],
-      "policyPurpose": "국제 NGO·공공원조·국제기구 공식 홈페이지"
+      "policyPurpose": "국제 NGO·공공원조·국제기구 공식 홈페이지",
+      "discoveryQueries": [
+        "international child welfare humanitarian NGO nonprofit official website",
+        "Korea international relief development NGO nonprofit official website",
+        "faith based humanitarian development NGO official website",
+        "refugee children poverty humanitarian nonprofit organization official website"
+      ]
     },
     "donation-mission": {
       "primaryQuery": "Protestant evangelical Christian mission evangelism missionary campus Bible education university higher education association network organization official website homepage",
@@ -322,7 +334,9 @@
         "international Christian university association evangelical mission education official website",
         "Christian higher education network university consortium mission official website",
         "evangelical education mission university network Asia Africa official website",
-        "Christian cross cultural education mission campus youth organization official website"
+        "Christian cross cultural education mission campus youth organization official website",
+        "international evangelical university association mission education official website",
+        "Christian medical media digital youth mission network official website"
       ]
     },
     "donation-service": {
@@ -376,7 +390,13 @@
         "service",
         "donation"
       ],
-      "policyPurpose": "봉사·의료·주거·식수·지역사회 서비스 기관"
+      "policyPurpose": "봉사·의료·주거·식수·지역사회 서비스 기관",
+      "discoveryQueries": [
+        "international medical volunteer nonprofit organization official website",
+        "clean water housing community volunteer nonprofit official website",
+        "Korea volunteer service nonprofit association official website",
+        "Christian volunteer medical housing community service organization official website"
+      ]
     },
     "donation-relief": {
       "primaryQuery": "humanitarian relief disaster emergency hunger refugee rescue food aid organization official website homepage",
@@ -452,7 +472,13 @@
         "hunger",
         "refugee"
       ],
-      "policyPurpose": "재난·기아·난민·긴급구호 기관"
+      "policyPurpose": "재난·기아·난민·긴급구호 기관",
+      "discoveryQueries": [
+        "international emergency disaster relief nonprofit official website",
+        "refugee famine conflict humanitarian relief organization official website",
+        "Christian disaster relief humanitarian aid organization official website",
+        "Korea emergency relief international aid nonprofit official website"
+      ]
     },
     "donation-education": {
       "primaryQuery": "Christian education children youth literacy multicultural migrant family community school university training nonprofit official website homepage",
@@ -528,7 +554,9 @@
         "Christian multicultural family education ministry Korea official website",
         "migrant children Christian education Korea nonprofit official website",
         "international Christian university association higher education mission official website",
-        "Christian higher education network education mission official website"
+        "Christian higher education network education mission official website",
+        "Christian scholarship literacy teacher training nonprofit official website",
+        "international faith based school university education nonprofit official website"
       ]
     },
     "donation-environment": {
@@ -586,7 +614,13 @@
         "creation care",
         "conservation"
       ],
-      "policyPurpose": "환경·창조세계 돌봄·보전·재조림, 비정파성"
+      "policyPurpose": "환경·창조세계 돌봄·보전·재조림, 비정파성",
+      "discoveryQueries": [
+        "international conservation biodiversity climate nonprofit official website",
+        "clean water reforestation environmental restoration nonprofit official website",
+        "Korea environmental conservation nonprofit official website",
+        "Christian creation care environmental nonprofit official website"
+      ]
     },
     "donation-others": {
       "primaryQuery": "Christian nonprofit vulnerable people justice disability anti trafficking prison migrant refugee family multicultural elderly orphan addiction recovery counseling public interest organization official website homepage",
@@ -648,7 +682,9 @@
         "Christian nonprofit migrant refugee family support multicultural official website",
         "faith based disability elderly orphan family support nonprofit official website",
         "Christian prison anti trafficking addiction recovery counseling nonprofit official website",
-        "Korea Christian multicultural migrant family community support nonprofit official website"
+        "Korea Christian multicultural migrant family community support nonprofit official website",
+        "Christian counseling addiction recovery family support nonprofit official website",
+        "human trafficking disability orphan elderly support nonprofit official website"
       ]
     }
   }

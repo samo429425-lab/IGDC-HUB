@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.8.0-fresh-global-video";
+const VERSION = "donation-research-policy-v1.9.0-global-news-research-boost";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -258,8 +258,8 @@ function isVideoUrl(value){
     return /\.(?:mp4|webm|m3u8|mov)(?:$|[?#])/i.test(path);
   }catch(_e){ return false; }
 }
-const GLOBAL_NEWS_HOST_RE = /(?:^|\.)(?:bbc\.com|bbc\.co\.uk|reuters\.com|apnews\.com|arirang\.com|arirang\.co\.kr|aljazeera\.com|dw\.com|france24\.com|cnn\.com|nbcnews\.com|abcnews\.go\.com|cbsnews\.com|npr\.org|pbs\.org|news\.sky\.com|channelnewsasia\.com|trtworld\.com|nhk\.or\.jp|reliefweb\.int|news\.un\.org|un\.org|unicef\.org|unhcr\.org|wfp\.org|ifrc\.org)$/i;
-const GLOBAL_NEWS_SOURCE_RE = /\b(?:bbc(?: news)?|reuters|associated press|ap news|arirang(?: tv| news)?|al jazeera(?: english)?|dw news|deutsche welle|france 24|cnn|nbc news|abc news|cbs news|pbs newshour|sky news|cna|channel newsasia|trt world|npr|nhk world(?: japan)?|reliefweb|ocha|un news|united nations|unicef|unhcr|world food programme|wfp|ifrc)\b/i;
+const GLOBAL_NEWS_HOST_RE = /(?:^|\.)(?:bbc\.com|bbc\.co\.uk|reuters\.com|apnews\.com|arirang\.com|arirang\.co\.kr|aljazeera\.com|dw\.com|france24\.com|cnn\.com|nbcnews\.com|abcnews\.go\.com|cbsnews\.com|npr\.org|pbs\.org|news\.sky\.com|channelnewsasia\.com|trtworld\.com|nhk\.or\.jp|voanews\.com|euronews\.com|reliefweb\.int|news\.un\.org|un\.org|unicef\.org|unhcr\.org|wfp\.org|ifrc\.org)$/i;
+const GLOBAL_NEWS_SOURCE_RE = /\b(?:bbc(?: news)?|reuters|associated press|ap news|arirang(?: tv| news)?|al jazeera(?: english)?|dw news|deutsche welle|france 24|cnn|nbc news|abc news|cbs news|pbs newshour|sky news|cna|channel newsasia|trt world|npr|nhk world(?: japan)?|voice of america|voa|euronews|reliefweb|ocha|un news|united nations|unicef|unhcr|world food programme|wfp|ifrc)\b/i;
 function isAuthoritativeGlobalNewsUrl(value){
   const raw=httpsUrl(value); if(!raw) return false;
   const host=urlHost(raw); return !!host && GLOBAL_NEWS_HOST_RE.test(host);
@@ -270,7 +270,17 @@ function isAuthoritativeGlobalNews(record){
   return GLOBAL_NEWS_SOURCE_RE.test(recordText(r));
 }
 function globalNewsRelevant(record){
-  const policy=policyFor("donation-global"),blob=recordText(record),generic=new Set(["video","footage","broadcast","report","update","news","news report","breaking news"]);
+  const r=plain(record),source=plain(r.source),media=plain(r.media),org=plain(r.org);
+  /* Relevance must come from the returned content itself, not from the research
+     query stored in collector.query/donationResearch.query. Otherwise an
+     unrelated Reuters market clip can inherit words like "humanitarian" from
+     the query and be falsely accepted. */
+  const blob=lower([
+    r.title,r.name,r.summary,r.description,r.about,r.content,r.category,r.semantic_category,r.type,r.mediaType,
+    source.name,source.platform,org.name,media.kind,media.type,
+    ...array(r.tags),...array(r.keywords),...array(r.topics)
+  ].filter(Boolean).join(" "));
+  const policy=policyFor("donation-global"),generic=new Set(["video","footage","broadcast","report","update","news","news report","breaking news"]);
   const humanitarian=(policy.semanticHints||[]).filter(h=>!generic.has(lower(h)));
   return countHints(blob,humanitarian)>0 && (looksLikeVideo(record)||isAuthoritativeGlobalNews(record));
 }

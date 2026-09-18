@@ -18,7 +18,7 @@ const PolicyDiscussion = require("./lib/donation-policy-discussion.v1");
 let SearchBank = null;
 try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBank = null; }
 
-const VERSION = "donation-candidate-admin-v1.14.0-fresh-global-youtube";
+const VERSION = "donation-candidate-admin-v1.15.0-global-news-research-boost";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -40,6 +40,7 @@ function safeHttps(value){ const v=text(value); if(!/^https:\/\//i.test(v)) retu
 function sourceName(item){ const s=plain(item&&item.source); return limitText(s.name||item&&item.source_name||item&&item.sourceAdapter||item&&item.source_adapter||item&&item.collector&&item.collector.engine||"SearchBank",160); }
 
 const homepagePreviewCache=new Map();
+const contentPreviewCache=new Map();
 function decodeHtml(value){
   return text(value)
     .replace(/&#x([0-9a-f]+);/gi,function(_m,h){try{return String.fromCodePoint(parseInt(h,16));}catch(_e){return _m;}})
@@ -165,16 +166,68 @@ async function fetchHomepagePreview(homepage,timeoutMs){
   homepagePreviewCache.set(canonical,promise);
   return promise;
 }
+async function fetchContentPreview(url,timeoutMs){
+  const target=safeHttps(url);
+  if(!target||!publicPreviewHost(target))return {url:target||'',title:'',description:'',image:'',publishedAt:null,resolved:false,status:0};
+  if(contentPreviewCache.has(target))return contentPreviewCache.get(target);
+  const promise=(async function(){
+    const controller=typeof AbortController==='function'?new AbortController():null;
+    const timer=controller?setTimeout(function(){try{controller.abort();}catch(_e){}},Math.max(1400,Math.min(4200,Number(timeoutMs)||2600))):null;
+    try{
+      const res=await fetch(target,{
+        method:'GET',redirect:'follow',
+        headers:{
+          'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0 Safari/537.36',
+          'accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'accept-language':'en-US,en;q=0.9,ko-KR;q=0.8,ko;q=0.7'
+        },
+        signal:controller?controller.signal:undefined
+      });
+      if(!res||!res.ok)return {url:target,title:'',description:'',image:'',publishedAt:null,resolved:false,status:res&&res.status||0};
+      const ctype=lower(res.headers&&res.headers.get&&res.headers.get('content-type'));
+      if(ctype&&ctype.indexOf('html')<0)return {url:safeHttps(res.url)||target,title:'',description:'',image:'',publishedAt:null,resolved:false,status:res.status};
+      let html=await res.text();if(html.length>900000)html=html.slice(0,900000);
+      const finalUrl=safeHttps(res.url)||target,meta=homepageMeta(html);
+      const title=limitText(homepageTitle(html,meta),300);
+      const description=limitText(homepageDescription(meta),1800);
+      const image=safeHttps(homepageImage(html,meta,finalUrl));
+      const publishedAt=text(firstMeta(meta,['article:published_time','article:modified_time','og:updated_time','date','datepublished','pubdate']))||null;
+      return {url:finalUrl,title,description,image,publishedAt,resolved:!!(title||description||image),status:res.status};
+    }catch(error){
+      return {url:target,title:'',description:'',image:'',publishedAt:null,resolved:false,status:0,error:text(error&&error.name||error)};
+    }finally{if(timer)clearTimeout(timer);}
+  })();
+  contentPreviewCache.set(target,promise);
+  return promise;
+}
+
 async function mapLimit(items,limit,worker){
   const list=Array.isArray(items)?items:[],out=new Array(list.length);let cursor=0;
   async function run(){for(;;){const i=cursor++;if(i>=list.length)return;out[i]=await worker(list[i],i);}}
   await Promise.all(Array.from({length:Math.max(1,Math.min(Number(limit)||1,list.length||1))},run));return out;
 }
-function youtubeApiKey(){ return text(process.env.YOUTUBE_API_KEY||process.env.GOOGLE_YOUTUBE_API_KEY||''); }
+function youtubeApiKey(){
+  /* Keep Donation compatible with the same YouTube key aliases already used by
+     MaruSearch/social.  Some Netlify deployments expose only GOOGLE_API_KEY. */
+  return text(
+    process.env.YOUTUBE_API_KEY||
+    process.env.GOOGLE_YOUTUBE_API_KEY||
+    process.env.GOOGLE_API_KEY||
+    process.env.GOOGLE_SEARCH_API_KEY||
+    ''
+  );
+}
 function channelKey(value){ return text(value).toLowerCase().replace(/[^a-z0-9가-힣]+/g,' ').replace(/\s+/g,' ').trim(); }
 function trustedYoutubeChannel(channelTitle,allowed){
   const key=channelKey(channelTitle);if(!key)return false;
-  return (Array.isArray(allowed)?allowed:[]).some(function(name){return channelKey(name)===key;});
+  return (Array.isArray(allowed)?allowed:[]).some(function(name){
+    const wanted=channelKey(name);if(!wanted)return false;
+    if(key===wanted)return true;
+    /* Official channel titles occasionally add/remove a regional suffix or the
+       word "News".  Permit a conservative long-name prefix match instead of
+       rejecting an otherwise valid result because of that cosmetic suffix. */
+    return wanted.length>=6 && (key.startsWith(wanted+' ')||wanted.startsWith(key+' '));
+  });
 }
 async function fetchJsonTimeout(url,timeoutMs){
   const controller=typeof AbortController==='function'?new AbortController():null;
@@ -186,40 +239,69 @@ async function fetchJsonTimeout(url,timeoutMs){
   }finally{if(timer)clearTimeout(timer);}
 }
 async function directYoutubeGlobalNews(frame,freshnessHours,policyQuery){
-  const key=youtubeApiKey(),queries=(frame&&frame.youtubeQueries||[]).slice(0,5),allowed=(frame&&frame.youtubeTrustedChannels||[]);
-  if(!key)return {status:'not_configured',items:[],queries:0};
-  if(!queries.length||!allowed.length)return {status:'no_frame_queries',items:[],queries:0};
+  const key=youtubeApiKey(),frameQueries=(frame&&frame.youtubeQueries||[]).map(text).filter(Boolean),allowed=(frame&&frame.youtubeTrustedChannels||[]).map(text).filter(Boolean);
+  if(!key)return {status:'not_configured',items:[],queries:0,keyAlias:'missing'};
+  if(!allowed.length)return {status:'no_trusted_channels',items:[],queries:0,keyAlias:'configured'};
   const hours=Math.max(24,Math.min(168,Number(freshnessHours)||Number(frame&&frame.freshnessHours)||120));
   const publishedAfter=new Date(Date.now()-hours*3600000).toISOString();
   const policy=text(policyQuery);
-  const planned=queries.slice();
+  const topics=[
+    'earthquake flood wildfire storm disaster humanitarian rescue relief',
+    'refugee displacement civilians war humanitarian aid evacuation',
+    'famine hunger food insecurity children medical aid humanitarian',
+    'international relief operation rescue medical team food distribution'
+  ];
+  /* Source-scoped searches are much more reliable than one large OR/pipe query.
+     Keep the request count bounded so daily scheduling remains quota-safe. */
+  const sourcePool=[];
+  allowed.slice(0,8).forEach(function(v){if(v&&!sourcePool.includes(v))sourcePool.push(v);});
+  allowed.slice(-5).forEach(function(v){if(v&&!sourcePool.includes(v))sourcePool.push(v);});
+  const planned=frameQueries.slice(0,8);
+  for(let i=0;planned.length<8&&i<sourcePool.length;i++){
+    const q=limitText(sourcePool[i]+' '+topics[i%topics.length],220);
+    if(q&&!planned.includes(q))planned.push(q);
+  }
   if(policy)planned.push(limitText(policy+' humanitarian international news',220));
-  const batches=await mapLimit(planned.slice(0,6),2,async function(query){
+
+  const batches=await mapLimit(planned.slice(0,9),3,async function(query){
     try{
-      const params=new URLSearchParams({part:'snippet',type:'video',order:'date',safeSearch:'strict',videoEmbeddable:'true',videoSyndicated:'true',maxResults:'25',publishedAfter,q:query,key});
-      const data=await fetchJsonTimeout('https://www.googleapis.com/youtube/v3/search?'+params.toString(),4200);
+      const params=new URLSearchParams({
+        part:'snippet',type:'video',order:'date',safeSearch:'strict',
+        videoEmbeddable:'true',videoSyndicated:'true',maxResults:'20',
+        publishedAfter,q:query,key
+      });
+      const data=await fetchJsonTimeout('https://www.googleapis.com/youtube/v3/search?'+params.toString(),5200);
       const items=[];
       for(const row of Array.isArray(data&&data.items)?data.items:[]){
         const id=text(row&&row.id&&row.id.videoId),snippet=plain(row&&row.snippet),channelTitle=text(snippet.channelTitle);
         if(!id||!trustedYoutubeChannel(channelTitle,allowed))continue;
         const videoUrl='https://www.youtube.com/watch?v='+encodeURIComponent(id);
         const thumbs=plain(snippet.thumbnails),thumb=safeHttps(plain(thumbs.maxres).url||plain(thumbs.high).url||plain(thumbs.medium).url||plain(thumbs.default).url)||('https://i.ytimg.com/vi/'+encodeURIComponent(id)+'/hqdefault.jpg');
-        items.push({
+        const item={
           id:'youtube:'+id,title:limitText(snippet.title||channelTitle,300),summary:limitText(snippet.description||'',1800),description:limitText(snippet.description||'',1800),
           url:videoUrl,videoUrl,type:'video',mediaType:'video',thumbnail:thumb,thumb,image:thumb,publishedAt:text(snippet.publishedAt),published_at:text(snippet.publishedAt),
           channel:'donation',page:'donation',section:'donation-global',psom_key:'donation-global',
           media:{kind:'video',src:videoUrl,url:videoUrl,thumb,image:thumb},link:{url:videoUrl,mode:'global-news-video',target:'_blank'},
           source:{name:channelTitle,url:videoUrl,platform:'youtube',authority:1},collector:{engine:'youtube-data-api',query},
           donationResearch:{kind:'youtube-api',query,anchor:channelTitle,identityVerified:true},frontSupplyAllowed:true,snapshotEligible:true,indexEligible:true
-        });
+        };
+        /* Filter at source so quota results are not filled with ordinary politics,
+           markets, entertainment, or unrelated breaking news. */
+        if(Policy.globalNewsRelevant&& !Policy.globalNewsRelevant(item))continue;
+        items.push(item);
       }
       return {query,items,status:'ok'};
     }catch(error){return {query,items:[],status:'error',error:text(error&&error.message||error)};}
   });
   const out=[],seen=new Set();
   for(const batch of batches){for(const item of batch.items||[]){const u=text(item.url);if(!u||seen.has(u))continue;seen.add(u);out.push(item);}}
-  return {status:out.length?'ok':(batches.some(x=>x.status==='ok')?'empty':'error'),items:out.slice(0,24),queries:batches.length,reports:batches.map(x=>({query:x.query,count:(x.items||[]).length,status:x.status,error:x.error||null}))};
+  return {
+    status:out.length?'ok':(batches.some(x=>x.status==='ok')?'empty':'error'),
+    items:out.slice(0,36),queries:batches.length,keyAlias:'configured',
+    reports:batches.map(x=>({query:x.query,count:(x.items||[]).length,status:x.status,error:x.error||null}))
+  };
 }
+
 function researchQuery(section,customQuery){
   const sec=Policy.normalizeSection(section)||'donation-ngo',frame=Policy.researchFrameFor?Policy.researchFrameFor(sec):{},custom=text(customQuery);
   if(custom)return custom+(sec==='donation-global'?' latest humanitarian disaster refugee conflict authoritative news video report':' official website homepage');
@@ -250,18 +332,25 @@ function researchQuerySpecs(section,customQuery,singleSection,existingViews,poli
   }else out.push({query:researchQuery(sec,''),kind:'broad',anchorName:'',homepage:'',searchType:'web'});
   if(custom) out.push({query:researchQuery(sec,custom),kind:'custom',anchorName:'',homepage:'',searchType:sec==='donation-global'?'web':'web'});
   if(policy) out.push({query:researchQuery(sec,policy),kind:'policy',anchorName:'',homepage:'',searchType:sec==='donation-global'?'web':'web'});
-  if(singleSection){
+  /* Full-page research used to skip every anchor/discovery query when section=all.
+     That made the "전체 리서치" button much weaker than researching a lane by
+     itself.  Keep all-section research bounded, but still feed it curated roots
+     and discovery terms so capacity grows across repeated runs. */
+  {
     const state=researchAnchorState(sec,existingViews);
     const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query),homepage:safeHttps(a&&a.homepage),searchType:['web','video'].includes(lower(a&&a.searchType))?lower(a.searchType):(sec==='donation-global'?'video':'web')};}).filter(function(a){return a.name&&a.query;});
     function stateRank(name){return !state.found.has(name)?0:(!state.ready.has(name)?1:2);}
     if(sec==='donation-global'){
-      anchors.slice(0,10).forEach(function(a){out.push({query:a.query,kind:'global-anchor',anchorName:a.name,homepage:'',searchType:a.searchType||'video'});});
+      const globalAnchorLimit=singleSection?12:4;
+      anchors.slice(0,globalAnchorLimit).forEach(function(a){out.push({query:a.query,kind:'global-anchor',anchorName:a.name,homepage:'',searchType:a.searchType||'video'});});
     }else{
       anchors.sort(function(a,b){const d=stateRank(a.name)-stateRank(b.name);if(d)return d;return (a.homepage?0:1)-(b.homepage?0:1);});
-      anchors.slice(0,10).forEach(function(a){out.push({query:a.query||a.name,kind:'anchor',anchorName:a.name,homepage:a.homepage||'',searchType:'web'});});
+      const anchorLimit=singleSection?14:4;
+      anchors.slice(0,anchorLimit).forEach(function(a){out.push({query:a.query||a.name,kind:'anchor',anchorName:a.name,homepage:a.homepage||'',searchType:'web'});});
     }
     if(Array.isArray(frame.discoveryQueries)){
-      frame.discoveryQueries.slice(0,4).map(text).filter(Boolean).forEach(function(q){out.push({query:q,kind:'discovery',anchorName:'',homepage:'',searchType:'web'});});
+      const discoveryLimit=singleSection?6:1;
+      frame.discoveryQueries.slice(0,discoveryLimit).map(text).filter(Boolean).forEach(function(q){out.push({query:q,kind:'discovery',anchorName:'',homepage:'',searchType:'web'});});
     }
   }
   const seen=new Set();
@@ -662,14 +751,48 @@ async function performResearch(event,section,customQuery,limit,options){
     if(sec==='donation-global'){
       const itemMap=new Map();
       rawEntries.forEach(function(entry,index){
-        const r=plain(entry.item),link=plain(r.link),org=plain(r.org),key=text(r.id||r.uid||r.url||link.url||org.homepage||r.title||('row-'+index)).toLowerCase();
-        if(!itemMap.has(key))itemMap.set(key,entry.item);
+        const r=plain(entry&&entry.item),link=plain(r.link),org=plain(r.org),key=text(r.id||r.uid||r.url||link.url||org.homepage||r.title||('row-'+index)).toLowerCase();
+        if(!itemMap.has(key))itemMap.set(key,entry);
       });
-      for(const item of itemMap.values()){
-        if(Policy.isPlaceholder(item))continue;
-        const url=Policy.candidateUrlForSection?Policy.candidateUrlForSection(item,sec):candidateUrl(item,sec);
-        if(!url){if(Policy.candidateUrls(item||{}).some(function(u){return Policy.isSearchLandingUrl&&Policy.isSearchLandingUrl(u);}))skippedSearchLanding++;else skippedPolicy++;continue;}
-        const norm=normalizeCandidate(item,sec,query);
+      const globalEntries=Array.from(itemMap.values());
+      const prepared=await mapLimit(globalEntries,4,async function(entry){
+        const raw=plain(entry&&entry.item),spec=entry&&entry.spec||{query,kind:'broad-web',anchorName:''};
+        if(Policy.isPlaceholder(raw))return null;
+        const url=Policy.candidateUrlForSection?Policy.candidateUrlForSection(raw,sec):candidateUrl(raw,sec);
+        if(!url)return {raw,spec,url:'',noUrl:true};
+        let item=raw;
+        const hasThumb=!!candidateThumb(raw,sec);
+        const isVideo=Policy.looksLikeVideo&&Policy.looksLikeVideo(raw);
+        const authoritativePage=Policy.isAuthoritativeGlobalNewsUrl&&Policy.isAuthoritativeGlobalNewsUrl(url);
+        /* Search providers often return a clean BBC/Reuters/AP article URL but no
+           image.  Fetch only that authoritative article page and recover its own
+           OG image/title/description so a valid news card is not discarded. */
+        if(!isVideo&&authoritativePage&&(!hasThumb||!(Policy.globalNewsRelevant&&Policy.globalNewsRelevant(raw)))){
+          const preview=await fetchContentPreview(url,3200);
+          if(preview&&preview.resolved){
+            const image=safeHttps(preview.image)||candidateThumb(raw,sec);
+            item=Object.assign({},raw,{
+              title:limitText(preview.title||raw.title||raw.name||url,300),
+              summary:limitText(preview.description||raw.summary||raw.description||'',1800),
+              description:limitText(preview.description||raw.description||raw.summary||'',1800),
+              url:preview.url||url,
+              thumbnail:image||raw.thumbnail||null,thumb:image||raw.thumb||null,image:image||raw.image||null,
+              publishedAt:raw.publishedAt||raw.published_at||preview.publishedAt||null,
+              published_at:raw.published_at||raw.publishedAt||preview.publishedAt||null,
+              media:Object.assign({},plain(raw.media),{kind:'image',thumb:image||plain(raw.media).thumb||null,image:image||plain(raw.media).image||null}),
+              link:Object.assign({},plain(raw.link),{url:preview.url||url,mode:'global-news-article',target:'_blank'}),
+              source:Object.assign({},plain(raw.source),{url:preview.url||url})
+            });
+          }
+        }
+        return {item,spec,url};
+      });
+      for(const preparedEntry of prepared){
+        if(!preparedEntry)continue;
+        if(preparedEntry.noUrl){const item=preparedEntry.raw;if(Policy.candidateUrls(item||{}).some(function(u){return Policy.isSearchLandingUrl&&Policy.isSearchLandingUrl(u);}))skippedSearchLanding++;else skippedPolicy++;continue;}
+        const item=plain(preparedEntry.item),spec=preparedEntry.spec||{query};
+        const itemQuery=text(spec.query)||query;
+        const norm=normalizeCandidate(item,sec,itemQuery);
         if(!norm.candidate.url||!norm.candidate.thumbnail){skippedPolicy++;continue;}
         if(!policyVisibleCandidate(norm.candidate,sec)){skippedPolicy++;continue;}
         if(seen.has(norm.id))continue;seen.add(norm.id);globalNewsCount++;if(Policy.looksLikeVideo(item))globalVideoCount++;
@@ -678,7 +801,7 @@ async function performResearch(event,section,customQuery,limit,options){
         const previousQueue=plain(previousPayload.donationQueue),previousCandidate=plain(previousPayload.candidate),stage=previous?previousStage:'research';
         const queue=Object.assign({},norm.queue,previousQueue,{section:sec,stage,updatedAt:nowIso(),relevanceScore:Math.max(Number(previousQueue.relevanceScore||0),Number(norm.queue.relevanceScore||0)),issues:Array.from(new Set([...(previousQueue.issues||[]),...(norm.queue.issues||[])]))});
         const candidate=Object.assign({},norm.candidate,previousCandidate);candidate.section=sec;candidate.psom_key=sec;candidate.channel='donation';candidate.page='donation';
-        writes.push({id:norm.id,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Donation Global News video candidate.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
+        writes.push({id:norm.id,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Donation Global News candidate.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
     }else{
       /* Keep query context. A document can discover a domain, but only the
@@ -708,9 +831,9 @@ async function performResearch(event,section,customQuery,limit,options){
            single noisy result cannot suppress the actual organization site. */
         roots.push(...group.sort(function(a,b){return anchorDiscoveryScore(b,sec)-anchorDiscoveryScore(a,sec);}).slice(0,2));
       }
-      roots.push(...broad.sort(function(a,b){return b.score-a.score;}).slice(0,sections.length>1?2:4));
+      roots.push(...broad.sort(function(a,b){return b.score-a.score;}).slice(0,sections.length>1?4:6));
       const enriched=await mapLimit(roots,sections.length>1?4:6,async function(entry){
-        const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?2200:4800);
+        const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?2800:4800);
         const home=preview.homepage||entry.homepage,raw=plain(entry.item),spec=entry.spec||{kind:'broad',anchorName:'',query};
         const directResult=isDirectHomepageResult(raw,entry.homepage);
         const rawTitle=limitText(raw.title||raw.name||plain(raw.org).name||plain(raw.displayCard).title||'',300);
@@ -770,7 +893,7 @@ async function performResearch(event,section,customQuery,limit,options){
         writes.push({id:rowId,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Verified official organization homepage + homepage representative preview.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
     }
-    return {section:sec,query,queries,queryPlan:specs.map(function(x){return {kind:x.kind,anchorName:x.anchorName||null,homepage:x.homepage||null,query:x.query};}),accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,identityRejected,officialHomepageCount,globalNewsCount,globalVideoCount,previewResolved,engineItems:rawEntries.length,youtubeDirect:{status:youtubeDirect.status,items:Array.isArray(youtubeDirect.items)?youtubeDirect.items.length:0,queries:Number(youtubeDirect.queries||0),reports:Array.isArray(youtubeDirect.reports)?youtubeDirect.reports:[]},durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
+    return {section:sec,query,queries,queryPlan:specs.map(function(x){return {kind:x.kind,anchorName:x.anchorName||null,homepage:x.homepage||null,query:x.query};}),accepted:writes.length,skippedExcluded,skippedSearchLanding,skippedPolicy,identityRejected,officialHomepageCount,globalNewsCount,globalVideoCount,previewResolved,engineItems:rawEntries.length,youtubeDirect:{status:youtubeDirect.status,items:Array.isArray(youtubeDirect.items)?youtubeDirect.items.length:0,queries:Number(youtubeDirect.queries||0),keyAlias:text(youtubeDirect.keyAlias)||null,reports:Array.isArray(youtubeDirect.reports)?youtubeDirect.reports:[]},durationMs:Date.now()-started,writes,errors,adapters:Array.isArray(meta.adapters)?meta.adapters.map(a=>({name:text(a&&a.name),count:Number(a&&a.count||0),ok:a&&a.ok!==false,error:text(a&&a.error)||null})):[]};
   }
 
   const sectionResults=[];const concurrency=section==="all"?2:1;

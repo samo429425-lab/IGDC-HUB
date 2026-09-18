@@ -9,7 +9,7 @@
  * - Do not mutate SearchBank, Snapshot Engine, AutoMap, or front HTML.
  * - Topic preference is soft guidance, never an absolute exclusion rule.
  */
-const VERSION = "social-country-content-policy-v1.1.0-consumption-weighted";
+const VERSION = "social-country-content-policy-v1.2.0-route-aware-nonpolitical-social";
 
 const GLOBAL_TOPICS = Object.freeze([
   { key: "music", weight: 100, terms: ["music", "singer", "artist", "live performance", "concert", "official music"] },
@@ -25,7 +25,10 @@ const COUNTRY_OVERRIDES = Object.freeze({
     topics: [
       { key: "music", weight: 110, terms: ["한국 가수", "라이브 무대", "음악방송", "공식 공연", "K-pop", "트로트", "보컬"] },
       { key: "travel", weight: 102, terms: ["국내 여행", "한국 관광", "지역 축제", "여행지", "호텔", "리조트", "골프", "캠핑"] },
-      { key: "world", weight: 94, terms: ["국제 주요 이슈", "세계 뉴스", "국제기구", "글로벌 경제", "과학 뉴스"] }
+      { key: "culture", weight: 100, terms: ["한국 음식", "지역 맛집", "전통문화", "지역 축제", "박물관", "문화 공연"] },
+      { key: "entertainment", weight: 98, terms: ["한국 예능", "인기 공연", "건전한 엔터테인먼트", "코미디", "라이브 쇼"] },
+      { key: "education", weight: 92, terms: ["한국 교육", "과학", "기술", "지식", "다큐멘터리"] },
+      { key: "world", weight: 86, terms: ["국제기구", "글로벌 경제", "과학 뉴스"] }
     ]
   },
   JP: {
@@ -148,6 +151,10 @@ const REGION_OVERRIDES = Object.freeze({
     ]
   }
 });
+
+const NONPOLITICAL_SOCIAL_QUERY_PLATFORMS = new Set(["wechat", "weibo"]);
+const NONPOLITICAL_QUERY_BLOCK = /(?:politic|election|partisan|propaganda|territorial|military|world\s+news|international\s+affairs|global\s+issue|정치|선거|정당|선전|영토|군사|세계\s*뉴스|국제\s*주요\s*이슈|政治|选举|選舉|政党|政黨|宣传|宣傳|军事|軍事|领土|領土|国际\s*新闻|國際\s*新聞)/i;
+
 const PLATFORM_TOPIC_BIAS = Object.freeze({
   youtube: ["music", "travel", "world", "education", "sports", "culture"],
   instagram: ["travel", "music", "culture", "sports"],
@@ -231,8 +238,12 @@ function topicQueries(routeOrCountry, platform, maxTerms) {
 function applyToPlatformPolicy(basePolicy, routeOrCountry, platform) {
   const base = basePolicy && typeof basePolicy === "object" ? basePolicy : {};
   const p = profile(routeOrCountry);
-  const topicTerms = topicQueries(routeOrCountry, platform, 18);
-  const baseQueries = base.collectionQueries || [];
+  let topicTerms = topicQueries(routeOrCountry, platform, 18);
+  let baseQueries = base.collectionQueries || [];
+  if (NONPOLITICAL_SOCIAL_QUERY_PLATFORMS.has(text(platform).toLowerCase())) {
+    topicTerms = topicTerms.filter((term) => !NONPOLITICAL_QUERY_BLOCK.test(text(term)));
+    baseQueries = baseQueries.filter((query) => !NONPOLITICAL_QUERY_BLOCK.test(text(query)));
+  }
   const topicSearchQueries = topicTerms.map((term) =>
     [platform, term, "official public latest high quality"].filter(Boolean).join(" ")
   );

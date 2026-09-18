@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.22.0-registry-quality-recovery";
+const VERSION = "sanmaru-social-live-collector-v1.23.0-route-aware-diversity-recovery";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -387,10 +387,14 @@ function rejectionSummary(entries) {
   });
   return out;
 }
-function sectionPlan(sectionKey) {
+function sectionPlan(sectionKey, route) {
   const platform = Policy.PLATFORM_BY_SECTION[sectionKey];
-  const policy = Policy.PLATFORM_POLICIES[platform];
-  return platform && policy ? { sectionKey, platform, policy } : null;
+  const basePolicy = Policy.PLATFORM_POLICIES[platform];
+  if (!platform || !basePolicy) return null;
+  const policy = Policy.CountryContentPolicy && typeof Policy.CountryContentPolicy.applyToPlatformPolicy === "function"
+    ? Policy.CountryContentPolicy.applyToPlatformPolicy(basePolicy, route || {}, platform)
+    : basePolicy;
+  return { sectionKey, platform, policy };
 }
 function flattenKeyValues(value, output) {
   const out = output || {};
@@ -1562,25 +1566,36 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     const hasActualPost = (list) => (list || []).some((result) => (result.items || []).some((item) =>
       candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
     ));
-    if (!hasActualPost(providers)) {
+    const hadActualPost = hasActualPost(providers);
+    // Search APIs can return only already-known posts. A provider-level "hit"
+    // must therefore not suppress discovery diversity. When a registry creator
+    // is targeted (or during a quality sweep), run the independent public-post
+    // search as well so a duplicate Naver/Google result cannot freeze the pool.
+    const diversityRescue = !!(qualitySweep || registryTargeted);
+    if (!hadActualPost || diversityRescue) {
       if (plan.platform === "facebook") {
-        // Facebook is already stable in production; preserve its prior rescue order.
-        const broad = await maruUnfilteredSearchOne(
-          event, plan, queryText, limit, language, start
-        );
-        providers = providers.concat([broad]);
-        if (!hasActualPost(providers)) {
+        // Preserve Facebook's stable path. Use the broad Maru read only when the
+        // normal providers found no post; otherwise one independent public-post
+        // pass is enough to add diversity without multiplying requests.
+        if (!hadActualPost) {
+          const broad = await maruUnfilteredSearchOne(
+            event, plan, queryText, limit, language, start
+          );
+          providers = providers.concat([broad]);
+        }
+        if (!hasActualPost(providers) || diversityRescue) {
           const rescue = await directPublicPostSearch(plan, queryText, limit);
           providers = providers.concat([rescue]);
         }
-      } else {
-        // For the seven recovering providers, run both rescue reads in parallel.
-        // The previous sequential broad->web fallback doubled empty-provider wait.
+      } else if (!hadActualPost) {
         const rescuePair = await Promise.all([
           maruUnfilteredSearchOne(event, plan, queryText, limit, language, start),
           directPublicPostSearch(plan, queryText, limit)
         ]);
         providers = providers.concat(rescuePair);
+      } else {
+        const rescue = await directPublicPostSearch(plan, queryText, limit);
+        providers = providers.concat([rescue]);
       }
     }
   }
@@ -2471,12 +2486,12 @@ exports.handler = async function(event) {
     const actor = await requireCollectorActor(event);
     const body = SocialStore.parseBody(event);
     const sectionKey = Policy.normalizeSectionKey(body.sectionKey || body.section || body.targetSection);
-    const plan = sectionPlan(sectionKey);
+    const route = CountryRouting.resolve(event, body);
+    const plan = sectionPlan(sectionKey, route);
     if (!plan) return SocialStore.response(400, { ok: false, version: VERSION, error: "invalid_social_section", allowedSections: Policy.SECTION_KEYS });
 
     const dryRun = flag(body.dryRun || body.dry_run);
     const batchSize = Math.max(1, Math.min(MAX_BATCH_SIZE, Number(body.batchSize || body.batch_size || body.limit || DEFAULT_BATCH_SIZE) || DEFAULT_BATCH_SIZE));
-    const route = CountryRouting.resolve(event, body);
     const aiPolicy = AIPolicy.normalize(body.aiPolicy || {});
 
     if (/^(intake_channels|intake_urls|direct_intake)$/i.test(SocialStore.text(body.action))) {

@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.6.0-expiry-aware";
+const VERSION = "social-preview-metadata-v1.7.0-reddit-public-json";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -362,6 +362,43 @@ async function fetchJson(url) {
   }
 }
 
+async function redditPublicPreview(contentUrl) {
+  try {
+    const safe = safeProviderUrl("reddit", contentUrl);
+    if (!safe) return null;
+    const parsed = new URL(safe);
+    if (!/\/comments\/[^/]+/i.test(parsed.pathname)) return null;
+    parsed.search = "";
+    parsed.hash = "";
+    const endpoint = parsed.toString().replace(/\/$/, "") + ".json?raw_json=1";
+    const payload = await fetchJson(endpoint);
+    const listing = Array.isArray(payload) ? payload[0] : payload;
+    const row = listing && listing.data && Array.isArray(listing.data.children) && listing.data.children[0] && listing.data.children[0].data;
+    if (!row) return null;
+    const preview = row.preview && row.preview.images && row.preview.images[0] && row.preview.images[0].source && row.preview.images[0].source.url;
+    const candidates = [
+      preview,
+      row.thumbnail,
+      row.url_overridden_by_dest,
+      row.url,
+    ];
+    let thumbnailUrl = "";
+    for (const value of candidates) {
+      const decoded = decodeHtml(value || "");
+      const image = previewImageUrl("reddit", decoded);
+      if (image) { thumbnailUrl = image; break; }
+    }
+    return {
+      title: stripTags(row.title || ""),
+      creatorName: stripTags(row.author || ""),
+      thumbnailUrl,
+      source: thumbnailUrl ? "reddit-public-json" : "reddit-public-json-no-image",
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
 async function oembed(platform, contentUrl) {
   let endpoint = "";
   if (platform === "tiktok") endpoint = "https://www.tiktok.com/oembed?url=" + encodeURIComponent(contentUrl);
@@ -482,6 +519,18 @@ async function resolvePreview(platform, contentUrl) {
     } catch (_error) {}
   }
 
+  const redditPreview = platform === "reddit" ? await redditPublicPreview(workingUrl) : null;
+  if (redditPreview && redditPreview.thumbnailUrl) {
+    return {
+      resolvedUrl: workingUrl,
+      title: redditPreview.title || "",
+      thumbnailUrl: redditPreview.thumbnailUrl,
+      creatorName: redditPreview.creatorName || "",
+      channelUrl: "",
+      source: redditPreview.source || "reddit-public-json"
+    };
+  }
+
   const oe = await oembed(platform, workingUrl);
   const oeTitle = stripTags(oe && (oe.title || oe.author_name || ""));
   const oeCreator = stripTags(oe && (oe.author_name || oe.author || ""));
@@ -515,8 +564,8 @@ async function resolvePreview(platform, contentUrl) {
   if (!prefetchedPage) {
     try { page = await fetchProviderHtml(platform, workingUrl); } catch (_error) {}
   }
-  const title = htmlTitle(page.html) || embed.title || oeTitle;
-  const creatorName = htmlCreator(platform, page.html) || embed.creatorName || oeCreator;
+  const title = htmlTitle(page.html) || embed.title || oeTitle || (redditPreview && redditPreview.title) || "";
+  const creatorName = htmlCreator(platform, page.html) || embed.creatorName || oeCreator || (redditPreview && redditPreview.creatorName) || "";
   const resolvedUrl = safeProviderUrl(platform, page.url) || workingUrl;
   let thumbnailUrl = htmlImage(page.html, platform) || previewImageUrl(platform, embed.thumbnailUrl) || previewImageUrl(platform, oeThumb);
   if (!thumbnailUrl && platform === "instagram") thumbnailUrl = await resolveInstagramMedia(resolvedUrl);
