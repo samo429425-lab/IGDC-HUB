@@ -1,6 +1,6 @@
 {
   "schema": "igdc-donation-searchbank-research-frame.v1",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "channel": "donation",
   "page": "donation",
   "policy": {
@@ -107,7 +107,7 @@
         "authoritative news",
         "broadcast"
       ],
-      "policyPurpose": "당일·최근 국제 주요 인도주의 이슈 중심. 지진·홍수·산불·폭풍·기아·난민·강제이주·전쟁으로 인한 민간인 피해와 구조·구호·의료·식량지원 등 가치 있는 국제 활동을 다룬 권위 있는 방송/통신사 및 UN·구호기관의 뉴스 영상 우선.",
+      "policyPurpose": "당일·최근 국제 주요 인도주의 이슈 중심. 지진·홍수·산불·폭풍·기아·난민·강제이주·전쟁으로 인한 민간인 피해와 구조·구호·의료·식량지원 등 가치 있는 국제 활동을 다룬 권위 있는 방송/통신사 및 UN·구호기관의 뉴스 영상 우선 홈 화면에 등록된 101개 국제 뉴스매체 전체를 영상 리서치 소스 풀로 재사용하며, 실행 시 지역 균형 순환 검색으로 최신 인도주의 관련 영상만 선별.",
       "discoveryQueries": [
         "latest earthquake flood wildfire storm tsunami landslide humanitarian rescue international news video",
         "latest famine hunger refugee displacement humanitarian aid international news video",
@@ -118,10 +118,10 @@
       ],
       "youtubeQueries": [
         "BBC News earthquake flood wildfire storm humanitarian relief",
-        "Reuters refugee displacement civilians war humanitarian aid",
-        "Associated Press disaster rescue relief humanitarian",
+        "Reuters disaster refugee displacement civilians humanitarian aid",
+        "Associated Press AP disaster rescue relief humanitarian",
         "Arirang News international disaster refugee humanitarian aid",
-        "Al Jazeera English refugee civilians war humanitarian relief",
+        "Al Jazeera English refugee civilians conflict humanitarian relief",
         "DW News disaster refugee humanitarian aid",
         "UN News humanitarian emergency relief civilians",
         "UNICEF UNHCR World Food Programme IFRC humanitarian emergency aid"
@@ -152,6 +152,629 @@
         "Voice of America",
         "VOA",
         "Euronews"
+      ],
+      "rssFeeds": [
+        {
+          "name": "BBC World",
+          "url": "https://feeds.bbci.co.uk/news/world/rss.xml"
+        },
+        {
+          "name": "UN News",
+          "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml"
+        },
+        {
+          "name": "Al Jazeera English",
+          "url": "https://www.aljazeera.com/xml/rss/all.xml"
+        }
+      ],
+      "homeNewsSourceOrigin": "home.html .news-section a.news-btn @ IGDC-HUB-main(20260918-042152)",
+      "homeNewsSources": [
+        {
+          "name": "KBS",
+          "homepage": "https://news.kbs.co.kr/",
+          "country": "KR",
+          "region": "AS"
+        },
+        {
+          "name": "SBS",
+          "homepage": "https://news.sbs.co.kr/",
+          "country": "KR",
+          "region": "AS"
+        },
+        {
+          "name": "YTN",
+          "homepage": "https://www.ytn.co.kr/",
+          "country": "KR",
+          "region": "AS"
+        },
+        {
+          "name": "TV조선",
+          "homepage": "http://news.tvchosun.com/",
+          "country": "KR",
+          "region": "AS"
+        },
+        {
+          "name": "연합뉴스",
+          "homepage": "https://www.yna.co.kr/",
+          "country": "KR",
+          "region": "AS"
+        },
+        {
+          "name": "JTBC",
+          "homepage": "https://news.jtbc.co.kr/",
+          "country": "KR",
+          "region": "AS"
+        },
+        {
+          "name": "MBC",
+          "homepage": "https://imnews.imbc.com/",
+          "country": "KR",
+          "region": "AS"
+        },
+        {
+          "name": "CBS",
+          "homepage": "https://www.nocutnews.co.kr/",
+          "country": "KR",
+          "region": "AS"
+        },
+        {
+          "name": "한겨레",
+          "homepage": "https://www.hani.co.kr/",
+          "country": "KR",
+          "region": "AS"
+        },
+        {
+          "name": "新华社 Xinhua",
+          "homepage": "http://www.xinhuanet.com/",
+          "country": "CN",
+          "region": "AS"
+        },
+        {
+          "name": "人民网 People",
+          "homepage": "http://www.people.com.cn/",
+          "country": "CN",
+          "region": "AS"
+        },
+        {
+          "name": "CCTV",
+          "homepage": "https://news.cctv.com/",
+          "country": "CN",
+          "region": "AS"
+        },
+        {
+          "name": "环球网 Global Times",
+          "homepage": "https://www.huanqiu.com/",
+          "country": "CN",
+          "region": "AS"
+        },
+        {
+          "name": "澎湃新闻 The Paper",
+          "homepage": "https://www.thepaper.cn/",
+          "country": "CN",
+          "region": "AS"
+        },
+        {
+          "name": "财新 Caixin",
+          "homepage": "https://www.caixin.com/",
+          "country": "CN",
+          "region": "AS"
+        },
+        {
+          "name": "中国日报 China Daily",
+          "homepage": "https://www.chinadaily.com.cn/",
+          "country": "CN",
+          "region": "AS"
+        },
+        {
+          "name": "中央社 CNA",
+          "homepage": "https://www.cna.com.tw/",
+          "country": "TW",
+          "region": "AS"
+        },
+        {
+          "name": "聯合新聞網 UDN",
+          "homepage": "https://udn.com/news/index",
+          "country": "TW",
+          "region": "AS"
+        },
+        {
+          "name": "明報 Ming Pao",
+          "homepage": "https://www.mingpao.com/",
+          "country": "HK",
+          "region": "AS"
+        },
+        {
+          "name": "NHK",
+          "homepage": "https://www3.nhk.or.jp/news/",
+          "country": "JP",
+          "region": "AS"
+        },
+        {
+          "name": "朝日新聞",
+          "homepage": "https://www.asahi.com/",
+          "country": "JP",
+          "region": "AS"
+        },
+        {
+          "name": "読売新聞",
+          "homepage": "https://www.yomiuri.co.jp/",
+          "country": "JP",
+          "region": "AS"
+        },
+        {
+          "name": "毎日新聞",
+          "homepage": "https://mainichi.jp/",
+          "country": "JP",
+          "region": "AS"
+        },
+        {
+          "name": "The Straits Times",
+          "homepage": "https://www.straitstimes.com/",
+          "country": "SG",
+          "region": "AS"
+        },
+        {
+          "name": "The Star",
+          "homepage": "https://www.thestar.com.my/",
+          "country": "MY",
+          "region": "AS"
+        },
+        {
+          "name": "Bangkok Post",
+          "homepage": "https://www.bangkokpost.com/",
+          "country": "TH",
+          "region": "AS"
+        },
+        {
+          "name": "ไทยรัฐ ThaiRath",
+          "homepage": "https://www.thairath.co.th/",
+          "country": "TH",
+          "region": "AS"
+        },
+        {
+          "name": "VNExpress",
+          "homepage": "https://vnexpress.net/",
+          "country": "VN",
+          "region": "AS"
+        },
+        {
+          "name": "Tuổi Trẻ",
+          "homepage": "https://tuoitre.vn/",
+          "country": "VN",
+          "region": "AS"
+        },
+        {
+          "name": "Kompas",
+          "homepage": "https://www.kompas.com/",
+          "country": "ID",
+          "region": "AS"
+        },
+        {
+          "name": "Jakarta Post",
+          "homepage": "https://www.thejakartapost.com/",
+          "country": "ID",
+          "region": "AS"
+        },
+        {
+          "name": "Rappler",
+          "homepage": "https://www.rappler.com/",
+          "country": "PH",
+          "region": "AS"
+        },
+        {
+          "name": "Inquirer",
+          "homepage": "https://www.inquirer.net/",
+          "country": "PH",
+          "region": "AS"
+        },
+        {
+          "name": "The Hindu",
+          "homepage": "https://www.thehindu.com/",
+          "country": "IN",
+          "region": "AS"
+        },
+        {
+          "name": "Times of India",
+          "homepage": "https://timesofindia.indiatimes.com/",
+          "country": "IN",
+          "region": "AS"
+        },
+        {
+          "name": "Dawn",
+          "homepage": "https://www.dawn.com/",
+          "country": "PK",
+          "region": "AS"
+        },
+        {
+          "name": "The News International",
+          "homepage": "https://www.thenews.com.pk/",
+          "country": "PK",
+          "region": "AS"
+        },
+        {
+          "name": "The Daily Star",
+          "homepage": "https://www.thedailystar.net/",
+          "country": "BD",
+          "region": "AS"
+        },
+        {
+          "name": "Prothom Alo",
+          "homepage": "https://www.prothomalo.com/",
+          "country": "BD",
+          "region": "AS"
+        },
+        {
+          "name": "Kathmandu Post",
+          "homepage": "https://kathmandupost.com/",
+          "country": "NP",
+          "region": "AS"
+        },
+        {
+          "name": "Daily Mirror LK",
+          "homepage": "https://www.dailymirror.lk/",
+          "country": "LK",
+          "region": "AS"
+        },
+        {
+          "name": "AKIpress",
+          "homepage": "https://akipress.com/",
+          "country": "KG",
+          "region": "AS"
+        },
+        {
+          "name": "UzDaily",
+          "homepage": "https://www.uzdaily.uz/",
+          "country": "UZ",
+          "region": "AS"
+        },
+        {
+          "name": "Kazinform",
+          "homepage": "https://www.inform.kz/en",
+          "country": "KZ",
+          "region": "AS"
+        },
+        {
+          "name": "Kazakhstan Pravda",
+          "homepage": "https://www.kazpravda.kz/en",
+          "country": "KZ",
+          "region": "AS"
+        },
+        {
+          "name": "Asia-Plus",
+          "homepage": "https://asiaplustj.info/en",
+          "country": "TJ",
+          "region": "AS"
+        },
+        {
+          "name": "Montsame",
+          "homepage": "https://montsame.mn/en",
+          "country": "MN",
+          "region": "AS"
+        },
+        {
+          "name": "AP",
+          "homepage": "https://apnews.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "Reuters",
+          "homepage": "https://www.reuters.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "The New York Times",
+          "homepage": "https://www.nytimes.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "The Washington Post",
+          "homepage": "https://www.washingtonpost.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "The Wall Street Journal",
+          "homepage": "https://www.wsj.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "Bloomberg",
+          "homepage": "https://www.bloomberg.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "CNN",
+          "homepage": "https://www.cnn.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "NBC News",
+          "homepage": "https://www.nbcnews.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "ABC News",
+          "homepage": "https://abcnews.go.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "Fox News",
+          "homepage": "https://www.foxnews.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "Los Angeles Times",
+          "homepage": "https://www.latimes.com/",
+          "country": "US",
+          "region": "NA"
+        },
+        {
+          "name": "O Globo",
+          "homepage": "https://www.globo.com/",
+          "country": "BR",
+          "region": "SA"
+        },
+        {
+          "name": "Folha de S.Paulo",
+          "homepage": "https://www1.folha.uol.com.br/",
+          "country": "BR",
+          "region": "SA"
+        },
+        {
+          "name": "La Nación (AR)",
+          "homepage": "https://www.lanacion.com.ar/",
+          "country": "AR",
+          "region": "SA"
+        },
+        {
+          "name": "Clarín",
+          "homepage": "https://www.clarin.com/",
+          "country": "AR",
+          "region": "SA"
+        },
+        {
+          "name": "El Tiempo",
+          "homepage": "https://www.eltiempo.com/",
+          "country": "CO",
+          "region": "SA"
+        },
+        {
+          "name": "El Comercio (PE)",
+          "homepage": "https://elcomercio.pe/",
+          "country": "PE",
+          "region": "SA"
+        },
+        {
+          "name": "EMOL (CL)",
+          "homepage": "https://www.emol.com/",
+          "country": "CL",
+          "region": "SA"
+        },
+        {
+          "name": "El Universal (MX)",
+          "homepage": "https://www.eluniversal.com.mx/",
+          "country": "MX",
+          "region": "NA"
+        },
+        {
+          "name": "Reforma (MX)",
+          "homepage": "https://www.reforma.com/",
+          "country": "MX",
+          "region": "NA"
+        },
+        {
+          "name": "ABC Australia",
+          "homepage": "https://www.abc.net.au/news/",
+          "country": "AU",
+          "region": "OC"
+        },
+        {
+          "name": "The Australian",
+          "homepage": "https://www.theaustralian.com.au/",
+          "country": "AU",
+          "region": "OC"
+        },
+        {
+          "name": "Sydney Morning Herald",
+          "homepage": "https://www.smh.com.au/",
+          "country": "AU",
+          "region": "OC"
+        },
+        {
+          "name": "BBC",
+          "homepage": "https://www.bbc.com/news",
+          "country": "UK",
+          "region": "EU"
+        },
+        {
+          "name": "The Guardian",
+          "homepage": "https://www.theguardian.com/international",
+          "country": "UK",
+          "region": "EU"
+        },
+        {
+          "name": "Financial Times",
+          "homepage": "https://www.ft.com/",
+          "country": "UK",
+          "region": "EU"
+        },
+        {
+          "name": "The Times",
+          "homepage": "https://www.thetimes.co.uk/",
+          "country": "UK",
+          "region": "EU"
+        },
+        {
+          "name": "The Telegraph",
+          "homepage": "https://www.telegraph.co.uk/",
+          "country": "UK",
+          "region": "EU"
+        },
+        {
+          "name": "Le Monde",
+          "homepage": "https://www.lemonde.fr/",
+          "country": "FR",
+          "region": "EU"
+        },
+        {
+          "name": "Le Figaro",
+          "homepage": "https://www.lefigaro.fr/",
+          "country": "FR",
+          "region": "EU"
+        },
+        {
+          "name": "Der Spiegel",
+          "homepage": "https://www.spiegel.de/international/",
+          "country": "DE",
+          "region": "EU"
+        },
+        {
+          "name": "FAZ",
+          "homepage": "https://www.faz.net/",
+          "country": "DE",
+          "region": "EU"
+        },
+        {
+          "name": "El País",
+          "homepage": "https://elpais.com/",
+          "country": "ES",
+          "region": "EU"
+        },
+        {
+          "name": "El Mundo",
+          "homepage": "https://www.elmundo.es/",
+          "country": "ES",
+          "region": "EU"
+        },
+        {
+          "name": "La Repubblica",
+          "homepage": "https://www.repubblica.it/",
+          "country": "IT",
+          "region": "EU"
+        },
+        {
+          "name": "Corriere della Sera",
+          "homepage": "https://www.corriere.it/",
+          "country": "IT",
+          "region": "EU"
+        },
+        {
+          "name": "DW",
+          "homepage": "https://www.dw.com/en/top-stories/s-9097",
+          "country": "DE",
+          "region": "EU"
+        },
+        {
+          "name": "RTÉ News",
+          "homepage": "https://www.rte.ie/news/",
+          "country": "IE",
+          "region": "EU"
+        },
+        {
+          "name": "TASS",
+          "homepage": "https://tass.com/",
+          "country": "RU",
+          "region": "EU"
+        },
+        {
+          "name": "Kommersant",
+          "homepage": "https://www.kommersant.ru/",
+          "country": "RU",
+          "region": "EU"
+        },
+        {
+          "name": "Al Jazeera",
+          "homepage": "https://www.aljazeera.com/",
+          "country": "QA",
+          "region": "ME"
+        },
+        {
+          "name": "Al Arabiya",
+          "homepage": "https://english.alarabiya.net/",
+          "country": "SA",
+          "region": "ME"
+        },
+        {
+          "name": "Arab News",
+          "homepage": "https://www.arabnews.com/",
+          "country": "SA",
+          "region": "ME"
+        },
+        {
+          "name": "The National (UAE)",
+          "homepage": "https://www.thenationalnews.com/",
+          "country": "AE",
+          "region": "ME"
+        },
+        {
+          "name": "Gulf News",
+          "homepage": "https://gulfnews.com/",
+          "country": "AE",
+          "region": "ME"
+        },
+        {
+          "name": "Haaretz",
+          "homepage": "https://www.haaretz.com/",
+          "country": "IL",
+          "region": "ME"
+        },
+        {
+          "name": "The Times of Israel",
+          "homepage": "https://www.timesofisrael.com/",
+          "country": "IL",
+          "region": "ME"
+        },
+        {
+          "name": "Anadolu Agency",
+          "homepage": "https://www.aa.com.tr/en",
+          "country": "TR",
+          "region": "ME"
+        },
+        {
+          "name": "Hurriyet Daily News",
+          "homepage": "https://www.hurriyetdailynews.com/",
+          "country": "TR",
+          "region": "ME"
+        },
+        {
+          "name": "The Guardian Nigeria",
+          "homepage": "https://guardian.ng/",
+          "country": "NG",
+          "region": "AF"
+        },
+        {
+          "name": "Daily Nation",
+          "homepage": "https://nation.africa/",
+          "country": "KE",
+          "region": "AF"
+        },
+        {
+          "name": "Mail & Guardian",
+          "homepage": "https://mg.co.za/",
+          "country": "ZA",
+          "region": "AF"
+        },
+        {
+          "name": "TimesLIVE",
+          "homepage": "https://www.timeslive.co.za/",
+          "country": "ZA",
+          "region": "AF"
+        },
+        {
+          "name": "News24",
+          "homepage": "https://www.news24.com/",
+          "country": "ZA",
+          "region": "AF"
+        }
       ]
     },
     "donation-ngo": {

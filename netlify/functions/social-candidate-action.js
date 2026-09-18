@@ -10,7 +10,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialPreview = require("./social-preview-metadata");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "social-candidate-action-v1.6.0-preview-canonicalize";
+const VERSION = "social-candidate-action-v1.7.0-profile-preview";
 const ACTIONS = new Set([
   "approve",
   "hold",
@@ -321,10 +321,15 @@ exports.handler = async function (event) {
       const by = SocialStore.compact(actor.email || actor.memberId || "admin", 200);
       const now = SocialStore.nowIso();
       const updated = [];
+      const fallbackSections = new Set(["social-wechat","social-weibo","social-pinterest","social-reddit","social-twitter"]);
       const eligible = candidates.filter((row) => {
         const raw = rawObject(row && row.raw);
         const assetClass = SocialStore.text(row.asset_class || row.assetClass || raw.assetClass).toLowerCase();
-        return assetClass !== "influencer_registry" && assetClass !== "influencer-registry";
+        if (assetClass === "influencer_registry" || assetClass === "influencer-registry") {
+          const sectionKey = SocialStore.text(row.section_key || row.sectionKey || raw.sectionKey);
+          return fallbackSections.has(sectionKey);
+        }
+        return true;
       });
       const concurrency = 4;
       for (let index = 0; index < eligible.length; index += concurrency) {
@@ -332,7 +337,13 @@ exports.handler = async function (event) {
         const hydrated = await Promise.all(batch.map(async (row) => {
           const raw = rawObject(row.raw);
           const platform = SocialStore.text(row.platform || raw.platform).toLowerCase().replace(/^social-/, "").replace(/^x$/, "twitter");
-          const contentUrl = SocialStore.text(row.source_url || row.sourceUrl || raw.latestContentUrl || raw.latest_content_url || raw.sourceUrl || raw.source_url || raw.url);
+          const assetClass = SocialStore.text(row.asset_class || row.assetClass || raw.assetClass).toLowerCase();
+          const influencerFallback = assetClass === "influencer_registry" || assetClass === "influencer-registry";
+          const contentUrl = SocialStore.text(
+            influencerFallback
+              ? (row.channel_url || row.channelUrl || raw.channelUrl || raw.channel_url || row.source_url || row.sourceUrl || raw.sourceUrl || raw.url)
+              : (row.source_url || row.sourceUrl || raw.latestContentUrl || raw.latest_content_url || raw.sourceUrl || raw.source_url || raw.url)
+          );
           if (!platform || !/^https:\/\//i.test(contentUrl) || !SocialPreview || typeof SocialPreview.resolvePreview !== "function") return [];
           let preview;
           try { preview = await SocialPreview.resolvePreview(platform, contentUrl); } catch (_error) { return []; }
@@ -340,9 +351,9 @@ exports.handler = async function (event) {
           const resolvedTitle = SocialStore.compact(preview && preview.title, 500);
           const resolvedCreator = SocialStore.compact(preview && preview.creatorName, 220);
           const currentThumb = SocialStore.text(row.thumbnail_url || row.thumbnailUrl || raw.thumbnailUrl || raw.thumbnail_url);
-          const currentPublishable = SocialStore.publishableThumbnail
-            ? SocialStore.publishableThumbnail(row)
-            : currentThumb;
+          const currentPublishable = influencerFallback
+            ? (/^https:\/\//i.test(currentThumb) && !/placeholder|\/assets\/sample\//i.test(currentThumb) ? currentThumb : "")
+            : (SocialStore.publishableThumbnail ? SocialStore.publishableThumbnail(row) : currentThumb);
           const resolvedThumb = SocialPreview && typeof SocialPreview.previewImageUrl === "function"
             ? SocialPreview.previewImageUrl(platform, thumb)
             : (/^https:\/\//i.test(thumb) && !/placeholder|\/assets\/sample\//i.test(thumb) ? thumb : "");

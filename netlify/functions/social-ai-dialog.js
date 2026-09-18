@@ -9,7 +9,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const SocialStore = require("./lib/social-candidate-store.v1");
 const RuntimePolicy = require("./lib/social-ai-policy-runtime.v1");
 
-const VERSION = "social-ai-dialog-v1.1.0-ip-preference-active-influencer";
+const VERSION = "social-ai-dialog-v1.2.0-conversation-policy-binding";
 function text(v) { return v == null ? "" : String(v).trim(); }
 async function actorFor(event) {
   const actor = await SharedAdminAuth.resolveUser(event);
@@ -22,7 +22,7 @@ async function actorFor(event) {
   return member;
 }
 function localDraft(message, scopeType, sectionKey) {
-  const m = text(message);
+  const m = RuntimePolicy.normalizeSpeechTerms ? RuntimePolicy.normalizeSpeechTerms(message) : text(message);
   const include = [], exclude = [];
   const pairs = [
     [/여행|관광|travel|tour/i, "travel"], [/음악|공연|music|performance/i, "music"],
@@ -41,6 +41,9 @@ function localDraft(message, scopeType, sectionKey) {
   excludes.forEach(([rx, term]) => { if (rx.test(m)) exclude.push(term); });
   return RuntimePolicy.normalize({
     scopeType, sectionKey, instructions: m, includeTopics: include, excludeTopics: exclude,
+    preferredCreatorTraits: /인플루언서|influencer|creator/i.test(m) ? ["active creator", "official public profile", "recent posting", "healthy engagement"] : [],
+    notes: /인플루언서|influencer|creator/i.test(m) && /페이지|프로필|profile|page|썸네일|thumbnail/i.test(m)
+      ? ["use influencer registry as a discovery source and allow safe profile-card fallback when latest public content is unavailable"] : [],
     requireThumbnail: true, replaceDeadUrls: true,
   });
 }
@@ -79,6 +82,8 @@ async function askConfiguredAI(body) {
     "Influencer registry should favor currently active creators with strong followers, recent posting, rising views/likes/recommendations and healthy engagement; do not fill quotas with dormant accounts.",
     "Default healthy themes include music, travel/tourism, beauty, health/wellness, education/learning, art/culture, nature and family/lifestyle. Exclude political/partisan, graphic violence, explicit/adult sexual, gambling and other unsafe content.",
     "Keep safety/quality requirements conservative and preserve administrator approval boundaries.",
+    "In Social policy context, likely speech-to-text variants such as 임플란트/인풀루언서/인플루언스 should be interpreted as 인플루언서 (influencer) when the surrounding request is about creators, profiles, thumbnails or Social slots.",
+    "If the user agrees that influencer/profile pages should be used when fresh post discovery is empty, encode that operational intent in instructions/notes so the collector can use the registry as a discovery source; never bypass safety, thumbnail, public-access or administrator gates.",
   ].join(" ");
   const prompt = system + "\nSCOPE=" + text(body.scopeType || "global") + " SECTION=" + text(body.sectionKey) +
     "\nCURRENT_CONTEXT=" + JSON.stringify(context).slice(0, 12000) +

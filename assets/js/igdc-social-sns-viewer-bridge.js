@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260918-facebook-fullwidth-video-registry-v5'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260918-profile-fallback-contained-v6'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -241,6 +241,11 @@
     return 'https://www.facebook.com/plugins/post.php?href=' + encoded + '&show_text=false&width=750';
   }
 
+  function validPreviewImageSrc(value) {
+    var src = text(value).trim();
+    return validHttp(src) || /^data:image\/(?:svg\+xml|png|jpe?g|webp|gif)(?:;|,)/i.test(src);
+  }
+
   function buildEmbed(platform, url, card) {
     platform = text(platform).toLowerCase();
     url = text(url).trim();
@@ -284,32 +289,50 @@
 
     if (platform === 'twitter') {
       var xid = statusId(url);
-      if (!xid) return null;
-      return {
-        mode: 'iframe',
-        src: 'https://platform.twitter.com/embed/Tweet.html?dnt=true&id=' + encodeURIComponent(xid),
-        aspect: 'auto'
-      };
+      if (xid) {
+        return {
+          mode: 'iframe',
+          src: 'https://platform.twitter.com/embed/Tweet.html?dnt=true&id=' + encodeURIComponent(xid),
+          aspect: 'auto'
+        };
+      }
+      var xPreview = previewUrlOf(card);
+      if (validPreviewImageSrc(xPreview)) {
+        return { mode: 'preview', src: xPreview, aspect: '16/9', provider: 'twitter-profile-preview', profileFallback: true };
+      }
+      return null;
     }
 
     if (platform === 'pinterest') {
       var pid = pinterestPinId(url);
-      if (!pid) return null;
-      return {
-        mode: 'iframe',
-        src: 'https://assets.pinterest.com/ext/embed.html?id=' + encodeURIComponent(pid),
-        aspect: 'auto'
-      };
+      if (pid) {
+        return {
+          mode: 'iframe',
+          src: 'https://assets.pinterest.com/ext/embed.html?id=' + encodeURIComponent(pid),
+          aspect: 'auto'
+        };
+      }
+      var pinPreview = previewUrlOf(card);
+      if (validPreviewImageSrc(pinPreview)) {
+        return { mode: 'preview', src: pinPreview, aspect: '16/9', provider: 'pinterest-profile-preview', profileFallback: true };
+      }
+      return null;
     }
 
     if (platform === 'reddit') {
       var path = normalizeRedditPath(url);
-      if (!path || path.indexOf('/comments/') < 0) return null;
-      return {
-        mode: 'iframe',
-        src: 'https://www.redditmedia.com' + path + (path.indexOf('?') >= 0 ? '&' : '?') + 'ref_source=embed&ref=share&embed=true',
-        aspect: 'auto'
-      };
+      if (path && path.indexOf('/comments/') >= 0) {
+        return {
+          mode: 'iframe',
+          src: 'https://www.redditmedia.com' + path + (path.indexOf('?') >= 0 ? '&' : '?') + 'ref_source=embed&ref=share&embed=true',
+          aspect: 'auto'
+        };
+      }
+      var redditPreview = previewUrlOf(card);
+      if (validPreviewImageSrc(redditPreview)) {
+        return { mode: 'preview', src: redditPreview, aspect: '16/9', provider: 'reddit-profile-preview', profileFallback: true };
+      }
+      return null;
     }
 
     /* WeChat / Weibo do not expose a stable third-party embed/player endpoint.
@@ -319,7 +342,7 @@
        restricted-frame attempt as a last resort. */
     if ((platform === 'wechat' || platform === 'weibo') && validHttp(url)) {
       var storedPreview = previewUrlOf(card);
-      if (validHttp(storedPreview)) {
+      if (validPreviewImageSrc(storedPreview)) {
         return {
           mode: 'preview',
           src: storedPreview,

@@ -11,9 +11,10 @@ const Policy = require("./social-candidate-policy.v1");
 const CountryRouting = require("./social-country-routing.v1");
 const CountryContentPolicy = require("./social-country-content-policy.v1");
 const ChannelLink = require("./social-channel-link.v1");
+const AIPolicy = require("./social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-store-v1.11.0-front-slot-reconcile";
+  "social-candidate-store-v1.12.0-profile-fallback";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1062,9 +1063,11 @@ function assetClassOf(row) {
   const r = plain(row);
   const raw = plain(r.raw);
   return text(
-    raw.assetClass ||
+    r.asset_class ||
+      r.assetClass ||
+      raw.assetClass ||
       plain(r.evidence).assetClass ||
-      (raw.latestContentAsset === true ? "latest_content" : ""),
+      (r.latest_content_asset === true || r.latestContentAsset === true || raw.latestContentAsset === true ? "latest_content" : ""),
   );
 }
 function isApprovedInfluencer(row) {
@@ -1084,6 +1087,101 @@ function isApprovedInfluencer(row) {
     risk !== "rejected" &&
     !!channelIdentity(r)
   );
+}
+const PROFILE_FALLBACK_SECTIONS = new Set([
+  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter",
+]);
+function platformProfileUrl(platform, value) {
+  const url = Policy.normalizeUrl(value);
+  if (!url) return "";
+  try {
+    const u = new URL(url), p = text(platform).replace(/^social-/, "").replace(/^x$/, "twitter").toLowerCase();
+    const host = u.hostname.toLowerCase().replace(/^www\./, ""), path = (u.pathname || "/").replace(/\/{2,}/g, "/");
+    let ok = false;
+    if (p === "twitter") ok = /^(?:x|twitter)\.com$/i.test(host) && /^\/[A-Za-z0-9_]{1,30}\/?$/i.test(path);
+    else if (p === "pinterest") ok = /(^|\.)pinterest\./i.test(host) && !/^\/pin\//i.test(path) && path.split("/").filter(Boolean).length >= 1;
+    else if (p === "reddit") ok = /(^|\.)reddit\.com$/i.test(host) && /^\/(?:r|user|u)\/[^/]+\/?$/i.test(path);
+    else if (p === "weibo") ok = /(^|\.)weibo\.com$/i.test(host) && !/^\/(?:detail|status|tv\/show)\//i.test(path) && path !== "/";
+    else if (p === "wechat") ok = /(^|\.)weixin\.qq\.com$/i.test(host) || host === "open.weixin.qq.com";
+    return ok ? url : "";
+  } catch (_error) { return ""; }
+}
+function xmlEscape(value) {
+  return text(value)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function generatedProfileCardThumbnail(row, platform) {
+  const r = plain(row), raw = plain(r.raw);
+  const profileUrl = text(raw.channelUrl || raw.channel_url || r.channel_url || r.channelUrl || r.source_url || r.sourceUrl);
+  let creator = compact(
+    r.creator_name || r.creatorName || r.title || raw.creatorName || raw.title || "",
+    54
+  ).replace(/^(?:false|null|undefined)$/i, "");
+  if (!creator && profileUrl) {
+    try {
+      const parts = new URL(profileUrl).pathname.split("/").filter(Boolean);
+      creator = compact(parts[parts.length - 1] || parts[0] || "Creator", 54);
+    } catch (_error) { creator = "Creator"; }
+  }
+  if (!creator) creator = "Creator";
+  const labels = {
+    twitter: "X · Creator", reddit: "Reddit · Community", pinterest: "Pinterest · Creator",
+    wechat: "WeChat · Creator", weibo: "Weibo · Creator",
+  };
+  const label = labels[platform] || "Social · Creator";
+  const initial = Array.from(creator || label)[0] || "•";
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+    '<rect width="1280" height="720" fill="#f5f7fb"/>' +
+    '<rect x="72" y="72" width="1136" height="576" rx="36" fill="#ffffff" stroke="#d8dee9" stroke-width="4"/>' +
+    '<circle cx="300" cy="360" r="142" fill="#eef2f7"/>' +
+    '<text x="300" y="405" text-anchor="middle" font-family="Arial,sans-serif" font-size="132" font-weight="700" fill="#334155">' +
+      xmlEscape(initial) + '</text>' +
+    '<text x="510" y="315" font-family="Arial,sans-serif" font-size="54" font-weight="700" fill="#0f172a">' +
+      xmlEscape(label) + '</text>' +
+    '<text x="510" y="400" font-family="Arial,sans-serif" font-size="42" font-weight="600" fill="#334155">' +
+      xmlEscape(creator) + '</text>' +
+    '<text x="510" y="466" font-family="Arial,sans-serif" font-size="28" fill="#64748b">IGDC Social · public profile</text>' +
+    '</svg>';
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+}
+function publishableProfileThumbnail(row) {
+  const r = plain(row), raw = plain(r.raw);
+  const section = lowerKey(r.section_key || r.sectionKey), platform = text(r.platform || PLATFORM_BY_SECTION[section]).replace(/^x$/, "twitter");
+  const profileUrl = platformProfileUrl(platform, raw.channelUrl || raw.channel_url || r.channel_url || r.channelUrl || r.source_url || r.sourceUrl);
+  if (!profileUrl) return "";
+  const thumb = thumbnailFromCandidate(
+    Object.assign({}, raw, r),
+    { platform, sourceUrl: profileUrl, thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl || raw.channelThumbnailUrl) }
+  );
+  if (/^https:\/\//i.test(thumb) && !/placeholder|\/assets\/sample\//i.test(thumb) && !providerBrandThumbnail(platform, thumb)) {
+    const expiry = signedThumbnailExpiry(platform, thumb);
+    if (!expiry || expiry > Date.now() + 24 * 60 * 60 * 1000) return thumb;
+  }
+  // A registry/profile card is explicitly labelled as a creator/community card,
+  // never as a post thumbnail. This lets sparse sections replace SAMPLE slots
+  // without pretending an unavailable provider image is real content artwork.
+  return generatedProfileCardThumbnail(r, platform);
+}
+function profileFallbackSafetyText(row) {
+  const r = plain(row), raw = plain(r.raw);
+  return [
+    r.title, r.description, r.creator_name, r.creatorName, r.category,
+    raw.title, raw.description, raw.creatorName, raw.category,
+  ].map(text).join(" ").toLowerCase();
+}
+function isPublishEligibleInfluencerFallbackRow(row) {
+  const r = plain(row), section = lowerKey(r.section_key || r.sectionKey);
+  if (!PROFILE_FALLBACK_SECTIONS.has(section) || !isApprovedInfluencer(r)) return false;
+  if (r.public_access === false || r.publicAccess === false || r.login_required === true || r.loginRequired === true) return false;
+  if (Number(r.safety_score || r.safetyScore || 0) < 65 || Number(r.trust_score || r.trustScore || 0) < 50) return false;
+  const h = profileFallbackSafetyText(r);
+  if (/(?:\bnsfw\b|onlyfans|porn(?:ography)?|sexual|sexiness|cameltoe|nude|nudity|adult\s+content|gambling|casino|betting|음란|성인물|도박|카지노)/i.test(h)) return false;
+  if (/^(?:social-wechat|social-weibo)$/.test(section) &&
+      /(?:communist\s+party|publicity\s+department|foreign\s+ministry|government\s+(?:agency|department)|embassy|consulate|political\s+propaganda|military\s+conflict|territorial\s+dispute|공산당|선전부|외교부|대사관|영사관|정치선전|군사분쟁|영토분쟁|政治宣传|政治宣傳|共产党|共產黨|宣传部|宣傳部|外交部|大使馆|大使館|领事馆|領事館|军事冲突|軍事衝突|领土争端|領土爭端)/i.test(h)) return false;
+  if (!AIPolicy.evaluate(r, {}).ok) return false;
+  return !!publishableProfileThumbnail(r);
 }
 function providerBrandThumbnail(platform, value) {
   const raw = text(value);
@@ -1108,6 +1206,7 @@ function genericContentTitle(platform, value) {
   const title = text(value).replace(/\s+/g, " ").trim();
   if (!title) return true;
   if (/^loading[.…]*$/i.test(title)) return true;
+  if (/^(?:false|null|undefined)$/i.test(title)) return true;
   if (/^(?:instagram|tiktok|wechat|weibo|pinterest|reddit|twitter|x|facebook|youtube)(?:\s+(?:post|reel|video|pin|content|item))?$/i.test(title)) return true;
   const p = text(platform).replace(/^social-/, "").replace(/^x$/, "twitter");
   return !!p && title.toLowerCase() === p.toLowerCase();
@@ -1248,15 +1347,33 @@ function isPublishEligibleContentRow(row) {
   return true;
 }
 function approvedContentRows(rows) {
-  // Influencer registry and latest-content publication are independent pools.
-  // A real approved post/video must not disappear merely because the platform
-  // hid its creator/profile identity from anonymous metadata. Publication is
-  // instead gated by the real platform content URL + durable thumbnail contract.
-  return array(rows).filter(isPublishEligibleContentRow);
+  const all = array(rows);
+  const latest = all.filter(isPublishEligibleContentRow);
+  const latestCount = {};
+  const latestChannels = new Set();
+  latest.forEach((row) => {
+    const key = lowerKey(row.section_key || row.sectionKey);
+    latestCount[key] = (latestCount[key] || 0) + 1;
+    const channel = channelIdentity(row);
+    if (channel) latestChannels.add(key + "|" + channel);
+  });
+  const profiles = all
+    .filter(isPublishEligibleInfluencerFallbackRow)
+    .filter((row) => {
+      const key = lowerKey(row.section_key || row.sectionKey);
+      const channel = channelIdentity(row);
+      return !channel || !latestChannels.has(key + "|" + channel);
+    })
+    .map((row) => Object.assign({}, row, { __profileFallback: true }));
+  // Real posts/videos always rank ahead of profile cards. Profile cards only
+  // backfill otherwise empty SAMPLE positions in the sparse SNS sections.
+  return latest.concat(profiles.filter((row) => (latestCount[lowerKey(row.section_key || row.sectionKey)] || 0) < ROTATION_LIMIT_PER_SECTION));
 }
 function byRank(salt) {
   return function (a, b) {
-    const d = rowScore(b) - rowScore(a);
+    const profilePenaltyA = a && a.__profileFallback ? 10000 : 0;
+    const profilePenaltyB = b && b.__profileFallback ? 10000 : 0;
+    const d = (rowScore(b) - profilePenaltyB) - (rowScore(a) - profilePenaltyA);
     if (d) return d;
     const ah = shortHash({
       id: a.id,
@@ -1273,13 +1390,15 @@ function byRank(salt) {
 }
 function byRouteRank(route, salt) {
   return function (a, b) {
+    const profilePenaltyA = a && a.__profileFallback ? 10000 : 0;
+    const profilePenaltyB = b && b.__profileFallback ? 10000 : 0;
     const d =
       rowScore(b) +
       CountryRouting.matchScore(b, route) +
-      CountryContentPolicy.contentAffinityScore(b, route) -
+      CountryContentPolicy.contentAffinityScore(b, route) - profilePenaltyB -
       (rowScore(a) +
         CountryRouting.matchScore(a, route) +
-        CountryContentPolicy.contentAffinityScore(a, route));
+        CountryContentPolicy.contentAffinityScore(a, route) - profilePenaltyA);
     if (d) return d;
     return byRank(salt)(a, b);
   };
@@ -1342,12 +1461,17 @@ function selectRotation(rows, options) {
     const remaining = selectable.filter((row) => !stableIds.has(text(row.id)));
     const refresh = remaining
       .slice()
-      .sort((a, b) => dateValue(b) - dateValue(a))
+      .sort((a, b) => {
+        const profile = Number(!!a.__profileFallback) - Number(!!b.__profileFallback);
+        return profile || (dateValue(b) - dateValue(a));
+      })
       .slice(0, refreshCount);
     const used = new Set(stable.concat(refresh).map((row) => text(row.id)));
     const discovery = remaining
       .filter((row) => !used.has(text(row.id)))
       .sort((a, b) => {
+        const profile = Number(!!a.__profileFallback) - Number(!!b.__profileFallback);
+        if (profile) return profile;
         const ah = shortHash({ id: a.id, salt, mode: "discovery" });
         const bh = shortHash({ id: b.id, salt, mode: "discovery" });
         return ah < bh ? -1 : ah > bh ? 1 : 0;
@@ -1409,12 +1533,13 @@ function publicSocialSlot(row, slotId, defaults) {
   );
   // Defensive SAMPLE-preserve gate. Even if a future caller invokes this
   // mapper directly, an incomplete real row must not consume a SAMPLE slot.
-  if (SAMPLE_SAFE_PREVIEW_PLATFORMS.has(platformHint) && !isPublishEligibleContentRow(r)) {
+  const profileFallback = isPublishEligibleInfluencerFallbackRow(r);
+  if (SAMPLE_SAFE_PREVIEW_PLATFORMS.has(platformHint) && !isPublishEligibleContentRow(r) && !profileFallback) {
     return Object.assign({}, base, {
       slotId: Number(slotId) || Number(base.slotId) || 1,
     });
   }
-  const latestContentUrl = text(
+  const latestContentUrl = profileFallback ? "" : text(
     platformContentUrl(
       platformHint,
       raw.latestContentUrl ||
@@ -1427,8 +1552,9 @@ function publicSocialSlot(row, slotId, defaults) {
         "",
     ),
   );
-  const sourceUrl = latestContentUrl || text(r.source_url || r.sourceUrl);
-  const publishThumb = publishableThumbnail(r);
+  const profileUrl = profileFallback ? platformProfileUrl(platformHint, raw.channelUrl || raw.channel_url || r.channel_url || r.channelUrl || r.source_url || r.sourceUrl) : "";
+  const sourceUrl = latestContentUrl || profileUrl || text(r.source_url || r.sourceUrl);
+  const publishThumb = profileFallback ? publishableProfileThumbnail(r) : publishableThumbnail(r);
   const thumb = text(
     publishThumb ||
       thumbnailFromCandidate(Object.assign({}, raw, r), {
@@ -1457,18 +1583,19 @@ function publicSocialSlot(row, slotId, defaults) {
   const rawTitle = decodeEntityText(r.title || raw.title);
   const creatorLabel = text(
     r.creator_name || r.creatorName || r.creator_handle || r.creatorHandle,
-  );
+  ).replace(/^(?:false|null|undefined)$/i, "");
   const providerCreator = /^(?:bing-rss-social|duckduckgo-lite-social|naver(?:-web|-rss)?-social|google(?:-rss)?-social)$/i.test(creatorLabel);
   const fallbackTitle = decodeEntityText(r.description || raw.description) ||
     (!providerCreator ? creatorLabel : "") ||
     (platform === "instagram" ? "Instagram · Reel" :
       platform === "tiktok" ? "TikTok · Video" :
       platform === "facebook" ? "Facebook · Post" :
-      platform === "reddit" ? "Reddit · Post" :
-      platform === "pinterest" ? "Pinterest · Pin" :
-      platform === "twitter" ? "X · Post" :
-      platform === "wechat" ? "WeChat · Post" :
-      platform === "weibo" ? "Weibo · Post" : rawTitle);
+      platform === "reddit" ? (profileFallback ? "Reddit · Community" : "Reddit · Post") :
+      platform === "pinterest" ? (profileFallback ? "Pinterest · Creator" : "Pinterest · Pin") :
+      platform === "twitter" ? (profileFallback ? "X · Creator" : "X · Post") :
+      platform === "wechat" ? (profileFallback ? "WeChat · Creator" : "WeChat · Post") :
+      platform === "weibo" ? (profileFallback ? "Weibo · Creator" : "Weibo · Post") :
+      rawTitle);
   const displayTitle = genericContentTitle(platform, rawTitle) ? fallbackTitle : rawTitle;
   return Object.assign({}, base, {
     slotId: Number(slotId) || Number(base.slotId) || 1,
@@ -1481,7 +1608,7 @@ function publicSocialSlot(row, slotId, defaults) {
     href: sourceUrl,
     permalink: sourceUrl,
     sourceUrl: sourceUrl,
-    latestContentUrl: latestContentUrl || sourceUrl,
+    latestContentUrl: profileFallback ? "" : (latestContentUrl || sourceUrl),
     platform: platform,
     viewerUrl: sourceUrl,
     thumb: thumb || undefined,
@@ -1495,7 +1622,7 @@ function publicSocialSlot(row, slotId, defaults) {
     creatorName: text(r.creator_name || r.creatorName),
     creatorHandle: text(r.creator_handle || r.creatorHandle),
     embedUrl: text(r.embed_url || r.embedUrl) || socialEmbedUrl(platform, sourceUrl) || undefined,
-    displayMode: text(r.display_mode || r.displayMode || "link_card"),
+    displayMode: profileFallback ? "link_card" : text(r.display_mode || r.displayMode || "link_card"),
     source: Object.assign({}, plain(base.source), {
       platform,
       section_key: section,
@@ -1512,9 +1639,10 @@ function publicSocialSlot(row, slotId, defaults) {
           "channel",
       ),
       channelAsset: true,
-      latestContentAsset: !!latestContentUrl || platformContentUrl(platform, sourceUrl) !== "",
+      latestContentAsset: !profileFallback && (!!latestContentUrl || platformContentUrl(platform, sourceUrl) !== ""),
+      profileFallback: profileFallback || undefined,
       channelUrl: channelUrl || undefined,
-      latestContentUrl: latestContentUrl || sourceUrl,
+      latestContentUrl: profileFallback ? undefined : (latestContentUrl || sourceUrl),
       contentPublishedAt: contentPublishedAt || undefined,
       category: text(raw.category),
       topicTags: unique(raw.tags).slice(0, 12),
@@ -1543,6 +1671,7 @@ function publicSocialSlot(row, slotId, defaults) {
     verificationStatus: text(r.verification_status || "approved_for_snapshot"),
     audit: Object.assign({}, plain(base.audit), {
       origin: "social_candidates",
+      profile_fallback: profileFallback || undefined,
       candidate_id: text(r.id),
       approved_at: text(r.approved_at || r.approvedAt),
       generated_at: now,
@@ -1885,6 +2014,9 @@ module.exports = {
   summaryDoc,
   isApprovedForSnapshot,
   isPublishEligibleContentRow,
+  isPublishEligibleInfluencerFallbackRow,
+  publishableProfileThumbnail,
+  platformProfileUrl,
   publishableThumbnail,
   publishableIdentity,
   rowScore,

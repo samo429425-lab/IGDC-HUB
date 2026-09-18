@@ -6,7 +6,7 @@
  * research time and strict only at the public-matching boundary.
  */
 
-const VERSION = "donation-research-policy-v1.9.0-global-news-research-boost";
+const VERSION = "donation-research-policy-v1.11.0-home-news-video-pool";
 
 let RESEARCH_FRAME = null;
 try { RESEARCH_FRAME = require("../data/donation.research-frame.v1.json"); } catch (_error) { RESEARCH_FRAME = null; }
@@ -70,6 +70,15 @@ const POLICY = Object.freeze({
       "education","school","water","sanitation","climate","environment","emergency","relief","aid","response","field report",
       "storm","cyclone","typhoon","tornado","tsunami","landslide","survivor","rescue","evacuee","shelter","malnutrition",
       "aid convoy","food distribution","medical aid","medical team","vaccination","humanitarian corridor","relief operation","relief mission","volunteer",
+      "civilian casualties","humanitarian access","aid delivery","aid workers","displaced families","emergency shelter","search and rescue","food crisis","malnutrition crisis","hospital evacuation",
+      "airstrike civilian","bombing civilian","ceasefire aid","siege humanitarian","evacuation order","disaster response",
+      "지진","홍수","산불","태풍","쓰나미","산사태","재난","기아","난민","피란민","전쟁","민간인","구호","구조","긴급지원","인도주의","의료지원","식량지원",
+      "地震","洪水","山火","台風","津波","災害","難民","飢餓","戦争","救援","人道支援","地震","洪水","山火","台风","海啸","灾害","难民","饥荒","战争","救援","人道援助",
+      "terremoto","inundación","incendio forestal","refugiados","hambre","guerra","ayuda humanitaria","rescate",
+      "séisme","inondation","incendie","réfugiés","famine","guerre","aide humanitaire","secours",
+      "erdbeben","überschwemmung","waldbrand","flüchtlinge","hunger","krieg","humanitäre hilfe","rettung",
+      "terremoto","inundação","incêndio","refugiados","fome","guerra","ajuda humanitária","resgate",
+      "زلزال","فيضان","حريق","لاجئين","مجاعة","حرب","مساعدات إنسانية","إنقاذ",
       "video","footage","broadcast","report","update","news","news report","breaking news","civilian impact","evacuation"
     ],
     preferredKinds:["video","article","feed_item"],
@@ -179,7 +188,10 @@ function researchFrameFor(value){
     anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({name:text(a&&a.name),query:text(a&&a.query),homepage:httpsUrl(a&&a.homepage),searchType:["web","video"].includes(lower(a&&a.searchType))?lower(a.searchType):""})).filter(a=>a.name||a.query||a.homepage) : [],
     discoveryQueries:Array.isArray(frame.discoveryQueries) ? frame.discoveryQueries.map(text).filter(Boolean) : [],
     youtubeQueries:Array.isArray(frame.youtubeQueries) ? frame.youtubeQueries.map(text).filter(Boolean) : [],
-    youtubeTrustedChannels:Array.isArray(frame.youtubeTrustedChannels) ? frame.youtubeTrustedChannels.map(text).filter(Boolean) : []
+    youtubeTrustedChannels:Array.isArray(frame.youtubeTrustedChannels) ? frame.youtubeTrustedChannels.map(text).filter(Boolean) : [],
+    homeNewsSourceOrigin:text(frame.homeNewsSourceOrigin),
+    homeNewsSources:Array.isArray(frame.homeNewsSources) ? frame.homeNewsSources.map(a=>({name:text(a&&a.name),homepage:text(a&&a.homepage),country:text(a&&a.country),region:text(a&&a.region)})).filter(a=>a.name) : [],
+    rssFeeds:Array.isArray(frame.rssFeeds) ? frame.rssFeeds.map(a=>({name:text(a&&a.name),url:httpsUrl(a&&a.url)})).filter(a=>a.name&&a.url) : []
   };
 }
 function policyFor(value){
@@ -265,7 +277,11 @@ function isAuthoritativeGlobalNewsUrl(value){
   const host=urlHost(raw); return !!host && GLOBAL_NEWS_HOST_RE.test(host);
 }
 function isAuthoritativeGlobalNews(record){
-  const r=plain(record);
+  const r=plain(record),source=plain(r.source),collector=plain(r.collector);
+  /* home.html is already the platform's curated international news-source
+     registry. Donation may mark a video as homeNewsSource only after the
+     publisher/channel is matched against that registry. */
+  if(source.homeNewsSource===true || collector.homeNewsSource===true) return true;
   if(candidateUrls(r).some(isAuthoritativeGlobalNewsUrl)) return true;
   return GLOBAL_NEWS_SOURCE_RE.test(recordText(r));
 }
@@ -570,7 +586,10 @@ function usablePublicCandidate(record, sectionValue){
   if(!title) return false;
   if(section==="donation-global"){
     if(!globalNewsRelevant(record)) return false;
-    if(isVideoUrl(destination)) return true;
+    /* Global video cards must also prove an authoritative newsroom/UN/humanitarian
+       source.  A random re-upload with disaster keywords is not a publishable
+       Global News item. */
+    if(isVideoUrl(destination)) return isAuthoritativeGlobalNews(record);
     return isAuthoritativeGlobalNewsUrl(destination)&&isAuthoritativeGlobalNews(record);
   }
   const homepage=organizationHomepageUrl(record);

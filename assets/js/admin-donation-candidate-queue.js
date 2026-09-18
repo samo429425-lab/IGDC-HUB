@@ -156,8 +156,14 @@
       var j=await api('POST',{action:'research',section:all?'all':section,query:q,limit:50}),r=j.result||{},reports=Array.isArray(r.reports)?r.reports:[];
       await load();
       var engine=reports.reduce(function(n,x){return n+Number(x.engineItems||0)},0),accepted=reports.reduce(function(n,x){return n+Number(x.accepted||0)},0),homepage=reports.reduce(function(n,x){return n+Number(x.officialHomepageCount||0)},0),globalNews=reports.reduce(function(n,x){return n+Number(x.globalNewsCount||0)},0),globalVideo=reports.reduce(function(n,x){return n+Number(x.globalVideoCount||0)},0),policySkip=reports.reduce(function(n,x){return n+Number(x.skippedPolicy||0)},0),searchSkip=reports.reduce(function(n,x){return n+Number(x.skippedSearchLanding||0)},0);
-      var applied=r.appliedPolicy&&r.appliedPolicy.agendaId?(' · AI 정책 자동 반영: '+text(r.appliedPolicy.title||r.appliedPolicy.agendaId)):'';
-      $('state').textContent='리서치 완료 · 엔진 '+engine+'건 → 저장 '+accepted+'건 · 공식 홈페이지 '+homepage+' · 글로벌 뉴스 '+globalNews+' (영상 '+globalVideo+') · 정책 제외 '+policySkip+' · 검색결과 링크 제외 '+searchSkip+applied;
+      var applied='';
+      if(Array.isArray(r.appliedPolicies)&&r.appliedPolicies.length){
+        var policyLabels=[];r.appliedPolicies.forEach(function(entry){(entry&&entry.agendas||[]).forEach(function(a){var label=text(a&&a.title||a&&a.agendaId);if(label&&!policyLabels.includes(label))policyLabels.push(label)})});
+        if(policyLabels.length)applied=' · AI 정책 자동 반영: '+policyLabels.slice(0,4).join(' + ')+(policyLabels.length>4?' 외 '+(policyLabels.length-4)+'건':'');
+      }else if(r.appliedPolicy&&r.appliedPolicy.agendaId)applied=' · AI 정책 자동 반영: '+text(r.appliedPolicy.title||r.appliedPolicy.agendaId);
+      var gr=reports.find(function(x){return x&&x.section==='donation-global'}),collector='';
+      if(gr){var yd=gr.youtubeDirect||{},yw=gr.youtubeWebFallback||{},rf=gr.rssFallback||{},pool=Number(gr.homeNewsSourcePool||yd.homeSourcePool||yw.homeSourcePool||0),planned=Array.isArray(gr.homeNewsSourcesPlanned)?gr.homeNewsSourcesPlanned.length:0;collector=' · 글로벌수집 YT '+Number(yd.items||0)+'['+text(yd.status||'-')+'] / WebVideo '+Number(yw.items||0)+'['+text(yw.status||'-')+'] / NewsFeed '+Number(rf.items||0)+'['+text(rf.status||'-')+']'+(pool?' · 홈뉴스 '+pool+'개 중 '+planned+'개 순환검색':'');}
+      $('state').textContent='리서치 완료 · 엔진 '+engine+'건 → 저장 '+accepted+'건 · 공식 홈페이지 '+homepage+' · 글로벌 뉴스 '+globalNews+' (영상 '+globalVideo+') · 정책 제외 '+policySkip+' · 검색결과 링크 제외 '+searchSkip+collector+applied;
       if(!all&&section){openSection=section;renderSections()}
     }catch(e){$('state').textContent='리서치 오류: '+e.message;setBusy(false)}
   }

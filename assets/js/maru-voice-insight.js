@@ -1,4 +1,4 @@
-/* MARU Voice Insight — FINAL STABLE (v1.1)
+/* MARU Voice Insight — LONG UTTERANCE STABLE (v1.2)
  * - interimResults enabled for realtime typing
  * - interim transcript -> MaruAddon.previewVoice(text, context)
  * - final transcript -> MaruAddon.handleVoiceQuery(text, context)
@@ -11,7 +11,25 @@
   let currentState = STATE.OFF;
   let recognition = null;
   let silenceTimer = null;
-  const SILENCE_TIMEOUT = 1200;
+  let phraseTimer = null;
+  let phraseParts = [];
+  let phraseContext = null;
+  const SILENCE_TIMEOUT = 1800;
+  const PHRASE_COMMIT_DELAY = 3200;
+
+  function flushPhrase(){
+    clearTimeout(phraseTimer); phraseTimer=null;
+    const text = phraseParts.join(' ').replace(/\s+/g,' ').trim();
+    const context = phraseContext;
+    phraseParts=[]; phraseContext=null;
+    if(text && window.MaruAddon?.handleVoiceQuery) window.MaruAddon.handleVoiceQuery(text, context);
+  }
+  function queueFinal(text, context){
+    if(!text) return;
+    phraseParts.push(text); phraseContext=context || phraseContext;
+    clearTimeout(phraseTimer);
+    phraseTimer=setTimeout(flushPhrase, PHRASE_COMMIT_DELAY);
+  }
 
   function getCurrentMaruContext(){
     // prefer dock/context
@@ -64,9 +82,9 @@
           window.MaruAddon.previewVoice(interim, context);
         }
 
-        if (finals.length && window.MaruAddon?.handleVoiceQuery) {
+        if (finals.length) {
           const text = finals.join(' ').trim();
-          if (text) window.MaruAddon.handleVoiceQuery(text, context);
+          if (text) queueFinal(text, context);
         }
       } catch (_) {}
     };
@@ -98,6 +116,7 @@
   function stop(){
     try{ recognition?.stop(); }catch(_){}
     clearTimeout(silenceTimer);
+    if(phraseParts.length) flushPhrase(); else clearTimeout(phraseTimer);
     setState(STATE.OFF);
   }
 

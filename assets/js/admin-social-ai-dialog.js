@@ -1,4 +1,4 @@
-/* IGDC Social AI Policy Dialog v1.1.0
+/* IGDC Social AI Policy Dialog v1.2.0
  * Admin-only conversation/policy layer. Never writes SearchBank/Snapshot/front.
  */
 (function () {
@@ -108,7 +108,21 @@
     document.getElementById("socialAiSpeak").onclick=speakLast;
     return m;
   }
-  var current={scopeType:"global",sectionKey:"",label:"전체 Social",draft:null,lastReply:""}, recognition=null;
+  var current={scopeType:"global",sectionKey:"",label:"전체 Social",draft:null,lastReply:""}, recognition=null,
+    listeningWanted=false, speechBase="", speechCommitted="", restartTimer=null;
+  function normalizeSocialSpeech(v){
+    return text(v)
+      .replace(/임플란트/gi,"인플루언서")
+      .replace(/인풀루언서|인플루언스|인풀루언스|인플런서/gi,"인플루언서")
+      .replace(/섬네일/gi,"썸네일");
+  }
+  function persistDraft(policy){
+    if(!policy) return false;
+    var all=policies(), key=policyId(current.scopeType,current.sectionKey), saved=Object.assign({},policy,{appliedAt:new Date().toISOString()});
+    all[key]=saved; writeJson(STORE_KEY,all); current.draft=saved;
+    window.dispatchEvent(new CustomEvent("igdc:social-ai-policy-applied",{detail:{key:key,policy:saved,automatic:true}}));
+    return true;
+  }
   function contextFor(scopeType, sectionKey){
     var root=null;
     if(scopeType==="content" && sectionKey) root=document.querySelector('#waitingAccordion [data-section="'+CSS.escape(sectionKey)+'"]');
@@ -138,16 +152,20 @@
   }
   window.IGDCSocialAI.openDialog=openDialog;
   async function sendCurrent(){
-    var input=document.getElementById("socialAiInput"), message=text(input.value); if(!message) return;
+    var input=document.getElementById("socialAiInput"), message=normalizeSocialSpeech(input.value); if(!message) return;
+    input.value=message;
     var key=policyId(current.scopeType,current.sectionKey), all=chats(), history=(all[key]||[]).slice(-12);
     appendMsg("user",message); history.push({role:"user",text:message}); all[key]=history; writeJson(CHAT_KEY,all); input.value="";
     var st=document.getElementById("socialAiState"); st.textContent="AI 협의 중";
     try{
       var d=await callAI({scopeType:current.scopeType,sectionKey:current.sectionKey,message:message,history:history,context:contextFor(current.scopeType,current.sectionKey)});
       current.draft=d.policyDraft||null; current.lastReply=text(d.reply); appendMsg("assistant",current.lastReply);
+      if(current.draft) persistDraft(current.draft);
       all=chats(); history=(all[key]||[]); history.push({role:"assistant",text:current.lastReply}); all[key]=history.slice(-24); writeJson(CHAT_KEY,all);
       document.getElementById("socialAiPolicyPreview").textContent=current.draft?JSON.stringify(current.draft,null,2):"정책 초안 없음";
-      st.textContent=d.provider==="configured_ai"?"AI 정책 초안 완료":"로컬 정책 초안 · AI API 미연결";
+      st.textContent=current.draft
+        ? (d.provider==="configured_ai"?"AI 협의 정책 자동 반영됨":"로컬 정책 자동 반영됨 · AI API 미연결")
+        : "정책 초안 없음";
     }catch(e){ appendMsg("system","오류: "+(e.message||e)); st.textContent="대화 실패"; }
   }
   function applyDraft(){
@@ -155,19 +173,51 @@
     var all=policies(), key=policyId(current.scopeType,current.sectionKey);
     current.draft.appliedAt=new Date().toISOString(); all[key]=current.draft; writeJson(STORE_KEY,all);
     document.getElementById("socialAiPolicyPreview").textContent=JSON.stringify(current.draft,null,2); document.getElementById("socialAiState").textContent="정책 적용됨";
-    window.dispatchEvent(new CustomEvent("igdc:social-ai-policy-applied",{detail:{key:key,policy:current.draft}}));
+    window.dispatchEvent(new CustomEvent("igdc:social-ai-policy-applied",{detail:{key:key,policy:current.draft,automatic:false}}));
   }
   function clearCurrent(){
     var key=policyId(current.scopeType,current.sectionKey), all=chats(); delete all[key]; writeJson(CHAT_KEY,all); current.draft=null; renderChat(); document.getElementById("socialAiState").textContent="대화 지움";
   }
   function SpeechRecognitionCtor(){ return window.SpeechRecognition||window.webkitSpeechRecognition||null; }
-  function stopListening(){ try{ if(recognition) recognition.stop(); }catch(_e){} recognition=null; var b=document.getElementById("socialAiMic"); if(b)b.classList.remove("live"); }
+  function stopListening(){
+    listeningWanted=false; clearTimeout(restartTimer); restartTimer=null;
+    try{ if(recognition) recognition.stop(); }catch(_e){}
+    recognition=null; var b=document.getElementById("socialAiMic"); if(b)b.classList.remove("live");
+    var st=document.getElementById("socialAiState"); if(st&&/듣는 중/.test(st.textContent||""))st.textContent="음성 입력 종료";
+  }
+  function startRecognitionSession(){
+    var C=SpeechRecognitionCtor(); if(!C){document.getElementById("socialAiState").textContent="이 브라우저는 음성 입력을 지원하지 않습니다";return;}
+    var input=document.getElementById("socialAiInput"), b=document.getElementById("socialAiMic");
+    recognition=new C(); recognition.lang="ko-KR"; recognition.interimResults=true; recognition.continuous=true;
+    recognition.onresult=function(e){
+      var interim="";
+      for(var i=e.resultIndex;i<e.results.length;i++){
+        var t=normalizeSocialSpeech(e.results[i][0]&&e.results[i][0].transcript);
+        if(!t)continue;
+        if(e.results[i].isFinal) speechCommitted=(speechCommitted+(speechCommitted?" ":"")+t).trim();
+        else interim=(interim+(interim?" ":"")+t).trim();
+      }
+      input.value=[speechBase,speechCommitted,interim].filter(Boolean).join(" ").replace(/\s+/g," ").trim();
+      document.getElementById("socialAiState").textContent="듣는 중 · 문장을 끝까지 말씀하세요";
+    };
+    recognition.onerror=function(e){
+      var code=text(e&&e.error);
+      if(code==="not-allowed"||code==="service-not-allowed"){
+        listeningWanted=false; document.getElementById("socialAiState").textContent="마이크 권한을 확인해 주세요";
+      } else if(code!=="aborted") document.getElementById("socialAiState").textContent="음성 입력 재연결 중";
+    };
+    recognition.onend=function(){
+      recognition=null;
+      if(!listeningWanted){if(b)b.classList.remove("live");return;}
+      clearTimeout(restartTimer); restartTimer=setTimeout(function(){if(listeningWanted)startRecognitionSession();},250);
+    };
+    try{recognition.start();if(b)b.classList.add("live");document.getElementById("socialAiState").textContent="듣는 중 · 문장을 끝까지 말씀하세요";}
+    catch(e){recognition=null;if(listeningWanted){clearTimeout(restartTimer);restartTimer=setTimeout(startRecognitionSession,350);}}
+  }
   function toggleListening(){
-    if(recognition){stopListening();return;} var C=SpeechRecognitionCtor(); if(!C){document.getElementById("socialAiState").textContent="이 브라우저는 음성 입력을 지원하지 않습니다";return;}
-    recognition=new C(); recognition.lang="ko-KR"; recognition.interimResults=true; recognition.continuous=false;
-    var b=document.getElementById("socialAiMic"), input=document.getElementById("socialAiInput"), base=text(input.value); b.classList.add("live");
-    recognition.onresult=function(e){var finalText="",interim="";for(var i=e.resultIndex;i<e.results.length;i++){var t=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=t;else interim+=t;}input.value=[base,finalText||interim].filter(Boolean).join(base?" ":"");};
-    recognition.onerror=function(){document.getElementById("socialAiState").textContent="음성 입력 오류";stopListening();}; recognition.onend=function(){recognition=null;b.classList.remove("live");}; recognition.start(); document.getElementById("socialAiState").textContent="듣는 중";
+    if(listeningWanted){stopListening();return;}
+    if(!SpeechRecognitionCtor()){document.getElementById("socialAiState").textContent="이 브라우저는 음성 입력을 지원하지 않습니다";return;}
+    listeningWanted=true; speechBase=text(document.getElementById("socialAiInput").value); speechCommitted=""; startRecognitionSession();
   }
   function speakLast(){ if(!current.lastReply||!window.speechSynthesis)return; try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(current.lastReply);u.lang="ko-KR";speechSynthesis.speak(u);}catch(_e){} }
   function makeButton(label,scopeType,sectionKey,display){

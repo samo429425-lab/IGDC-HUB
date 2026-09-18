@@ -4,7 +4,7 @@
  * Optional Social AI policy envelope used only before SearchBank publication.
  * No snapshot/front/rightPanel mutation occurs here.
  */
-const VERSION = "social-ai-policy-runtime-v1.2.0-nonpolitical-quality-focus";
+const VERSION = "social-ai-policy-runtime-v1.3.0-conversation-search-binding";
 const SECTION_KEYS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
   "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter",
@@ -29,6 +29,12 @@ const DEFAULT_BLOCKED_TOPICS = Object.freeze([
 ]);
 
 function text(v) { return v == null ? "" : String(v).trim(); }
+function normalizeSpeechTerms(v) {
+  return text(v)
+    .replace(/임플란트/gi, "인플루언서")
+    .replace(/인풀루언서|인플루언스|인풀루언스|인플런서/gi, "인플루언서")
+    .replace(/섬네일/gi, "썸네일");
+}
 function list(v) {
   return Array.from(new Set((Array.isArray(v) ? v : text(v).split(/[,\n]/))
     .map(text).filter(Boolean))).slice(0, 40);
@@ -45,7 +51,7 @@ function normalize(input) {
     scopeType: /^(global|section|collector|content|influencer)$/.test(text(p.scopeType).toLowerCase())
       ? text(p.scopeType).toLowerCase() : "global",
     sectionKey,
-    instructions: text(p.instructions).slice(0, 4000),
+    instructions: normalizeSpeechTerms(p.instructions).slice(0, 4000),
     includeTopics: list(p.includeTopics),
     excludeTopics: list(p.excludeTopics),
     preferredCreatorTraits: list(p.preferredCreatorTraits),
@@ -86,9 +92,19 @@ function evaluate(row, input) {
 function querySuffix(input) {
   const p = normalize(input);
   const explicit = p.includeTopics.slice(0, 8);
-  return (explicit.length ? explicit : DEFAULT_PREFERRED_TOPICS.slice(0, 8)).join(" ");
+  const parts = [(explicit.length ? explicit : DEFAULT_PREFERRED_TOPICS.slice(0, 8)).join(" ")];
+  const ins = p.instructions.toLowerCase();
+  const hints = [
+    [/인플루언서|influencer|creator/, "active creator official profile latest public post"],
+    [/프로필|페이지|profile|page/, "official profile public page"],
+    [/썸네일|thumbnail|preview/, "thumbnail preview image"],
+    [/최신|새 게시물|recent|latest|fresh/, "latest recent active"],
+    [/인기|조회수|좋아요|참여|popular|views|likes|engagement/, "popular high engagement"],
+  ];
+  hints.forEach(([rx, value]) => { if (rx.test(ins)) parts.push(value); });
+  return Array.from(new Set(parts.join(" ").split(/\s+/).filter(Boolean))).join(" ").slice(0, 420);
 }
 module.exports = {
   VERSION, SECTION_KEYS, DEFAULT_PREFERRED_TOPICS, DEFAULT_BLOCKED_TOPICS,
-  normalize, evaluate, querySuffix, text, list
+  normalize, evaluate, querySuffix, normalizeSpeechTerms, text, list
 };

@@ -375,6 +375,47 @@ function groupBySection(items){
     });
   }
 
+  const MEDIA_PLAYBACK_SRC = '/assets/js/mediahub-playback-controller.v2.js?v=20260918-donation-global-v1';
+  const MEDIA_PLAYBACK_SCRIPT_ID = 'igdc-mediahub-playback-loader-donation-v1';
+
+  function ensureDonationMediaPlayback(){
+    if(window.IGDCMediaHubPlayback && typeof window.IGDCMediaHubPlayback.open === 'function') return Promise.resolve(window.IGDCMediaHubPlayback);
+    if(window.__IGDC_DONATION_MEDIA_PROMISE__) return window.__IGDC_DONATION_MEDIA_PROMISE__;
+    window.__IGDC_DONATION_MEDIA_PROMISE__ = new Promise(function(resolve,reject){
+      let script=document.getElementById(MEDIA_PLAYBACK_SCRIPT_ID);
+      const finish=function(){
+        if(window.IGDCMediaHubPlayback && typeof window.IGDCMediaHubPlayback.open === 'function') resolve(window.IGDCMediaHubPlayback);
+        else reject(new Error('IGDC media playback unavailable'));
+      };
+      if(script){
+        if(script.dataset.loaded==='1'){finish();return;}
+        script.addEventListener('load',finish,{once:true});
+        script.addEventListener('error',function(){reject(new Error('IGDC media playback load failed'));},{once:true});
+        return;
+      }
+      script=document.createElement('script');script.id=MEDIA_PLAYBACK_SCRIPT_ID;script.src=MEDIA_PLAYBACK_SRC;script.async=true;
+      script.addEventListener('load',function(){script.dataset.loaded='1';finish();},{once:true});
+      script.addEventListener('error',function(){reject(new Error('IGDC media playback load failed'));},{once:true});
+      (document.head||document.documentElement).appendChild(script);
+    }).catch(function(err){window.__IGDC_DONATION_MEDIA_PROMISE__=null;throw err;});
+    return window.__IGDC_DONATION_MEDIA_PROMISE__;
+  }
+
+  function looksPlayableVideoUrl(value){
+    const url=safeExternalUrl(value);if(!url)return false;
+    return /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?v=|embed\/|shorts\/)|\.(?:mp4|webm|ogv|ogg|m4v)(?:[?#]|$))/i.test(url);
+  }
+
+  function openDonationVideo(card){
+    if(!card) return Promise.resolve(false);
+    const source=safeExternalUrl(card.dataset.mediaSource||card.dataset.videoUrl||'');
+    if(!source) return Promise.resolve(false);
+    return ensureDonationMediaPlayback().then(function(player){player.open(card,{autoPlay:true});return true;}).catch(function(err){
+      console.warn('[IGDC][Donation] media playback unavailable:',err&&err.message?err.message:err);
+      return openContainedHomepage(source,card.querySelector?.('.card-title')?.textContent||'Global News');
+    });
+  }
+
 
   function renderCard(it){
     const rawImg = safeUrl(it?.media?.thumb) || '';
@@ -386,8 +427,13 @@ function groupBySection(items){
       ''
     );
     const summary = escHtml(it?.summary || it?.org?.legal_name || '');
-    // Institution cards always open the verified organization homepage.
-    const url = safeExternalUrl(it?.org?.homepage) || safeExternalUrl(it?.link?.url) || safeExternalUrl(it?.url) || '';
+    const sectionKey = String(it?.psom_key || it?.section || it?.bind?.section || '').trim();
+    const globalLane = sectionKey === 'donation-global';
+    const mediaSource = globalLane ? (safeExternalUrl(it?.media?.src) || safeExternalUrl(it?.videoUrl) || (String(it?.link?.mode||'').toLowerCase()==='content-video'?safeExternalUrl(it?.link?.url):'') || (looksPlayableVideoUrl(it?.url)?safeExternalUrl(it?.url):'')) : '';
+    const playableVideo = globalLane && !!mediaSource && (String(it?.media?.kind||it?.type||'').toLowerCase()==='video' || String(it?.link?.mode||'').toLowerCase()==='content-video' || looksPlayableVideoUrl(mediaSource));
+    // Organization lanes open the verified homepage. Global News keeps its actual
+    // article/video destination and uses the shared MediaHub player for videos.
+    const url = globalLane ? (mediaSource || safeExternalUrl(it?.link?.url) || safeExternalUrl(it?.url) || '') : (safeExternalUrl(it?.org?.homepage) || safeExternalUrl(it?.link?.url) || safeExternalUrl(it?.url) || '');
     const uid = escAttr(it?.uid || it?.id || '');
     const sample = isSeedItem(it) || /(?:placeholder|sample)/i.test(rawImg);
     const img = sample ? '' : safeExternalUrl(rawImg);
@@ -400,7 +446,7 @@ function groupBySection(items){
       : thumbImage;
 
     return `
-      <div class="card donation-card" data-uid="${uid}" data-url="${escAttr(url)}" role="${url?'link':'group'}" ${url?'tabindex="0"':''} aria-label="${title}">
+      <div class="card donation-card" data-uid="${uid}" data-url="${escAttr(url)}" data-section="${escAttr(sectionKey)}" data-donation-video="${playableVideo?'1':'0'}" data-media-source="${escAttr(mediaSource)}" data-media-title="${title}" data-content-id="${uid}" role="${url?'link':'group'}" ${url?'tabindex="0"':''} aria-label="${title}">
         <div class="thumb">${thumbHtml}</div>
         <div class="card-body">
           <div class="card-title">${title || '-'}</div>
@@ -445,7 +491,8 @@ function groupBySection(items){
         if(typeof e.stopImmediatePropagation==='function') e.stopImmediatePropagation();
         const card=a.closest('.donation-card');
         const label=card&&card.querySelector('.card-title')?card.querySelector('.card-title').textContent:'';
-        openContainedHomepage(url,label);
+        if(card&&card.dataset.donationVideo==='1') openDonationVideo(card);
+        else openContainedHomepage(url,label);
       });
     });
   }
@@ -566,7 +613,7 @@ function mountSection(key, items, limit){
       const card = e.target?.closest?.('.donation-card');
       if(!card) return;
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url){ e.preventDefault(); e.stopPropagation(); openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || ''); }
+      if(url){ e.preventDefault(); e.stopPropagation(); if(card.dataset.donationVideo==='1')openDonationVideo(card);else openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || ''); }
     });
 
     document.addEventListener('keydown', (e)=>{
@@ -575,7 +622,7 @@ function mountSection(key, items, limit){
       if(!card) return;
       e.preventDefault();
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url) openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || '');
+      if(url){if(card.dataset.donationVideo==='1')openDonationVideo(card);else openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || '');}
     });
   }
 

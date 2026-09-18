@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.7.0 - runtime release direct + front quality recovery */
+/* IGDC Social Hub Content Operations v3.8.0 - influencer fallback + AI policy binding */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -314,12 +314,14 @@
     if ((url === LIVE || url === AUTO) && window.IGDCSocialAI && typeof window.IGDCSocialAI.policyEnvelope === "function") {
       var sectionKey = text(payload.sectionKey || payload.section || payload.targetSection);
       var aiPolicy = null;
-      if (url === LIVE) {
-        aiPolicy = window.IGDCSocialAI.policyEnvelope(sectionKey, "collector");
-      } else if (typeof window.IGDCSocialAI.policyBundle === "function") {
-        aiPolicy = window.IGDCSocialAI.policyBundle(sectionKey, ["content","influencer"]);
+      if (typeof window.IGDCSocialAI.policyBundle === "function") {
+        // A policy agreed in any Social conversation scope must guide both
+        // discovery and curation. In particular, influencer-dialog decisions
+        // previously never reached the LIVE collector because it read only the
+        // collector scope.
+        aiPolicy = window.IGDCSocialAI.policyBundle(sectionKey, ["collector","content","influencer"]);
       } else {
-        aiPolicy = window.IGDCSocialAI.policyEnvelope(sectionKey, "content");
+        aiPolicy = window.IGDCSocialAI.policyEnvelope(sectionKey, url === LIVE ? "collector" : "content");
       }
       if (aiPolicy) payload.aiPolicy = aiPolicy;
     }
@@ -1510,8 +1512,11 @@
       return signedPreviewExpired(platform, raw);
     } catch (_e) { return false; }
   }
+  var PROFILE_FALLBACK_SECTIONS = new Set(["social-wechat","social-weibo","social-pinterest","social-reddit","social-twitter"]);
   function realPreviewMissing(row) {
-    if (!row || assetClass(row) !== "latest_content") return false;
+    if (!row) return false;
+    var cls=assetClass(row);
+    if (cls !== "latest_content" && !(cls === "influencer_registry" && PROFILE_FALLBACK_SECTIONS.has(row.sectionKey))) return false;
     var platform = lower(row.platform).replace(/^social-/, "").replace(/^x$/, "twitter"),
       title = lower(row.title),
       raw = row.raw || {},
@@ -1788,7 +1793,7 @@
       sectionKey: section,
       limit: j.batchSize,
       batchSize: j.batchSize,
-      queryPasses: j.qualitySweepActive ? 2 : 1,
+      queryPasses: 1,
       queryCursor: j.queryCursor || 0,
       countryCode: j.countryCode || "",
       regionId: j.regionId || "",
@@ -1942,7 +1947,7 @@
       newlyFound: 0,
       emptyBatches: 0,
       qualitySweepBatches: 0,
-      qualitySweepTarget: 6,
+      qualitySweepTarget: 3,
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
@@ -2018,7 +2023,7 @@
       !skipConfirm && !confirm(
         "각 SNS 섹션을 " +
           $("collectorBatchSize").value +
-          "개 단위로 120개(공개 100 + 예비 20) 운영 풀을 채운 뒤 인기·품질 보강 검색을 추가 실행하고 상위 100개를 다시 정리해 다음 섹션으로 진행할까요?",
+          "개 단위로 100개까지 수집한 뒤 인기·품질 보강 검색과 상위 100개 정리를 거쳐 다음 섹션으로 진행할까요?",
       )
     )
       return;
@@ -2055,7 +2060,7 @@
           j.emptyBatches = 0;
           j.newlyFound = 0;
           j.qualitySweepBatches = 0;
-          j.qualitySweepTarget = 6;
+          j.qualitySweepTarget = 3;
           j.qualitySweepDone = false;
           j.qualitySweepActive = false;
         }
@@ -2557,20 +2562,17 @@
     }
   }
   function candidateRegistered(row) {
-    if (!row || assetClass(row) !== "latest_content" || contentHold(row)) return false;
-    var thumbUrl = text(row.thumbnailUrl || (row.raw && row.raw.thumbnailUrl));
-    var hasRealThumb = /^https:\/\//i.test(thumbUrl) && !/placeholder|\/assets\/sample\//i.test(thumbUrl);
-    if (typeof row.promotable === "boolean") return row.promotable === true && hasRealThumb;
-    return (
-      text(row.reviewStatus).toLowerCase() === "approved" &&
+    if (!row || contentHold(row)) return false;
+    var cls=assetClass(row), isProfileFallback=cls === "influencer_registry" && PROFILE_FALLBACK_SECTIONS.has(row.sectionKey);
+    if (cls !== "latest_content" && !isProfileFallback) return false;
+    var thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url || row.raw.channelThumbnailUrl)));
+    var hasRealThumb = /^https:\/\//i.test(thumbUrl) && !/placeholder|\/assets\/sample\//i.test(thumbUrl) && !genericProviderPreviewThumb(lower(row.platform).replace(/^social-/,"").replace(/^x$/,"twitter"),thumbUrl);
+    var baseOk = text(row.reviewStatus).toLowerCase() === "approved" &&
       /^(approved_for_snapshot|verified|approved)$/i.test(text(row.verificationStatus)) &&
-      row.candidateOnly === false &&
-      row.seedContent !== true &&
-      row.publicAccess === true &&
-      row.loginRequired !== true &&
-      /^https:\/\//i.test(text(row.latestContentUrl || row.sourceUrl)) &&
-      hasRealThumb
-    );
+      row.candidateOnly === false && row.seedContent !== true && row.publicAccess === true && row.loginRequired !== true;
+    if (isProfileFallback) return baseOk && /^https:\/\//i.test(text(row.channelUrl || row.sourceUrl));
+    if (typeof row.promotable === "boolean") return row.promotable === true && hasRealThumb;
+    return baseOk && /^https:\/\//i.test(text(row.latestContentUrl || row.sourceUrl)) && hasRealThumb;
   }
   function registeredContentIds(sectionKey) {
     return rows
@@ -2727,8 +2729,13 @@
   async function hydrateFrontPublicationPreviews(sectionKeys) {
     var allowed = Array.isArray(sectionKeys) && sectionKeys.length ? new Set(sectionKeys) : null;
     var ids = rows.filter(function (row) {
-      return row && assetClass(row) === "latest_content" &&
-        (!allowed || allowed.has(row.sectionKey)) && realPreviewMissing(row);
+      if(!row || (allowed && !allowed.has(row.sectionKey))) return false;
+      var cls=assetClass(row);
+      // Latest-content thumbnails are a hard publication requirement. Sparse
+      // influencer/profile fallbacks have a labelled server-generated card when
+      // provider metadata has no image, so do not block the whole publish while
+      // hydrating dozens of profiles.
+      return cls === "latest_content" && realPreviewMissing(row);
     }).map(function (row) { return text(row.id); }).filter(Boolean);
     ids = Array.from(new Set(ids));
     if (!ids.length) return 0;
@@ -2767,14 +2774,10 @@
     var ids = registeredContentIds("");
     if (!ids.length)
       return show("SearchBank 인계 가능한 최신 콘텐츠 후보가 없습니다.", "warn");
-    // Full-section publication is server-authoritative. Do not freeze the
-    // publication plan to the browser's current row cache: the server reads the
-    // latest approved candidates after preview hydration/AI curation and applies
-    // every currently publish-eligible row to the 100 real+SAMPLE slots.
     return actualApply(
       "",
       skipConfirm === true,
-      null,
+      ids,
       publishMode || "all_sections_front_publish",
       order.slice(),
     );
@@ -2793,8 +2796,8 @@
     keys.forEach(function (key) { ids = ids.concat(registeredContentIds(key)); });
     ids = Array.from(new Set(ids));
     if (!ids.length) return show("선택한 SNS 섹션에 SearchBank 인계 가능한 후보가 없습니다.", "warn");
-    if (!confirm(keys.map(label).join(", ") + " 섹션의 현재 정상 후보를 서버 최신 상태 기준으로 프론트 등록할까요?")) return false;
-    return actualApply("", true, null, "selected_sections_front_publish", keys);
+    if (!confirm(keys.map(label).join(", ") + " 섹션의 후보 " + ids.length + "개를 프론트 등록 대상으로 보낼까요?")) return false;
+    return actualApply("", true, ids, "selected_sections_front_publish", keys);
   }
 
   async function actualUnapplySelectedFrontSections() {
@@ -3299,7 +3302,7 @@
           : keys.length === 1
             ? "single_section_front_publish"
             : "selected_sections_front_publish";
-        var applied = await actualApply(keys.length === 1 ? keys[0] : "", true, null, autoMode, keys);
+        var applied = await actualApply("", true, applyIds, autoMode, keys);
         if (!applied) throw new Error("AI 자동 운영 프론트 실제 적용을 완료하지 못했습니다.");
       }
       if (statusEl) statusEl.textContent = "완료 · " + keys.length + "개 SNS";
