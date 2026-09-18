@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260918-premium-actions-facebook-play-v4'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260918-facebook-fullwidth-video-registry-v5'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -397,6 +397,7 @@
       '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-frame{position:absolute;left:0;top:0;z-index:2;max-width:none;transform:none!important;background:#fff;pointer-events:auto;touch-action:auto}' +
       '#igdcSocialViewerV2 .igsv-fb-owned-media{width:100%;background:#111;display:flex;align-items:center;justify-content:center;overflow:hidden}' +
       '#igdcSocialViewerV2 .igsv-fb-owned-media img{display:block;width:100%;height:auto;max-width:100%;object-fit:contain;object-position:center;background:#111}' +
+      '#igdcSocialViewerV2 .igsv-fb-video-frame{display:block;width:100%;height:auto;min-height:320px;aspect-ratio:16/9;border:0;background:#000}' +
       '#igdcSocialViewerV2 .igsv-fb-official{width:100%;box-sizing:border-box;padding:0 clamp(18px,3vw,48px);background:#fff;color:#111;border-top:1px solid #e5e7eb}' +
       '#igdcSocialViewerV2 .igsv-fb-nativebar{display:flex;align-items:center;gap:0;flex-wrap:nowrap;padding:10px 0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;background:#fff}' +
       '#igdcSocialViewerV2 .igsv-fb-nativebtn{appearance:none;border:0;border-radius:18px;background:#f1f3f5;color:#4b5563;min-height:38px;padding:0 16px;font:700 14px/1.2 system-ui,-apple-system,Segoe UI,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}' +
@@ -880,6 +881,33 @@
     host.appendChild(box);
   }
 
+  function mountFacebookVideoMedia(media, sourceUrl, title) {
+    if (!media || !validHttp(sourceUrl)) return null;
+    media.textContent = '';
+    media.hidden = false;
+    media.style.background = '#000';
+
+    var src = 'https://www.facebook.com/plugins/video.php?' + new URLSearchParams({
+      href: sourceUrl,
+      show_text: 'false',
+      autoplay: 'false',
+      width: '1280'
+    }).toString();
+
+    var frame = document.createElement('iframe');
+    frame.className = 'igsv-fb-video-frame';
+    frame.src = src;
+    frame.title = title || 'Facebook video';
+    frame.loading = 'eager';
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    frame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write; web-share';
+    frame.setAttribute('allowfullscreen', '');
+    frame.setAttribute('scrolling', 'no');
+    frame.setAttribute('sandbox', iframeSandboxFor('facebook', { provider: 'facebook-video' }));
+    media.appendChild(frame);
+    return frame;
+  }
+
   function mountFacebookPostDocument(stage, title, description, sourceUrl) {
     stage.setAttribute('data-aspect', 'auto');
     stage.setAttribute('data-provider', 'facebook-post');
@@ -888,34 +916,22 @@
     var content = document.createElement('div');
     content.className = 'igsv-content';
 
+    /* Main Facebook content is IGDC-owned full width. Do not use the narrow
+       750px Facebook post plugin as the visible page: it regresses the viewer
+       into a small card floating in a large white browser area. A public image
+       fills the viewer immediately; confirmed video posts are upgraded below
+       to Meta's official video player without leaving the IGDC container. */
     var media = document.createElement('div');
     media.className = 'igsv-fb-owned-media';
-    media.style.background = '#fff';
-    media.style.minHeight = '520px';
     var preview = text(state.lastPreview || '').trim();
     var image = null;
-
-    /* Keep the official Facebook document interactive inside IGDC. The former
-       static-only document made video posts look clickable but could never play. */
-    var pluginSrc = 'https://www.facebook.com/plugins/post.php?' + new URLSearchParams({
-      href: sourceUrl,
-      show_text: 'false',
-      width: '750'
-    }).toString();
-    var postFrame = facebookPluginFrame(pluginSrc, 'igsv-fb-interaction-frame', title || 'Facebook post', 720);
-    postFrame.style.width = 'min(100%,750px)';
-    postFrame.style.maxWidth = '750px';
-    postFrame.style.margin = '0 auto';
-    postFrame.style.background = '#fff';
-    media.appendChild(postFrame);
-
+    media.hidden = !validHttp(preview);
     if (validHttp(preview)) {
       image = document.createElement('img');
       image.src = preview;
-      image.alt = title || 'Facebook post preview';
+      image.alt = title || 'Facebook post';
       image.loading = 'eager';
       image.referrerPolicy = 'no-referrer';
-      image.style.display = 'none';
       media.appendChild(image);
     }
     content.appendChild(media);
@@ -932,7 +948,11 @@
     stage.appendChild(scroll);
     bindViewerScrollHost(scroll);
 
-    loadFacebookPublicDetail(detail, sourceUrl, image, media);
+    loadFacebookPublicDetail(detail, sourceUrl, image, media, {
+      onVideo: function () {
+        mountFacebookVideoMedia(media, sourceUrl, title || 'Facebook video');
+      }
+    });
     showStatus('');
     return true;
   }
@@ -1162,7 +1182,7 @@
     if (value) refreshDescriptionToggle(detail);
   }
 
-  function loadFacebookPublicDetail(detail, sourceUrl, imageEl, mediaEl) {
+  function loadFacebookPublicDetail(detail, sourceUrl, imageEl, mediaEl, options) {
     if (!detail || !validHttp(sourceUrl)) return;
     fetch('/.netlify/functions/social-facebook-public-detail?url=' + encodeURIComponent(sourceUrl), {
       method: 'GET', credentials: 'same-origin', cache: 'default'
@@ -1175,6 +1195,10 @@
       var titleEl = q('.igsv-detail-title', detail);
       if (titleEl && data.title) titleEl.textContent = decodeEntities(data.title);
       if (data.description) updateDetailDescription(detail, decodeEntities(data.description));
+      if (data.isVideo) {
+        if (options && typeof options.onVideo === 'function') options.onVideo(data);
+        return;
+      }
       if (data.image && validHttp(data.image)) {
         if (!imageEl && mediaEl) {
           imageEl = document.createElement('img');
@@ -1183,7 +1207,10 @@
           imageEl.referrerPolicy = 'no-referrer';
           mediaEl.appendChild(imageEl);
         }
-        if (mediaEl) mediaEl.hidden = false;
+        if (mediaEl) {
+          mediaEl.hidden = false;
+          mediaEl.style.background = '#111';
+        }
         if (imageEl && imageEl.src !== data.image) imageEl.src = data.image;
       }
     }).catch(function () {

@@ -4,7 +4,7 @@
  * Optional Social AI policy envelope used only before SearchBank publication.
  * No snapshot/front/rightPanel mutation occurs here.
  */
-const VERSION = "social-ai-policy-runtime-v1.1.0-safe-preference";
+const VERSION = "social-ai-policy-runtime-v1.2.0-nonpolitical-quality-focus";
 const SECTION_KEYS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
   "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter",
@@ -12,14 +12,20 @@ const SECTION_KEYS = new Set([
 
 const DEFAULT_PREFERRED_TOPICS = Object.freeze([
   "music", "travel", "tourism", "beauty", "health", "wellness",
-  "education", "learning", "art", "culture", "nature", "family", "lifestyle",
-  "음악", "여행", "관광", "뷰티", "건강", "교육", "학습", "예술", "문화", "자연", "가족"
+  "education", "learning", "art", "culture", "nature", "family", "lifestyle", "entertainment", "food", "museum",
+  "음악", "여행", "관광", "뷰티", "건강", "교육", "학습", "예술", "문화", "자연", "가족", "오락", "음식",
+  "音乐", "音樂", "旅游", "旅遊", "文化", "美食", "艺术", "藝術", "自然", "娱乐", "娛樂", "健康", "教育"
 ]);
 const DEFAULT_BLOCKED_TOPICS = Object.freeze([
   "political campaign", "politics", "election", "partisan", "extremism",
+  "political propaganda", "state propaganda", "territorial dispute", "military conflict",
+  "misinformation", "disinformation", "false information",
   "graphic violence", "violence", "gore", "explicit sexual", "porn", "adult sexual",
   "gambling", "casino",
-  "정치", "선거", "정당", "극단주의", "폭력", "잔혹", "음란", "성인물", "도박", "카지노"
+  "정치", "선거", "정당", "극단주의", "정치선전", "국가선전", "영토분쟁", "군사분쟁", "허위정보", "왜곡정보",
+  "폭력", "잔혹", "음란", "성인물", "도박", "카지노",
+  "政治", "选举", "選舉", "政党", "政黨", "政治宣传", "政治宣傳", "军事冲突", "軍事衝突",
+  "领土争端", "領土爭端", "虚假信息", "虛假信息"
 ]);
 
 function text(v) { return v == null ? "" : String(v).trim(); }

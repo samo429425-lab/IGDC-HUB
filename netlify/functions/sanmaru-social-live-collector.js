@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.21.1-preview-recovery";
+const VERSION = "sanmaru-social-live-collector-v1.22.0-registry-quality-recovery";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 2;
 const DEFAULT_BATCH_SIZE = 10;
@@ -133,6 +133,30 @@ const DISCOVERY_INTENT_TERMS = Object.freeze([
   "trending recent active public content",
   "useful trusted official creator",
   "popular culture travel education performance",
+]);
+
+const REGISTRY_QUALITY_FOCUS = Object.freeze({
+  wechat: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education",
+  weibo: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education",
+  twitter: "travel music culture art science education nature museum tourism entertainment useful public creator"
+});
+
+const REGISTRY_BLOCK_TERMS = Object.freeze([
+  "political campaign", "politics", "election", "partisan", "party politics",
+  "military conflict", "territorial dispute", "state propaganda", "political propaganda",
+  "government department", "government agency", "embassy", "consulate", "state media", "newspaper", "news agency",
+  "정치", "선거", "정당", "정치선전", "국가선전", "군사분쟁", "영토분쟁",
+  "정부기관", "정부부처", "외교부", "대사관", "영사관", "국영매체", "신문사", "통신사",
+  "政治", "选举", "選舉", "政党", "政黨", "政治宣传", "政治宣傳",
+  "军事冲突", "軍事衝突", "领土争端", "領土爭端", "政府部门", "政府部門",
+  "政府机构", "政府機構", "外交部", "大使馆", "大使館", "领事馆", "領事館", "国营媒体", "國營媒體", "报社", "報社"
+]);
+
+const REGISTRY_PREFERRED_TERMS = Object.freeze([
+  "music", "travel", "tourism", "culture", "food", "art", "nature", "entertainment",
+  "health", "wellness", "education", "museum", "festival", "performance",
+  "음악", "여행", "관광", "문화", "음식", "예술", "자연", "오락", "건강", "교육",
+  "音乐", "音樂", "旅游", "旅遊", "文化", "美食", "艺术", "藝術", "自然", "娱乐", "娛樂", "健康", "教育"
 ]);
 
 const LATEST_QUERY_TERMS = Object.freeze({
@@ -633,7 +657,34 @@ function registryIdentity(row, platform) {
     raw.thumbnail,
     raw.image,
   ]);
-  return { row, url, title, handle, thumbnail };
+  const category = firstText([row && row.category, raw.category]);
+  const description = firstText([row && row.description, raw.description, raw.summary]).slice(0, 1200);
+  return { row, url, title, handle, thumbnail, category, description };
+}
+function registrySeedCorpus(seed) {
+  return [
+    seed && seed.title, seed && seed.handle, seed && seed.category,
+    seed && seed.description, seed && seed.url
+  ].map(SocialStore.text).join(" ").toLowerCase();
+}
+function registrySeedBlocked(seed) {
+  const corpus = registrySeedCorpus(seed);
+  return REGISTRY_BLOCK_TERMS.some((term) => corpus.includes(String(term).toLowerCase()));
+}
+function registrySeedQualityScore(seed) {
+  /* Registry category values can be stale/bootstrap-derived (notably WeChat,
+     where many unrelated accounts were historically tagged as "music").
+     Rank by creator name + description instead of trusting that category. */
+  const corpus = [
+    seed && seed.title, seed && seed.handle, seed && seed.description
+  ].map(SocialStore.text).join(" ").toLowerCase();
+  let score = 0;
+  REGISTRY_PREFERRED_TERMS.forEach((term) => {
+    if (corpus.includes(String(term).toLowerCase())) score += 4;
+  });
+  if (seed && seed.thumbnail) score += 2;
+  if (seed && seed.url) score += 1;
+  return score;
 }
 function facebookPressPublisher(value) {
   const corpus = SocialStore.text(value).toLowerCase();
@@ -647,27 +698,37 @@ async function influencerRegistrySeeds(sectionKey, platform) {
         "&order=rotation_score.desc,updated_at.desc&limit=350",
     );
     const seen = new Set();
-    return (Array.isArray(rows) ? rows : [])
+    const seeds = (Array.isArray(rows) ? rows : [])
       .filter((row) => SocialStore.assetClassOf(row) === "influencer_registry" && registryRowActive(row))
       .map((row) => registryIdentity(row, platform))
       .filter((seed) => platform !== "facebook" || !facebookPressPublisher(
         [seed.title, seed.handle, seed.url].filter(Boolean).join(" ")
       ))
+      .filter((seed) => !["wechat", "weibo", "twitter"].includes(platform) || !registrySeedBlocked(seed))
       .filter((seed) => {
         const key = String(seed.url || (seed.title + "|" + seed.handle)).toLowerCase();
         if (!key || seen.has(key)) return false;
         seen.add(key);
         return !!(seed.url || seed.title || seed.handle);
       });
+
+    if (["wechat", "weibo", "twitter"].includes(platform)) {
+      return seeds
+        .map((seed, index) => ({ seed, index, score: registrySeedQualityScore(seed) }))
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+        .map((entry) => entry.seed);
+    }
+    return seeds;
   } catch (_error) { return []; }
 }
-function registryLatestQuery(seed, route) {
+function registryLatestQuery(seed, route, platform) {
   if (!seed) return "";
   const identity = [
     seed.handle ? '"' + seed.handle.replace(/"/g, "") + '"' : "",
     seed.title ? '"' + seed.title.replace(/"/g, "") + '"' : "",
   ].filter(Boolean).join(" ");
-  return [identity, languageQueryTerm(route), "latest recent public"].filter(Boolean).join(" ");
+  const qualityFocus = REGISTRY_QUALITY_FOCUS[platform] || "";
+  return [identity, languageQueryTerm(route), "latest recent public", qualityFocus].filter(Boolean).join(" ");
 }
 function scopedQueriesWithRegistry(plan, cursor, passes, route, registrySeeds) {
   const seeds = Array.isArray(registrySeeds) ? registrySeeds : [];
@@ -682,7 +743,7 @@ function scopedQueriesWithRegistry(plan, cursor, passes, route, registrySeeds) {
   for (let index = 0; index < count; index += 1) {
     const seed = seeds[(offset + index) % seeds.length];
     if (!selectedSeed) selectedSeed = seed;
-    const q = registryLatestQuery(seed, route);
+    const q = registryLatestQuery(seed, route, plan.platform);
     if (q) {
       queries.push(q);
       if (!seedByQuery[q]) seedByQuery[q] = seed;
@@ -1252,6 +1313,26 @@ async function registryNativeLatestSearch(plan, registrySeed, limit) {
       let uid = "";
       if (parts[0] === "u" && /^\d+$/.test(parts[1] || "")) uid = parts[1];
       else if (/^\d+$/.test(parts[0] || "")) uid = parts[0];
+
+      /* Many registry rows use a vanity Weibo path (for example /exok) rather
+         than /u/<numeric-id>. Resolve the public profile once and recover the
+         numeric uid so the stable m.weibo.cn feed can be used for latest posts. */
+      if (!uid) {
+        try {
+          const profileHtml = await fetchText(seedUrl, { headers }, PROFILE_LATEST_TIMEOUT_MS);
+          const normalized = String(profileHtml || "").replace(/\\u002f/gi, "/").replace(/\\\//g, "/");
+          const patterns = [
+            /["'](?:idstr|uid|user_id)["']\s*[:=]\s*["'](\d{5,})["']/i,
+            /\$CONFIG\[['"]oid['"]\]\s*=\s*['"](\d{5,})['"]/i,
+            /weibo\.com\/u\/(\d{5,})/i,
+            /m\.weibo\.cn\/u\/(\d{5,})/i
+          ];
+          for (const pattern of patterns) {
+            const match = normalized.match(pattern);
+            if (match && match[1]) { uid = match[1]; break; }
+          }
+        } catch (_profileError) {}
+      }
       if (!uid) return { provider: "registry-native-latest", status: "unsupported_profile", items: [] };
       const endpoint = "https://m.weibo.cn/api/container/getIndex?" + new URLSearchParams({
         type: "uid", value: uid, containerid: "107603" + uid, page: "1"
@@ -1275,15 +1356,21 @@ async function registryNativeLatestSearch(plan, registrySeed, limit) {
           post.user && post.user.profile_image_url
         ]);
         if (!contentKind(platform, url)) return;
+        const cleanText = stripHtml(firstText([post.text]));
+        const nativeCorpus = [
+          cleanText, post.user && post.user.screen_name,
+          registrySeed && registrySeed.title, registrySeed && registrySeed.category
+        ].map(SocialStore.text).join(" ").toLowerCase();
+        if (REGISTRY_BLOCK_TERMS.some((term) => nativeCorpus.includes(String(term).toLowerCase()))) return;
         items.push({
           provider: "weibo-mobile-public-feed",
           platform,
           url,
           sourceUrl: url,
           latestContentUrl: url,
-          title: stripHtml(firstText([post.text, "Weibo post"])).slice(0, 240),
+          title: firstText([cleanText, "Weibo post"]).slice(0, 240),
           creatorName: firstText([post.user && post.user.screen_name, registrySeed.title]),
-          description: stripHtml(firstText([post.text])).slice(0, 1200),
+          description: cleanText.slice(0, 1200),
           thumbnail: /^https:\/\//i.test(thumb) ? thumb : "",
           entityKind: "latest_post"
         });
@@ -2605,6 +2692,9 @@ exports.__test = {
   providerRelativePostUrls,
   registryNativeLatestSearch,
   registryOnlyFromItem,
+  registryLatestQuery,
+  registrySeedBlocked,
+  registrySeedQualityScore,
   resolveSearchCandidates,
   decodeSearchRedirectTarget,
   decodeXml

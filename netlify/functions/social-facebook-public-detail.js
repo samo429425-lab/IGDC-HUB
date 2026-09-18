@@ -48,6 +48,31 @@ function metaValue(html, names) {
   return '';
 }
 
+
+function facebookVideoUrl(value) {
+  try {
+    var u = new URL(text(value));
+    return /\/(?:reel|watch|videos?)\//i.test(u.pathname) ||
+      /(?:^|[?&])(?:v|video_id)=\d+/i.test(u.search || '') ||
+      /(^|\.)fb\.watch$/i.test(u.hostname);
+  } catch (_e) {
+    return false;
+  }
+}
+
+function hasVideoSignals(html) {
+  var source = String(html || '').slice(0, 1500000)
+    .replace(/\\u002f/gi, '/')
+    .replace(/\\\//g, '/');
+  var ogType = metaValue(source, ['og:type']);
+  var ogVideo = metaValue(source, [
+    'og:video', 'og:video:url', 'og:video:secure_url',
+    'twitter:player', 'twitter:player:stream'
+  ]);
+  if (/video/i.test(ogType) || /^https:\/\//i.test(ogVideo)) return true;
+  return /(?:<video\b|playable_url|browser_native_hd_url|browser_native_sd_url|video_id|videoId|TahoeVideo|VideoPlayer)/i.test(source);
+}
+
 function facebookUrl(value) {
   try {
     var u = new URL(text(value));
@@ -95,23 +120,52 @@ exports.handler = async function (event) {
 
   try {
     var html = await fetchText(embedUrl, 5000);
-    var title = metaValue(html, ['og:title', 'twitter:title']);
-    var description = metaValue(html, ['og:description', 'twitter:description', 'description']);
-    var image = metaValue(html, ['og:image', 'twitter:image']);
+    var sourceHtml = '';
+    var isVideo = facebookVideoUrl(sourceUrl) || hasVideoSignals(html);
+
+    /* /posts/... URLs can still contain a video. The post plugin may omit that
+       signal from its metadata, so make one bounded best-effort read of the public
+       source page before deciding that the content is image/text only. */
+    if (!isVideo && /\/posts\//i.test(sourceUrl)) {
+      try {
+        sourceHtml = await fetchText(sourceUrl, 3200);
+        isVideo = hasVideoSignals(sourceHtml);
+      } catch (_sourceError) {}
+    }
+
+    var title = metaValue(html, ['og:title', 'twitter:title']) ||
+      metaValue(sourceHtml, ['og:title', 'twitter:title']);
+    var description = metaValue(html, ['og:description', 'twitter:description', 'description']) ||
+      metaValue(sourceHtml, ['og:description', 'twitter:description', 'description']);
+    var image = metaValue(html, ['og:image', 'twitter:image']) ||
+      metaValue(sourceHtml, ['og:image', 'twitter:image']);
     if (image && !/^https:\/\//i.test(image)) image = '';
 
     /* Some Facebook shells expose generic boilerplate instead of post text. Do not
        overwrite a useful stored snapshot with that. */
     if (/^(facebook|log in|see posts|connect with friends)/i.test(description)) description = '';
 
+    var videoEmbedUrl = isVideo
+      ? 'https://www.facebook.com/plugins/video.php?' + new URLSearchParams({
+          href: sourceUrl,
+          show_text: 'false',
+          autoplay: 'false',
+          width: '1280'
+        }).toString()
+      : '';
+
     return json(200, {
       ok: true,
       title: text(title).slice(0, 500),
       description: text(description).slice(0, 5000),
       image: text(image).slice(0, 3000),
+      isVideo: !!isVideo,
+      videoEmbedUrl: videoEmbedUrl,
       sourceUrl
     });
   } catch (error) {
     return json(200, { ok: false, error: text(error && error.message) || 'facebook_detail_unavailable' });
   }
 };
+
+exports.__test = { facebookVideoUrl, hasVideoSignals, metaValue };
