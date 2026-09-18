@@ -1,4 +1,5 @@
 // netlify_functions/assignOwner.js
+const { resolveUser } = require("./lib/global-slot-console-auth");
 // POST /.netlify/functions/assignOwner  (via /api/assignOwner)
 //
 // 기능:
@@ -23,9 +24,17 @@ exports.handler = async (event, context) => {
       return { statusCode: 405, body: "Method Not Allowed" };
     }
 
-    // 1) 호출자 검사: OWNER만 허용
-    const authHeader = event.headers.authorization || event.headers.Authorization;
-    if (!isOwner(authHeader)) {
+    // 1) 호출자 검사: 기존 OWNER 권한은 그대로 두고, Auth0 서명된 세션만 인정
+    let actor;
+    try {
+      actor = await resolveUser(event);
+    } catch (authErr) {
+      return {
+        statusCode: authErr.statusCode || 401,
+        body: JSON.stringify({ error: authErr.code || "member_token_invalid" }),
+      };
+    }
+    if (!Array.isArray(actor.roles) || !actor.roles.includes("owner")) {
       return {
         statusCode: 403,
         body: JSON.stringify({ error: "OWNER role required" }),
@@ -113,47 +122,6 @@ exports.handler = async (event, context) => {
 };
 
 // ───────────────── 헬퍼들 ─────────────────
-
-function getRolesClaimKey() {
-  const envKey = process.env.AUTH0_ROLES_CLAIM;
-  if (envKey) return envKey;
-  return "https://os.auth/roles";
-}
-
-function isOwner(authHeader) {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
-  const token = authHeader.slice("Bearer ".length).trim();
-  try {
-    const payload = decodeJwtPayload(token);
-    const claimKey = getRolesClaimKey();
-    const roles =
-      payload[claimKey] ||
-      payload["https://os0.app/roles"] ||
-      payload["roles"] ||
-      [];
-    if (!Array.isArray(roles)) return false;
-    return roles.includes("OWNER") || roles.includes("Owner");
-  } catch (e) {
-    return false;
-  }
-}
-
-function decodeJwtPayload(jwt) {
-  const parts = jwt.split(".");
-  if (parts.length < 2) throw new Error("Invalid JWT");
-  const payload = parts[1];
-  const padded = padBase64(payload.replace(/-/g, "+").replace(/_/g, "/"));
-  const json = Buffer.from(padded, "base64").toString("utf8");
-  return JSON.parse(json);
-}
-
-function padBase64(str) {
-  const pad = str.length % 4;
-  if (pad === 2) return str + "==";
-  if (pad === 3) return str + "=";
-  if (pad === 1) return str + "===";
-  return str;
-}
 
 async function getManagementToken() {
   const domain = process.env.AUTH0_DOMAIN;

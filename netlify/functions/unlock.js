@@ -1,3 +1,7 @@
+import SharedAdminAuth from "./lib/global-slot-console-auth.js";
+
+const { resolveUser } = SharedAdminAuth;
+
 // netlify/functions/unlock.js
 // env: AUTH0_DOMAIN=dev-zzc5mej3f2hgg6gw.us.auth0.com
 //      AUTH0_CLIENT_ID=<YOUR_M2M_CLIENT_ID>
@@ -5,7 +9,35 @@
 
 export async function handler(event) {
   try {
-    const email = (JSON.parse(event.body || "{}").email || "samo429425@gmail.com").trim();
+    if (event.httpMethod !== "POST") {
+      return { statusCode: 405, body: JSON.stringify({ error: "method_not_allowed" }) };
+    }
+
+    let actor;
+    try {
+      actor = await resolveUser(event);
+    } catch (authErr) {
+      return {
+        statusCode: authErr.statusCode || 401,
+        body: JSON.stringify({ error: authErr.code || "member_token_invalid" }),
+      };
+    }
+    const roles = Array.isArray(actor.roles) ? actor.roles : [];
+    if (!roles.some(role => role === "owner" || role === "admin" || role === "super_admin")) {
+      return { statusCode: 403, body: JSON.stringify({ error: "admin_role_required" }) };
+    }
+
+    let body;
+    try {
+      body = JSON.parse(event.body || "{}");
+    } catch (_error) {
+      return { statusCode: 400, body: JSON.stringify({ error: "invalid_json_body" }) };
+    }
+    const email = String(body.email || "").trim();
+    if (!email) {
+      return { statusCode: 400, body: JSON.stringify({ error: "email_required" }) };
+    }
+
     const DOMAIN = process.env.AUTH0_DOMAIN; // e.g., dev-zzc5mej3f2hgg6gw.us.auth0.com
 
     // 1) M2M token
