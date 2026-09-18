@@ -14,7 +14,7 @@ const ChannelLink = require("./social-channel-link.v1");
 const AIPolicy = require("./social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-store-v1.12.0-profile-fallback";
+  "social-candidate-store-v1.12.1-profile-fallback-media-safe";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1190,7 +1190,7 @@ function providerBrandThumbnail(platform, value) {
     const url = new URL(raw);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
     const path = (url.pathname + url.search).toLowerCase();
-    if (/\.(?:js|mjs|css|map|json|html?|xml)(?:$|[?#])/i.test(raw)) return true;
+    if (/\.(?:js|mjs|css|map|json|html?|xml|woff2?|ttf|otf|eot)(?:$|[?#])/i.test(raw)) return true;
     if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(path)) return true;
     if (platform === "instagram") {
       if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return true;

@@ -9,15 +9,20 @@
  * - Do not mutate SearchBank, Snapshot Engine, AutoMap, or front HTML.
  * - Topic preference is soft guidance, never an absolute exclusion rule.
  */
-const VERSION = "social-country-content-policy-v1.2.0-route-aware-nonpolitical-social";
+const VERSION = "social-country-content-policy-v1.3.0-broad-social-discovery";
 
 const GLOBAL_TOPICS = Object.freeze([
-  { key: "music", weight: 100, terms: ["music", "singer", "artist", "live performance", "concert", "official music"] },
-  { key: "travel", weight: 96, terms: ["travel", "tourism", "destination", "local culture", "hotel", "resort", "cruise", "outdoor", "leisure"] },
-  { key: "world", weight: 90, terms: ["world news", "international affairs", "global issue", "international organization", "science", "economy", "culture"] },
-  { key: "culture", weight: 82, terms: ["culture", "festival", "museum", "heritage", "food culture"] },
-  { key: "sports", weight: 78, terms: ["sports", "football", "golf", "outdoor sports", "major sporting event"] },
-  { key: "education", weight: 72, terms: ["education", "documentary", "learning", "technology", "science"] }
+  { key: "music", weight: 100, terms: ["music", "singer", "artist", "live performance", "concert", "official music", "new release"] },
+  { key: "travel", weight: 98, terms: ["travel", "tourism", "destination", "local culture", "hotel", "resort", "cruise", "outdoor", "leisure", "city guide"] },
+  { key: "culture", weight: 94, terms: ["culture", "festival", "museum", "heritage", "food culture", "traditional culture", "local event"] },
+  { key: "food", weight: 92, terms: ["food", "recipe", "restaurant", "cooking", "local cuisine", "cafe"] },
+  { key: "technology", weight: 90, terms: ["technology", "science", "AI", "software", "gadgets", "innovation"] },
+  { key: "entertainment", weight: 90, terms: ["entertainment", "variety show", "performance", "comedy", "movie", "drama"] },
+  { key: "design", weight: 88, terms: ["design", "interior", "architecture", "fashion", "photography", "illustration", "DIY"] },
+  { key: "wellness", weight: 86, terms: ["wellness", "health", "fitness", "beauty", "lifestyle", "family"] },
+  { key: "sports", weight: 84, terms: ["sports", "football", "golf", "outdoor sports", "major sporting event"] },
+  { key: "education", weight: 82, terms: ["education", "documentary", "learning", "technology", "science", "books"] },
+  { key: "world", weight: 76, terms: ["world news", "international affairs", "global issue", "international organization", "science", "economy", "culture"] }
 ]);
 
 const COUNTRY_OVERRIDES = Object.freeze({
@@ -28,6 +33,11 @@ const COUNTRY_OVERRIDES = Object.freeze({
       { key: "culture", weight: 100, terms: ["한국 음식", "지역 맛집", "전통문화", "지역 축제", "박물관", "문화 공연"] },
       { key: "entertainment", weight: 98, terms: ["한국 예능", "인기 공연", "건전한 엔터테인먼트", "코미디", "라이브 쇼"] },
       { key: "education", weight: 92, terms: ["한국 교육", "과학", "기술", "지식", "다큐멘터리"] },
+      { key: "food", weight: 98, terms: ["한국 음식", "맛집", "카페", "요리", "지역 먹거리"] },
+      { key: "technology", weight: 96, terms: ["한국 기술", "AI", "IT", "과학", "신제품"] },
+      { key: "design", weight: 94, terms: ["한국 패션", "인테리어", "디자인", "사진", "건축", "뷰티"] },
+      { key: "wellness", weight: 92, terms: ["건강", "운동", "웰니스", "라이프스타일", "가족"] },
+      { key: "sports", weight: 90, terms: ["한국 스포츠", "야구", "축구", "골프", "아웃도어"] },
       { key: "world", weight: 86, terms: ["국제기구", "글로벌 경제", "과학 뉴스"] }
     ]
   },
@@ -156,15 +166,15 @@ const NONPOLITICAL_SOCIAL_QUERY_PLATFORMS = new Set(["wechat", "weibo"]);
 const NONPOLITICAL_QUERY_BLOCK = /(?:politic|election|partisan|propaganda|territorial|military|world\s+news|international\s+affairs|global\s+issue|정치|선거|정당|선전|영토|군사|세계\s*뉴스|국제\s*주요\s*이슈|政治|选举|選舉|政党|政黨|宣传|宣傳|军事|軍事|领土|領土|国际\s*新闻|國際\s*新聞)/i;
 
 const PLATFORM_TOPIC_BIAS = Object.freeze({
-  youtube: ["music", "travel", "world", "education", "sports", "culture"],
-  instagram: ["travel", "music", "culture", "sports"],
-  tiktok: ["music", "travel", "culture", "sports"],
-  facebook: ["travel", "world", "culture", "music", "community"],
-  wechat: ["travel", "world", "culture", "education"],
-  weibo: ["music", "culture", "world", "travel"],
-  pinterest: ["travel", "culture", "design", "food"],
-  reddit: ["world", "technology", "travel", "music", "sports"],
-  twitter: ["world", "music", "sports", "travel"]
+  youtube: ["music", "travel", "entertainment", "education", "technology", "sports", "culture", "food"],
+  instagram: ["travel", "music", "design", "wellness", "culture", "food", "entertainment", "sports"],
+  tiktok: ["music", "entertainment", "travel", "design", "food", "wellness", "culture", "sports"],
+  facebook: ["travel", "culture", "music", "entertainment", "food", "education", "sports", "world"],
+  wechat: ["travel", "culture", "education", "food", "technology", "wellness", "music", "entertainment"],
+  weibo: ["music", "culture", "travel", "entertainment", "food", "sports", "design", "technology"],
+  pinterest: ["design", "food", "travel", "wellness", "culture", "education", "nature", "technology"],
+  reddit: ["technology", "education", "travel", "music", "sports", "culture", "food", "entertainment", "world"],
+  twitter: ["music", "travel", "culture", "technology", "education", "sports", "entertainment", "food", "world"]
 });
 
 function text(v) { return v == null ? "" : String(v).trim(); }
@@ -238,7 +248,7 @@ function topicQueries(routeOrCountry, platform, maxTerms) {
 function applyToPlatformPolicy(basePolicy, routeOrCountry, platform) {
   const base = basePolicy && typeof basePolicy === "object" ? basePolicy : {};
   const p = profile(routeOrCountry);
-  let topicTerms = topicQueries(routeOrCountry, platform, 18);
+  let topicTerms = topicQueries(routeOrCountry, platform, 24);
   let baseQueries = base.collectionQueries || [];
   if (NONPOLITICAL_SOCIAL_QUERY_PLATFORMS.has(text(platform).toLowerCase())) {
     topicTerms = topicTerms.filter((term) => !NONPOLITICAL_QUERY_BLOCK.test(text(term)));

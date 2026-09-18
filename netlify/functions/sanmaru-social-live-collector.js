@@ -19,9 +19,9 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.23.0-route-aware-diversity-recovery";
+const VERSION = "sanmaru-social-live-collector-v1.24.0-broad-registry-discovery";
 const DEFAULT_QUERY_PASSES = 1;
-const MAX_QUERY_PASSES = 2;
+const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
 const MAX_BATCH_SIZE = 12;
 const REQUEST_TIMEOUT_MS = 3800;
@@ -134,6 +134,34 @@ const DISCOVERY_INTENT_TERMS = Object.freeze([
   "useful trusted official creator",
   "popular culture travel education performance",
 ]);
+const SPARSE_PLATFORM_DISCOVERY_TERMS = Object.freeze({
+  wechat: [
+    "travel tourism destination", "music live performance", "culture museum heritage",
+    "food restaurant local cuisine", "education science technology", "art design photography",
+    "nature outdoor wellness", "family entertainment lifestyle"
+  ],
+  weibo: [
+    "travel tourism destination", "music singer live performance", "culture art museum",
+    "food local cuisine", "entertainment variety performance", "education science technology",
+    "sports outdoor", "nature photography lifestyle"
+  ],
+  pinterest: [
+    "travel ideas destination", "food recipes", "interior design", "fashion style",
+    "beauty wellness", "art illustration", "photography", "DIY crafts",
+    "architecture", "education ideas", "nature outdoors", "home lifestyle"
+  ],
+  reddit: [
+    "travel community", "music community", "technology discussion", "science learning",
+    "education", "food cooking", "photography", "culture", "Korea community",
+    "gaming", "sports", "movies books", "DIY", "nature outdoors"
+  ],
+  twitter: [
+    "music artist creator", "travel creator", "culture art", "science technology",
+    "education learning", "sports", "entertainment", "food", "photography",
+    "nature outdoors", "museum heritage", "lifestyle creator", "Korea creator"
+  ]
+});
+const SPARSE_DISCOVERY_PLATFORMS = new Set(Object.keys(SPARSE_PLATFORM_DISCOVERY_TERMS));
 
 const REGISTRY_QUALITY_FOCUS = Object.freeze({
   wechat: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education",
@@ -606,7 +634,9 @@ function scopedQueries(plan, cursor, passes, route) {
     // of relying only on literal platform/category phrases. Safety is still
     // enforced later by the existing hard-block, AI-policy and safe-search gates.
     const discoveryIntent = DISCOVERY_INTENT_TERMS[absoluteIndex % DISCOVERY_INTENT_TERMS.length];
-    queries.push([baseQuery, discoveryIntent, countryQueryTerm(route), languageQueryTerm(route)].filter(Boolean).join(" "));
+    const sparseTerms = SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || [];
+    const sparseTerm = sparseTerms.length ? sparseTerms[absoluteIndex % sparseTerms.length] : "";
+    queries.push([baseQuery, sparseTerm, discoveryIntent, countryQueryTerm(route), languageQueryTerm(route)].filter(Boolean).join(" "));
   }
   return Array.from(new Set(queries));
 }
@@ -1090,14 +1120,51 @@ function decodeSearchRedirectTarget(rawValue) {
 function searchResultUrl(value) {
   return decodeSearchRedirectTarget(value);
 }
-function publicSearchQuery(plan, queryText) {
-  const cfg = PUBLIC_POST_SEARCH[plan && plan.platform] || {};
+function registrySearchNeedle(seed, platform) {
+  if (!seed) return "";
+  const handle = SocialStore.text(seed.handle).replace(/^@/, "");
+  const title = SocialStore.text(seed.title).replace(/["']/g, " ");
+  let pathToken = "";
+  try {
+    const url = new URL(SocialStore.text(seed.url));
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (platform === "reddit") {
+      const r = parts.findIndex((part) => /^r$/i.test(part));
+      const u = parts.findIndex((part) => /^(?:u|user)$/i.test(part));
+      pathToken = r >= 0 && parts[r + 1] ? "r/" + parts[r + 1] :
+        (u >= 0 && parts[u + 1] ? "user/" + parts[u + 1] : "");
+    } else {
+      pathToken = parts[0] || "";
+    }
+  } catch (_error) {}
+  return firstText([handle, pathToken, title]);
+}
+function publicSearchQuery(plan, queryText, registrySeed) {
+  const platform = plan && plan.platform;
+  const cfg = PUBLIC_POST_SEARCH[platform] || {};
   const base = SocialStore.text(queryText)
     .replace(/\bsite:[^\s)]+/gi, " ")
     .replace(/\binurl:[^\s)]+/gi, " ")
     .replace(/[()]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  const needle = registrySearchNeedle(registrySeed, platform);
+  const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
+  if (platform === "twitter") {
+    return [base, exact, "site:x.com", "status", "latest public post"].filter(Boolean).join(" ");
+  }
+  if (platform === "pinterest") {
+    return [base, exact, "site:pinterest.com/pin", "latest public pin"].filter(Boolean).join(" ");
+  }
+  if (platform === "reddit") {
+    return [base, exact, "site:reddit.com", "comments latest public post"].filter(Boolean).join(" ");
+  }
+  if (platform === "weibo") {
+    return [base, exact, "site:weibo.com", "latest public post"].filter(Boolean).join(" ");
+  }
+  if (platform === "wechat") {
+    return [base, exact, "site:mp.weixin.qq.com/s", "latest public article"].filter(Boolean).join(" ");
+  }
   return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"]
     .filter(Boolean).join(" ");
 }
@@ -1174,11 +1241,11 @@ function htmlPublicPostItems(html, plan, provider) {
   }
   return out;
 }
-async function directPublicPostSearch(plan, queryText, limit) {
+async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
   if (!plan || plan.platform === "youtube") {
     return { provider: "direct-public-post-search", status: "not_needed", items: [] };
   }
-  const q = publicSearchQuery(plan, queryText);
+  const q = publicSearchQuery(plan, queryText, registrySeed);
   const wanted = Math.max(1, Math.min(30, Number(limit || 10) || 10));
   const headers = {
     Accept: "text/html,application/rss+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -1260,6 +1327,21 @@ function providerRelativePostUrls(platform, html, baseUrl, limit) {
     const shortcodeRe = /"shortcode"\s*:\s*"([A-Za-z0-9_-]{5,30})"/g;
     while ((match = shortcodeRe.exec(source)) && out.length < max) {
       accept("https://www.instagram.com/p/" + match[1] + "/");
+    }
+  }
+  // Dynamic X/Pinterest pages frequently keep post links only in escaped JSON.
+  // Recover those bounded identifiers, then let the strict contentKind gate
+  // validate the reconstructed provider URL.
+  if (platform === "twitter" && out.length < max) {
+    const statusRe = /(?:\\u002f|\\\/|\/)([A-Za-z0-9_]{1,30})(?:\\u002f|\\\/|\/)status(?:\\u002f|\\\/|\/)(\d{5,})/gi;
+    while ((match = statusRe.exec(source)) && out.length < max) {
+      accept("https://x.com/" + match[1] + "/status/" + match[2]);
+    }
+  }
+  if (platform === "pinterest" && out.length < max) {
+    const pinRe = /(?:\\u002f|\\\/|\/)pin(?:\\u002f|\\\/|\/)(\d{5,})/gi;
+    while ((match = pinRe.exec(source)) && out.length < max) {
+      accept("https://www.pinterest.com/pin/" + match[1] + "/");
     }
   }
   return out;
@@ -1584,17 +1666,17 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
           providers = providers.concat([broad]);
         }
         if (!hasActualPost(providers) || diversityRescue) {
-          const rescue = await directPublicPostSearch(plan, queryText, limit);
+          const rescue = await directPublicPostSearch(plan, queryText, limit, registrySeed);
           providers = providers.concat([rescue]);
         }
       } else if (!hadActualPost) {
         const rescuePair = await Promise.all([
           maruUnfilteredSearchOne(event, plan, queryText, limit, language, start),
-          directPublicPostSearch(plan, queryText, limit)
+          directPublicPostSearch(plan, queryText, limit, registrySeed)
         ]);
         providers = providers.concat(rescuePair);
       } else {
-        const rescue = await directPublicPostSearch(plan, queryText, limit);
+        const rescue = await directPublicPostSearch(plan, queryText, limit, registrySeed);
         providers = providers.concat([rescue]);
       }
     }
@@ -2642,6 +2724,8 @@ exports.handler = async function(event) {
       providerGroupCount: PROVIDER_GROUP_COUNT,
       searchStart,
       qualitySweep,
+      broadDiscovery: SPARSE_DISCOVERY_PLATFORMS.has(plan.platform),
+      broadDiscoveryTermCount: (SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || []).length,
       registryTargeted: scoped.targeted,
       registrySeedCount: registrySeeds.length,
       registrySeed: scoped.seed ? {

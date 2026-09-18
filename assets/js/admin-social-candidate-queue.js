@@ -1798,7 +1798,9 @@
       sectionKey: section,
       limit: j.batchSize,
       batchSize: j.batchSize,
-      queryPasses: j.qualitySweepActive ? 2 : 1,
+      queryPasses: j.qualitySweepActive
+        ? (/^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section) ? 3 : 2)
+        : (/^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section) ? 2 : 1),
       queryCursor: j.queryCursor || 0,
       countryCode: j.countryCode || "",
       regionId: j.regionId || "",
@@ -1952,7 +1954,7 @@
       newlyFound: 0,
       emptyBatches: 0,
       qualitySweepBatches: 0,
-      qualitySweepTarget: 6,
+      qualitySweepTarget: /^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section) ? 8 : 6,
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
