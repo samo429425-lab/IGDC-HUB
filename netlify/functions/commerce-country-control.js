@@ -130,7 +130,7 @@ exports.handler=async function(event){
         return json(200,await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null));
       }
       const confirmation=operation==="unmatch"?"SITE_UNPUBLISH":"SITE_PUBLISH";
-      const refreshResult=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:operation==="unmatch"?"unmatch":"refresh",confirmation:text(body.confirmation)||confirmation,candidateId:candidateIds[0]||null,candidateCount:Math.max(1,Number(body.changedCount)||candidateIds.length||1)},scope);
+      const refreshResult=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:operation==="unmatch"?"unmatch":"refresh",confirmation:text(body.confirmation)||confirmation,candidateId:candidateIds[0]||null,candidateIds,candidateCount:Math.max(1,Number(body.changedCount)||candidateIds.length||1)},scope);
       return json(200,await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:operation==="unmatch"?"unmatch":"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),refreshResult,null));
     }
     if(action==="product_front_match"||action==="product_front_unmatch"){
