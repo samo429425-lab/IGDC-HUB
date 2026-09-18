@@ -190,9 +190,10 @@ async function scopedLiveProductResearchQueue(country,region,limit){
     return {ok:relationErrors.length===0,rows:output,storageError:null,relationErrors};
   }catch(error){return {ok:false,rows:[],storageError:text(error&&error.message||error),relationErrors:[]};}
 }
-async function scopedStage(root,country,region){
+async function scopedStage(root,country,region,limitInput){
   const stored=CommerceIntake.readStage(root)||{schema:"commerce-candidate-staging.snapshot.v1",summary:{considered:0},candidates:[]};
-  const storedScoped=filteredStage(stored,country,region),live=await scopedLiveProductResearchQueue(country,region,3000),merged=new Map();
+  const scopedLimit=Math.max(100,Math.min(3000,Number(limitInput)||3000));
+  const storedScoped=filteredStage(stored,country,region),live=await scopedLiveProductResearchQueue(country,region,scopedLimit),merged=new Map();
   for(const row of Array.isArray(storedScoped.candidates)?storedScoped.candidates:[])merged.set(text(row&&row.candidateId),row);
   for(const row of live.rows||[])merged.set(text(row&&row.candidateId),row);
   const candidates=Array.from(merged.values()).filter(Boolean),eligible=candidates.filter((row)=>row&&row.releaseEligible===true).length,registrySyncReady=candidates.filter((row)=>text(row&&row.stageStatus)==="registry_sync_ready"||text(row&&row.lifecycle&&row.lifecycle.stage)==="registry_sync_ready").length;
@@ -627,6 +628,7 @@ async function decide(member, body){
 exports.buildDiagnostic=diagnosticDoc;
 exports.candidateLifecycle=candidateLifecycle;
 exports.stage=stage;
+exports.scopedStage=scopedStage;
 exports.handler=async function(event){
   try{
     if(String(event&&event.httpMethod||"GET").toUpperCase()==="OPTIONS")return json(204,{});
@@ -645,7 +647,8 @@ exports.handler=async function(event){
       const probe=geoProbe(event);const requested=text(query.country).toUpperCase();
       const scopeCountry=requested||(probe.resolved?probe.country:"UNRESOLVED");
       const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
-      const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion);
+      const stageLimit=action==="diagnostic"?600:(action==="summary"?800:3000);
+      const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion,stageLimit);
       if(action==="dashboard"){
         const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,3000)};
         if(!["1","true","yes"].includes(lower(query.compact)))response.diagnostic=diagnosticDoc(doc,member);
