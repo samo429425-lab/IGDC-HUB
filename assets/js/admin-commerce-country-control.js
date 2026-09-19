@@ -262,9 +262,10 @@
     queueFocusedCandidateIds=ids.slice(0,3000);
     try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}catch(_refreshError){}
     ids.forEach(function(id){candidateSelectedProducts[text(id)]=true;});
-    await runProductAiAutomation('products','',ids);
-    try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}catch(_refreshError2){}
-    show('선택 상품 '+ids.length+'건의 AI 18개 섹션 자동배치를 요청했습니다. 배치 결과는 18개 섹션 배치 예정 상품 목록에서 확인할 수 있습니다.','ok');
+    var result=await autoPlaceSelectedCandidateLedger('queue_selected',ids);
+    ids.forEach(function(id){delete candidateSelectedProducts[id];});
+    saveReviewSnapshot();
+    show('선택 상품 '+result.requested+'건 · AI 추천 섹션 배치 '+result.processed+'건 · 추천 부족 '+result.unassigned+'건 · 실패 '+result.failed+'건',result.failed?'warn':'ok');
   }
   async function runSelectedQueueManualPlacement(){
     var ids=selectedQueueIds(),placement=text($('queueSelectedManualSection')&&$('queueSelectedManualSection').value);
@@ -302,7 +303,8 @@
     if(!panel)return;panel.classList.remove('hidden');if(!sameScope)panel.open=false;if($('queueSummary'))$('queueSummary').textContent=queueCandidateRows.length+'건';syncQueueToggleLabel();if(panel.open)renderQueueRows();else if($('queueRows'))$('queueRows').innerHTML='';
   }
 
-  function candidateLedgerFrontStatus(row){var life=row&&row.lifecycle||{},assignment=life.assignment||{},status=text(assignment.publicationStatus||assignment.publication_status).toLowerCase();if(!status||status==='audit_ready')return null;return{schema:'igdc-product-front-publication-control.v1',candidateId:text(row&&row.candidateId),status:status,queued:status==='publish_requested',persisted:true,pendingBuild:false,publicSnapshotConfirmed:false};}
+  function candidateLedgerFrontStatus(row){var life=row&&row.lifecycle||{},assignment=row&&row.frontAssignment||life.assignment||{},status=text(assignment.publicationStatus||assignment.publication_status).toLowerCase();if(!status||status==='audit_ready')return null;return{schema:'igdc-product-front-publication-control.v1',candidateId:text(row&&row.candidateId),status:status,queued:status==='publish_requested',persisted:true,pendingBuild:false,publicSnapshotConfirmed:false,page:text(assignment.hubKey||assignment.hub_key||assignment.page),section:text(assignment.slotKey||assignment.slot_key||assignment.section),country:text(assignment.countryCode||assignment.country_code),region:text(assignment.regionCode||assignment.region_code||'NATIONWIDE')};}
+  function frontPublicationSectionKey(row){var front=row&&row.frontPublication||{},key=sectionKeyOf(front);return PRODUCT_SECTION_MAP[key]?key:'';}
   function candidateLedgerProductRow(row){
     row=row||{};var rr=row.researchReadiness||{},card=(row.productCard&&row.productCard.checkoutUrl)?row.productCard:(rr.productCard||row.productCard||{}),supplier=row.supplier||{},placement=row.placement||{},stage=text(row.stageStatus).toLowerCase(),page=text(placement.page),section=text(placement.section||placement.sectionKey),key=page&&section?page+'|'+section:'',decision='undecided';
     if(stage==='held'||stage==='hold')decision='hold';else if(stage==='rejected'||stage==='reject'||stage==='suppressed')decision='reject';else if(key&&PRODUCT_SECTION_MAP[key]&&stage!=='administrator_selection_pending')decision='slot_candidate';
@@ -639,12 +641,27 @@
   }
   function selectedCandidateIds(groupKey){var valid={};candidateGroupRows(groupKey).forEach(function(row){valid[text(row.id)]=true;});return Object.keys(candidateSelectedProducts).filter(function(id){return candidateSelectedProducts[id]===true&&valid[id];});}
   function syncCandidateSelectionControls(groupKey){var rows=candidateGroupRows(groupKey),ids=selectedCandidateIds(groupKey),safeKey=groupKey.replace(/[^a-z0-9_-]/gi,'_'),all=$('candidateSelectAll-'+safeKey),count=$('candidateSelectedCount-'+safeKey),busy=productAutomationActive||productFrontSyncActive,selectedMap={};ids.forEach(function(id){selectedMap[id]=true;});if(all){all.checked=rows.length>0&&ids.length===rows.length;all.indeterminate=ids.length>0&&ids.length<rows.length;all.disabled=busy||!rows.length;}Array.prototype.forEach.call(document.querySelectorAll('[data-candidate-select]'),function(box){if(box.getAttribute('data-candidate-select')===groupKey)box.checked=selectedMap[text(box.value)]===true;});if(count)count.textContent='선택 후보 '+ids.length+'건';Array.prototype.forEach.call(document.querySelectorAll('[data-candidate-group="'+groupKey+'"]'),function(button){button.disabled=busy||!ids.length;});}
+  function aiRecommendedCandidatePlacement(row,counts){
+    var options=(Array.isArray(row&&row.sectionAssignments)?row.sectionAssignments:[]).map(function(item){return{key:sectionKeyOf(item),score:Number(item&&item.score||item&&item.rankScore||item&&item.rankingScore||0)};}).filter(function(entry){return PRODUCT_SECTION_MAP[entry.key];}).sort(function(a,b){return b.score-a.score;});
+    var preferred=candidatePlacementKey(row);if(PRODUCT_SECTION_MAP[preferred]&&!options.some(function(entry){return entry.key===preferred;}))options.unshift({key:preferred,score:999999});
+    for(var i=0;i<options.length;i++){if(Number(counts[options[i].key]||0)<100)return options[i].key;}
+    return'';
+  }
+  async function autoPlaceSelectedCandidateLedger(groupKey,ids){
+    ids=Array.from(new Set((ids||[]).map(text).filter(Boolean)));if(!ids.length)return{requested:0,processed:0,failed:0,unassigned:0};
+    var rows=candidateGroupRows(groupKey).filter(function(row){return ids.indexOf(text(row&&row.id))>=0;}),counts=productSectionCounts(),groups={},unassigned=[];
+    rows.forEach(function(row){var key=aiRecommendedCandidatePlacement(row,counts),candidateId=text(row&&row.candidateId||row&&row.id);if(!candidateId||!key){unassigned.push(candidateId||text(row&&row.id));return;}counts[key]=Number(counts[key]||0)+1;(groups[key]||(groups[key]=[])).push(candidateId);});
+    var processed=0,failed=0;
+    for(var key of Object.keys(groups)){for(var off=0;off<groups[key].length;off+=100){var chunk=groups[key].slice(off,off+100);try{var result=await api(CONTROL,'product_candidate_ledger_bulk_action','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:chunk,decision:'slot_candidate',placementKey:key},45000);processed+=Number(result&&result.processed||0);failed+=Number(result&&result.failed||0);}catch(_error){failed+=chunk.length;}}}
+    await refreshCandidateLedgerProducts({preserveResearchReport:true});
+    return{requested:ids.length,processed:processed,failed:failed,unassigned:unassigned.length};
+  }
   async function runCandidateBulkAction(groupKey,action){
     var ids=selectedCandidateIds(groupKey);if(!ids.length){show('먼저 처리할 후보를 선택해 주세요.','warn');return;}
     var placement='',select=document.querySelector('[data-candidate-target="'+groupKey+'"]');
     if(action==='place'){placement=text(select&&select.value);if(!PRODUCT_SECTION_MAP[placement]){show('수동 배치할 18개 섹션을 선택해 주세요.','warn');return;}}
     if((action==='hold'||action==='reject'||action==='purge'||action==='list_delete')&&!window.confirm('선택한 후보 '+ids.length+'건을 '+(action==='hold'?'보류':action==='purge'?'영구 제외':action==='list_delete'?'현재 후보 관리 목록에서만 제거':'제외')+' 처리합니다. 프론트 공개·빌드는 실행하지 않습니다. 계속할까요?'))return;
-    if(action==='ai'){await runProductAiAutomation('products','',ids);var stillVisible={};candidateGroupRows(groupKey).forEach(function(row){stillVisible[text(row.id)]=true;});ids.forEach(function(id){if(!stillVisible[id])delete candidateSelectedProducts[id];});saveReviewSnapshot();syncCandidateSelectionControls(groupKey);return;}
+    if(action==='ai'){var aiResult=await autoPlaceSelectedCandidateLedger(groupKey,ids);ids.forEach(function(id){delete candidateSelectedProducts[id];});saveReviewSnapshot();syncCandidateSelectionControls(groupKey);show('선택 후보 '+aiResult.requested+'건 · AI 추천 섹션 배치 '+aiResult.processed+'건 · 추천 부족 '+aiResult.unassigned+'건 · 실패 '+aiResult.failed+'건',aiResult.failed?'warn':'ok');return;}
     var selectedRows=candidateGroupRows(groupKey).filter(function(row){return ids.indexOf(text(row&&row.id))>=0;}),ledgerRows=selectedRows.filter(function(row){return row&&row.ledgerSource==='candidate';});
     var succeeded=0,failed=0;
     try{
@@ -1024,9 +1041,12 @@
     // the controls behave as one chained action instead of separate commands.
     var unmatch=operation==='unmatch',sectionMode=mode==='section',sectionsMode=mode==='sections',candidateMode=mode==='candidate',candidatesMode=mode==='candidates',selectedSections=sectionsMode?(Array.isArray(selection)?selection:[]):[],selectedProducts=candidatesMode?(Array.isArray(selection)?selection:[]):[],selectedProduct=candidateMode?productById(productId):null,label=candidateMode?(text(selectedProduct&&selectedProduct.productName||selectedProduct&&selectedProduct.title||productId)+' · 상품 1건'):(candidatesMode?'선택 상품 '+selectedProducts.length+'건':(sectionsMode?(selectedSections.length===1?sectionLabel(selectedSections[0]):'선택 섹션 '+selectedSections.length+'개'):(sectionMode?sectionLabel(sectionKey):'18개 전체 섹션'))),confirmation=unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH';
     if(sectionsMode&&!selectedSections.length){show('매칭할 섹션을 먼저 선택해 주세요.','warn');return;}if(candidatesMode&&!selectedProducts.length){show('매칭할 상품을 먼저 선택해 주세요.','warn');return;}
-    var replacementRun=!unmatch&&(mode==='all'||sectionMode||sectionsMode),pendingManagement=unmatch?[]:pendingFrontManagementChanges(mode,sectionKey,productId,selection),selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
+    var replacementRun=!unmatch&&(mode==='all'||sectionMode||sectionsMode),replacementScopeKeys=replacementRun?(mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice())):[],replacementScopeMap={},pendingManagement=unmatch?[]:pendingFrontManagementChanges(mode,sectionKey,productId,selection),selectedProductMap={};replacementScopeKeys.forEach(function(key){replacementScopeMap[key]=true;});selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
+    var staleFrontIds=replacementRun?Array.from(new Set(productRows.filter(function(row){if(!frontPublicationActive(row))return false;var frontKey=frontPublicationSectionKey(row),adminKey=assignedSectionKey(row),decision=productDecision(row),inScope=mode==='all'?true:!!replacementScopeMap[frontKey];return inScope&&(decision!=='slot_candidate'||!adminKey||(frontKey&&frontKey!==adminKey));}).map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean))):[];
     var targetRows=productRows.filter(function(row){
-      var key=assignedSectionKey(row),id=text(row&&row.id),placed=productDecision(row)==='slot_candidate'&&!!key;
+      var key=assignedSectionKey(row),id=text(row&&row.id),candidateId=text(row&&row.candidateId||row&&row.id),placed=productDecision(row)==='slot_candidate'&&!!key;
+      if(unmatch&&candidateMode)return id===text(productId)||candidateId===text(productId);
+      if(unmatch&&candidatesMode)return selectedProductMap[id]===true||selectedProductMap[candidateId]===true;
       // The 18-section board owns only rows that still have a valid placement.
       // Match and unmatch are publication controls, not assignment controls:
       // matching requires a placed row; unmatching requires that same placed
@@ -1071,12 +1091,26 @@
         targetIds=Array.from(new Set(targetRows.map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean)));
       }
       var action=unmatch?'product_front_unmatch':'product_front_match',batches=[];
+      if(replacementRun&&staleFrontIds.length){
+        if(state){state.className='front-sync-state running';state.textContent=label+' · 관리자 배치와 다른 기존 프론트 '+staleFrontIds.length+'건을 먼저 해제합니다.';}
+        for(var staleOffset=0;staleOffset<staleFrontIds.length;staleOffset+=batchSize){
+          var staleBatch=staleFrontIds.slice(staleOffset,staleOffset+batchSize);
+          try{
+            var stalePart=await requestFrontBatch(staleBatch,'product_front_unmatch'),staleResult=stalePart.frontSyncResult||{},staleRefresh=staleResult.refresh||{};
+            aggregate.withdrawn+=Math.max(staleBatch.length,Number(staleRefresh.withdrawn||staleRefresh.withdrawRequested||0));
+            staleBatch.forEach(function(id){if(id)changedMap[text(id)]=true;});
+          }catch(staleError){
+            aggregate.batchErrors.push({offset:'stale-unmatch-'+staleOffset,candidateIds:staleBatch.slice(),message:text(staleError&&staleError.message)||'stale_front_unmatch_failed'});
+          }
+        }
+        if(aggregate.batchErrors.length)throw new Error('기존 프론트 해제 중 오류가 발생해 관리자 기준 치환을 중단했습니다. 기존 프론트를 보존합니다.');
+      }
       for(var offset=0;offset<targetIds.length;offset+=batchSize)batches.push({offset:offset,ids:targetIds.slice(offset,offset+batchSize)});
       var nextBatch=0;
-      async function requestFrontBatch(batch){
-        var lastError=null;
+      async function requestFrontBatch(batch,actionOverride){
+        var lastError=null,useAction=actionOverride||action,useConfirmation=useAction==='product_front_unmatch'?'SITE_UNPUBLISH':confirmation;
         for(var attempt=0;attempt<2;attempt++){
-          try{return await api(CONTROL,action,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:confirmation,deferRelease:true,scopeRefresh:false,compactResponse:true,reuseFreshValidation:true,freshValidationMinutes:720},requestTimeout);}
+          try{return await api(CONTROL,useAction,'POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',mode:'candidates',candidateIds:batch,ledgerMode:'candidate',confirmation:useConfirmation,deferRelease:true,scopeRefresh:false,compactResponse:true,reuseFreshValidation:true,freshValidationMinutes:720},requestTimeout);}
           catch(error){lastError=error;if(!isGatewayDelay(error)||attempt>0)throw error;if(state){state.className='front-sync-state running';state.textContent=label+' · 일시적인 게이트웨이 지연을 감지했습니다. 저장 원장을 버리지 않고 같은 묶음을 1회 재확인합니다.';}await new Promise(function(resolve){setTimeout(resolve,1200);});}
         }
         throw lastError||new Error('front_batch_failed');
