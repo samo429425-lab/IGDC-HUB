@@ -127,14 +127,18 @@
   }
   function contentHref(id){ return id ? ("/content.html?id=" + encodeURIComponent(id)) : ""; }
   function resolveItemHref(item){
-    // A Tour product with an IGDC id opens the local content detail first.  The
-    // external booking/seller destination remains available from that detail.
-    if (item && item.id) return contentHref(item.id);
+    // Tour right-panel cards must go straight to the verified booking/seller
+    // destination when one exists.  Canonical IP snapshots always carry a
+    // stable IGDC id, so preferring the id here forced every real Tour card
+    // through /content.html first; vendors that block framing then surfaced as
+    // a blank/broken page inside the hub.  Keep the IGDC detail route only as
+    // a fallback for cards that do not yet have a usable external destination.
     const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     const link = item && item.link;
-    if (isBadUrl(link) || isExampleUrl(link)) return "";
-    return link || "";
+    if (link && !isBadUrl(link) && !isExampleUrl(link)) return link;
+    if (item && item.id) return contentHref(item.id);
+    return "";
   }
 
   function normalizeItems(raw) {
