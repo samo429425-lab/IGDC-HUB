@@ -3577,7 +3577,7 @@ async function productCandidateLedgerAction(actorId, input) {
     try { const removed=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId)); assignmentCleanup={ok:true,count:array(removed).length}; }
     catch (error) { assignmentCleanup={ok:false,error:text(error&&error.message)||"assignment_release_failed"}; }
     delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement;
-    payload.frontPublication = Object.assign({}, plain(payload.frontPublication), { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"unmatch", status:"deferred_section_release", queued:false, persisted:true, pendingBuild:true, publicSnapshotConfirmed:false, buildVerificationRequired:true, deferredBuild:true, requestedAt:now, requestedBy:actor });
+    payload.frontPublication = Object.assign({}, plain(payload.frontPublication), { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"unmatch", status:"unpublish_requested", queued:false, persisted:true, pendingBuild:true, publicSnapshotConfirmed:false, buildVerificationRequired:true, deferredBuild:true, reason:"administrator_section_release", requestedAt:now, requestedBy:actor });
   }
   payload.decisionAt = now; payload.decisionBy = actor; payload.decisionSource = "candidate_ledger_control"; payload.publicPublication = false; payload.automaticImport = false;
   if (decision !== "affiliate_settlement") payload.review = Object.assign({}, plain(payload.review), { state: decision === "remove_from_list" ? "removed_from_list" : (effectiveDecision === "slot_candidate" ? "pending" : effectiveDecision), decidedAt: now, decidedBy: actor });
