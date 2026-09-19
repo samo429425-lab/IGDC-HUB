@@ -250,6 +250,29 @@
         <label class="supplier-select-label"><input id="queueSelectAll" type="checkbox" data-queue-select-all> 전체 선택</label>
         <span id="queueSelectedCount" class="supplier-selection-count">선택 0건</span>
         <button id="queueOpenInProductManagerBtn" type="button" disabled>선택 상품 관리목록에서 보기</button>
+        <button id="queueSelectedAiPlaceBtn" type="button" disabled>선택 상품 AI로 18개 섹션 자동배치</button>
+        <select id="queueSelectedManualSection" class="product-management-select">
+          <option value="">수동 배치 섹션 선택</option>
+          <option value="home|home_1">홈 · home_1</option>
+          <option value="home|home_2">홈 · home_2</option>
+          <option value="home|home_3">홈 · home_3</option>
+          <option value="home|home_4">홈 · home_4</option>
+          <option value="home|home_5">홈 · home_5</option>
+          <option value="home|home_right_top">홈 · 우측 상단 (자동차·웹툰·패션)</option>
+          <option value="home|home_right_middle">홈 · 우측 중단 (푸드·리빙·책방)</option>
+          <option value="home|home_right_bottom">홈 · 우측 하단 (지식·건강·기타)</option>
+          <option value="distribution|distribution-recommend">유통 · 오늘의 추천</option>
+          <option value="distribution|distribution-sponsor">유통 · 스폰서</option>
+          <option value="distribution|distribution-trending">유통 · 실시간 인기</option>
+          <option value="distribution|distribution-new">유통 · 신규</option>
+          <option value="distribution|distribution-special">유통 · 특별</option>
+          <option value="distribution|distribution-others">유통 · 기타</option>
+          <option value="distribution|distribution-right">유통 · 우측</option>
+          <option value="network|network-right">네트워크 · 우측</option>
+          <option value="social|rightPanel">소셜 · 우측</option>
+          <option value="tour|tour">투어 · 우측</option>
+        </select>
+        <button id="queueSelectedManualPlaceBtn" type="button" class="secondary" disabled>선택 상품 수동배치</button>
         <button type="button" class="secondary" data-queue-bulk="dismiss" disabled>선택 삭제·재수집 허용</button>
         <button type="button" class="danger" data-queue-bulk="purge" disabled>선택 영구 제외</button>
         <button type="button" class="ghost" data-queue-bulk="remove_from_list" disabled>선택 목록에서만 제거</button>
@@ -460,7 +483,7 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260919-queue-controls1"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260919-queue-transfer2"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
 </body>

@@ -239,6 +239,70 @@
     return fallback || 'commerce';
   }
 
+  const TOUR_PRODUCT_ID_QUERY_KEYS = new Set([
+    'goodsno','goods_no','goodsid','goods_id','productno','product_no','productid','product_id',
+    'itemno','item_no','itemid','item_id','prdno','prd_no','sku','skuid','code','idx','no',
+    'hotelid','hotel_id','roomid','room_id','activityid','activity_id','tourid','tour_id',
+    'ticketid','ticket_id','packageid','package_id','bookingid','booking_id','offerid','offer_id'
+  ]);
+
+  function isTourContext(item, ctx){
+    const page = String((ctx && ctx.page) || pick(item, ['page','hub','channel']) || '').toLowerCase();
+    return page === 'tour';
+  }
+
+  function isSpecificTourExternalUrl(value){
+    const raw = usableUrl(value);
+    if (!raw) return false;
+    try {
+      const url = new URL(raw, window.location.origin);
+      if (!/^https?:$/i.test(url.protocol) || !url.hostname) return false;
+      const path = decodeURIComponent(url.pathname || '/').replace(/\/+$/, '') || '/';
+      const lowPath = path.toLowerCase();
+      const queryHasProductId = Array.from(url.searchParams.entries()).some(function(pair){
+        return TOUR_PRODUCT_ID_QUERY_KEYS.has(String(pair[0] || '').toLowerCase()) && String(pair[1] || '').trim();
+      });
+      if (queryHasProductId) return true;
+      if (path === '/') return false;
+      if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|best|event|events|home|main|travel|shop|store|list)(?:\/|$)/i.test(lowPath)) return false;
+      if (/\/(?:products?|items?|goods|detail|offers?|activities|activity|attractions?|experiences?|tours?|tickets?|hotels?|resorts?|rooms?|stays?|cruises?|packages?|properties?|restaurants?|dining|reservation|car-rental|cars)\/[^/?#]{2,}/i.test(lowPath)) return true;
+      if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|hotel-detail|hotel-information)\/[^/?#]{1,}/i.test(lowPath)) return true;
+      const last = path.split('/').filter(Boolean).pop() || '';
+      return /\d{3,}/.test(last);
+    } catch(e) { return false; }
+  }
+
+  function nestedTourExternalUrl(item){
+    const rr = item && item.researchReadiness && typeof item.researchReadiness === 'object' ? item.researchReadiness : null;
+    const sources = [
+      item && item.productCard,
+      rr && rr.productCard,
+      item && item.directCommerceListing,
+      item && item.brokerageContract
+    ];
+    for (const source of sources) {
+      if (!source || typeof source !== 'object') continue;
+      const value = pick(source, ['checkoutUrl','paymentUrl','purchaseUrl','orderUrl','externalProductUrl','officialProductUrl','productUrl','productPageUrl','detailUrl','destinationUrl','url','href','link']);
+      if (isSpecificTourExternalUrl(value)) return usableUrl(value);
+    }
+    return '';
+  }
+
+  function preferredTourExternalUrl(item){
+    if (!item || typeof item !== 'object') return '';
+    const keys = [
+      'checkoutUrl','paymentUrl','purchaseUrl','orderUrl',
+      'externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','productLink','displayUrl',
+      'affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url',
+      'url','href','link','contentUrl','pageUrl'
+    ];
+    for (const key of keys) {
+      const value = pick(item, [key]);
+      if (isSpecificTourExternalUrl(value)) return usableUrl(value);
+    }
+    return nestedTourExternalUrl(item);
+  }
+
   function normalizeContent(item, ctx, index, fallbackType){
     const id = (ctx && ctx.matchedId) || stableIdForItem(item || {}, ctx || {}, index || 0);
     const title = pick(item, ['title','name','label','caption']) || id;
@@ -254,7 +318,8 @@
     // has already verified the explicit non-PG contract. Ordinary seller URLs
     // keep their original visit behavior and are never converted by default.
     const affiliateOutboundUrl = usableUrl(pick(item, ['affiliateOutboundUrl','affiliate_outbound_url']));
-    const externalUrl = affiliateOutboundUrl || usableUrl(
+    const tourExternalUrl = isTourContext(item, ctx) ? preferredTourExternalUrl(item) : '';
+    const externalUrl = tourExternalUrl || affiliateOutboundUrl || usableUrl(
       pick(item, ['checkoutUrl','paymentUrl','productUrl','purchaseUrl','orderUrl','detailUrl','contentUrl','pageUrl','url','href','link']) ||
       (item && item.detail && pick(item.detail, ['detailUrl','url'])) ||
       ''
