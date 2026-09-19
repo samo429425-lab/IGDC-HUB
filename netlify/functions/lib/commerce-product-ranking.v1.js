@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.15.0-production-profitability-priority";
+const VERSION = "commerce-product-ranking-v1.15.1-tour-offer-detail-route";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -329,7 +329,7 @@ function isSpecificProductUrl(value) {
     // Treat only paths with an actual detail segment after the service family
     // as specific; generic /hotel, /tour, /activity list pages stay excluded.
     const travelDetail = /\/(?:hotels?|resorts?|rooms?|stays?|cruises?|packages?)\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?[^/?#]{2,}(?:\.html?)?$/i.test(path) ||
-      /\/(?:activity|activities|attraction|attractions|experience|experiences|tour|tours|ticket|tickets|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting)\/[^/?#]{2,}(?:\/[^/?#]{1,})?/i.test(path) ||
+      /\/(?:activity|activities|attraction|attractions|experience|experiences|offer|offers|tour|tours|ticket|tickets|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting)\/[^/?#]{2,}(?:\/[^/?#]{1,})?/i.test(path) ||
       /\/(?:restaurants?|dining|cafes?|bistro|menu|reservation)\/[^/?#]{2,}(?:\/[^/?#]{1,})?/i.test(path) ||
       /\/(?:hotel-detail|hotel-information|property|properties|restaurant-detail|dining-detail)\/[^/?#]{2,}/i.test(path);
     if (travelDetail) return true;

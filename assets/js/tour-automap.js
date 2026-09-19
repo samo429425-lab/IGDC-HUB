@@ -1,15 +1,16 @@
-// tour-automap.js (PRODUCTION v7.1 - Home-pattern right-rail routing + thumb-grid hard disable)
-// - Right panel/mobile rail cards use the same internal /content.html?id=... route as Home cards
-// - Live Tour cards without an explicit id receive a deterministic snapshot-compatible content id
-// - Legacy .thumb-grid[data-psom-key="tour"] is disabled so it cannot push the index/slots
-// - Main external tour .link-btn anchors open in the IGDC contained viewer; dynamic outbound rail links keep legacy top navigation
+// tour-automap.js (PRODUCTION v8.0 - exact Tour product destination + in-shell navigation)
+// - Right panel/mobile rail cards prefer verified transaction/detail URLs over provider landing pages
+// - Right-rail destinations stay inside the existing IGDC mainFrame (no _top escape)
+// - External hosts are preflighted for frame compatibility; blocked/unverified hosts are removed from the rail
+// - Legacy .thumb-grid[data-psom-key="tour"] remains disabled so it cannot push the index/slots
+// - Main external tour .link-btn behavior is preserved
 // - Revenue autohook loader is preserved
 
 (function () {
   "use strict";
 
-  if (window.__TOUR_RIGHTPANEL_AUTOMAP_V6__) return;
-  window.__TOUR_RIGHTPANEL_AUTOMAP_V6__ = true;
+  if (window.__TOUR_RIGHTPANEL_AUTOMAP_V8__) return;
+  window.__TOUR_RIGHTPANEL_AUTOMAP_V8__ = true;
 
   const HUB = "tour";
   const SNAPSHOT_URL = "/data/tour-snapshot.json";
@@ -17,6 +18,7 @@
 
   const RIGHT_PANEL_ID = "rightAutoPanel";
   const RIGHT_SLOT_COUNT = 100;
+  const SOURCE_SCAN_LIMIT = RIGHT_SLOT_COUNT + 40; // reserve candidates can replace blocked hosts
 
   const MOBILE_RAIL_ID = "tour-mobile-rail";
   const MOBILE_LIST_SEL = "#tour-mobile-rail .list";
@@ -113,34 +115,76 @@
   }
 
   function pickId(it){ return pick(it, ["id", "contentId", "productId", "itemId", "sku", "code", "pid"]); }
-  function pickLink(it){ return pick(it, ["affiliateOutboundUrl", "affiliate_outbound_url", "externalOutboundUrl", "external_outbound_url", "contentUrl", "pageUrl", "detailUrl", "checkoutUrl", "paymentUrl", "productUrl", "purchaseUrl", "orderUrl", "link", "url", "href"]) || "#"; }
 
-  function pad3(n){
-    const x = Number(n);
-    if (!Number.isFinite(x) || x <= 0) return "001";
-    return String(Math.floor(x)).padStart(3, "0");
-  }
+  const DIRECT_DESTINATION_KEYS = [
+    // Tour must land on the actual bookable/purchasable detail page first.
+    // Same-origin affiliate redirectors can ultimately point at an unframeable
+    // host, so they are only fallbacks after an exact product destination.
+    "checkoutUrl", "paymentUrl", "purchaseUrl", "orderUrl",
+    "externalProductUrl", "officialProductUrl", "productUrl", "product_url",
+    "productPageUrl", "detailUrl", "productLink", "displayUrl",
+    "affiliateOutboundUrl", "affiliate_outbound_url",
+    "externalOutboundUrl", "external_outbound_url"
+  ];
+  const FALLBACK_DESTINATION_KEYS = ["url", "href", "link", "contentUrl", "pageUrl"];
+  const PRODUCT_ID_QUERY_KEYS = new Set([
+    "goodsno","goods_no","goodsid","goods_id","productno","product_no","productid","product_id",
+    "itemno","item_no","itemid","item_id","prdno","prd_no","sku","skuid","code","idx","no",
+    "hotelid","hotel_id","roomid","room_id","activityid","activity_id","tourid","tour_id",
+    "ticketid","ticket_id","packageid","package_id","bookingid","booking_id","offerid","offer_id"
+  ]);
 
-  function numberFromUrl(url){
-    try {
-      const parsed = new URL(String(url || ""), window.location.origin);
-      const last = (parsed.pathname.split("/").filter(Boolean).pop() || "");
-      const m = last.match(/(\d+)/);
-      return m ? Number(m[1]) : null;
-    } catch(e) {
-      const m = String(url || "").match(/(\d+)(?!.*\d)/);
-      return m ? Number(m[1]) : null;
+  function nestedDestination(it){
+    const sources = [it && it.productCard, it && it.researchReadiness && it.researchReadiness.productCard, it && it.directCommerceListing, it && it.brokerageContract];
+    for (const source of sources) {
+      if (!source || typeof source !== "object") continue;
+      const value = pick(source, ["checkoutUrl","paymentUrl","purchaseUrl","orderUrl","externalProductUrl","officialProductUrl","productUrl","productPageUrl","detailUrl","destinationUrl","url","href","link"]);
+      if (value) return value;
     }
+    return "";
   }
 
-  // Mirrors content-engine.js stableIdForItem() for the exact top-level
-  // collection that Tour Automap reads (items first, slots as fallback).
-  function stableTourContentId(it, collection, index, url){
-    const explicit = pickId(it);
-    if (explicit) return explicit;
-    const base = collection || "items";
-    const n = Number(it && (it.priority || it.order || it.rank)) || numberFromUrl(url) || (Number(index) + 1) || 1;
-    return base + "-" + pad3(n);
+  function isUsableHttpUrl(value){
+    try {
+      const url = new URL(String(value || "").trim(), window.location.origin);
+      return /^https?:$/i.test(url.protocol) && !!url.hostname && !isExampleUrl(url.href);
+    } catch(e) { return false; }
+  }
+
+  function isSpecificTourDestination(value){
+    if (!isUsableHttpUrl(value)) return false;
+    try {
+      const url = new URL(String(value), window.location.origin);
+      const path = decodeURIComponent(url.pathname || "/").replace(/\/+$/, "") || "/";
+      const lowPath = path.toLowerCase();
+      const queryHasProductId = Array.from(url.searchParams.entries()).some(function(pair){
+        return PRODUCT_ID_QUERY_KEYS.has(String(pair[0] || "").toLowerCase()) && String(pair[1] || "").trim();
+      });
+      if (queryHasProductId) return true;
+      if (path === "/") return false;
+      if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|best|event|events|home|main|travel|shop|store)(?:\/|$)/i.test(lowPath)) return false;
+      if (/\/(?:products?|items?|goods|detail|offers?|activities|activity|attractions?|experiences?|tours?|tickets?|hotels?|resorts?|rooms?|stays?|cruises?|packages?|properties?|restaurants?|dining|reservation|car-rental|cars)\/[^/?#]{2,}/i.test(lowPath)) return true;
+      const segments = path.split("/").filter(Boolean);
+      const last = segments[segments.length - 1] || "";
+      if (/\d{3,}/.test(last)) return true;
+      if (segments.length >= 2 && last.length >= 6 && !/^(?:list|index|view|detail|booking|reserve|reservation|product|products|tour|tours|ticket|tickets|activity|activities|hotel|hotels)$/i.test(last)) return true;
+      return false;
+    } catch(e) { return false; }
+  }
+
+  function pickPurchaseLink(it){
+    if (!it || typeof it !== "object") return "";
+    for (const key of DIRECT_DESTINATION_KEYS) {
+      const value = pick(it, [key]);
+      if (value && isSpecificTourDestination(value)) return value;
+    }
+    const nested = nestedDestination(it);
+    if (nested && isSpecificTourDestination(nested)) return nested;
+    for (const key of FALLBACK_DESTINATION_KEYS) {
+      const value = pick(it, [key]);
+      if (value && isSpecificTourDestination(value)) return value;
+    }
+    return "";
   }
 
   function isExternal(url){ return /^https?:\/\//i.test(String(url || "")); }
@@ -154,30 +198,24 @@
     try { return /(^|\.)example\.(com|org|net)$/i.test(new URL(u, window.location.origin).hostname); }
     catch(e){ return /example\.(com|org|net)/i.test(u); }
   }
-  function contentHref(id){ return id ? ("/content.html?id=" + encodeURIComponent(id)) : ""; }
   function resolveItemHref(item){
-    // A Tour product with an IGDC id opens the local content detail first.  The
-    // external booking/seller destination remains available from that detail.
-    if (item && item.id) return contentHref(item.id);
-    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
-    if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     const link = item && item.link;
-    if (isBadUrl(link) || isExampleUrl(link)) return "";
-    return link || "";
+    if (isBadUrl(link) || isExampleUrl(link) || !isSpecificTourDestination(link)) return "";
+    return link;
   }
 
-  function normalizeItems(raw, collection) {
+  function normalizeItems(raw) {
     const arr = Array.isArray(raw) ? raw : [];
     const out = [];
     for (let index = 0; index < arr.length; index++) {
       const it = arr[index];
       const title = pick(it, ["title", "name", "label", "caption"]);
       const thumb = pick(it, ["thumb", "image", "thumbnail", "img", "photo", "cover", "coverUrl", "thumbnailUrl"]);
-      const link = pickLink(it);
-      const id = stableTourContentId(it, collection, index, link);
-      if (!title || !thumb) continue;
+      const link = pickPurchaseLink(it);
+      const id = pickId(it);
+      if (!title || !thumb || !link) continue;
       out.push({ id, title, thumb, link, sourceUrl: link, affiliateOutboundUrl: pick(it, ["affiliateOutboundUrl","affiliate_outbound_url"]), externalOutboundUrl: pick(it, ["externalOutboundUrl","external_outbound_url"]) });
-      if (out.length >= RIGHT_SLOT_COUNT) break;
+      if (out.length >= SOURCE_SCAN_LIMIT) break;
     }
     return out;
   }
@@ -228,6 +266,103 @@
     }, true);
   }
 
+  const FRAME_CHECK_ENDPOINT = "/.netlify/functions/tour-page-proxy?action=frame-check&url=";
+  const FRAME_CACHE_PREFIX = "igdc:tour:frame-host:v1:";
+  const frameCheckPromises = new Map();
+  const blockedFrameHosts = new Set();
+  let renderedItems = [];
+
+  function destinationHost(value){
+    try { return new URL(String(value || ""), window.location.origin).hostname.toLowerCase(); }
+    catch(e) { return ""; }
+  }
+
+  function readFrameHostCache(host){
+    if (!host) return null;
+    try {
+      const raw = sessionStorage.getItem(FRAME_CACHE_PREFIX + host);
+      if (!raw) return null;
+      const row = JSON.parse(raw);
+      if (!row || Date.now() - Number(row.at || 0) > 6 * 60 * 60 * 1000) return null;
+      return row.allowed === true;
+    } catch(e) { return null; }
+  }
+
+  function writeFrameHostCache(host, allowed){
+    if (!host) return;
+    try { sessionStorage.setItem(FRAME_CACHE_PREFIX + host, JSON.stringify({ at:Date.now(), allowed:allowed === true })); } catch(e) {}
+  }
+
+  function frameAllowedInShell(url){
+    if (!isExternal(url)) return Promise.resolve(true);
+    const host = destinationHost(url);
+    if (!host) return Promise.resolve(false);
+    const cached = readFrameHostCache(host);
+    if (cached !== null) return Promise.resolve(cached);
+    if (frameCheckPromises.has(host)) return frameCheckPromises.get(host);
+
+    const promise = fetch(FRAME_CHECK_ENDPOINT + encodeURIComponent(url), { cache:"no-store", credentials:"same-origin" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(data){
+        const reason = String(data && data.reason || "");
+        const allowed = !!(data && data.ok === true && data.directAllowed === true && reason.indexOf("probe-unavailable-") !== 0);
+        writeFrameHostCache(host, allowed);
+        if (!allowed) blockedFrameHosts.add(host);
+        return allowed;
+      })
+      .catch(function(){
+        writeFrameHostCache(host, false);
+        blockedFrameHosts.add(host);
+        return false;
+      })
+      .finally(function(){ frameCheckPromises.delete(host); });
+
+    frameCheckPromises.set(host, promise);
+    return promise;
+  }
+
+  function filteredRenderableItems(items){
+    return (items || []).filter(function(item){
+      const host = destinationHost(item && item.link);
+      return !host || !blockedFrameHosts.has(host);
+    });
+  }
+
+  function rerenderAfterFrameGate(){
+    const safe = filteredRenderableItems(renderedItems);
+    renderMobileRail(safe);
+    renderRightPanel(safe);
+  }
+
+  function preflightFrameHosts(items){
+    const firstByHost = new Map();
+    (items || []).forEach(function(item){
+      const link = resolveItemHref(item);
+      const host = destinationHost(link);
+      if (host && !firstByHost.has(host)) firstByHost.set(host, link);
+    });
+    if (!firstByHost.size) return;
+    Promise.all(Array.from(firstByHost.values()).map(frameAllowedInShell)).then(rerenderAfterFrameGate);
+  }
+
+  function navigateProductInsideShell(ev, item){
+    const href = resolveItemHref(item);
+    if (!href) { if (ev) ev.preventDefault(); return; }
+    if (!isExternal(href)) return;
+    if (ev) ev.preventDefault();
+    frameAllowedInShell(href).then(function(allowed){
+      if (!allowed) {
+        const host = destinationHost(href);
+        if (host) blockedFrameHosts.add(host);
+        rerenderAfterFrameGate();
+        return;
+      }
+      // Tour itself already runs in index.html#mainFrame.  Navigating this
+      // window preserves the IGDC shell and browser Back history.
+      window.location.assign(href);
+    });
+  }
+
   function ensureMobileCss() {
     if (document.getElementById(MOBILE_CSS_ID)) return;
     const style = document.createElement("style");
@@ -276,9 +411,8 @@
     if (isExternal(href)){
       if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound','1');
       if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound','1');
-      a.target = '_top';
-      a.rel = 'noopener';
-      a.setAttribute('data-igdc-external','top');
+      a.setAttribute('data-tour-product-link','1');
+      a.addEventListener('click', function(ev){ navigateProductInsideShell(ev, item); }, { passive:false });
     }
   }
 
@@ -345,17 +479,17 @@
     const snap = await fetchJson(SNAPSHOT_URL);
     let items = [];
 
-    // Match content-engine.js collection context exactly so a generated id in
-    // the card resolves to the same Tour snapshot item on /content.html.
     const rawItems = snap && Array.isArray(snap.items) && snap.items.length ? snap.items : null;
-    const collection = rawItems ? "items" : "slots";
-    items = normalizeItems(rawItems || ((snap && snap.slots) || []), collection);
+    items = normalizeItems(rawItems || ((snap && snap.slots) || []));
 
     // No generic feed fallback: only the Edge-routed canonical IP snapshot is
     // allowed to populate the tour right panel and mobile rail.
+    // Render exact product routes immediately, then quietly remove hosts that
+    // cannot be framed inside the IGDC shell before they can become dead cards.
+    renderedItems = items;
     disablePsomThumbGrid();
-    renderMobileRail(items);
-    renderRightPanel(items);
+    rerenderAfterFrameGate();
+    preflightFrameHosts(items);
   }
 
   disablePsomThumbGrid();

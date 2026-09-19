@@ -24,8 +24,9 @@ const IpSlotPolicy = require("./ip-slot-policy.v1");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
+const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.6.1-exact-product-destination-contract";
+const VERSION = "canonical-snapshot-publisher-v1.6.2-tour-exact-product-destination-contract";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
@@ -346,6 +347,15 @@ function directProductUrlOf(item) {
     card.checkoutUrl, card.productUrl, readinessCard.checkoutUrl, readinessCard.productUrl,
     listing.destinationUrl, contract.destinationUrl
   ];
+  // Prefer a verified, specific product/booking detail route even when an
+  // earlier alias contains only a provider landing/list page.  This uses the
+  // same product URL contract as the ranking pipeline.
+  for (const value of values) {
+    const url = normalizeUrl(value);
+    if (url && ProductRanking.isSpecificProductUrl(url)) return url;
+  }
+  // Preserve the previous fallback for non-Tour routes; Tour itself is gated
+  // strictly in validateCandidate() below.
   for (const value of values) {
     const url = specificProductUrl(value);
     if (url) return url;
@@ -485,7 +495,13 @@ function validateCandidate(raw, index, context) {
   if (sections.length !== 1) reasons.push(sections.length ? "SECTION_MAPPING_CONFLICT" : "SECTION_MAPPING_MISSING");
   const section = sections[0] || "";
   if (page && section && !(context.registry.pages.get(page) || new Set()).has(section)) reasons.push("SECTION_NOT_IN_PSOM_PAGE");
-  if (page && section && productBearingRoute(page, section) && !specificProductUrl(destination)) reasons.push("PRODUCT_DETAIL_DESTINATION_REQUIRED");
+  if (page && section && productBearingRoute(page, section)) {
+    if (page === "tour") {
+      if (!ProductRanking.isSpecificProductUrl(destination)) reasons.push("TOUR_EXACT_PRODUCT_DESTINATION_REQUIRED");
+    } else if (!specificProductUrl(destination)) {
+      reasons.push("PRODUCT_DETAIL_DESTINATION_REQUIRED");
+    }
+  }
   if (Number.isNaN(requested)) reasons.push("SLOT_MAPPING_CONFLICT");
   if (requested != null && requested > context.policy.slotCapacityDefault) reasons.push("SLOT_OUT_OF_CAPACITY");
 

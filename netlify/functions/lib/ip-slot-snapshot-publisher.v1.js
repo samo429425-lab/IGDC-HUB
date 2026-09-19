@@ -22,7 +22,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const SlotOverlay = require("./sample-slot-overlay.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.2-social-thumbnail-alias-preservation";
+const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.3-product-destination-alias-preservation";
 const MANIFEST_FILE = "ip-slot-manifest.json";
 const AUTO_ROOT = ["data", "auto"];
 const ROUTES = Object.freeze({
@@ -195,7 +195,21 @@ function cloneCard(item) {
     commerceCandidatePublication: clone(item.commerceCandidatePublication || null),
     outboundRoute: clone(item.outboundRoute || null),
     affiliateOutboundUrl: text(item.affiliateOutboundUrl || "") || undefined,
-    externalOutboundUrl: text(item.externalOutboundUrl || "") || undefined
+    externalOutboundUrl: text(item.externalOutboundUrl || "") || undefined,
+    // Preserve the exact transaction/detail aliases selected by the canonical
+    // publisher. Tour/Distribution renderers must not be forced back to a
+    // generic provider homepage after country/IP snapshot projection.
+    externalProductUrl: text(item.externalProductUrl || "") || undefined,
+    officialProductUrl: text(item.officialProductUrl || "") || undefined,
+    productUrl: text(item.productUrl || item.product_url || "") || undefined,
+    productPageUrl: text(item.productPageUrl || "") || undefined,
+    detailUrl: text(item.detailUrl || "") || undefined,
+    checkoutUrl: text(item.checkoutUrl || "") || undefined,
+    paymentUrl: text(item.paymentUrl || "") || undefined,
+    purchaseUrl: text(item.purchaseUrl || "") || undefined,
+    orderUrl: text(item.orderUrl || "") || undefined,
+    productLink: text(item.productLink || "") || undefined,
+    displayUrl: text(item.displayUrl || "") || undefined
   };
   for (const key of Object.keys(card)) if (card[key] === undefined) delete card[key];
   return card;
