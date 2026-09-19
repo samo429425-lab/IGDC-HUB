@@ -1,8 +1,7 @@
-// tour-automap.js (PRODUCTION v8 - Tour right-panel contained navigation + browser Back)
-// - Right panel/mobile rail cards prefer the verified booking/seller destination
-// - External Tour destinations open inside the IGDC Tour viewer (no top-level escape)
-// - Browser Back closes the contained viewer and restores the Tour page immediately
-// - Legacy .thumb-grid[data-psom-key="tour"] remains disabled so it cannot push the index/slots
+// tour-automap.js (PRODUCTION v7 - contained main-link reliability + thumb-grid hard disable)
+// - Right panel/mobile rail product slots open IGDC internal /content.html?id=...
+// - Legacy .thumb-grid[data-psom-key="tour"] is disabled so it cannot push the index/slots
+// - Main external tour .link-btn anchors keep their existing contained-viewer behavior; right-panel outbound fallbacks stay inside the IGDC mainFrame
 // - Revenue autohook loader is preserved
 
 (function () {
@@ -24,8 +23,8 @@
 
   const MOBILE_CSS_ID = "tour-mobile-rail-cap-v2";
 
-  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-tour-external-viewer.js?v=20260919-tour-rightpanel-v10';
-  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-tour-viewer-loader-rightpanel-v10';
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260914-network-tour-stable-v8';
+  const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v8';
   const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v6';
 
   function ensureContainedToolbarTheme(){
@@ -62,19 +61,19 @@
 
   function ensureContainedViewer(){
     ensureContainedToolbarTheme();
-    if (window.IGDCTourViewer && Number(window.IGDCTourViewer.version || 0) >= 10 && typeof window.IGDCTourViewer.open === 'function') {
-      return Promise.resolve(window.IGDCTourViewer);
+    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 8 && typeof window.IGDCContainedViewer.open === 'function') {
+      return Promise.resolve(window.IGDCContainedViewer);
     }
-    if (window.__IGDC_TOUR_RIGHTPANEL_VIEWER_V10_PROMISE__) return window.__IGDC_TOUR_RIGHTPANEL_VIEWER_V10_PROMISE__;
+    if (window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__;
 
-    window.__IGDC_TOUR_RIGHTPANEL_VIEWER_V10_PROMISE__ = new Promise(function(resolve, reject){
+    window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__ = new Promise(function(resolve, reject){
       let script = document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
       const finish = function(){
-        if (window.IGDCTourViewer && Number(window.IGDCTourViewer.version || 0) >= 10 && typeof window.IGDCTourViewer.open === 'function') {
+        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 8 && typeof window.IGDCContainedViewer.open === 'function') {
           ensureContainedToolbarTheme();
-          resolve(window.IGDCTourViewer);
+          resolve(window.IGDCContainedViewer);
         } else {
-          reject(new Error('IGDC Tour viewer unavailable'));
+          reject(new Error('IGDC contained viewer unavailable'));
         }
       };
       if (script) {
@@ -92,11 +91,11 @@
       script.addEventListener('error', function(){ reject(new Error('IGDC contained viewer load failed')); }, { once:true });
       (document.head || document.documentElement).appendChild(script);
     }).catch(function(err){
-      window.__IGDC_TOUR_RIGHTPANEL_VIEWER_V10_PROMISE__ = null;
+      window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__ = null;
       throw err;
     });
 
-    return window.__IGDC_TOUR_RIGHTPANEL_VIEWER_V10_PROMISE__;
+    return window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__;
   }
 
 
@@ -128,18 +127,14 @@
   }
   function contentHref(id){ return id ? ("/content.html?id=" + encodeURIComponent(id)) : ""; }
   function resolveItemHref(item){
-    // Tour right-panel cards must go straight to the verified booking/seller
-    // destination when one exists.  Canonical IP snapshots always carry a
-    // stable IGDC id, so preferring the id here forced every real Tour card
-    // through /content.html first; vendors that block framing then surfaced as
-    // a blank/broken page inside the hub.  Keep the IGDC detail route only as
-    // a fallback for cards that do not yet have a usable external destination.
+    // A Tour product with an IGDC id opens the local content detail first.  The
+    // external booking/seller destination remains available from that detail.
+    if (item && item.id) return contentHref(item.id);
     const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     const link = item && item.link;
-    if (link && !isBadUrl(link) && !isExampleUrl(link)) return link;
-    if (item && item.id) return contentHref(item.id);
-    return "";
+    if (isBadUrl(link) || isExampleUrl(link)) return "";
+    return link || "";
   }
 
   function normalizeItems(raw) {
@@ -182,23 +177,24 @@
     if (window.__IGDC_TOUR_TOP_NAV_INSTALLED__) return;
     window.__IGDC_TOUR_TOP_NAV_INSTALLED__ = true;
     document.addEventListener('click', function(ev){
-      const a = ev.target && ev.target.closest && ev.target.closest('a.link-btn[href^="http"], a[data-igdc-external="contained"][href^="http"]');
+      const a = ev.target && ev.target.closest && ev.target.closest('a.link-btn[href^="http"], a[data-igdc-external="top"][href^="http"]');
       if (!a) return;
       const href = a.href;
       if (!href) return;
-
-      // Keep Tour destinations inside the IGDC viewer. IGDCTourViewer v10
-      // pushes one history marker, so the browser's native Back button closes
-      // the viewer and restores this exact Tour page/scroll position.
       ev.preventDefault();
-      ev.stopPropagation();
-      if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
-      const label = String(a.textContent || a.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
-      ensureContainedViewer().then(function(viewer){
-        viewer.open(href, { label: label, kind: 'tour' });
-      }).catch(function(err){
-        console.warn('[IGDC][Tour] Tour viewer load failed:', err && err.message ? err.message : err);
-      });
+      if (a.matches('a.link-btn[href^="http"]')) {
+        ev.stopPropagation();
+        if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+        const label = String(a.textContent || '').replace(/\s+/g, ' ').trim();
+        ensureContainedViewer().then(function(viewer){
+          viewer.open(href, { label: label, kind: 'tour' });
+        }).catch(function(err){
+          console.warn('[IGDC][Tour] contained viewer load failed:', err && err.message ? err.message : err);
+        });
+        return;
+      }
+      try { (window.top || window).location.assign(href); }
+      catch(e){ window.location.href = href; }
     }, true);
   }
 
@@ -250,7 +246,12 @@
     if (isExternal(href)){
       if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound','1');
       if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound','1');
-      a.setAttribute('data-igdc-external','contained');
+      // Match Home/Distribution behavior: navigate the current hub frame only.
+      // The outer IGDC shell/browser remains in place and browser Back returns
+      // to the Tour page through the joint session history.
+      a.target = '_self';
+      a.rel = 'noopener';
+      a.setAttribute('data-igdc-external','frame');
     }
   }
 
