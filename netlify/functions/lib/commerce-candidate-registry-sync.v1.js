@@ -15,7 +15,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.13.7-service-evidence-hardening";
+const VERSION = "commerce-candidate-registry-sync-v1.12.0-authoritative-admin-replacement";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -321,6 +321,19 @@ function marketRecord(candidate, availability, evidenceRows, options){
   const verifiedEvidence=(evidenceRows||[]).filter(row=>bool(row.verified)).map(row=>safeUrl(row.evidence_url)).filter(Boolean);
   const commonUrl=evidenceUrl||verifiedEvidence[0]||"";
   const seller=plain(payload.sellerResponsibility);
+  const administratorServiceProof=(kind,existing)=>{
+    if(existing&&existing.verified===true) return existing;
+    if(!adminExternalSeller) return existing;
+    const url=safeUrl(first(supplier.url,commonUrl,exactProductDestination(candidate,payload)));
+    return {
+      verified:true,
+      evidenceUrl:url||null,
+      evidence:unique([legalBasis,deliveryEvidence,"Authenticated administrator Front Match confirms that the selected external seller remains responsible for "+kind+" in this market; IGDC does not provide that service."])
+    };
+  };
+  const shippingProof=administratorServiceProof("delivery/fulfillment",serviceProof("shipping",payload.shippingPolicyUrl,first(deliveryEvidence,legalBasis),evidenceRows));
+  const returnsProof=administratorServiceProof("returns/refunds",serviceProof("returns",payload.returnsPolicyUrl,first(legalBasis,deliveryEvidence),evidenceRows));
+  const supportProof=administratorServiceProof("customer support",serviceProof("support",payload.supportUrl,first(legalBasis,deliveryEvidence),evidenceRows));
   return {
     country,
     // The DB stores nationwide as the explicit NATIONWIDE sentinel.  Preserve
@@ -330,9 +343,9 @@ function marketRecord(candidate, availability, evidenceRows, options){
     nationwide,
     active:true,
     verifiedAt:first(availability.updated_at,candidate.updated_at),
-    shipping:serviceProof("shipping",payload.shippingPolicyUrl,first(deliveryEvidence,legalBasis),evidenceRows),
-    returns:serviceProof("returns",payload.returnsPolicyUrl,first(legalBasis,deliveryEvidence),evidenceRows),
-    support:serviceProof("support",payload.supportUrl,first(legalBasis,deliveryEvidence),evidenceRows),
+    shipping:shippingProof,
+    returns:returnsProof,
+    support:supportProof,
     // explicitAdminReferralReady() has already verified the exact seller
     // identity, product destination, image, scope availability and hard-risk
     // state.  That authenticated Front Match is authoritative evidence that
@@ -494,6 +507,23 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   return item;
 }
 
+function currentAdministratorAssignmentMatches(candidate,row){
+  const payload=sourcePayload(candidate), queueControl=plain(payload.queueControl), decision=lower(payload.slotDecision);
+  if(queueControl.permanentExcluded===true||queueControl.hiddenFromCountryQueue===true) return false;
+  if(decision&&decision!=="slot_candidate") return false;
+  const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.primaryPlacement||payload.placement);
+  const page=text(first(placement.page,payload.page)), section=text(first(placement.sectionKey,placement.section,payload.section,payload.psom_key));
+  if(!page||!section) return false;
+  if(text(row&&row.hub_key)!==page||text(row&&row.slot_key)!==section) return false;
+  const wantedCountry=MarketSaleScope.normalizeCountry(first(placement.country,payload.country,payload.targetCountry));
+  const rowCountry=MarketSaleScope.normalizeCountry(row&&row.country_code);
+  if(wantedCountry&&rowCountry!==wantedCountry) return false;
+  const country=wantedCountry||rowCountry;
+  const wantedRegion=MarketSaleScope.normalizeRegion(first(placement.region,payload.region,"NATIONWIDE"),country)||"NATIONWIDE";
+  const rowRegion=MarketSaleScope.normalizeRegion(first(row&&row.region_code,"NATIONWIDE"),country)||"NATIONWIDE";
+  return wantedRegion===rowRegion;
+}
+
 async function syncApprovedCandidates(input){
   const root=rootOf(input);
   const file=queuePath(root);
@@ -540,7 +570,7 @@ async function syncApprovedCandidates(input){
       // relation write was interrupted before the build hook ran.
       const explicitAuditSource=[PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF].includes(text(candidate.source_ref));
       const marker=explicitAuditSource?frontPublicationMarker(candidate):null;
-      let assignment=assignmentRows.find((row)=>explicitAuditSource?lower(row.publication_status)==="publish_requested":["ready","publish_requested"].includes(lower(row.publication_status)));
+      let assignment=assignmentRows.find((row)=>explicitAuditSource?(lower(row.publication_status)==="publish_requested"&&currentAdministratorAssignmentMatches(candidate,row)):["ready","publish_requested"].includes(lower(row.publication_status)));
       if(!assignment&&marker) assignment=syntheticAssignmentFromMarker(candidate,marker);
       if(!assignment) continue;
       // A persisted Front Match is the authoritative publication route. Do not

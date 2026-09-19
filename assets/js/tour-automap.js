@@ -1,8 +1,8 @@
-// tour-automap.js (PRODUCTION v8 - Tour right-rail in-shell provider routing + thumb-grid hard disable)
-// - Right panel/mobile rail product slots open the real provider/detail URL through the Tour same-origin shell relay
-// - The IGDC parent shell remains visible; browser Back returns to the Tour grid
+// tour-automap.js (PRODUCTION v7.1 - Home-pattern right-rail routing + thumb-grid hard disable)
+// - Right panel/mobile rail cards use the same internal /content.html?id=... route as Home cards
+// - Live Tour cards without an explicit id receive a deterministic snapshot-compatible content id
 // - Legacy .thumb-grid[data-psom-key="tour"] is disabled so it cannot push the index/slots
-// - Main external tour .link-btn anchors keep their existing contained viewer; only right/mobile product rails use the shell relay
+// - Main external tour .link-btn anchors open in the IGDC contained viewer; dynamic outbound rail links keep legacy top navigation
 // - Revenue autohook loader is preserved
 
 (function () {
@@ -115,6 +115,34 @@
   function pickId(it){ return pick(it, ["id", "contentId", "productId", "itemId", "sku", "code", "pid"]); }
   function pickLink(it){ return pick(it, ["affiliateOutboundUrl", "affiliate_outbound_url", "externalOutboundUrl", "external_outbound_url", "contentUrl", "pageUrl", "detailUrl", "checkoutUrl", "paymentUrl", "productUrl", "purchaseUrl", "orderUrl", "link", "url", "href"]) || "#"; }
 
+  function pad3(n){
+    const x = Number(n);
+    if (!Number.isFinite(x) || x <= 0) return "001";
+    return String(Math.floor(x)).padStart(3, "0");
+  }
+
+  function numberFromUrl(url){
+    try {
+      const parsed = new URL(String(url || ""), window.location.origin);
+      const last = (parsed.pathname.split("/").filter(Boolean).pop() || "");
+      const m = last.match(/(\d+)/);
+      return m ? Number(m[1]) : null;
+    } catch(e) {
+      const m = String(url || "").match(/(\d+)(?!.*\d)/);
+      return m ? Number(m[1]) : null;
+    }
+  }
+
+  // Mirrors content-engine.js stableIdForItem() for the exact top-level
+  // collection that Tour Automap reads (items first, slots as fallback).
+  function stableTourContentId(it, collection, index, url){
+    const explicit = pickId(it);
+    if (explicit) return explicit;
+    const base = collection || "items";
+    const n = Number(it && (it.priority || it.order || it.rank)) || numberFromUrl(url) || (Number(index) + 1) || 1;
+    return base + "-" + pad3(n);
+  }
+
   function isExternal(url){ return /^https?:\/\//i.test(String(url || "")); }
   function isBadUrl(url){
     const u = String(url || "").trim();
@@ -128,26 +156,25 @@
   }
   function contentHref(id){ return id ? ("/content.html?id=" + encodeURIComponent(id)) : ""; }
   function resolveItemHref(item){
-    // Tour rail cards are provider/detail links first.  Use the IGDC content
-    // page only when the snapshot has no real outbound destination.
-    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.link || '');
+    // A Tour product with an IGDC id opens the local content detail first.  The
+    // external booking/seller destination remains available from that detail.
+    if (item && item.id) return contentHref(item.id);
+    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
-    return item && item.id ? contentHref(item.id) : "";
-  }
-  function tourShellHref(url){
-    const raw = String(url || '').trim();
-    if (!isExternal(raw)) return raw;
-    return '/.netlify/functions/tour-page-proxy?shell=1&mode=live&url=' + encodeURIComponent(raw);
+    const link = item && item.link;
+    if (isBadUrl(link) || isExampleUrl(link)) return "";
+    return link || "";
   }
 
-  function normalizeItems(raw) {
+  function normalizeItems(raw, collection) {
     const arr = Array.isArray(raw) ? raw : [];
     const out = [];
-    for (const it of arr) {
+    for (let index = 0; index < arr.length; index++) {
+      const it = arr[index];
       const title = pick(it, ["title", "name", "label", "caption"]);
       const thumb = pick(it, ["thumb", "image", "thumbnail", "img", "photo", "cover", "coverUrl", "thumbnailUrl"]);
       const link = pickLink(it);
-      const id = pickId(it);
+      const id = stableTourContentId(it, collection, index, link);
       if (!title || !thumb) continue;
       out.push({ id, title, thumb, link, sourceUrl: link, affiliateOutboundUrl: pick(it, ["affiliateOutboundUrl","affiliate_outbound_url"]), externalOutboundUrl: pick(it, ["externalOutboundUrl","external_outbound_url"]) });
       if (out.length >= RIGHT_SLOT_COUNT) break;
@@ -229,14 +256,13 @@
 
 
   function applyAnchor(a, item){
-    const destination = resolveItemHref(item);
+    const href = resolveItemHref(item);
     a.removeAttribute('target');
     a.removeAttribute('rel');
     a.removeAttribute('data-igdc-external');
     a.removeAttribute('data-affiliate-outbound');
     a.removeAttribute('data-external-outbound');
-    a.removeAttribute('data-url');
-    if (!destination){
+    if (!href){
       a.href = '#';
       a.tabIndex = -1;
       a.setAttribute('aria-disabled', 'true');
@@ -244,24 +270,16 @@
       a.addEventListener('click', function(ev){ ev.preventDefault(); }, { passive:false });
       return;
     }
+    a.href = href;
     if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
     if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
-
-    if (isExternal(destination)){
-      // Keep the visible IGDC shell.  The same-origin Tour relay removes the
-      // provider's frame headers and rewrites in-page navigation back through
-      // the same relay, so the source site never replaces window.top.
-      a.href = tourShellHref(destination);
-      a.target = '_self';
-      a.setAttribute('data-url', destination); // revenue tracker keeps the real provider URL
-      a.setAttribute('data-igdc-external','tour-shell');
+    if (isExternal(href)){
       if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound','1');
       if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound','1');
-      return;
+      a.target = '_top';
+      a.rel = 'noopener';
+      a.setAttribute('data-igdc-external','top');
     }
-
-    // No real provider URL: fall back to the local IGDC content page.
-    a.href = destination;
   }
 
   function createRightBox(item) {
@@ -327,7 +345,11 @@
     const snap = await fetchJson(SNAPSHOT_URL);
     let items = [];
 
-    items = normalizeItems((snap && (snap.items || snap.slots)) || []);
+    // Match content-engine.js collection context exactly so a generated id in
+    // the card resolves to the same Tour snapshot item on /content.html.
+    const rawItems = snap && Array.isArray(snap.items) && snap.items.length ? snap.items : null;
+    const collection = rawItems ? "items" : "slots";
+    items = normalizeItems(rawItems || ((snap && snap.slots) || []), collection);
 
     // No generic feed fallback: only the Edge-routed canonical IP snapshot is
     // allowed to populate the tour right panel and mobile rail.

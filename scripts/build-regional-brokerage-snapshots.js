@@ -1020,21 +1020,20 @@ async function main() {
   const administratorRequestedCount = Number(intake && intake.releaseGate && intake.releaseGate.requestedCount || commerceRegistrySync && commerceRegistrySync.requestedCount || 0);
   if (releaseItems.length === 0 && administratorRequestedCount > 0) {
     const held = Array.isArray(intake && intake.stage && intake.stage.candidates) ? intake.stage.candidates.filter(row => row && row.releaseEligible !== true).slice(0,25).map(row => ({candidateId:row.candidateId,reasons:row.reasons,administratorFrontMatch:row.administratorFrontMatch||null})) : [];
-    // Do not let a held administrator product queue block an otherwise valid
-    // site/admin code deployment. Preserve the currently published Distribution
-    // scoped artifacts byte-for-byte and leave the held products unpublished.
-    const carriedDistribution = await carryForwardPublishedScopedOutputs();
-    if (carriedDistribution && carriedDistribution.ok === true) {
-      writePreservedBuild("administrator-publication-held-live-distribution-carried-forward", {
+    if (!queueAuthoritative) {
+      preserveOrFail("administrator-publication-empty-without-authoritative-queue", {
         commerceRegistrySync,
         requestedCount: administratorRequestedCount,
         intakeSummary: intake.summary || {},
-        heldSample: held,
-        carriedDistribution
+        heldSample: held
       });
       return;
     }
-    throw new Error("Administrator publication queue contained " + administratorRequestedCount + " requested products, but Commerce Candidate Intake released none and live Distribution carry-forward was unavailable: " + JSON.stringify({summary:intake.summary||{},heldSample:held,carriedDistribution:carriedDistribution||null}));
+    // An authenticated Front Match is a replacement instruction, not an append.
+    // When every requested real product is blocked by a hard safety check, do
+    // not resurrect the previous live products. Continue with the authoritative
+    // empty release so Snapshot Engine restores sample slots instead.
+    process.stderr.write("Administrator Front Match produced zero safe real products; materializing authoritative sample fallback instead of carrying old Distribution cards.\n");
   }
   if (releaseItems.length === 0 && !queueAuthoritative) {
     preserveOrFail("no-release-ready-candidates", {
@@ -1063,8 +1062,8 @@ async function main() {
   if (!publication.counts) {
     throw new Error("Canonical Snapshot Publisher did not return candidate counts.");
   }
-  if (Number(publication.counts.accepted || 0) <= 0 && administratorRequestedCount > 0) {
-    throw new Error("Canonical Snapshot Publisher rejected every administrator-requested product. Inspect data/canonical-snapshot/audit/latest.json before publishing sample-only output.");
+  if (Number(publication.counts.accepted || 0) <= 0 && administratorRequestedCount > 0 && !queueAuthoritative) {
+    throw new Error("Canonical Snapshot Publisher rejected every administrator-requested product without an authoritative administrator queue.");
   }
   if (Number(publication.counts.accepted || 0) <= 0 && !queueAuthoritative) {
     throw new Error("Canonical Snapshot Publisher produced no accepted candidates without an authoritative administrator withdrawal state.");
