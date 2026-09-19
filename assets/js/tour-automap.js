@@ -1,7 +1,8 @@
-// tour-automap.js (PRODUCTION v7 - contained main-link reliability + thumb-grid hard disable)
-// - Right panel/mobile rail product slots open IGDC internal /content.html?id=...
+// tour-automap.js (PRODUCTION v8 - Tour right-rail in-shell provider routing + thumb-grid hard disable)
+// - Right panel/mobile rail product slots open the real provider/detail URL through the Tour same-origin shell relay
+// - The IGDC parent shell remains visible; browser Back returns to the Tour grid
 // - Legacy .thumb-grid[data-psom-key="tour"] is disabled so it cannot push the index/slots
-// - Main external tour .link-btn anchors keep their existing contained-viewer behavior; right-panel outbound fallbacks stay inside the IGDC mainFrame
+// - Main external tour .link-btn anchors keep their existing contained viewer; only right/mobile product rails use the shell relay
 // - Revenue autohook loader is preserved
 
 (function () {
@@ -127,14 +128,16 @@
   }
   function contentHref(id){ return id ? ("/content.html?id=" + encodeURIComponent(id)) : ""; }
   function resolveItemHref(item){
-    // A Tour product with an IGDC id opens the local content detail first.  The
-    // external booking/seller destination remains available from that detail.
-    if (item && item.id) return contentHref(item.id);
-    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
+    // Tour rail cards are provider/detail links first.  Use the IGDC content
+    // page only when the snapshot has no real outbound destination.
+    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.link || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
-    const link = item && item.link;
-    if (isBadUrl(link) || isExampleUrl(link)) return "";
-    return link || "";
+    return item && item.id ? contentHref(item.id) : "";
+  }
+  function tourShellHref(url){
+    const raw = String(url || '').trim();
+    if (!isExternal(raw)) return raw;
+    return '/.netlify/functions/tour-page-proxy?shell=1&mode=live&url=' + encodeURIComponent(raw);
   }
 
   function normalizeItems(raw) {
@@ -226,13 +229,14 @@
 
 
   function applyAnchor(a, item){
-    const href = resolveItemHref(item);
+    const destination = resolveItemHref(item);
     a.removeAttribute('target');
     a.removeAttribute('rel');
     a.removeAttribute('data-igdc-external');
     a.removeAttribute('data-affiliate-outbound');
     a.removeAttribute('data-external-outbound');
-    if (!href){
+    a.removeAttribute('data-url');
+    if (!destination){
       a.href = '#';
       a.tabIndex = -1;
       a.setAttribute('aria-disabled', 'true');
@@ -240,19 +244,24 @@
       a.addEventListener('click', function(ev){ ev.preventDefault(); }, { passive:false });
       return;
     }
-    a.href = href;
     if (item && item.id) a.setAttribute('data-igdc-content-id', item.id);
     if (item && item.sourceUrl) a.setAttribute('data-igdc-source-url', item.sourceUrl);
-    if (isExternal(href)){
+
+    if (isExternal(destination)){
+      // Keep the visible IGDC shell.  The same-origin Tour relay removes the
+      // provider's frame headers and rewrites in-page navigation back through
+      // the same relay, so the source site never replaces window.top.
+      a.href = tourShellHref(destination);
+      a.target = '_self';
+      a.setAttribute('data-url', destination); // revenue tracker keeps the real provider URL
+      a.setAttribute('data-igdc-external','tour-shell');
       if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound','1');
       if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound','1');
-      // Match Home/Distribution behavior: navigate the current hub frame only.
-      // The outer IGDC shell/browser remains in place and browser Back returns
-      // to the Tour page through the joint session history.
-      a.target = '_self';
-      a.rel = 'noopener';
-      a.setAttribute('data-igdc-external','frame');
+      return;
     }
+
+    // No real provider URL: fall back to the local IGDC content page.
+    a.href = destination;
   }
 
   function createRightBox(item) {

@@ -77,6 +77,7 @@ function proxyUrl(v, baseUrl, opts){
   sp.set('safe', '1');
   sp.set('embed', '1');
   sp.set('mode', (opts && opts.mode) || 'static');
+  if(opts && opts.shell) sp.set('shell', '1');
   if(opts && opts.proxyId) sp.set('proxyId', opts.proxyId);
   sp.set('url', abs);
   return '/.netlify/functions/tour-page-proxy?' + sp.toString();
@@ -133,23 +134,32 @@ function rewriteCssUrls(value, baseUrl){
 function rewriteAttributes(markup, baseUrl, opts){
   opts = opts || {};
   const live = String(opts.mode || '').toLowerCase() === 'live';
+  const shell = opts.shell === true;
   let out = String(markup || '');
 
-  /* Page navigation stays as the original absolute URL. The injected bridge
-   * catches it and asks the parent viewer to load that exact URL, preventing
-   * nested proxy URLs from accumulating across product/detail clicks. */
+  /* Viewer mode reports navigation to its parent overlay. Shell mode is
+   * different: the proxy page itself IS the mainFrame document, so every
+   * provider link/form remains normal browser navigation but points back to
+   * this same-origin relay. This keeps the IGDC header/nav shell in place and
+   * lets the browser's native Back button restore the Tour page. */
   out = out.replace(/<(a|area)\b([^>]*?)\shref\s*=\s*(["'])(.*?)\3/ig, function(m, tag, before, quote, href){
     const cleanBefore = before.replace(/\s+target\s*=\s*(["']).*?\1/ig, '');
-    return '<' + tag + cleanBefore + ' href=' + quote + escapeHtml(absoluteUrl(href, baseUrl)) + quote;
+    const nav = shell
+      ? proxyUrl(href, baseUrl, { mode:'live', shell:true, proxyId:opts.proxyId || '' })
+      : absoluteUrl(href, baseUrl);
+    return '<' + tag + cleanBefore + ' href=' + quote + escapeHtml(nav) + quote;
   });
 
   out = out.replace(/<form\b([^>]*?)\saction\s*=\s*(["'])(.*?)\2/ig, function(m, before, quote, action){
     const cleanBefore = before.replace(/\s+target\s*=\s*(["']).*?\1/ig, '');
-    return '<form' + cleanBefore + ' action=' + quote + escapeHtml(absoluteUrl(action, baseUrl)) + quote + ' target="_self"';
+    const nav = shell
+      ? proxyUrl(action, baseUrl, { mode:'live', shell:true, proxyId:opts.proxyId || '' })
+      : absoluteUrl(action, baseUrl);
+    return '<form' + cleanBefore + ' action=' + quote + escapeHtml(nav) + quote + (shell ? ' data-igdc-provider-action=' + quote + escapeHtml(absoluteUrl(action, baseUrl)) + quote : '');
   });
 
   out = out.replace(/<(iframe|frame|object|embed)\b([^>]*?)\s(src|data)\s*=\s*(["'])(.*?)\4/ig, function(m, tag, before, attr, quote, src){
-    return '<' + tag + before + ' ' + attr + '=' + quote + escapeHtml(proxyUrl(src, baseUrl, { mode: live ? 'live' : 'static', proxyId: opts.proxyId || '' })) + quote;
+    return '<' + tag + before + ' ' + attr + '=' + quote + escapeHtml(proxyUrl(src, baseUrl, { mode: live ? 'live' : 'static', shell:shell, proxyId: opts.proxyId || '' })) + quote;
   });
 
   out = out.replace(/<(img|source|video|audio|track|input)\b([^>]*?)\ssrc\s*=\s*(["'])(.*?)\3/ig, function(m, tag, before, quote, src){
@@ -294,6 +304,39 @@ function liveTourBridge(finalUrl){
 function lightweightBridge(finalUrl, opts){
   const proxyId = String((opts && opts.proxyId) || '');
   const baseUrl = String(finalUrl || '');
+  const shell = !!(opts && opts.shell);
+  if(shell){
+    // In mainFrame shell mode navigation remains in this browsing context.
+    // Static and dynamically-created provider links/forms are routed through
+    // the same-origin Tour relay; no parent overlay or synthetic back button.
+    return `<script>(function(){
+      var BASE_URL=${JSON.stringify(baseUrl)};
+      var RELAY='/.netlify/functions/tour-page-proxy';
+      function abs(v){try{return new URL(v,BASE_URL||location.href).href}catch(e){return ''}}
+      function relay(v){var u=abs(v);if(!/^https?:/i.test(u))return v;return RELAY+'?shell=1&mode=live&url='+encodeURIComponent(u)}
+      document.addEventListener('click',function(e){
+        if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+        var a=e.target&&e.target.closest?e.target.closest('a[href],area[href]'):null;if(!a)return;
+        var raw=a.getAttribute('href')||'';if(!raw||raw.charAt(0)==='#'||/^javascript:|^mailto:|^tel:/i.test(raw))return;
+        var u=abs(raw);if(!/^https?:/i.test(u))return;
+        try{var here=new URL(location.href);if(here.origin===new URL(u).origin&&/\/\.netlify\/functions\/tour-page-proxy$/.test(here.pathname))return}catch(x){}
+        e.preventDefault();e.stopPropagation();location.assign(relay(u));
+      },true);
+      document.addEventListener('submit',function(e){
+        var f=e.target;if(!f||!f.action)return;
+        var original=f.getAttribute('data-igdc-provider-action')||f.getAttribute('action')||BASE_URL;
+        var u=abs(original);if(!/^https?:/i.test(u))return;
+        var method=(f.method||'GET').toUpperCase();
+        if(method==='GET'){
+          try{var target=new URL(u);var fd=new FormData(f);fd.forEach(function(v,k){target.searchParams.append(k,v)});e.preventDefault();location.assign(relay(target.href))}catch(x){}
+          return;
+        }
+        f.action=relay(u);f.target='_self';
+      },true);
+      function report(){try{var b=document.body||{};var d=document.documentElement||{};parent.postMessage({__igdcTourShellStatus:1,title:document.title||'',textLen:((b.innerText||'').trim()).length,height:Math.max(b.scrollHeight||0,d.scrollHeight||0)},'*')}catch(e){}}
+      setTimeout(report,450);setTimeout(report,1500);window.addEventListener('load',function(){setTimeout(report,100)});
+    })();<\/script>`;
+  }
   return `<script>(function(){
     var PROXY_ID=${JSON.stringify(proxyId)};
     var BASE_URL=${JSON.stringify(baseUrl)};
@@ -321,21 +364,23 @@ function lightweightBridge(finalUrl, opts){
 function injectShell(htmlText, finalUrl, opts){
   opts = opts || {};
   const mode = String(opts.mode || 'static').toLowerCase();
-  if(mode === 'snapshot') return snapshotDocument(htmlText, finalUrl);
+  const shell = opts.shell === true;
+  const live = shell || mode === 'live';
+  if(mode === 'snapshot' && !shell) return snapshotDocument(htmlText, finalUrl);
   let out = String(htmlText || '');
   out = removeFrameAndRedirectTraps(out);
-  // Static is the stable IGDC viewer path. It prevents source-page scripts from
-  // freezing the search shell while still showing server-rendered HTML/CSS/images.
-  if(mode !== 'live') out = stripActiveScripts(out);
-  out = rewriteAttributes(out, finalUrl, { mode: mode === 'live' ? 'live' : 'static', proxyId: opts.proxyId || '' });
+  // Static is the stable IGDC viewer path. MainFrame shell mode stays live so
+  // provider detail navigation can continue without leaving the IGDC shell.
+  if(!live) out = stripActiveScripts(out);
+  out = rewriteAttributes(out, finalUrl, { mode: live ? 'live' : 'static', shell:shell, proxyId: opts.proxyId || '' });
 
   const headInject = [
     '<meta charset="utf-8">',
     '<base href="' + escapeHtml(finalUrl) + '">',
     '<meta name="referrer" content="no-referrer-when-downgrade">',
     '<style>html,body{min-height:100%;margin:0;background:#fff!important;visibility:visible!important;opacity:1!important;}body{overflow:auto!important;}body.loading,body.preload,body.preloading{visibility:visible!important;opacity:1!important;}img,video,svg,canvas{max-width:100%;height:auto;}table{max-width:100%;}a{cursor:pointer;}</style>',
-    mode === 'live' ? liveTourBridge(finalUrl) : '',
-    lightweightBridge(finalUrl, opts)
+    live ? liveTourBridge(finalUrl) : '',
+    lightweightBridge(finalUrl, { proxyId:opts.proxyId || '', shell:shell })
   ].join('');
 
   if(/<head[^>]*>/i.test(out)) out = out.replace(/<head([^>]*)>/i, '<head$1>' + headInject);
@@ -491,7 +536,7 @@ async function fetchWithBrowserProfiles(event, target, fetchOpts){
         if(settled){ failOne(); return; }
         const ctrl = new AbortController();
         controllers.push(ctrl);
-        const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 6500);
+        const timer = setTimeout(() => { try{ ctrl.abort(); }catch(e){} }, 8500);
         try{
           const opts = Object.assign({}, fetchOpts || {}, { signal: ctrl.signal });
           opts.headers = copyRequestHeaders(event, target, item.name);
@@ -565,7 +610,8 @@ exports.handler = async function(event){
   if(event.httpMethod === 'OPTIONS') return json(200, { ok:true });
   const qp = event.queryStringParameters || {};
   const raw = qp.url;
-  const mode = qp.mode || (qp.snapshot === '1' ? 'snapshot' : (qp.static === '1' ? 'static' : 'static'));
+  const shell = String(qp.shell || '') === '1';
+  const mode = shell ? 'live' : (qp.mode || (qp.snapshot === '1' ? 'snapshot' : (qp.static === '1' ? 'static' : 'static')));
   const proxyId = qp.proxyId || '';
   if(!raw) return html(400, fallbackDocument('Missing url', '표시할 원문 주소가 없습니다.', ''));
 
@@ -583,7 +629,7 @@ exports.handler = async function(event){
   }
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 7600);
+  const timer = setTimeout(() => ctrl.abort(), 9800);
   try{
     const method = String(event.httpMethod || 'GET').toUpperCase();
     const fetchOpts = {
@@ -618,7 +664,7 @@ exports.handler = async function(event){
     if(String(qp.asset || '') === '1'){
       return response(pack.status || 200, text, { 'Content-Type': contentType, 'Cache-Control':'no-store' }, false);
     }
-    return html(pack.status || 200, injectShell(text, finalUrl, { mode, proxyId }));
+    return html(pack.status || 200, injectShell(text, finalUrl, { mode, proxyId, shell }));
   }catch(e){
     return html(502, fallbackDocument('원문 응답을 불러오지 못했습니다.', '사이트 응답 시간이 길거나 서버 접근을 제한했습니다.', target && target.href));
   }finally{
