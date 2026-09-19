@@ -20,7 +20,7 @@ const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-candidate-intake-v1.7.0-production-profitability-propagation";
+const VERSION = "commerce-candidate-intake-v1.7.1-authoritative-admin-front-match";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -275,16 +275,18 @@ function revenueRight(item, tier, policy, affiliateRegistry, candidateCountries)
   };
 }
 function reviewApproval(item, tier, policy){
-  if(tier!=="approved_commerce_member" && tier!=="managed_sponsor") return {ok:true, state:"not-required"};
   const review=plain(item&&item.commerceReview), listing=plain(item&&item.directCommerceListing), approval=plain(item&&item.operatorApproval);
-  const desired=lower(policy.reviewQueue&&policy.reviewQueue.directMemberRequiresApprovalState||"approved");
-  const allowed=array(policy.reviewQueue&&policy.reviewQueue.directMemberRequiresAssignmentState||["approved","pinned"]).map(lower);
   const state=lower(first(review.status,listing.reviewStatus,approval.status));
   const assignment=lower(first(review.assignmentState,listing.assignmentState,approval.assignmentState));
   const id=first(review.approvalId,listing.approvalId,approval.approvalId,approval.id);
   const at=first(review.approvedAt,listing.approvedAt,approval.approvedAt,approval.updatedAt);
   const publicationStatus=lower(first(review.publicationStatus,listing.publicationStatus,approval.publicationStatus));
   const explicitPublicationRequested=bool(first(review.explicitPublicationRequested,review.publicationRequested,listing.publicationRequested,approval.publicationRequested)) || publicationStatus==="publish_requested";
+  if(tier!=="approved_commerce_member" && tier!=="managed_sponsor"){
+    return {ok:true,state:"not-required",assignment:assignment||null,approvalId:id||null,approvedAt:at||null,publicationStatus:publicationStatus||null,explicitPublicationRequested};
+  }
+  const desired=lower(policy.reviewQueue&&policy.reviewQueue.directMemberRequiresApprovalState||"approved");
+  const allowed=array(policy.reviewQueue&&policy.reviewQueue.directMemberRequiresAssignmentState||["approved","pinned"]).map(lower);
   return {ok:state===desired && allowed.includes(assignment) && !!id && !!at,state,assignment,approvalId:id||null,approvedAt:at||null,publicationStatus:publicationStatus||null,explicitPublicationRequested};
 }
 function marketReady(item, policy){
@@ -429,13 +431,18 @@ function queueRecordToItem(entry){
   const candidate=clone(plain(entry&&entry.candidate));
   if(!candidate || !Object.keys(candidate).length) return null;
   const review=plain(entry.review); const assignment=plain(entry.assignment); const revenue=plain(entry.revenue);
-  candidate.commerceCandidate=Object.assign({},plain(candidate.commerceCandidate),{sourceTier:first(entry.sourceTier,"approved_commerce_member")});
-  candidate.directCommerceListing=Object.assign({},plain(candidate.directCommerceListing),plain(entry.directCommerceListing),{sourceTier:first(entry.sourceTier,"approved_commerce_member"),contractApproved:bool(first(entry.contractApproved,plain(entry.directCommerceListing).contractApproved)),contractStatus:first(entry.contractStatus,plain(entry.directCommerceListing).contractStatus),contractId:first(entry.contractId,plain(entry.directCommerceListing).contractId),expectedNetRevenuePerOrder:first(entry.expectedNetRevenuePerOrder,plain(entry.directCommerceListing).expectedNetRevenuePerOrder)});
+  // The synchronized administrator review queue is authoritative. Historical
+  // research-source labels (for example risk_ranked_official_supplier_product)
+  // are not commerce source tiers and must not downgrade an authenticated
+  // administrator Front Match into an unrecognized source.
+  const queueTier=sourceTier(null,entry&&entry.sourceTier)||"approved_commerce_member";
+  candidate.commerceCandidate=Object.assign({},plain(candidate.commerceCandidate),{sourceTier:queueTier});
+  candidate.directCommerceListing=Object.assign({},plain(candidate.directCommerceListing),plain(entry.directCommerceListing),{sourceTier:queueTier,contractApproved:bool(first(entry.contractApproved,plain(entry.directCommerceListing).contractApproved)),contractStatus:first(entry.contractStatus,plain(entry.directCommerceListing).contractStatus),contractId:first(entry.contractId,plain(entry.directCommerceListing).contractId),expectedNetRevenuePerOrder:first(entry.expectedNetRevenuePerOrder,plain(entry.directCommerceListing).expectedNetRevenuePerOrder)});
   const publicationRequest=plain(entry&&entry.publicationRequest);
   const publicationStatus=lower(first(publicationRequest.status,assignment.publicationStatus));
   const explicitPublicationRequested=publicationRequest.requested===true || publicationStatus==="publish_requested";
   candidate.commerceReview=Object.assign({},plain(candidate.commerceReview),review,{assignmentState:first(review.assignmentState,assignment.state),approvalId:first(review.approvalId,assignment.id),approvedAt:first(review.approvedAt,assignment.updatedAt),publicationStatus:publicationStatus||null,explicitPublicationRequested,publicationRequest:clone(publicationRequest)});
-  candidate.commerceCandidate=Object.assign({},plain(candidate.commerceCandidate),{sourceTier:first(entry.sourceTier,"approved_commerce_member"),explicitPublicationRequested,publicationScope:{country:first(publicationRequest.country,assignment.country),region:first(publicationRequest.region,assignment.region,"NATIONWIDE"),page:first(publicationRequest.page,assignment.page),section:first(publicationRequest.section,assignment.section),crossCountryFallback:false}});
+  candidate.commerceCandidate=Object.assign({},plain(candidate.commerceCandidate),{sourceTier:queueTier,explicitPublicationRequested,publicationScope:{country:first(publicationRequest.country,assignment.country),region:first(publicationRequest.region,assignment.region,"NATIONWIDE"),page:first(publicationRequest.page,assignment.page),section:first(publicationRequest.section,assignment.section),crossCountryFallback:false}});
   candidate.brokerageContract=Object.assign({},plain(candidate.brokerageContract),revenue,{approved:bool(first(revenue.approved,entry.contractApproved)),status:first(revenue.status,entry.contractStatus),id:first(revenue.contractId,entry.contractId),expectedNetRevenuePerOrder:first(revenue.expectedNetRevenuePerOrder,entry.expectedNetRevenuePerOrder)});
   return candidate;
 }
