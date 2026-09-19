@@ -1038,8 +1038,10 @@ async function dispatchFrontRefresh(event,actor,body,scope){
   const operation=low(body&&body.operation)==="unmatch"?"unpublish":"publish";
   const expected=operation==="unpublish"?"SITE_UNPUBLISH":"SITE_PUBLISH";
   if(text(body&&body.confirmation)!==expected){const error=new Error("프론트 최종 갱신 확인 값이 일치하지 않습니다.");error.statusCode=409;error.code="front_refresh_confirmation_required";throw error;}
-  const candidateCount=Math.max(1,Number(body&&body.candidateCount)||1);
-  const dispatch=await ReleaseDispatch.dispatch({candidateId:text(body&&body.candidateId)||null,assignmentId:text(body&&body.assignmentId)||null,actorId:text(actor&&actor.sub),operation,candidateCount,explicitAdminAuthorization:true});
+  const candidateIds=Array.from(new Set(asArray(body&&body.candidateIds).map(text).filter(Boolean))).slice(0,1800);
+  const primaryCandidate=text(body&&body.candidateId)||candidateIds[0]||null;
+  const candidateCount=Math.max(1,Number(body&&body.candidateCount)||candidateIds.length||1);
+  const dispatch=await ReleaseDispatch.dispatch({candidateId:primaryCandidate,candidateIds,assignmentId:text(body&&body.assignmentId)||null,actorId:text(actor&&actor.sub),operation,candidateCount,explicitAdminAuthorization:true});
   return {ok:true,status:dispatch.queued===true?"queued":"pending_build",version:VERSION,action:"dispatch_front_refresh",scope:scope||null,candidateCount,release:dispatch,persisted:true,pendingBuild:dispatch.queued!==true,automaticPublication:false,publicSnapshotConfirmed:false,buildVerificationRequired:true};
 }
 
