@@ -131,7 +131,7 @@ async function fallbackPagedScopeRows(country,region,maxRows){
 }
 async function scopedProductCandidateRows(countryInput,regionInput,limitInput){
   const country=normalizeCountry(countryInput),region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE";
-  const limit=Math.max(50,Math.min(3000,Number(limitInput)||3000));
+  const limit=Math.max(50,Math.min(5000,Number(limitInput)||5000));
   if(!country||country==="GLOBAL")return [];
   const seen=new Map(),regions=scopedRegionValues(country,region);
   // Current product candidates always carry marketScope. Older rows may only
@@ -185,14 +185,14 @@ async function scopedLiveProductResearchQueue(country,region,limit){
     const grouped={assignments:new Map(),markets:new Map(),revenues:new Map(),evidence:new Map()};
     function add(map,row){const id=text(row&&row.candidate_id);if(!id)return;if(!map.has(id))map.set(id,[]);map.get(id).push(row);}
     settled[0].rows.forEach((row)=>add(grouped.assignments,row));settled[1].rows.forEach((row)=>add(grouped.markets,row));settled[2].rows.forEach((row)=>add(grouped.revenues,row));settled[3].rows.forEach((row)=>add(grouped.evidence,row));
-    const output=candidates.map((candidate)=>{const id=text(candidate&&candidate.id),payload=plain(candidate&&candidate.source_payload),live=ProductPipeline.liveQueueRow(candidate,{assignments:grouped.assignments.get(id)||[],markets:grouped.markets.get(id)||[],revenues:grouped.revenues.get(id)||[],evidence:grouped.evidence.get(id)||[]}),adminPlacement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.primaryPlacement||payload.placement),life=plain(live.lifecycle),frontAssignment=plain(life.assignment);live.queueControl=plain(payload.queueControl);live.slotDecision=text(payload.slotDecision);live.frontAssignment=frontAssignment;if(lower(payload.slotDecision)==='slot_candidate'&&text(adminPlacement.page)&&text(adminPlacement.sectionKey||adminPlacement.section)){live.placement={page:text(adminPlacement.page),section:text(adminPlacement.sectionKey||adminPlacement.section),slot:text(adminPlacement.slot),country:text(adminPlacement.country),region:text(adminPlacement.region||'NATIONWIDE')};}else if(lower(payload.slotDecision)!=='slot_candidate'){live.placement={};}return live;});
+    const output=candidates.map((candidate)=>{const id=text(candidate&&candidate.id),payload=plain(candidate&&candidate.source_payload),live=ProductPipeline.liveQueueRow(candidate,{assignments:grouped.assignments.get(id)||[],markets:grouped.markets.get(id)||[],revenues:grouped.revenues.get(id)||[],evidence:grouped.evidence.get(id)||[]});live.queueControl=plain(payload.queueControl);live.slotDecision=text(payload.slotDecision);return live;});
     const names=["assignments","markets","revenues","evidence"],relationErrors=[];settled.forEach((result,index)=>result.errors.forEach((message)=>relationErrors.push({source:names[index],message})));
     return {ok:relationErrors.length===0,rows:output,storageError:null,relationErrors};
   }catch(error){return {ok:false,rows:[],storageError:text(error&&error.message||error),relationErrors:[]};}
 }
 async function scopedStage(root,country,region,limitInput){
   const stored=CommerceIntake.readStage(root)||{schema:"commerce-candidate-staging.snapshot.v1",summary:{considered:0},candidates:[]};
-  const scopedLimit=Math.max(100,Math.min(3000,Number(limitInput)||3000));
+  const scopedLimit=Math.max(100,Math.min(5000,Number(limitInput)||5000));
   const storedScoped=filteredStage(stored,country,region),live=await scopedLiveProductResearchQueue(country,region,scopedLimit),merged=new Map();
   for(const row of Array.isArray(storedScoped.candidates)?storedScoped.candidates:[])merged.set(text(row&&row.candidateId),row);
   for(const row of live.rows||[])merged.set(text(row&&row.candidateId),row);
@@ -316,7 +316,7 @@ function countryRegistry(){
   REGISTRY_CACHE={
     schema:text(countries.schema),version:text(countries.version),policy:plain(countries.policy),
     regions:Array.isArray(countries.regions)?countries.regions:[],
-    countries:(Array.isArray(countries.countries)?countries.countries:[]).filter((row)=>normalizeCountry(row&&row.code)&&normalizeCountry(row&&row.code)!=="KP"),
+    countries:(Array.isArray(countries.countries)?countries.countries:[]).filter((row)=>normalizeCountry(row&&row.code)),
     subdivisionMap
   };
   return REGISTRY_CACHE;
@@ -332,7 +332,7 @@ async function locationStatus(doc){
   const countryRows=safeRows(settled[0]),availability=safeRows(settled[1]),assignments=safeRows(settled[2]);
   const map=new Map();
   function ensure(codeInput,seed){
-    const code=normalizeCountry(codeInput);if(!code||code==="KP"||!allowedCountryCodes.has(code))return null;
+    const code=normalizeCountry(codeInput);if(!code||!allowedCountryCodes.has(code))return null;
     if(!map.has(code))map.set(code,{code,nameKo:code,nameEn:code,worldRegion:null,enabled:true,requiresSubdivision:false,subdivisionType:null,subdivisions:[],observedRegions:new Set(),candidateIds:new Set(),eligibleIds:new Set(),heldIds:new Set(),availabilityIds:new Set(),assignmentIds:new Set(),manualPinnedIds:new Set(),lastUpdated:""});
     const entry=map.get(code),src=plain(seed);
     if(text(src.nameKo))entry.nameKo=text(src.nameKo);if(text(src.nameEn))entry.nameEn=text(src.nameEn);
@@ -363,7 +363,7 @@ async function locationStatus(doc){
     aiState:"inherit",status:entry.candidateIds.size?"candidate_data":((entry.availabilityIds.size||entry.assignmentIds.size)?"registry_only":"ready_empty")
   })).sort((a,b)=>{const ao=(registry.regions.find((r)=>r.id===a.worldRegion)||{}).order||999;const bo=(registry.regions.find((r)=>r.id===b.worldRegion)||{}).order||999;return ao-bo||a.nameKo.localeCompare(b.nameKo,"ko")||a.code.localeCompare(b.code);});
   if(unscoped.length)countries.unshift({code:"UNSCOPED",name:"국가 미지정 후보",nameKo:"국가 미지정 후보",nameEn:"Unscoped candidates",worldRegion:null,enabled:true,requiresSubdivision:false,candidateCount:unscoped.length,releaseEligible:unscoped.filter((row)=>row&&row.releaseEligible===true).length,held:unscoped.filter((row)=>row&&row.releaseEligible!==true).length,availabilityCount:0,assignmentCount:0,manualPinnedCount:0,regions:[],subdivisions:[],lastUpdated:null,aiState:"manual",status:"unscoped_requires_assignment"});
-  return {ok:true,version:VERSION,mode:"country-region-ip-control",registry:{schema:registry.schema,version:registry.version,countryCount:countries.filter((row)=>row.code!=="UNSCOPED").length,regions:registry.regions,excludedCountryCodes:["KP"]},countries,database:{countriesAvailable:settled[0].status==="fulfilled",availabilityAvailable:settled[1].status==="fulfilled",assignmentsAvailable:settled[2].status==="fulfilled"},policy:{countryRequired:true,regionOptional:true,regionFallback:"same-country-nationwide",crossCountryFallback:false,unresolvedGeo:"empty",unscopedCandidates:"hold-until-country-assigned",manualPinnedPrecedence:true}};
+  return {ok:true,version:VERSION,mode:"country-region-ip-control",registry:{schema:registry.schema,version:registry.version,countryCount:countries.filter((row)=>row.code!=="UNSCOPED").length,regions:registry.regions,excludedCountryCodes:[]},countries,database:{countriesAvailable:settled[0].status==="fulfilled",availabilityAvailable:settled[1].status==="fulfilled",assignmentsAvailable:settled[2].status==="fulfilled"},policy:{countryRequired:true,regionOptional:true,regionFallback:"same-country-nationwide",crossCountryFallback:false,unresolvedGeo:"empty",unscopedCandidates:"hold-until-country-assigned",manualPinnedPrecedence:true}};
 }
 
 function readGeoObject(value){
@@ -378,7 +378,7 @@ function geoProbe(event){
   const detected=normalizeCountry(rawDetected);const excluded=detected==="KP";
   const registry=countryRegistry();const row=!excluded&&registry.countries.find((item)=>normalizeCountry(item&&item.code)===detected);const country=row?detected:"";
   const region=country?normalizeRegion(first(subdivision.code,subdivision.iso_code,typeof geo.subdivision==="string"?geo.subdivision:"",geo.subdivisionCode,geo.regionCode,geo.stateCode,geo.provinceCode,geo.region,geo.state,headers["x-region"],headers["x-nf-subdivision"],headers["x-nf-region"],headers["x-vercel-ip-country-region"]),country):"";
-  return {ok:true,version:VERSION,country:country||null,region:region||null,worldRegion:row&&row.regionGroup||null,resolved:!!country,excluded,detectedCountry:detected||rawDetected||null,scope:country+(region?"-"+region:""),policy:{exactRegionFirst:true,nationwideFallbackWithinSameCountry:true,crossCountryFallback:false,unresolvedGeo:"empty",excludedCountryCodes:["KP"]}};
+  return {ok:true,version:VERSION,country:country||null,region:region||null,worldRegion:row&&row.regionGroup||null,resolved:!!country,excluded,detectedCountry:detected||rawDetected||null,scope:country+(region?"-"+region:""),policy:{exactRegionFirst:true,nationwideFallbackWithinSameCountry:true,crossCountryFallback:false,unresolvedGeo:"empty",excludedCountryCodes:[]}};
 }
 
 function countBy(rows, selector){
@@ -647,15 +647,15 @@ exports.handler=async function(event){
       const probe=geoProbe(event);const requested=text(query.country).toUpperCase();
       const scopeCountry=requested||(probe.resolved?probe.country:"UNRESOLVED");
       const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
-      const stageLimit=action==="diagnostic"?600:(action==="summary"?800:3000);
+      const stageLimit=action==="diagnostic"?600:(action==="summary"?800:5000);
       const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion,stageLimit);
       if(action==="dashboard"){
-        const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,3000)};
+        const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,5000)};
         if(!["1","true","yes"].includes(lower(query.compact)))response.diagnostic=diagnosticDoc(doc,member);
         return json(200,response);
       }
       if(action==="summary")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc)});
-      if(action==="candidates")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,3000)});
+      if(action==="candidates")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,5000)});
       if(action==="diagnostic")return json(200,diagnosticDoc(doc,member));
       return json(404,{ok:false,error:"지원하지 않는 조회 요청입니다."});
     }

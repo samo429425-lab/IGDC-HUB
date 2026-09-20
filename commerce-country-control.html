@@ -250,7 +250,7 @@
         <label class="supplier-select-label"><input id="queueSelectAll" type="checkbox" data-queue-select-all> 전체 선택</label>
         <span id="queueSelectedCount" class="supplier-selection-count">선택 0건</span>
         <button id="queueOpenInProductManagerBtn" type="button" disabled>선택 상품 관리목록에서 보기</button>
-        <button id="queueSelectedAiPlaceBtn" type="button" disabled>선택 상품 AI로 18개 섹션 자동배치</button>
+        <button id="queueSelectedAiPlaceBtn" type="button" disabled>선택 상품 AI 자동배치(비공개)</button>
         <select id="queueSelectedManualSection" class="product-management-select">
           <option value="">수동 배치 섹션 선택</option>
           <option value="home|home_1">홈 · home_1</option>
@@ -272,7 +272,7 @@
           <option value="social|rightPanel">소셜 · 우측</option>
           <option value="tour|tour">투어 · 우측</option>
         </select>
-        <button id="queueSelectedManualPlaceBtn" type="button" class="secondary" disabled>선택 상품 수동배치</button>
+        <button id="queueSelectedManualPlaceBtn" type="button" class="secondary" disabled>선택 상품 수동배치(비공개)</button>
         <button type="button" class="secondary" data-queue-bulk="dismiss" disabled>선택 삭제·재수집 허용</button>
         <button type="button" class="danger" data-queue-bulk="purge" disabled>선택 영구 제외</button>
         <button type="button" class="ghost" data-queue-bulk="remove_from_list" disabled>선택 목록에서만 제거</button>
@@ -380,7 +380,7 @@
     </section>
 
     <section id="productSectionBoard" class="product-section-board" aria-label="18개 섹션 배치 예정 상품 목록">
-      <div class="section-board-head"><div><h3>18개 섹션 배치 예정 상품 목록</h3><div class="small">AI 자동 배치 또는 관리자 수동 배치가 끝난 상품은 바로 프론트 매칭할 수 있습니다. 실제 게재는 상품별 공개 안전 게이트와 빌드 검증을 통과한 항목만 요청됩니다.</div></div><div class="section-board-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="distribution_18_sections" data-policy-workspace-label="18개 섹션 배치 예정 상품" data-policy-scope="country">AI 운영·정책 대화</button><span id="productSectionSummary" class="pill info section-board-count">배치 예정 0건</span><label class="section-select-label"><input id="allSectionsSelect" type="checkbox"> 18개 전체 선택</label><span id="selectedSectionCount" class="pill info">선택 섹션 0개</span><button id="selectedSectionsMatchBtn" type="button" class="product-section-front-button" disabled>선택 섹션 프론트 매칭</button><button id="allSectionsMatchBtn" type="button" class="product-section-front-button" disabled>전체 섹션 프론트 매칭</button><button id="selectedSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>선택 섹션 매칭 해제</button><button id="allSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>전체 섹션 매칭 해제</button></div></div>
+      <div class="section-board-head"><div><h3>18개 섹션 배치 예정 상품 목록</h3><div class="small"><strong>관리자 배치가 기준입니다.</strong> AI 자동 배치는 비공개 배치만 정리하고 프론트를 공개하지 않습니다. 공개 반영은 <strong>이 섹션 / 선택 섹션 / 전체 섹션 프론트 매칭</strong> 중 필요한 범위 하나만 실행하면 됩니다. 매칭 해제는 해당 공개 범위를 제거합니다.</div></div><div class="section-board-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="distribution_18_sections" data-policy-workspace-label="18개 섹션 배치 예정 상품" data-policy-scope="country">AI 운영·정책 대화</button><span id="productSectionSummary" class="pill info section-board-count">배치 예정 0건</span><label class="section-select-label"><input id="allSectionsSelect" type="checkbox"> 18개 전체 선택</label><span id="selectedSectionCount" class="pill info">선택 섹션 0개</span><button id="selectedSectionsMatchBtn" type="button" class="product-section-front-button" disabled>선택 섹션 프론트 매칭</button><button id="allSectionsMatchBtn" type="button" class="product-section-front-button" disabled>전체 섹션 프론트 매칭</button><button id="selectedSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>선택 섹션 매칭 해제</button><button id="allSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>전체 섹션 매칭 해제</button></div></div>
       <div id="productSectionList" class="product-section-list"></div>
     </section>
   </section>
@@ -483,7 +483,7 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260919-queue-transfer2"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260920-final-stable1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
 </body>

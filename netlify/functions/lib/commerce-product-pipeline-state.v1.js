@@ -172,7 +172,7 @@ function registryState(candidateInput, relationsInput){
 
 function liveQueueRow(candidateInput, relationsInput){
   const candidate=plain(candidateInput), payload=plain(candidate.source_payload), lifecycle=registryState(candidate,relationsInput), card=plain(payload.productCard&&payload.productCard.schema?payload.productCard:productCard(payload));
-  const placement=plain(payload.placement), ranking=plain(payload.productRanking), revenue=plain(payload.revenue), readiness=plain(payload.researchReadiness);
+  const placement=plain(payload.approvedPlacement || payload.selectedPlacement || payload.placement), ranking=plain(payload.productRanking), revenue=plain(payload.revenue), readiness=plain(payload.researchReadiness);
   const qualityReasons=unique(array(readiness.blockers).concat(array(readiness.reviewGaps),array(readiness.warnings)));
   return {
     candidateId:text(candidate.id),
