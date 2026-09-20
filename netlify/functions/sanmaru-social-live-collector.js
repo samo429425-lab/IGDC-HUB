@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.25.0-mandatory-registry-sweep";
+const VERSION = "sanmaru-social-live-collector-v1.26.0-global-registry-real-media";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -637,7 +637,14 @@ function scopedQueries(plan, cursor, passes, route) {
     const discoveryIntent = DISCOVERY_INTENT_TERMS[absoluteIndex % DISCOVERY_INTENT_TERMS.length];
     const sparseTerms = SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || [];
     const sparseTerm = sparseTerms.length ? sparseTerms[absoluteIndex % sparseTerms.length] : "";
-    queries.push([baseQuery, sparseTerm, discoveryIntent, countryQueryTerm(route), languageQueryTerm(route)].filter(Boolean).join(" "));
+    const sparseGlobal = SPARSE_DISCOVERY_PLATFORMS.has(plan.platform) && (absoluteIndex % 2 === 1);
+    queries.push([
+      baseQuery,
+      sparseTerm,
+      discoveryIntent,
+      sparseGlobal ? "global worldwide public" : countryQueryTerm(route),
+      sparseGlobal ? "" : languageQueryTerm(route)
+    ].filter(Boolean).join(" "));
   }
   return Array.from(new Set(queries));
 }
@@ -763,7 +770,14 @@ function registryLatestQuery(seed, route, platform) {
     seed.title ? '"' + seed.title.replace(/"/g, "") + '"' : "",
   ].filter(Boolean).join(" ");
   const qualityFocus = REGISTRY_QUALITY_FOCUS[platform] || "";
-  return [identity, languageQueryTerm(route), "latest recent public", qualityFocus].filter(Boolean).join(" ");
+  // The registry is a curated global research seed bank. Sparse providers must
+  // not be trapped behind the viewer's current IP/country vocabulary; use the
+  // creator identity globally, while generic discovery still alternates local
+  // and worldwide queries.
+  const scopeTerm = SPARSE_DISCOVERY_PLATFORMS.has(platform)
+    ? "global worldwide"
+    : languageQueryTerm(route);
+  return [identity, scopeTerm, "latest recent public", qualityFocus].filter(Boolean).join(" ");
 }
 function scopedQueriesWithRegistry(plan, cursor, passes, route, registrySeeds) {
   const seeds = Array.isArray(registrySeeds) ? registrySeeds : [];
@@ -1942,7 +1956,7 @@ function genericProviderThumbnail(value, platform) {
     const url = new URL(normalized);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
     const path = (url.pathname + url.search).toLowerCase();
-    if (/\.(?:js|mjs|css|map|json|html?|xml)(?:$|[?#])/i.test(normalized)) return true;
+    if (/\.(?:js|mjs|css|map|json|html?|xml|woff2?|ttf|otf|eot)(?:$|[?#])/i.test(normalized)) return true;
     if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(path)) return true;
     if (platform === "instagram") {
       if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return true;

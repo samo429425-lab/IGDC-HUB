@@ -1583,7 +1583,7 @@
         "연결 정상 · " +
         ((d.source && d.source.candidateSourceMode) || "read_only");
       show(
-        "인플루언서 등록부와 최신 콘텐츠 후보·교체 대기열을 분리해 읽었습니다.",
+        "관리 화면에서는 인플루언서 등록부와 최신 콘텐츠 후보·교체 대기열을 유형별로 분리해 읽고, 실제 수집에서는 등록 인플루언서를 최신 콘텐츠 검색 시드로 함께 사용합니다.",
         "ok",
       );
     } catch (e) {
@@ -1928,10 +1928,11 @@
       if (dryRun) break;
       if (!stopRequested && j.sectionCount < j.target) await wait(650);
     }
+    var sparseRescue = /^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section);
     if (
       !dryRun &&
       !stopRequested &&
-      j.sectionCount >= j.target &&
+      (j.sectionCount >= j.target || sparseRescue) &&
       !j.qualitySweepDone
     ) {
       j.qualitySweepActive = true;

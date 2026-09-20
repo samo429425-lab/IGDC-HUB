@@ -14,7 +14,7 @@ const ChannelLink = require("./social-channel-link.v1");
 const AIPolicy = require("./social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-store-v1.12.1-profile-fallback-media-safe";
+  "social-candidate-store-v1.12.2-real-media-profile-safe";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1159,10 +1159,12 @@ function publishableProfileThumbnail(row) {
     const expiry = signedThumbnailExpiry(platform, thumb);
     if (!expiry || expiry > Date.now() + 24 * 60 * 60 * 1000) return thumb;
   }
-  // A registry/profile card is explicitly labelled as a creator/community card,
-  // never as a post thumbnail. This lets sparse sections replace SAMPLE slots
-  // without pretending an unavailable provider image is real content artwork.
-  return generatedProfileCardThumbnail(r, platform);
+  // Do not manufacture an IGDC letter-card when the provider supplies no real
+  // profile/media image. A synthetic card was visually indistinguishable from a
+  // content thumbnail and is the source of the generic 안내-card rows seen on
+  // sparse SNS sections. Keep the permanent SAMPLE slot until a real provider
+  // image or a real post thumbnail is available.
+  return "";
 }
 function profileFallbackSafetyText(row) {
   const r = plain(row), raw = plain(r.raw);

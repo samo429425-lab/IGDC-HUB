@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.7.0-reddit-public-json";
+const VERSION = "social-preview-metadata-v1.8.0-reddit-community-media";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -100,7 +100,7 @@ function previewImageUrl(platform, value) {
     // Search/provider pages frequently expose JavaScript, CSS, sprites or brand
     // chrome in the same fields that normally contain a post image. None of
     // those may consume a real Social slot.
-    if (/\.(?:js|mjs|css|map|json|html?|xml)(?:$|[?#])/i.test(raw)) return "";
+    if (/\.(?:js|mjs|css|map|json|html?|xml|woff2?|ttf|otf|eot)(?:$|[?#])/i.test(raw)) return "";
     if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(full)) return "";
 
     if (platform === "instagram") {
@@ -362,6 +362,28 @@ async function fetchJson(url) {
   }
 }
 
+async function redditCommunityImage(subreddit) {
+  const name = text(subreddit).replace(/^r\//i, "").replace(/[^A-Za-z0-9_]/g, "");
+  if (!name) return "";
+  try {
+    const payload = await fetchJson("https://www.reddit.com/r/" + encodeURIComponent(name) + "/about.json?raw_json=1");
+    const data = payload && payload.data || {};
+    const candidates = [
+      data.community_icon,
+      data.icon_img,
+      data.banner_background_image,
+      data.banner_img,
+      data.mobile_banner_image,
+    ];
+    for (const value of candidates) {
+      const clean = decodeHtml(value || "").replace(/&amp;/gi, "&");
+      const image = previewImageUrl("reddit", clean);
+      if (image) return image;
+    }
+  } catch (_error) {}
+  return "";
+}
+
 async function redditPublicPreview(contentUrl) {
   try {
     const safe = safeProviderUrl("reddit", contentUrl);
@@ -388,6 +410,11 @@ async function redditPublicPreview(contentUrl) {
       const image = previewImageUrl("reddit", decoded);
       if (image) { thumbnailUrl = image; break; }
     }
+    // Text-only Reddit posts are valid content but frequently have no post
+    // artwork. Use the real subreddit/community icon or banner, never a
+    // synthetic IGDC letter-card, so the front still receives an honest
+    // provider-owned thumbnail linked to the actual post.
+    if (!thumbnailUrl) thumbnailUrl = await redditCommunityImage(row.subreddit || row.subreddit_name_prefixed || "");
     return {
       title: stripTags(row.title || ""),
       creatorName: stripTags(row.author || ""),
