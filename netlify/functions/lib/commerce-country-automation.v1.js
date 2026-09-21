@@ -3543,12 +3543,13 @@ async function productCandidateLedgerAction(actorId, input) {
   const rows = await frontSyncSelectCandidates([candidateId]), row = plain(rows[0]);
   if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { const error = new Error("선택 상품 후보 원장을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   const payload = Object.assign({}, plain(row.source_payload)), now = iso(), actor = text(actorId) || "administrator";
+  const priorPlacement = plain(payload.approvedPlacement || payload.selectedPlacement || payload.placement), priorStructuredKey = productPlacementKey(priorPlacement), priorLegacyKey = text(payload.page) && text(payload.section) ? text(payload.page) + "|" + text(payload.section) : "", priorKey = validProductSectionKey(priorStructuredKey) ? priorStructuredKey : (validProductSectionKey(priorLegacyKey) ? priorLegacyKey : "");
   let status = text(row.status) || "approval_pending", placement = null, effectiveDecision = decision, releaseAssignment = false;
   if (decision === "slot_candidate") {
     const key = text(input && input.placementKey), sourcePlacement = array(payload.proposedPlacements).find((item) => productPlacementKey(item) === key) || { key };
     placement = candidateLedgerPlacementRecord(scope, sourcePlacement, actor, "administrator");
     if (!placement) { const error = new Error("지정할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
-    payload.slotDecision = "slot_candidate"; payload.approvedPlacement = placement; payload.placement = placement; status = "approval_pending";
+    payload.slotDecision = "slot_candidate"; payload.approvedPlacement = placement; payload.placement = placement; payload.page = placement.page; payload.channel = placement.page; payload.section = placement.sectionKey; payload.psom_key = placement.sectionKey; status = "approval_pending";
     payload.queueControl = Object.assign({}, plain(payload.queueControl), { hiddenFromCountryQueue:false, permanentExcluded:false, action:"section_selected", restoredAt:now, restoredBy:actor });
     payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
   } else if (decision === "undecided" || decision === "ai_reclassify") {
@@ -3572,12 +3573,12 @@ async function productCandidateLedgerAction(actorId, input) {
     payload.affiliateSettlement = normalizeAffiliateSettlement(input && input.affiliateSettlement, { existing: payload.affiliateSettlement }); effectiveDecision = lower(payload.slotDecision || "undecided");
   } else { const error = new Error("지원하지 않는 상품 후보 관리 작업입니다."); error.statusCode = 400; throw error; }
 
-  let assignmentCleanup={ok:true,count:0};
+  let assignmentCleanup={ok:true,count:0,deferred:true,reason:"front_relation_preserved_until_explicit_front_apply"};
   if (releaseAssignment) {
-    try { const removed=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId)); assignmentCleanup={ok:true,count:array(removed).length}; }
-    catch (error) { assignmentCleanup={ok:false,error:text(error&&error.message)||"assignment_release_failed"}; }
-    delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement;
-    payload.frontPublication = Object.assign({}, plain(payload.frontPublication), { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"unmatch", status:"unpublish_requested", queued:false, persisted:true, pendingBuild:true, publicSnapshotConfirmed:false, buildVerificationRequired:true, deferredBuild:true, reason:"administrator_section_release", requestedAt:now, requestedBy:actor });
+    const priorSplit = validProductSectionKey(priorKey) ? splitProductSectionKey(priorKey) : null;
+    if (priorSplit) payload.previousApprovedPlacement = Object.assign({}, priorPlacement, { key:priorKey, page:priorSplit.page, section:priorSplit.sectionKey, sectionKey:priorSplit.sectionKey, country:scope.country, region:scope.region, removedAt:now, removedReason:"administrator_section_release" });
+    delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement; delete payload.page; delete payload.channel; delete payload.section; delete payload.psom_key; delete payload.slot;
+    payload.frontPublication = Object.assign({}, plain(payload.frontPublication), { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"unmatch", status:"unpublish_requested", queued:false, persisted:true, pendingBuild:true, publicSnapshotConfirmed:false, buildVerificationRequired:true, deferredBuild:true, reason:"administrator_section_release", page:priorSplit&&priorSplit.page||text(plain(payload.frontPublication).page)||null, section:priorSplit&&priorSplit.sectionKey||text(plain(payload.frontPublication).section)||null, sectionKey:priorSplit&&priorSplit.sectionKey||text(plain(payload.frontPublication).sectionKey)||null, country:scope.country, region:scope.region, requestedAt:now, requestedBy:actor });
   }
   payload.decisionAt = now; payload.decisionBy = actor; payload.decisionSource = "candidate_ledger_control"; payload.publicPublication = false; payload.automaticImport = false;
   if (decision !== "affiliate_settlement") payload.review = Object.assign({}, plain(payload.review), { state: decision === "remove_from_list" ? "removed_from_list" : (effectiveDecision === "slot_candidate" ? "pending" : effectiveDecision), decidedAt: now, decidedBy: actor });
@@ -3691,6 +3692,7 @@ function candidateRuntimeCard(payloadInput, productInput) {
 }
 async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, optionsInput) {
   const scope = researchScope(input), actor = text(actorId) || "administrator", options = plain(optionsInput), ids = Array.from(new Set(array(candidateIdsInput).map(text).filter(Boolean))).slice(0, 500);
+  const validationOnly = options.reassign === false, forceSelectedAi = options.forceSelectedAi === true;
   const rebalance = options.rebalance === true, suppliedBalanceCounts = Object.keys(plain(options.balanceCounts)).length > 0;
   let workingCounts = normalizeProductSectionCounts(options.balanceCounts);
   let tourDiningAutomaticCount = Math.max(0, Math.floor(Number(options.tourDiningAutomaticCount || 0) || 0));
@@ -3737,7 +3739,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       continue;
     }
     const inspected = Object.keys(inspectedRaw).length ? Object.assign({}, sourceProduct, inspectedRaw, { candidateId:id, id:id }) : Object.assign({}, sourceProduct, { candidateId:id, id:id, productPageLive:false, inspectionComplete:true, researchStatus:"inspection_error" });
-    const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
+    const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = forceSelectedAi ? false : candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
     let nextDecision = currentDecision, nextPlacement = currentPlacement, status = text(row.status) || "research_pending", assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey), changeReason = "runtime_revalidated", currentBalanceReleased = false;
     const releaseCurrentBalance = () => {
       if (!rebalance || currentBalanceReleased || currentDecision !== "slot_candidate" || !validProductSectionKey(currentKey)) return;
@@ -3745,14 +3747,17 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       if (currentKey === "tour|tour" && tourProfile.diningAuxiliary === true) tourDiningAutomaticCount = Math.max(0, tourDiningAutomaticCount - 1);
       currentBalanceReleased = true;
     };
-    if (health.dead) {
-      // An administrator placement lock preserves the historical decision, but
-      // it must never force a dead/redirected product back into the public
-      // Snapshot. Runtime validity is the final publication safety gate.
+    if (validationOnly) {
+      // Front Match validates publication safety only. The administrator ledger
+      // is the desired state and must never be rewritten from the current front
+      // or from a transient runtime check.
+      assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey);
+      changeReason = health.dead ? "front_validation_unavailable_admin_state_preserved" : (health.inconclusive ? (priorLiveFallback ? "front_validation_inconclusive_prior_verified_admin_state_preserved" : "front_validation_inconclusive_admin_state_preserved") : "front_validation_live_admin_state_preserved");
+    } else if (health.dead) {
       releaseCurrentBalance();
       nextDecision = "hold"; nextPlacement = null; status = "hold"; assigned = false;
       changeReason = manualLocked ? "runtime_product_unavailable_administrator_locked" : "runtime_product_unavailable";
-    } else if (health.inconclusive) {
+    } else if (health.inconclusive && !(forceSelectedAi && priorLiveFallback)) {
       // Anti-bot/429/temporary server failures are not proof that a product was
       // removed. A recent, exact prior detail-page verification may preserve an
       // administrator-selected external referral without inventing new evidence.
@@ -3797,21 +3802,24 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     payload.productCategory = category.primary; payload.productCategoryTags = category.tags; payload.productRanking = Object.assign({}, plain(payload.productRanking), { category:category.primary, categoryTags:category.tags });
     payload.researchReadiness = Object.assign({}, plain(payload.researchReadiness), { stage:payload.researchStatus, productPageLive:payload.productPageLive, inspectionComplete:payload.inspectionComplete, productCard:card, lastVerifiedAt:now });
     payload.runtimeValidation = { schema:"igdc-product-runtime-validation.v3", source:options.source || "administrator_refresh", checkedAt:now, checkedBy:actor, state:health.state, live:health.live, dead:health.dead, inconclusive:health.inconclusive, priorLiveFallbackAllowed:priorLiveFallback, priorLiveVerifiedAt:priorLiveFallback?priorLiveProof.verifiedAt:null, reasons:health.reasons, exactProductUrl:payload.url || null, imageUrl:payload.image || null, category:category.primary, previousSectionKey:currentKey || null, nextSectionKey:productPlacementKey(nextPlacement) || null };
-    payload.slotDecision = nextDecision; payload.publicPublication = false; payload.automaticImport = false;
-    if (nextPlacement && validProductSectionKey(productPlacementKey(nextPlacement))) {
-      payload.approvedPlacement = nextPlacement; payload.placement = nextPlacement;
-    } else if (!manualLocked || !health.ok) {
-      if (currentKey) payload.previousApprovedPlacement = Object.assign({}, currentPlacement, { removedAt:now, removedReason:changeReason });
-      delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement;
+    payload.slotDecision = validationOnly ? currentDecision : nextDecision; payload.publicPublication = false; payload.automaticImport = false;
+    if (!validationOnly) {
+      if (nextPlacement && validProductSectionKey(productPlacementKey(nextPlacement))) {
+        payload.approvedPlacement = nextPlacement; payload.placement = nextPlacement; payload.page = nextPlacement.page; payload.channel = nextPlacement.page; payload.section = nextPlacement.sectionKey || nextPlacement.section; payload.psom_key = nextPlacement.sectionKey || nextPlacement.section;
+      } else if (!manualLocked || !health.ok) {
+        if (currentKey) payload.previousApprovedPlacement = Object.assign({}, currentPlacement, { removedAt:now, removedReason:changeReason });
+        delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement; delete payload.page; delete payload.channel; delete payload.section; delete payload.psom_key; delete payload.slot;
+      }
     }
-    if (!manualLocked) payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema:"igdc-product-management-control.v1", source:"ai_automation", administratorLocked:false, aiReclassificationAllowed:true, automationMode:"runtime_refresh", updatedAt:now, decidedBy:actor });
-    if (health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now });
+    if (!validationOnly && !manualLocked) payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema:"igdc-product-management-control.v1", source:"ai_automation", administratorLocked:false, aiReclassificationAllowed:true, automationMode:"runtime_refresh", updatedAt:now, decidedBy:actor });
+    if (validationOnly) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:health.dead?"failed":(health.inconclusive?"inconclusive":"passed"), runtimeReasons:health.reasons, runtimeCheckedAt:now, administratorPlacementPreserved:true });
+    else if (health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now });
     else if (health.inconclusive) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"inconclusive", runtimeReasons:health.reasons, runtimeCheckedAt:now });
     else payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"passed", runtimeReasons:[], runtimeCheckedAt:now });
     await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), { title:payload.title || row.title, official_url:payload.url || row.official_url, thumbnail_url:payload.image || row.thumbnail_url, status, source_payload:payload, updated_at:now });
     const nextKey = productPlacementKey(payload.approvedPlacement || payload.placement);
     for (const assignment of activeAssignments) {
-      const assignmentKey = candidateRuntimeAssignmentKey(assignment), shouldWithdraw = health.dead || (!health.inconclusive && (nextDecision !== "slot_candidate" || !validProductSectionKey(nextKey) || assignmentKey !== nextKey));
+      const assignmentKey = candidateRuntimeAssignmentKey(assignment), shouldWithdraw = health.dead || (!validationOnly && !health.inconclusive && (nextDecision !== "slot_candidate" || !validProductSectionKey(nextKey) || assignmentKey !== nextKey));
       if (shouldWithdraw) { withdrawAssignments.push({ candidateId:id, assignmentId:text(assignment.id), sectionKey:assignmentKey, reason:health.dead?"runtime_product_unavailable":"runtime_section_changed" }); withdrawCandidateIds.add(id); }
     }
     results.push({ candidateId:id, status:health.dead?"invalid":(health.inconclusive?"inconclusive":(assigned?"assigned":"unassigned")), live:health.live, invalid:health.dead, inconclusive:health.inconclusive, assigned, manualLocked, reason:changeReason, reasons:health.reasons, previousSectionKey:currentKey || null, sectionKey:nextKey || null, changedSection:!!(currentKey && nextKey && currentKey !== nextKey), activePublication:activeAssignments.length>0 });
@@ -3827,7 +3835,7 @@ async function productCandidateAiRecover(actorId, input) {
   const ids = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 12);
   if (!ids.length) { const error = new Error("AI 자동 배치·갱신할 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
   const result = await revalidateCandidateLedgerRows(actorId, input, ids, {
-    source:"ai_auto_placement_refresh", reassign:true, rebalance:true,
+    source:"ai_auto_placement_refresh", reassign:true, rebalance:true, forceSelectedAi:true,
     // Reuse a recent successful product-page validation. Re-running every remote
     // page check on repeated AI placement clicks caused otherwise valid products
     // to stall on transient 403/429/5xx responses and wasted external requests.
@@ -4588,6 +4596,30 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     policy:{ explicitAdministratorConfirmationRequired:true, canonicalRelationLedgersRequired:true, assignmentPublicationStatusAuthoritative:true, twoPhasePublicationCommit:true, readBackVerificationRequired:true, candidateAnnotationSecondary:true, officialSellerExternalReferralOnly:true, hardUnsafeSignalsStillBlocking:true, noIgdcCheckout:true, noPaymentExecution:true, noCrossCountryFallback:true }
   };
 }
+
+async function productFrontReplacementPlan(input) {
+  const scope = researchScope(input), authoritative = input && input.authoritativeReplacement === true;
+  const sectionKeys = Array.from(new Set(array(input && input.replacementSectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
+  const desiredCandidateIds = Array.from(new Set(array(input && input.replacementCandidateIds).map(text).filter(Boolean))).slice(0, 3000);
+  if (!authoritative || !sectionKeys.length) return { ok:true, applied:false, scope, sectionKeys:[], desiredCandidateIds, staleCandidateIds:[], withdrawAssignments:[] };
+  const sectionSet = new Set(sectionKeys), desired = new Set(desiredCandidateIds);
+  const rows = await SlotStore.select("gslot_slot_assignments", [
+    "select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at",
+    "country_code=eq." + encodeURIComponent(scope.country),
+    "order=updated_at.desc",
+    "limit=5000"
+  ].join("&"));
+  const acceptedStates = new Set(["approved","pinned"]), acceptedPublication = new Set(["audit_ready","ready","not_ready","publish_requested","published","matched","active","queued"]);
+  const stale = array(rows).filter((row) => {
+    if (!row || normalizeCountry(row.country_code) !== scope.country || frontSyncExpectedRegion(row, scope.country) !== scope.region) return false;
+    if (!acceptedStates.has(lower(row.state)) || !acceptedPublication.has(lower(row.publication_status))) return false;
+    const key = text(row.hub_key) + "|" + text(row.slot_key);
+    return sectionSet.has(key) && !desired.has(text(row.candidate_id));
+  });
+  const withdrawAssignments = stale.map((row) => ({ candidateId:text(row.candidate_id), assignmentId:text(row.id), sectionKey:text(row.hub_key)+"|"+text(row.slot_key), reason:"administrator_authoritative_section_replacement" })).filter((row)=>row.candidateId&&row.assignmentId);
+  return { ok:true, applied:true, scope, sectionKeys, desiredCandidateIds, staleCandidateIds:Array.from(new Set(withdrawAssignments.map((row)=>row.candidateId))), withdrawAssignments };
+}
+
 async function productFrontSyncTargets(input, jobInput) {
   const scope = researchScope(input), requestedMode = lower(input && input.mode), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", mode = ["candidate","candidates","section","sections"].includes(requestedMode) ? requestedMode : "all", sectionKey = text(input && input.sectionKey), requestedProductId = text(input && input.productId), requestedCandidateId = text(input && input.candidateId);
   const requestedSectionKeys = Array.from(new Set(array(input && input.sectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
@@ -5098,5 +5130,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, productCandidateAiRecover, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, productCandidateAiRecover, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
 };

@@ -562,15 +562,16 @@ async function syncApprovedCandidates(input){
     }
     const output=[];
     for(const candidate of array(candidates)){
-      if(!allowedCandidateStatus(candidate.status)) continue;
       const assignmentRows=assignmentByCandidate.get(candidate.id)||[];
-      // The slot-assignment relation is preferred, but the candidate's durable
-      // Front Match marker is an authoritative recovery source. This keeps a
-      // successful administrator click publishable even if an auxiliary
-      // relation write was interrupted before the build hook ran.
+      // The slot-assignment relation is the current FRONT state. The candidate
+      // payload is the administrator's desired NEXT state. An administrator may
+      // move/hold/unassign a product privately without changing the live front
+      // until an explicit Front Match/Unmatch demotes this relation.
       const explicitAuditSource=[PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF].includes(text(candidate.source_ref));
+      const currentFrontAssignment=explicitAuditSource?assignmentRows.find((row)=>lower(row.publication_status)==="publish_requested"):null;
+      if(!allowedCandidateStatus(candidate.status)&&!currentFrontAssignment) continue;
       const marker=explicitAuditSource?frontPublicationMarker(candidate):null;
-      let assignment=assignmentRows.find((row)=>explicitAuditSource?(lower(row.publication_status)==="publish_requested"&&currentAdministratorAssignmentMatches(candidate,row)):["ready","publish_requested"].includes(lower(row.publication_status)));
+      let assignment=currentFrontAssignment||assignmentRows.find((row)=>explicitAuditSource?lower(row.publication_status)==="publish_requested":["ready","publish_requested"].includes(lower(row.publication_status)));
       if(!assignment&&marker) assignment=syntheticAssignmentFromMarker(candidate,marker);
       if(!assignment) continue;
       // A persisted Front Match is the authoritative publication route. Do not

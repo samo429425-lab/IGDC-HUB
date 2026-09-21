@@ -946,92 +946,86 @@ async function requestUnpublicationAssignments(event,actor,body,scope){
   requireActorRole(actor,true);
   if(cleanMode(body&&body.mode)!=="production"){const error=new Error("자동 복구 매칭 해제는 실상품 운영 모드에서만 가능합니다.");error.statusCode=409;error.code="production_mode_required";throw error;}
   if(text(body&&body.confirmation)!=="SITE_UNPUBLISH"){const error=new Error("자동 복구 매칭 해제 확인 값이 일치하지 않습니다.");error.statusCode=409;error.code="unpublication_confirmation_required";throw error;}
-  const requested=asArray(body&&body.assignments).map((row)=>({candidateId:text(row&&row.candidateId),assignmentId:text(row&&row.assignmentId),reason:text(row&&row.reason)||"runtime_refresh"})).filter((row)=>row.candidateId&&row.assignmentId);
+  const requested=asArray(body&&body.assignments).map((row)=>({candidateId:text(row&&row.candidateId),assignmentId:text(row&&row.assignmentId),reason:text(row&&row.reason)||"runtime_refresh"})).filter((row)=>row.candidateId);
   if(!requested.length)return batchSummary("request_unpublication_assignments",[],[],{queued:false,reason:"no_selected_assignments"});
-  const candidateIds=Array.from(new Set(requested.map((row)=>row.candidateId))), wanted=new Map(requested.map((row)=>[row.assignmentId,row]));
+  const candidateIds=Array.from(new Set(requested.map((row)=>row.candidateId))), wanted=new Map(requested.filter((row)=>row.assignmentId).map((row)=>[row.assignmentId,row]));
   let assignmentRows=[];
   try{assignmentRows=await assignmentRowsForCandidates(candidateIds);}catch(error){
-    const items=requested.map((row)=>({candidateId:row.candidateId,status:"unpublish_failed",queued:false,reason:text(error&&error.code)||"assignment_lookup_failed",assignmentId:row.assignmentId}));
-    return batchSummary("request_unpublication_assignments",candidateIds,items,{queued:false,reason:text(error&&error.code)||"assignment_lookup_failed"});
+    const markerOnly=requested.map((row)=>({candidateId:row.candidateId,assignment:null,originalStatus:"missing",reason:row.reason}));
+    let markerResult;try{markerResult=await clearCandidatePublicationMarkers(markerOnly,actor&&actor.sub,"runtime_refresh");}catch(markerError){markerResult={ok:false,updated:0,failed:markerOnly.map((item)=>({candidateId:item.candidateId,error:markerError}))};}
+    if(!markerResult.ok)return batchSummary("request_unpublication_assignments",candidateIds,markerOnly.map((item)=>({candidateId:item.candidateId,status:"unpublish_failed",queued:false,persisted:false,pendingBuild:false,reason:"candidate_publication_marker_clear_failed",assignmentId:null})),{queued:false,reason:"candidate_publication_marker_clear_failed"});
+    const items=markerOnly.map((item)=>({candidateId:item.candidateId,status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,reason:"marker_only_unpublish_requested",assignmentId:null,repairReason:item.reason}));
+    if(body&&body.deferRelease===true)return batchSummary("request_unpublication_assignments",candidateIds,items,{ok:true,queued:false,deferred:true,reason:"release_dispatch_deferred",hookConfigured:!!ReleaseDispatch.configuredHook().value});
+    const dispatch=await ReleaseDispatch.dispatch({candidateId:candidateIds[0]||null,candidateIds,assignmentId:null,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:candidateIds.length,explicitAdminAuthorization:true});
+    items.forEach((item)=>{item.queued=dispatch.queued===true;item.pendingBuild=dispatch.queued!==true;item.reason=text(dispatch.reason)||(dispatch.queued?"build_hook_queued":"unpublication_build_pending");});
+    return batchSummary("request_unpublication_assignments",candidateIds,items,dispatch);
   }
-  const items=[],toUpdate=[];
+  const items=[],toUpdate=[],already=[];
   for(const request of requested){
-    const assignment=asArray(assignmentRows).find((row)=>text(row&&row.id)===request.assignmentId&&text(row&&row.candidate_id)===request.candidateId&&assignmentScopeMatch(row,scope));
-    if(!assignment){items.push({candidateId:request.candidateId,status:"unpublish_failed",queued:false,reason:"assignment_missing_or_scope_mismatch",assignmentId:request.assignmentId});continue;}
+    const assignment=request.assignmentId?asArray(assignmentRows).find((row)=>text(row&&row.id)===request.assignmentId&&text(row&&row.candidate_id)===request.candidateId&&assignmentScopeMatch(row,scope)):null;
+    if(!assignment){already.push({candidateId:request.candidateId,assignment:null,originalStatus:"missing",reason:request.reason});continue;}
     const originalStatus=low(assignment.publication_status)||"audit_ready";
-    if(["audit_ready","ready","not_ready"].includes(originalStatus)){items.push({candidateId:request.candidateId,status:"unmatched",queued:false,reason:"already_not_published",assignmentId:request.assignmentId});continue;}
+    if(["audit_ready","ready","not_ready"].includes(originalStatus)){already.push({candidateId:request.candidateId,assignment,originalStatus,reason:request.reason});continue;}
     if(!["publish_requested","published","matched","active","queued"].includes(originalStatus)){items.push({candidateId:request.candidateId,status:"unpublish_failed",queued:false,reason:"unsupported_publication_status",assignmentId:request.assignmentId});continue;}
     toUpdate.push({candidateId:request.candidateId,assignment,originalStatus,reason:request.reason});
   }
-  if(!toUpdate.length)return batchSummary("request_unpublication_assignments",candidateIds,items,{queued:false,reason:"no_published_assignments"});
-  const updateResult=await bulkAssignmentStatus(toUpdate,"audit_ready",actor&&actor.sub);
+  const updateResult=toUpdate.length?await bulkAssignmentStatus(toUpdate,"audit_ready",actor&&actor.sub):{updated:[],failed:[]};
   for(const failure of updateResult.failed)items.push({candidateId:failure.item.candidateId,status:"unpublish_failed",queued:false,reason:text(failure.error&&failure.error.code)||"assignment_update_failed",assignmentId:failure.item.assignment.id});
-  const active=updateResult.updated;
-  if(!active.length)return batchSummary("request_unpublication_assignments",candidateIds,items,{queued:false,reason:"no_updated_assignments"});
+  const active=updateResult.updated,markerTargets=active.concat(already);
+  if(!markerTargets.length)return batchSummary("request_unpublication_assignments",candidateIds,items,{queued:false,reason:"no_unpublication_targets"});
   let markerResult;
-  try{markerResult=await clearCandidatePublicationMarkers(active,actor&&actor.sub,"runtime_refresh");}catch(error){markerResult={ok:false,updated:0,failed:active.map((item)=>({candidateId:item.candidateId,error}))};}
+  try{markerResult=await clearCandidatePublicationMarkers(markerTargets,actor&&actor.sub,"runtime_refresh");}catch(error){markerResult={ok:false,updated:0,failed:markerTargets.map((item)=>({candidateId:item.candidateId,error}))};}
   if(!markerResult.ok){
-    await rollbackAssignmentStatuses(active,actor&&actor.sub);
-    for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_failed",queued:false,persisted:false,pendingBuild:false,reason:"candidate_publication_marker_clear_failed",assignmentId:item.assignment.id,repairReason:item.reason||"runtime_refresh"});
+    if(active.length)await rollbackAssignmentStatuses(active,actor&&actor.sub);
+    for(const item of markerTargets)items.push({candidateId:item.candidateId,status:"unpublish_failed",queued:false,persisted:false,pendingBuild:false,reason:"candidate_publication_marker_clear_failed",assignmentId:item.assignment&&item.assignment.id||null,repairReason:item.reason||"runtime_refresh"});
     return batchSummary("request_unpublication_assignments",candidateIds,items,{queued:false,reason:"candidate_publication_marker_clear_failed"});
   }
   if(body&&body.deferRelease===true){
-    for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,reason:"release_dispatch_deferred",assignmentId:item.assignment.id,repairReason:item.reason||"runtime_refresh"});
+    for(const item of markerTargets)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,reason:item.originalStatus==="missing"?"marker_only_unpublish_requested":(item.originalStatus&&["audit_ready","ready","not_ready"].includes(item.originalStatus)?"already_not_published_marker_cleared":"release_dispatch_deferred"),assignmentId:item.assignment&&item.assignment.id||null,repairReason:item.reason||"runtime_refresh"});
     return batchSummary("request_unpublication_assignments",candidateIds,items,{ok:true,queued:false,deferred:true,reason:"release_dispatch_deferred",hookConfigured:!!ReleaseDispatch.configuredHook().value});
   }
-  const firstItem=active[0];
-  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,candidateIds:active.map((item)=>item.candidateId),assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:active.length,explicitAdminAuthorization:true});
-  for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:dispatch.queued===true,persisted:true,pendingBuild:dispatch.queued!==true,reason:text(dispatch.reason)||(dispatch.queued?"build_hook_queued":"unpublication_build_pending"),assignmentId:item.assignment.id,repairReason:item.reason||"runtime_refresh"});
+  const firstItem=markerTargets[0];
+  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,candidateIds:Array.from(new Set(markerTargets.map((item)=>item.candidateId))),assignmentId:firstItem.assignment&&firstItem.assignment.id||null,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:markerTargets.length,explicitAdminAuthorization:true});
+  for(const item of markerTargets)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:dispatch.queued===true,persisted:true,pendingBuild:dispatch.queued!==true,reason:text(dispatch.reason)||(dispatch.queued?"build_hook_queued":"unpublication_build_pending"),assignmentId:item.assignment&&item.assignment.id||null,repairReason:item.reason||"runtime_refresh"});
   return batchSummary("request_unpublication_assignments",candidateIds,items,dispatch);
 }
-
 async function requestUnpublicationBatch(event,actor,body,scope){
   requireActorRole(actor,true);
   if(cleanMode(body&&body.mode)!=="production"){const error=new Error("전체 매칭 해제는 실상품 운영 모드에서만 가능합니다.");error.statusCode=409;error.code="production_mode_required";throw error;}
   if(text(body&&body.confirmation)!=="SITE_UNPUBLISH"){const error=new Error("전체 매칭 해제 확인 값이 일치하지 않습니다.");error.statusCode=409;error.code="unpublication_confirmation_required";throw error;}
   const candidateIds=uniqueCandidateIds(body);
   if(!candidateIds.length)return batchSummary("request_unpublication_batch",candidateIds,[],{queued:false,reason:"no_selected_products"});
-  // Unpublication is also durable first. A missing hook delays the rebuild but
-  // must not restore the old published state in the management ledger.
   let assignmentRows=[];
-  try{assignmentRows=await assignmentRowsForCandidates(candidateIds);}catch(error){
-    return batchSummary("request_unpublication_batch",candidateIds,candidateIds.map((id)=>({candidateId:id,status:"unpublish_failed",queued:false,reason:text(error&&error.code)||"assignment_lookup_failed",assignmentId:null})),{queued:false,reason:text(error&&error.code)||"assignment_lookup_failed"});
-  }
-  const items=[],toUpdate=[];
+  try{assignmentRows=await assignmentRowsForCandidates(candidateIds);}catch(error){assignmentRows=[];}
+  const items=[],toUpdate=[],already=[];
   for(const candidateId of candidateIds){
     const assignment=selectAssignment(assignmentRows,candidateId,scope);
-    if(!assignment){items.push({candidateId,status:"unpublish_failed",queued:false,reason:"assignment_missing",assignmentId:null});continue;}
+    if(!assignment){already.push({candidateId,assignment:null,originalStatus:"missing"});continue;}
     const originalStatus=low(assignment.publication_status)||"audit_ready";
-    if(["audit_ready","ready","not_ready"].includes(originalStatus)){items.push({candidateId,status:"unmatched",queued:false,reason:"already_not_published",assignmentId:assignment.id});continue;}
-    if(!["publish_requested","published","matched","active"].includes(originalStatus)){items.push({candidateId,status:"unpublish_failed",queued:false,reason:"unsupported_publication_status",assignmentId:assignment.id});continue;}
+    if(["audit_ready","ready","not_ready"].includes(originalStatus)){already.push({candidateId,assignment,originalStatus});continue;}
+    if(!["publish_requested","published","matched","active","queued"].includes(originalStatus)){items.push({candidateId,status:"unpublish_failed",queued:false,reason:"unsupported_publication_status",assignmentId:assignment.id});continue;}
     toUpdate.push({candidateId,assignment,originalStatus});
   }
-  if(!toUpdate.length)return batchSummary("request_unpublication_batch",candidateIds,items,{queued:false,reason:"no_published_products"});
-  const updateResult=await bulkAssignmentStatus(toUpdate,"audit_ready",actor&&actor.sub);
+  const updateResult=toUpdate.length?await bulkAssignmentStatus(toUpdate,"audit_ready",actor&&actor.sub):{updated:[],failed:[]};
   for(const failure of updateResult.failed)items.push({candidateId:failure.item.candidateId,status:"unpublish_failed",queued:false,reason:text(failure.error&&failure.error.code)||"assignment_update_failed",assignmentId:failure.item.assignment.id});
-  const active=updateResult.updated;
-  if(!active.length)return batchSummary("request_unpublication_batch",candidateIds,items,{queued:false,reason:"no_updated_products"});
+  const active=updateResult.updated,markerTargets=active.concat(already);
+  if(!markerTargets.length)return batchSummary("request_unpublication_batch",candidateIds,items,{queued:false,reason:"no_unpublication_targets"});
   let markerResult;
-  try{markerResult=await clearCandidatePublicationMarkers(active,actor&&actor.sub,"administrator_unmatch");}catch(error){markerResult={ok:false,updated:0,failed:active.map((item)=>({candidateId:item.candidateId,error}))};}
+  try{markerResult=await clearCandidatePublicationMarkers(markerTargets,actor&&actor.sub,"administrator_unmatch");}catch(error){markerResult={ok:false,updated:0,failed:markerTargets.map((item)=>({candidateId:item.candidateId,error}))};}
   if(!markerResult.ok){
-    await rollbackAssignmentStatuses(active,actor&&actor.sub);
-    for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_failed",queued:false,persisted:false,pendingBuild:false,reason:"candidate_publication_marker_clear_failed",assignmentId:item.assignment.id});
+    if(active.length)await rollbackAssignmentStatuses(active,actor&&actor.sub);
+    for(const item of markerTargets)items.push({candidateId:item.candidateId,status:"unpublish_failed",queued:false,persisted:false,pendingBuild:false,reason:"candidate_publication_marker_clear_failed",assignmentId:item.assignment&&item.assignment.id||null});
     return batchSummary("request_unpublication_batch",candidateIds,items,{queued:false,reason:"candidate_publication_marker_clear_failed"});
   }
   if(body&&body.deferRelease===true){
-    for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,reason:"release_dispatch_deferred",assignmentId:item.assignment.id});
+    for(const item of markerTargets)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,reason:item.originalStatus==="missing"?"marker_only_unpublish_requested":(item.originalStatus&&["audit_ready","ready","not_ready"].includes(item.originalStatus)?"already_not_published_marker_cleared":"release_dispatch_deferred"),assignmentId:item.assignment&&item.assignment.id||null});
     return batchSummary("request_unpublication_batch",candidateIds,items,{ok:true,queued:false,deferred:true,reason:"release_dispatch_deferred",hookConfigured:!!ReleaseDispatch.configuredHook().value});
   }
-  const firstItem=active[0];
-  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,candidateIds:active.map((item)=>item.candidateId),assignmentId:firstItem.assignment.id,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:active.length,explicitAdminAuthorization:true});
-  if(!dispatch.queued){
-    for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,reason:text(dispatch.reason)||"unpublication_build_pending",assignmentId:item.assignment.id});
-    return batchSummary("request_unpublication_batch",candidateIds,items,dispatch);
-  }
-  for(const item of active)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:true,persisted:true,pendingBuild:false,reason:text(dispatch.reason)||"build_hook_queued",assignmentId:item.assignment.id});
+  const firstItem=markerTargets[0],dispatchIds=Array.from(new Set(markerTargets.map((item)=>item.candidateId)));
+  const dispatch=await ReleaseDispatch.dispatch({candidateId:firstItem.candidateId,candidateIds:dispatchIds,assignmentId:firstItem.assignment&&firstItem.assignment.id||null,actorId:text(actor&&actor.sub),operation:"unpublish",candidateCount:markerTargets.length,explicitAdminAuthorization:true});
+  for(const item of markerTargets)items.push({candidateId:item.candidateId,status:"unpublish_requested",queued:dispatch.queued===true,persisted:true,pendingBuild:dispatch.queued!==true,reason:text(dispatch.reason)||(dispatch.queued?"build_hook_queued":"unpublication_build_pending"),assignmentId:item.assignment&&item.assignment.id||null});
   return batchSummary("request_unpublication_batch",candidateIds,items,dispatch);
 }
-
 async function dispatchFrontRefresh(event,actor,body,scope){
   requireActorRole(actor,true);
   if(cleanMode(body&&body.mode)!=="production"){const error=new Error("프론트 최종 갱신은 실상품 운영 모드에서만 가능합니다.");error.statusCode=409;error.code="production_mode_required";throw error;}

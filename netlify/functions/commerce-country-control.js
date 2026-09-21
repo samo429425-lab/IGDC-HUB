@@ -112,26 +112,36 @@ exports.handler=async function(event){
     if(action==="product_candidate_ai_recover")return json(200,await Automation.productCandidateAiRecover(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
     if(action==="product_front_finalize"){
-      const operation=lower(body.operation)==="unmatch"?"unmatch":(lower(body.operation)==="refresh"?"refresh":"match");
-      const candidateIds=Array.from(new Set((Array.isArray(body.candidateIds)?body.candidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
+      const requestedOperation=lower(body.operation)==="unmatch"?"unmatch":(lower(body.operation)==="refresh"?"refresh":"match");
+      const requestedCandidateIds=Array.from(new Set((Array.isArray(body.candidateIds)?body.candidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
+      const authoritativeReplacement=body.authoritativeReplacement===true;
+      const replacementCandidateIds=Array.from(new Set((Array.isArray(body.replacementCandidateIds)?body.replacementCandidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
+      const candidateIds=authoritativeReplacement?replacementCandidateIds:requestedCandidateIds;
       const scope=ProductGoLiveAudit.selectedScope(text(body.countryCode||body.country).toUpperCase(),text(body.subdivisionCode||body.regionCode||body.region||"NATIONWIDE").toUpperCase());
-      // All match/unmatch/revalidation batches persist their canonical lifecycle
-      // changes first.  Finalize is the *single* build dispatch for the whole
-      // administrator action.  A refresh may therefore be required even when
-      // no new candidate was publishable (for example, every previously live
-      // product in a section was found dead and was withdrawn).
-      if(operation==="match"&&candidateIds.length){
-        // The batch phase already performed the canonical relation preflight and
-        // durable assignment commit. requestPublicationBatch explicitly accepts
-        // preparedByFrontLifecycle without requiring a second full CandidateReview
-        // staging pass; avoiding that duplicate scan prevents finalizer 502/504s.
-        const liveDoc={candidates:[]};
-        const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
-        return json(200,await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null));
+      let replacementPlan=null,replacementUnpublish=null;
+      if(authoritativeReplacement){
+        replacementPlan=await Automation.productFrontReplacementPlan(Object.assign({},body,{authoritativeReplacement:true,replacementCandidateIds:candidateIds}));
+        const staleAssignments=Array.isArray(replacementPlan&&replacementPlan.withdrawAssignments)?replacementPlan.withdrawAssignments:[];
+        if(staleAssignments.length){
+          replacementUnpublish=await ProductGoLiveAudit.requestUnpublicationAssignments(event,actor,{mode:"production",confirmation:"SITE_UNPUBLISH",assignments:staleAssignments,deferRelease:true},scope);
+          const failed=(Array.isArray(replacementUnpublish&&replacementUnpublish.items)?replacementUnpublish.items:[]).filter((item)=>item&&item.status==="unpublish_failed");
+          if(failed.length){const error=new Error("관리자 기준 프론트 치환 중 기존 상품 "+failed.length+"건의 해제 원장을 저장하지 못했습니다. 기존 프론트를 보존하고 다시 실행해 주세요.");error.statusCode=409;error.code="authoritative_replacement_unpublish_failed";throw error;}
+        }
       }
-      const confirmation=operation==="unmatch"?"SITE_UNPUBLISH":"SITE_PUBLISH";
-      const refreshResult=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:operation==="unmatch"?"unmatch":"refresh",confirmation:text(body.confirmation)||confirmation,candidateId:candidateIds[0]||null,candidateIds,candidateCount:Math.max(1,Number(body.changedCount)||candidateIds.length||1)},scope);
-      return json(200,await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:operation==="unmatch"?"unmatch":"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),refreshResult,null));
+      const effectiveOperation=requestedOperation==="unmatch"?"unmatch":(candidateIds.length?"match":"refresh");
+      if(effectiveOperation==="match"&&candidateIds.length){
+        const liveDoc={candidates:[]};
+        const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:"SITE_PUBLISH",candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
+        const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null);
+        if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish};
+        return json(200,recorded);
+      }
+      const staleIds=Array.from(new Set((replacementPlan&&replacementPlan.staleCandidateIds||[]).map(text).filter(Boolean))),refreshIds=Array.from(new Set(candidateIds.concat(requestedCandidateIds,staleIds))).slice(0,1800);
+      const refreshUnpublish=requestedOperation==="unmatch"||(authoritativeReplacement&&candidateIds.length===0&&staleIds.length>0);
+      const refreshResult=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:refreshUnpublish?"unmatch":"refresh",confirmation:refreshUnpublish?"SITE_UNPUBLISH":"SITE_PUBLISH",candidateId:refreshIds[0]||null,candidateIds:refreshIds,candidateCount:Math.max(1,Number(body.changedCount)||refreshIds.length||1)},scope);
+      const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:requestedOperation==="unmatch"?"unmatch":"match",mode:"candidates",candidateIds:refreshIds,ledgerMode:"candidate",compactResponse:true}),refreshResult,null);
+      if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish};
+      return json(200,recorded);
     }
     if(action==="product_front_match"||action==="product_front_unmatch"){
       const operation=action==="product_front_unmatch"?"unmatch":"match";
