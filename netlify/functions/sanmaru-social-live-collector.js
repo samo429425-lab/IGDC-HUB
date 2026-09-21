@@ -19,12 +19,12 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.26.0-global-registry-real-media";
+const VERSION = "sanmaru-social-live-collector-v1.27.0-balanced-registry-global-rotation";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
 const MAX_BATCH_SIZE = 12;
-const REGISTRY_SWEEP_BATCH_SIZE = 4;
+const REGISTRY_SWEEP_BATCH_SIZE = 6;
 const REQUEST_TIMEOUT_MS = 3800;
 const PROVIDER_GROUP_COUNT = 3;
 const PROVIDER_GROUP_NAMES = Object.freeze([
@@ -46,6 +46,7 @@ const PREVIEW_RECOVERY_PLATFORMS = new Set([
   "instagram", "tiktok", "facebook", "wechat", "weibo", "pinterest", "reddit", "twitter"
 ]);
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
+const INTERNAL_SCHEDULE_EVENT = Symbol("igdc-social-scheduled-internal");
 
 /*
  * Key-free public directory fallback.
@@ -248,6 +249,7 @@ function internalAuthorized(event) {
   return safeEqual(received, expected);
 }
 async function requireCollectorActor(event) {
+  if (event && event[INTERNAL_SCHEDULE_EVENT]) return { memberId: "social-scheduler", email: "social-scheduler", roles: ["social_manager"], mode: "scheduled_internal" };
   if (internalAuthorized(event)) return { memberId: "sanmaru-internal", email: "sanmaru-internal", roles: ["social_manager"], mode: "internal" };
   const actor = await AdminAuth.authenticateCommerceAdmin(event);
   SocialStore.requireRole(actor, "write");
@@ -805,6 +807,15 @@ function scopedQueriesWithRegistry(plan, cursor, passes, route, registrySeeds) {
   // new real posts even when old registry rows no longer yield public content.
   const generic = scopedQueries(plan, cursor, 1, route)[0];
   if (generic) queries.push(generic);
+
+  // Registered creators are a priority seed, not an exclusive boundary.
+  // Always add a worldwide generic discovery query as well so a country/IP
+  // preference never starves globally relevant new content.
+  const globalRoute = Object.assign({}, route || {}, {
+    countryCode: "", country: "", regionId: "", worldRegion: "", scopeMode: "global"
+  });
+  const globalGeneric = scopedQueries(plan, cursor + 1, 1, globalRoute)[0];
+  if (globalGeneric) queries.push(globalGeneric);
 
   const finalQueries = Array.from(new Set(queries.length ? queries : scopedQueries(plan, cursor, passes, route)));
   return {
@@ -2863,6 +2874,18 @@ exports.handler = async function(event) {
       sampleSlotMutation: false
     });
   }
+};
+
+
+exports.collectInternal = async function(body) {
+  const event = {
+    httpMethod: "POST",
+    headers: {},
+    queryStringParameters: {},
+    body: JSON.stringify(body || {})
+  };
+  event[INTERNAL_SCHEDULE_EVENT] = true;
+  return exports.handler(event);
 };
 
 

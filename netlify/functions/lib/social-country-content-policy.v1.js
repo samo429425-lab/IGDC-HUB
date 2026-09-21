@@ -9,7 +9,7 @@
  * - Do not mutate SearchBank, Snapshot Engine, AutoMap, or front HTML.
  * - Topic preference is soft guidance, never an absolute exclusion rule.
  */
-const VERSION = "social-country-content-policy-v1.3.0-broad-social-discovery";
+const VERSION = "social-country-content-policy-v1.4.0-platform-topic-priority";
 
 const GLOBAL_TOPICS = Object.freeze([
   { key: "music", weight: 100, terms: ["music", "singer", "artist", "live performance", "concert", "official music", "new release"] },
@@ -28,15 +28,15 @@ const GLOBAL_TOPICS = Object.freeze([
 const COUNTRY_OVERRIDES = Object.freeze({
   KR: {
     topics: [
-      { key: "music", weight: 110, terms: ["한국 가수", "라이브 무대", "음악방송", "공식 공연", "K-pop", "트로트", "보컬"] },
+      { key: "music", weight: 110, terms: ["한국 가수", "최신 음악 오디션", "음악 경연", "라이브 무대", "음악방송", "공식 공연", "K-pop", "트로트", "보컬", "인기 가수 무대"] },
       { key: "travel", weight: 102, terms: ["국내 여행", "한국 관광", "지역 축제", "여행지", "호텔", "리조트", "골프", "캠핑"] },
       { key: "culture", weight: 100, terms: ["한국 음식", "지역 맛집", "전통문화", "지역 축제", "박물관", "문화 공연"] },
       { key: "entertainment", weight: 98, terms: ["한국 예능", "인기 공연", "건전한 엔터테인먼트", "코미디", "라이브 쇼"] },
       { key: "education", weight: 92, terms: ["한국 교육", "과학", "기술", "지식", "다큐멘터리"] },
       { key: "food", weight: 98, terms: ["한국 음식", "맛집", "카페", "요리", "지역 먹거리"] },
       { key: "technology", weight: 96, terms: ["한국 기술", "AI", "IT", "과학", "신제품"] },
-      { key: "design", weight: 94, terms: ["한국 패션", "인테리어", "디자인", "사진", "건축", "뷰티"] },
-      { key: "wellness", weight: 92, terms: ["건강", "운동", "웰니스", "라이프스타일", "가족"] },
+      { key: "design", weight: 100, terms: ["한국 패션", "의류 코디", "패션 크리에이터", "인테리어", "디자인", "사진", "건축", "뷰티", "메이크업", "스킨케어"] },
+      { key: "wellness", weight: 98, terms: ["뷰티", "메이크업", "스킨케어", "건강", "운동", "웰니스", "라이프스타일", "가족"] },
       { key: "sports", weight: 90, terms: ["한국 스포츠", "야구", "축구", "골프", "아웃도어"] },
       { key: "world", weight: 86, terms: ["국제기구", "글로벌 경제", "과학 뉴스"] }
     ]
@@ -167,7 +167,7 @@ const NONPOLITICAL_QUERY_BLOCK = /(?:politic|election|partisan|propaganda|territ
 
 const PLATFORM_TOPIC_BIAS = Object.freeze({
   youtube: ["music", "travel", "entertainment", "education", "technology", "sports", "culture", "food"],
-  instagram: ["travel", "music", "design", "wellness", "culture", "food", "entertainment", "sports"],
+  instagram: ["design", "wellness", "travel", "music", "culture", "food", "entertainment", "sports"],
   tiktok: ["music", "entertainment", "travel", "design", "food", "wellness", "culture", "sports"],
   facebook: ["travel", "culture", "music", "entertainment", "food", "education", "sports", "world"],
   wechat: ["travel", "culture", "education", "food", "technology", "wellness", "music", "entertainment"],

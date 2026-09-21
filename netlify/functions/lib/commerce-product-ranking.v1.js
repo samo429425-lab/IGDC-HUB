@@ -463,10 +463,10 @@ function classifyCategory(rowInput) {
 
   addProduct("food_household_essentials", 80, /(화장지|두루마리|휴지|티슈|물티슈|키친타올|생리대|위생|세제|세정제|주방용품|생활용품|생필품|식료품|건강식품|가공식품|즉석식품|냉동식품|신선식품|수입식품|유기농식품|(?:^|[^가-힣])식품(?:[^가-힣]|$)|김치|장류|반찬|떡|한과|household|tissue|detergent|grocery|food)/i);
   addProduct("food_household_essentials", 35, /(미용티슈|각티슈|롤화장지|배변패드|발티슈|키친타월|키친타올|생리대|오버나이트)/i);
-  addProduct("beauty_personal_care", 85, /(화장품|뷰티|스킨케어|세럼|크림|로션(?!\s*\d*겹)|선크림|샴푸|린스|클렌징|마스크팩|메이크업|향수|미스트|그루밍|이어클리너|이어클렌저|personal care|beauty|cosmetic|skincare|grooming)/i);
+  addProduct("beauty_personal_care", 85, /(화장품|뷰티|스킨케어|세럼|앰플|에센스|토너|크림|로션(?!\s*\d*겹)|보습제|선크림|자외선차단|샴푸|린스|컨디셔너|클렌징|클렌저|마스크팩|메이크업|향수|미스트|헤어케어|바디케어|그루밍|이어클리너|이어클렌저|personal care|beauty|cosmetic|skincare|serum|ampoule|essence|toner|moisturizer|cleanser|sunscreen|makeup|hair care|body care|grooming)/i);
   addProduct("fashion", 75, /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|등산복|등산화|아웃도어의류|fashion|apparel|jewelry|ring|watch|shoes|bag|outdoor wear)/i);
-  addProduct("electronics_accessories", 80, /(전자|스마트폰|휴대폰|태블릿|컴퓨터|노트북|모니터|이어폰|헤드폰|충전기|케이블|카메라|어댑터|아답터|커넥터|리모컨|전원부|센서|컨트롤러|배터리|충전식|인버터|계측기|측정기|멀티미터|electronics|smartphone|tablet|computer|laptop|charger|camera|adapter|connector|remote control|battery|inverter|multimeter)/i);
-  addProduct("home_appliances_living", 75, /(가전|냉장고|세탁기|청소기|에어컨|공기청정기|가구|침구|조명|인테리어|온수매트|전기요|전기장판|카본매트|냉온수|난방|써큘레이터|선풍기|펫하우스|메밀베개|베개|매트커버|클린필터|에어펌프|수납장|테이블|의자|소파|책상|home appliance|furniture|living|vacuum|refrigerator|heated mat|electric blanket|circulator|fan|table|chair|sofa|desk)/i);
+  addProduct("electronics_accessories", 80, /(전자|소형전자|스마트폰|휴대폰|태블릿|컴퓨터|노트북|모니터|스피커|블루투스\s*스피커|이어버드|블루투스\s*이어폰|이어폰|헤드폰|마이크|마이크로폰|USB|USB\s*허브|USB\s*메모리|플래시\s*드라이브|충전기|케이블|보조배터리|웹캠|도킹|카메라|어댑터|아답터|커넥터|리모컨|전원부|센서|컨트롤러|배터리|충전식|인버터|계측기|측정기|멀티미터|electronics|small electronics|smartphone|tablet|computer|laptop|monitor|speaker|bluetooth speaker|earbud|earphone|headphone|microphone|usb hub|flash drive|charger|cable|power bank|webcam|dock|docking|camera|adapter|connector|remote control|battery|inverter|multimeter)/i);
+  addProduct("home_appliances_living", 75, /(가전|소형가전|전기포트|토스터|블렌더|믹서|커피메이커|커피머신|가습기|제습기|헤어드라이어|냉장고|세탁기|청소기|에어컨|공기청정기|가구|침구|조명|인테리어|온수매트|전기요|전기장판|카본매트|냉온수|난방|써큘레이터|선풍기|펫하우스|메밀베개|베개|매트커버|클린필터|에어펌프|수납장|테이블|의자|소파|책상|home appliance|small appliance|electric kettle|toaster|blender|mixer|coffee maker|coffee machine|humidifier|dehumidifier|hair dryer|furniture|living|vacuum|refrigerator|air purifier|heated mat|electric blanket|circulator|fan|table|chair|sofa|desk)/i);
   addProduct("baby_family_education", 75, /(유아|아기|어린이|키즈|학생|교육|학습|도서|문구|장난감|아기물티슈|유아용|보솜이|baby|kids|child|education|book|toy)/i);
   addProduct("agriculture_fishery_forestry", 85, /(버섯|표고|느타리|목이|송이|고사리|산채|임산물|밤|대추|호두|잣|꿀|약초|쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|과일|채소|농산물|한우|돼지고기|닭고기|계란|우유|축산물|수산물|건어물|김|미역|젓갈|전복|굴|새우|agriculture|fishery|forestry|farm|seafood)/i);
   if (isTravelServiceText(productHay)) scores.travel_local_services += 90;
@@ -718,7 +718,7 @@ function audienceValueAssessment(rowInput, category, risk, commercial, contextIn
   if (/(화장지|휴지|티슈|물티슈|세제|비누|치약|샴푸|식품|쌀|잡곡|채소|과일|고기|생리대|위생|기저귀|cleaner|detergent|grocery|food|hygiene)/i.test(hay)) {
     essentiality = Math.max(essentiality, 90); broadAppeal = Math.max(broadAppeal, 82); repeatPurchase = Math.max(repeatPurchase, 86);
   }
-  if (/(충전기|케이블|보조배터리|이어폰|전구|조명|청소기|소형가전|charger|cable|power bank|earphone|lamp|vacuum)/i.test(hay)) {
+  if (/(충전기|케이블|보조배터리|이어폰|이어버드|헤드폰|스피커|블루투스|마이크|태블릿|USB|웹캠|전구|조명|청소기|소형가전|전기포트|가습기|제습기|charger|cable|power bank|earphone|earbud|headphone|speaker|bluetooth|microphone|tablet|usb|webcam|lamp|vacuum|small appliance|electric kettle|humidifier|dehumidifier)/i.test(hay)) {
     essentiality = Math.max(essentiality, 72); broadAppeal = Math.max(broadAppeal, 76);
   }
   if (/(가구|침대|소파|냉장고|세탁기|에어컨|대형가전|furniture|sofa|refrigerator|washer|air conditioner)/i.test(hay)) repeatPurchase = Math.min(repeatPurchase, 18);
@@ -975,7 +975,7 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const tourRecreationProduct = tourProfile.recreationProduct;
   const tourDiningAuxiliary = tourProfile.diningAuxiliary;
   const industrialTool = /(전동공구|공구세트|드릴|해머드릴|임팩트|그라인더|절단기|샌더|용접기|콤프레샤|에어공구|작업대|측정공구|수공구|톱날|비트세트|공업용|산업재|power tool|drill|grinder|welder|compressor|sander|impact driver)/i.test(hay);
-  const electronicsUtility = category.primary === "electronics_accessories" || /(배터리|충전기|인버터|계측기|측정기|멀티미터|전자부품|센서|컨트롤러|battery|charger|inverter|multimeter|sensor|controller)/i.test(hay);
+  const electronicsUtility = category.primary === "electronics_accessories" || /(배터리|충전기|인버터|계측기|측정기|멀티미터|전자부품|센서|컨트롤러|스피커|블루투스|이어버드|이어폰|헤드폰|마이크|태블릿|USB|웹캠|보조배터리|battery|charger|inverter|multimeter|sensor|controller|speaker|bluetooth|earbud|earphone|headphone|microphone|tablet|usb|webcam|power bank)/i.test(hay);
   const socialLifestyle = ["beauty_personal_care","fashion","baby_family_education"].includes(category.primary) || /(뷰티|패션|의류|신발|가방|주얼리|화장품|스킨케어|키즈|유아|beauty|fashion|apparel|cosmetic|kids)/i.test(hay);
 
   // HOME. The five main rows are all the same front policy: 쇼핑 핫템 추천.

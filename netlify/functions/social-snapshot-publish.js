@@ -16,11 +16,15 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.18.1-server-authoritative-front";
+  "social-snapshot-publish-v1.18.2-scheduled-runtime-rotation";
+const INTERNAL_SCHEDULE_EVENT = Symbol("igdc-social-publish-scheduled-internal");
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
 async function actorFor(event) {
+  if (event && event[INTERNAL_SCHEDULE_EVENT]) {
+    return { memberId: "social-scheduler", email: "social-scheduler", roles: ["social_manager"] };
+  }
   const actor = await SharedAdminAuth.resolveUser(event);
   const member = {
     memberId: text(actor && (actor.memberId || actor.sub)),
@@ -1283,3 +1287,15 @@ exports.handler = async function (event) {
     });
   }
 };
+
+exports.publishInternal = async function(body) {
+  const event = {
+    httpMethod: "POST",
+    headers: {},
+    queryStringParameters: {},
+    body: JSON.stringify(body || {})
+  };
+  event[INTERNAL_SCHEDULE_EVENT] = true;
+  return exports.handler(event);
+};
+

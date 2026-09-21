@@ -1885,27 +1885,23 @@
     j.qualitySweepBatches = Number(j.qualitySweepBatches || 0);
     j.registrySweepBatches = Number(j.registrySweepBatches || 0);
     j.registryCursor = Number(j.registryCursor || 0);
-    // Registered influencers are not decorative metadata. Every normal section
-    // run must research every policy-allowed registered creator first, even when
-    // 120+ latest-content rows already exist. Only then does generic discovery
-    // continue filling or rotating the section.
-    if (!dryRun && !j.registrySweepDone) {
+    // Registered influencers are priority seeds, not the only discovery source.
+    // Start each run with one registry slice, then immediately continue with
+    // broad/local+global discovery. Remaining creators are revisited by cursor
+    // rotation and the scheduled collector instead of blocking generic search.
+    if (!dryRun && !j.registryPriorityPassDone) {
       j.registrySweepActive = true;
-      var registrySafety = 0;
-      while (!stopRequested && !j.registrySweepDone && registrySafety < 500) {
-        registrySafety += 1;
-        j.batch += 1;
-        progress(j);
-        var registryResult = await collectOne(section, false, j);
-        var registryNew = newIds(registryResult, known);
-        j.newlyFound += registryNew;
-        j.sectionCount += registryNew;
-        progress(j);
-        saveJob(j);
-        if (!j.registrySweepDone && !stopRequested) await wait(450);
-      }
+      j.batch += 1;
+      progress(j);
+      var registryResult = await collectOne(section, false, j);
+      var registryNew = newIds(registryResult, known);
+      j.newlyFound += registryNew;
+      j.sectionCount += registryNew;
+      j.registryPriorityPassDone = true;
       j.registrySweepActive = false;
+      progress(j);
       saveJob(j);
+      if (!stopRequested) await wait(300);
     }
     var maxEmpty = Math.max(6, Number(j.catalogSize || 15));
     while (
@@ -2006,6 +2002,7 @@
       registrySweepTotal: 0,
       registrySweepDone: false,
       registrySweepActive: false,
+      registryPriorityPassDone: false,
       qualitySweepBatches: 0,
       qualitySweepTarget: /^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section) ? 8 : 6,
       qualitySweepDone: false,
