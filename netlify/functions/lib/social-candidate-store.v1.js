@@ -1298,6 +1298,15 @@ const SAMPLE_SAFE_PREVIEW_PLATFORMS = new Set([
   "reddit",
   "twitter",
 ]);
+// Pinterest/Reddit/X can expose a verified public post while withholding a
+// stable anonymous thumbnail. Do not throw away that real content row merely
+// because preview media is unavailable. The front renderer has an explicit
+// text-card fallback and does not navigate away from IGDC.
+const PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS = new Set([
+  "pinterest",
+  "reddit",
+  "twitter",
+]);
 function publishableIdentity(row) {
   const r = plain(row);
   const raw = plain(r.raw);
@@ -1340,36 +1349,23 @@ function isPublishEligibleContentRow(row) {
       r.source_url ||
       r.sourceUrl,
   );
-  if (!contentUrl || !publishableThumbnail(r)) return false;
-  // A verified latest-content row is allowed to replace its SAMPLE slot when
-  // the real platform URL and a real, non-provider-chrome thumbnail are both
-  // present. Some providers expose only a generic title/anonymous creator to
-  // server-side metadata requests; that must not discard otherwise valid real
-  // content. The slot mapper supplies a conservative display-title fallback.
-  return true;
+  if (!contentUrl) return false;
+  const thumbnail = publishableThumbnail(r);
+  if (thumbnail) return true;
+  // Sparse public providers (notably Reddit/X and some localized Pinterest
+  // pages) can suppress OG/oEmbed images while the post URL and identity remain
+  // fully public. Keep only rows with a non-generic real identity/title; the
+  // front card then renders an honest provider text fallback instead of a fake
+  // or SAMPLE thumbnail.
+  if (PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS.has(platform) && publishableIdentity(r)) return true;
+  return false;
 }
 function approvedContentRows(rows) {
-  const all = array(rows);
-  const latest = all.filter(isPublishEligibleContentRow);
-  const latestCount = {};
-  const latestChannels = new Set();
-  latest.forEach((row) => {
-    const key = lowerKey(row.section_key || row.sectionKey);
-    latestCount[key] = (latestCount[key] || 0) + 1;
-    const channel = channelIdentity(row);
-    if (channel) latestChannels.add(key + "|" + channel);
-  });
-  const profiles = all
-    .filter(isPublishEligibleInfluencerFallbackRow)
-    .filter((row) => {
-      const key = lowerKey(row.section_key || row.sectionKey);
-      const channel = channelIdentity(row);
-      return !channel || !latestChannels.has(key + "|" + channel);
-    })
-    .map((row) => Object.assign({}, row, { __profileFallback: true }));
-  // Real posts/videos always rank ahead of profile cards. Profile cards only
-  // backfill otherwise empty SAMPLE positions in the sparse SNS sections.
-  return latest.concat(profiles.filter((row) => (latestCount[lowerKey(row.section_key || row.sectionKey)] || 0) < ROTATION_LIMIT_PER_SECTION));
+  // Public Social main slots are latest-content only. Influencer/profile rows are
+  // still retained in the private registry and can seed future discovery, but a
+  // channel/profile/home URL must never replace a permanent SAMPLE slot. When no
+  // verified post/video/reel/status/pin is publishable, the SAMPLE remains.
+  return array(rows).filter(isPublishEligibleContentRow);
 }
 function byRank(salt) {
   return function (a, b) {
@@ -1534,14 +1530,15 @@ function publicSocialSlot(row, slotId, defaults) {
     r.platform || PLATFORM_BY_SECTION[text(r.section_key || r.sectionKey)] || "social",
   );
   // Defensive SAMPLE-preserve gate. Even if a future caller invokes this
-  // mapper directly, an incomplete real row must not consume a SAMPLE slot.
-  const profileFallback = isPublishEligibleInfluencerFallbackRow(r);
-  if (SAMPLE_SAFE_PREVIEW_PLATFORMS.has(platformHint) && !isPublishEligibleContentRow(r) && !profileFallback) {
+  // mapper directly, only a verified latest-content row may consume a SAMPLE
+  // slot. Influencer/profile rows remain private discovery inputs.
+  const profileFallback = false;
+  if (!isPublishEligibleContentRow(r)) {
     return Object.assign({}, base, {
       slotId: Number(slotId) || Number(base.slotId) || 1,
     });
   }
-  const latestContentUrl = profileFallback ? "" : text(
+  const latestContentUrl = text(
     platformContentUrl(
       platformHint,
       raw.latestContentUrl ||
@@ -1554,21 +1551,13 @@ function publicSocialSlot(row, slotId, defaults) {
         "",
     ),
   );
-  const profileUrl = profileFallback ? platformProfileUrl(platformHint, raw.channelUrl || raw.channel_url || r.channel_url || r.channelUrl || r.source_url || r.sourceUrl) : "";
-  const sourceUrl = latestContentUrl || profileUrl || text(r.source_url || r.sourceUrl);
-  const publishThumb = profileFallback ? publishableProfileThumbnail(r) : publishableThumbnail(r);
-  const thumb = text(
-    publishThumb ||
-      thumbnailFromCandidate(Object.assign({}, raw, r), {
-        platform: platformHint,
-        sourceUrl,
-        thumbnailUrl: text(r.thumbnail_url || r.thumbnailUrl),
-      }) ||
-      base.thumb ||
-      base.thumbnail ||
-      base.image ||
-      "",
-  );
+  const profileUrl = "";
+  const sourceUrl = latestContentUrl || text(r.source_url || r.sourceUrl);
+  const publishThumb = publishableThumbnail(r);
+  // Real Social content must never inherit the SAMPLE slot artwork. If an
+  // approved Pinterest/Reddit/X row has no stable preview image, keep thumb
+  // empty and let the front renderer show its provider-text fallback.
+  const thumb = text(publishThumb || "");
   const section = text(r.section_key || r.sectionKey);
   const platform = platformHint;
   const now = nowIso();

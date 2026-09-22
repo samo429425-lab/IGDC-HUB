@@ -17,7 +17,7 @@
  * settlement record. Unknown tax/legal state fails closed for monetization.
  */
 
-const VERSION = "commerce-profitability-gate-v1.0.0";
+const VERSION = "commerce-profitability-gate-v1.1.0-traffic-opportunity-order";
 
 const PRIORITY = Object.freeze({
   DIRECT_COMMERCE_VERIFIED: 700,
@@ -26,8 +26,8 @@ const PRIORITY = Object.freeze({
   DIRECT_SPONSOR: 550,
   REFERRAL_VERIFIED: 500,
   VERIFIED_REVENUE_ROUTE: 450,
+  TRAFFIC_VALUE_ONLY: 65,
   ORDINARY: 40,
-  TRAFFIC_VALUE_ONLY: 30,
   REVENUE_ROUTE_HOLD: 25,
   NON_REVENUE: 20,
   FALLBACK: 10

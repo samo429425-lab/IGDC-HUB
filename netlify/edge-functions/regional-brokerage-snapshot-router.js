@@ -300,6 +300,26 @@ async function documentMatchesPublishedScope(doc, selected, manifest) {
   }
   return realCount > 0;
 }
+function initialDistributionView(bytes, limit) {
+  try {
+    const doc = JSON.parse(new TextDecoder().decode(bytes));
+    const sections = doc && doc.pages && doc.pages.distribution && doc.pages.distribution.sections;
+    if (!sections || typeof sections !== "object") return null;
+    const max = Math.max(1, Math.min(40, Number(limit) || 20));
+    const nextSections = {};
+    for (const [key, value] of Object.entries(sections)) {
+      if (Array.isArray(value)) nextSections[key] = value.slice(0, max);
+      else if (value && typeof value === "object" && Array.isArray(value.slots)) nextSections[key] = Object.assign({}, value, { slots: value.slots.slice(0, max) });
+      else nextSections[key] = value;
+    }
+    doc.pages = Object.assign({}, doc.pages, {
+      distribution: Object.assign({}, doc.pages.distribution, { sections: nextSections })
+    });
+    doc.meta = Object.assign({}, doc.meta || {}, { deliveryView: "initial", deliveryLimitPerSection: max });
+    return new TextEncoder().encode(JSON.stringify(doc));
+  } catch (_e) { return null; }
+}
+
 async function fetchPublishedSnapshot(url, relative) {
   try {
     const target = new URL(relative, url);
@@ -346,6 +366,17 @@ export default async function canonicalIpSlotSnapshotRouter(request, context) {
   }
 
   const headers = new Headers(published.response.headers);
+  let responseBytes = published.bytes;
+  const wantsInitialDistribution = FILE_TO_PAGE[file] === "distribution" && url.searchParams.get("view") === "initial";
+  if (wantsInitialDistribution) {
+    const compact = initialDistributionView(published.bytes, 20);
+    if (compact) responseBytes = compact;
+    headers.delete("Content-Length");
+    headers.delete("ETag");
+    headers.set("X-IGDC-Snapshot-View", "initial");
+  } else {
+    headers.set("X-IGDC-Snapshot-View", "full");
+  }
   headers.set("Cache-Control", "private, no-store, max-age=0");
   headers.set("Vary", "x-nf-geo, cf-ipcountry, x-country, x-region");
   headers.set("X-IGDC-Canonical-Release", String(manifest.canonicalReleaseId || ""));
@@ -353,7 +384,7 @@ export default async function canonicalIpSlotSnapshotRouter(request, context) {
   headers.set("X-IGDC-IP-Slot-Page", FILE_TO_PAGE[file]);
   headers.set("X-IGDC-IP-Slot-Policy", String(manifest.ipSlotPolicyDigest || ""));
   headers.set("X-IGDC-IP-Slot-Verify-Cache", verificationCacheState);
-  return new Response(request.method === "HEAD" ? null : published.bytes, {
+  return new Response(request.method === "HEAD" ? null : responseBytes, {
     status: published.response.status,
     statusText: published.response.statusText,
     headers

@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.27.0-balanced-registry-global-rotation";
+const VERSION = "sanmaru-social-live-collector-v1.28.0-pinterest-reddit-x-rescue";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -1200,7 +1200,7 @@ function publicSearchQuery(plan, queryText, registrySeed) {
   const needle = registrySearchNeedle(registrySeed, platform);
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
   if (platform === "twitter") {
-    return [base, exact, "site:x.com", "status", "latest public post"].filter(Boolean).join(" ");
+    return [base, exact, "(site:x.com OR site:twitter.com)", "status", "latest public post"].filter(Boolean).join(" ");
   }
   if (platform === "pinterest") {
     return [base, exact, "site:pinterest.com/pin", "latest public pin"].filter(Boolean).join(" ");
@@ -1290,6 +1290,113 @@ function htmlPublicPostItems(html, plan, provider) {
   }
   return out;
 }
+
+function sparseSearchTerms(queryText, platform) {
+  return SocialStore.text(queryText)
+    .replace(/\bsite:[^\s)]+/gi, " ")
+    .replace(/\binurl:[^\s)]+/gi, " ")
+    .replace(/[()]/g, " ")
+    .replace(new RegExp("\\b" + String(platform || "").replace(/[^a-z0-9]/gi, "") + "\\b", "ig"), " ")
+    .replace(/\b(?:latest|recent|public|post|pin|comments?|status|global|worldwide)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+function redditJsonThumbnail(row) {
+  const preview = row && row.preview && Array.isArray(row.preview.images) && row.preview.images[0] || {};
+  const source = preview && preview.source || {};
+  const candidates = [
+    source.url,
+    row && row.thumbnail,
+    row && row.url_overridden_by_dest,
+  ];
+  for (const value of candidates) {
+    const clean = decodeXml(SocialStore.text(value)).replace(/&amp;/gi, "&");
+    if (/^https:\/\//i.test(clean) && !/^(?:self|default|nsfw|spoiler)$/i.test(clean)) return clean;
+  }
+  return "";
+}
+async function redditPublicJsonSearch(plan, queryText, limit, qualitySweep) {
+  if (!plan || plan.platform !== "reddit") return { provider: "reddit-public-search-json", status: "not_needed", items: [] };
+  const wanted = Math.max(1, Math.min(30, Number(limit || 10) || 10));
+  const query = sparseSearchTerms(queryText, "reddit") || "popular useful community";
+  const params = new URLSearchParams({
+    q: query,
+    sort: qualitySweep ? "top" : "hot",
+    t: qualitySweep ? "month" : "week",
+    limit: String(wanted),
+    raw_json: "1",
+    type: "link"
+  });
+  try {
+    const data = await fetchJson(
+      "https://www.reddit.com/search.json?" + params.toString(),
+      { headers: { Accept: "application/json", "User-Agent": "IGDC-MARU-SocialHub/1.0" } },
+      REQUEST_TIMEOUT_MS
+    );
+    const children = data && data.data && Array.isArray(data.data.children) ? data.data.children : [];
+    const items = children.map((entry) => entry && entry.data || {}).map((row) => {
+      const permalink = row.permalink ? "https://www.reddit.com" + row.permalink : "";
+      if (!permalink || !contentKind("reddit", permalink)) return null;
+      return {
+        provider: "reddit-public-search-json",
+        platform: "reddit",
+        url: permalink,
+        sourceUrl: permalink,
+        latestContentUrl: permalink,
+        title: firstText([row.title, row.link_title]),
+        creatorName: firstText([row.author, row.subreddit_name_prefixed, row.subreddit]),
+        description: firstText([row.selftext, row.link_flair_text]).slice(0, 1200),
+        thumbnail: redditJsonThumbnail(row),
+        publishedAt: row.created_utc ? new Date(Number(row.created_utc) * 1000).toISOString() : "",
+        engagement: { likes: Number(row.ups || row.score || 0), comments: Number(row.num_comments || 0) },
+        entityKind: "latest_post",
+        source: { name: "reddit-public-search-json", platform: "reddit", mode: "public_post_search" }
+      };
+    }).filter(Boolean).slice(0, wanted);
+    return { provider: "reddit-public-search-json", status: items.length ? "ok" : "empty", items };
+  } catch (error) {
+    return { provider: "reddit-public-search-json", status: error && error.name === "AbortError" ? "timeout" : "error", error: error && error.message || "reddit_public_search_failed", items: [] };
+  }
+}
+async function pinterestPublicHtmlSearch(plan, queryText, limit) {
+  if (!plan || plan.platform !== "pinterest") return { provider: "pinterest-public-search-html", status: "not_needed", items: [] };
+  const wanted = Math.max(1, Math.min(24, Number(limit || 10) || 10));
+  const query = sparseSearchTerms(queryText, "pinterest") || "popular ideas";
+  const target = "https://www.pinterest.com/search/pins/?q=" + encodeURIComponent(query);
+  try {
+    const html = await fetchText(target, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.8"
+      }
+    }, REQUEST_TIMEOUT_MS);
+    const urls = providerRelativePostUrls("pinterest", html, "https://www.pinterest.com/", wanted);
+    const items = urls.map((url) => ({
+      provider: "pinterest-public-search-html",
+      platform: "pinterest",
+      url,
+      sourceUrl: url,
+      latestContentUrl: url,
+      title: "",
+      creatorName: "",
+      description: "",
+      entityKind: "latest_post",
+      source: { name: "pinterest-public-search-html", platform: "pinterest", mode: "public_post_search" }
+    }));
+    return { provider: "pinterest-public-search-html", status: items.length ? "ok" : "empty", items };
+  } catch (error) {
+    return { provider: "pinterest-public-search-html", status: error && error.name === "AbortError" ? "timeout" : "error", error: error && error.message || "pinterest_public_search_failed", items: [] };
+  }
+}
+async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
+  if (!plan) return [];
+  if (plan.platform === "reddit") return [await redditPublicJsonSearch(plan, queryText, limit, qualitySweep)];
+  if (plan.platform === "pinterest") return [await pinterestPublicHtmlSearch(plan, queryText, limit)];
+  return [];
+}
+
 async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
   if (!plan || plan.platform === "youtube") {
     return { provider: "direct-public-post-search", status: "not_needed", items: [] };
@@ -1688,6 +1795,16 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
       items: []
     };
   });
+
+  // Reddit has an anonymous public JSON search surface and Pinterest exposes a
+  // public pin-search page. Use them as Social-only, key-free discovery lanes.
+  // These run in addition to registered-influencer targeting, so the registry
+  // is a priority seed rather than a ceiling on what can be discovered.
+  if (plan.platform === "reddit" || plan.platform === "pinterest") {
+    const nativeSparse = await sparseNativePublicSearch(plan, queryText, limit, qualitySweep);
+    providers = providers.concat(nativeSparse);
+  }
+
   // YouTube already owns a real-content RSS/Data-API path. For the other eight
   // platforms, invoke the Social-only public-post fallback only when the normal
   // provider group did not return even one genuine post/video URL. This avoids
@@ -2906,9 +3023,16 @@ exports.__test = {
   registryNativeLatestSearch,
   registryOnlyFromItem,
   registryLatestQuery,
+  scopedQueries,
+  scopedQueriesWithRegistry,
   registrySeedBlocked,
   registrySeedQualityScore,
   registrySweepWindow,
+  sparseSearchTerms,
+  redditJsonThumbnail,
+  redditPublicJsonSearch,
+  pinterestPublicHtmlSearch,
+  sparseNativePublicSearch,
   resolveSearchCandidates,
   decodeSearchRedirectTarget,
   decodeXml

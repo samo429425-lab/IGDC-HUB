@@ -6,3 +6,7 @@
   X-Robots-Tag: noindex, nofollow, noarchive
 /assets/js/distribution-products-automap.v3.js
   Cache-Control: no-cache, must-revalidate
+/assets/js/socialnetwork-automap-v3.js
+  Cache-Control: no-cache, must-revalidate
+/assets/js/igdc-social-sns-viewer-bridge.js
+  Cache-Control: no-cache, must-revalidate

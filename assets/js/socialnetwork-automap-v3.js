@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20260918-thumbnail-proxy-title-only-v1
+// build: 20260922-social-main-contained-viewer-only-v1
 // 목적:
 // 1) Social 메인 9섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -580,7 +580,10 @@
     const viewerUrl = safeText(it && (it.viewerUrl || it.permalink || it.href || it.link));
     const embedUrl = safeText(it && (it.embedUrl || it.embed_url));
 
-    card.href = url || "#";
+    // Social main must never navigate the top-level browser away from IGDC.
+    // Keep the verified provider URL only in data attributes; the viewer bridge
+    // consumes it and opens the contained in-site viewer.
+    card.href = "#";
     card.dataset.contentUrl = url || "#";
     card.dataset.socialUrl = url || "#";
     card.dataset.latestContentUrl = latestContentUrl || url || "";
@@ -588,9 +591,9 @@
     card.dataset.thumbnailUrl = thumb || "";
     card.dataset.embedUrl = embedUrl;
     card.dataset.profileFallback = it && it.social && it.social.profileFallback ? "1" : "0";
-    // Viewer bridge intercepts normal clicks. _blank remains only as a fail-safe
-    // when the bridge itself is unavailable, so a real video/post is never dead.
-    card.target = url && url !== "#" ? "_blank" : "_self";
+    // Viewer bridge intercepts normal clicks. There is intentionally no external
+    // tab/top-level navigation fallback for Social main.
+    card.target = "_self";
     card.rel = "noopener";
     card.removeAttribute("data-dummy");
 
@@ -905,29 +908,17 @@
           source: "stored_release_current_route"
         });
 
-        // Prefer the durable stored Social release. If it is temporarily
-        // unavailable, reuse the canonical snapshot request that the independent
-        // Distribution-owned right panel already started. Never start a duplicate
-        // multi-megabyte snapshot fetch from the Social main path.
+        // Social main and the right product panel have different owners.
+        // The nine SNS rows may read only the durable Social Stored Release.
+        // If that release is temporarily unavailable, preserve the existing
+        // Social cards; never substitute the Distribution-owned right snapshot.
         if (!(current && current.snapshot)) {
-          return getInitialRightSnapshotPromise().then(function (canonicalSnapshot) {
-            if (!canonicalSnapshot) {
-              window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-                source: "stored_release_current+canonical_snapshot_engine_output",
-                status: "both_readbacks_unavailable_preserve_existing_slots",
-                loadedAt: new Date().toISOString(),
-              };
-              return false;
-            }
-            lastMainSnapshot = canonicalSnapshot;
-            window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-              source: "canonical_snapshot_engine_output_reused",
-              status: "front_readback_recovered",
-              url: RIGHT_SNAPSHOT_URL,
-              loadedAt: new Date().toISOString(),
-            };
-            return renderMainSnapshot(lastMainSnapshot, lastRoute);
-          });
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+            source: "stored_release_current",
+            status: "stored_release_unavailable_preserve_existing_social_slots",
+            loadedAt: new Date().toISOString(),
+          };
+          return false;
         }
 
         lastMainSnapshot = current.snapshot;

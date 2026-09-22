@@ -8,7 +8,7 @@
  * from SearchBank core engines: SearchBank remains a broad ledger, and this
  * policy is applied only when copying social candidates into social_candidates.
  */
-const VERSION = "social-candidate-policy-v1.2.0-facebook-creator-focus";
+const VERSION = "social-candidate-policy-v1.3.0-sparse-platform-host-coverage";
 const CountryContentPolicy = require("./social-country-content-policy.v1");
 
 const POOL_TARGET_PER_SECTION = 300;
@@ -231,6 +231,15 @@ function platformFromHost(url) {
   const host = hostOf(url);
   if (!host) return "";
   if (HOST_PLATFORM[host]) return HOST_PLATFORM[host];
+
+  // Pinterest localizes public pin URLs to country domains (for example
+  // pinterest.co.kr / pinterest.jp / pinterest.co.uk). The preview resolver
+  // already accepts those hosts, so discovery/validation must use the same
+  // host policy or valid pins are discarded before they reach Social Hub.
+  if (/^(?:[a-z0-9-]+\.)*pinterest\.(?:com|ca|co\.uk|co\.kr|de|fr|es|it|jp|com\.au|com\.mx|cl|ph|nz|pt|ie|ch|at|se|dk|no|fi|nl|be|cz|pl)$/i.test(host)) return "pinterest";
+  if (/^(?:[a-z0-9-]+\.)*reddit\.com$/i.test(host) || host === "redd.it") return "reddit";
+  if (/^(?:[a-z0-9-]+\.)*(?:x|twitter)\.com$/i.test(host)) return "twitter";
+
   const parts = host.split(".");
   while (parts.length > 2) {
     parts.shift();

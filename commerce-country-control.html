@@ -316,7 +316,7 @@
     <details id="excludedLedgerPanel" class="product-management-details heavy-data-panel" data-heavy-panel="excluded">
       <summary class="heavy-panel-summary"><span><strong>제외·보류 업체 및 상품 목록</strong> <span id="excludedLedgerSummary" class="small">0건</span></span><span id="excludedLedgerToggleLabel" class="pill info">목록 펼치기</span></summary>
       <div class="heavy-panel-content">
-        <div class="small">후보 목록에서 제외·보류한 업체와 상품을 한곳에서 확인합니다. 평소에는 닫혀 있으며 펼친 목록만 렌더링합니다. 복원하면 각각 책임 공급업체 후보 또는 상품 후보 목록으로 돌아갑니다.</div>
+        <div class="small">후보 목록에서 제외·보류한 업체와 상품을 한곳에서 확인합니다. 페이지당 최대 100건을 선택 관리합니다. <strong>삭제·재수집 허용</strong>은 현재 후보 원장/관계를 실제 삭제해 이후 리서치에서 다시 발견될 수 있게 하고, <strong>영구 제외</strong>는 재수집 차단 기록을 남깁니다. <strong>목록에서만 제거</strong>는 원장을 보존한 채 현재 관리 목록에서 숨깁니다.</div>
         <details id="supplierControlQueue" class="supplier-control-queue">
           <summary><span id="supplierControlToggleLabel">후보 제외 업체 목록 · 보류 0건 · 차단 0건</span><span id="supplierControlActionLabel" class="pill info">목록 펼치기</span></summary>
           <div class="supplier-control-content">
@@ -338,7 +338,7 @@
                 <label class="supplier-select-label"><input id="supplierBlockedSelectAll" type="checkbox" data-supplier-select-all="blocked"> 전체 선택</label>
                 <span id="supplierBlockedSelectedCount" class="supplier-selection-count">선택 0건</span>
                 <button type="button" class="secondary" data-supplier-bulk="unblock" data-supplier-bulk-scope="blocked" disabled>선택 차단 해제·보류 이동</button>
-                <button type="button" class="secondary" data-supplier-bulk="dismiss" data-supplier-bulk-scope="blocked" disabled>선택 삭제·재수집 허용</button>
+                <button type="button" class="danger" data-supplier-bulk="dismiss" data-supplier-bulk-scope="blocked" disabled>선택 차단 해제·삭제·재수집 허용</button>
                 <button type="button" class="ghost" data-supplier-bulk="remove_from_list" data-supplier-bulk-scope="blocked" disabled>선택 목록에서만 제거</button>
               </div>
               <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>차단 대상</th><th>도메인</th><th>차단 사유</th></tr></thead><tbody id="supplierBlockedRows"></tbody></table></div>
@@ -354,7 +354,7 @@
               <span id="productHoldSelectedCount" class="supplier-selection-count">선택 0건</span>
               <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="hold" disabled>선택 후보 목록으로 복원</button>
               <button type="button" class="danger" data-product-exclusion-bulk="reject" data-product-exclusion-scope="hold" disabled>선택 제외로 이동</button>
-              <button type="button" class="secondary" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="hold" disabled>선택 삭제·재수집 허용</button>
+              <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="hold" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="hold" disabled>선택 목록에서만 제거</button>
             </div>
             <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>상품·원본 확인</th><th>업체</th><th>현재 상태</th></tr></thead><tbody id="productHoldRows"></tbody></table></div>
@@ -369,7 +369,7 @@
               <span id="productRejectSelectedCount" class="supplier-selection-count">선택 0건</span>
               <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="reject" disabled>선택 후보 목록으로 복원</button>
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="reject" disabled>선택 영구 제외</button>
-              <button type="button" class="secondary" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="reject" disabled>선택 삭제·재수집 허용</button>
+              <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="reject" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="reject" disabled>선택 목록에서만 제거</button>
             </div>
             <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>상품·원본 확인</th><th>업체</th><th>제외 상태</th></tr></thead><tbody id="productRejectRows"></tbody></table></div>
@@ -488,7 +488,7 @@
 </div>
 
 <script src="/assets/js/igdc-member-auth.js"></script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260922-admin-authority-research1"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260922-admin-final-cleanup1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
 </body>

@@ -10,8 +10,9 @@
 
 const fs = require("fs");
 const path = require("path");
+const ResearchCategoryRegistry = require("./commerce-research-category-registry.v1");
 
-const VERSION = "commerce-supplier-research-plan-v1.4.2-global-country-resilient-discovery";
+const VERSION = "commerce-supplier-research-plan-v1.5.0-shared-focused-commerce-registry";
 
 function text(value){ return String(value == null ? "" : value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
@@ -89,10 +90,10 @@ const KR_FOUNDATION_QUERIES = Object.freeze([
   "대한민국 사과 농장 참외 농장 토마토 농장 딸기 농장 버섯 재배 고사리 농가 영농조합법인 직거래 택배",
   "대한민국 농업회사법인 식품 제조업체 가공식품 공장 생산자 공식 온라인몰 배송 반품 환불 고객센터",
   "대한민국 전통시장 상인회 지역특산품 공동몰 로컬푸드 생산자 공동판매 온라인 주문 배송 반품",
-  "대한민국 화장품 스킨케어 메이크업 파운데이션 쿠션 BB CC 립스틱 립틴트 립밤 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 향수 네일 샴푸 트리트먼트 바디워시 미용기기 LED마스크 갈바닉 피부마사지 두피관리 전동면도기 헤어스타일러 제조사 브랜드 본사 책임판매업자 공식몰 제품 구매 배송 반품 환불 고객센터",
+  "대한민국 화장품 제조사 브랜드 본사 책임판매업자 공식몰 제품 구매 배송 반품 환불 고객센터",
   "대한민국 지역 유통업체 도매 총판 공판장 소규모 유통업체 공식 판매처 온라인 주문 배송 반품",
   "대한민국 생활용품 주방용품 가구 침구 제조사 생산업체 직영몰 공식 판매처 배송 반품 고객지원",
-  "대한민국 전자제품 블루투스 이어폰 이어버드 헤드폰 블루투스 스피커 마이크 태블릿 USB 허브 USB 메모리 케이블 충전기 보조배터리 웹캠 소형가전 선풍기 휴대용 선풍기 써큘레이터 전기포트 토스터 블렌더 커피메이커 가습기 제습기 공기청정기 청소기 제조사 공장 직영몰 온라인 주문 배송 반품",
+  "대한민국 전자제품 소형가전 부품 공구 산업용품 제조사 공장 직영몰 온라인 주문 배송 반품",
   "대한민국 기계 금속 플라스틱 목재 포장재 사무용품 제조업체 자체 쇼핑몰 제품 카탈로그 구매",
   "대한민국 의류 신발 가방 섬유 봉제 제조사 브랜드 직영몰 공식 온라인 판매처",
   "대한민국 유아용품 교육용품 문구 완구 제조사 공식몰 배송 반품 고객지원",
@@ -104,8 +105,8 @@ const KR_PRODUCT_CLUSTERS = Object.freeze([
   "쌀 잡곡 콩 참깨 들깨 고춧가루 마늘 양파", "한우 돼지고기 닭고기 계란 우유 치즈 축산물",
   "수산물 건어물 김 미역 젓갈 전복 굴 새우", "임산물 밤 대추 호두 잣 꿀 약초",
   "김치 장류 반찬 떡 한과 전통식품 가공식품", "건강식품 차 음료 주스 발효식품",
-  "화장품 스킨케어 세럼 앰플 토너 크림 선크림 클렌저 마스크팩 파운데이션 쿠션 BB CC 립스틱 립틴트 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 향수 네일 헤어케어 바디케어 그루밍 미용기기 LED마스크 갈바닉 피부마사지 두피관리 전동면도기 헤어스타일러", "생활용품 세제 위생용품 주방용품",
-  "의류 신발 가방 패션잡화", "가구 침구 인테리어 생활가전", "전자제품 액세서리 블루투스 이어폰 이어버드 헤드폰 스피커 마이크 태블릿 USB 허브 메모리 충전기 보조배터리 웹캠 소형가전 선풍기 휴대용 선풍기 써큘레이터 가습기 공기청정기 청소기", "유아용품 교육용품 문구 완구"
+  "화장품 스킨케어 헤어케어 바디케어 미용용품", "생활용품 세제 위생용품 주방용품",
+  "의류 신발 가방 패션잡화", "가구 침구 인테리어 생활가전", "전자제품 액세서리 소형가전", "유아용품 교육용품 문구 완구"
 ]);
 const KR_ENTITY_CLUSTERS = Object.freeze([
   "농가 농장 생산자 영농조합법인 농업회사법인", "농협 축협 수협 산림조합 협동조합",
@@ -118,7 +119,7 @@ const PACKS = Object.freeze({
     agri_cooperative:"producer farm agricultural fishery forestry cooperative local products",
     manufacturer_brand:"manufacturer factory brand owner official products",
     food_essentials:"food groceries household essentials responsible seller",
-    consumer_goods:"beauty skincare makeup foundation cushion BB CC lipstick lip tint mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance nail hair body grooming beauty device electric shaver hair styler LED mask galvanic facial massager scalp care clothing shoes bags small electronics bluetooth earbuds headphones speakers microphone tablet USB hub flash drive cable charger power bank webcam small home appliances portable fan desk fan circulator humidifier air purifier vacuum kitchen baby education products",
+    consumer_goods:"beauty personal care clothing shoes bags electronics home kitchen baby education products",
     industrial_goods:"industrial goods tools parts machinery materials manufacturer product catalog",
     regional_market:"regional products traditional market producer collective local ecommerce",
     wholesale_distribution:"authorized distributor wholesaler regional supplier official ordering",
@@ -129,7 +130,7 @@ const PACKS = Object.freeze({
     agri_cooperative:"생산자 농가 농협 축협 수협 산림조합 협동조합 지역 특산품",
     manufacturer_brand:"제조사 공장 브랜드 본사 공식 제품",
     food_essentials:"식품 식료품 생활필수품 책임 판매업체",
-    consumer_goods:"화장품 스킨케어 메이크업 파운데이션 쿠션 BB CC 립스틱 립틴트 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 향수 네일 헤어 바디 그루밍 미용기기 전동면도기 헤어스타일러 LED마스크 갈바닉 피부마사지 두피관리 의류 신발 가방 소형전자 블루투스 이어폰 헤드폰 스피커 마이크 태블릿 USB 허브 메모리 충전기 보조배터리 웹캠 소형가전 선풍기 휴대용 선풍기 써큘레이터 가습기 공기청정기 청소기 주방 유아 교육용품",
+    consumer_goods:"화장품 개인용품 의류 신발 가방 전자제품 가전 주방 유아 교육용품",
     industrial_goods:"산업재 공구 부품 기계 자재 제조업체 제품 카탈로그",
     regional_market:"지역 특산품 전통시장 생산자 공동판매 로컬 온라인몰",
     wholesale_distribution:"공식 총판 도매 지역 유통업체 온라인 주문",
@@ -427,7 +428,30 @@ function sourceHintTerms(sourceTerms, locale){
   const preferred=sourceTerms.filter(term=>term.length<=28&&(!rx||rx.test(term)));
   return unique(preferred,8).join(" ");
 }
-function restoredKrRows(geo, sourceTerms, maxQueries){
+function focusedResearchRows(geo, locales, maxRows){
+  const country=text(geo&&geo.country).toUpperCase();
+  const region=text(geo&&geo.region), regionPart=region&&region!=="NATIONWIDE"?region:"";
+  const localeRows=unique([].concat(locales&&locales.length?locales:[country==="KR"?"ko":"en"],["en"]),4);
+  const keys=ResearchCategoryRegistry.focusedKeys();
+  const rows=[];
+  const add=(locale,key)=>{
+    const pack=packForLocale(locale), localName=localCountryName(country,locale,first(geo&&geo.countryName,country));
+    const locality=[regionPart,localName].filter(Boolean).join(" ");
+    const suffix=ResearchCategoryRegistry.suffixFor(locale,key);
+    if(!suffix) return;
+    const query=sanitizeQuery(`${locality} ${suffix} ${pack.lanes.manufacturer_brand||PACKS.en.lanes.manufacturer_brand} ${pack.commerce}`);
+    if(!query||rows.some(row=>lower(row.locale+"|"+row.query)===lower(locale+"|"+query))) return;
+    rows.push({query,locale,origin:`shared-focused-registry:${key}`,lane:`focused_${key}`,localName,localizationError:null});
+  };
+  for(const locale of localeRows){
+    for(const key of keys){
+      add(locale,key);
+      if(rows.length>=maxRows) return rows;
+    }
+  }
+  return rows;
+}
+function restoredKrRows(geo, sourceTerms, maxQueries, locales){
   const period=Math.floor(Date.now()/(6*60*60*1000));
   const productOffset=stableOffset([geo.country,geo.region||"NATIONWIDE",period,"product"].join("|"),KR_PRODUCT_CLUSTERS.length);
   const entityOffset=stableOffset([geo.country,geo.region||"NATIONWIDE",period,"entity"].join("|"),KR_ENTITY_CLUSTERS.length);
@@ -449,11 +473,20 @@ function restoredKrRows(geo, sourceTerms, maxQueries){
     if(/농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|농장|농가|수산물|임산물/.test(query)) return "agri_cooperative";
     return index<KR_FOUNDATION_QUERIES.length?"food_essentials":"kr_rotating";
   }
-  return unique(KR_FOUNDATION_QUERIES.concat(dynamic),maxQueries).map((query,index)=>({query,locale:"ko",origin:`country-supply-lane:${laneFor(query,index)}`,lane:laneFor(query,index),localName:"대한민국",localizationError:null}));
+  const focusLimit=Math.min(maxQueries,maxQueries<=8?3:6);
+  const rows=focusedResearchRows(geo,locales&&locales.length?locales:["ko","en"],focusLimit);
+  const seen=new Set(rows.map(row=>lower(row.locale+"|"+row.query)));
+  for(const [index,query] of KR_FOUNDATION_QUERIES.concat(dynamic).entries()){
+    const clean=sanitizeQuery(query),key=lower("ko|"+clean);
+    if(!clean||seen.has(key)) continue;
+    seen.add(key);rows.push({query:clean,locale:"ko",origin:`country-supply-lane:${laneFor(clean,index)}`,lane:laneFor(clean,index),localName:"대한민국",localizationError:null});
+    if(rows.length>=maxQueries) break;
+  }
+  return rows.slice(0,maxQueries);
 }
 function buildCountryRows(geo, locales, sourceTerms, maxQueries){
   const country=text(geo&&geo.country).toUpperCase();
-  if(country==="KR") return restoredKrRows(geo,sourceTerms,maxQueries);
+  if(country==="KR") return restoredKrRows(geo,sourceTerms,maxQueries,locales);
   const region=text(geo&&geo.region);
   const regionPart=region&&region!=="NATIONWIDE"?region:"";
   const localeRows=unique(locales&&locales.length?locales:[country==="KR"?"ko":"en"],12);
@@ -467,13 +500,8 @@ function buildCountryRows(geo, locales, sourceTerms, maxQueries){
     if(!clean||rows.some(row=>lower(row.locale+"|"+row.query)===lower(locale+"|"+clean))) return;
     rows.push({query:clean,locale,origin,lane,localName,localizationError:null});
   };
-  const focusLocale=localeRows[0]||"en",focusPack=packForLocale(focusLocale),focusName=localCountryName(country,focusLocale,first(geo&&geo.countryName,country));
-  const focusedCommerceQueries=[
-    ["beauty_focus","beauty skincare makeup foundation cushion BB CC lipstick lip tint mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance nail hair body grooming beauty device electric shaver hair styler LED mask galvanic facial massager scalp care manufacturer brand official store"],
-    ["electronics_focus","small electronics bluetooth earbuds earphones headphones speakers microphone tablet USB hub flash drive cable charger power bank webcam manufacturer brand official store"],
-    ["small_appliance_focus","small home appliances portable fan desk fan handheld fan circulator humidifier dehumidifier air purifier vacuum electric kettle toaster blender coffee maker manufacturer brand official store"]
-  ];
-  for(const item of focusedCommerceQueries){if(rows.length>=maxQueries)break;add(`${regionPart} ${focusName} ${item[1]} ${focusPack.commerce}`,focusLocale,`country-policy-focused:${item[0]}`,item[0],focusName);}
+  const focusLimit=Math.min(maxQueries,maxQueries<=8?3:6);
+  for(const row of focusedResearchRows(geo,localeRows,focusLimit)) add(row.query,row.locale,row.origin,row.lane,row.localName);
   for(let index=0;index<lanes.length&&rows.length<maxQueries;index+=1){
     const lane=lanes[index],locale=localeRows[index%localeRows.length],pack=packForLocale(locale),localName=localCountryName(country,locale,first(geo&&geo.countryName,country));
     const locality=[regionPart,localName].filter(Boolean).join(" ");
@@ -562,6 +590,8 @@ function buildPlan(input){
       regionalPolicyTerms:regionalPolicyTerms(sources.regional).length,
       searchBank:{items:bank.itemCount,external:bank.externalCount,commerceLike:bank.commerceCount,tags:bank.tags.length,categories:bank.categories.length,producers:bank.producers.length},
       generatedQueries:rows.length,
+      focusedCommerceQueries:rows.filter(row=>/^focused_/.test(text(row&&row.lane))).length,
+      researchCategoryRegistryVersion:ResearchCategoryRegistry.VERSION,
       supplyLanes:unique(rows.map(row=>row&&row.lane),40),
       localizedQueries:rows.filter(row=>baseLocale(row.locale)!=="en").length,
       countrySpecificBoosts:array(COUNTRY_BOOSTS[text(geo.country).toUpperCase()]).length,
