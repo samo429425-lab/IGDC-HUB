@@ -3666,7 +3666,10 @@ function candidateRuntimeHealth(productInput) {
   const product = plain(productInput), status = lower(product.researchStatus), risk = plain(product.riskAssessment), reasons = [];
   const hardDeadStatuses = new Set(["http_404","http_410","http_401","invalid_product_url","product_page_explicit_invalid_message","product_page_redirected_to_seller_home"]);
   const inconclusiveStatuses = new Set(["http_403","http_408","http_409","http_425","http_429","http_500","http_502","http_503","http_504","page_too_large","non_html","blocked","unavailable","inspection_error","timeout","aborterror","fetch_failed"]);
+  const productTitle = lower(first(product.productName, product.title, product.sourceTitle));
+  const navigationTitle = /^(?:aside(?:_?menu)?|sidebar|side_?menu|navigation|nav_?menu|header|footer|recommend(?:ed)?_?item(?:_?\d+)?|product_?item(?:_?\d+)?)(?:_|\b)/.test(productTitle.replace(/\s+/g,"_"));
   let hardDead = hardDeadStatuses.has(status), inconclusive = false;
+  if (!productTitle || navigationTitle) { reasons.push(navigationTitle ? "non_product_navigation_title" : "product_title_missing"); hardDead = true; }
   if (!ProductRanking.isSpecificProductUrl(productUrl(product))) { reasons.push("specific_product_url_missing"); hardDead = true; }
   if (!productImageUrl(product)) { reasons.push("actual_product_image_missing"); hardDead = true; }
   if (product.sameSupplierSite === false) { reasons.push("supplier_product_domain_mismatch"); hardDead = true; }
@@ -3760,12 +3763,21 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       if (currentKey === "tour|tour" && tourProfile.diningAuxiliary === true) tourDiningAutomaticCount = Math.max(0, tourDiningAutomaticCount - 1);
       currentBalanceReleased = true;
     };
-    if (validationOnly) {
-      // Front Match validates publication safety only. The administrator ledger
-      // is the desired state and must never be rewritten from the current front
-      // or from a transient runtime check.
+    if (validationOnly && health.dead) {
+      // A hard-dead/non-product result cannot remain counted on the administrator
+      // 18-section board while the public Snapshot correctly rejects it.  That
+      // split state was the root cause of admin counts such as 6/7 while the
+      // Distribution front could safely render only 5.  Quarantine only hard
+      // failures; transient 403/429/5xx checks continue to preserve the admin
+      // assignment below.
+      releaseCurrentBalance();
+      nextDecision = "hold"; nextPlacement = null; status = "hold"; assigned = false;
+      changeReason = manualLocked ? "front_validation_hard_invalid_administrator_assignment_quarantined" : "front_validation_hard_invalid_quarantined";
+    } else if (validationOnly) {
+      // Front Match validates publication safety only. Preserve the exact
+      // administrator placement for live or inconclusive/transient checks.
       assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey);
-      changeReason = health.dead ? "front_validation_unavailable_admin_state_preserved" : (health.inconclusive ? (priorLiveFallback ? "front_validation_inconclusive_prior_verified_admin_state_preserved" : "front_validation_inconclusive_admin_state_preserved") : "front_validation_live_admin_state_preserved");
+      changeReason = health.inconclusive ? (priorLiveFallback ? "front_validation_inconclusive_prior_verified_admin_state_preserved" : "front_validation_inconclusive_admin_state_preserved") : "front_validation_live_admin_state_preserved";
     } else if (health.dead) {
       releaseCurrentBalance();
       nextDecision = "hold"; nextPlacement = null; status = "hold"; assigned = false;
@@ -3815,8 +3827,8 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     payload.productCategory = category.primary; payload.productCategoryTags = category.tags; payload.productRanking = Object.assign({}, plain(payload.productRanking), { category:category.primary, categoryTags:category.tags });
     payload.researchReadiness = Object.assign({}, plain(payload.researchReadiness), { stage:payload.researchStatus, productPageLive:payload.productPageLive, inspectionComplete:payload.inspectionComplete, productCard:card, lastVerifiedAt:now });
     payload.runtimeValidation = { schema:"igdc-product-runtime-validation.v3", source:options.source || "administrator_refresh", checkedAt:now, checkedBy:actor, state:health.state, live:health.live, dead:health.dead, inconclusive:health.inconclusive, priorLiveFallbackAllowed:priorLiveFallback, priorLiveVerifiedAt:priorLiveFallback?priorLiveProof.verifiedAt:null, reasons:health.reasons, exactProductUrl:payload.url || null, imageUrl:payload.image || null, category:category.primary, previousSectionKey:currentKey || null, nextSectionKey:productPlacementKey(nextPlacement) || null };
-    payload.slotDecision = validationOnly ? currentDecision : nextDecision; payload.publicPublication = false; payload.automaticImport = false;
-    if (!validationOnly) {
+    payload.slotDecision = validationOnly && !health.dead ? currentDecision : nextDecision; payload.publicPublication = false; payload.automaticImport = false;
+    if (!validationOnly || health.dead) {
       if (nextPlacement && validProductSectionKey(productPlacementKey(nextPlacement))) {
         payload.approvedPlacement = nextPlacement; payload.placement = nextPlacement; payload.page = nextPlacement.page; payload.channel = nextPlacement.page; payload.section = nextPlacement.sectionKey || nextPlacement.section; payload.psom_key = nextPlacement.sectionKey || nextPlacement.section;
       } else if (!manualLocked || !health.ok) {
@@ -3825,7 +3837,8 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       }
     }
     if (!validationOnly && !manualLocked) payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema:"igdc-product-management-control.v1", source:"ai_automation", administratorLocked:false, aiReclassificationAllowed:true, automationMode:"runtime_refresh", updatedAt:now, decidedBy:actor });
-    if (validationOnly) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:health.dead?"failed":(health.inconclusive?"inconclusive":"passed"), runtimeReasons:health.reasons, runtimeCheckedAt:now, administratorPlacementPreserved:true });
+    if (validationOnly && health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now, administratorPlacementPreserved:false, quarantinedByFrontMatch:true });
+    else if (validationOnly) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:health.inconclusive?"inconclusive":"passed", runtimeReasons:health.reasons, runtimeCheckedAt:now, administratorPlacementPreserved:true });
     else if (health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now });
     else if (health.inconclusive) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"inconclusive", runtimeReasons:health.reasons, runtimeCheckedAt:now });
     else payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"passed", runtimeReasons:[], runtimeCheckedAt:now });

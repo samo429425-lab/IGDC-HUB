@@ -9,7 +9,7 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.2.0-admin-delete-and-removed-state";
+const VERSION = "commerce-candidate-queue-control-v1.3.0-reliable-admin-cleanup";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject"]);
 const RELATION_TABLES = Object.freeze([
@@ -48,16 +48,28 @@ async function releaseSectionAssignment(candidateId){
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
   if(action==="dismiss"){
+    /* Delete relation ledgers first, but do not abort merely because an optional
+       relation table returned an error.  The candidate row delete is the
+       authoritative operation; verify it afterwards so the admin button cannot
+       report success while the row still exists. */
     const relations=await deleteRelations(id);
     const relationFailures=relations.filter((item)=>item&&item.ok!==true);
-    if(relationFailures.length){
-      const error=new Error("candidate_relation_cleanup_failed");
-      error.code="candidate_relation_cleanup_failed";
-      error.relations=relations;
-      throw error;
+    let deleted=[];
+    try{ deleted=await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(id)); }
+    catch(error){
+      const deleteError=new Error("candidate_delete_failed: "+text(error&&error.message||error));
+      deleteError.code="candidate_delete_failed";
+      deleteError.relations=relations;
+      throw deleteError;
     }
-    await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(id));
-    return {id,action,status:"deleted_research_allowed",rediscoveryAllowed:true,relations};
+    const remaining=await readCandidate(id);
+    if(remaining){
+      const verifyError=new Error("candidate_delete_verify_failed");
+      verifyError.code="candidate_delete_verify_failed";
+      verifyError.relations=relations;
+      throw verifyError;
+    }
+    return {id,action,status:"deleted_research_allowed",deleted:true,rediscoveryAllowed:true,relations,relationWarnings:relationFailures};
   }
   const previousStatus=text(row&&row.status)||"approval_pending";
   const queueControl=Object.assign({},plain(payload.queueControl),{
@@ -71,6 +83,11 @@ async function applyAction(actorId,row,action){
     decidedBy:text(actorId)||"administrator"
   });
   payload.queueControl=queueControl;
+  payload.slotDecision=action==="purge"?"purge":action==="reject"?"reject":action==="remove_from_list"?"removed":"hold";
+  if(action==="hold"||action==="reject"||action==="purge"||action==="remove_from_list"){
+    delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement;
+    delete payload.page; delete payload.channel; delete payload.section; delete payload.psom_key; delete payload.slot;
+  }
   payload.review=Object.assign({},plain(payload.review),{
     state:action==="purge"?"permanent_excluded":action==="reject"?"rejected":action==="remove_from_list"?"removed_from_list":"hold",
     decidedAt:now,
