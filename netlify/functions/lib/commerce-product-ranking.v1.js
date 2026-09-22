@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.15.0-production-profitability-priority";
+const VERSION = "commerce-product-ranking-v1.16.0-trust-delivery-quality-priority";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -67,6 +67,7 @@ const VALUE_WEIGHTS = Object.freeze({
   affordability: 10,
   repeatPurchase: 8,
   sellerTrust: 18,
+  supplierOperationalQuality: 18,
   marketReadiness: 22,
   revenueCertainty: 24,
   transactionFrequency: 16,
@@ -74,7 +75,7 @@ const VALUE_WEIGHTS = Object.freeze({
   expectedNetRevenue: 12,
   searchExposure: 6,
   conversionQuality: 8,
-  trafficValue: 4,
+  trafficValue: 8,
   operatorCostPenalty: 14,
   riskPenalty: 30
 });
@@ -463,7 +464,7 @@ function classifyCategory(rowInput) {
 
   addProduct("food_household_essentials", 80, /(화장지|두루마리|휴지|티슈|물티슈|키친타올|생리대|위생|세제|세정제|주방용품|생활용품|생필품|식료품|건강식품|가공식품|즉석식품|냉동식품|신선식품|수입식품|유기농식품|(?:^|[^가-힣])식품(?:[^가-힣]|$)|김치|장류|반찬|떡|한과|household|tissue|detergent|grocery|food)/i);
   addProduct("food_household_essentials", 35, /(미용티슈|각티슈|롤화장지|배변패드|발티슈|키친타월|키친타올|생리대|오버나이트)/i);
-  addProduct("beauty_personal_care", 85, /(화장품|뷰티|스킨케어|세럼|앰플|에센스|토너|크림|로션(?!\s*\d*겹)|보습제|선크림|자외선차단|샴푸|린스|컨디셔너|클렌징|클렌저|마스크팩|메이크업|향수|미스트|헤어케어|바디케어|그루밍|이어클리너|이어클렌저|personal care|beauty|cosmetic|skincare|serum|ampoule|essence|toner|moisturizer|cleanser|sunscreen|makeup|hair care|body care|grooming)/i);
+  addProduct("beauty_personal_care", 85, /(화장품|뷰티|스킨케어|세럼|앰플|에센스|토너|크림|로션(?!\s*\d*겹)|보습제|선크림|자외선차단|샴푸|린스|컨디셔너|트리트먼트|헤어팩|클렌징|클렌저|마스크팩|메이크업|파운데이션|쿠션|BB\s*크림|CC\s*크림|립스틱|립틴트|립밤|마스카라|아이라이너|아이브로우|아이섀도|블러셔|컨실러|페이스파우더|향수|미스트|네일|매니큐어|바디워시|헤어케어|바디케어|그루밍|전동면도기|고데기|헤어스타일러|미용기기|LED\s*마스크|갈바닉|피부마사지|두피관리|이어클리너|이어클렌저|personal care|beauty|cosmetic|skincare|serum|ampoule|essence|toner|moisturizer|cleanser|sunscreen|makeup|foundation|cushion|bb cream|cc cream|lipstick|lip tint|lip balm|mascara|eyeliner|eyebrow|eyeshadow|blush|concealer|face powder|perfume|fragrance|nail polish|manicure|shampoo|conditioner|treatment|body wash|hair care|body care|grooming|electric shaver|hair straightener|hair styler|beauty device|led mask|galvanic|facial massager|scalp care)/i);
   addProduct("fashion", 75, /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|등산복|등산화|아웃도어의류|fashion|apparel|jewelry|ring|watch|shoes|bag|outdoor wear)/i);
   addProduct("electronics_accessories", 80, /(전자|소형전자|스마트폰|휴대폰|태블릿|컴퓨터|노트북|모니터|스피커|블루투스\s*스피커|이어버드|블루투스\s*이어폰|이어폰|헤드폰|마이크|마이크로폰|USB|USB\s*허브|USB\s*메모리|플래시\s*드라이브|충전기|케이블|보조배터리|웹캠|도킹|카메라|어댑터|아답터|커넥터|리모컨|전원부|센서|컨트롤러|배터리|충전식|인버터|계측기|측정기|멀티미터|electronics|small electronics|smartphone|tablet|computer|laptop|monitor|speaker|bluetooth speaker|earbud|earphone|headphone|microphone|usb hub|flash drive|charger|cable|power bank|webcam|dock|docking|camera|adapter|connector|remote control|battery|inverter|multimeter)/i);
   addProduct("home_appliances_living", 75, /(가전|소형가전|전기포트|토스터|블렌더|믹서|커피메이커|커피머신|가습기|제습기|헤어드라이어|냉장고|세탁기|청소기|에어컨|공기청정기|가구|침구|조명|인테리어|온수매트|전기요|전기장판|카본매트|냉온수|난방|써큘레이터|선풍기|펫하우스|메밀베개|베개|매트커버|클린필터|에어펌프|수납장|테이블|의자|소파|책상|home appliance|small appliance|electric kettle|toaster|blender|mixer|coffee maker|coffee machine|humidifier|dehumidifier|hair dryer|furniture|living|vacuum|refrigerator|air purifier|heated mat|electric blanket|circulator|fan|table|chair|sofa|desk)/i);
@@ -498,6 +499,14 @@ function metricContainers(rowInput) {
     plain(row.performance),
     plain(row.signals),
     plain(row.evidence),
+    plain(row.satisfaction),
+    plain(plain(row.satisfaction).delivery),
+    plain(plain(row.satisfaction).quality),
+    plain(plain(row.satisfaction).support),
+    plain(row.shipping),
+    plain(row.delivery),
+    plain(row.quality),
+    plain(row.commerce),
     plain(plain(row.commerceCandidate).revenue),
     plain(plain(row.candidateSelection).revenue)
   ];
@@ -547,7 +556,10 @@ function explicitRevenue(rowInput) {
     disclosureReady && payoutBasisVerified
   );
   const contractReady = affiliateReady || referralReady || sponsorReady || directPayable;
-  const trafficOnly = route.monetizationState === "traffic_value_only_review" || (revenueTypeRaw === "external_referral" && !directPayable);
+  const monetization = plain(row.monetization), impression = plain(monetization.impression), monetizationProvider = lower(first(impression.provider, monetization.provider, monetization.network));
+  const passiveTrafficMonetization = (monetization.enabled === true || impression.enabled === true) && ["adsense","ad_manager","display_ads","impression_ads","cpm"].includes(monetizationProvider);
+  const trafficOnly = route.monetizationState === "traffic_value_only_review" || (revenueTypeRaw === "external_referral" && !directPayable) || passiveTrafficMonetization;
+  if (passiveTrafficMonetization && !route.monetizationState) route.monetizationState = "traffic_value_only_review";
   const revenueType = sponsorReady ? "sponsor" : affiliateReady ? "affiliate" : referralReady ? "external_referral" : (allowedRevenueTypes.has(revenueTypeRaw) ? revenueTypeRaw : "commercial_candidate");
 
   const metricsVerified = anyEvidenceFlag(row, ["serverVerified","metricsVerified","revenueMetricsVerified","marketMetricsVerified","verifiedByServer"]);
@@ -610,19 +622,41 @@ function supplierAssessment(rowInput) {
   const evidenceReady = row.supplierEvidenceReady === true;
   const approvalReady = row.supplierApprovalReady === true;
   const trustScore = Math.round(clamp(first(row.supplierTrustScore, row.trustScore), 0, 100, 0));
+  const satisfaction = plain(row.satisfaction), delivery = plain(satisfaction.delivery), quality = plain(satisfaction.quality);
+  const reliabilityEvidence = anyEvidenceFlag(row, ["supplierReliabilityVerified","satisfactionVerified","deliveryMetricsVerified","shippingMetricsVerified","qualityMetricsVerified","defectMetricsVerified"]);
+  const onTimeRate = ratio01(first(delivery.onTimeRate, delivery.on_time_rate, row.onTimeDeliveryRate, row.on_time_delivery_rate, row.shippingOnTimeRate), NaN);
+  const defectRate = ratio01(first(quality.defectRate, quality.defect_rate, row.defectRate, row.defect_rate, row.productDefectRate), NaN);
+  const returnRate = ratio01(first(plain(row.commerce).refundRate, plain(row.commerce).returnRate, row.returnRate, row.return_rate), NaN);
+  let operationalQualityScore = 50;
+  if (reliabilityEvidence) {
+    const deliveryScore = Number.isFinite(onTimeRate) ? onTimeRate * 100 : 50;
+    const defectScore = Number.isFinite(defectRate) ? (1 - defectRate) * 100 : 50;
+    const returnScore = Number.isFinite(returnRate) ? (1 - returnRate) * 100 : 50;
+    operationalQualityScore = Math.round(clamp(deliveryScore * 0.45 + defectScore * 0.40 + returnScore * 0.15, 0, 100, 0));
+  }
   const blockers = [], concerns = [];
   if (!evidenceReady) blockers.push("supplier_evidence_not_ready");
   if (["reject", "exclude", "suppressed"].includes(decision)) blockers.push("supplier_rejected_or_excluded");
   if (!approvalReady) concerns.push("supplier_approval_pending");
   if (trustScore < 82) concerns.push("supplier_trust_below_public_threshold");
+  if (reliabilityEvidence && Number.isFinite(defectRate) && defectRate > 0.12) blockers.push("verified_defect_rate_too_high");
+  else if (reliabilityEvidence && Number.isFinite(defectRate) && defectRate > 0.05) concerns.push("verified_defect_rate_elevated");
+  if (reliabilityEvidence && Number.isFinite(onTimeRate) && onTimeRate < 0.65) blockers.push("verified_delivery_reliability_too_low");
+  else if (reliabilityEvidence && Number.isFinite(onTimeRate) && onTimeRate < 0.85) concerns.push("verified_delivery_reliability_below_target");
+  if (reliabilityEvidence && Number.isFinite(returnRate) && returnRate > 0.20) concerns.push("verified_return_rate_elevated");
   return {
     reviewEligible: blockers.length === 0,
     evidenceReady,
     approvalReady,
     trustScore,
     decision: decision || "unresolved",
-    blockers,
-    concerns,
+    reliabilityEvidence,
+    onTimeRate: Number.isFinite(onTimeRate) ? onTimeRate : null,
+    defectRate: Number.isFinite(defectRate) ? defectRate : null,
+    returnRate: Number.isFinite(returnRate) ? returnRate : null,
+    operationalQualityScore,
+    blockers: Array.from(new Set(blockers)),
+    concerns: Array.from(new Set(concerns)),
     publicTrustThreshold: 82
   };
 }
@@ -651,11 +685,19 @@ function riskAssessment(rowInput) {
   if (!row.offerPresent) concerns.push("offer_not_confirmed");
   if (!text(row.price)) concerns.push("price_not_confirmed");
   if (!availability) concerns.push("availability_not_confirmed");
+  const reliability = supplierAssessment(row);
+  if (reliability.reliabilityEvidence === true) {
+    if (Number.isFinite(reliability.defectRate) && reliability.defectRate > 0.12) blockers.push("verified_defect_rate_too_high");
+    else if (Number.isFinite(reliability.defectRate) && reliability.defectRate > 0.05) concerns.push("verified_defect_rate_elevated");
+    if (Number.isFinite(reliability.onTimeRate) && reliability.onTimeRate < 0.65) blockers.push("verified_delivery_reliability_too_low");
+    else if (Number.isFinite(reliability.onTimeRate) && reliability.onTimeRate < 0.85) concerns.push("verified_delivery_reliability_below_target");
+  }
 
+  const operationalAdjustment = reliability.reliabilityEvidence === true ? (Number(reliability.operationalQualityScore || 50) - 50) * 0.20 : 0;
   const quality = Math.round(clamp(
     (specificUrl ? 18 : 0) + (image ? 14 : 0) + (!genericName ? 12 : 0) + (inspected ? 14 : 0) +
     (live ? 10 : 0) + (sameSupplier ? 10 : 0) + (row.jsonLdProduct === true ? 10 : 0) +
-    (row.offerPresent === true ? 7 : 0) + (text(row.price) ? 3 : 0) + (availability ? 2 : 0),
+    (row.offerPresent === true ? 7 : 0) + (text(row.price) ? 3 : 0) + (availability ? 2 : 0) + operationalAdjustment,
     0, 100, 0
   ));
   const gatePassed = blockers.length === 0;
@@ -667,7 +709,12 @@ function riskAssessment(rowInput) {
     concerns: Array.from(new Set(concerns)),
     specificProductUrl: specificUrl,
     supplierSiteMatched: sameSupplier,
-    explicitUnavailable: explicitlyUnavailable
+    explicitUnavailable: explicitlyUnavailable,
+    operationalQualityVerified: reliability.reliabilityEvidence === true,
+    onTimeRate: reliability.onTimeRate,
+    defectRate: reliability.defectRate,
+    returnRate: reliability.returnRate,
+    operationalQualityScore: reliability.operationalQualityScore
   };
 }
 
@@ -861,6 +908,7 @@ function portfolioValueAssessment(rowInput, category, risk, supplier, audience, 
     affordability: audience.affordabilityScore,
     repeatPurchase: audience.repeatPurchaseScore,
     sellerTrust: Math.round(clamp(sellerTrustScore, 0, 100, 0)),
+    supplierOperationalQuality: Number(supplier.operationalQualityScore || 50),
     marketReadiness: audience.marketReadinessScore,
     revenueCertainty: revenueValue.revenueCertaintyScore,
     transactionFrequency: revenueValue.transactionFrequencyScore,
@@ -892,7 +940,7 @@ function portfolioValueAssessment(rowInput, category, risk, supplier, audience, 
     components,
     operatorCostPenalty,
     riskPenalty,
-    rankingPrinciple: "trust_gate_then_audience_need_then_frequency_and_total_expected_value; no_count_filling"
+    rankingPrinciple: "verified_product_and_supplier_trust_gate_then_delivery_defect_quality_then_audience_need_and_total_expected_value; no_count_filling"
   };
 }
 
@@ -947,7 +995,7 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const policyTourMatch=policyTourIntent&&policyAssessment.active===true&&Number(policyAssessment.score||0)>0;
   const travel = category.primary === "travel_local_services" || tourProfile.service;
   const localService = travel || /(지역서비스|방문서비스|예약|상담|local service)/i.test(hay);
-  const highTrust = risk.gatePassed === true && supplier.approvalReady === true && Number(supplier.trustScore || 0) >= 82;
+  const highTrust = risk.gatePassed === true && supplier.approvalReady === true && Number(supplier.trustScore || 0) >= 82 && (supplier.reliabilityEvidence !== true || Number(supplier.operationalQualityScore || 0) >= 75);
   const highestValue = highTrust && baseScore >= 72 && revenueValue.contractReady === true;
   const recentDiscovery = !!row.inspectedAt && Number.isFinite(Date.parse(row.inspectedAt)) && Date.now() - Date.parse(row.inspectedAt) <= 45 * 86400000;
   const officialProductText = row.productPageLive !== false && isSpecificProductUrl(first(row.productUrl, row.url)) && (row.sameSupplierSite === true || sameSite(first(row.productUrl, row.url), first(row.supplierSiteUrl, row.supplierOfficialUrl)));

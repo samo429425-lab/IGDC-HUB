@@ -5,7 +5,7 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 
-const VERSION = "commerce-candidate-admin-authority-v1.0.0";
+const VERSION = "commerce-candidate-admin-authority-v1.0.1-removed-list-state";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ALLOWED_SOURCE_REFS = new Set(["country-product-ranking-review","commerce-candidate-review-api"]);
 const SECTION_KEYS = new Set([
@@ -108,14 +108,15 @@ async function applyOne(actor,candidateId,scope,decision,key,source){
     if(prior)payload.previousApprovedPlacement=Object.assign({},prior,{removedAt:now,removedReason:"administrator_"+decision});
     await removeScopeAssignments(oldRows,scope);
     delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.primaryPlacement;
-    if(decision==="hold"||decision==="remove_from_list"){payload.slotDecision="hold";status="hold";effective="hold";}
+    if(decision==="hold"){payload.slotDecision="hold";status="hold";effective="hold";}
+    else if(decision==="remove_from_list"){payload.slotDecision="removed_from_list";status="suppressed";effective="removed_from_list";}
     else if(decision==="reject"){payload.slotDecision="reject";status="rejected";effective="reject";}
     else if(decision==="purge"){payload.slotDecision="purge";status="suppressed";effective="purge";}
     else {payload.slotDecision="undecided";status="research_pending";effective="undecided";}
     payload.queueControl=Object.assign({},plain(payload.queueControl),{
       schema:"igdc-private-product-queue-control.v1",
       action:decision==="remove_from_list"?"remove_from_list":effective,
-      hiddenFromCountryQueue:["hold","reject","purge"].includes(effective)||decision==="remove_from_list",
+      hiddenFromCountryQueue:["hold","reject","purge","removed_from_list"].includes(effective),
       permanentExcluded:effective==="purge",
       rediscoveryAllowed:effective!=="purge",
       decidedAt:now,decidedBy:actorId

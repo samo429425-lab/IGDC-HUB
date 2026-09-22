@@ -3428,8 +3428,9 @@ async function syncProductCandidateQueue(actorId, scope, product, decision) {
     const sourcePayload = decision === "undecided" ? productCandidatePayload(actorId, scope, product, "research_pending") : Object.assign({}, plain(existing.source_payload));
     sourcePayload.slotDecision = decision;
     sourcePayload.approvedPlacement = null;
-    sourcePayload.review = Object.assign({}, plain(sourcePayload.review), { state: decision === "undecided" ? "research_pending" : (decision === "hold" ? "hold" : "suppressed"), decidedAt: now, decidedBy: text(product.decisionBy || actorId) || "administrator" });
+    sourcePayload.review = Object.assign({}, plain(sourcePayload.review), { state: decision === "undecided" ? "research_pending" : (decision === "hold" ? "hold" : (decision === "removed_from_list" ? "removed_from_list" : "suppressed")), decidedAt: now, decidedBy: text(product.decisionBy || actorId) || "administrator" });
     if (decision === "purge") sourcePayload.queueControl = Object.assign({}, plain(sourcePayload.queueControl), { schema: "igdc-private-product-queue-control.v1", action: "purge", permanentExcluded: true, hiddenFromCountryQueue: true, rediscoveryAllowed: false, decidedAt: now, decidedBy: text(actorId) || "administrator" });
+    else if (decision === "removed_from_list") sourcePayload.queueControl = Object.assign({}, plain(sourcePayload.queueControl), { schema: "igdc-private-product-queue-control.v1", action: "remove_from_list", permanentExcluded: false, hiddenFromCountryQueue: true, rediscoveryAllowed: true, decidedAt: now, decidedBy: text(actorId) || "administrator" });
     else if (decision === "undecided") sourcePayload.queueControl = Object.assign({}, plain(sourcePayload.queueControl), { permanentExcluded: false, hiddenFromCountryQueue: false, rediscoveryAllowed: true, restoredAt: now, restoredBy: text(actorId) || "administrator" });
     const status = decision === "undecided" ? "approval_pending" : (decision === "hold" ? "hold" : "suppressed");
     await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: sourcePayload, updated_at: now });
@@ -3442,7 +3443,7 @@ async function syncProductCandidateQueue(actorId, scope, product, decision) {
 }
 async function productCandidateAction(actorId, input) {
   const scope = researchScope(input), job = await loadProductResearchJob(scope); if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
-  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","undecided","ai_reclassify","remove_from_list","affiliate_settlement"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
+  const id = text(input && input.productId), decision = lower(input && input.decision); if (!id || !["slot_candidate","hold","reject","purge","dismiss","undecided","ai_reclassify","remove_from_list","affiliate_settlement"].includes(decision)) { const error = new Error("상품 후보 ID와 관리자 판정을 확인하세요."); error.statusCode = 400; throw error; }
   const portfolio = ProductRanking.buildPortfolio(array(job.rawProducts).concat(array(job.products)), plain(job.rankingContext));
   const evaluated = array(portfolio.products).find((row) => text(row && row.id) === id); if (!evaluated) { const error = new Error("상품 후보를 찾을 수 없습니다. 최신 상품 리서치 상태를 다시 읽어 주세요."); error.statusCode = 404; throw error; }
   const identity = text(evaluated.productIdentity), index = array(job.products).findIndex((row) => text(row && row.id) === id || ProductRanking.productIdentity(row) === identity); if (index < 0) { const error = new Error("상세페이지 검증을 마친 상품 후보를 찾을 수 없습니다. 발견 단계 상품은 검증 완료 후 판정할 수 있습니다."); error.statusCode = 404; throw error; }
@@ -3480,7 +3481,25 @@ async function productCandidateAction(actorId, input) {
     const occupied = array(job.products).filter((row) => lower(row && row.slotDecision) === "slot_candidate" && ProductRanking.productIdentity(row) !== currentIdentity && productPlacementKey(row && (row.approvedPlacement || row.selectedPlacement || row.primaryPlacement)) === selectedKey).length;
     if (occupied >= PRODUCT_SECTION_CAPACITY) { const error = new Error("선택 섹션은 이미 100개 상품으로 가득 찼습니다. 기존 배치 예정 상품을 후보 목록으로 내린 뒤 다시 지정해 주세요."); error.statusCode = 409; throw error; }
   }
-  const effectiveDecision = decision === "ai_reclassify" ? "undecided" : (decision === "remove_from_list" ? "hold" : decision), current = plain(job.products[index]), now = iso();
+  const current = plain(job.products[index]), now = iso();
+  if (decision === "dismiss") {
+    const candidateId = productCandidateId(scope, current);
+    const relationTables = ["gslot_slot_assignments","gslot_candidate_availability","gslot_candidate_revenue","gslot_candidate_evidence"];
+    const relationCleanup = [];
+    for (const table of relationTables) {
+      try { const removed = await SlotStore.remove(table, "candidate_id=eq." + encodeURIComponent(candidateId)); relationCleanup.push({ table, ok:true, count:array(removed).length }); }
+      catch (error) { relationCleanup.push({ table, ok:false, error:text(error&&error.message)||"cleanup_failed" }); }
+    }
+    try { await SlotStore.remove("gslot_candidates", "id=eq." + encodeURIComponent(candidateId)); } catch (_deleteError) {}
+    job.products.splice(index,1);
+    job.version = VERSION; job.rankingVersion = ProductRanking.VERSION;
+    job.trace = array(job.trace).concat([{ at:now, source:"product-management-control", status:"dismiss", productId:id, candidateId, rediscoveryAllowed:true, publicPublication:false }]).slice(-240);
+    await saveProductJob(job, actorId);
+    const result = publicProductJob(job);
+    result.actionResult = { productId:id, decision:"dismiss", effectiveDecision:"dismiss", candidateId, deleted:true, rediscoveryAllowed:true, relationCleanup, publicPublication:false, paymentExecution:false };
+    return result;
+  }
+  const effectiveDecision = decision === "ai_reclassify" ? "undecided" : (decision === "remove_from_list" ? "removed_from_list" : decision);
   const preservedSettlement = normalizeAffiliateSettlement(current.affiliateSettlement || evaluated.affiliateSettlement, { existing: current.affiliateSettlement || evaluated.affiliateSettlement });
   const next = Object.assign({}, current, evaluated, { affiliateSettlement: preservedSettlement, affiliateStage: preservedSettlement.stage,
     slotDecision: effectiveDecision,
@@ -3562,7 +3581,7 @@ async function productCandidateLedgerAction(actorId, input) {
     payload.queueControl = Object.assign({}, plain(payload.queueControl), { schema:"igdc-private-product-queue-control.v1", action:"hold", hiddenFromCountryQueue:true, permanentExcluded:false, decidedAt:now, decidedBy:actor });
     payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
   } else if (decision === "remove_from_list") {
-    payload.slotDecision = "hold"; status = "hold"; releaseAssignment = true; effectiveDecision = "hold";
+    payload.slotDecision = "removed_from_list"; status = "suppressed"; releaseAssignment = true; effectiveDecision = "removed_from_list";
     payload.queueControl = Object.assign({}, plain(payload.queueControl), { schema:"igdc-private-product-queue-control.v1", action:"remove_from_list", hiddenFromCountryQueue:true, permanentExcluded:false, rediscoveryAllowed:true, decidedAt:now, decidedBy:actor });
     payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator_list_cleanup", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
   } else if (decision === "reject" || decision === "purge") {
@@ -4935,7 +4954,7 @@ async function manualSupplierRegister(actorId,input){
 async function persistSupplierResearchDecision(scope,targetRow,action,actorId,options){
   options=plain(options);const exactRoot=supplierRootUrl(supplierRowUrl(targetRow)),targetHost=supplierRowHost(targetRow),matchHost=options.matchHost===true;
   if(!exactRoot&&!targetHost)return{updated:0};
-  let rows=[];try{rows=array(await supplierScopedCandidateRows(scope,"id,status,source_ref,official_url,source_payload","",1000));}catch(_error){return{updated:0};}
+  let rows=array(options.rows);if(!rows.length){try{rows=array(await supplierScopedCandidateRows(scope,"id,status,source_ref,official_url,source_payload","",1000));}catch(_error){const durableError=new Error(text(_error&&_error.message||_error)||"durable_supplier_read_failed");durableError.code="DURABLE_SUPPLIER_READ_FAILED";throw durableError;}}
   let updated=0;const now=iso(),actor=text(actorId)||"administrator";
   for(const entry of rows){
     const payload=plain(entry&&entry.source_payload),automation=plain(payload.aiAutomation);
@@ -4943,8 +4962,11 @@ async function persistSupplierResearchDecision(scope,targetRow,action,actorId,op
     if(text(payload.entityKind)==="supplier_control_tombstone")continue;
     const rowRoot=supplierRootUrl(first(entry&&entry.official_url,payload.supplierOfficialUrl,payload.url)),rowHost=(()=>{try{return new URL(rowRoot).hostname.toLowerCase().replace(/^www\./,"");}catch(_e){return"";}})();
     if(matchHost?(!!targetHost&&rowHost===targetHost):(!!exactRoot&&rowRoot===exactRoot)){
+      if(action==="dismiss"){
+        await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(text(entry.id)));updated+=1;continue;
+      }
       let status=lower(entry&&entry.status)||"approval_pending";
-      if(action==="hold"||action==="dismiss"||action==="unblock")status="hold";
+      if(action==="hold"||action==="unblock")status="hold";
       else if(action==="restore"||action==="keep")status="approval_pending";
       else if(action==="purge"||action==="block"||action==="remove_from_list")status="suppressed";
       payload.aiAutomation=Object.assign({},automation,{operatorDecision:action,operatorDecisionAt:now,operatorDecisionBy:actor,publicPublication:false,productImport:false});
@@ -4960,7 +4982,8 @@ async function researchCandidateAction(actorId,input){
   const scope=researchScope(input),job=await researchJobRule(scope);if(!job||job.schema!==RESEARCH_JOB_SCHEMA){const error=new Error("책임 공급업체 단계별 리서치 작업을 찾을 수 없습니다.");error.statusCode=404;throw error;}
   const action=lower(input&&input.decision),requested=Array.from(new Set(array(input&&input.urls).concat([first(input&&input.url,input&&input.supplierUrl)]).map((value)=>researchCandidateUrl({url:value})).filter(Boolean))).slice(0,500),allowed=["keep","hold","unpin","restore","dismiss","purge","block","unblock","remove_from_list"];
   if(!requested.length||!allowed.includes(action)){const error=new Error("공급업체 후보 URL과 유지·보류·고정해제·복원·목록삭제·영구제외·차단·차단해제 결정을 확인하세요.");error.statusCode=400;throw error;}
-  let active=array(job.candidates),holding=array(job.supplierHoldingCandidates),blocked=array(job.supplierBlockedCandidates);const keys=new Set(array(job.blockedSupplierKeys).map(text).filter(Boolean)),results=[],registry=await manualSupplierRegistry(scope);let manualRows=array(registry.suppliers),manualChanged=false;
+  let active=array(job.candidates),holding=array(job.supplierHoldingCandidates),blocked=array(job.supplierBlockedCandidates);const keys=new Set(array(job.blockedSupplierKeys).map(text).filter(Boolean)),results=[],registry=await manualSupplierRegistry(scope);let manualRows=array(registry.suppliers),manualChanged=false,durableRows=[],durableReadError="";
+  try{durableRows=array(await supplierScopedCandidateRows(scope,"id,status,source_ref,official_url,source_payload","",1000));}catch(_durableReadError){durableRows=[];durableReadError=text(_durableReadError&&_durableReadError.message||_durableReadError)||"durable_supplier_read_failed";}
   function allRows(){return active.concat(holding,blocked);}function removeUrl(rows,url){return array(rows).filter((row)=>!sameSupplierUrl(row,url));}function addUnique(rows,row){const url=supplierRowUrl(row);return removeUrl(rows,url).concat([row]);}
   function removeManualExact(url){const before=manualRows.length;manualRows=manualRows.filter((row)=>supplierRootUrl(row&&row.officialUrl)!==supplierRootUrl(url));if(before!==manualRows.length)manualChanged=true;}
   function removeManualHost(host){const before=manualRows.length;manualRows=manualRows.filter((row)=>{try{return new URL(supplierRootUrl(row&&row.officialUrl)).hostname.toLowerCase().replace(/^www\./,"")!==host;}catch(_e){return true;}});if(before!==manualRows.length)manualChanged=true;}
@@ -4978,12 +5001,12 @@ async function researchCandidateAction(actorId,input){
     }else if(action==="remove_from_list"){active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);removeManualExact(targetUrl);}
     // Keep the persisted private supplier ledger aligned with the research
     // workspace so hold/restore/block states survive a new cumulative run.
-    let durable={updated:0};
-    try{durable=await persistSupplierResearchDecision(scope,target,action,actorId,{matchHost:action==="block"});}catch(_durableError){}
-    results.push({url:targetUrl,host,status:action,durableUpdated:Number(durable&&durable.updated||0)});
+    let durable={updated:0},durableError="";
+    try{durable=await persistSupplierResearchDecision(scope,target,action,actorId,{rows:durableRows,matchHost:action==="block"});}catch(_durableError){durableError=text(_durableError&&_durableError.message||_durableError)||"durable_supplier_write_failed";}
+    results.push({url:targetUrl,host,status:action,durableUpdated:Number(durable&&durable.updated||0),durableError:durableError||null});
   }
   if(manualChanged){registry.suppliers=manualRows;await saveManualSupplierRegistry(scope,registry,actorId);}job.candidates=reindexCandidateRows(active);job.supplierHoldingCandidates=holding;job.supplierBlockedCandidates=blocked;job.blockedSupplierKeys=Array.from(keys);job.manualSupplierCount=manualRows.filter((row)=>row&&row.adminPinned===true&&row.state!=="disabled").length;job.trace=array(job.trace).concat(results.map((row)=>({source:"supplier-candidate-control",status:row.status,at:iso(),url:row.url,host:row.host||null,actor:text(actorId)||"administrator"}))).slice(-160);await saveResearchJob(job,actorId);
-  const result=publicResearchJob(job);result.candidateAction={action,requested:requested.length,processed:results.filter((row)=>row.status!=="not_found").length,notFound:results.filter((row)=>row.status==="not_found").length,results,blockedKeyCount:job.blockedSupplierKeys.length,manualRegistryUpdated:manualChanged,publicPublication:false,productImport:false};return result;
+  const result=publicResearchJob(job);result.candidateAction={action,requested:requested.length,processed:results.filter((row)=>row.status!=="not_found"&&!row.durableError).length,failed:results.filter((row)=>!!row.durableError).length,notFound:results.filter((row)=>row.status==="not_found").length,durableReadError:durableReadError||null,results,blockedKeyCount:job.blockedSupplierKeys.length,manualRegistryUpdated:manualChanged,publicPublication:false,productImport:false};return result;
 }
 
 async function listAutomationCandidates(countryCode, regionCode) {

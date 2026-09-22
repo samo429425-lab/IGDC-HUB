@@ -60,6 +60,9 @@
   let regionalFollowUpScheduled=false;
   let regionalRetryCount=0;
   let renderGeneration=0;
+  let lastStaticRefreshAt=0;
+  let staticRefreshPromise=null;
+  const STATIC_VISIBLE_RECHECK_TTL=60*1000;
   const incrementalJobs=new WeakMap();
 
   function text(v){return v==null?'':String(v);}
@@ -398,14 +401,20 @@
       if(canRefreshRegional()) refreshRegional();
     },waitMs+150);
   }
-  function refreshStatic(){
-    return fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache').then(function(result){
-      if(result.empty||!result.payload) return;
-      const compact=compactSnapshot(result.payload,{etag:result.etag}); if(!compact) return;
+  function refreshStatic(force){
+    const now=Date.now();
+    if(staticRefreshPromise) return staticRefreshPromise;
+    if(force!==true&&lastStaticRefreshAt&&now-lastStaticRefreshAt<STATIC_VISIBLE_RECHECK_TTL) return Promise.resolve(false);
+    staticRefreshPromise=fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache').then(function(result){
+      if(result.empty||!result.payload) return false;
+      const compact=compactSnapshot(result.payload,{etag:result.etag}); if(!compact) return false;
       baseSnapshot=compact;
       setCached('static',compact);
+      lastStaticRefreshAt=Date.now();
       renderMerged();
-    }).catch(function(){/* Existing visible cards or same-session cache stay visible. */});
+      return true;
+    }).catch(function(){return false;}).finally(function(){staticRefreshPromise=null;});
+    return staticRefreshPromise;
   }
   function refreshRegional(){
     // Deliberately disabled: the Edge-routed canonical snapshot already applies
@@ -419,9 +428,9 @@
     // between visits and a cached card has no request-time geo proof.
     baseSnapshot=null;
     regionalSnapshot=null;
-    nextFrame(function(){refreshStatic();});
+    nextFrame(function(){refreshStatic(true);});
     document.addEventListener('visibilitychange',function(){
-      if(document.hidden===false) nextFrame(function(){refreshStatic();});
+      if(document.hidden===false) nextFrame(function(){refreshStatic(false);});
     });
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true});

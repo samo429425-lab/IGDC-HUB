@@ -174,14 +174,14 @@ function baseLocale(locale){return text(locale).split("-")[0].toLowerCase()||"en
 function googleLocale(locale){return GOOGLE_LOCALE_ALIASES[locale]||locale||"en";}
 const FOCUSED_CATEGORY_SUFFIXES=Object.freeze({
   en:Object.freeze({
-    beauty_personal_care:"skincare serum ampoule essence toner moisturizer cream lotion cleanser sunscreen mask makeup cosmetics hair care body care",
+    beauty_personal_care:"skincare serum ampoule essence toner moisturizer cream lotion cleanser sunscreen mask makeup cosmetics foundation cushion BB CC lipstick lip tint lip balm mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance perfume nail manicure hair care body care grooming electric shaver hair straightener hair styler beauty device LED mask galvanic facial massager scalp care",
     electronics_accessories:"small electronics portable speaker bluetooth speaker earbuds earphones headphones microphone tablet USB hub flash drive cable charger power bank webcam",
-    home_appliances_living:"small home appliances electric kettle toaster blender mixer coffee maker humidifier dehumidifier air purifier vacuum hair dryer"
+    home_appliances_living:"small home appliances portable fan desk fan handheld fan circulator electric kettle toaster blender mixer coffee maker humidifier dehumidifier air purifier vacuum hair dryer"
   }),
   ko:Object.freeze({
-    beauty_personal_care:"스킨케어 세럼 앰플 에센스 토너 보습제 크림 로션 클렌저 선크림 마스크팩 메이크업 화장품 헤어케어 바디케어",
+    beauty_personal_care:"스킨케어 세럼 앰플 에센스 토너 보습제 크림 로션 클렌저 선크림 마스크팩 메이크업 화장품 파운데이션 쿠션 BB CC 립스틱 립틴트 립밤 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 향수 네일 매니큐어 헤어케어 바디케어 그루밍 전동면도기 고데기 헤어스타일러 미용기기 LED마스크 갈바닉 피부마사지 두피관리",
     electronics_accessories:"소형 전자제품 스피커 블루투스 스피커 이어버드 블루투스 이어폰 헤드폰 마이크 태블릿 USB 허브 USB 메모리 케이블 충전기 보조배터리 웹캠",
-    home_appliances_living:"소형가전 전기포트 토스터 블렌더 믹서 커피메이커 가습기 제습기 공기청정기 청소기 헤어드라이어"
+    home_appliances_living:"소형가전 선풍기 휴대용 선풍기 탁상용 선풍기 핸디 선풍기 써큘레이터 전기포트 토스터 블렌더 믹서 커피메이커 가습기 제습기 공기청정기 청소기 헤어드라이어"
   }),
   ja:Object.freeze({
     beauty_personal_care:"スキンケア 美容液 アンプル エッセンス 化粧水 保湿 クリーム ローション クレンザー 日焼け止め マスク メイク 化粧品 ヘアケア ボディケア",

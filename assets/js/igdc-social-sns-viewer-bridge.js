@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260918-content-link-video-failsafe-v7'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260922-contained-fallback-v8'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -280,6 +280,21 @@
       }
     } catch (_) {}
     return null;
+  }
+
+  function containedFallbackEmbed(platform, card, title) {
+    var preview = previewUrlOf(card);
+    if (validPreviewImageSrc(preview)) {
+      return { mode: 'preview', src: preview, aspect: '16/9', provider: platform + '-contained-fallback', restrictedProvider: true };
+    }
+    var label = text(title || platform || 'Social content').replace(/[<>&"']/g, ' ').slice(0, 90);
+    var status = text(labels().unavailable || 'Preview unavailable').replace(/[<>&"']/g, ' ').slice(0, 120);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<rect width="1280" height="720" fill="%23111111"/>' +
+      '<text x="640" y="330" text-anchor="middle" fill="white" font-family="Arial,sans-serif" font-size="34">' + label + '</text>' +
+      '<text x="640" y="390" text-anchor="middle" fill="%23cccccc" font-family="Arial,sans-serif" font-size="24">' + status + '</text>' +
+      '</svg>';
+    return { mode: 'preview', src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), aspect: '16/9', provider: platform + '-contained-fallback', restrictedProvider: true };
   }
 
   function buildEmbed(platform, url, card) {
@@ -1569,16 +1584,10 @@
     image.alt = title || platform || 'Social content';
     image.loading = 'eager';
     image.referrerPolicy = 'no-referrer';
-    if (validHttp(state.lastUrl || '')) {
-      image.style.cursor = 'pointer';
-      image.setAttribute('title', 'Open original content');
-      image.addEventListener('click', function () {
-        try {
-          var popup = window.open(state.lastUrl, '_blank', 'noopener,noreferrer');
-          if (popup) popup.opener = null;
-        } catch (_) {}
-      });
-    }
+    /* Main-card fallback remains inside IGDC. The original provider URL is kept
+       as metadata for provider-specific actions, but the preview itself never
+       navigates the visitor away from the Social Hub. */
+    image.style.cursor = 'default';
     media.appendChild(image);
     content.appendChild(media);
 
@@ -1735,6 +1744,7 @@
     var title = titleOf(card) || platform;
     var description = descOf(card);
     var embed = buildEmbed(platform, url, card);
+    if (!embed || !embed.src) embed = containedFallbackEmbed(platform, card, title);
     if (!embed || !embed.src) return false;
 
     state.previousFocus = document.activeElement;
@@ -1981,14 +1991,9 @@
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    if (!openCard(card)) {
-      // Last-resort continuity: if a provider URL variant cannot be embedded, never
-      // leave a real thumbnail as a dead card. Open the verified original source in
-      // a user-initiated isolated tab. Normal supported videos/posts stay contained.
-      try {
-        var popup = window.open(url, '_blank', 'noopener,noreferrer');
-        if (popup) popup.opener = null;
-      } catch (_) {}
-    }
+    /* Main SNS content never uses an external navigation fallback. Unsupported
+       provider variants are rendered by openCard() as a contained preview/status
+       document so Back/ESC always returns to the 9-section list. */
+    openCard(card);
   }, true);
 })();
