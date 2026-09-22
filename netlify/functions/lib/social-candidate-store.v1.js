@@ -14,7 +14,7 @@ const ChannelLink = require("./social-channel-link.v1");
 const AIPolicy = require("./social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-store-v1.12.2-real-media-profile-safe";
+  "social-candidate-store-v1.12.3-sparse-public-post-safe";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1303,6 +1303,8 @@ const SAMPLE_SAFE_PREVIEW_PLATFORMS = new Set([
 // because preview media is unavailable. The front renderer has an explicit
 // text-card fallback and does not navigate away from IGDC.
 const PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS = new Set([
+  "wechat",
+  "weibo",
   "pinterest",
   "reddit",
   "twitter",
@@ -1357,7 +1359,14 @@ function isPublishEligibleContentRow(row) {
   // fully public. Keep only rows with a non-generic real identity/title; the
   // front card then renders an honest provider text fallback instead of a fake
   // or SAMPLE thumbnail.
-  if (PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS.has(platform) && publishableIdentity(r)) return true;
+  if (PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS.has(platform)) {
+    // These providers frequently suppress anonymous preview media or serve it
+    // from anti-hotlink CDNs. At this point the row has already passed the
+    // strict latest-content URL, public-access, review, verification and risk
+    // gates above. Keep the verified post/article even when preview media is
+    // unavailable; the front renderer uses a visible provider-text fallback.
+    return true;
+  }
   return false;
 }
 function approvedContentRows(rows) {

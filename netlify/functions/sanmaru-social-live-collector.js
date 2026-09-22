@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.28.0-pinterest-reddit-x-rescue";
+const VERSION = "sanmaru-social-live-collector-v1.29.0-sparse-five-provider-rescue";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -389,6 +389,44 @@ function syntheticTitle(value, platform) {
   const p = SocialStore.text(platform).replace(/^social-/, "").replace(/^x$/, "twitter");
   return !!p && title.toLowerCase() === p.toLowerCase();
 }
+function sparseVerifiedContentTitle(platform, contentUrl, item) {
+  const snippet = firstText([
+    item && item.description, item && item.summary, item && item.snippet, item && item.caption
+  ]).replace(/\s+/g, " ").trim();
+  if (snippet && !syntheticTitle(snippet, platform)) return snippet.slice(0, 220);
+  try {
+    const url = new URL(contentUrl);
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (platform === "twitter") {
+      const statusIndex = parts.findIndex((part) => part.toLowerCase() === "status");
+      const handle = statusIndex > 0 ? parts[statusIndex - 1] : "";
+      const id = statusIndex >= 0 ? parts[statusIndex + 1] || "" : "";
+      return ["X", handle ? "@" + handle.replace(/^@/, "") : "", id ? "Post " + id.slice(-10) : "Public post"].filter(Boolean).join(" · ");
+    }
+    if (platform === "pinterest") {
+      const pinIndex = parts.findIndex((part) => part.toLowerCase() === "pin");
+      const id = pinIndex >= 0 ? parts[pinIndex + 1] || "" : "";
+      return "Pinterest · Pin" + (id ? " " + id.slice(-10) : "");
+    }
+    if (platform === "reddit") {
+      const rIndex = parts.findIndex((part) => part.toLowerCase() === "r");
+      const commentsIndex = parts.findIndex((part) => part.toLowerCase() === "comments");
+      const subreddit = rIndex >= 0 ? parts[rIndex + 1] || "" : "";
+      const id = commentsIndex >= 0 ? parts[commentsIndex + 1] || "" : "";
+      return ["Reddit", subreddit ? "r/" + subreddit : "", id ? "Post " + id : "Public post"].filter(Boolean).join(" · ");
+    }
+    if (platform === "weibo") {
+      const id = parts[parts.length - 1] || "";
+      return "Weibo · Public post" + (id ? " · " + id.slice(-10) : "");
+    }
+    if (platform === "wechat") {
+      const mid = url.searchParams.get("mid") || url.searchParams.get("__biz") || "";
+      return "WeChat · Public article" + (mid ? " · " + String(mid).slice(-10) : "");
+    }
+  } catch (_error) {}
+  return "";
+}
+
 function creatorNameFromSource(item, source) {
   const mode = SocialStore.text(source && source.mode).toLowerCase();
   const name = SocialStore.text(source && source.name);
@@ -1815,11 +1853,19 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
       candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
     ));
     const hadActualPost = hasActualPost(providers);
+    const actualPostCount = (providers || []).reduce((count, result) => count + (result.items || []).filter((item) =>
+      candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
+    ).length, 0);
+    // Sparse providers need more than one lucky search hit. Registered creators
+    // remain the priority seed, but when fewer than a small floor of real posts
+    // were found, run the independent public-post search as a diversity lane too.
+    const sparseUnderfilled = SPARSE_DISCOVERY_PLATFORMS.has(plan.platform) &&
+      actualPostCount < Math.min(Math.max(2, Number(limit || 0) || 2), 4);
     // Search APIs can return only already-known posts. A provider-level "hit"
     // must therefore not suppress discovery diversity. When a registry creator
-    // is targeted (or during a quality sweep), run the independent public-post
-    // search as well so a duplicate Naver/Google result cannot freeze the pool.
-    const diversityRescue = !!(qualitySweep || registryTargeted);
+    // is targeted, during a quality sweep, or a sparse provider is underfilled,
+    // run the independent public-post search as well.
+    const diversityRescue = !!(qualitySweep || registryTargeted || sparseUnderfilled);
     if (!hadActualPost || diversityRescue) {
       if (plan.platform === "facebook") {
         // Preserve Facebook's stable path. Use the broad Maru read only when the
@@ -2419,7 +2465,7 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
   // Non-YouTube platforms often block anonymous metadata/oEmbed requests even
   // when the public post itself is valid. Keep the candidate and let later
   // collection passes enrich its preview instead of collapsing the section to 0.
-  const title = decodeXml(firstText([
+  let title = decodeXml(firstText([
     latest.title,
     enrichment.title,
     publicMetadata.title,
@@ -2427,6 +2473,9 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     originalTitle,
     resolved.suggestedTitle
   ]));
+  if (syntheticTitle(title, platform) && SPARSE_DISCOVERY_PLATFORMS.has(platform)) {
+    title = sparseVerifiedContentTitle(platform, resolved.latestContentUrl, item);
+  }
   if (syntheticTitle(title, platform)) return { ok: false, reason: "real_content_title_required" };
   const source = item && item.source;
   const creatorName = firstText([
@@ -3015,6 +3064,7 @@ exports.__test = {
   htmlPublicPostItems,
   publicSearchTitle,
   publicSearchCreator,
+  sparseVerifiedContentTitle,
   youtubeSafeCategoryId,
   youtubeVideoItem,
   genericProviderThumbnail,

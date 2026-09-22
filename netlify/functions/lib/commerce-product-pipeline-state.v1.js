@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.3.0-explicit-go-live-audit-publication-gate";
+const VERSION = "commerce-product-pipeline-state-v1.3.1-removed-management-state";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -26,7 +26,8 @@ const STAGES = Object.freeze([
   "canonical_canary_ready",
   "published_external_checkout",
   "held",
-  "rejected"
+  "rejected",
+  "removed"
 ]);
 
 function text(value){ return value == null ? "" : String(value).trim(); }
@@ -147,7 +148,8 @@ function registryState(candidateInput, relationsInput){
   const revenueState=approvedRevenueRoute(payload,revenues), revenue=revenueState.ready?revenueState.row:null;
   const verifiedEvidence=evidence.find((row)=>row&&row.verified===true) || null;
   let stage="private_research_queue", nextGate="administrator_product_selection", reasons=[];
-  if(["suppressed","rejected"].includes(status) || selected==="reject"){ stage="rejected"; nextGate=null; reasons.push("administrator_rejected"); }
+  if(status==="removed" || selected==="removed" || lower(plain(payload.queueControl).action)==="remove_from_list"){ stage="removed"; nextGate=null; reasons.push("administrator_removed_from_management_list"); }
+  else if(["suppressed","rejected"].includes(status) || selected==="reject" || selected==="purge"){ stage="rejected"; nextGate=null; reasons.push("administrator_rejected"); }
   else if(status==="hold" || selected==="hold"){ stage="held"; nextGate="administrator_reconsideration"; reasons.push("administrator_hold"); }
   else if(status==="research_pending" || selected==="undecided" || !selected){ stage="administrator_selection_pending"; nextGate="administrator_product_selection"; reasons.push("slot_candidate_not_selected"); }
   else if(!market){ stage="market_evidence_pending"; nextGate="record_market_delivery_return_support_evidence"; reasons.push("market_evidence_missing"); }

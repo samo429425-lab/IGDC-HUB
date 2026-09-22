@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20260922-social-main-contained-viewer-only-v1
+// build: 20260922-social-sparse-provider-visible-fallback-v2
 // 목적:
 // 1) Social 메인 9섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -522,6 +522,45 @@
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }
 
+
+  function platformDisplayName(platform) {
+    var key = safeText(platform).toLowerCase().replace(/^social-/, "");
+    return ({
+      twitter: "X (Twitter)",
+      pinterest: "Pinterest",
+      reddit: "Reddit",
+      wechat: "WeChat",
+      weibo: "Weibo",
+      youtube: "YouTube",
+      instagram: "Instagram",
+      tiktok: "TikTok",
+      facebook: "Facebook"
+    })[key] || (key ? key.charAt(0).toUpperCase() + key.slice(1) : "Social");
+  }
+
+  function paintTextThumbFallback(pic, platform) {
+    if (!pic) return;
+    while (pic.firstChild) pic.removeChild(pic.firstChild);
+    pic.style.backgroundImage = "";
+    pic.style.backgroundSize = "";
+    pic.style.backgroundPosition = "";
+    pic.dataset.socialTextFallback = "1";
+    pic.style.display = "flex";
+    pic.style.alignItems = "center";
+    pic.style.justifyContent = "center";
+    pic.style.background = "#f3f6fa";
+    pic.style.color = "#334155";
+    pic.style.fontWeight = "700";
+    pic.style.fontSize = "clamp(14px,1.2vw,20px)";
+    pic.style.textAlign = "center";
+    pic.style.padding = "10px";
+    pic.style.boxSizing = "border-box";
+    var label = document.createElement("span");
+    label.className = "igdc-social-provider-fallback";
+    label.textContent = platformDisplayName(platform);
+    pic.appendChild(label);
+  }
+
   function paintThumb(pic, platform, contentUrl, thumb) {
     if (!pic) return;
     pic.style.backgroundImage = "";
@@ -529,7 +568,7 @@
     pic.style.backgroundPosition = "";
     while (pic.firstChild) pic.removeChild(pic.firstChild);
     if (!thumb) {
-      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
+      paintTextThumbFallback(pic, platform);
       return;
     }
     var img = document.createElement("img");
@@ -552,8 +591,19 @@
         return;
       }
       if (img.parentNode === pic) pic.removeChild(img);
-      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
+      paintTextThumbFallback(pic, platform);
     });
+    pic.dataset.socialTextFallback = "0";
+    pic.style.display = "";
+    pic.style.alignItems = "";
+    pic.style.justifyContent = "";
+    pic.style.background = "";
+    pic.style.color = "";
+    pic.style.fontWeight = "";
+    pic.style.fontSize = "";
+    pic.style.textAlign = "";
+    pic.style.padding = "";
+    pic.style.boxSizing = "";
     pic.appendChild(img);
   }
 
