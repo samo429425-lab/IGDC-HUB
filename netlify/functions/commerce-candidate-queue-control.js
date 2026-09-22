@@ -9,15 +9,10 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.3.0-reliable-admin-cleanup";
+const VERSION = "commerce-candidate-queue-control-v1.5.0-safe-isolated-bucket-guard";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject"]);
-const RELATION_TABLES = Object.freeze([
-  "gslot_slot_assignments",
-  "gslot_candidate_availability",
-  "gslot_candidate_revenue",
-  "gslot_candidate_evidence"
-]);
+
 
 function text(value){ return value == null ? "" : String(value).trim(); }
 function lower(value){ return text(value).toLowerCase().replace(/[\s.]+/g,"_"); }
@@ -35,41 +30,50 @@ async function readCandidate(id){
   const rows=await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,owner_note&limit=1&id=eq."+encodeURIComponent(id));
   return Array.isArray(rows)?rows[0]||null:null;
 }
-async function deleteRelations(candidateId){
-  return await Promise.all(RELATION_TABLES.map(async(table)=>{
-    try{const rows=await SlotStore.remove(table,"candidate_id=eq."+encodeURIComponent(candidateId));return{table,ok:true,count:Array.isArray(rows)?rows.length:0};}
-    catch(error){return{table,ok:false,error:text(error&&error.message||error)};}
-  }));
-}
 async function releaseSectionAssignment(candidateId){
   try{const rows=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId));return{ok:true,count:Array.isArray(rows)?rows.length:0};}
   catch(error){return{ok:false,error:text(error&&error.message||error)};}
 }
+function candidateManagementBucket(row){
+  const payload=plain(row&&row.source_payload),status=lower(row&&row.status),decision=lower(payload.slotDecision),review=lower(plain(payload.review).state),queueAction=lower(plain(payload.queueControl).action);
+  if(status==="hold"||decision==="hold"||review==="hold"||queueAction==="hold")return "hold";
+  if(["reject","rejected","suppressed","purge","excluded"].includes(status)||["reject","purge"].includes(decision)||["reject","rejected","permanent_excluded"].includes(review)||["reject","purge"].includes(queueAction))return "reject";
+  if(status==="removed"||decision==="removed"||["removed_from_list","deleted_from_management"].includes(review)||["remove_from_list","dismiss"].includes(queueAction))return "removed";
+  return "active";
+}
+function requireExpectedBucket(row,expectedBucket,action){
+  const expected=lower(expectedBucket),actual=candidateManagementBucket(row);
+  if(!expected)return actual;
+  if(!["hold","reject"].includes(expected)){const error=new Error("invalid_expected_bucket");error.code="invalid_expected_bucket";throw error;}
+  if(actual!==expected){
+    if(actual==="removed" && ["dismiss","remove_from_list"].includes(action))return actual;
+    const error=new Error("candidate_state_mismatch: expected "+expected+", actual "+actual);error.code="candidate_state_mismatch";throw error;
+  }
+  if(expected==="hold" && !["dismiss","remove_from_list","reject"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
+  if(expected==="reject" && !["dismiss","remove_from_list","purge"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
+  return actual;
+}
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
   if(action==="dismiss"){
-    /* Delete relation ledgers first, but do not abort merely because an optional
-       relation table returned an error.  The candidate row delete is the
-       authoritative operation; verify it afterwards so the admin button cannot
-       report success while the row still exists. */
-    const relations=await deleteRelations(id);
-    const relationFailures=relations.filter((item)=>item&&item.ok!==true);
-    let deleted=[];
-    try{ deleted=await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(id)); }
-    catch(error){
-      const deleteError=new Error("candidate_delete_failed: "+text(error&&error.message||error));
-      deleteError.code="candidate_delete_failed";
-      deleteError.relations=relations;
-      throw deleteError;
-    }
-    const remaining=await readCandidate(id);
-    if(remaining){
-      const verifyError=new Error("candidate_delete_verify_failed");
-      verifyError.code="candidate_delete_verify_failed";
-      verifyError.relations=relations;
-      throw verifyError;
-    }
-    return {id,action,status:"deleted_research_allowed",deleted:true,rediscoveryAllowed:true,relations,relationWarnings:relationFailures};
+    /* SAFE DELETE: never physically delete the shared master candidate row from
+       a HOLD/REJECT management screen.  The master ledger is also the source for
+       the normal candidate/18-section manager.  A physical DELETE here made a
+       secondary cleanup action capable of erasing the primary management view.
+       Archive only the selected candidate, clear only its slot assignment, and
+       keep research/evidence history so the candidate can be rediscovered or
+       restored later without affecting unrelated candidates. */
+    const assignmentCleanup=await releaseSectionAssignment(id);
+    const previousStatus=text(row&&row.status)||"approval_pending";
+    const queueControl=Object.assign({},plain(payload.queueControl),{
+      schema:"igdc-private-product-queue-control.v1",action:"dismiss",previousStatus,hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:text(actorId)||"administrator"
+    });
+    payload.queueControl=queueControl;payload.slotDecision="removed";
+    delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
+    payload.review=Object.assign({},plain(payload.review),{state:"deleted_from_management",decidedAt:now,decidedBy:text(actorId)||"administrator"});
+    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{operation:"unmatch",status:"deferred_section_release",queued:false,pendingBuild:true,publicSnapshotConfirmed:false,buildVerificationRequired:true,deferredBuild:true,requestedAt:now,requestedBy:text(actorId)||"administrator"});
+    await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"removed",source_payload:payload,owner_note:"관리자가 보류·제외 관리 목록에서 삭제했습니다. 공유 후보 원장은 보존하며 재수집을 허용합니다.",updated_at:now});
+    return {id,action,status:"removed",deletedFromManagement:true,masterLedgerPreserved:true,rediscoveryAllowed:true,assignmentCleanup};
   }
   const previousStatus=text(row&&row.status)||"approval_pending";
   const queueControl=Object.assign({},plain(payload.queueControl),{
@@ -112,7 +116,7 @@ exports.handler=async function(event){
     const method=String(event&&event.httpMethod||"GET").toUpperCase();
     if(method==="OPTIONS")return json(204,{});
     if(method!=="POST")return json(405,{ok:false,error:"method_not_allowed"});
-    const body=parse(event),action=lower(body.decision||body.action),ids=candidateIds(body.candidateIds||body.candidateId);
+    const body=parse(event),action=lower(body.decision||body.action),ids=candidateIds(body.candidateIds||body.candidateId),expectedBucket=lower(body.expectedBucket);
     if(!ACTIONS.has(action)){const error=new Error("지원하지 않는 상품 후보 대기열 작업입니다.");error.statusCode=400;throw error;}
     if(!ids.length){const error=new Error("처리할 상품 후보를 선택해 주세요.");error.statusCode=400;throw error;}
     const actor=await AdminSession.resolveUser(event);requireWriteRole(actor);const actorId=text(actor&&actor.sub);
@@ -123,6 +127,7 @@ exports.handler=async function(event){
         const row=await readCandidate(id);
         if(!row)throw Object.assign(new Error("candidate_not_found"),{candidateId:id});
         if(text(row.source_ref)!==ProductPipeline.SOURCE_REF)throw Object.assign(new Error("unsupported_candidate_source"),{candidateId:id});
+        requireExpectedBucket(row,expectedBucket,action);
         return await applyAction(actorId,row,action);
       }));
       settled.forEach((entry,index)=>{const id=chunk[index];if(entry.status==="fulfilled")processed.push(entry.value);else failures.push({id,error:text(entry.reason&&entry.reason.message||entry.reason)});});

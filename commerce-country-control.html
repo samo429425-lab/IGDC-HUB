@@ -288,19 +288,20 @@
 
   <section id="productResearchPanel" class="panel">
     <div class="panel-heading"><h2>공식 상품 리서치·후보 심사·18개 섹션 배치 관리</h2><div class="actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="policy" data-policy-workspace-label="상품 리서치 적용 정책" data-policy-scope="country">AI 운영·정책 대화</button></div></div>
-    <div class="small">현재 책임 공급업체 비공개 후보 목록의 활성 업체를 모두 조사합니다. 새로 등록된 업체도 다음 실행부터 자동 포함되며, 실상품 상세페이지 검증을 통과한 상품은 중간 대기열을 운영자가 거치지 않고 전체 상품 후보·배치 관리 목록으로 자동 등록됩니다. 이후 관리자가 18개 섹션 배치·보류·제외·삭제를 결정하고 프론트 매칭을 실행합니다.</div>
-    <div class="review-return-note">상품 이미지·상품명·원본 페이지·업체 사이트를 누르면 브라우저 최상위 현재 탭에서 열립니다. 뒤로가기로 돌아오면 선택 국가와 상품 목록 상태를 복원합니다.</div>
+    <div class="small">현재 책임 공급업체 비공개 후보 목록의 활성 업체를 모두 조사합니다. 새로 등록된 업체도 다음 실행부터 자동 포함됩니다. 조사 도중 일시정지를 눌러도 그 시점까지 상세페이지 검증을 통과한 상품은 즉시 전체 상품 후보·배치 관리 목록으로 자동 반영되므로 전체 업체 조사가 끝날 때까지 기다릴 필요가 없습니다. 이후 관리자가 18개 섹션 배치·보류·제외·삭제를 결정하고 프론트 매칭을 실행합니다.</div>
+    <div class="review-return-note">상품·업체 링크는 현재 탭에서 열립니다. 뒤로가기를 누르면 이 관리 화면의 기존 국가·목록 위치로 돌아옵니다.</div>
     <div class="operation-actions">
       <button id="productResearchBtn" type="button" class="ghost" disabled>상품 리서치 시작·후보목록 자동 반영</button>
       <button id="productResearchPauseBtn" type="button" class="secondary" disabled>상품 조사 일시정지</button>
       <button id="productResearchDownloadBtn" type="button" class="secondary" disabled>상품 후보 JSON 다운로드</button>
       <button id="productAiAutoBtn" type="button" disabled>AI 완전 자동화</button>
     </div>
-    <div id="productResearchState" class="policy-state">책임 공급업체 목록이 준비되면 상품 리서치를 시작할 수 있습니다. 활성 AI 정책과 신규 업체를 포함한 현재 공급업체 원장을 기준으로 조사합니다.</div>
-    <div id="productAiAutomationState" class="product-auto-state">AI 완전 자동화는 미배정·추가 확인 필요 상품 전체를 다시 분석합니다. 검사·가격·제휴 정보가 부족한 상품도 링크·상품명·이미지가 정상이고 중대한 문제가 없으면 가장 적합한 섹션의 비공개 배치 예정 목록으로 최대한 정리합니다. 관리자 수동 지정·보류·제외·고정은 덮어쓰지 않습니다.</div>
-    <div id="productFrontSyncState" class="front-sync-state">AI 자동 배치 결과를 관리자가 확인한 뒤 프론트 실상품 매칭을 실행합니다. 실제 게재는 기존 공개 안전 게이트와 빌드 대기열을 통과한 상품만 요청되며, 매칭 해제도 별도 확인 절차로 실행합니다.</div>
-    <div id="productResearchStats" class="product-progress"></div>
+    <div class="small"><strong>실시간 상품 조사 현황</strong> · 기존/신규 업체 조사, 상품 발견·점검·이미지·영상 확인 수가 조사 진행에 따라 자동 갱신됩니다.</div>
+    <div id="productResearchStats" class="product-progress" aria-live="polite"></div>
     <div id="productDecisionStats" class="product-decision-stats" aria-live="polite"></div>
+    <div id="productResearchState" class="policy-state">상품 조사 상태를 불러오는 중입니다.</div>
+    <div id="productAiAutomationState" class="product-auto-state">AI 자동 배치: 대기</div>
+    <div id="productFrontSyncState" class="front-sync-state">프론트 실상품 매칭: 대기</div>
 
     <details id="latestProductPanel" class="product-management-details heavy-data-panel" data-heavy-panel="latest-products">
       <summary class="heavy-panel-summary"><span><strong>최신 상품 리서치 목록</strong> <span id="latestProductSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="latest_product_research" data-policy-workspace-label="최신 상품 리서치 목록" data-policy-scope="country">AI 운영·정책 대화</button><span id="latestProductToggleLabel" class="pill info">목록 펼치기</span></span></summary>
@@ -517,7 +518,14 @@
   });
 })();
 </script>
+<script>
+  // Product research policy: pausing always commits every currently verified product
+  // into the private candidate ledger. Operators should never have to wait for the
+  // full supplier sweep to finish before the research completed so far is usable.
+  try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
+</script>
 <script src="/assets/js/admin-commerce-country-control.js?v=20260922-admin-final-cleanup1"></script>
+<script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
 </body>
