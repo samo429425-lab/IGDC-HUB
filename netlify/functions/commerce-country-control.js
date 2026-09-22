@@ -17,6 +17,16 @@ function parse(event){try{return event&&event.body?JSON.parse(event.isBase64Enco
 function roleList(actor){return Array.from(new Set((actor&&actor.roles||[]).map(lower).filter(Boolean)));}
 function requireRole(actor,write){const allowed=write?WRITE_ROLES:READ_ROLES;const roles=roleList(actor);if(!roles.some((role)=>allowed.has(role))){const error=new Error(write?"국가·지역 자동화 설정 권한이 없습니다.":"국가·지역 책임 공급업체 관제는 관리자·운영진만 사용할 수 있습니다.");error.statusCode=403;throw error;}return roles;}
 function plain(value){return value&&typeof value==="object"&&!Array.isArray(value)?value:{};}
+async function authoritativeReplacementEligibility(body,candidateIdsInput){
+  const requested=Array.from(new Set((Array.isArray(candidateIdsInput)?candidateIdsInput:[]).map(text).filter(Boolean))).slice(0,1800),eligible=[],blocked=[];
+  for(let offset=0;offset<requested.length;offset+=400){
+    const chunk=requested.slice(offset,offset+400);
+    const plan=await Automation.productFrontSyncTargets(Object.assign({},plain(body),{operation:"match",mode:"candidates",candidateIds:chunk,ledgerMode:"candidate"}),null);
+    const allowed=new Set((Array.isArray(plan&&plan.targets)?plan.targets:[]).map((row)=>text(row&&row.candidateId)).filter(Boolean));
+    for(const id of chunk){if(allowed.has(id))eligible.push(id);else blocked.push(id);}
+  }
+  return{requested,eligible:Array.from(new Set(eligible)),blocked:Array.from(new Set(blocked))};
+}
 function readGeoObject(value){const raw=text(value);if(!raw)return{};for(const candidate of [raw,(()=>{try{return decodeURIComponent(raw);}catch(_e){return"";}})()]){try{const parsed=JSON.parse(candidate);if(parsed&&typeof parsed==="object"&&!Array.isArray(parsed))return parsed;}catch(_e){}}return{};}
 function normalizeGeo(event){
   const headers={};for(const [key,value] of Object.entries(event&&event.headers||{}))headers[String(key).toLowerCase()]=value;
@@ -115,7 +125,12 @@ exports.handler=async function(event){
       const requestedOperation=lower(body.operation)==="unmatch"?"unmatch":(lower(body.operation)==="refresh"?"refresh":"match");
       const requestedCandidateIds=Array.from(new Set((Array.isArray(body.candidateIds)?body.candidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
       const authoritativeReplacement=body.authoritativeReplacement===true;
-      const replacementCandidateIds=Array.from(new Set((Array.isArray(body.replacementCandidateIds)?body.replacementCandidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
+      const requestedReplacementCandidateIds=Array.from(new Set((Array.isArray(body.replacementCandidateIds)?body.replacementCandidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
+      let replacementEligibility={requested:requestedReplacementCandidateIds,eligible:requestedReplacementCandidateIds,blocked:[]};
+      if(authoritativeReplacement&&requestedReplacementCandidateIds.length){
+        replacementEligibility=await authoritativeReplacementEligibility(body,requestedReplacementCandidateIds);
+      }
+      const replacementCandidateIds=authoritativeReplacement?replacementEligibility.eligible:requestedReplacementCandidateIds;
       const candidateIds=authoritativeReplacement?replacementCandidateIds:requestedCandidateIds;
       const scope=ProductGoLiveAudit.selectedScope(text(body.countryCode||body.country).toUpperCase(),text(body.subdivisionCode||body.regionCode||body.region||"NATIONWIDE").toUpperCase());
       let replacementPlan=null,replacementUnpublish=null;
@@ -133,14 +148,14 @@ exports.handler=async function(event){
         const liveDoc={candidates:[]};
         const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:"SITE_PUBLISH",candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
         const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null);
-        if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish};
+        if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish,requestedCandidateIds:replacementEligibility.requested,eligibleCandidateIds:replacementEligibility.eligible,blockedCandidateIds:replacementEligibility.blocked};
         return json(200,recorded);
       }
       const staleIds=Array.from(new Set((replacementPlan&&replacementPlan.staleCandidateIds||[]).map(text).filter(Boolean))),refreshIds=Array.from(new Set(candidateIds.concat(requestedCandidateIds,staleIds))).slice(0,1800);
       const refreshUnpublish=requestedOperation==="unmatch"||(authoritativeReplacement&&candidateIds.length===0&&staleIds.length>0);
       const refreshResult=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:refreshUnpublish?"unmatch":"refresh",confirmation:refreshUnpublish?"SITE_UNPUBLISH":"SITE_PUBLISH",candidateId:refreshIds[0]||null,candidateIds:refreshIds,candidateCount:Math.max(1,Number(body.changedCount)||refreshIds.length||1)},scope);
       const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:requestedOperation==="unmatch"?"unmatch":"match",mode:"candidates",candidateIds:refreshIds,ledgerMode:"candidate",compactResponse:true}),refreshResult,null);
-      if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish};
+      if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish,requestedCandidateIds:replacementEligibility.requested,eligibleCandidateIds:replacementEligibility.eligible,blockedCandidateIds:replacementEligibility.blocked};
       return json(200,recorded);
     }
     if(action==="product_front_match"||action==="product_front_unmatch"){

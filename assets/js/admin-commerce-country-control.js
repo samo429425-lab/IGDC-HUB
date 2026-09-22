@@ -1205,6 +1205,14 @@
       var workers=[];for(var w=0;w<Math.min(maxConcurrent,batches.length);w++)workers.push(worker());await Promise.all(workers);
 
       aggregate.persistedCandidateIds=Object.keys(publishPersistedMap);aggregate.changedCandidateIds=Array.from(new Set(Object.keys(changedMap).concat(managementCommit.changedCandidateIds||[])));
+      // Front validation can quarantine a hard-invalid/non-product row.  Reload
+      // the durable administrator ledger before building an authoritative
+      // replacement list so the browser never sends the stale pre-validation
+      // 6/7-card board back to the server after the safety gate reduced it.
+      if(replacementRun){
+        try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}
+        catch(_replacementRefreshError){aggregate.batchErrors.push({offset:'replacement_refresh',candidateIds:aggregate.changedCandidateIds.slice(),message:'authoritative_board_refresh_failed'});}
+      }
       var needsFinalize=aggregate.persistedCandidateIds.length>0||aggregate.changedCandidateIds.length>0||aggregate.withdrawn>0||Number(managementCommit.changedCount||0)>0||replacementRun;
       if(needsFinalize){
         try{

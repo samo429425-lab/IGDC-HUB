@@ -12,10 +12,9 @@
 
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
-const ResearchCategoryRegistry=require("./lib/commerce-research-category-registry.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.7.0-shared-commerce-research-registry";
+const VERSION="regional-brokerage-autoselector-v2.6.4-bounded-staged-network-timeouts";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -175,14 +174,14 @@ function baseLocale(locale){return text(locale).split("-")[0].toLowerCase()||"en
 function googleLocale(locale){return GOOGLE_LOCALE_ALIASES[locale]||locale||"en";}
 const FOCUSED_CATEGORY_SUFFIXES=Object.freeze({
   en:Object.freeze({
-    beauty_personal_care:"skincare serum ampoule essence toner moisturizer cream lotion cleanser sunscreen mask makeup cosmetics hair care body care",
+    beauty_personal_care:"skincare serum ampoule essence toner moisturizer cream lotion cleanser sunscreen mask makeup cosmetics foundation cushion BB CC lipstick lip tint lip balm mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance perfume nail manicure hair care body care grooming electric shaver hair straightener hair styler beauty device LED mask galvanic facial massager scalp care",
     electronics_accessories:"small electronics portable speaker bluetooth speaker earbuds earphones headphones microphone tablet USB hub flash drive cable charger power bank webcam",
-    home_appliances_living:"small home appliances electric kettle toaster blender mixer coffee maker humidifier dehumidifier air purifier vacuum hair dryer"
+    home_appliances_living:"small home appliances portable fan desk fan handheld fan circulator electric kettle toaster blender mixer coffee maker humidifier dehumidifier air purifier vacuum hair dryer"
   }),
   ko:Object.freeze({
-    beauty_personal_care:"스킨케어 세럼 앰플 에센스 토너 보습제 크림 로션 클렌저 선크림 마스크팩 메이크업 화장품 헤어케어 바디케어",
+    beauty_personal_care:"스킨케어 세럼 앰플 에센스 토너 보습제 크림 로션 클렌저 선크림 마스크팩 메이크업 화장품 파운데이션 쿠션 BB CC 립스틱 립틴트 립밤 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 향수 네일 매니큐어 헤어케어 바디케어 그루밍 전동면도기 고데기 헤어스타일러 미용기기 LED마스크 갈바닉 피부마사지 두피관리",
     electronics_accessories:"소형 전자제품 스피커 블루투스 스피커 이어버드 블루투스 이어폰 헤드폰 마이크 태블릿 USB 허브 USB 메모리 케이블 충전기 보조배터리 웹캠",
-    home_appliances_living:"소형가전 전기포트 토스터 블렌더 믹서 커피메이커 가습기 제습기 공기청정기 청소기 헤어드라이어"
+    home_appliances_living:"소형가전 선풍기 휴대용 선풍기 탁상용 선풍기 핸디 선풍기 써큘레이터 전기포트 토스터 블렌더 믹서 커피메이커 가습기 제습기 공기청정기 청소기 헤어드라이어"
   }),
   ja:Object.freeze({
     beauty_personal_care:"スキンケア 美容液 アンプル エッセンス 化粧水 保湿 クリーム ローション クレンザー 日焼け止め マスク メイク 化粧品 ヘアケア ボディケア",
@@ -201,8 +200,6 @@ const FOCUSED_CATEGORY_SUFFIXES=Object.freeze({
   })
 });
 function focusedCategorySuffix(locale,key){
-  const shared=ResearchCategoryRegistry&&typeof ResearchCategoryRegistry.suffixFor==="function"?ResearchCategoryRegistry.suffixFor(locale,key):"";
-  if(shared)return text(shared);
   const pack=FOCUSED_CATEGORY_SUFFIXES[locale]||FOCUSED_CATEGORY_SUFFIXES[baseLocale(locale)]||FOCUSED_CATEGORY_SUFFIXES.en;
   return text(pack&&pack[key]);
 }
@@ -1065,7 +1062,7 @@ function catalogPageUrls(html,baseUrl){
   const out=[],seen=new Set(),rx=/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let m;
   while((m=rx.exec(String(html||"")))){
     const label=stripHtml(m[2]).replace(/\s+/g," ").trim(),href=absoluteHttpUrl(baseUrl,m[1]);if(!href||!sameSite(baseUrl,href))continue;
-    if(!isProductDetailUrl(href)&&!/(상품|제품|쇼핑|스토어|공식몰|카탈로그|농산물|축산물|수산물|임산물|버섯|식품|생필품|생활용품|뷰티|화장품|스킨케어|세럼|앰플|클렌징|선크림|메이크업|파운데이션|쿠션|BB크림|CC크림|립스틱|립틴트|립밤|마스카라|아이라이너|아이브로우|아이섀도|블러셔|컨실러|파우더|네일|매니큐어|샴푸|컨디셔너|트리트먼트|헤어팩|바디워시|향수|면도기|전동면도기|뷰티기기|LED마스크|갈바닉|마사지기|고데기|헤어스타일러|전자제품|소형가전|선풍기|손선풍기|써큘레이터|스피커|블루투스|이어폰|헤드폰|마이크|태블릿|USB|충전기|보조배터리|케이블|가전|로컬푸드|product|products|shop|store|catalog|collection|beauty|cosmetic|skincare|serum|cleanser|sunscreen|makeup|foundation|cushion|bb cream|cc cream|lipstick|lip tint|lip balm|mascara|eyeliner|eyebrow|eyeshadow|blush|concealer|face powder|nail polish|shampoo|conditioner|hair treatment|body wash|perfume|electric shaver|beauty device|led mask|galvanic|facial massager|hair straightener|hair styler|electronics|speaker|bluetooth|earbud|earphone|headphone|microphone|tablet|usb|charger|power bank|cable|portable fan|handheld fan|circulator|appliance)/i.test(label+" "+href))continue;
+    if(!isProductDetailUrl(href)&&!/(상품|제품|쇼핑|스토어|공식몰|카탈로그|농산물|축산물|수산물|임산물|버섯|식품|생필품|생활용품|뷰티|화장품|스킨케어|세럼|앰플|클렌징|선크림|메이크업|전자제품|소형가전|스피커|블루투스|이어폰|헤드폰|마이크|태블릿|USB|충전기|케이블|가전|로컬푸드|product|products|shop|store|catalog|collection|beauty|cosmetic|skincare|serum|cleanser|sunscreen|makeup|electronics|speaker|bluetooth|earbud|earphone|headphone|microphone|tablet|usb|charger|cable|appliance)/i.test(label+" "+href))continue;
     if(seen.has(href)||href===baseUrl)continue;seen.add(href);out.push(href);if(out.length>=8)break;
   }
   return out;

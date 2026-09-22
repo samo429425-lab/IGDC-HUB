@@ -14,7 +14,6 @@
   window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V8__=true;
 
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
-  const INITIAL_SNAPSHOT_URL=STATIC_SNAPSHOT_URL+'?view=initial';
   const REGIONAL_SNAPSHOT_URL=''; // Edge-routed canonical snapshot is the only source.
   const LIMIT_MAIN=100, LIMIT_RIGHT=100;
   const RENDER_BATCH=20;
@@ -29,7 +28,6 @@
   const REGIONAL_REFRESH_DELAY=1400;
   const INITIAL_SEED_PER_SECTION=0;
   const STATIC_TIMEOUT=12000;
-  const VISIBILITY_REVALIDATE_MIN_MS=60*1000;
   const REGIONAL_TIMEOUT=8500;
   const CACHE_PREFIX='igdc:distribution:instant-render:v5:';
 
@@ -62,8 +60,9 @@
   let regionalFollowUpScheduled=false;
   let regionalRetryCount=0;
   let renderGeneration=0;
-  let staticRefreshInFlight=null;
   let lastStaticRefreshAt=0;
+  let staticRefreshPromise=null;
+  const STATIC_VISIBLE_RECHECK_TTL=60*1000;
   const incrementalJobs=new WeakMap();
 
   function text(v){return v==null?'':String(v);}
@@ -402,25 +401,20 @@
       if(canRefreshRegional()) refreshRegional();
     },waitMs+150);
   }
-  function refreshStatic(url){
-    if(staticRefreshInFlight) return staticRefreshInFlight;
-    const target=url||STATIC_SNAPSHOT_URL;
-    lastStaticRefreshAt=Date.now();
-    staticRefreshInFlight=fetchJson(target,STATIC_TIMEOUT,'no-cache').then(function(result){
+  function refreshStatic(force){
+    const now=Date.now();
+    if(staticRefreshPromise) return staticRefreshPromise;
+    if(force!==true&&lastStaticRefreshAt&&now-lastStaticRefreshAt<STATIC_VISIBLE_RECHECK_TTL) return Promise.resolve(false);
+    staticRefreshPromise=fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache').then(function(result){
       if(result.empty||!result.payload) return false;
       const compact=compactSnapshot(result.payload,{etag:result.etag}); if(!compact) return false;
       baseSnapshot=compact;
-      // Keep only the verified in-memory snapshot. Session card restoration is
-      // intentionally disabled because the visitor IP scope may change.
+      setCached('static',compact);
+      lastStaticRefreshAt=Date.now();
       renderMerged();
       return true;
-    }).catch(function(){return false;}).finally(function(){staticRefreshInFlight=null;});
-    return staticRefreshInFlight;
-  }
-  function refreshInitialThenFull(){
-    return refreshStatic(INITIAL_SNAPSHOT_URL).finally(function(){
-      idle(function(){refreshStatic(STATIC_SNAPSHOT_URL);},350);
-    });
+    }).catch(function(){return false;}).finally(function(){staticRefreshPromise=null;});
+    return staticRefreshPromise;
   }
   function refreshRegional(){
     // Deliberately disabled: the Edge-routed canonical snapshot already applies
@@ -434,11 +428,9 @@
     // between visits and a cached card has no request-time geo proof.
     baseSnapshot=null;
     regionalSnapshot=null;
-    nextFrame(function(){refreshInitialThenFull();});
+    nextFrame(function(){refreshStatic(true);});
     document.addEventListener('visibilitychange',function(){
-      if(document.hidden===false&&Date.now()-lastStaticRefreshAt>=VISIBILITY_REVALIDATE_MIN_MS){
-        nextFrame(function(){refreshStatic(STATIC_SNAPSHOT_URL);});
-      }
+      if(document.hidden===false) nextFrame(function(){refreshStatic(false);});
     });
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true});

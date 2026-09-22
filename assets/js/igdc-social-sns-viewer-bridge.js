@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260922-contained-only-no-external-fallback-v8'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260922-contained-fallback-v8'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -280,6 +280,21 @@
       }
     } catch (_) {}
     return null;
+  }
+
+  function containedFallbackEmbed(platform, card, title) {
+    var preview = previewUrlOf(card);
+    if (validPreviewImageSrc(preview)) {
+      return { mode: 'preview', src: preview, aspect: '16/9', provider: platform + '-contained-fallback', restrictedProvider: true };
+    }
+    var label = text(title || platform || 'Social content').replace(/[<>&"']/g, ' ').slice(0, 90);
+    var status = text(labels().unavailable || 'Preview unavailable').replace(/[<>&"']/g, ' ').slice(0, 120);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">' +
+      '<rect width="1280" height="720" fill="%23111111"/>' +
+      '<text x="640" y="330" text-anchor="middle" fill="white" font-family="Arial,sans-serif" font-size="34">' + label + '</text>' +
+      '<text x="640" y="390" text-anchor="middle" fill="%23cccccc" font-family="Arial,sans-serif" font-size="24">' + status + '</text>' +
+      '</svg>';
+    return { mode: 'preview', src: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), aspect: '16/9', provider: platform + '-contained-fallback', restrictedProvider: true };
   }
 
   function buildEmbed(platform, url, card) {
@@ -1569,8 +1584,9 @@
     image.alt = title || platform || 'Social content';
     image.loading = 'eager';
     image.referrerPolicy = 'no-referrer';
-    // Contained previews are intentionally non-navigating. The original provider
-    // URL remains available to the viewer logic but never opens a new external tab.
+    /* Main-card fallback remains inside IGDC. The original provider URL is kept
+       as metadata for provider-specific actions, but the preview itself never
+       navigates the visitor away from the Social Hub. */
     image.style.cursor = 'default';
     media.appendChild(image);
     content.appendChild(media);
@@ -1728,6 +1744,8 @@
     var title = titleOf(card) || platform;
     var description = descOf(card);
     var embed = buildEmbed(platform, url, card);
+    if (!embed || !embed.src) embed = containedFallbackEmbed(platform, card, title);
+    if (!embed || !embed.src) return false;
 
     state.previousFocus = document.activeElement;
     state.lastUrl = url;
@@ -1743,13 +1761,7 @@
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     updateLabels(root);
-    if (embed && embed.src) {
-      mountEmbed(root, embed, title, description, platform);
-    } else {
-      var stage = q('.igsv-stage', root);
-      clearStage(stage);
-      showStatus(labels().unavailable);
-    }
+    mountEmbed(root, embed, title, description, platform);
 
     if (!state.pushed) {
       try {
@@ -1979,8 +1991,9 @@
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    // openCard always keeps the user inside IGDC. Unsupported provider variants
-    // show the contained unavailable state instead of navigating externally.
+    /* Main SNS content never uses an external navigation fallback. Unsupported
+       provider variants are rendered by openCard() as a contained preview/status
+       document so Back/ESC always returns to the 9-section list. */
     openCard(card);
   }, true);
 })();

@@ -9,7 +9,7 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.2.0-admin-delete-and-removed-state";
+const VERSION = "commerce-candidate-queue-control-v1.3.0-bulk-admin-actions";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject"]);
 const RELATION_TABLES = Object.freeze([
@@ -31,33 +31,67 @@ function candidateIds(value){
   for(const raw of input){const id=text(raw);if(!/^[A-Za-z0-9_-]{3,180}$/.test(id)||seen.has(id))continue;seen.add(id);out.push(id);if(out.length>=3000)break;}
   return out;
 }
+function inFilter(ids){ return "("+candidateIds(ids).map((id)=>encodeURIComponent(id)).join(",")+")"; }
 async function readCandidate(id){
   const rows=await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,owner_note&limit=1&id=eq."+encodeURIComponent(id));
   return Array.isArray(rows)?rows[0]||null:null;
 }
+async function readCandidates(ids){
+  const wanted=candidateIds(ids),rows=[];
+  for(let offset=0;offset<wanted.length;offset+=80){
+    const batch=wanted.slice(offset,offset+80);
+    const found=await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,owner_note&id=in."+inFilter(batch)+"&limit=5000");
+    if(Array.isArray(found))rows.push(...found);
+  }
+  return rows;
+}
+async function removeAssignmentsBulk(ids){
+  const wanted=candidateIds(ids),removed=[];
+  for(let offset=0;offset<wanted.length;offset+=80){
+    const batch=wanted.slice(offset,offset+80);
+    const rows=await SlotStore.remove("gslot_slot_assignments","candidate_id=in."+inFilter(batch));
+    if(Array.isArray(rows))removed.push(...rows);
+  }
+  return{ok:true,count:removed.length,bulk:true};
+}
+async function dismissCandidatesBulk(ids){
+  const wanted=candidateIds(ids),relationSummary=[];
+  for(const table of RELATION_TABLES){
+    let count=0;
+    for(let offset=0;offset<wanted.length;offset+=80){
+      const batch=wanted.slice(offset,offset+80);
+      const rows=await SlotStore.remove(table,"candidate_id=in."+inFilter(batch));
+      count+=Array.isArray(rows)?rows.length:0;
+    }
+    relationSummary.push({table,ok:true,count,bulk:true});
+  }
+  let deleted=0;
+  for(let offset=0;offset<wanted.length;offset+=80){
+    const batch=wanted.slice(offset,offset+80);
+    const rows=await SlotStore.remove("gslot_candidates","id=in."+inFilter(batch));
+    deleted+=Array.isArray(rows)?rows.length:0;
+  }
+  return{deleted,relations:relationSummary};
+}
 async function deleteRelations(candidateId){
-  return await Promise.all(RELATION_TABLES.map(async(table)=>{
-    try{const rows=await SlotStore.remove(table,"candidate_id=eq."+encodeURIComponent(candidateId));return{table,ok:true,count:Array.isArray(rows)?rows.length:0};}
-    catch(error){return{table,ok:false,error:text(error&&error.message||error)};}
-  }));
+  const results=[];
+  for(const table of RELATION_TABLES){
+    try{const rows=await SlotStore.remove(table,"candidate_id=eq."+encodeURIComponent(candidateId));results.push({table,ok:true,count:Array.isArray(rows)?rows.length:0});}
+    catch(error){results.push({table,ok:false,error:text(error&&error.message||error)});}
+  }
+  return results;
 }
 async function releaseSectionAssignment(candidateId){
   try{const rows=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId));return{ok:true,count:Array.isArray(rows)?rows.length:0};}
   catch(error){return{ok:false,error:text(error&&error.message||error)};}
 }
-async function applyAction(actorId,row,action){
+async function applyAction(actorId,row,action,options){
+  options=plain(options);
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
   if(action==="dismiss"){
     const relations=await deleteRelations(id);
-    const relationFailures=relations.filter((item)=>item&&item.ok!==true);
-    if(relationFailures.length){
-      const error=new Error("candidate_relation_cleanup_failed");
-      error.code="candidate_relation_cleanup_failed";
-      error.relations=relations;
-      throw error;
-    }
     await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(id));
-    return {id,action,status:"deleted_research_allowed",rediscoveryAllowed:true,relations};
+    return {id,action,status:"deleted_research_allowed",relations};
   }
   const previousStatus=text(row&&row.status)||"approval_pending";
   const queueControl=Object.assign({},plain(payload.queueControl),{
@@ -66,25 +100,26 @@ async function applyAction(actorId,row,action){
     previousStatus,
     hiddenFromCountryQueue:true,
     permanentExcluded:action==="purge",
-    rediscoveryAllowed:action==="dismiss"||action==="remove_from_list",
+    rediscoveryAllowed:action!=="purge",
     decidedAt:now,
     decidedBy:text(actorId)||"administrator"
   });
   payload.queueControl=queueControl;
+  payload.slotDecision=action==="remove_from_list"?"removed_from_list":action;
   payload.review=Object.assign({},plain(payload.review),{
     state:action==="purge"?"permanent_excluded":action==="reject"?"rejected":action==="remove_from_list"?"removed_from_list":"hold",
     decidedAt:now,
     decidedBy:text(actorId)||"administrator"
   });
-  const assignmentCleanup=await releaseSectionAssignment(id);
+  const assignmentCleanup=options.assignmentCleanup&&options.assignmentCleanup.ok===true?options.assignmentCleanup:await releaseSectionAssignment(id);
   payload.frontPublication=Object.assign({},plain(payload.frontPublication),{operation:"unmatch",status:"deferred_section_release",queued:false,pendingBuild:true,publicSnapshotConfirmed:false,buildVerificationRequired:true,deferredBuild:true,requestedAt:now,requestedBy:text(actorId)||"administrator"});
-  const status=action==="purge"?"suppressed":action==="reject"?"rejected":action==="remove_from_list"?"removed":"hold";
+  const status=action==="purge"||action==="remove_from_list"?"suppressed":action==="reject"?"rejected":"hold";
   const note=action==="purge"
     ?"관리자가 이 상품 후보를 보류·제외 관리에서 영구 제외했습니다. 자동 상품 리서치가 같은 후보를 다시 승격하지 않도록 원장 기록을 보존합니다."
     :action==="reject"
       ?"관리자가 이 상품 후보를 현재 후보·배치 목록에서 제외하고 보류·제외 관리로 이동했습니다. 영구 삭제는 수행하지 않았습니다."
       :action==="remove_from_list"
-        ?"관리자가 이 상품 후보 원장은 보존하고 현재 후보 관리 목록에서만 제거했습니다. 이후 리서치 재발견은 허용됩니다."
+        ?"관리자가 이 상품 후보를 현재 관리 목록에서만 제거했습니다. 영구 차단은 아니며 다음 정상 리서치에서 다시 발견될 수 있습니다."
         :"관리자가 이 상품 후보를 보류했습니다. 원장과 기존 검토 기록은 보존합니다.";
   await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status,source_payload:payload,owner_note:note,updated_at:now});
   return {id,action,status,assignmentCleanup,frontBuildDispatched:false};
@@ -99,16 +134,37 @@ exports.handler=async function(event){
     if(!ACTIONS.has(action)){const error=new Error("지원하지 않는 상품 후보 대기열 작업입니다.");error.statusCode=400;throw error;}
     if(!ids.length){const error=new Error("처리할 상품 후보를 선택해 주세요.");error.statusCode=400;throw error;}
     const actor=await AdminSession.resolveUser(event);requireWriteRole(actor);const actorId=text(actor&&actor.sub);
-    const processed=[],failures=[];
-    for(let offset=0;offset<ids.length;offset+=8){
-      const chunk=ids.slice(offset,offset+8);
-      const settled=await Promise.allSettled(chunk.map(async(id)=>{
-        const row=await readCandidate(id);
-        if(!row)throw Object.assign(new Error("candidate_not_found"),{candidateId:id});
-        if(text(row.source_ref)!==ProductPipeline.SOURCE_REF)throw Object.assign(new Error("unsupported_candidate_source"),{candidateId:id});
-        return await applyAction(actorId,row,action);
-      }));
-      settled.forEach((entry,index)=>{const id=chunk[index];if(entry.status==="fulfilled")processed.push(entry.value);else failures.push({id,error:text(entry.reason&&entry.reason.message||entry.reason)});});
+    const processed=[],failures=[],rows=await readCandidates(ids),byId=new Map(rows.map((row)=>[text(row&&row.id),row])),eligible=[];
+    for(const id of ids){
+      const row=byId.get(id);
+      if(!row){failures.push({id,error:"candidate_not_found"});continue;}
+      if(text(row.source_ref)!==ProductPipeline.SOURCE_REF){failures.push({id,error:"unsupported_candidate_source"});continue;}
+      eligible.push(row);
+    }
+    if(action==="dismiss"&&eligible.length){
+      const eligibleIds=eligible.map((row)=>text(row.id));
+      try{
+        const bulk=await dismissCandidatesBulk(eligibleIds);
+        const deletedSet=new Set(eligibleIds);
+        eligibleIds.forEach((id)=>processed.push({id,action,status:"deleted_research_allowed",relations:bulk.relations,bulk:true,rediscoveryAllowed:true}));
+      }catch(error){
+        const message=text(error&&error.message||error)||"bulk_delete_failed";
+        eligibleIds.forEach((id)=>failures.push({id,error:message}));
+      }
+    }else if(eligible.length){
+      let assignmentCleanup=null;
+      try{assignmentCleanup=await removeAssignmentsBulk(eligible.map((row)=>text(row.id)));}
+      catch(error){
+        const message=text(error&&error.message||error)||"assignment_release_failed";
+        eligible.forEach((row)=>failures.push({id:text(row.id),error:message}));
+      }
+      if(assignmentCleanup&&assignmentCleanup.ok===true){
+        for(let offset=0;offset<eligible.length;offset+=12){
+          const batch=eligible.slice(offset,offset+12);
+          const settled=await Promise.allSettled(batch.map((row)=>applyAction(actorId,row,action,{assignmentCleanup})));
+          settled.forEach((entry,index)=>{const id=text(batch[index]&&batch[index].id);if(entry.status==="fulfilled")processed.push(entry.value);else failures.push({id,error:text(entry.reason&&entry.reason.message||entry.reason)});});
+        }
+      }
     }
     if(!processed.length){const error=new Error("선택 항목을 처리하지 못했습니다. 최신 대기열을 다시 불러와 주세요.");error.statusCode=409;error.failures=failures;throw error;}
     return json(200,{ok:true,version:VERSION,decision:action,requested:ids.length,processed:processed.length,processedIds:processed.map((row)=>row.id),results:processed,failures,publicPublication:false,paymentExecution:false});
