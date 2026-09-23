@@ -1,4 +1,4 @@
-/* IGDC Distribution admin exclusion/hold controls isolation hotfix v11
+/* IGDC Distribution admin exclusion/hold controls isolation hotfix v11.2
  * Scope: supplier hold/block bulk actions, product hold/reject bulk actions,
  * and exclusive accordion behavior only. No front publication action here.
  */
@@ -44,13 +44,13 @@
   function syncSupplier(kind){
     var boxes=Array.prototype.slice.call(document.querySelectorAll('[data-supplier-select="'+kind+'"]')).filter(function(x){return !x.disabled;}),selected=boxes.filter(function(x){return x.checked;}),all=document.getElementById(kind==='hold'?'supplierHoldSelectAll':kind==='blocked'?'supplierBlockedSelectAll':'supplierActiveSelectAll');
     if(all){all.disabled=boxes.length===0;all.checked=boxes.length>0&&selected.length===boxes.length;all.indeterminate=selected.length>0&&selected.length<boxes.length;}
-    var count=document.getElementById(kind==='hold'?'supplierHoldSelectedCount':kind==='blocked'?'supplierBlockedSelectedCount':'supplierActiveSelectedCount');if(count)count.textContent='선택 '+selected.length+'건';
+    var count=document.getElementById(kind==='hold'?'supplierHoldSelectedCount':kind==='blocked'?'supplierBlockedSelectedCount':'supplierActiveSelectedCount'),countText='선택 '+selected.length+'건';if(count&&count.textContent!==countText)count.textContent=countText;
     document.querySelectorAll('[data-supplier-bulk-scope="'+kind+'"]').forEach(function(b){b.disabled=selected.length===0;});
   }
   function syncProduct(kind){
     var boxes=Array.prototype.slice.call(document.querySelectorAll('[data-product-exclusion-select="'+kind+'"]')).filter(function(x){return !x.disabled;}),selected=boxes.filter(function(x){return x.checked;}),all=document.getElementById(kind==='hold'?'productHoldSelectAll':'productRejectSelectAll');
     if(all){all.disabled=boxes.length===0;all.checked=boxes.length>0&&selected.length===boxes.length;all.indeterminate=selected.length>0&&selected.length<boxes.length;}
-    var count=document.getElementById(kind==='hold'?'productHoldSelectedCount':'productRejectSelectedCount');if(count)count.textContent='선택 '+selected.length+'건';
+    var count=document.getElementById(kind==='hold'?'productHoldSelectedCount':'productRejectSelectedCount'),countText='선택 '+selected.length+'건';if(count&&count.textContent!==countText)count.textContent=countText;
     document.querySelectorAll('[data-product-exclusion-scope="'+kind+'"]').forEach(function(b){b.disabled=selected.length===0;});
   }
   function reloadAfter(message){notice(message,'ok');setTimeout(function(){location.reload();},300);}
@@ -85,7 +85,18 @@
     event.preventDefault();event.stopPropagation();if(event.stopImmediatePropagation)event.stopImmediatePropagation();
     if(t.hasAttribute('data-supplier-bulk'))supplierBulk(t);else productBulk(t);
   },true);
-  function wire(){['supplierControlQueue','productHoldQueue','productRejectQueue'].forEach(function(id){var d=document.getElementById(id);if(d&&!d.dataset.exclusiveWired){d.dataset.exclusiveWired='1';d.addEventListener('toggle',function(){exclusive(d);});}});syncSupplier('hold');syncSupplier('blocked');syncProduct('hold');syncProduct('reject');}
+  function observeList(id,sync){
+    var root=document.getElementById(id);if(!root||root.dataset.hotfixListObserver==='1')return;root.dataset.hotfixListObserver='1';
+    var queued=false,observer=new MutationObserver(function(){if(queued)return;queued=true;(window.requestAnimationFrame||function(fn){return setTimeout(fn,0);})(function(){queued=false;sync();});});
+    observer.observe(root,{subtree:true,childList:true});
+  }
+  function wire(){
+    ['supplierControlQueue','productHoldQueue','productRejectQueue'].forEach(function(id){var d=document.getElementById(id);if(d&&!d.dataset.exclusiveWired){d.dataset.exclusiveWired='1';d.addEventListener('toggle',function(){exclusive(d);});}});
+    observeList('supplierHoldRows',function(){syncSupplier('hold');});
+    observeList('supplierBlockedRows',function(){syncSupplier('blocked');});
+    observeList('productHoldRows',function(){syncProduct('hold');});
+    observeList('productRejectRows',function(){syncProduct('reject');});
+    syncSupplier('hold');syncSupplier('blocked');syncProduct('hold');syncProduct('reject');
+  }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire);else wire();
-  new MutationObserver(function(){syncSupplier('hold');syncSupplier('blocked');syncProduct('hold');syncProduct('reject');}).observe(document.documentElement,{subtree:true,childList:true});
 })();
