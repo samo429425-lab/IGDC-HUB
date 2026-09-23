@@ -76,10 +76,14 @@ function parseGeo(event, params){
   const h={}; Object.keys(headers).forEach(k=>h[k.toLowerCase()]=headers[k]);
   let nf={};
   try{ nf=JSON.parse(h["x-nf-geo"] || "{}"); }catch(_e){}
-  const country = normalizeCountry(first(nf.country, nf.country_code, h["x-country"], h["cf-ipcountry"], h["x-vercel-ip-country"], h["x-nf-country"], params && params.country, params && params.targetCountry));
-  const region = normalizeRegion(first(nf.subdivision, nf.region, nf.state, h["x-region"], h["x-vercel-ip-country-region"], h["x-nf-region"], params && params.region, params && params.targetRegion), country);
-  const city = text(first(nf.city, h["x-city"], h["x-nf-city"])).slice(0,80);
-  return { country: country || "GLOBAL", region, city, countryName: COUNTRY_NAMES[country] || country || "Global" };
+  const requested=params&&typeof params==="object"?params:{};
+  const adminSelected=String(requested.scopeAuthority||"").toLowerCase()==="administrator-selected"||requested.ignoreRequestGeo===true||requested.adminSelectedScope===true;
+  const explicitCountry=normalizeCountry(first(requested.country,requested.targetCountry));
+  const country = adminSelected&&explicitCountry ? explicitCountry : normalizeCountry(first(nf.country, nf.country_code, h["x-country"], h["cf-ipcountry"], h["x-vercel-ip-country"], h["x-nf-country"], requested.country, requested.targetCountry));
+  const explicitRegion=normalizeRegion(first(requested.region,requested.targetRegion),country);
+  const region = adminSelected ? explicitRegion : normalizeRegion(first(nf.subdivision, nf.region, nf.state, h["x-region"], h["x-vercel-ip-country-region"], h["x-nf-region"], requested.region, requested.targetRegion), country);
+  const city = adminSelected ? "" : text(first(nf.city, h["x-city"], h["x-nf-city"])).slice(0,80);
+  return { country: country || "GLOBAL", region, city, countryName: COUNTRY_NAMES[country] || country || "Global", source:adminSelected?"administrator-selected":"request-ip" };
 }
 
 function rootCandidates(){

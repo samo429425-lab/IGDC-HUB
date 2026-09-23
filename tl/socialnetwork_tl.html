@@ -472,9 +472,6 @@ a[id*="qna"]{
 <div class="row-viewport" data-row="4"><div class="row-scroller" id="rowScroller4"><div class="row-grid" id="rowGrid4"><div class="thumb-grid thumb-scroller" data-psom-key="social-facebook"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft4">‹</button><button class="rscroll right" id="rsRight4">›</button></div>
 <div class="row-viewport" data-row="5"><div class="row-scroller" id="rowScroller5"><div class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft5">‹</button><button class="rscroll right" id="rsRight5">›</button></div>
 <div class="row-viewport" data-row="6"><div class="row-scroller" id="rowScroller6"><div class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft6">‹</button><button class="rscroll right" id="rsRight6">›</button></div>
-<div class="row-viewport" data-row="7"><div class="row-scroller" id="rowScroller7"><div class="row-grid" id="rowGrid7"><div class="thumb-grid thumb-scroller" data-psom-key="social-pinterest"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft7">‹</button><button class="rscroll right" id="rsRight7">›</button></div>
-<div class="row-viewport" data-row="8"><div class="row-scroller" id="rowScroller8"><div class="row-grid" id="rowGrid8"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft8">‹</button><button class="rscroll right" id="rsRight8">›</button></div>
-<div class="row-viewport" data-row="9"><div class="row-scroller" id="rowScroller9"><div class="row-grid" id="rowGrid9"><div class="thumb-grid thumb-scroller" data-psom-key="social-twitter"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft9">‹</button><button class="rscroll right" id="rsRight9">›</button></div>
 <section id="rpMobileBox">
 <h3 class="ad-headline">💎 Mga Sikat na Produkto 💎</h3>
 <div id="rpMobileScroller">
@@ -666,10 +663,7 @@ a[id*="qna"]{
         'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · 미리보기' },
         'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · 미리보기' },
         'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · 미리보기' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · 미리보기' },
-        'social-pinterest': { icon:'📌', title:'Pinterest', row:'Row 7 · 미리보기' },
-        'social-reddit': { icon:'👽', title:'Reddit', row:'Row 8 · 미리보기' },
-        'social-twitter': { icon:'✖️', title:'X (Twitter)', row:'Row 9 · 미리보기' }
+        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · 미리보기' }
       };
       function makeCard(meta){
         var a = document.createElement('a'); a.className='card'; a.href='#';
@@ -1126,7 +1120,7 @@ function boot(){
           setTimeout(sync, t);
         });
       }
-      for(var i=1;i<=9;i++){
+      for(var i=1;i<=6;i++){
         bindRow(
           document.querySelector('.row-viewport[data-row="'+i+'"]'),
           document.getElementById('rowScroller'+i),

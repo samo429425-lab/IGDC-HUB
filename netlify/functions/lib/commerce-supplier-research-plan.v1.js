@@ -11,7 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "commerce-supplier-research-plan-v1.4.2-global-country-resilient-discovery";
+const VERSION = "commerce-supplier-research-plan-v1.5.0-kr-focused-gap-discovery";
 
 function text(value){ return String(value == null ? "" : value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
@@ -81,6 +81,15 @@ const LANE_ORDER = Object.freeze([
 // packs remain active for every other country; KR uses these detailed local
 // producer/manufacturer/distributor queries so a generic global query rotation
 // cannot narrow the supplier pool again.
+const KR_PRIORITY_QUERIES = Object.freeze([
+  "대한민국 화장품 스킨케어 세럼 앰플 토너 크림 선크림 클렌저 마스크팩 제조사 브랜드 본사 책임판매업자 공식몰 직영몰 온라인 구매",
+  "대한민국 색조화장품 메이크업 파운데이션 쿠션 립스틱 립틴트 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 네일 브랜드 공식몰 책임판매업자",
+  "대한민국 뷰티기기 LED마스크 갈바닉 피부마사지 두피관리 전동면도기 헤어드라이어 고데기 헤어스타일러 제조사 브랜드 공식몰 직영몰",
+  "대한민국 블루투스 이어폰 이어버드 헤드폰 블루투스 스피커 마이크 태블릿 웹캠 제조사 브랜드 공식몰 직영몰 온라인 판매",
+  "대한민국 USB 허브 USB 메모리 케이블 충전기 보조배터리 멀티탭 소형 전자 액세서리 제조사 브랜드 공식몰 직영몰",
+  "대한민국 소형가전 선풍기 휴대용 선풍기 써큘레이터 가습기 제습기 공기청정기 청소기 제조사 브랜드 직영몰 공식 판매처",
+  "대한민국 주방 소형가전 전기포트 토스터 블렌더 믹서 커피메이커 커피머신 에어프라이어 제조사 브랜드 직영몰 공식 판매처"
+]);
 const KR_FOUNDATION_QUERIES = Object.freeze([
   "대한민국 생활필수품 식료품 농수축임산물 생산자 농협 축협 수협 산림조합 협동조합 공식몰 직거래 배송 반품 환불 고객센터",
   "대한민국 화장품 스킨케어 메이크업 파운데이션 쿠션 BB CC 립스틱 립틴트 립밤 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 향수 네일 샴푸 트리트먼트 바디워시 미용기기 LED마스크 갈바닉 피부마사지 두피관리 전동면도기 헤어스타일러 제조사 브랜드 본사 책임판매업자 공식몰 제품 구매 배송 반품 환불 고객센터",
@@ -441,6 +450,9 @@ function restoredKrRows(geo, sourceTerms, maxQueries){
   if(sourceHint) dynamic.push(`대한민국 ${sourceHint} 생산자 제조사 협동조합 책임 판매업체 공식 판매처`);
   function laneFor(query,index){
     if(/지자체|농업기술센터|생산자 명단|기업 제품/.test(query)) return "public_directory_bridge";
+    if(/화장품|스킨케어|색조화장품|메이크업|뷰티기기|LED마스크|갈바닉/.test(query)) return "beauty_focus";
+    if(/블루투스|이어폰|이어버드|헤드폰|스피커|마이크|태블릿|USB|충전기|보조배터리|웹캠/.test(query)) return "electronics_focus";
+    if(/소형가전|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피메이커|커피머신|에어프라이어/.test(query)) return "small_appliance_focus";
     if(/기계|금속|플라스틱|목재|포장재|공구|산업용품|전자제품|부품/.test(query)) return "industrial_manufacturing";
     if(/전통시장|지역특산품|공동몰/.test(query)) return "regional_market";
     if(/지역 유통업체|도매|총판|공판장/.test(query)) return "wholesale_distribution";
@@ -449,7 +461,7 @@ function restoredKrRows(geo, sourceTerms, maxQueries){
     if(/농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|농장|농가|수산물|임산물/.test(query)) return "agri_cooperative";
     return index<KR_FOUNDATION_QUERIES.length?"food_essentials":"kr_rotating";
   }
-  return unique(KR_FOUNDATION_QUERIES.concat(dynamic),maxQueries).map((query,index)=>({query,locale:"ko",origin:`country-supply-lane:${laneFor(query,index)}`,lane:laneFor(query,index),localName:"대한민국",localizationError:null}));
+  return unique(KR_PRIORITY_QUERIES.concat(KR_FOUNDATION_QUERIES,dynamic),maxQueries).map((query,index)=>({query,locale:"ko",origin:`country-supply-lane:${laneFor(query,index)}`,lane:laneFor(query,index),localName:"대한민국",localizationError:null}));
 }
 function buildCountryRows(geo, locales, sourceTerms, maxQueries){
   const country=text(geo&&geo.country).toUpperCase();
@@ -562,6 +574,7 @@ function buildPlan(input){
       regionalPolicyTerms:regionalPolicyTerms(sources.regional).length,
       searchBank:{items:bank.itemCount,external:bank.externalCount,commerceLike:bank.commerceCount,tags:bank.tags.length,categories:bank.categories.length,producers:bank.producers.length},
       generatedQueries:rows.length,
+      krPriorityQueries:geo.country==="KR"?KR_PRIORITY_QUERIES.length:0,
       supplyLanes:unique(rows.map(row=>row&&row.lane),40),
       localizedQueries:rows.filter(row=>baseLocale(row.locale)!=="en").length,
       countrySpecificBoosts:array(COUNTRY_BOOSTS[text(geo.country).toUpperCase()]).length,

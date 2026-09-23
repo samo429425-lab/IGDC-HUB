@@ -7,7 +7,7 @@
 const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-snapshot-current-v1.4.0-compact-front-read-cache";
+const VERSION = "social-snapshot-current-v1.4.1-six-main-sections";
 
 function text(value) {
   return value == null ? "" : String(value).trim();
@@ -15,7 +15,7 @@ function text(value) {
 
 const FRONT_SECTION_KEYS = Object.freeze([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter",
+  "social-wechat", "social-weibo",
 ]);
 let warmProjectionCache = null;
 

@@ -1,7 +1,7 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20260922-social-sparse-provider-visible-fallback-v2
+// build: 20260923-six-main-sections-v1
 // 목적:
-// 1) Social 메인 9섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
+// 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
 // 3) 메인 Social과 rightPanel의 fetch/render/state를 완전히 분리해 어느 한쪽 지연/실패가 다른 쪽을 막지 않는다.
 // 4) Social runtime readback은 rightPanel/social-maru를 절대 읽거나 덮지 않는다.
@@ -17,7 +17,7 @@
   const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
   const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
-  const MAIN_ROWS = 9;
+  const MAIN_ROWS = 6;
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 20;
   const RIGHT_LIMIT = 100;
@@ -28,9 +28,6 @@
     "social-facebook",
     "social-wechat",
     "social-weibo",
-    "social-pinterest",
-    "social-reddit",
-    "social-twitter",
   ]);
   const mainRenderTokens = new WeakMap();
 
@@ -440,7 +437,7 @@
     // Performance policy: card geometry is owned by the existing CSS
     // (16:9 media + bounded 3-line title/meta). Do not read layout metrics
     // and write heights for every card: that forces synchronous reflow across
-    // all nine SNS rows and delays first paint on slower devices.
+    // all six SNS rows and delays first paint on slower devices.
   }
 
   function sampleLabelForSection(key) {
@@ -451,9 +448,6 @@
       "social-facebook": "Facebook",
       "social-wechat": "WeChat",
       "social-weibo": "Weibo",
-      "social-pinterest": "Pinterest",
-      "social-reddit": "Reddit",
-      "social-twitter": "X (Twitter)",
     };
     return labels[safeText(key)] || "SNS";
   }
@@ -522,45 +516,6 @@
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }
 
-
-  function platformDisplayName(platform) {
-    var key = safeText(platform).toLowerCase().replace(/^social-/, "");
-    return ({
-      twitter: "X (Twitter)",
-      pinterest: "Pinterest",
-      reddit: "Reddit",
-      wechat: "WeChat",
-      weibo: "Weibo",
-      youtube: "YouTube",
-      instagram: "Instagram",
-      tiktok: "TikTok",
-      facebook: "Facebook"
-    })[key] || (key ? key.charAt(0).toUpperCase() + key.slice(1) : "Social");
-  }
-
-  function paintTextThumbFallback(pic, platform) {
-    if (!pic) return;
-    while (pic.firstChild) pic.removeChild(pic.firstChild);
-    pic.style.backgroundImage = "";
-    pic.style.backgroundSize = "";
-    pic.style.backgroundPosition = "";
-    pic.dataset.socialTextFallback = "1";
-    pic.style.display = "flex";
-    pic.style.alignItems = "center";
-    pic.style.justifyContent = "center";
-    pic.style.background = "#f3f6fa";
-    pic.style.color = "#334155";
-    pic.style.fontWeight = "700";
-    pic.style.fontSize = "clamp(14px,1.2vw,20px)";
-    pic.style.textAlign = "center";
-    pic.style.padding = "10px";
-    pic.style.boxSizing = "border-box";
-    var label = document.createElement("span");
-    label.className = "igdc-social-provider-fallback";
-    label.textContent = platformDisplayName(platform);
-    pic.appendChild(label);
-  }
-
   function paintThumb(pic, platform, contentUrl, thumb) {
     if (!pic) return;
     pic.style.backgroundImage = "";
@@ -568,7 +523,7 @@
     pic.style.backgroundPosition = "";
     while (pic.firstChild) pic.removeChild(pic.firstChild);
     if (!thumb) {
-      paintTextThumbFallback(pic, platform);
+      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
       return;
     }
     var img = document.createElement("img");
@@ -591,19 +546,8 @@
         return;
       }
       if (img.parentNode === pic) pic.removeChild(img);
-      paintTextThumbFallback(pic, platform);
+      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
     });
-    pic.dataset.socialTextFallback = "0";
-    pic.style.display = "";
-    pic.style.alignItems = "";
-    pic.style.justifyContent = "";
-    pic.style.background = "";
-    pic.style.color = "";
-    pic.style.fontWeight = "";
-    pic.style.fontSize = "";
-    pic.style.textAlign = "";
-    pic.style.padding = "";
-    pic.style.boxSizing = "";
     pic.appendChild(img);
   }
 
@@ -630,10 +574,7 @@
     const viewerUrl = safeText(it && (it.viewerUrl || it.permalink || it.href || it.link));
     const embedUrl = safeText(it && (it.embedUrl || it.embed_url));
 
-    // Social main must never navigate the top-level browser away from IGDC.
-    // Keep the verified provider URL only in data attributes; the viewer bridge
-    // consumes it and opens the contained in-site viewer.
-    card.href = "#";
+    card.href = url || "#";
     card.dataset.contentUrl = url || "#";
     card.dataset.socialUrl = url || "#";
     card.dataset.latestContentUrl = latestContentUrl || url || "";
@@ -641,9 +582,9 @@
     card.dataset.thumbnailUrl = thumb || "";
     card.dataset.embedUrl = embedUrl;
     card.dataset.profileFallback = it && it.social && it.social.profileFallback ? "1" : "0";
-    // Viewer bridge intercepts normal clicks. There is intentionally no external
-    // tab/top-level navigation fallback for Social main.
-    card.target = "_self";
+    // Viewer bridge intercepts normal clicks. _blank remains only as a fail-safe
+    // when the bridge itself is unavailable, so a real video/post is never dead.
+    card.target = url && url !== "#" ? "_blank" : "_self";
     card.rel = "noopener";
     card.removeAttribute("data-dummy");
 
@@ -946,7 +887,7 @@
 
     // One front read is enough. social-snapshot-current already resolves the
     // request country, so waiting for social-country-route as a second serverless
-    // dependency only delays the nine main rows. Browser language remains the
+    // dependency only delays the six main rows. Browser language remains the
     // lightweight fallback for language ranking.
     mainRunInFlight = loadCurrentSnapshot()
       .then(function (current) {
@@ -958,17 +899,29 @@
           source: "stored_release_current_route"
         });
 
-        // Social main and the right product panel have different owners.
-        // The nine SNS rows may read only the durable Social Stored Release.
-        // If that release is temporarily unavailable, preserve the existing
-        // Social cards; never substitute the Distribution-owned right snapshot.
+        // Prefer the durable stored Social release. If it is temporarily
+        // unavailable, reuse the canonical snapshot request that the independent
+        // Distribution-owned right panel already started. Never start a duplicate
+        // multi-megabyte snapshot fetch from the Social main path.
         if (!(current && current.snapshot)) {
-          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-            source: "stored_release_current",
-            status: "stored_release_unavailable_preserve_existing_social_slots",
-            loadedAt: new Date().toISOString(),
-          };
-          return false;
+          return getInitialRightSnapshotPromise().then(function (canonicalSnapshot) {
+            if (!canonicalSnapshot) {
+              window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+                source: "stored_release_current+canonical_snapshot_engine_output",
+                status: "both_readbacks_unavailable_preserve_existing_slots",
+                loadedAt: new Date().toISOString(),
+              };
+              return false;
+            }
+            lastMainSnapshot = canonicalSnapshot;
+            window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+              source: "canonical_snapshot_engine_output_reused",
+              status: "front_readback_recovered",
+              url: RIGHT_SNAPSHOT_URL,
+              loadedAt: new Date().toISOString(),
+            };
+            return renderMainSnapshot(lastMainSnapshot, lastRoute);
+          });
         }
 
         lastMainSnapshot = current.snapshot;

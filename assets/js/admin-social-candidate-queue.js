@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.8.1 - server-authoritative publish + profile fallback */
+/* IGDC Social Hub Content Operations v3.8.2 - six active main sections */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -18,9 +18,6 @@
     ["social-facebook", "Facebook", "facebook"],
     ["social-wechat", "WeChat", "wechat"],
     ["social-weibo", "Weibo", "weibo"],
-    ["social-pinterest", "Pinterest", "pinterest"],
-    ["social-reddit", "Reddit", "reddit"],
-    ["social-twitter", "X · Twitter", "twitter"],
   ];
   var order = SECTIONS.map(function (x) {
       return x[0];
@@ -1306,7 +1303,7 @@
     button.textContent = open ? "등록부 접기" : "등록부 펼치기";
     button.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
-      // Always reopen cleanly with all nine section bodies folded.
+      // Always reopen cleanly with all six section bodies folded.
       openDetailQueue = "";
       openDetailSection = "";
       renderSections();
@@ -1885,23 +1882,27 @@
     j.qualitySweepBatches = Number(j.qualitySweepBatches || 0);
     j.registrySweepBatches = Number(j.registrySweepBatches || 0);
     j.registryCursor = Number(j.registryCursor || 0);
-    // Registered influencers are priority seeds, not the only discovery source.
-    // Start each run with one registry slice, then immediately continue with
-    // broad/local+global discovery. Remaining creators are revisited by cursor
-    // rotation and the scheduled collector instead of blocking generic search.
-    if (!dryRun && !j.registryPriorityPassDone) {
+    // Registered influencers are not decorative metadata. Every normal section
+    // run must research every policy-allowed registered creator first, even when
+    // 120+ latest-content rows already exist. Only then does generic discovery
+    // continue filling or rotating the section.
+    if (!dryRun && !j.registrySweepDone) {
       j.registrySweepActive = true;
-      j.batch += 1;
-      progress(j);
-      var registryResult = await collectOne(section, false, j);
-      var registryNew = newIds(registryResult, known);
-      j.newlyFound += registryNew;
-      j.sectionCount += registryNew;
-      j.registryPriorityPassDone = true;
+      var registrySafety = 0;
+      while (!stopRequested && !j.registrySweepDone && registrySafety < 500) {
+        registrySafety += 1;
+        j.batch += 1;
+        progress(j);
+        var registryResult = await collectOne(section, false, j);
+        var registryNew = newIds(registryResult, known);
+        j.newlyFound += registryNew;
+        j.sectionCount += registryNew;
+        progress(j);
+        saveJob(j);
+        if (!j.registrySweepDone && !stopRequested) await wait(450);
+      }
       j.registrySweepActive = false;
-      progress(j);
       saveJob(j);
-      if (!stopRequested) await wait(300);
     }
     var maxEmpty = Math.max(6, Number(j.catalogSize || 15));
     while (
@@ -2002,7 +2003,6 @@
       registrySweepTotal: 0,
       registrySweepDone: false,
       registrySweepActive: false,
-      registryPriorityPassDone: false,
       qualitySweepBatches: 0,
       qualitySweepTarget: /^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section) ? 8 : 6,
       qualitySweepDone: false,
@@ -2136,7 +2136,7 @@
       saveJob(j);
       if (j.paused) {
         show(
-          "수집을 일시정지했습니다. 전체 9개 섹션 버튼을 다시 누르면 현재 섹션부터 이어집니다.",
+          "수집을 일시정지했습니다. 전체 6개 섹션 버튼을 다시 누르면 현재 섹션부터 이어집니다.",
           "ok",
         );
       } else {
@@ -2154,7 +2154,7 @@
           }),
         });
         show(
-          "전체 9개 섹션 수집·품질 보강 완료: 검색 " +
+          "전체 6개 섹션 수집·품질 보강 완료: 검색 " +
             j.searched +
             "건, 최신 콘텐츠 후보 " +
             j.direct +
@@ -2589,7 +2589,7 @@
     }
   }
   async function autoCurate(sectionKey, skipConfirm) {
-    var target = sectionKey ? label(sectionKey) : "전체 9개 섹션",
+    var target = sectionKey ? label(sectionKey) : "전체 6개 섹션",
       scope = currentScope(),
       scopeName =
         (scope.country &&
@@ -2943,7 +2943,7 @@
   }
 
   async function actualApply(sectionKey, skipConfirm, exactIds, publishMode, requestedSections) {
-    var target = sectionKey ? label(sectionKey) : "전체 9개 섹션",
+    var target = sectionKey ? label(sectionKey) : "전체 6개 섹션",
       scope = currentScope(),
       scopeName =
         (scope.country &&
@@ -3226,7 +3226,7 @@
   async function actualUnapplyAll(sectionKey) {
     var target = sectionKey
       ? label(sectionKey) + " 섹션 전체"
-      : "전체 9개 섹션";
+      : "전체 6개 섹션";
     try {
       var ids = await currentPublishedIds(sectionKey);
       if (!ids.length) {
@@ -3311,7 +3311,7 @@
         return '<label class="small" style="display:inline-flex;align-items:center;gap:5px"><input class="aiSectionCheck" type="checkbox" value="' +
           esc(key) + '" /> ' + esc(label(key)) + '</label>';
       }).join("") +
-      '<button id="aiSelectAllSectionsBtn" class="secondary" type="button">9개 전체 선택</button>' +
+      '<button id="aiSelectAllSectionsBtn" class="secondary" type="button">6개 전체 선택</button>' +
       '<button id="aiClearSectionsBtn" class="secondary" type="button">선택 해제</button>';
     $("aiSelectAllSectionsBtn").onclick = function () {
       host.querySelectorAll(".aiSectionCheck").forEach(function (el) { el.checked = true; });

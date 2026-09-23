@@ -4,10 +4,10 @@
  * Optional Social AI policy envelope used only before SearchBank publication.
  * No snapshot/front/rightPanel mutation occurs here.
  */
-const VERSION = "social-ai-policy-runtime-v1.3.0-conversation-search-binding";
+const VERSION = "social-ai-policy-runtime-v1.3.1-six-main-sections";
 const SECTION_KEYS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter",
+  "social-wechat", "social-weibo",
 ]);
 
 const DEFAULT_PREFERRED_TOPICS = Object.freeze([
