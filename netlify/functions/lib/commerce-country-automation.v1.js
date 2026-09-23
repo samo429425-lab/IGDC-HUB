@@ -2788,8 +2788,36 @@ async function unmatchPrivateResearchRows(actorId,scope,products,handled,explici
   }
   return{removed,skipped,blocked,failed,details};
 }
+async function persistLatestProductPermanentExclusion(actorId,scope,productInput){
+  const product=plain(productInput),candidateId=productCandidateId(scope,product),now=iso();
+  let existing=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url,thumbnail_url,title&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0];
+  if(existing&&text(existing.source_ref)!==PRODUCT_SOURCE_REF){const error=new Error("existing_non_product_candidate_preserved");error.code="existing_non_product_candidate_preserved";throw error;}
+  const base=productCandidatePayload(actorId,scope,product,"research_pending"),prior=plain(existing&&existing.source_payload),payload=Object.assign({},base,prior,{
+    title:first(base.title,prior.title,text(product.productName||product.title)||"영구 제외 상품"),
+    url:first(base.url,prior.url,productUrl(product)),externalProductUrl:first(base.externalProductUrl,prior.externalProductUrl,productUrl(product)),
+    image:first(base.image,prior.image,productImageUrl(product)),thumb:first(base.thumb,prior.thumb,productImageUrl(product)),
+    slotDecision:"purge",approvedPlacement:null,selectedPlacement:null,placement:null,publicPublication:false,automaticImport:false,
+    queueControl:Object.assign({},plain(prior.queueControl),{schema:"igdc-private-product-queue-control.v1",action:"purge",hiddenFromCountryQueue:true,permanentExcluded:true,rediscoveryAllowed:false,decidedAt:now,decidedBy:text(actorId)||"administrator"}),
+    review:Object.assign({},plain(prior.review),{state:"permanent_excluded",decidedAt:now,decidedBy:text(actorId)||"administrator"}),
+    managementControl:Object.assign({},plain(prior.managementControl),{schema:"igdc-product-management-control.v1",source:"administrator",administratorLocked:true,aiReclassificationAllowed:false,updatedAt:now,updatedBy:text(actorId)||"administrator"})
+  });
+  delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
+  try{await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId));}catch(_assignmentError){}
+  const row={id:candidateId,kind:"product",title:text(payload.title)||"영구 제외 상품",official_url:safeUrl(payload.externalProductUrl)||null,status:"suppressed",source_ref:PRODUCT_SOURCE_REF,thumbnail_url:safeUrl(payload.image)||null,description:"Administrator permanent product exclusion tombstone.",owner_note:"관리자가 최신 상품 리서치 목록에서 영구 제외했습니다. 동일 상품의 자동 재수집·승격을 차단합니다.",source_payload:storageSafeJsonValue(payload,0),updated_at:now};
+  if(existing)await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),row);else{row.created_at=now;row.created_by=text(actorId)||"administrator";await SlotStore.insert("gslot_candidates",row,"resolution=merge-duplicates,return=minimal");}
+  return{candidateId,status:"permanent_excluded",identity:ProductRanking.productIdentity(product)||text(product.id)||productUrl(product)};
+}
+
 async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime,scope,operation){
   const requestedIds=new Set(array(input&&input.productIds).map(text).filter(Boolean).slice(0,100)),hasSelection=requestedIds.size>0||array(input&&input.productRefs).length>0,handled=new Set(array(runtime.partialQueueStagedIdentities).map(text).filter(Boolean)),explicitlyUnstaged=new Set(array(runtime.partialQueueUnstagedIdentities).map(text).filter(Boolean));
+  if(operation==="purge"){
+    if(!hasSelection){const error=new Error("영구 제외할 최신 상품을 선택하세요.");error.statusCode=400;throw error;}
+    const rows=await resolveChunkedProductSelection(job,input),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)),details=[];let excluded=0,failed=0;
+    for(const product of rows){try{const saved=await persistLatestProductPermanentExclusion(actorId,scope,product),identity=saved.identity;if(identity)deletedLatest.add(identity);excluded+=1;details.push(saved);}catch(error){failed+=1;details.push({productId:text(product&&product.id),status:"failed",error:text(error&&error.message||error)});}}
+    const deletedKeys=Array.from(new Set(rows.flatMap(productSelectionAliases))).slice(0,400),partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"purge",source:"latest_list_manual",eligible:rows.length,done:excluded,remaining:0,attempted:rows.length,handled:excluded,permanentExcluded:excluded,deletedKeys,blocked:0,failed,complete:true,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsPreserved:false,latestResearchRowsDeleted:excluded,rediscoveryAllowed:false,automaticFullCompletionStaging:false,stagedAt:iso(),stagedBy:text(actorId)||"administrator",details};
+    runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
+    return{ok:failed===0,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,currentCyclePermanentExclude:true,rediscoveryAllowedNextResearch:false,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
+  }
   if(operation==="delete"){
     if(!hasSelection){const error=new Error("대기열에서 삭제할 최신 상품을 선택하세요.");error.statusCode=400;throw error;}
     const rows=await resolveChunkedProductSelection(job,input),result=await unmatchPrivateResearchRows(actorId,scope,rows,handled,explicitlyUnstaged),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));let deleted=0;
@@ -2857,7 +2885,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
 
 
 async function stageCurrentProductResearchQueue(actorId,input){
-  const scope=researchScope(input),requestedOperation=lower(input&&input.operation),operation=requestedOperation==="unmatch"?"unmatch":(requestedOperation==="delete"?"delete":"stage");
+  const scope=researchScope(input),requestedOperation=lower(input&&input.operation),operation=requestedOperation==="unmatch"?"unmatch":(requestedOperation==="delete"?"delete":(requestedOperation==="purge"?"purge":"stage"));
   let runtime={};try{runtime=await productRuntimeRule(scope);}catch(_runtimeReadError){runtime={};}
   const job=await productJobRule(scope);
   if(!job||job.schema!==PRODUCT_JOB_SCHEMA){const error=new Error("현재 조사분을 등록할 공식 상품 리서치 작업이 없습니다.");error.statusCode=404;throw error;}
@@ -2875,7 +2903,7 @@ async function stageCurrentProductResearchQueue(actorId,input){
   return stageCurrentProductResearchQueueLegacy(actorId,input);
 }
 async function stageCurrentProductResearchQueueLegacy(actorId, input) {
-  const scope = researchScope(input), requestedOperation = lower(input && input.operation), operation = requestedOperation === "unmatch" ? "unmatch" : (requestedOperation === "delete" ? "delete" : "stage");
+  const scope = researchScope(input), requestedOperation = lower(input && input.operation), operation = requestedOperation === "unmatch" ? "unmatch" : (requestedOperation === "delete" ? "delete" : (requestedOperation === "purge" ? "purge" : "stage"));
   let runtime = {};
   try { runtime = await productRuntimeRule(scope); } catch (_runtimeReadError) { runtime = {}; }
   const job = await productJobRule(scope);
@@ -2901,6 +2929,15 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
   const handled = new Set(array(runtime.partialQueueStagedIdentities).concat(array(job.partialQueueStagedIdentities)).map(text).filter(Boolean));
   const explicitlyUnstaged = new Set(array(runtime.partialQueueUnstagedIdentities).concat(array(job.partialQueueUnstagedIdentities)).map(text).filter(Boolean));
   let selectionReconcile={actualCandidateIds:[],actualIdentities:new Set(),staleHandledRepaired:0,checked:0};
+
+  if (operation === "purge") {
+    if (!requestedIds.size) { const error = new Error("영구 제외할 최신 상품을 선택하세요."); error.statusCode = 400; throw error; }
+    const selectedPurgeRows=requestedRows.slice(0,100),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)),details=[];let excluded=0,failed=0;
+    for(const product of selectedPurgeRows){try{const saved=await persistLatestProductPermanentExclusion(actorId,scope,product),identity=saved.identity;if(identity)deletedLatest.add(identity);excluded+=1;details.push(saved);}catch(error){failed+=1;details.push({productId:text(product&&product.id),status:"failed",error:text(error&&error.message||error)});}}
+    const deletedKeys=Array.from(new Set(selectedPurgeRows.flatMap(productSelectionAliases))).slice(0,400),partialQueue={schema:"igdc-product-research-partial-private-queue.v3",operation:"purge",source:"latest_list_manual",eligible:selectedPurgeRows.length,done:excluded,remaining:0,attempted:selectedPurgeRows.length,handled:excluded,permanentExcluded:excluded,deletedKeys,blocked:0,failed,complete:true,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsPreserved:false,latestResearchRowsDeleted:excluded,rediscoveryAllowed:false,automaticFullCompletionStaging:false,stagedAt:iso(),stagedBy:text(actorId)||"administrator",details};
+    runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
+    return{ok:failed===0,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,currentCyclePermanentExclude:true,rediscoveryAllowedNextResearch:false,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
+  }
 
   if (operation === "delete") {
     if (!requestedIds.size) { const error = new Error("대기열에서 삭제할 최신 상품을 선택하세요."); error.statusCode = 400; throw error; }
@@ -5010,7 +5047,7 @@ async function supplierScopedCandidateRows(scope,fields,extra,limitInput){
   return Array.from(seen.values()).slice(0,limit);
 }
 async function persistSupplierSuppression(scope,row,actorId,action,key){
-  const url=researchCandidateUrl({url:supplierRowUrl(row)}); if(!url) return {status:"suppression_not_persisted",reason:"url_missing"};
+  const url=supplierControlTargetUrl(supplierRowUrl(row)); if(!url) return {status:"suppression_not_persisted",reason:"url_missing"};
   const id="country_supplier_control_"+sha256(scope.country+"|"+scope.region+"|"+url).slice(0,24),now=iso();
   const payload={entityKind:"supplier_control_tombstone",targetCountry:scope.country,targetRegion:scope.region,sourceCandidateUrl:url,supplierOfficialUrl:first(row&&row.normalizedSupplierUrl,url),operatorControl:{action,key,blockedAt:now,blockedBy:text(actorId)||"administrator",preventsRediscovery:true},aiAutomation:{country:scope.country,region:scope.region,operatorDecision:action,operatorDecisionAt:now,operatorDecisionBy:text(actorId)||"administrator",publicPublication:false,productImport:false}};
   const dbrow={id,kind:"supplier",title:text(row&&row.title)||supplierHostLabel(supplierRowHost(row)),official_url:url,status:"suppressed",source_ref:SOURCE_REF,description:"Administrator supplier research suppression tombstone. It prevents the same URL or domain from being reintroduced automatically.",owner_note:"표시 데이터는 제거하고 재수집 방지용 최소 차단 지문만 유지합니다.",source_payload:payload,updated_at:now};
@@ -5082,9 +5119,14 @@ async function persistSupplierResearchDecision(scope,targetRow,action,actorId,op
   return{updated};
 }
 
+function supplierControlTargetUrl(value){
+  const url=safeUrl(value);if(!url)return "";
+  try{const u=new URL(url);u.hash="";return u.toString();}catch(_error){return url;}
+}
+
 async function researchCandidateAction(actorId,input){
   const scope=researchScope(input),job=await researchJobRule(scope);if(!job||job.schema!==RESEARCH_JOB_SCHEMA){const error=new Error("책임 공급업체 단계별 리서치 작업을 찾을 수 없습니다.");error.statusCode=404;throw error;}
-  const action=lower(input&&input.decision),requested=Array.from(new Set(array(input&&input.urls).concat([first(input&&input.url,input&&input.supplierUrl)]).map((value)=>researchCandidateUrl({url:value})).filter(Boolean))).slice(0,500),allowed=["keep","hold","unpin","restore","dismiss","purge","block","unblock","remove_from_list"];
+  const action=lower(input&&input.decision),requested=Array.from(new Set(array(input&&input.urls).concat([first(input&&input.url,input&&input.supplierUrl)]).map(supplierControlTargetUrl).filter(Boolean))).slice(0,500),allowed=["keep","hold","unpin","restore","dismiss","purge","block","unblock","remove_from_list"];
   if(!requested.length||!allowed.includes(action)){const error=new Error("공급업체 후보 URL과 유지·보류·고정해제·복원·목록삭제·영구제외·차단·차단해제 결정을 확인하세요.");error.statusCode=400;throw error;}
   let active=array(job.candidates),holding=array(job.supplierHoldingCandidates),blocked=array(job.supplierBlockedCandidates);const keys=new Set(array(job.blockedSupplierKeys).map(text).filter(Boolean)),results=[],registry=await manualSupplierRegistry(scope);let manualRows=array(registry.suppliers),manualChanged=false,durableRows=[],durableReadError="";
   try{durableRows=array(await supplierScopedCandidateRows(scope,"id,status,source_ref,official_url,source_payload","",1000));}catch(error){durableReadError=text(error&&error.message)||"supplier_ledger_read_failed";}
@@ -5092,7 +5134,25 @@ async function researchCandidateAction(actorId,input){
   function removeManualExact(url){const before=manualRows.length;manualRows=manualRows.filter((row)=>supplierRootUrl(row&&row.officialUrl)!==supplierRootUrl(url));if(before!==manualRows.length)manualChanged=true;}
   function removeManualHost(host){const before=manualRows.length;manualRows=manualRows.filter((row)=>{try{return new URL(supplierRootUrl(row&&row.officialUrl)).hostname.toLowerCase().replace(/^www\./,"")!==host;}catch(_e){return true;}});if(before!==manualRows.length)manualChanged=true;}
   for(const targetUrl of requested){
-    const target=allRows().find((row)=>sameSupplierUrl(row,targetUrl));if(!target){results.push({url:targetUrl,status:"not_found"});continue;}
+    let target=allRows().find((row)=>sameSupplierUrl(row,targetUrl));
+    if(!target&&!durableReadError){
+      const wanted=supplierControlTargetUrl(targetUrl).toLowerCase();
+      const durableRow=durableRows.find((entry)=>{
+        const payload=plain(entry&&entry.source_payload),automation=plain(payload.aiAutomation);
+        const candidates=[payload.sourceCandidateUrl,payload.supplierOfficialUrl,payload.url,entry&&entry.official_url,automation.sourceUrl,automation.officialUrl].map(supplierControlTargetUrl).filter(Boolean);
+        return candidates.some((value)=>value.toLowerCase()===wanted);
+      });
+      if(durableRow){
+        const payload=plain(durableRow.source_payload),automation=plain(payload.aiAutomation),official=supplierControlTargetUrl(first(payload.supplierOfficialUrl,durableRow.official_url,targetUrl));
+        target={
+          id:text(durableRow.id),title:first(durableRow.title,payload.title,payload.supplierName,automation.supplierName),
+          url:targetUrl,sourceCandidateUrl:targetUrl,normalizedSupplierUrl:official||targetUrl,officialUrl:official||targetUrl,
+          supplierType:first(payload.supplierType,automation.supplierType,"research_reference"),queueState:lower(durableRow.status)==="suppressed"?"blocked":lower(durableRow.status)==="hold"?"holding":"active",
+          durableCandidateId:text(durableRow.id)
+        };
+      }
+    }
+    if(!target){results.push({url:targetUrl,status:"not_found"});continue;}
     const host=supplierRowHost(target),urlKey="url:"+sha256(targetUrl.toLowerCase()).slice(0,32),hostKey=host?"host:"+host:"";
     if(action==="keep"){active=active.map((row)=>sameSupplierUrl(row,targetUrl)?Object.assign({},row,{operatorDecision:"keep",updatedAt:iso()}):row);
     }else if(action==="unpin"){active=active.map((row)=>sameSupplierUrl(row,targetUrl)?Object.assign({},row,{adminPinned:false,manualPinned:false,operatorDecision:"unpin",updatedAt:iso()}):row);removeManualExact(targetUrl);

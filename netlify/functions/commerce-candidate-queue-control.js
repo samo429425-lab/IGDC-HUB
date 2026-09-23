@@ -49,7 +49,7 @@ function requireExpectedBucket(row,expectedBucket,action){
     if(actual==="removed" && ["dismiss","remove_from_list"].includes(action))return actual;
     const error=new Error("candidate_state_mismatch: expected "+expected+", actual "+actual);error.code="candidate_state_mismatch";throw error;
   }
-  if(expected==="hold" && !["dismiss","remove_from_list","reject"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
+  if(expected==="hold" && !["dismiss","remove_from_list","reject","purge"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
   if(expected==="reject" && !["dismiss","remove_from_list","purge"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
   return actual;
 }
