@@ -16,7 +16,7 @@
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
   const REGIONAL_SNAPSHOT_URL=''; // Edge-routed canonical snapshot is the only source.
   const LIMIT_MAIN=100, LIMIT_RIGHT=100;
-  const RENDER_BATCH=20;
+  const RENDER_BATCH=12;
 
   // Cached content is only the instant first view. Every return visit revalidates
   // the public snapshot without delaying the visible page.
@@ -158,6 +158,31 @@
   // Local seed cards are used only when the server HTML has no visible cards.
 
 
+  let deferredBackgroundObserver=null;
+  function applyDeferredBackground(el,url){
+    if(!el||!url)return;
+    el.style.backgroundImage="url('"+escUrl(url)+"')";
+    el.style.backgroundSize='cover';
+    el.style.backgroundPosition='center';
+    delete el.dataset.igdcDeferredBg;
+  }
+  function deferBackground(el,url){
+    if(!el||!url)return;
+    el.dataset.igdcDeferredBg=text(url);
+    if(!('IntersectionObserver' in window)){applyDeferredBackground(el,url);return;}
+    if(!deferredBackgroundObserver){
+      deferredBackgroundObserver=new IntersectionObserver(function(entries){
+        entries.forEach(function(entry){
+          if(!entry.isIntersecting)return;
+          deferredBackgroundObserver.unobserve(entry.target);
+          const pending=entry.target.dataset.igdcDeferredBg||'';
+          if(pending)applyDeferredBackground(entry.target,pending);
+        });
+      },{root:null,rootMargin:'700px 420px',threshold:.01});
+    }
+    deferredBackgroundObserver.observe(el);
+  }
+
   function makeCard(item,track){
     const root=document.createElement('div'); root.className='thumb-card';
     // This renderer already emits its own exact tracker calls. Keep the global
@@ -170,10 +195,7 @@
     if(item&&item.externalOutboundUrl) root.setAttribute('data-external-outbound','1');
     const img=document.createElement('div'); img.className='thumb-img';
     const image=pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']);
-    if(image){
-      img.style.backgroundImage="url('"+escUrl(image)+"')";
-      img.style.backgroundSize='cover'; img.style.backgroundPosition='center';
-    }
+    if(image) deferBackground(img,image);
     const title=document.createElement('div'); title.className='thumb-title'; title.textContent=text(pick(item,['title','name','text'])||'Product');
     const meta=document.createElement('div'); meta.className='thumb-meta'; meta.textContent=text(pick(item,['meta','subtitle','summary','description']));
     root.appendChild(img); root.appendChild(title); root.appendChild(meta);
@@ -319,8 +341,8 @@
       if(nearEnd) renderMore(current);
     },{passive:true});
   }
-  function shouldRender(snapshot,priority,kind){
-    const key=fingerprint(snapshot,kind);
+  function shouldRender(snapshot,priority,kind,key){
+    key=key||fingerprint(snapshot,kind);
     if(key&&key===activeFingerprint) return false;
     // A verified regional result is more specific than a generic static snapshot.
     // Static data may fill an empty page, but may never displace a visible regional view.
@@ -329,12 +351,13 @@
   }
   function render(snapshot,priority,kind){
     const sections=sectionsOf(snapshot);
-    if(!sections||!shouldRender(snapshot,priority,kind)) return false;
+    if(!sections) return false;
+    const nextFingerprint=fingerprint(snapshot,kind);
+    if(!shouldRender(snapshot,priority,kind,nextFingerprint)) return false;
 
     // Give every section its first usable row before filling later cards.
     // The complete approved list is preserved; only DOM commits are batched.
     const generation=++renderGeneration;
-    const nextFingerprint=fingerprint(snapshot,kind);
     activePriority=priority;
     activeFingerprint=nextFingerprint;
     activeStamp=snapshotStamp(snapshot);

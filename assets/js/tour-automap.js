@@ -19,6 +19,7 @@
 
   const RIGHT_PANEL_ID = "rightAutoPanel";
   const RIGHT_SLOT_COUNT = 100;
+  const RENDER_BATCH = 12;
   const SOURCE_SCAN_LIMIT = RIGHT_SLOT_COUNT + 40;
 
   const MOBILE_RAIL_ID = "tour-mobile-rail";
@@ -368,14 +369,32 @@
     renderRightPanel(safe);
   }
 
-  function preflightFrameHosts(items){
+  async function preflightFrameHosts(items){
     const firstByHost = new Map();
     (items || []).forEach(function(item){
       const host = destinationHost(item && item.sourceUrl);
       if (host && !firstByHost.has(host)) firstByHost.set(host, item.sourceUrl);
     });
-    if (!firstByHost.size) return;
-    Promise.all(Array.from(firstByHost.values()).map(frameAllowedInsideIgdc)).then(rerenderAfterFrameGate);
+    const urls = Array.from(firstByHost.values());
+    if (!urls.length) return;
+    let cursor = 0;
+    async function worker(){
+      while(cursor < urls.length){
+        const index = cursor++;
+        await frameAllowedInsideIgdc(urls[index]);
+      }
+    }
+    const workers = [];
+    const workerCount = Math.min(3, urls.length);
+    for(let i=0;i<workerCount;i++) workers.push(worker());
+    await Promise.all(workers);
+    rerenderAfterFrameGate();
+  }
+
+  function deferFramePreflight(items){
+    const task = function(){ preflightFrameHosts(items); };
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(task, { timeout: 1800 });
+    else setTimeout(task, 500);
   }
 
   function gateCardNavigation(ev, item, href){
@@ -471,37 +490,71 @@
     return box;
   }
 
+  const railRenderJobs = new WeakMap();
+
+  function renderRailBatch(container, items, limit, mobile) {
+    if (!container) return;
+    const list = (items || []).slice(0, limit);
+    container.innerHTML = "";
+    if (!list.length) return;
+    const job = { container: container, items: list, offset: 0, mobile: mobile, observer: null };
+    railRenderJobs.set(container, job);
+
+    function armObserver(current){
+      if (!current || !('IntersectionObserver' in window) || current.offset >= current.items.length) return;
+      if (current.observer) current.observer.disconnect();
+      const last = current.container.lastElementChild;
+      if (!last) return;
+      current.observer = new IntersectionObserver(function(entries){
+        if (!entries.some(function(entry){ return entry.isIntersecting; })) return;
+        current.observer.disconnect();
+        more(current);
+      }, { root:null, rootMargin:'600px', threshold:0.01 });
+      current.observer.observe(last);
+    }
+
+    function more(current){
+      if (!current || railRenderJobs.get(container) !== current) return;
+      const end = Math.min(current.offset + RENDER_BATCH, current.items.length);
+      const frag = document.createDocumentFragment();
+      for (let i=current.offset;i<end;i++) {
+        const card = createRightBox(current.items[i]);
+        if (current.mobile) card.classList.add("card");
+        frag.appendChild(card);
+      }
+      current.container.appendChild(frag);
+      current.offset = end;
+      armObserver(current);
+    }
+    more(job);
+
+    if (container.dataset.igdcTourBatchBound === "1") return;
+    container.dataset.igdcTourBatchBound = "1";
+    container.addEventListener("scroll", function(){
+      const current = railRenderJobs.get(container);
+      if (!current || current.offset >= current.items.length) return;
+      const horizontal = container.scrollWidth > container.clientWidth + 2;
+      const nearEnd = horizontal
+        ? container.scrollLeft + container.clientWidth >= container.scrollWidth - 60
+        : container.scrollTop + container.clientHeight >= container.scrollHeight - 60;
+      if (nearEnd) more(current);
+    }, { passive:true });
+  }
+
   function renderRightPanel(items) {
     const panel = byId(RIGHT_PANEL_ID);
     if (!panel) return;
-
-    panel.innerHTML = "";
-    if (!items || !items.length) return;
-    const frag = document.createDocumentFragment();
-    for (const it of items.slice(0, RIGHT_SLOT_COUNT)) frag.appendChild(createRightBox(it));
-    panel.appendChild(frag);
+    renderRailBatch(panel, items, RIGHT_SLOT_COUNT, false);
   }
 
   function renderMobileRail(items) {
     const rail = byId(MOBILE_RAIL_ID);
     const list = $(MOBILE_LIST_SEL);
     if (!rail || !list) return;
-
     if (!items || !items.length) { list.innerHTML = ""; rail.style.display = "none"; return; }
-
     rail.style.display = "block";
     ensureMobileCss();
-
-    list.innerHTML = "";
-    const frag = document.createDocumentFragment();
-
-    for (const it of items.slice(0, MOBILE_LIMIT)) {
-      const card = createRightBox(it);
-      card.classList.add("card");
-      frag.appendChild(card);
-    }
-
-    list.appendChild(frag);
+    renderRailBatch(list, items, MOBILE_LIMIT, true);
   }
 
   async function run() {
@@ -524,7 +577,7 @@
     const visible = filteredRenderableItems(items);
     renderMobileRail(visible);
     renderRightPanel(visible);
-    preflightFrameHosts(items);
+    deferFramePreflight(items);
   }
 
   disablePsomThumbGrid();

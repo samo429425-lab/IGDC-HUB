@@ -437,7 +437,7 @@
     function beginLoad(){
       if(settled||loadStarted||!a.isConnected)return;loadStarted=true;
       loader=new Image();loader.decoding='async';
-      try{if(a.dataset.thumbEager==='1'&&'fetchPriority' in loader)loader.fetchPriority='high';}catch(_e){}
+      try{if('fetchPriority' in loader)loader.fetchPriority=a.dataset.thumbEager==='1'?'high':'low';}catch(_e){}
       loader.onload=function(){if(settled)return;if(loader.naturalWidth>=120&&loader.naturalHeight>=68)activate();else fail('thumbnail_too_small');};
       loader.onerror=function(){fail('thumbnail_load_failed');};
       loader.src=thumb;
@@ -1023,8 +1023,43 @@
     return false;
   }
 
+  const EAGER_LINE_KEYS=new Set(['media-trending','media-movie','media-drama']);
+  const deferredLinePayloads=new WeakMap();
+  let deferredLineObserver=null;
+
+  function ensureDeferredLineObserver(){
+    if(deferredLineObserver||!('IntersectionObserver' in window))return deferredLineObserver;
+    deferredLineObserver=new IntersectionObserver((entries)=>{
+      for(const entry of entries){
+        if(!entry.isIntersecting)continue;
+        deferredLineObserver.unobserve(entry.target);
+        const items=deferredLinePayloads.get(entry.target);
+        deferredLinePayloads.delete(entry.target);
+        if(items&&items.length)applyLine(entry.target,items);
+      }
+    },{root:null,rootMargin:'1200px 0px',threshold:.01});
+    return deferredLineObserver;
+  }
+
+  function scheduleLineApply(line,items){
+    if(!line||!Array.isArray(items)||!items.length)return;
+    const key=canonKey(line.getAttribute('data-psom-key')||'');
+    if(EAGER_LINE_KEYS.has(key)||!('IntersectionObserver' in window)){
+      applyLine(line,items);
+      return;
+    }
+    deferredLinePayloads.set(line,items);
+    const observer=ensureDeferredLineObserver();
+    if(observer)observer.observe(line);else applyLine(line,items);
+  }
+
+  function compactMappedLines(lines){
+    lines.forEach((line)=>{if(line&&line.dataset&&line.dataset.igdcMediaMapped==='1')compactLine(line);});
+  }
+
   function applyLine(line, items){
     if(!Array.isArray(items) || items.length === 0) return;
+    line.dataset.igdcMediaMapped='1';
     const ph=ensurePlaceholders(line);
     const ranked=items.filter(isFrontCandidate).slice().sort((a,b)=>frontPriority(b)-frontPriority(a));
     const immediate=[],pending=[];
@@ -1519,12 +1554,12 @@
       if(!key||key.indexOf('media-')!==0)continue;
       const items=extractItems(sectionMap[key]);
       if(items&&items.length){
-        applyLine(line,items);
+        scheduleLineApply(line,items);
       }else if(ENABLE_FEED_MEDIA_FALLBACK){
-        fallbackJobs.push(loadFeedItems(key).then((feedItems)=>{if(feedItems&&feedItems.length)applyLine(line,feedItems);}));
+        fallbackJobs.push(loadFeedItems(key).then((feedItems)=>{if(feedItems&&feedItems.length)scheduleLineApply(line,feedItems);}));
       }
     }
-    if(fallbackJobs.length)Promise.allSettled(fallbackJobs).then(()=>lines.forEach(compactLine));
+    if(fallbackJobs.length)Promise.allSettled(fallbackJobs).then(()=>compactMappedLines(lines));
 
     // Start hero selection only after the rail bind pass. The hero is therefore
     // guaranteed to be an expansion of a successfully rendered movie/drama card.
@@ -1538,13 +1573,13 @@
     // Async image decode/recovery and any later renderer must not be allowed to
     // reintroduce Sample/real interleaving. Re-compact a few times after the
     // initial mapping as an additional deterministic safety net.
-    [0,120,420,1100,2600].forEach((delay)=>setTimeout(()=>lines.forEach(compactLine),delay));
+    [0,120,420,1100,2600].forEach((delay)=>setTimeout(()=>compactMappedLines(lines),delay));
   }
 
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.5-hero-live-manual-rotation-fix';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.6-deferred-rail-performance';
 })();
 
 

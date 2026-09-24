@@ -13,6 +13,7 @@
   const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
   const FEED_URL = ''; // IP-scoped network market slots never fall back to a generic feed.
   const LIMIT = 100;
+  const RENDER_BATCH = 12;
 
   const MOBILE_ID = 'nh-mobile-rail-list';
   const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v2';
@@ -277,32 +278,66 @@
     });
   }
 
+  const railRenderJobs = new WeakMap();
+
+  function renderRail(container, items, mobile){
+    if(!container) return;
+    const list = (items || []).slice(0, LIMIT);
+    container.innerHTML = '';
+    if(!list.length) return;
+    const job = { container:container, items:list, offset:0, mobile:mobile, observer:null };
+    railRenderJobs.set(container,job);
+
+    function armObserver(current){
+      if(!current||!('IntersectionObserver' in window)||current.offset>=current.items.length) return;
+      if(current.observer) current.observer.disconnect();
+      const last=current.container.lastElementChild;
+      if(!last) return;
+      current.observer=new IntersectionObserver(function(entries){
+        if(!entries.some(function(entry){return entry.isIntersecting;})) return;
+        current.observer.disconnect();
+        more(current);
+      },{root:null,rootMargin:'600px',threshold:.01});
+      current.observer.observe(last);
+    }
+
+    function more(current){
+      if(!current || railRenderJobs.get(container)!==current) return;
+      const end=Math.min(current.offset+RENDER_BATCH,current.items.length);
+      const frag=document.createDocumentFragment();
+      for(let i=current.offset;i<end;i++) frag.appendChild(createCard(current.items[i],current.mobile));
+      current.container.appendChild(frag);
+      current.offset=end;
+      armObserver(current);
+    }
+    more(job);
+
+    if(container.dataset.igdcNetworkBatchBound==='1') return;
+    container.dataset.igdcNetworkBatchBound='1';
+    container.addEventListener('scroll',function(){
+      const current=railRenderJobs.get(container);
+      if(!current||current.offset>=current.items.length) return;
+      const horizontal=container.scrollWidth>container.clientWidth+2;
+      const nearEnd=horizontal
+        ? container.scrollLeft+container.clientWidth>=container.scrollWidth-60
+        : container.scrollTop+container.clientHeight>=container.scrollHeight-60;
+      if(nearEnd) more(current);
+    },{passive:true});
+  }
+
   function renderMobile(items){
     const list = $(MOBILE_ID);
     if (!list) return;
     if (!items || !items.length) { list.innerHTML = ''; return; }
-
     ensureMobileCss();
-    list.innerHTML = '';
-
-    const frag = document.createDocumentFragment();
-    for (const item of items){
-      frag.appendChild(createCard(item, true));
-    }
-    list.appendChild(frag);
+    renderRail(list,items,true);
   }
 
   function renderDesktopDirect(items){
     const panel = document.getElementById('rightAutoPanel');
     if (!panel) return;
     if (!items || !items.length) { panel.innerHTML = ''; return; }
-
-    panel.innerHTML = '';
-    const frag = document.createDocumentFragment();
-    for (const item of items){
-      frag.appendChild(createCard(item, false));
-    }
-    panel.appendChild(frag);
+    renderRail(panel,items,false);
   }
 
   async function run(){

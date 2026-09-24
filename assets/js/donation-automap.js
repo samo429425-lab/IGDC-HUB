@@ -13,6 +13,32 @@
 (async function(){
   'use strict';
 
+  const RENDER_BATCH = 12;
+  const sectionRenderJobs = new WeakMap();
+
+  // The legacy Donation HTML still contains a DOMContentLoaded placeholder
+  // generator with data-count=100 on every rail.  Cap only that first shell
+  // pass, then restore the declared count before this automap reads the real
+  // slot limit.  One shared JS change therefore protects every language page
+  // without rewriting 30 separate HTML files.
+  function capLegacyPlaceholderBurst(){
+    const rows = Array.from(document.querySelectorAll('.feed-row[data-count]'));
+    if(!rows.length) return;
+    rows.forEach((row)=>{
+      row.dataset.igdcOriginalCount = row.dataset.count || '';
+      row.dataset.count = String(RENDER_BATCH);
+    });
+    document.addEventListener('DOMContentLoaded', ()=>{
+      rows.forEach((row)=>{
+        const original = row.dataset.igdcOriginalCount;
+        if(original) row.dataset.count = original;
+        else row.removeAttribute('data-count');
+        delete row.dataset.igdcOriginalCount;
+      });
+    }, { once:true });
+  }
+  capLegacyPlaceholderBurst();
+
   const SNAPSHOT_PATHS = [
     // 1) direct builder (feed integrated)
     '/.netlify/functions/donation-snapshot-builder',
@@ -482,6 +508,8 @@ function groupBySection(items){
   function wireThumbnailFailures(box){
     if(!box) return;
     box.querySelectorAll('img.donation-site-thumb').forEach((img)=>{
+      if(img.dataset.donationThumbFailBound === '1') return;
+      img.dataset.donationThumbFailBound = '1';
       const fail=()=>{
         img.style.display='none';
         const fallback=img.parentElement?.querySelector?.('.donation-thumb-fallback');
@@ -604,10 +632,31 @@ function mountSection(key, items, limit){
   box.innerHTML = '';
 
   const slice = list.slice(0, finalLimit);
-  for(const it of slice){
-    box.insertAdjacentHTML('beforeend', renderCard(it));
+  const job = { box, items:slice, offset:0 };
+  sectionRenderJobs.set(box, job);
+
+  function renderMore(current){
+    if(!current || sectionRenderJobs.get(box) !== current) return;
+    if(current.offset >= current.items.length) return;
+    const end = Math.min(current.offset + RENDER_BATCH, current.items.length);
+    const html = current.items.slice(current.offset, end).map(renderCard).join('');
+    box.insertAdjacentHTML('beforeend', html);
+    current.offset = end;
+    wireThumbnailFailures(box);
   }
-  wireThumbnailFailures(box);
+
+  renderMore(job);
+  if(box.dataset.donationBatchBound === '1') return;
+  box.dataset.donationBatchBound = '1';
+  box.addEventListener('scroll', ()=>{
+    const current = sectionRenderJobs.get(box);
+    if(!current || current.offset >= current.items.length) return;
+    const horizontal = box.scrollWidth > box.clientWidth + 2;
+    const nearEnd = horizontal
+      ? box.scrollLeft + box.clientWidth >= box.scrollWidth - 60
+      : box.scrollTop + box.clientHeight >= box.scrollHeight - 60;
+    if(nearEnd) renderMore(current);
+  }, { passive:true });
 }
 
   async function main(){

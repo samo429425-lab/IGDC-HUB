@@ -5,7 +5,7 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 
-const VERSION = "commerce-candidate-admin-authority-v1.0.1-removed-list-state";
+const VERSION = "commerce-candidate-admin-authority-v1.1.0-canonical-management-state";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ALLOWED_SOURCE_REFS = new Set(["country-product-ranking-review","commerce-candidate-review-api"]);
 const SECTION_KEYS = new Set([
@@ -109,14 +109,15 @@ async function applyOne(actor,candidateId,scope,decision,key,source){
     await removeScopeAssignments(oldRows,scope);
     delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.primaryPlacement;
     if(decision==="hold"){payload.slotDecision="hold";status="hold";effective="hold";}
-    else if(decision==="remove_from_list"){payload.slotDecision="removed_from_list";status="suppressed";effective="removed_from_list";}
+    else if(decision==="dismiss"){payload.slotDecision="removed";status="removed";effective="removed";}
+    else if(decision==="remove_from_list"){payload.slotDecision="removed_from_list";status="removed";effective="removed_from_list";}
     else if(decision==="reject"){payload.slotDecision="reject";status="rejected";effective="reject";}
     else if(decision==="purge"){payload.slotDecision="purge";status="suppressed";effective="purge";}
     else {payload.slotDecision="undecided";status="research_pending";effective="undecided";}
     payload.queueControl=Object.assign({},plain(payload.queueControl),{
       schema:"igdc-private-product-queue-control.v1",
-      action:decision==="remove_from_list"?"remove_from_list":effective,
-      hiddenFromCountryQueue:["hold","reject","purge","removed_from_list"].includes(effective),
+      action:decision==="dismiss"?"dismiss":(decision==="remove_from_list"?"remove_from_list":effective),
+      hiddenFromCountryQueue:["hold","reject","purge","removed","removed_from_list"].includes(effective),
       permanentExcluded:effective==="purge",
       rediscoveryAllowed:effective!=="purge",
       decidedAt:now,decidedBy:actorId
@@ -126,7 +127,8 @@ async function applyOne(actor,candidateId,scope,decision,key,source){
   }
 
   payload.decisionAt=now;payload.decisionBy=actorId;payload.decisionSource=source==="ai_automation"?"ai_automation":"administrator_candidate_authority";payload.publicPublication=false;payload.automaticImport=false;
-  payload.review=Object.assign({},plain(payload.review),{state:effective==="slot_candidate"?"pending":effective,decidedAt:now,decidedBy:actorId});
+  const reviewState=decision==="dismiss"?"deleted_from_management":(decision==="remove_from_list"?"removed_from_list":(effective==="slot_candidate"?"pending":effective));
+  payload.review=Object.assign({},plain(payload.review),{state:reviewState,decidedAt:now,decidedBy:actorId});
   await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{status,source_payload:payload,updated_at:now});
   return{candidateId,decision,effectiveDecision:effective,placement:payload.approvedPlacement||null,status,assignmentId:assignment&&assignment.id||null,ok:true};
 }
@@ -146,7 +148,7 @@ exports.handler=async function(event){
       requests=ids.map(candidateId=>({candidateId,placementKey:placementKey(body.placementKey)}));
     }
     if(!requests.length)throw Object.assign(new Error("처리할 상품 후보를 선택하세요."),{statusCode:400});
-    const allowed=new Set(["slot_candidate","sync_ai","undecided","hold","reject","purge","remove_from_list","front_unmatch"]);
+    const allowed=new Set(["slot_candidate","sync_ai","undecided","hold","reject","purge","dismiss","remove_from_list","front_unmatch"]);
     if(!allowed.has(decision))throw Object.assign(new Error("지원하지 않는 관리자 상품 작업입니다."),{statusCode:400});
 
     const results=[],failures=[];

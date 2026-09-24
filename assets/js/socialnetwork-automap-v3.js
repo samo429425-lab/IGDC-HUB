@@ -19,8 +19,9 @@
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 6;
   const MAIN_LIMIT = 100;
-  const MAIN_BATCH = 20;
+  const MAIN_BATCH = 12;
   const RIGHT_LIMIT = 100;
+  const RIGHT_BATCH = 12;
   const MANAGED_MAIN_KEYS = new Set([
     "social-youtube",
     "social-instagram",
@@ -30,6 +31,7 @@
     "social-weibo",
   ]);
   const mainRenderTokens = new WeakMap();
+  const rightRenderTokens = new WeakMap();
 
   function qs(sel, root) {
     return (root || document).querySelector(sel);
@@ -781,6 +783,40 @@
     a.appendChild(cap);
   }
 
+  function rightScrollHost(panel) {
+    if (!panel) return null;
+    if (panel.id === "rpMobileGrid") return panel.closest("#rpMobileScroller") || panel.parentElement || panel;
+    return panel;
+  }
+
+  function armRightObserver(job) {
+    if (!job || !('IntersectionObserver' in window) || job.offset >= Math.min(RIGHT_LIMIT, job.items.length)) return;
+    if (job.observer) job.observer.disconnect();
+    const last = job.panel.lastElementChild;
+    if (!last) return;
+    job.observer = new IntersectionObserver(function (entries) {
+      if (!entries.some(function (entry) { return entry.isIntersecting; })) return;
+      job.observer.disconnect();
+      renderRightMore(job);
+    }, { root: null, rootMargin: '600px', threshold: 0.01 });
+    job.observer.observe(last);
+  }
+
+  function renderRightMore(job) {
+    if (!job || rightRenderTokens.get(job.scrollHost) !== job) return;
+    if (job.offset >= job.items.length || job.offset >= RIGHT_LIMIT) return;
+    const end = Math.min(job.offset + RIGHT_BATCH, RIGHT_LIMIT, job.items.length);
+    const frag = document.createDocumentFragment();
+    for (let index = job.offset; index < end; index++) {
+      const box = makeRightCard();
+      paintRightCard(box, job.items[index], index);
+      frag.appendChild(box);
+    }
+    job.panel.appendChild(frag);
+    job.offset = end;
+    armRightObserver(job);
+  }
+
   function mountRightPanel(panel, items) {
     if (!panel) return;
     const usable = rightUsableItems(items);
@@ -791,13 +827,23 @@
     panel.innerHTML = "";
     if (!usable.length) return;
 
-    const frag = document.createDocumentFragment();
-    usable.forEach(function (it, index) {
-      const box = makeRightCard();
-      paintRightCard(box, it, index);
-      frag.appendChild(box);
-    });
-    panel.appendChild(frag);
+    const scrollHost = rightScrollHost(panel);
+    if (!scrollHost) return;
+    const job = { panel: panel, scrollHost: scrollHost, items: usable, offset: 0 };
+    rightRenderTokens.set(scrollHost, job);
+    renderRightMore(job);
+
+    if (scrollHost.dataset.igdcSocialRightBatchBound === "1") return;
+    scrollHost.dataset.igdcSocialRightBatchBound = "1";
+    scrollHost.addEventListener("scroll", function () {
+      const current = rightRenderTokens.get(scrollHost);
+      if (!current || current.offset >= Math.min(RIGHT_LIMIT, current.items.length)) return;
+      const horizontal = scrollHost.scrollWidth > scrollHost.clientWidth + 2;
+      const nearEnd = horizontal
+        ? scrollHost.scrollLeft + scrollHost.clientWidth >= scrollHost.scrollWidth - 60
+        : scrollHost.scrollTop + scrollHost.clientHeight >= scrollHost.scrollHeight - 60;
+      if (nearEnd) renderRightMore(current);
+    }, { passive: true });
   }
 
   let lastMainSnapshot = null;

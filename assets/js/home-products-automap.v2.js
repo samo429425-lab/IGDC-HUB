@@ -23,9 +23,9 @@
   const ALL_KEYS = KEYS_MAIN.concat(KEYS_RIGHT);
 
   const MAIN_LIMIT = 100;
-  const MAIN_BATCH = 20;
+  const MAIN_BATCH = 12;
   const RIGHT_LIMIT = 100;
-  const RIGHT_BATCH = 100;
+  const RIGHT_BATCH = 12;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
@@ -316,6 +316,37 @@
     }
   }
 
+  let deferredBackgroundObserver = null;
+
+  function applyDeferredBackground(el, url) {
+    if (!el || !url) return;
+    el.style.backgroundImage = 'url("' + escAttr(url) + '")';
+    el.style.backgroundPosition = 'center';
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundRepeat = 'no-repeat';
+    delete el.dataset.igdcDeferredBg;
+  }
+
+  function deferBackground(el, url) {
+    if (!el || !url) return;
+    el.dataset.igdcDeferredBg = String(url);
+    if (!('IntersectionObserver' in window)) {
+      applyDeferredBackground(el, url);
+      return;
+    }
+    if (!deferredBackgroundObserver) {
+      deferredBackgroundObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          deferredBackgroundObserver.unobserve(entry.target);
+          const pending = entry.target.dataset.igdcDeferredBg || '';
+          if (pending) applyDeferredBackground(entry.target, pending);
+        });
+      }, { root: null, rootMargin: '700px 420px', threshold: 0.01 });
+    }
+    deferredBackgroundObserver.observe(el);
+  }
+
   function buildMainCard(item) {
     const a = document.createElement('a');
     a.className = 'shop-card';
@@ -325,12 +356,7 @@
       a.setAttribute('aria-hidden', 'true');
     }
 
-    if (item.thumb) {
-      a.style.backgroundImage = 'url("' + escAttr(item.thumb) + '")';
-      a.style.backgroundPosition = 'center';
-      a.style.backgroundSize = 'cover';
-      a.style.backgroundRepeat = 'no-repeat';
-    }
+    if (item.thumb) deferBackground(a, item.thumb);
 
     const cap = document.createElement('div');
     cap.className = 'shop-card-cap';
