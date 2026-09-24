@@ -354,7 +354,7 @@
             <div class="supplier-queue-toolbar">
               <label class="supplier-select-label"><input id="productHoldSelectAll" type="checkbox" data-product-exclusion-select-all="hold"> 전체 선택</label>
               <span id="productHoldSelectedCount" class="supplier-selection-count">선택 0건</span>
-              <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="hold" disabled>선택 후보 목록으로 복원</button>
+              <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="hold" disabled>선택 후보·배치 관리 목록으로 복원</button>
               <button type="button" class="danger" data-product-exclusion-bulk="reject" data-product-exclusion-scope="hold" disabled>선택 제외로 이동</button>
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="hold" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="hold" disabled>선택 상품 영구 제외</button>
@@ -370,7 +370,7 @@
             <div class="supplier-queue-toolbar">
               <label class="supplier-select-label"><input id="productRejectSelectAll" type="checkbox" data-product-exclusion-select-all="reject"> 전체 선택</label>
               <span id="productRejectSelectedCount" class="supplier-selection-count">선택 0건</span>
-              <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="reject" disabled>선택 후보 목록으로 복원</button>
+              <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="reject" disabled>선택 후보·배치 관리 목록으로 복원</button>
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="reject" disabled>선택 영구 제외</button>
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="reject" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="reject" disabled>선택 목록에서만 제거</button>
@@ -521,7 +521,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260923-v13"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260924-hold-restore-v15"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
