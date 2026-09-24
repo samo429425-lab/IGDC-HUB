@@ -10,3 +10,7 @@
   Cache-Control: no-cache, must-revalidate
 /assets/js/igdc-social-sns-viewer-bridge.js
   Cache-Control: no-cache, must-revalidate
+/commerce-country-control.html
+  Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+/assets/js/admin-commerce-country-control.js
+  Cache-Control: no-cache, must-revalidate

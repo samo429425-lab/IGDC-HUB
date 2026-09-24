@@ -284,7 +284,7 @@
 
   <section id="productResearchPanel" class="panel">
     <div class="panel-heading"><h2>공식 상품 리서치·후보 심사·18개 섹션 배치 관리</h2><div class="actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="policy" data-policy-workspace-label="상품 리서치 적용 정책" data-policy-scope="country">AI 운영·정책 대화</button></div></div>
-    <div class="small">현재 책임 공급업체 비공개 후보 목록의 활성 업체를 모두 조사합니다. 새로 등록된 업체도 다음 실행부터 자동 포함됩니다. 조사 도중 일시정지를 눌러도 그 시점까지 상세페이지 검증을 통과한 상품은 즉시 전체 상품 후보·배치 관리 목록으로 자동 반영되므로 전체 업체 조사가 끝날 때까지 기다릴 필요가 없습니다. 이후 관리자가 18개 섹션 배치·보류·제외·삭제를 결정하고 프론트 매칭을 실행합니다.</div>
+    <div class="small">현재 책임 공급업체 비공개 후보 목록의 활성 업체를 모두 조사합니다. 새로 등록된 업체도 다음 실행부터 자동 포함됩니다. 조사 도중 일시정지하면 그 시점까지 발견·점검되어 저장된 상품을 최신 상품 리서치 목록에서 즉시 다시 확인할 수 있으므로 전체 업체 조사가 끝날 때까지 기다릴 필요가 없습니다. 최신 목록에서 선택 상품 또는 현재 목록 전체를 후보 관리목록 등록·AI 검증 자동 배치할 수 있으며, 검증 실패 상품은 보류·제외 목록으로 분류됩니다.</div>
     <div class="review-return-note">상품·업체 링크는 현재 탭에서 열립니다. 뒤로가기를 누르면 이 관리 화면의 기존 국가·목록 위치로 돌아옵니다.</div>
     <div class="operation-actions">
       <button id="productResearchBtn" type="button" class="ghost" disabled>상품 리서치 시작·후보목록 자동 반영</button>
@@ -302,7 +302,7 @@
     <details id="latestProductPanel" class="product-management-details heavy-data-panel" data-heavy-panel="latest-products">
       <summary class="heavy-panel-summary"><span><strong>최신 상품 리서치 목록</strong> <span id="latestProductSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="latest_product_research" data-policy-workspace-label="최신 상품 리서치 목록" data-policy-scope="country">AI 운영·정책 대화</button><span id="latestProductToggleLabel" class="pill info">목록 펼치기</span></span></summary>
       <div class="heavy-panel-content">
-        <div class="small">현재 선택 국가·지역의 이번 상품 리서치 사이클에서 점검이 끝난 최신 상품만 표시합니다. 목록을 펼칠 때 국가·지역 분할 원장에서 최신 상태를 읽으며, 여기의 상품은 아직 공개되지 않습니다. 이 목록은 이번 조사 결과를 확인하는 감사용 목록입니다. 검증 통과 상품은 리서치 완료 과정에서 전체 상품 후보·배치 관리 목록으로 자동 반영됩니다.</div>
+        <div class="small">현재 선택 국가·지역의 이번 상품 리서치 사이클에서 발견·점검되어 저장된 최신 상품을 표시합니다. 조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관할 수 있습니다. 버튼 실행 시 실제 상품 상세페이지 조건을 통과한 상품은 전체 상품 후보·배치 관리 목록으로 이동하고, URL·페이지 검증에 실패하거나 확인이 끝나지 않은 상품은 제외·보류 업체 및 상품 목록으로 자동 분류됩니다. 상품 조사를 일시정지하면 그 시점까지 저장된 최신 상품 목록을 다시 읽습니다.</div>
         <div id="latestProductGrid" class="product-grid latest-product-grid"><div class="small">아직 최신 리서치 상품을 불러오지 않았습니다.</div></div>
       </div>
     </details>
@@ -521,7 +521,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260924-v15"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260924-v16-transfer-routing"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
