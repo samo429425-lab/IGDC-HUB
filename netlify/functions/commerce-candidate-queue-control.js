@@ -9,9 +9,9 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.6.0-safe-restore-isolated-bucket-guard";
+const VERSION = "commerce-candidate-queue-control-v1.5.0-safe-isolated-bucket-guard";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
-const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore","undecided"]);
+const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject"]);
 
 
 function text(value){ return value == null ? "" : String(value).trim(); }
@@ -49,31 +49,12 @@ function requireExpectedBucket(row,expectedBucket,action){
     if(actual==="removed" && ["dismiss","remove_from_list"].includes(action))return actual;
     const error=new Error("candidate_state_mismatch: expected "+expected+", actual "+actual);error.code="candidate_state_mismatch";throw error;
   }
-  if(expected==="hold" && !["restore","undecided","dismiss","remove_from_list","reject","purge"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
-  if(expected==="reject" && !["restore","undecided","dismiss","remove_from_list","purge"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
+  if(expected==="hold" && !["dismiss","remove_from_list","reject","purge"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
+  if(expected==="reject" && !["dismiss","remove_from_list","purge"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
   return actual;
 }
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
-  if(action==="restore"||action==="undecided"){
-    /* RESTORE is deliberately private-only.  It moves exactly the selected
-       HOLD/REJECT row back to the normal candidate-management pool.  It never
-       publishes, builds a snapshot, or rewrites unrelated candidates/sections. */
-    const assignmentCleanup=await releaseSectionAssignment(id);
-    const previousStatus=text(row&&row.status)||"hold";
-    payload.slotDecision="undecided";
-    delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;
-    delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
-    payload.queueControl=Object.assign({},plain(payload.queueControl),{
-      schema:"igdc-private-product-queue-control.v1",action:"restore",previousStatus,hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:text(actorId)||"administrator",decidedAt:now,decidedBy:text(actorId)||"administrator"
-    });
-    payload.review=Object.assign({},plain(payload.review),{state:"research_pending",decidedAt:now,decidedBy:text(actorId)||"administrator"});
-    payload.managementControl={schema:"igdc-product-management-control.v1",source:"administrator_restore",administratorLocked:false,aiReclassificationAllowed:true,decidedAt:now,decidedBy:text(actorId)||"administrator"};
-    payload.publicPublication=false;payload.automaticImport=false;
-    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{operation:"unmatch",status:"private_candidate_restored",queued:false,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:true,deferredBuild:true,requestedAt:now,requestedBy:text(actorId)||"administrator"});
-    await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"research_pending",source_payload:payload,owner_note:"관리자가 보류·제외 상품을 전체 상품 후보·배치 관리 목록으로 복원했습니다. 프론트 공개나 18개 섹션 자동배치는 실행하지 않았습니다.",updated_at:now});
-    return{id,action:"restore",status:"research_pending",restoredToCandidateManagement:true,masterLedgerPreserved:true,publicPublication:false,frontBuildDispatched:false,assignmentCleanup};
-  }
   if(action==="dismiss"){
     /* SAFE DELETE: never physically delete the shared master candidate row from
        a HOLD/REJECT management screen.  The master ledger is also the source for
