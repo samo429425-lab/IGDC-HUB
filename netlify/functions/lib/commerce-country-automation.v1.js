@@ -1297,10 +1297,35 @@ function manualSupplierSeed(scope,row){
 function activeManualSupplierSeeds(registry){return array(registry&&registry.suppliers).filter((row)=>row&&row.adminPinned===true&&row.state!=="disabled"&&supplierRootUrl(row.officialUrl)).map((row)=>manualSupplierSeed(registry.scope,row));}
 function reindexCandidateRows(rows){return array(rows).map((row,index)=>Object.assign({},row,{rank:index+1,aiAssessment:Object.assign({},plain(row&&row.aiAssessment),{rank:index+1})}));}
 function preservePinnedReviewPool(pool,sources){const out=[],seen=new Set();for(const row of array(sources).filter((item)=>item&&item.adminPinned===true).concat(array(pool))){const url=researchCandidateUrl(row),key=text(url).toLowerCase();if(!key||seen.has(key))continue;seen.add(key);out.push(row);}return out.slice(0,SUPPLIER_REVIEW_LIMIT);}
+function supplierFocusLane(item){
+  const payload=plain(item&&item.payload),evidence=plain(item&&item.evidence),lane=lower(first(payload.supplyLane,evidence.supplyLane,item&&item.supplyLane));
+  return ["beauty_focus","electronics_focus","small_appliance_focus"].includes(lane)?lane:"";
+}
 function supplierRankEntries(reviewPool,maxCandidates,policyHintsInput){
   const hints=plain(policyHintsInput);
   const scored=deterministicAssessment(reviewPool).map((assessment,index)=>({item:reviewPool[index],assessment,originalIndex:index,policyAffinity:supplierPolicyAffinity(reviewPool[index],hints)})).sort((a,b)=>Number(b.item&&b.item.adminPinned===true)-Number(a.item&&a.item.adminPinned===true)||Number(b.assessment.hardGatePassed===true)-Number(a.assessment.hardGatePassed===true)||Number(b.assessment.trustScore||0)-Number(a.assessment.trustScore||0)||Number(b.policyAffinity||0)-Number(a.policyAffinity||0)||Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0));
-  const pinned=scored.filter((row)=>row.item&&row.item.adminPinned===true),normal=scored.filter((row)=>!(row.item&&row.item.adminPinned===true)),limit=Math.max(1,Number(maxCandidates)||DEFAULT_MAX_CANDIDATES);return pinned.concat(normal.slice(0,Math.max(0,limit-pinned.length)));
+  const pinned=scored.filter((row)=>row.item&&row.item.adminPinned===true),normal=scored.filter((row)=>!(row.item&&row.item.adminPinned===true)),limit=Math.max(1,Number(maxCandidates)||DEFAULT_MAX_CANDIDATES),capacity=Math.max(0,limit-pinned.length);
+  if(!capacity)return pinned;
+  // Private research needs category coverage as well as trust ordering. Reserve a
+  // small lane quota so beauty/electronics/small-appliance suppliers are not
+  // crowded out by a single high-volume category. This does NOT bypass hard
+  // trust, approval or public-release gates; it only decides which private
+  // candidates receive the next detailed assessment.
+  const focusLanes=["beauty_focus","electronics_focus","small_appliance_focus"],reserveEach=capacity>=9?2:1,selected=[],used=new Set();
+  for(const lane of focusLanes){
+    let taken=0;
+    for(const row of normal){
+      if(taken>=reserveEach||selected.length>=capacity)break;
+      if(used.has(row.originalIndex)||supplierFocusLane(row.item)!==lane)continue;
+      used.add(row.originalIndex);selected.push(row);taken+=1;
+    }
+  }
+  for(const row of normal){
+    if(selected.length>=capacity)break;
+    if(used.has(row.originalIndex))continue;
+    used.add(row.originalIndex);selected.push(row);
+  }
+  return pinned.concat(selected);
 }
 function researchCandidateUrl(item) { try { const value = first(item && item.supplierOfficialUrl, item && item.url, item && item.href, item && item.link && item.link.url, item && item.link); const url = new URL(text(value)); if (!["https:","http:"].includes(url.protocol) || url.username || url.password || !url.hostname) return ""; url.hash = ""; return url.toString(); } catch (_error) { return ""; } }
 function decodeLoose(value) { try { return decodeURIComponent(text(value).replace(/\+/g," ")); } catch (_error) { return text(value); } }
@@ -2493,7 +2518,8 @@ async function beginProductResearchJob(actorId, input) {
   // 48, 100 or more new suppliers are present, all unresearched suppliers enter
   // this job. advanceProductResearchJob still processes them incrementally so
   // serverless request duration stays bounded without dropping any supplier.
-  const allSupplierSources=sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName)));
+  function focusedProductResearchPriority(source){return ["beauty_focus","electronics_focus","small_appliance_focus"].includes(lower(source&&source.supplyLane))?1:0;}
+  const allSupplierSources=sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||focusedProductResearchPriority(b)-focusedProductResearchPriority(a)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName)));
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
 
   const supplierLedgerSourceId=text(supplierJob&&supplierJob.jobId)||"durable_supplier_candidate_ledger";

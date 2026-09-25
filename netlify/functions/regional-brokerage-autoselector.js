@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.6.4-bounded-staged-network-timeouts";
+const VERSION="regional-brokerage-autoselector-v2.6.5-focused-beauty-small-appliance-product-discovery";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -762,7 +762,7 @@ function createSupplierResearchPlan(params){
   if(SupplierResearchPlan&&typeof SupplierResearchPlan.buildPlan==="function")plan=SupplierResearchPlan.buildPlan({geo,locales,maxQueries:24,seedLimit:40});
   const rows=[];const seen=new Set();for(const row of array(plan.rows)){const q=text(row&&row.query).replace(/\s+/g," ");if(!q||seen.has(q.toLowerCase()))continue;seen.add(q.toLowerCase());rows.push({query:q,locale:text(row&&row.locale)||locales[0]||"en",origin:text(row&&row.origin)||"searchbank-psom-policy-plan",lane:text(row&&row.lane)||"general",localName:text(row&&row.localName)||geo.countryName||geo.country});}
   const tasks=[];rows.forEach((row,index)=>{if(geo.country==="KR")tasks.push({lane:"naver",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});else tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});tasks.push({lane:"sanmaru",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});});
-  if(geo.country==="KR")rows.slice(0,8).forEach((row,index)=>tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0}));
+  if(geo.country==="KR")rows.forEach((row,index)=>{if(index<8||["beauty_focus","electronics_focus","small_appliance_focus"].includes(text(row.lane)))tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});});
   const seeds=array(plan.seeds).concat(manualPolicySeeds(geo)).map(compactResearchItem).filter(Boolean);
   return{version:VERSION,researchPlanVersion:text(plan.version),geo,locales,rows,tasks,seeds,diagnostics:plain(plan.diagnostics)};
 }
@@ -955,8 +955,8 @@ function productPriorityInfo(value){
   if(/(?:버섯|표고|느타리|목이|송이|고사리|산채|임산물|밤|대추|호두|잣|꿀|약초)/i.test(hay))labels.push("버섯·임산물");
   if(/(?:쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|과일|채소|농산물|한우|돼지고기|닭고기|계란|우유|축산물|수산물|건어물|김|미역|젓갈|전복|굴|새우)/i.test(hay))labels.push("농·축·수산물");
   if(/(?:식품|식료품|김치|장류|반찬|떡|한과|생필품|생활용품|세제|위생용품|주방용품)/i.test(hay))labels.push("식품·생활필수품");
-  if(/(?:화장품|뷰티|스킨케어|세럼|앰플|에센스|토너|크림|로션|보습제|선크림|자외선차단|샴푸|린스|컨디셔너|클렌징|클렌저|마스크팩|메이크업|향수|헤어케어|바디케어|personal care|beauty|cosmetic|skincare|serum|ampoule|essence|toner|moisturizer|cream|lotion|cleanser|sunscreen|mask|makeup|hair care|body care)/i.test(hay))labels.push("뷰티·개인용품");
-  if(/(?:소형전자|전자제품|소형가전|스피커|블루투스\s*스피커|이어버드|이어폰|헤드폰|마이크|마이크로폰|태블릿|USB|USB\s*허브|USB\s*메모리|충전기|케이블|보조배터리|웹캠|전기포트|토스터|블렌더|믹서|커피메이커|가습기|제습기|공기청정기|청소기|공구|산업용품|기계|부품|금속|철강|플라스틱|고무|목재|포장재|전기자재|전자부품|자동차부품|건축자재|설비|안전용품|small electronics|portable speaker|bluetooth speaker|earbud|earphone|headphone|microphone|tablet|usb hub|flash drive|charger|cable|power bank|webcam|small appliance|electric kettle|toaster|blender|mixer|coffee maker|humidifier|dehumidifier|air purifier|vacuum|industrial|machinery|machine|tool|component|parts|metal|steel|plastic|rubber|packaging|electrical|hardware)/i.test(hay))labels.push("전자·소형가전·산업재");
+  if(/(?:화장품|뷰티|스킨케어|세럼|앰플|에센스|토너|크림|로션|보습제|선크림|자외선차단|샴푸|린스|컨디셔너|클렌징|클렌저|마스크팩|메이크업|파운데이션|쿠션|BB|CC|립스틱|립틴트|립밤|마스카라|아이라이너|아이브로우|아이섀도|블러셔|컨실러|파우더|네일|향수|헤어케어|바디케어|뷰티기기|미용기기|LED마스크|갈바닉|피부마사지|두피관리|전동면도기|이발기|헤어드라이어|고데기|헤어아이론|헤어스타일러|전동칫솔|구강세정기|personal care|beauty|cosmetic|skincare|serum|ampoule|essence|toner|moisturizer|cream|lotion|cleanser|sunscreen|mask|makeup|foundation|cushion|lipstick|lip tint|lip balm|mascara|eyeliner|eyebrow|eyeshadow|blush|concealer|powder|nail|hair care|body care|beauty device|electric shaver|hair dryer|hair styler|electric toothbrush|oral irrigator)/i.test(hay))labels.push("뷰티·개인용품");
+  if(/(?:소형전자|전자제품|소형가전|미니가전|스피커|휴대용\s*스피커|블루투스\s*스피커|TWS|무선이어폰|이어버드|이어폰|헤드폰|마이크|마이크로폰|태블릿|USB|USB-C|USB\s*허브|멀티허브|도킹스테이션|USB\s*메모리|메모리카드|카드리더기|GaN|충전기|무선충전기|케이블|보조배터리|웹캠|전기포트|토스터|블렌더|믹서|커피메이커|커피머신|에어프라이어|미니밥솥|전기그릴|샌드위치메이커|와플메이커|착즙기|전동다지기|선풍기|써큘레이터|가습기|제습기|공기청정기|핸디청소기|무선청소기|청소기|공구|산업용품|기계|부품|금속|철강|플라스틱|고무|목재|포장재|전기자재|전자부품|자동차부품|건축자재|설비|안전용품|small electronics|portable speaker|bluetooth speaker|tws|wireless earbud|earbud|earphone|headphone|microphone|tablet|usb-c|usb hub|dock|docking station|flash drive|memory card|card reader|gan charger|wireless charger|charger|cable|power bank|webcam|small appliance|mini appliance|electric kettle|toaster|blender|mixer|coffee maker|air fryer|rice cooker|electric grill|portable fan|circulator|humidifier|dehumidifier|air purifier|handheld vacuum|cordless vacuum|vacuum|industrial|machinery|machine|tool|component|parts|metal|steel|plastic|rubber|packaging|electrical|hardware)/i.test(hay))labels.push("전자·소형가전·산업재");
   if(/(?:의류|섬유|패션|신발|가방|완구|교육용품|문구|유아용품|가구|조명|침구|apparel|textile|fashion|footwear|toy|stationery|furniture|lighting|bedding)/i.test(hay))labels.push("소비재·제조상품");
   if(/(?:농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|로컬푸드|생산자|농장|어촌|산촌)/i.test(hay))labels.push("생산자·조합");
   return{score:labels.length*40,label:labels[0]||""};
@@ -1063,7 +1063,7 @@ function catalogPageUrls(html,baseUrl){
   const out=[],seen=new Set(),rx=/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let m;
   while((m=rx.exec(String(html||"")))){
     const label=stripHtml(m[2]).replace(/\s+/g," ").trim(),href=absoluteHttpUrl(baseUrl,m[1]);if(!href||!sameSite(baseUrl,href))continue;
-    if(!isProductDetailUrl(href)&&!/(상품|제품|쇼핑|스토어|공식몰|카탈로그|농산물|축산물|수산물|임산물|버섯|식품|생필품|생활용품|뷰티|화장품|스킨케어|세럼|앰플|클렌징|선크림|메이크업|전자제품|소형가전|스피커|블루투스|이어폰|헤드폰|마이크|태블릿|USB|충전기|케이블|가전|로컬푸드|product|products|shop|store|catalog|collection|beauty|cosmetic|skincare|serum|cleanser|sunscreen|makeup|electronics|speaker|bluetooth|earbud|earphone|headphone|microphone|tablet|usb|charger|cable|appliance)/i.test(label+" "+href))continue;
+    if(!isProductDetailUrl(href)&&!/(상품|제품|쇼핑|스토어|공식몰|카탈로그|농산물|축산물|수산물|임산물|버섯|식품|생필품|생활용품|뷰티|화장품|스킨케어|세럼|앰플|클렌징|선크림|메이크업|파운데이션|쿠션|립스틱|립틴트|립밤|마스카라|아이브로우|아이섀도|네일|뷰티기기|미용기기|전동면도기|헤어드라이어|고데기|전자제품|소형전자|소형가전|미니가전|스피커|블루투스|무선이어폰|이어버드|이어폰|헤드폰|마이크|태블릿|USB|USB-C|허브|도킹스테이션|충전기|무선충전기|케이블|보조배터리|메모리카드|카드리더기|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|에어프라이어|미니밥솥|전기그릴|가전|로컬푸드|product|products|shop|store|catalog|collection|beauty|cosmetic|skincare|serum|cleanser|sunscreen|makeup|foundation|lipstick|lip tint|beauty device|electric shaver|hair dryer|electronics|speaker|bluetooth|wireless earbud|earbud|earphone|headphone|microphone|tablet|usb|usb-c|hub|dock|docking|charger|wireless charger|cable|power bank|memory card|card reader|portable fan|circulator|humidifier|dehumidifier|air purifier|vacuum|electric kettle|toaster|blender|coffee maker|air fryer|rice cooker|electric grill|appliance)/i.test(label+" "+href))continue;
     if(seen.has(href)||href===baseUrl)continue;seen.add(href);out.push(href);if(out.length>=8)break;
   }
   return out;

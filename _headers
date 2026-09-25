@@ -14,3 +14,12 @@
   Cache-Control: no-store, no-cache, must-revalidate, max-age=0
 /assets/js/admin-commerce-country-control.js
   Cache-Control: no-cache, must-revalidate
+
+/assets/js/home-products-automap.v2.js
+  Cache-Control: no-cache, must-revalidate
+
+/assets/js/network-rightpanel-automap.js
+  Cache-Control: no-cache, must-revalidate
+
+/assets/js/tour-automap.js
+  Cache-Control: no-cache, must-revalidate

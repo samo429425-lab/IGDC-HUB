@@ -14,7 +14,7 @@
   window.__SOCIALNETWORK_AUTOMAP_V3_FIXED__ = true;
 
   // --- config ---
-  const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
+  const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json?view=right-panel"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
   const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 6;
@@ -387,7 +387,7 @@
     try {
       const res = await fetch(
         CURRENT_SNAPSHOT_URL + "?view=front",
-        { cache: "default", credentials: "same-origin" },
+        { cache: "default", credentials: "same-origin", priority: "high" },
       );
       if (!res.ok) return null;
       const payload = await res.json();
@@ -408,6 +408,12 @@
     } catch (_e) {
       return null;
     }
+  }
+
+  let initialMainSnapshotPromise = null;
+  function getInitialMainSnapshotPromise() {
+    if (!initialMainSnapshotPromise) initialMainSnapshotPromise = loadCurrentSnapshot();
+    return initialMainSnapshotPromise;
   }
 
   function getMainSlots(gridEl) {
@@ -518,7 +524,7 @@
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }
 
-  function paintThumb(pic, platform, contentUrl, thumb) {
+  function paintThumb(pic, platform, contentUrl, thumb, eager) {
     if (!pic) return;
     pic.style.backgroundImage = "";
     pic.style.backgroundSize = "";
@@ -530,8 +536,9 @@
     }
     var img = document.createElement("img");
     img.alt = "";
-    img.loading = "lazy";
+    img.loading = eager ? "eager" : "lazy";
     img.decoding = "async";
+    if (eager) { try { img.fetchPriority = "high"; } catch (_e) {} }
     img.referrerPolicy = "no-referrer";
     img.style.width = "100%";
     img.style.height = "100%";
@@ -553,7 +560,7 @@
     pic.appendChild(img);
   }
 
-  function paintMainCard(card, it) {
+  function paintMainCard(card, it, eager) {
     if (!card || !it) return;
 
     // SAMPLE ownership is upstream. Automap never creates sample rows; it only
@@ -610,7 +617,7 @@
       metaDesc.style.display = "none";
     }
 
-    paintThumb(pic, platform, url, thumb);
+    paintThumb(pic, platform, url, thumb, eager);
   }
 
 
@@ -654,7 +661,7 @@
       cards = ensureCards(end);
       for (let i = job.offset; i < end; i++) {
         const it = job.items[i] || null;
-        if (it) paintMainCard(cards[i], it);
+        if (it) paintMainCard(cards[i], it, i < 6);
       }
       job.offset = end;
       normalizeMainCardLayout(gridEl);
@@ -935,7 +942,7 @@
     // request country, so waiting for social-country-route as a second serverless
     // dependency only delays the six main rows. Browser language remains the
     // lightweight fallback for language ranking.
-    mainRunInFlight = loadCurrentSnapshot()
+    mainRunInFlight = getInitialMainSnapshotPromise()
       .then(function (current) {
         const fallbackRoute = routeFallback();
         const releaseRoute = current && current.pipeline && current.pipeline.route || {};
@@ -999,13 +1006,16 @@
     runRightPanel();
   });
 
-  // Start the canonical right-panel request immediately; DOM events reuse it.
+  // Start both canonical reads immediately; DOM events only render their shared result.
   getInitialRightSnapshotPromise();
+  getInitialMainSnapshotPromise();
+  let bootStarted = false;
+  function bootOnce(){ if (bootStarted) return; bootStarted = true; boot(); }
   if (document.readyState === "complete" || document.readyState === "interactive") {
-    setTimeout(boot, 0);
+    setTimeout(bootOnce, 0);
   } else {
-    document.addEventListener("DOMContentLoaded", boot, { once: true });
-    window.addEventListener("load", boot, { once: true });
+    document.addEventListener("DOMContentLoaded", bootOnce, { once: true });
+    window.addEventListener("load", bootOnce, { once: true });
   }
 })();
 

@@ -300,6 +300,21 @@ async function documentMatchesPublishedScope(doc, selected, manifest) {
   }
   return realCount > 0;
 }
+function initialDistributionCard(card) {
+  if (!card || typeof card !== "object") return card;
+  const keep = [
+    "id","uid","productId","contentId","title","name","text","meta","subtitle","summary","description",
+    "thumb","thumbnail","image","imageUrl","thumbnailUrl",
+    "affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url",
+    "externalProductUrl","officialProductUrl","productUrl","product_url","productPageUrl","detailUrl",
+    "checkoutUrl","purchaseUrl","orderUrl","productLink","displayUrl","url","href","link",
+    "affiliate","trackId","track_id","revenueLine","revenue_line","price","salePrice","amount","currency",
+    "section","psom_key","type","sample","placeholder","isSample","realProduct","monetization"
+  ];
+  const out = {};
+  for (const key of keep) if (card[key] !== undefined) out[key] = card[key];
+  return out;
+}
 function initialDistributionView(bytes, limit) {
   try {
     const doc = JSON.parse(new TextDecoder().decode(bytes));
@@ -308,15 +323,93 @@ function initialDistributionView(bytes, limit) {
     const max = Math.max(1, Math.min(40, Number(limit) || 20));
     const nextSections = {};
     for (const [key, value] of Object.entries(sections)) {
-      if (Array.isArray(value)) nextSections[key] = value.slice(0, max);
-      else if (value && typeof value === "object" && Array.isArray(value.slots)) nextSections[key] = Object.assign({}, value, { slots: value.slots.slice(0, max) });
+      if (Array.isArray(value)) nextSections[key] = value.slice(0, max).map(initialDistributionCard);
+      else if (value && typeof value === "object" && Array.isArray(value.slots)) nextSections[key] = Object.assign({}, value, { slots: value.slots.slice(0, max).map(initialDistributionCard) });
       else nextSections[key] = value;
     }
-    doc.pages = Object.assign({}, doc.pages, {
-      distribution: Object.assign({}, doc.pages.distribution, { sections: nextSections })
-    });
-    doc.meta = Object.assign({}, doc.meta || {}, { deliveryView: "initial", deliveryLimitPerSection: max });
-    return new TextEncoder().encode(JSON.stringify(doc));
+    const out = {
+      pages: { distribution: Object.assign({}, doc.pages.distribution, { sections: nextSections }) },
+      meta: Object.assign({}, doc.meta || {}, {
+        deliveryView: "initial",
+        deliveryLimitPerSection: max,
+        deliveryProjection: "front-card-minimal-v1"
+      })
+    };
+    return new TextEncoder().encode(JSON.stringify(out));
+  } catch (_e) { return null; }
+}
+
+function projectedFrontCard(card) {
+  if (!card || typeof card !== "object") return card;
+  const keep = [
+    "id","uid","productId","product_id","contentId","content_id","itemId","item_id","sku","code","pid",
+    "title","name","text","label","caption",
+    "thumb","image","image_url","thumbnail","img","photo","cover","coverUrl","thumbnailUrl","imageUrl",
+    "affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url",
+    "checkoutUrl","paymentUrl","purchaseUrl","orderUrl","externalProductUrl","officialProductUrl",
+    "productUrl","product_url","productPageUrl","detailUrl","productLink","displayUrl",
+    "contentUrl","pageUrl","internalUrl","path","url","href","link",
+    "priority","order","rank","weight","enabled","lang","page","section","psom_key",
+    "type","sample","placeholder","isSample","realProduct","monetization",
+    "productCard","researchReadiness","directCommerceListing","brokerageContract"
+  ];
+  const out = {};
+  for (const key of keep) if (card[key] !== undefined) out[key] = card[key];
+  return out;
+}
+function frontPageView(bytes, page) {
+  try {
+    const doc = JSON.parse(new TextDecoder().decode(bytes));
+    let out = null;
+    if (page === "home") {
+      const sections = doc && doc.pages && doc.pages.home && doc.pages.home.sections;
+      if (!sections || typeof sections !== "object") return null;
+      const nextSections = {};
+      for (const [key,value] of Object.entries(sections)) {
+        if (Array.isArray(value)) nextSections[key] = value.slice(0,100).map(projectedFrontCard);
+        else if (value && typeof value === "object" && Array.isArray(value.slots)) nextSections[key] = Object.assign({}, value, {slots:value.slots.slice(0,100).map(projectedFrontCard)});
+      }
+      out = { pages:{home:{sections:nextSections}}, meta:Object.assign({},doc.meta||{},{deliveryView:"front",deliveryProjection:"home-front-minimal-v1"}) };
+    } else if (page === "network" || page === "tour") {
+      const items = Array.isArray(doc && doc.items) ? doc.items.slice(0,140).map(projectedFrontCard) : [];
+      const slots = Array.isArray(doc && doc.slots) ? doc.slots.slice(0,140).map(projectedFrontCard) : [];
+      if (!items.length && !slots.length) return null;
+      out = {items,slots,meta:Object.assign({},doc.meta||{},{deliveryView:"front",deliveryProjection:page+"-front-minimal-v1"})};
+    }
+    return out ? new TextEncoder().encode(JSON.stringify(out)) : null;
+  } catch (_e) { return null; }
+}
+
+function socialRightPanelView(bytes) {
+  try {
+    const doc = JSON.parse(new TextDecoder().decode(bytes));
+    const sections = doc && doc.pages && doc.pages.social && doc.pages.social.sections;
+    const raw = sections && sections.rightPanel;
+    const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.slots) ? raw.slots : []);
+    if (!list.length) return null;
+    const keep = [
+      "id","uid","productId","product_id","contentId","content_id","itemId","item_id","sku","code",
+      "title","name","text","label","thumb","image","thumbnail","imageUrl","thumbnailUrl",
+      "contentUrl","pageUrl","internalUrl","detailPage","detailUrl","path",
+      "latestContentUrl","latest_content_url","sourceContentUrl","source_content_url","viewerUrl","permalink",
+      "sourceUrl","source_url","affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url",
+      "checkoutUrl","paymentUrl","productUrl","productLink","redirectUrl","url","href","link",
+      "type","sample","placeholder","isSample","realProduct","monetization"
+    ];
+    const project = (card) => {
+      if (!card || typeof card !== "object") return card;
+      const out = {};
+      for (const key of keep) if (card[key] !== undefined) out[key] = card[key];
+      return out;
+    };
+    const rightPanel = Array.isArray(raw)
+      ? list.slice(0, 100).map(project)
+      : Object.assign({}, raw, { slots: list.slice(0, 100).map(project) });
+    const out = {
+      pages: { social: { sections: { rightPanel } } },
+      meta: Object.assign({}, doc.meta || {}, { deliveryView: "right-panel", deliveryProjection: "social-right-panel-minimal-v1" })
+    };
+    return new TextEncoder().encode(JSON.stringify(out));
   } catch (_e) { return null; }
 }
 
@@ -367,13 +460,28 @@ export default async function canonicalIpSlotSnapshotRouter(request, context) {
 
   const headers = new Headers(published.response.headers);
   let responseBytes = published.bytes;
-  const wantsInitialDistribution = FILE_TO_PAGE[file] === "distribution" && url.searchParams.get("view") === "initial";
+  const requestedView = url.searchParams.get("view") || "";
+  const wantsInitialDistribution = FILE_TO_PAGE[file] === "distribution" && requestedView === "initial";
+  const wantsSocialRightPanel = FILE_TO_PAGE[file] === "social" && requestedView === "right-panel";
+  const wantsFrontProjection = ["home","network","tour"].includes(FILE_TO_PAGE[file]) && requestedView === "front";
   if (wantsInitialDistribution) {
     const compact = initialDistributionView(published.bytes, 20);
     if (compact) responseBytes = compact;
     headers.delete("Content-Length");
     headers.delete("ETag");
     headers.set("X-IGDC-Snapshot-View", "initial");
+  } else if (wantsSocialRightPanel) {
+    const compact = socialRightPanelView(published.bytes);
+    if (compact) responseBytes = compact;
+    headers.delete("Content-Length");
+    headers.delete("ETag");
+    headers.set("X-IGDC-Snapshot-View", "right-panel");
+  } else if (wantsFrontProjection) {
+    const compact = frontPageView(published.bytes, FILE_TO_PAGE[file]);
+    if (compact) responseBytes = compact;
+    headers.delete("Content-Length");
+    headers.delete("ETag");
+    headers.set("X-IGDC-Snapshot-View", "front");
   } else {
     headers.set("X-IGDC-Snapshot-View", "full");
   }

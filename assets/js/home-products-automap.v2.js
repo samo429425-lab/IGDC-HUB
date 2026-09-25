@@ -16,7 +16,7 @@
   const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
   // The Edge function resolves this path to an approved same-country snapshot.
   // Do not try a legacy root fallback because that would bypass the IP gate.
-  const SNAPSHOT_CANDIDATES = [ '/data/front.snapshot.json' ];
+  const SNAPSHOT_CANDIDATES = [ '/data/front.snapshot.json?view=front' ];
 
   const KEYS_MAIN = ['home_1', 'home_2', 'home_3', 'home_4', 'home_5'];
   const KEYS_RIGHT = ['home_right_top', 'home_right_middle', 'home_right_bottom'];
@@ -26,6 +26,7 @@
   const MAIN_BATCH = 12;
   const RIGHT_LIMIT = 100;
   const RIGHT_BATCH = 12;
+  const FIRST_VIEW_EAGER = 6;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
@@ -347,7 +348,7 @@
     deferredBackgroundObserver.observe(el);
   }
 
-  function buildMainCard(item) {
+  function buildMainCard(item, eager) {
     const a = document.createElement('a');
     a.className = 'shop-card';
     applyAnchorDestination(a, item);
@@ -356,7 +357,7 @@
       a.setAttribute('aria-hidden', 'true');
     }
 
-    if (item.thumb) deferBackground(a, item.thumb);
+    if (item.thumb) { if (eager) applyDeferredBackground(a, item.thumb); else deferBackground(a, item.thumb); }
 
     const cap = document.createElement('div');
     cap.className = 'shop-card-cap';
@@ -387,7 +388,7 @@
     return a;
   }
 
-  function buildRightCard(item) {
+  function buildRightCard(item, eager) {
     const a = document.createElement('a');
     a.className = 'ad-box news-btn';
     applyAnchorDestination(a, item);
@@ -397,8 +398,9 @@
     }
 
     const img = document.createElement('img');
-    img.loading = 'lazy';
+    img.loading = eager ? 'eager' : 'lazy';
     img.decoding = 'async';
+    if (eager) { try { img.fetchPriority = 'high'; } catch (_e) {} }
     img.src = item.thumb || '';
     img.alt = '';
 
@@ -541,7 +543,8 @@ function bindIncremental(target, items) {
 
     for (let i = offset; i < end; i++) {
       const it = items[i];
-      frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+      const eager = i < FIRST_VIEW_EAGER;
+      frag.appendChild(isRight ? buildRightCard(it, eager) : buildMainCard(it, eager));
     }
 
     target.list.appendChild(frag);
@@ -614,11 +617,17 @@ function bindIncremental(target, items) {
   }
 
   async function fetchJSON(url) {
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetch(url, { cache: 'no-store', priority: 'high' });
     if (!res.ok) {
       throw new Error('HTTP ' + res.status + ' @ ' + url);
     }
     return await res.json();
+  }
+
+  let initialSnapshotPromise = null;
+  function getInitialSnapshotPromise() {
+    if (!initialSnapshotPromise) initialSnapshotPromise = fetchJSON(SNAPSHOT_CANDIDATES[0]);
+    return initialSnapshotPromise;
   }
 
   async function loadFromFeed() {
@@ -632,7 +641,7 @@ function bindIncremental(target, items) {
 
     for (const url of SNAPSHOT_CANDIDATES) {
       try {
-        const snapshot = await fetchJSON(url);
+        const snapshot = url === SNAPSHOT_CANDIDATES[0] ? await getInitialSnapshotPromise() : await fetchJSON(url);
         const sections = buildSectionsFromSnapshot(snapshot);
         return { source: 'snapshot', sections };
       } catch (e) {
@@ -698,6 +707,9 @@ function bindIncremental(target, items) {
   }
 
   installHomeNewsTopNavigation();
+  // Start the canonical snapshot request as soon as this script is evaluated.
+  // Rendering still waits for the DOM, but network/JSON time overlaps page parsing.
+  getInitialSnapshotPromise().catch(function(){ initialSnapshotPromise = null; });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function(){

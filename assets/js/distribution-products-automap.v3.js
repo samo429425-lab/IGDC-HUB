@@ -14,9 +14,11 @@
   window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V8__=true;
 
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
+  const STATIC_INITIAL_URL=STATIC_SNAPSHOT_URL+'?view=initial';
   const REGIONAL_SNAPSHOT_URL=''; // Edge-routed canonical snapshot is the only source.
   const LIMIT_MAIN=100, LIMIT_RIGHT=100;
   const RENDER_BATCH=12;
+  const FIRST_VIEW_EAGER=6;
 
   // Cached content is only the instant first view. Every return visit revalidates
   // the public snapshot without delaying the visible page.
@@ -183,7 +185,7 @@
     deferredBackgroundObserver.observe(el);
   }
 
-  function makeCard(item,track){
+  function makeCard(item,track,eager){
     const root=document.createElement('div'); root.className='thumb-card';
     // This renderer already emits its own exact tracker calls. Keep the global
     // autohook from duplicating the same signals on Distribution Hub cards.
@@ -195,7 +197,7 @@
     if(item&&item.externalOutboundUrl) root.setAttribute('data-external-outbound','1');
     const img=document.createElement('div'); img.className='thumb-img';
     const image=pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']);
-    if(image) deferBackground(img,image);
+    if(image){if(eager)applyDeferredBackground(img,image);else deferBackground(img,image);}
     const title=document.createElement('div'); title.className='thumb-title'; title.textContent=text(pick(item,['title','name','text'])||'Product');
     const meta=document.createElement('div'); meta.className='thumb-meta'; meta.textContent=text(pick(item,['meta','subtitle','summary','description']));
     root.appendChild(img); root.appendChild(title); root.appendChild(meta);
@@ -320,7 +322,7 @@
     if(!job||job.generation!==renderGeneration||job.offset>=job.list.length) return;
     const end=Math.min(job.offset+RENDER_BATCH,job.list.length);
     const fragment=document.createDocumentFragment();
-    for(let i=job.offset;i<end;i++) fragment.appendChild(makeCard(job.list[i]));
+    for(let i=job.offset;i<end;i++) fragment.appendChild(makeCard(job.list[i],true,i<FIRST_VIEW_EAGER));
     if(job.offset===0) replaceChildren(job.box,fragment);
     else job.box.appendChild(fragment);
     job.offset=end;
@@ -385,13 +387,19 @@
     const controller=typeof AbortController!=='undefined'?new AbortController():null;
     const timer=controller?setTimeout(function(){controller.abort();},timeout):null;
     try{
-      const response=await fetch(url,{cache:cacheMode||'default',credentials:'same-origin',signal:controller&&controller.signal});
+      const response=await fetch(url,{cache:cacheMode||'default',credentials:'same-origin',signal:controller&&controller.signal,priority:'high'});
       const etag=response.headers&&typeof response.headers.get==='function'?response.headers.get('etag')||'':'';
       if(response.status===204) return {empty:true,status:204,etag:etag,payload:null};
       if(!response.ok) throw new Error('HTTP '+response.status);
       return {empty:false,status:response.status,etag:etag,payload:await response.json()};
     }finally{if(timer)clearTimeout(timer);}
   }
+  let initialStaticFetchPromise=null;
+  function getInitialStaticFetchPromise(){
+    if(!initialStaticFetchPromise)initialStaticFetchPromise=fetchJson(STATIC_INITIAL_URL,STATIC_TIMEOUT,'no-cache');
+    return initialStaticFetchPromise;
+  }
+
   function idle(task,delay){
     const run=function(){
       if(typeof window.requestIdleCallback==='function') window.requestIdleCallback(task,{timeout:1800});
@@ -424,17 +432,40 @@
       if(canRefreshRegional()) refreshRegional();
     },waitMs+150);
   }
+  let fullSnapshotUpgradePromise=null;
+  function upgradeInitialToFullSnapshot(){
+    if(fullSnapshotUpgradePromise)return fullSnapshotUpgradePromise;
+    fullSnapshotUpgradePromise=fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache').then(function(result){
+      if(result.empty||!result.payload)return false;
+      const compact=compactSnapshot(result.payload,{etag:result.etag});if(!compact)return false;
+      baseSnapshot=compact;setCached('static',compact);lastStaticRefreshAt=Date.now();
+      const sections=sectionsOf(compact)||{};
+      SECTION_MAP.forEach(function(cfg){
+        const box=document.querySelector(cfg.selector),job=box&&incrementalJobs.get(box);
+        if(!job)return;
+        job.list=normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]).slice(0,cfg.limit);
+      });
+      activeFingerprint=fingerprint(mergedSnapshot(),'merged');
+      activeStamp=snapshotStamp(compact);
+      return true;
+    }).catch(function(){return false;}).finally(function(){fullSnapshotUpgradePromise=null;});
+    return fullSnapshotUpgradePromise;
+  }
+
   function refreshStatic(force){
     const now=Date.now();
     if(staticRefreshPromise) return staticRefreshPromise;
     if(force!==true&&lastStaticRefreshAt&&now-lastStaticRefreshAt<STATIC_VISIBLE_RECHECK_TTL) return Promise.resolve(false);
-    staticRefreshPromise=fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache').then(function(result){
+    staticRefreshPromise=(lastStaticRefreshAt?fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache'):getInitialStaticFetchPromise()).then(function(result){
       if(result.empty||!result.payload) return false;
       const compact=compactSnapshot(result.payload,{etag:result.etag}); if(!compact) return false;
       baseSnapshot=compact;
       setCached('static',compact);
       lastStaticRefreshAt=Date.now();
       renderMerged();
+      if(result.payload&&result.payload.meta&&result.payload.meta.deliveryView==='initial'){
+        idle(function(){upgradeInitialToFullSnapshot();},450);
+      }
       return true;
     }).catch(function(){return false;}).finally(function(){staticRefreshPromise=null;});
     return staticRefreshPromise;
@@ -456,6 +487,8 @@
       if(document.hidden===false) nextFrame(function(){refreshStatic(false);});
     });
   }
+  // Begin the canonical IP-scoped snapshot request before DOMContentLoaded.
+  getInitialStaticFetchPromise().catch(function(){initialStaticFetchPromise=null;});
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true});
   else boot();
 })();
