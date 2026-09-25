@@ -1,0 +1,55 @@
+/* IGDC administrator checkbox accessibility v1.0
+ * Shared across Distribution / Media / Social / Donation and admin audit consoles.
+ * Keeps native checkbox behavior while providing a human-sized visual and hit target.
+ */
+input[type="checkbox"]{
+  width:24px !important;
+  height:24px !important;
+  min-width:24px !important;
+  min-height:24px !important;
+  margin:0 6px 0 0;
+  vertical-align:middle;
+  cursor:pointer;
+  accent-color:#55c8ff;
+  touch-action:manipulation;
+}
+input[type="checkbox"]:disabled{
+  cursor:not-allowed;
+  opacity:.55;
+}
+.igdc-checkbox-label{
+  min-height:38px;
+  padding:6px 8px;
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+  align-items:center;
+}
+.igdc-checkbox-label > input[type="checkbox"]{
+  flex:0 0 24px;
+}
+.igdc-checkbox-hit{
+  min-width:52px;
+  min-height:42px;
+  padding-left:10px !important;
+  padding-right:10px !important;
+  cursor:pointer;
+  text-align:center;
+  vertical-align:middle !important;
+}
+.igdc-checkbox-hit > input[type="checkbox"],
+.igdc-checkbox-hit label input[type="checkbox"]{
+  display:inline-block;
+  margin-left:auto;
+  margin-right:auto;
+}
+@media (pointer:coarse){
+  input[type="checkbox"]{
+    width:26px !important;
+    height:26px !important;
+    min-width:26px !important;
+    min-height:26px !important;
+  }
+  .igdc-checkbox-label{min-height:44px;padding:8px 10px}
+  .igdc-checkbox-hit{min-width:58px;min-height:46px}
+}
