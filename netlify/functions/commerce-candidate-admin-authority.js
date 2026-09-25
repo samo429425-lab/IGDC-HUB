@@ -5,7 +5,7 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 
-const VERSION = "commerce-candidate-admin-authority-v1.1.0-canonical-management-state";
+const VERSION = "commerce-candidate-admin-authority-v1.2.0-front-live-admin-restore";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ALLOWED_SOURCE_REFS = new Set(["country-product-ranking-review","commerce-candidate-review-api"]);
 const SECTION_KEYS = new Set([
@@ -82,18 +82,19 @@ async function applyOne(actor,candidateId,scope,decision,key,source){
   const actorId=text(actor&&actor.sub)||"administrator",prior=currentPlacement(payload,scope,oldRows);
   let status=text(row.status)||"approval_pending",effective=decision,assignment=null;
 
-  if(decision==="slot_candidate"||decision==="sync_ai"){
+  if(decision==="slot_candidate"||decision==="sync_ai"||decision==="recover_live_assignment"){
     const target=placementKey(key||text(plain(payload.approvedPlacement||payload.placement).key)||((text(plain(payload.approvedPlacement||payload.placement).page)&&text(plain(payload.approvedPlacement||payload.placement).sectionKey||plain(payload.approvedPlacement||payload.placement).section))?text(plain(payload.approvedPlacement||payload.placement).page)+"|"+text(plain(payload.approvedPlacement||payload.placement).sectionKey||plain(payload.approvedPlacement||payload.placement).section):""));
     if(!target)throw Object.assign(new Error("배치할 18개 섹션을 확인하세요."),{statusCode:400});
-    const split=splitKey(target),ai=decision==="sync_ai"||source==="ai_automation";
+    const split=splitKey(target),recovering=decision==="recover_live_assignment",ai=!recovering&&(decision==="sync_ai"||source==="ai_automation");
     await removeScopeAssignments(oldRows,scope);
     assignment=await upsertAssignment(candidateId,scope,target,actorId,ai?"ai_automation":"administrator",oldRows);
+    if(recovering&&assignment&&assignment.id){await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(assignment.id),{publication_status:"published",updated_at:now,updated_by:actorId});assignment.publication_status="published";}
     payload.slotDecision="slot_candidate";
-    payload.approvedPlacement={key:target,page:split.page,section:split.section,sectionKey:split.section,country:scope.country,region:scope.region,administratorSelected:!ai,aiSelected:ai,proposalOnly:false,publicPublication:false,selectedAt:now,selectedBy:actorId,selectionSource:ai?"ai_automation":"administrator"};
+    payload.approvedPlacement={key:target,page:split.page,section:split.section,sectionKey:split.section,country:scope.country,region:scope.region,administratorSelected:!ai,aiSelected:ai,proposalOnly:false,publicPublication:false,selectedAt:now,selectedBy:actorId,selectionSource:recovering?"front_snapshot_recovery":(ai?"ai_automation":"administrator")};
     payload.placement=Object.assign({},payload.approvedPlacement);
-    payload.managementControl={schema:"igdc-product-management-control.v1",source:ai?"ai_automation":"administrator",administratorLocked:!ai,aiReclassificationAllowed:ai,decidedAt:now,decidedBy:actorId};
-    payload.queueControl=Object.assign({},plain(payload.queueControl),{hiddenFromCountryQueue:false,permanentExcluded:false,action:ai?"ai_section_selected":"section_selected",restoredAt:now,restoredBy:actorId});
-    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"match",status:"ready",queued:false,persisted:true,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:true,authority:"administrator_candidate_ledger",assignmentId:assignment.id,sectionKey:target,country:scope.country,region:scope.region,preparedAt:now,preparedBy:actorId});
+    payload.managementControl={schema:"igdc-product-management-control.v1",source:recovering?"front_snapshot_recovery":(ai?"ai_automation":"administrator"),administratorLocked:!ai,aiReclassificationAllowed:ai,decidedAt:now,decidedBy:actorId};
+    payload.queueControl=Object.assign({},plain(payload.queueControl),{hiddenFromCountryQueue:false,permanentExcluded:false,action:recovering?"front_live_assignment_restored":(ai?"ai_section_selected":"section_selected"),restoredAt:now,restoredBy:actorId});
+    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"match",status:recovering?"matched":"ready",queued:false,persisted:true,pendingBuild:false,publicSnapshotConfirmed:recovering,buildVerificationRequired:!recovering,authority:recovering?"front_snapshot_recovery":"administrator_candidate_ledger",assignmentId:assignment.id,sectionKey:target,country:scope.country,region:scope.region,preparedAt:now,preparedBy:actorId,confirmedAt:recovering?now:undefined,confirmedBy:recovering?actorId:undefined});
     status="approval_pending";
     effective="slot_candidate";
   } else if(decision==="front_unmatch"){
@@ -148,7 +149,7 @@ exports.handler=async function(event){
       requests=ids.map(candidateId=>({candidateId,placementKey:placementKey(body.placementKey)}));
     }
     if(!requests.length)throw Object.assign(new Error("처리할 상품 후보를 선택하세요."),{statusCode:400});
-    const allowed=new Set(["slot_candidate","sync_ai","undecided","hold","reject","purge","dismiss","remove_from_list","front_unmatch"]);
+    const allowed=new Set(["slot_candidate","sync_ai","recover_live_assignment","undecided","hold","reject","purge","dismiss","remove_from_list","front_unmatch"]);
     if(!allowed.has(decision))throw Object.assign(new Error("지원하지 않는 관리자 상품 작업입니다."),{statusCode:400});
 
     const results=[],failures=[];
