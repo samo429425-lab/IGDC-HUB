@@ -51,6 +51,8 @@
     #queuePanel,#productQueueStageCurrentBtn,#productQueueAutoBtn,#productQueueStageState,.product-transition-audit{display:none!important}
 
     .candidate-bulk-state{display:inline-flex;align-items:center;min-height:30px;padding:5px 9px;border:1px solid #355677;border-radius:8px;background:#091525;color:#b9cde3;font-weight:800}.candidate-bulk-state.working{border-color:#3b78a4;color:#ccecff}.candidate-bulk-state.ok{border-color:#2f7d5a;color:#c9f7df}.candidate-bulk-state.warn{border-color:#8b5c20;color:#ffe4ad}.candidate-bulk-state.fail{border-color:#9f4757;color:#ffd5dc}
+
+    .excluded-product-preview{display:grid;grid-template-columns:132px minmax(240px,1fr);gap:12px;align-items:start;min-width:430px}.excluded-product-thumb{display:grid;place-items:center;width:132px;height:100px;border:1px solid #355677;border-radius:9px;overflow:hidden;background:#fff;text-decoration:none}.excluded-product-thumb img{width:100%;height:100%;object-fit:contain;background:#fff}.excluded-product-thumb.missing{background:#091525;color:#8ea2ba;font-size:12px;text-align:center}.excluded-product-meta{min-width:0}.excluded-product-meta .mono{margin-top:7px;word-break:break-all;color:#9fb3cb}@media(max-width:760px){.excluded-product-preview{grid-template-columns:96px minmax(190px,1fr);min-width:320px}.excluded-product-thumb{width:96px;height:82px}}
 </style>
 
   <style>
@@ -371,7 +373,7 @@
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="hold" disabled>선택 상품 영구 제외</button>
               <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="hold" disabled>선택 목록에서만 제거</button>
             </div>
-            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>상품·원본 확인</th><th>업체</th><th>현재 상태</th></tr></thead><tbody id="productHoldRows"></tbody></table></div>
+            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>썸네일·상품·원본 확인</th><th>업체</th><th>현재 상태</th></tr></thead><tbody id="productHoldRows"></tbody></table></div>
           </div>
         </details>
 
@@ -386,7 +388,7 @@
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="reject" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="reject" disabled>선택 목록에서만 제거</button>
             </div>
-            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>상품·원본 확인</th><th>업체</th><th>제외 상태</th></tr></thead><tbody id="productRejectRows"></tbody></table></div>
+            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>썸네일·상품·원본 확인</th><th>업체</th><th>제외 상태</th></tr></thead><tbody id="productRejectRows"></tbody></table></div>
           </div>
         </details>
       </div>
@@ -532,7 +534,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260926-candidate-bulk-v2"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260927-psom-bulk-thumb-v1"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
