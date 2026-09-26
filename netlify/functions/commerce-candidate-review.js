@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.12.0-fast-management-projection";
+const VERSION = "commerce-candidate-review-api-v1.13.0-fast-snapshot-fallback";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -248,6 +248,14 @@ async function managementCandidatePage(countryInput,regionInput,offsetInput,limi
   }
   const projectionStarted=Date.now(),rows=raw.map(fastManagementCandidate),projectionMs=Date.now()-projectionStarted,returned=rows.length,hasMore=mode==="marketScope_fast_page"&&raw.length===limit;
   return {rows,relationErrors:[],pagination:{offset,limit,returned,hasMore,nextOffset:hasMore?offset+raw.length:null,mode},timing:{candidateQueryMs:queryMs,projectionMs,totalMs:Date.now()-started,relationHydration:false}};
+}
+
+async function managementCandidateSnapshot(countryInput,regionInput,limitInput){
+  const started=Date.now(),country=normalizeCountry(countryInput),region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE",limit=Math.max(50,Math.min(3000,Number(limitInput)||3000));
+  if(!country||country==="GLOBAL")return {rows:[],pagination:{total:0,loadedItems:0,loadedPages:1,complete:true,mode:"empty"},timing:{totalMs:Date.now()-started}};
+  const queryStarted=Date.now(),raw=await scopedProductCandidateRows(country,region,limit),queryMs=Date.now()-queryStarted;
+  const projectionStarted=Date.now(),rows=(Array.isArray(raw)?raw:[]).map(fastManagementCandidate),projectionMs=Date.now()-projectionStarted;
+  return {rows,pagination:{total:rows.length,loadedItems:rows.length,loadedPages:1,complete:true,mode:"source_payload_fast_snapshot"},timing:{candidateQueryMs:queryMs,projectionMs,totalMs:Date.now()-started,relationHydration:false}};
 }
 
 async function scopedLiveProductResearchQueue(country,region,limit){
@@ -748,6 +756,11 @@ exports.handler=async function(event){
         const page=await managementCandidatePage(scopeCountry,scopeRegion,query.offset,query.pageSize||query.limit);
         const rows=compactRequested?compactManagementCandidates(page.rows):page.rows;
         return json(200,{ok:true,scope:{country:scopeCountry,region:scopeRegion||"NATIONWIDE",source:"administrator-selected",crossCountry:false},candidates:rows,pagination:page.pagination,timing:page.timing||{},pipeline:{version:VERSION,pagedManagementLedger:true,fastManagementProjection:true,relationErrors:page.relationErrors||[]}});
+      }
+      if(action==="management_snapshot"){
+        const snap=await managementCandidateSnapshot(scopeCountry,scopeRegion,query.limit);
+        const rows=compactRequested?compactManagementCandidates(snap.rows):snap.rows;
+        return json(200,{ok:true,scope:{country:scopeCountry,region:scopeRegion||"NATIONWIDE",source:"administrator-selected",crossCountry:false},candidates:rows,pagination:snap.pagination,timing:snap.timing||{},pipeline:{version:VERSION,fastManagementProjection:true,fastSnapshotFallback:true,relationHydration:false}});
       }
       const stageLimit=action==="diagnostic"?600:(action==="summary"?250:3000);
       const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion,stageLimit);

@@ -3,7 +3,7 @@
 const AdminSession=require("./lib/global-slot-console-auth");
 const SlotStore=require("./lib/global-slot-console-supabase");
 
-const VERSION="igdc-runtime-diagnostic-v1.0.0";
+const VERSION="igdc-runtime-diagnostic-v1.1.0-candidate-route-probes";
 const ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 function text(v){return v==null?"":String(v).trim();}
 function lower(v){return text(v).toLowerCase();}
@@ -31,6 +31,11 @@ exports.handler=async function(event){
     const candidateScope=country&&/^[A-Z]{2}$/.test(country)?"&source_payload->marketScope->>marketCountry=eq."+encodeURIComponent(country)+"&source_payload->marketScope->>marketRegion=eq."+encodeURIComponent(region||"NATIONWIDE"):"";
     const probes=[];
     probes.push(await supabaseProbe("candidates_scope_sample","/rest/v1/gslot_candidates?select=id,status,updated_at&source_ref=eq."+encodeURIComponent(sourceRef)+candidateScope+"&order=updated_at.desc&limit=3",6500));
+    // Exercise the same source_payload shape used by the administrator candidate
+    // fast path, including a deep offset where the 600-row KR ledger previously
+    // appeared disconnected. These are read-only DB probes.
+    probes.push(await supabaseProbe("candidate_management_page_first25","/rest/v1/gslot_candidates?select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at&source_ref=eq."+encodeURIComponent(sourceRef)+candidateScope+"&order=updated_at.desc,id.asc&limit=25&offset=0",9000));
+    probes.push(await supabaseProbe("candidate_management_page_offset500","/rest/v1/gslot_candidates?select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at&source_ref=eq."+encodeURIComponent(sourceRef)+candidateScope+"&order=updated_at.desc,id.asc&limit=25&offset=500",9000));
     probes.push(await supabaseProbe("assignments_sample","/rest/v1/gslot_slot_assignments?select=id,candidate_id,publication_status,updated_at&order=updated_at.desc&limit=3",6500));
     probes.push(await supabaseProbe("availability_sample","/rest/v1/gslot_candidate_availability?select=candidate_id,availability_state,updated_at&order=updated_at.desc&limit=3",6500));
     probes.push(await supabaseProbe("revenue_sample","/rest/v1/gslot_candidate_revenue?select=id,candidate_id,status,updated_at&order=updated_at.desc&limit=3",6500));

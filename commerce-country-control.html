@@ -90,7 +90,7 @@
     <button id="useGeoBtn" type="button">현재 접속 IP 적용</button>
     <button id="reloadBtn" type="button" class="secondary">전체 상태 새로고침</button>
     <button id="diagnosticBtn" type="button" class="secondary">통합 점검 JSON</button><button id="diagnosticDownloadBtn" type="button" class="secondary" disabled>통합 JSON 다운로드</button>
-    <button id="runtimeDiagnosticBtn" type="button" class="secondary">Netlify·DB 런타임 점검</button><span id="runtimeDiagnosticState" class="state">배포·함수·관리 DB 응답시간 점검</span>
+    <button id="runtimeDiagnosticBtn" type="button" class="secondary">Netlify·DB 런타임 점검</button><button id="runtimeDiagnosticDownloadBtn" type="button" class="secondary" disabled>런타임 점검 다운로드</button><span id="runtimeDiagnosticState" class="state">배포·함수·관리 DB·후보 원장 조회 경로 점검</span>
     <button id="returnBtn" type="button" class="secondary">관리자 화면으로</button>
     <span id="state" class="state">관리자 공통 세션을 확인하는 중입니다.</span>
   </div>
@@ -530,7 +530,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260926-v25-fast-ledger-runtime-diagnostic"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260926-v26-ledger-fallback-runtime-download"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
