@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.10.1-3000-ledger-cleanup-state";
+const VERSION = "commerce-candidate-review-api-v1.10.2-compact-management-ledger";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -104,6 +104,10 @@ function candidateScopeQuery(basePath,country,region,limit){
   const countryPath=basePath+"->>country",regionPath=basePath+"->>region";
   return "select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at"+
     "&source_ref=eq."+encodeURIComponent(ProductPipeline.SOURCE_REF)+
+    /* Current rows are projected by marketScope. The legacy fallback must not
+       reread every current row again through countrySupply/placement, or a
+       600-row country becomes 1,800 heavy JSON rows before relation hydration. */
+    "&source_payload->marketScope->>marketCountry=is.null"+
     "&source_payload->"+countryPath+"=eq."+encodeURIComponent(country)+
     "&source_payload->"+regionPath+"=eq."+encodeURIComponent(region)+
     "&order=updated_at.desc&limit="+Math.max(1,Number(limit)||600);
@@ -223,6 +227,21 @@ async function stage(root){
   });
 }
 function summaryDoc(doc){return {version:VERSION,stageVersion:doc.version||null,generatedAt:doc.generatedAt||null,releaseGate:doc.releaseGate||null,summary:doc.summary||{},pipeline:doc.pipeline||{},candidateCount:Array.isArray(doc.candidates)?doc.candidates.length:0};}
+function compactManagementCandidate(rowInput){
+  const row=plain(rowInput),card=plain(row.productCard),supplier=plain(row.supplier),readiness=plain(row.researchReadiness),placement=plain(row.placement),revenue=plain(row.revenue),review=plain(row.review),life=plain(row.lifecycle),assignment=plain(life.assignment);
+  return {
+    candidateId:text(row.candidateId),title:text(row.title),stageStatus:text(row.stageStatus),releaseEligible:row.releaseEligible===true,
+    productCard:{title:text(card.title),image:text(card.image),checkoutUrl:text(card.checkoutUrl),supplierUrl:text(card.supplierUrl),supplierName:text(card.supplierName),price:card.price==null?null:card.price,priceDisplay:text(card.priceDisplay),priceCurrency:text(card.priceCurrency),availability:card.availability==null?null:card.availability,checkoutMode:text(card.checkoutMode),sourceTitle:text(card.sourceTitle)},
+    supplier:{name:text(supplier.name),officialUrl:text(supplier.officialUrl),trustScore:Number(supplier.trustScore||0),evidenceReady:supplier.evidenceReady===true},
+    placement:{page:text(placement.page),section:text(placement.section),slot:text(placement.slot),country:text(placement.country),region:text(placement.region)},
+    proposedPlacements:array(row.proposedPlacements).slice(0,12),
+    researchReadiness:{stage:text(readiness.stage),queueEligible:readiness.queueEligible===true,blockers:array(readiness.blockers).slice(0,16),reviewGaps:array(readiness.reviewGaps).slice(0,16),warnings:array(readiness.warnings).slice(0,8)},
+    marketKeys:array(row.marketKeys).slice(0,24),revenue:{type:text(revenue.type),monetizationState:text(revenue.monetizationState),contractId:text(revenue.contractId),outboundRoute:plain(revenue.outboundRoute)},
+    review:{state:text(review.state),nextGate:text(review.nextGate)},reasons:array(row.reasons).slice(0,20),queueControl:plain(row.queueControl),slotDecision:text(row.slotDecision),
+    lifecycle:{stage:text(life.stage),nextGate:text(life.nextGate),assignment:Object.keys(assignment).length?{id:text(assignment.id),hubKey:text(assignment.hubKey),slotKey:text(assignment.slotKey),countryCode:text(assignment.countryCode),regionCode:text(assignment.regionCode),state:text(assignment.state),publicationStatus:text(assignment.publicationStatus),priority:Number(assignment.priority||0)}:null}
+  };
+}
+function compactManagementCandidates(rows){return array(rows).map(compactManagementCandidate);}
 function pageMap(hub){const h=lower(hub);return ({home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"})[h]||"";}
 
 function normalizeCountry(value){return MarketSaleScope.normalizeCountry(value);}
@@ -647,15 +666,19 @@ exports.handler=async function(event){
       const probe=geoProbe(event);const requested=text(query.country).toUpperCase();
       const scopeCountry=requested||(probe.resolved?probe.country:"UNRESOLVED");
       const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
-      const stageLimit=action==="diagnostic"?600:(action==="summary"?800:5000);
+      const compactRequested=["1","true","yes"].includes(lower(query.compact));
+      /* Product management is capped at 3,000 rows by operating policy. Avoid a
+         5,000-row hydrate that can time out before the admin sees a successful
+         latest-list transfer. */
+      const stageLimit=action==="diagnostic"?600:(action==="summary"?800:3000);
       const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion,stageLimit);
       if(action==="dashboard"){
-        const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,5000)};
-        if(!["1","true","yes"].includes(lower(query.compact)))response.diagnostic=diagnosticDoc(doc,member);
+        const summary=summaryDoc(doc),rows=(doc.candidates||[]).slice(0,3000),response={ok:true,scope:doc.selectedScope,summary,candidates:compactRequested?compactManagementCandidates(rows):rows};
+        if(!compactRequested)response.diagnostic=diagnosticDoc(doc,member);
         return json(200,response);
       }
       if(action==="summary")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc)});
-      if(action==="candidates")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,5000)});
+      if(action==="candidates"){const rows=(doc.candidates||[]).slice(0,3000);return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:compactRequested?compactManagementCandidates(rows):rows});}
       if(action==="diagnostic")return json(200,diagnosticDoc(doc,member));
       return json(404,{ok:false,error:"지원하지 않는 조회 요청입니다."});
     }
