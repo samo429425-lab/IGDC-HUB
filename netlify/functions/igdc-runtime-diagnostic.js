@@ -3,7 +3,7 @@
 const AdminSession=require("./lib/global-slot-console-auth");
 const SlotStore=require("./lib/global-slot-console-supabase");
 
-const VERSION="igdc-runtime-diagnostic-v1.2.0-scope-shape-probes";
+const VERSION="igdc-runtime-diagnostic-v1.3.0-canonical-product-source-ref";
 const ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 function text(v){return v==null?"":String(v).trim();}
 function lower(v){return text(v).toLowerCase();}
@@ -27,7 +27,7 @@ exports.handler=async function(event){
     const actor=await AdminSession.resolveUser(event),actorRoles=roles(actor);
     if(!actorRoles.some((role)=>ROLES.has(role)))return json(403,{ok:false,error:"administrator_required"});
     const query=event.queryStringParameters||{},country=text(query.country).toUpperCase(),region=text(query.region||"NATIONWIDE").toUpperCase();
-    const sourceRef="commerce_product_research";
+    const sourceRef="country-product-ranking-review";
     const candidateScope=country&&/^[A-Z]{2}$/.test(country)?"&source_payload->marketScope->>marketCountry=eq."+encodeURIComponent(country)+"&source_payload->marketScope->>marketRegion=eq."+encodeURIComponent(region||"NATIONWIDE"):"";
     const probes=[];
     probes.push(await supabaseProbe("candidates_scope_sample","/rest/v1/gslot_candidates?select=id,status,updated_at&source_ref=eq."+encodeURIComponent(sourceRef)+candidateScope+"&order=updated_at.desc&limit=3",6500));
