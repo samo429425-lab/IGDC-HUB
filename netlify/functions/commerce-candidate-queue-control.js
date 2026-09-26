@@ -9,9 +9,10 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.5.0-safe-isolated-bucket-guard";
+const VERSION = "commerce-candidate-queue-control-v1.6.0-bucket-restore";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
-const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject"]);
+const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore"]);
+const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce-candidate-review-api"]);
 
 
 function text(value){ return value == null ? "" : String(value).trim(); }
@@ -27,7 +28,7 @@ function candidateIds(value){
   return out;
 }
 async function readCandidate(id){
-  const rows=await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,owner_note&limit=1&id=eq."+encodeURIComponent(id));
+  const rows=await SlotStore.select("gslot_candidates","select=id,kind,status,source_ref,source_payload,owner_note&limit=1&id=eq."+encodeURIComponent(id));
   return Array.isArray(rows)?rows[0]||null:null;
 }
 async function releaseSectionAssignment(candidateId){
@@ -41,20 +42,43 @@ function candidateManagementBucket(row){
   if(status==="removed"||decision==="removed"||["removed_from_list","deleted_from_management"].includes(review)||["remove_from_list","dismiss"].includes(queueAction))return "removed";
   return "active";
 }
+function candidateAlreadyRestored(row){
+  const payload=plain(row&&row.source_payload),queueControl=plain(payload.queueControl);
+  return ["approval_pending","research_pending"].includes(lower(row&&row.status))
+    && lower(payload.slotDecision)==="undecided"
+    && lower(queueControl.action)==="restored"
+    && queueControl.hiddenFromCountryQueue!==true
+    && queueControl.permanentExcluded!==true;
+}
 function requireExpectedBucket(row,expectedBucket,action){
   const expected=lower(expectedBucket),actual=candidateManagementBucket(row);
   if(!expected)return actual;
   if(!["hold","reject"].includes(expected)){const error=new Error("invalid_expected_bucket");error.code="invalid_expected_bucket";throw error;}
   if(actual!==expected){
+    if(action==="restore" && actual==="active" && candidateAlreadyRestored(row))return actual;
     if(actual==="removed" && ["dismiss","remove_from_list"].includes(action))return actual;
     const error=new Error("candidate_state_mismatch: expected "+expected+", actual "+actual);error.code="candidate_state_mismatch";throw error;
   }
-  if(expected==="hold" && !["dismiss","remove_from_list","reject","purge"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
-  if(expected==="reject" && !["dismiss","remove_from_list","purge"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
+  if(expected==="hold" && !["restore","dismiss","remove_from_list","reject","purge"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
+  if(expected==="reject" && !["restore","dismiss","remove_from_list","purge"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
   return actual;
 }
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
+  if(action==="restore"){
+    if(candidateAlreadyRestored(row))return{id,action,status:text(row&&row.status)||"approval_pending",restoredToCandidate:true,idempotent:true,assignmentCleanup:{ok:true,count:0}};
+    const previousStatus=text(row&&row.status)||"approval_pending",previousBucket=candidateManagementBucket(row),assignmentCleanup=await releaseSectionAssignment(id);
+    payload.slotDecision="undecided";
+    delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.primaryPlacement;
+    delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
+    payload.queueControl=Object.assign({},plain(payload.queueControl),{schema:"igdc-private-product-queue-control.v1",action:"restored",previousStatus,previousBucket,hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:text(actorId)||"administrator",decidedAt:now,decidedBy:text(actorId)||"administrator"});
+    payload.review=Object.assign({},plain(payload.review),{state:"pending",restoredFrom:previousBucket,decidedAt:now,decidedBy:text(actorId)||"administrator"});
+    payload.managementControl={schema:"igdc-product-management-control.v1",source:"administrator_restore",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:text(actorId)||"administrator"};
+    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{operation:"unmatch",status:"unmatched",queued:false,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:false,deferredBuild:false,reason:"administrator_restored_to_candidate_pool",requestedAt:now,requestedBy:text(actorId)||"administrator"});
+    payload.decisionAt=now;payload.decisionBy=text(actorId)||"administrator";payload.decisionSource="administrator_restore";payload.publicPublication=false;payload.automaticImport=false;
+    await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"approval_pending",source_payload:payload,owner_note:"관리자가 보류·제외 상품을 전체 상품 후보·배치 관리 목록으로 복원했습니다.",updated_at:now});
+    return{id,action,status:"approval_pending",restoredToCandidate:true,previousBucket,assignmentCleanup};
+  }
   if(action==="dismiss"){
     /* SAFE DELETE: never physically delete the shared master candidate row from
        a HOLD/REJECT management screen.  The master ledger is also the source for
@@ -126,7 +150,7 @@ exports.handler=async function(event){
       const settled=await Promise.allSettled(chunk.map(async(id)=>{
         const row=await readCandidate(id);
         if(!row)throw Object.assign(new Error("candidate_not_found"),{candidateId:id});
-        if(text(row.source_ref)!==ProductPipeline.SOURCE_REF)throw Object.assign(new Error("unsupported_candidate_source"),{candidateId:id});
+        if(lower(row&&row.kind)!=="product"||!MANAGEABLE_PRODUCT_SOURCES.has(text(row.source_ref)))throw Object.assign(new Error("unsupported_candidate_source"),{candidateId:id});
         requireExpectedBucket(row,expectedBucket,action);
         return await applyAction(actorId,row,action);
       }));
