@@ -49,6 +49,8 @@
     /* Simplified 3-stage operator flow: supplier research -> product research -> candidate placement.
        Legacy queue controls remain in DOM/runtime for backward compatibility only. */
     #queuePanel,#productQueueStageCurrentBtn,#productQueueAutoBtn,#productQueueStageState,.product-transition-audit{display:none!important}
+
+    .candidate-bulk-state{display:inline-flex;align-items:center;min-height:30px;padding:5px 9px;border:1px solid #355677;border-radius:8px;background:#091525;color:#b9cde3;font-weight:800}.candidate-bulk-state.working{border-color:#3b78a4;color:#ccecff}.candidate-bulk-state.ok{border-color:#2f7d5a;color:#c9f7df}.candidate-bulk-state.warn{border-color:#8b5c20;color:#ffe4ad}.candidate-bulk-state.fail{border-color:#9f4757;color:#ffd5dc}
 </style>
 
   <style>
@@ -530,7 +532,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260926-direct-ledger-v1"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260926-candidate-bulk-v2"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

@@ -19,7 +19,7 @@
   var stateEl=$('state'),notice=$('notice');
   var acceptedToken='',acceptedSession=null,resolvingSession=null,wired=false;
   var catalog=null,locations=null,geo=null,regions=[],countries=[],settings=[],settingMap={};
-  var selectedRegion='',selectedCountry='',selectedSubdivision='NATIONWIDE',regionOnly=true,lastJson=null,lastGlobalJson=null,lastRegionalJson=null,lastCountryJson=null,lastDiagnosticJson=null,lastGlobalControlJson=null,lastProductJson=null,lastProductTransitionAuditJson=null,lastRuntimeDiagnostic=null,lastScopeCache=null,lastScopeAuditJson=null,activeScopeAudit='',selectionSource='initial',lastSignalReport=null,lastCountryPreview=null,researchStopRequested=false,researchLoopActive=false,productStopRequested=false,productLoopActive=false,productPausedForQueue=false,productQueueStageActive=false,productPauseAutoQueue=false,productPausePersistPromise=null,productPauseServerConfirmed=false,signalLoopActive=false,returnRestoreActive=false,returnRestoreRow=null,returnRestoreTimer=null,lastPassiveRestoreAt=0,supplierControlScopeKey='',queueControlScopeKey='',queueCandidateRows=[],queueFocusedCandidateIds=[],queuePage=0,supplierActiveRows=[],supplierHoldingRows=[],supplierBlockedRows=[],productRows=[],latestProductRows=[],latestProductPage=0,latestSelectedProducts={},latestQueueActionActive=false,latestRefreshActive=false,productPlacementSelections={},candidateSelectedProducts={},candidateGroupPages={},frontSelectedSections={},frontSelectedProducts={},frontSnapshotCounts={},frontSnapshotSource={},frontSnapshotItems={},frontSnapshotLoadedAt=0,frontRestoreAttempted={},productExclusionActionActive=false,productRenderEpoch=0,heavyPanelWired=false,productAutomationActive=false,productFrontSyncActive=false,affiliateSettlementProductId="",sessionResumeActive=false,sessionUiResume=null,sessionDataResumeAvailable=false;
+  var selectedRegion='',selectedCountry='',selectedSubdivision='NATIONWIDE',regionOnly=true,lastJson=null,lastGlobalJson=null,lastRegionalJson=null,lastCountryJson=null,lastDiagnosticJson=null,lastGlobalControlJson=null,lastProductJson=null,lastProductTransitionAuditJson=null,lastRuntimeDiagnostic=null,lastScopeCache=null,lastScopeAuditJson=null,activeScopeAudit='',selectionSource='initial',lastSignalReport=null,lastCountryPreview=null,researchStopRequested=false,researchLoopActive=false,productStopRequested=false,productLoopActive=false,productPausedForQueue=false,productQueueStageActive=false,productPauseAutoQueue=false,productPausePersistPromise=null,productPauseServerConfirmed=false,signalLoopActive=false,returnRestoreActive=false,returnRestoreRow=null,returnRestoreTimer=null,lastPassiveRestoreAt=0,supplierControlScopeKey='',queueControlScopeKey='',queueCandidateRows=[],queueFocusedCandidateIds=[],queuePage=0,supplierActiveRows=[],supplierHoldingRows=[],supplierBlockedRows=[],productRows=[],latestProductRows=[],latestProductPage=0,latestSelectedProducts={},latestQueueActionActive=false,latestRefreshActive=false,productPlacementSelections={},candidateSelectedProducts={},candidateGroupPages={},frontSelectedSections={},frontSelectedProducts={},frontSnapshotCounts={},frontSnapshotSource={},frontSnapshotItems={},frontSnapshotLoadedAt=0,frontRestoreAttempted={},candidateBulkActionActive={},productExclusionActionActive=false,productRenderEpoch=0,heavyPanelWired=false,productAutomationActive=false,productFrontSyncActive=false,affiliateSettlementProductId="",sessionResumeActive=false,sessionUiResume=null,sessionDataResumeAvailable=false;
   var PRODUCT_PAUSE_AUTO_QUEUE_KEY='igdc_product_pause_auto_queue_v1';
   var MANAGEMENT_PAGE_SIZE=100;
   var LATEST_MANUAL_ACTION_BATCH=10;
@@ -703,7 +703,7 @@
     var workspaceKey=kind==='section'&&validSection?'section_'+key.replace(/[^a-z0-9_-]/gi,'_'):(kind==='candidate'?'candidate_group_'+key.replace(/[^a-z0-9_-]/gi,'_'):'');
     var policyButton=workspaceKey?'<button type="button" class="ghost policy-workspace-button" data-policy-workspace="'+esc(workspaceKey)+'" data-policy-workspace-label="'+esc(label)+(kind==='candidate'?' 후보 관리 대화':' 섹션 운영 대화')+'" data-policy-scope="country">AI 운영·정책 대화</button>':'';
     var safeKey=key.replace(/[^a-z0-9_-]/gi,'_');
-    var candidateToolbar=kind==='candidate'?'<div class="section-product-toolbar candidate-bulk-toolbar"><label class="product-front-select-label"><input id="candidateSelectAll-'+esc(safeKey)+'" type="checkbox" data-candidate-select-all="'+esc(key)+'"> 이 후보군 전체 선택</label><span id="candidateSelectedCount-'+esc(safeKey)+'" class="pill info">선택 후보 0건</span><button type="button" class="product-section-ai-button" data-candidate-bulk="ai" data-candidate-group="'+esc(key)+'" disabled>선택 후보 AI로 18개 섹션 자동 배치</button><select class="product-management-select candidate-target-select" data-candidate-target="'+esc(key)+'"><option value="">수동 배치 섹션 선택</option>'+PRODUCT_SECTIONS.map(function(section){return'<option value="'+esc(section.key)+'">'+esc(section.label)+'</option>';}).join('')+'</select><button type="button" class="product-section-front-button" data-candidate-bulk="place" data-candidate-group="'+esc(key)+'" disabled>선택 후보를 18개 섹션 배치 예정으로 이동</button><button type="button" class="secondary" data-candidate-bulk="undecided" data-candidate-group="'+esc(key)+'" disabled>선택 후보 미배정 복원</button><button type="button" class="secondary" data-candidate-bulk="hold" data-candidate-group="'+esc(key)+'" disabled>선택 후보 보류</button><button type="button" class="danger" data-candidate-bulk="reject" data-candidate-group="'+esc(key)+'" disabled>선택 후보 제외</button><button type="button" class="danger" data-candidate-bulk="purge" data-candidate-group="'+esc(key)+'" disabled>선택 후보 영구 제외</button><button type="button" class="secondary" data-candidate-bulk="list_delete" data-candidate-group="'+esc(key)+'" disabled>선택 후보 목록에서만 제거</button></div>':'';
+    var candidateToolbar=kind==='candidate'?'<div class="section-product-toolbar candidate-bulk-toolbar"><label class="product-front-select-label"><input id="candidateSelectAll-'+esc(safeKey)+'" type="checkbox" data-candidate-select-all="'+esc(key)+'"> 이 후보군 전체 선택</label><span id="candidateSelectedCount-'+esc(safeKey)+'" class="pill info">선택 후보 0건</span><button type="button" class="product-section-ai-button" data-candidate-bulk="ai" data-candidate-group="'+esc(key)+'" disabled>선택 후보 AI로 18개 섹션 자동 배치</button><select class="product-management-select candidate-target-select" data-candidate-target="'+esc(key)+'"><option value="">수동 배치 섹션 선택</option>'+PRODUCT_SECTIONS.map(function(section){return'<option value="'+esc(section.key)+'">'+esc(section.label)+'</option>';}).join('')+'</select><button type="button" class="product-section-front-button" data-candidate-bulk="place" data-candidate-group="'+esc(key)+'" disabled>선택 후보를 18개 섹션 배치 예정으로 이동</button><button type="button" class="secondary" data-candidate-bulk="undecided" data-candidate-group="'+esc(key)+'" disabled>선택 후보 미배정 복원</button><button type="button" class="secondary" data-candidate-bulk="hold" data-candidate-group="'+esc(key)+'" disabled>선택 후보 보류</button><button type="button" class="danger" data-candidate-bulk="reject" data-candidate-group="'+esc(key)+'" disabled>선택 후보 제외</button><button type="button" class="danger" data-candidate-bulk="purge" data-candidate-group="'+esc(key)+'" disabled>선택 후보 영구 제외</button><button type="button" class="secondary" data-candidate-bulk="list_delete" data-candidate-group="'+esc(key)+'" disabled>선택 후보 목록에서만 제거</button><span id="candidateBulkState-'+esc(safeKey)+'" class="candidate-bulk-state small" aria-live="polite">준비</span></div>':'';
     var productToolbar=kind==='section'&&validSection?'<div class="section-product-toolbar"><label class="product-front-select-label"><input id="sectionProductSelectAll-'+esc(safeKey)+'" type="checkbox" data-section-products-select-all="'+esc(key)+'"> 이 섹션 상품 전체 선택</label><span id="sectionProductSelectedCount-'+esc(safeKey)+'" class="pill info">선택 상품 0건</span><button type="button" class="product-section-front-button" data-selected-products-front="'+esc(key)+'" data-front-operation="match" disabled>선택 상품 매칭</button><button type="button" class="product-section-unmatch-button" data-selected-products-front="'+esc(key)+'" data-front-operation="unmatch" disabled>선택 상품 매칭 해제</button><button type="button" class="product-section-front-button" data-section-front-match="'+esc(key)+'" '+(matchBusy||!count?'disabled':'')+'>이 섹션 전체 상품 매칭</button><button type="button" class="product-section-unmatch-button" data-section-front-unmatch="'+esc(key)+'" '+(controlsBusy||!rows.some(frontPublicationActive)?'disabled':'')+'>이 섹션 전체 상품 매칭 해제</button></div>':'';
     return'<details class="product-group" data-product-group="'+esc(key)+'" data-product-group-kind="'+esc(kind)+'"><summary><span>'+sectionSelect+' <strong>'+esc(label)+'</strong> '+capacity+'</span><span class="product-group-summary-actions">'+policyButton+autoButton+frontButtons+'<span class="pill info" data-group-toggle-label>목록 펼치기</span></span></summary><div class="product-group-body">'+sectionMismatchMarkup(key,count)+candidateToolbar+productToolbar+'<div class="product-group-grid"></div><div class="product-group-pager"></div></div></details>';
   }
@@ -723,58 +723,69 @@
     return rows.filter(function(row){return candidateGroupKey(row)===groupKey;});
   }
   function selectedCandidateIds(groupKey){var valid={};candidateGroupRows(groupKey).forEach(function(row){valid[text(row.id)]=true;});return Object.keys(candidateSelectedProducts).filter(function(id){return candidateSelectedProducts[id]===true&&valid[id];});}
-  function syncCandidateSelectionControls(groupKey){var rows=candidateGroupRows(groupKey),ids=selectedCandidateIds(groupKey),safeKey=groupKey.replace(/[^a-z0-9_-]/gi,'_'),all=$('candidateSelectAll-'+safeKey),count=$('candidateSelectedCount-'+safeKey),busy=productAutomationActive||productFrontSyncActive,selectedMap={};ids.forEach(function(id){selectedMap[id]=true;});if(all){all.checked=rows.length>0&&ids.length===rows.length;all.indeterminate=ids.length>0&&ids.length<rows.length;all.disabled=busy||!rows.length;}Array.prototype.forEach.call(document.querySelectorAll('[data-candidate-select]'),function(box){if(box.getAttribute('data-candidate-select')===groupKey)box.checked=selectedMap[text(box.value)]===true;});if(count)count.textContent='선택 후보 '+ids.length+'건';Array.prototype.forEach.call(document.querySelectorAll('[data-candidate-group="'+groupKey+'"]'),function(button){button.disabled=busy||!ids.length;});}
+  function syncCandidateSelectionControls(groupKey){var rows=candidateGroupRows(groupKey),ids=selectedCandidateIds(groupKey),safeKey=groupKey.replace(/[^a-z0-9_-]/gi,'_'),all=$('candidateSelectAll-'+safeKey),count=$('candidateSelectedCount-'+safeKey),busy=productAutomationActive||productFrontSyncActive||candidateBulkActionActive[groupKey]===true,selectedMap={};ids.forEach(function(id){selectedMap[id]=true;});if(all){all.checked=rows.length>0&&ids.length===rows.length;all.indeterminate=ids.length>0&&ids.length<rows.length;all.disabled=busy||!rows.length;}Array.prototype.forEach.call(document.querySelectorAll('[data-candidate-select]'),function(box){if(box.getAttribute('data-candidate-select')===groupKey){box.checked=selectedMap[text(box.value)]===true;box.disabled=busy;}});if(count)count.textContent='선택 후보 '+ids.length+'건';Array.prototype.forEach.call(document.querySelectorAll('[data-candidate-group="'+groupKey+'"]'),function(button){button.disabled=busy||!ids.length;});var target=document.querySelector('[data-candidate-target="'+groupKey+'"]');if(target)target.disabled=busy;}
+  function setCandidateBulkState(groupKey,message,kind){var safeKey=text(groupKey).replace(/[^a-z0-9_-]/gi,'_'),el=$('candidateBulkState-'+safeKey);if(!el)return;el.textContent=text(message)||'준비';el.className='candidate-bulk-state small'+(kind?' '+kind:'');}
   async function authorityCandidateAction(decision,candidateIds,placementKey,options){
-    candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
-    if(!candidateIds.length)return{ok:true,requested:0,processed:0,failed:0,results:[]};
-    var result=await api(ADMIN_AUTHORITY,'apply','POST',{}, {
-      countryCode:selectedCountry,
-      subdivisionCode:selectedSubdivision||'NATIONWIDE',
-      candidateIds:candidateIds,
-      decision:decision,
-      placementKey:placementKey||'',
-      source:options&&options.source||'administrator'
-    },45000);
-    return result||{};
+    options=options||{};candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
+    if(!candidateIds.length)return{ok:true,requested:0,processed:0,failed:0,processedIds:[],results:[],failures:[]};
+    /* Netlify functions have a finite invocation window.  Sending 100-3000 rows
+       to the authority in one request makes the server perform many Supabase
+       round-trips inside one invocation and the browser eventually sees a
+       timeout.  Keep each authority call small and durable, then aggregate the
+       exact per-chunk results in the browser. */
+    var chunkSize=Math.max(1,Math.min(8,Number(options.chunkSize||6))),processed=0,failures=[],results=[],processedIds=[];
+    for(var offset=0;offset<candidateIds.length;offset+=chunkSize){
+      var chunk=candidateIds.slice(offset,offset+chunkSize),data=null,lastError=null;
+      for(var attempt=0;attempt<3&&!data;attempt++){
+        try{data=await api(ADMIN_AUTHORITY,'apply','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:chunk,decision:decision,placementKey:placementKey||'',source:options.source||'administrator'},30000);}
+        catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
+      }
+      if(data){
+        processed+=Number(data.processed||0);(data.results||[]).forEach(function(row){results.push(row);});(data.processedIds||[]).forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});
+        (data.failures||[]).forEach(function(row){failures.push(row);});
+      }else{
+        chunk.forEach(function(id){failures.push({candidateId:id,error:text(lastError&&lastError.message)||'authority_request_failed'});});
+      }
+      if(typeof options.onProgress==='function')options.onProgress(Math.min(candidateIds.length,offset+chunk.length),candidateIds.length,failures.length);
+    }
+    return{ok:failures.length===0,complete:failures.length===0,requested:candidateIds.length,processed:processed,failed:failures.length,processedIds:processedIds,results:results,failures:failures};
   }
-  async function aiPlaceCandidateIds(candidateIds){
-    candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
-    var requested=candidateIds.length,processed=0,failed=0,placements=[];
-    for(var offset=0;offset<candidateIds.length;offset+=12){
-      var chunk=candidateIds.slice(offset,offset+12);
-      try{
-        var result=await api(CONTROL,'product_candidate_ai_recover','POST',{}, {
-          countryCode:selectedCountry,
-          subdivisionCode:selectedSubdivision||'NATIONWIDE',
-          candidateIds:chunk
-        },60000);
-        var rows=Array.isArray(result&&result.results)?result.results:[];
-        rows.forEach(function(row){
-          var id=text(row&&row.candidateId),key=text(row&&row.sectionKey);
-          if(id&&PRODUCT_SECTION_MAP[key])placements.push({candidateId:id,placementKey:key});
-        });
-        processed+=rows.filter(function(row){return row&&row.assigned===true&&PRODUCT_SECTION_MAP[text(row.sectionKey)];}).length;
-        failed+=Math.max(0,chunk.length-rows.length)+rows.filter(function(row){return !row||row.assigned!==true||!PRODUCT_SECTION_MAP[text(row.sectionKey)];}).length;
-      }catch(error){failed+=chunk.length;}
+  async function authorityAiPlacements(placements,options){
+    options=options||{};placements=Array.isArray(placements)?placements.filter(function(row){return row&&text(row.candidateId)&&PRODUCT_SECTION_MAP[text(row.placementKey)];}):[];
+    if(!placements.length)return{ok:true,requested:0,processed:0,failed:0,processedIds:[],results:[],failures:[]};
+    var chunkSize=Math.max(1,Math.min(8,Number(options.chunkSize||6))),processed=0,failures=[],results=[],processedIds=[];
+    for(var offset=0;offset<placements.length;offset+=chunkSize){
+      var chunk=placements.slice(offset,offset+chunkSize),data=null,lastError=null;
+      for(var attempt=0;attempt<3&&!data;attempt++){
+        try{data=await api(ADMIN_AUTHORITY,'apply','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',placements:chunk,decision:'sync_ai',source:'ai_automation'},30000);}
+        catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
+      }
+      if(data){processed+=Number(data.processed||0);(data.results||[]).forEach(function(row){results.push(row);});(data.processedIds||[]).forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});(data.failures||[]).forEach(function(row){failures.push(row);});}
+      else chunk.forEach(function(row){failures.push({candidateId:text(row.candidateId),error:text(lastError&&lastError.message)||'ai_authority_sync_failed'});});
+      if(typeof options.onProgress==='function')options.onProgress(Math.min(placements.length,offset+chunk.length),placements.length,failures.length);
     }
-    // Revalidation chooses the section; this second write makes that AI decision
-    // the durable admin ledger/assignment state so a refresh cannot snap back to
-    // the old Front assignment.
-    for(var p=0;p<placements.length;p+=100){
-      var batch=placements.slice(p,p+100);
-      try{
-        var committed=await api(ADMIN_AUTHORITY,'apply','POST',{}, {
-          countryCode:selectedCountry,
-          subdivisionCode:selectedSubdivision||'NATIONWIDE',
-          placements:batch,
-          decision:'sync_ai',
-          source:'ai_automation'
-        },45000);
-        failed+=Number(committed&&committed.failed||0);
-      }catch(error){failed+=batch.length;}
+    return{ok:failures.length===0,complete:failures.length===0,requested:placements.length,processed:processed,failed:failures.length,processedIds:processedIds,results:results,failures:failures};
+  }
+  async function aiPlaceCandidateIds(candidateIds,options){
+    options=options||{};candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
+    var requested=candidateIds.length,validationFailed=0,placements=[],validated=0,chunkSize=Math.max(1,Math.min(8,Number(options.chunkSize||6)));
+    for(var offset=0;offset<candidateIds.length;offset+=chunkSize){
+      var chunk=candidateIds.slice(offset,offset+chunkSize),result=null,lastError=null;
+      for(var attempt=0;attempt<2&&!result;attempt++){
+        try{result=await api(CONTROL,'product_candidate_ai_recover','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:chunk},55000);}
+        catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=1)break;await new Promise(function(resolve){setTimeout(resolve,700);});}
+      }
+      if(result){
+        var rows=Array.isArray(result.results)?result.results:[];validated+=rows.length;
+        rows.forEach(function(row){var id=text(row&&row.candidateId),key=text(row&&row.sectionKey);if(row&&row.assigned===true&&id&&PRODUCT_SECTION_MAP[key])placements.push({candidateId:id,placementKey:key});else validationFailed+=1;});
+        validationFailed+=Math.max(0,chunk.length-rows.length);
+      }else validationFailed+=chunk.length;
+      if(typeof options.onProgress==='function')options.onProgress('analysis',Math.min(candidateIds.length,offset+chunk.length),candidateIds.length,validationFailed);
     }
+    var committed=await authorityAiPlacements(placements,{chunkSize:6,onProgress:function(done,total,failed){if(typeof options.onProgress==='function')options.onProgress('commit',done,total,failed);}});
     try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}catch(_refreshError){}
-    return{ok:failed===0,requested:requested,processed:processed,failed:failed,placements:placements};
+    var failed=validationFailed+Number(committed.failed||0),processed=Number(committed.processed||0);
+    return{ok:failed===0,requested:requested,validated:validated,processed:processed,failed:failed,placements:placements,commit:committed};
   }
   async function releaseCandidateSection(candidateIds){
     candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
@@ -808,31 +819,41 @@
   }
 
   async function runCandidateBulkAction(groupKey,action){
-    var ids=selectedCandidateIds(groupKey);if(!ids.length){show('먼저 처리할 후보를 선택해 주세요.','warn');return;}
+    var ids=selectedCandidateIds(groupKey);if(!ids.length){setCandidateBulkState(groupKey,'먼저 처리할 후보를 선택해 주세요.','warn');show('먼저 처리할 후보를 선택해 주세요.','warn');return;}
+    if(candidateBulkActionActive[groupKey]===true)return;
     var placement='',select=document.querySelector('[data-candidate-target="'+groupKey+'"]');
-    if(action==='place'){placement=text(select&&select.value);if(!PRODUCT_SECTION_MAP[placement]){show('수동 배치할 18개 섹션을 선택해 주세요.','warn');return;}}
+    if(action==='place'){placement=text(select&&select.value);if(!PRODUCT_SECTION_MAP[placement]){setCandidateBulkState(groupKey,'먼저 수동 배치 섹션을 선택하세요.','warn');show('수동 배치할 18개 섹션을 선택해 주세요.','warn');return;}}
     if((action==='hold'||action==='reject'||action==='purge'||action==='list_delete')&&!window.confirm('선택한 후보 '+ids.length+'건을 '+(action==='hold'?'보류':action==='purge'?'영구 제외':action==='list_delete'?'현재 후보 관리 목록에서만 제거':'제외')+' 처리합니다.'+(candidateGroupRows(groupKey).some(function(row){return ids.indexOf(text(row&&row.id))>=0&&frontPublicationActive(row);})?' 현재 프론트 매칭된 상품은 먼저 안전하게 매칭 해제한 뒤 상태를 변경합니다.':'')+' 계속할까요?'))return;
-    if(action==='ai'){var aiResult=await aiPlaceCandidateIds(ids);var stillVisible={};candidateGroupRows(groupKey).forEach(function(row){stillVisible[text(row.id)]=true;});ids.forEach(function(id){if(!stillVisible[id])delete candidateSelectedProducts[id];});saveReviewSnapshot();syncCandidateSelectionControls(groupKey);show('선택 후보 '+ids.length+'건 AI 배치 요청 · 배치 '+Number(aiResult&&aiResult.processed||0)+'건 · 실패 '+Number(aiResult&&aiResult.failed||0)+'건',Number(aiResult&&aiResult.failed||0)?'warn':'ok');return;}
-    var selectedRows=candidateGroupRows(groupKey).filter(function(row){return ids.indexOf(text(row&&row.id))>=0;}),ledgerRows=selectedRows.filter(function(row){return row&&row.ledgerSource==='candidate';});
+    candidateBulkActionActive[groupKey]=true;syncCandidateSelectionControls(groupKey);setCandidateBulkState(groupKey,'처리 준비 · 0/'+ids.length+'건','working');
     var succeeded=0,failed=0;
     try{
-      if(['hold','reject','purge','list_delete','undecided'].indexOf(action)>=0){await unmatchRowsBeforeManagementChange(selectedRows);}
+      if(action==='ai'){
+        var aiResult=await aiPlaceCandidateIds(ids,{onProgress:function(stage,done,total,failCount){setCandidateBulkState(groupKey,(stage==='analysis'?'AI 분석·배치':'배치 원장 확정')+' · '+done+'/'+total+'건'+(failCount?' · 실패 '+failCount+'건':''),failCount?'warn':'working');}});
+        succeeded=Number(aiResult&&aiResult.processed||0);failed=Number(aiResult&&aiResult.failed||0);
+        var stillVisible={};candidateGroupRows(groupKey).forEach(function(row){stillVisible[text(row.id)]=true;});ids.forEach(function(id){if(!stillVisible[id])delete candidateSelectedProducts[id];});saveReviewSnapshot();
+        setCandidateBulkState(groupKey,'AI 배치 완료 · 성공 '+succeeded+'건 · 실패 '+failed+'건',failed?'warn':'ok');
+        show('선택 후보 '+ids.length+'건 AI 배치 요청 · 배치 '+succeeded+'건 · 실패 '+failed+'건',failed?'warn':'ok');return;
+      }
+      var selectedRows=candidateGroupRows(groupKey).filter(function(row){return ids.indexOf(text(row&&row.id))>=0;}),ledgerRows=selectedRows.filter(function(row){return row&&row.ledgerSource==='candidate';});
+      if(['hold','reject','purge','list_delete','undecided'].indexOf(action)>=0){setCandidateBulkState(groupKey,'기존 매칭 상태 확인 중…','working');await unmatchRowsBeforeManagementChange(selectedRows);}
       if(ledgerRows.length===selectedRows.length&&ledgerRows.length){
         var candidateIds=Array.from(new Set(ledgerRows.map(function(row){return text(row.candidateId||row.id);}).filter(Boolean))),decision=action==='place'?'slot_candidate':action==='list_delete'?'remove_from_list':action;
-        var bulk=await authorityCandidateAction(decision,candidateIds,placement||'',{source:'administrator'});
+        var bulk=await authorityCandidateAction(decision,candidateIds,placement||'',{source:'administrator',chunkSize:6,onProgress:function(done,total,failCount){setCandidateBulkState(groupKey,'원장 처리 '+done+'/'+total+'건'+(failCount?' · 실패 '+failCount+'건':''),failCount?'warn':'working');}});
         succeeded=Number(bulk&&bulk.processed||0);failed=Number(bulk&&bulk.failed||0);
-        await refreshCandidateLedgerProducts({preserveResearchReport:true});
+        setCandidateBulkState(groupKey,'최종 원장 새로고침 중…',failed?'warn':'working');await refreshCandidateLedgerProducts({preserveResearchReport:true});
       }else{
         var lastBulkData=null;
         for(var i=0;i<ids.length;i++){
           try{var itemDecision=action==='place'?'slot_candidate':action==='list_delete'?'remove_from_list':action;var itemData=await api(CONTROL,'product_candidate_action','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',productId:ids[i],decision:itemDecision,placementKey:placement||''},30000);lastBulkData=itemData;succeeded+=1;}catch(itemError){failed+=1;}
+          setCandidateBulkState(groupKey,'호환 원장 처리 '+(i+1)+'/'+ids.length+'건'+(failed?' · 실패 '+failed+'건':''),failed?'warn':'working');
         }
         if(lastBulkData){lastProductJson=lastBulkData;rememberReport('product',lastBulkData);renderProductProgress(lastBulkData);renderProducts(lastBulkData.products||[]);saveReviewSnapshot();}
       }
-    }catch(error){failed=Math.max(failed,ids.length-succeeded);show(conciseRequestError(error&&error.message,error&&error.status)||'선택 후보 일괄 처리를 완료하지 못했습니다.','fail');}
-    ids.forEach(function(id){delete candidateSelectedProducts[id];});saveReviewSnapshot();syncCandidateSelectionControls(groupKey);
-    var actionLabel=action==='place'?sectionLabel(placement)+' 섹션으로 수동 배치':action==='undecided'?'미배정 후보로 복원':action==='hold'?'보류':action==='purge'?'영구 제외':action==='list_delete'?'현재 후보 관리 목록에서만 제거':action==='reject'?'제외':action;
-    var resultText='요청 '+ids.length+'건 · 성공 '+succeeded+'건 · 실패 '+failed+'건';if(succeeded)show(resultText+' · '+actionLabel+'했습니다. 새 프론트 공개나 결제는 실행하지 않았습니다. 기존 매칭 상품이 있었다면 안전한 매칭 해제 반영만 실행했습니다.',failed?'warn':'ok');else show(resultText+' · 처리된 항목이 없습니다. 후보 상태·ID 또는 저장 권한을 확인해 주세요.','fail');
+      ids.forEach(function(id){delete candidateSelectedProducts[id];});saveReviewSnapshot();
+      var actionLabel=action==='place'?sectionLabel(placement)+' 섹션으로 수동 배치':action==='undecided'?'미배정 후보로 복원':action==='hold'?'보류':action==='purge'?'영구 제외':action==='list_delete'?'현재 후보 관리 목록에서만 제거':action==='reject'?'제외':action;
+      var resultText='요청 '+ids.length+'건 · 성공 '+succeeded+'건 · 실패 '+failed+'건';setCandidateBulkState(groupKey,resultText+' · '+actionLabel,failed?'warn':'ok');if(succeeded)show(resultText+' · '+actionLabel+'했습니다. 새 프론트 공개나 결제는 실행하지 않았습니다. 기존 매칭 상품이 있었다면 안전한 매칭 해제 반영만 실행했습니다.',failed?'warn':'ok');else show(resultText+' · 처리된 항목이 없습니다. 후보 상태·ID 또는 저장 권한을 확인해 주세요.','fail');
+    }catch(error){failed=Math.max(failed,ids.length-succeeded);setCandidateBulkState(groupKey,'처리 중단 · 성공 '+succeeded+'건 · 실패 '+failed+'건','fail');show(conciseRequestError(error&&error.message,error&&error.status)||'선택 후보 일괄 처리를 완료하지 못했습니다.','fail');}
+    finally{candidateBulkActionActive[groupKey]=false;syncCandidateSelectionControls(groupKey);}
   }
   function renderProductCandidateGroups(){var root=$('productGrid');if(!root)return;var rows=productRows.filter(candidatePoolRow),groups={};PRODUCT_SECTIONS.forEach(function(section){groups[section.key]=[];});rows.forEach(function(row){var key=candidateGroupKey(row);(groups[key]||(groups[key]=[])).push(row);});var keys=[];if(queueFocusedCandidateIds.length){var focused=rows.filter(function(row){var candidate=text(row&&row.candidateId),id=text(row&&row.id);return queueFocusedCandidateIds.indexOf(candidate)>=0||queueFocusedCandidateIds.indexOf(id)>=0;});if(focused.length){groups.queue_selected=focused;keys.push('queue_selected');}}if(groups.assignment_repair&&groups.assignment_repair.length)keys.push('assignment_repair');PRODUCT_SECTIONS.forEach(function(section){keys.push(section.key);});if(!groups.unassigned)groups.unassigned=[];keys.push('unassigned');var labels={queue_selected:'선택한 상품 · 아래 버튼으로 AI 자동배치/수동배치/제외 처리',assignment_repair:'배정정보 복구 필요',unassigned:'미배치 상품 목록 · 추가 확인 필요'};root.innerHTML=keys.map(function(key){return productGroupDetails(key,labels[key]||sectionLabel(key),groups[key]||[],'candidate');}).join('');wireProductGroupDetails(root,groups,'candidate');keys.forEach(syncCandidateSelectionControls);}
   function renderProductSectionBoard(){var root=$('productSectionList');if(!root)return;var groups={};PRODUCT_SECTIONS.forEach(function(section){groups[section.key]=[];});productRows.filter(function(row){return productDecision(row)==='slot_candidate';}).forEach(function(row){var key=productPlacementKey(row);if(groups[key])groups[key].push(row);});root.innerHTML=PRODUCT_SECTIONS.map(function(section){return productGroupDetails(section.key,section.label,groups[section.key]||[],'section');}).join('');wireProductGroupDetails(root,groups,'section');}
