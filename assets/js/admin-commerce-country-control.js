@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.11.3-excluded-product-restore
+/* IGDC Global/Region/Country Commerce Control v3.12.0-resilient-paged-ledger
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -241,7 +241,7 @@
       await refreshCandidateLedgerProducts({preserveResearchReport:true});
       var restored=Number(result&&result.processed||0),failed=Number(result&&result.failed||0);if(restored)show('유통 · 실시간 인기 관리자 원장을 현재 정상 프론트 상태에서 '+restored+'건 복원했습니다. 이후부터는 관리자 페이지를 기준으로 프론트가 동기화됩니다.'+(failed?' · 복원 실패 '+failed+'건':''),failed?'warn':'ok');
       return result||{};
-    }catch(error){show('실시간 인기 관리자 원장 복원 실패: '+conciseRequestError(error&&error.message,error&&error.status),'fail');return{ok:false,error:text(error&&error.message)};}
+    }catch(error){return{ok:false,error:text(error&&error.message),transient:transientResearchRequestError(error)};}
   }
   function tourDiningAuxiliaryRow(row){var hay=[row&&row.productName,row&&row.title,row&&row.priorityLabel,row&&row.description,row&&row.summary,row&&row.productUrl,row&&row.url].map(text).join(' ').toLowerCase(),misleading=/(여행용\s*(?:티슈|물티슈|휴지|세면|파우치)|포켓물티슈|캠핑용?\s*(?:물티슈|휴지)|체험팩|travel\s*(?:size|tissue|wipe))/i.test(hay),packaged=/(밀키트|냉동|즉석|가공식품|포장제품|배송상품|세트상품|meal\s*kit|frozen|packaged|grocery)/i.test(hay);return!misleading&&!packaged&&/(맛집|레스토랑|식당|음식점|다이닝|카페|뷔페|브런치|비스트로|그릴|스테이크하우스|펍|restaurant|dining|cafe|café|buffet|brunch|bistro|grill|steakhouse|pub)/i.test(hay);}
   function tourDiningPlacementCount(){return productRows.filter(function(row){return productDecision(row)==='slot_candidate'&&productPlacementKey(row)==='tour|tour'&&tourDiningAuxiliaryRow(row);}).length;}
@@ -364,7 +364,31 @@
   function candidateLedgerProductData(queueData){var rows=Array.isArray(queueData&&queueData.candidates)?queueData.candidates:[],products=rows.map(candidateLedgerProductRow).filter(function(row){var d=productDecision(row);return d!=='removed_from_list'&&d!=='removed'&&d!=='dismiss';}),summary={privateResearchQueueEligible:products.length,privateResearchQueueStaged:products.length,discovered:products.length,inspected:products.filter(function(row){return row.inspectionComplete===true;}).length,withImage:products.filter(function(row){return!!row.imageUrl;}).length,readyForAdminReview:products.filter(function(row){return!!row.productUrl;}).length,slotCandidates:products.filter(function(row){return productDecision(row)==='slot_candidate';}).length,held:products.filter(function(row){return productDecision(row)==='hold';}).length,rejected:products.filter(function(row){var d=productDecision(row);return d==='reject'||d==='purge';}).length};return{ok:true,candidateLedger:true,reportType:'igdc-candidate-ledger-product-control-snapshot',status:'candidate_ledger',scope:scopeSnapshot(),products:products,summary:summary,progress:{stage:'candidate_ledger',discovery:{done:0,total:0},inspection:{done:summary.inspected,total:products.length},privateQueue:{done:products.length,total:products.length,summary:{eligible:products.length,created:0,updated:0,preserved:products.length,failed:0}},resumable:false},pipeline:{version:'candidate-ledger-control-v2',canonicalSlotDecision:true,removedRowsHidden:true,automaticPrivateResearchStaging:false,automaticPublicPublication:false,nextGate:'administrator_product_selection_and_front_match'}};}
 
   function candidateLedgerViewActive(){return productRows.some(function(row){return row&&row.ledgerSource==='candidate';});}
-  async function refreshCandidateLedgerProducts(options){options=options||{};var q=await api(REVIEW,'dashboard','GET',Object.assign({},scopeParams(),{compact:'1'}),null,45000);renderQueue(q.candidates||[]);var data=candidateLedgerProductData(q);renderProducts(data.products||[]);var currentStatus=text(lastProductJson&&lastProductJson.status),hasResearchState=!!lastProductJson&&currentStatus&&currentStatus!=='candidate_ledger'&&currentStatus!=='not_started',preserve=options.preserveResearchReport===true||(options.preserveResearchReport!==false&&hasResearchState);if(preserve){saveReviewSnapshot();return data;}lastProductJson=data;rememberReport('product',data);renderProductProgress(data);saveReviewSnapshot();return data;}
+  async function refreshCandidateLedgerProducts(options){
+    options=options||{};var requested=scopeSnapshot('paged-candidate-ledger'),requestedKey=scopeKey(requested),pageSize=Math.max(50,Math.min(120,Number(options.pageSize||100))),offset=0,pages=0,maxPages=30,all=[],seen={},lastPage=null,partialError=null;
+    while(pages<maxPages){
+      if(scopeKey()!==requestedKey)throw new Error('상품 후보 원장 로딩 중 선택 범위가 변경됐습니다.');
+      var page=null,lastError=null;
+      for(var attempt=0;attempt<3&&!page;attempt++){
+        try{page=await api(REVIEW,'candidate_page','GET',{country:requested.country,region:requested.region,compact:'1',offset:offset,pageSize:pageSize},null,30000);}
+        catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,900*Math.pow(2,attempt));});}
+      }
+      if(!page){partialError=lastError||new Error('상품 후보 원장 묶음 응답이 중단되었습니다.');break;}
+      lastPage=page;pages+=1;var rows=Array.isArray(page.candidates)?page.candidates:[];
+      rows.forEach(function(row){var id=text(row&&row.candidateId||row&&row.id);if(!id||seen[id])return;seen[id]=true;all.push(row);});
+      var pg=page.pagination||{},hasMore=pg.hasMore===true,next=Number(pg.nextOffset);
+      // Progressive paint keeps slow networks usable without waiting for all 600+ rows.
+      if(pages===1||pages%2===0||!hasMore){var interim={ok:true,candidates:all.slice(),pagination:{loadedPages:pages,loadedItems:all.length,complete:!hasMore}};renderQueue(interim.candidates);renderProducts(candidateLedgerProductData(interim).products||[]);}
+      if(!hasMore)break;if(!Number.isFinite(next)||next<=offset){partialError=new Error('상품 후보 원장 페이지 커서가 반복되었습니다.');break;}offset=next;
+      await new Promise(function(resolve){setTimeout(resolve,35);});
+    }
+    if(pages>=maxPages&&lastPage&&lastPage.pagination&&lastPage.pagination.hasMore===true)partialError=new Error('상품 후보 원장 안전 로딩 한도에 도달했습니다.');
+    var q={ok:!partialError,candidates:all,pagination:{loadedPages:pages,loadedItems:all.length,complete:!partialError,partial:!!partialError,error:partialError?text(partialError&&partialError.message):null}};
+    if(!all.length&&partialError)throw partialError;
+    renderQueue(q.candidates);var data=candidateLedgerProductData(q);data.candidateRows=q.candidates.slice();data.pipeline=Object.assign({},data.pipeline||{},{pagedManagementLedger:true,ledgerLoadComplete:!partialError,loadedPages:pages,loadedItems:all.length,partialError:partialError?text(partialError&&partialError.message):null});renderProducts(data.products||[]);
+    var currentStatus=text(lastProductJson&&lastProductJson.status),hasResearchState=!!lastProductJson&&currentStatus&&currentStatus!=='candidate_ledger'&&currentStatus!=='not_started',preserve=options.preserveResearchReport===true||(options.preserveResearchReport!==false&&hasResearchState);
+    if(preserve){saveReviewSnapshot();if(partialError)throw partialError;return data;}lastProductJson=data;rememberReport('product',data);renderProductProgress(data);saveReviewSnapshot();if(partialError)throw partialError;return data;
+  }
   function wireQueueControls(){
     var all=$('queueSelectAll');if(all)all.addEventListener('change',function(){var checked=all.checked,body=$('queueRows');if(body)Array.prototype.forEach.call(body.querySelectorAll('[data-queue-select]'),function(box){box.checked=checked;});syncQueueSelectionControls();});
     var body=$('queueRows');if(body){body.addEventListener('change',function(event){if(event.target&&event.target.matches('[data-queue-select]'))syncQueueSelectionControls();});body.addEventListener('click',function(event){var button=event.target&&event.target.closest?event.target.closest('[data-management-pager=\"queue\"] [data-page-delta]'):null;if(!button)return;event.preventDefault();queuePage=clampPage(queuePage+Number(button.getAttribute('data-page-delta')||0),queueCandidateRows.length,MANAGEMENT_PAGE_SIZE);renderQueueRows();});}
@@ -1579,10 +1603,10 @@
       var scopeData=scopePart.data||scopeFallback;if(!scopePart.ok)failures.push(scopePart);
       renderAi(scopeData.candidates||[]);renderActiveSignals(scopeData.marketSignals||{});
 
-      /* Candidate summary + rows share the same live DB projection. Read them once. */
-      var queueFallback=cachedQueueData||{ok:true,summary:{},candidates:[]};
-      var queuePart=await readScopePart('상품 후보 원장',REVIEW,'dashboard',Object.assign({},requested,{compact:'1'}),queueFallback);if(scopeKey()!==requestedKey)return;
-      if(!queuePart.ok)failures.push(queuePart);var queueData=queuePart.data||queueFallback;renderSummary(queueData&&queueData.summary||{},scopeData,'저장 원장 기준');renderQueue(queueData&&queueData.candidates||[]);
+      /* Large product candidate ledgers are loaded in small resilient pages below.
+         Keep scope boot lightweight so slow networks never block the whole admin page. */
+      var queueFallback=cachedQueueData||{ok:true,summary:{},candidates:[]},queueData=queueFallback;
+      renderSummary(queueData&&queueData.summary||{},scopeData,'저장 원장 기준');if(queueData&&Array.isArray(queueData.candidates)&&queueData.candidates.length)renderQueue(queueData.candidates);
 
       var researchPart=await readScopePart('책임 공급업체 리서치',CONTROL,'research_status',requested,researchFallback);if(scopeKey()!==requestedKey)return;
       if(!researchPart.ok)failures.push(researchPart);var researchData=researchPart.data||researchFallback;renderResearchProgress(researchData);
@@ -1590,10 +1614,11 @@
       renderAi(researchData.candidates||[],researchData.holdingCandidates||[],researchData.blockedCandidates||[]);
 
       /* Product cards come from the private candidate ledger, while research control
-         state comes from the separate compact product job.  Keeping these two
-         authorities separate prevents a ledger refresh from replacing a saved
-         complete/paused research state and disabling the latest-list controls. */
-      var productData=candidateLedgerProductData(queueData||{candidates:[]});renderProducts(productData.products||[]);
+         state comes from the separate compact product job. Load the ledger in
+         bounded pages so latency is independent of country size and link speed. */
+      var productData=candidateLedgerProductData(queueData||{candidates:[]});
+      try{productData=await refreshCandidateLedgerProducts({preserveResearchReport:true,pageSize:100});queueData={ok:true,candidates:Array.isArray(productData&&productData.candidateRows)?productData.candidateRows:[]};}
+      catch(ledgerError){failures.push({ok:false,label:'상품 후보 원장',data:queueFallback,error:ledgerError});if(cachedQueueData&&Array.isArray(cachedQueueData.candidates))renderQueue(cachedQueueData.candidates);}
       var productStatusFallback=preservedProductData&&text(preservedProductData.status)!=='candidate_ledger'?preservedProductData:{ok:true,status:'not_started',scope:{country:requested.country,region:requested.region},summary:{},progress:{}};
       var productStatusPart=await readScopePart('상품 리서치 실행 상태',CONTROL,'product_research_status',{country:requested.country,region:requested.region,compact:'1'},productStatusFallback);if(scopeKey()!==requestedKey)return;if(!productStatusPart.ok)failures.push(productStatusPart);var productStatus=productStatusPart.data||productStatusFallback;
       if(productStatus&&productStatus.status&&productStatus.status!=='not_started')lastProductJson=Object.assign({},productStatus,{products:productRows,latestProducts:latestProductRows});else lastProductJson=productData;renderProductProgress(lastProductJson);setButtonEnabled('productResearchBtn',researchData.status==='complete'||researchData.status==='committed'||productData.products.length>0||text(lastProductJson.status)!=='not_started');if(productData.products.length||text(lastProductJson.status)!=='not_started')setButtonEnabled('productResearchDownloadBtn',true);
