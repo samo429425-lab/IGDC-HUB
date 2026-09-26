@@ -366,42 +366,32 @@
 
   function candidateLedgerViewActive(){return productRows.some(function(row){return row&&row.ledgerSource==='candidate';});}
   async function refreshCandidateLedgerProducts(options){
-    options=options||{};var requested=scopeSnapshot('paged-candidate-ledger'),requestedKey=scopeKey(requested),pageSize=Math.max(50,Math.min(120,Number(options.pageSize||100))),offset=0,pages=0,maxPages=30,all=[],seen={},lastPage=null,partialError=null;
-    while(pages<maxPages){
+    options=options||{};var requested=scopeSnapshot('candidate-ledger-snapshot'),requestedKey=scopeKey(requested),all=[],source='management_snapshot',snapshotError=null;
+    try{
+      var snap=await api(REVIEW,'management_snapshot','GET',{country:requested.country,region:requested.region,compact:'1',limit:3000},null,65000);
       if(scopeKey()!==requestedKey)throw new Error('상품 후보 원장 로딩 중 선택 범위가 변경됐습니다.');
-      var page=null,lastError=null;
-      for(var attempt=0;attempt<3&&!page;attempt++){
-        try{var adaptiveSize=attempt===0?pageSize:(attempt===1?Math.max(40,Math.floor(pageSize*0.6)):25);page=await api(REVIEW,'candidate_page','GET',{country:requested.country,region:requested.region,compact:'1',offset:offset,pageSize:adaptiveSize},null,22000);}
-        catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,700*Math.pow(2,attempt));});}
+      all=Array.isArray(snap&&snap.candidates)?snap.candidates:[];
+    }catch(error){snapshotError=error;}
+    if(snapshotError){
+      source='candidate_page_fallback';var pageSize=Math.max(25,Math.min(100,Number(options.pageSize||75))),offset=0,pages=0,maxPages=40,seen={},partialError=null;
+      while(pages<maxPages){
+        if(scopeKey()!==requestedKey)throw new Error('상품 후보 원장 로딩 중 선택 범위가 변경됐습니다.');
+        var page=null,lastError=null;
+        for(var attempt=0;attempt<3&&!page;attempt++){
+          try{var adaptiveSize=attempt===0?pageSize:(attempt===1?Math.max(30,Math.floor(pageSize*0.6)):25);page=await api(REVIEW,'candidate_page','GET',{country:requested.country,region:requested.region,compact:'1',offset:offset,pageSize:adaptiveSize},null,24000);}
+          catch(error2){lastError=error2;if(!transientResearchRequestError(error2)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,650*Math.pow(2,attempt));});}
+        }
+        if(!page){partialError=lastError||new Error('상품 후보 원장 묶음 응답이 중단되었습니다.');break;}
+        pages+=1;var rows=Array.isArray(page.candidates)?page.candidates:[];rows.forEach(function(row){var id=text(row&&row.candidateId||row&&row.id);if(!id||seen[id])return;seen[id]=true;all.push(row);});
+        var pg=page.pagination||{},hasMore=pg.hasMore===true,next=Number(pg.nextOffset);
+        if(!hasMore)break;if(!Number.isFinite(next)||next<=offset){partialError=new Error('상품 후보 원장 페이지 커서가 반복되었습니다.');break;}offset=next;
       }
-      if(!page){partialError=lastError||new Error('상품 후보 원장 묶음 응답이 중단되었습니다.');break;}
-      lastPage=page;pages+=1;var rows=Array.isArray(page.candidates)?page.candidates:[];
-      rows.forEach(function(row){var id=text(row&&row.candidateId||row&&row.id);if(!id||seen[id])return;seen[id]=true;all.push(row);});
-      var pg=page.pagination||{},hasMore=pg.hasMore===true,next=Number(pg.nextOffset);
-      // Progressive paint keeps slow networks usable without waiting for all 600+ rows.
-      if(pages===1||pages%2===0||!hasMore){var interim={ok:true,candidates:all.slice(),pagination:{loadedPages:pages,loadedItems:all.length,complete:!hasMore}};renderQueue(interim.candidates);renderProducts(candidateLedgerProductData(interim).products||[]);}
-      if(!hasMore)break;if(!Number.isFinite(next)||next<=offset){partialError=new Error('상품 후보 원장 페이지 커서가 반복되었습니다.');break;}offset=next;
-      await new Promise(function(resolve){setTimeout(resolve,35);});
+      if(!all.length&&partialError)throw partialError;
     }
-    if(pages>=maxPages&&lastPage&&lastPage.pagination&&lastPage.pagination.hasMore===true)partialError=new Error('상품 후보 원장 안전 로딩 한도에 도달했습니다.');
-    /* If any paged request fails, use the server-side fast snapshot once.  The
-       snapshot reads only the canonical candidate source_payload projection and
-       does not join the four heavy relation ledgers.  This makes a transient
-       page/cursor failure recoverable instead of leaving the administrator UI
-       disconnected even though the underlying 600-row ledger is healthy. */
-    if(partialError){
-      try{
-        var fallback=await api(REVIEW,'management_snapshot','GET',{country:requested.country,region:requested.region,compact:'1',limit:3000},null,65000);
-        if(scopeKey()!==requestedKey)throw new Error('상품 후보 원장 복구 중 선택 범위가 변경됐습니다.');
-        var fallbackRows=Array.isArray(fallback&&fallback.candidates)?fallback.candidates:[];
-        if(fallbackRows.length||Number(fallback&&fallback.pagination&&fallback.pagination.total||0)===0){all=fallbackRows;partialError=null;pages=Number(fallback&&fallback.pagination&&fallback.pagination.loadedPages||1);lastPage=fallback;}
-      }catch(snapshotError){if(!all.length)partialError=snapshotError||partialError;}
-    }
-    var q={ok:!partialError,candidates:all,pagination:{loadedPages:pages,loadedItems:all.length,complete:!partialError,partial:!!partialError,error:partialError?text(partialError&&partialError.message):null}};
-    if(!all.length&&partialError)throw partialError;
-    renderQueue(q.candidates);var data=candidateLedgerProductData(q);data.candidateRows=q.candidates.slice();data.pipeline=Object.assign({},data.pipeline||{},{pagedManagementLedger:true,fastSnapshotFallback:true,ledgerLoadComplete:!partialError,loadedPages:pages,loadedItems:all.length,partialError:partialError?text(partialError&&partialError.message):null});renderProducts(data.products||[]);
+    var q={ok:true,candidates:all,pagination:{loadedItems:all.length,complete:true,source:source}};
+    renderQueue(q.candidates);var data=candidateLedgerProductData(q);data.candidateRows=q.candidates.slice();data.pipeline=Object.assign({},data.pipeline||{},{mergedManagementSnapshot:true,ledgerLoadComplete:true,loadedItems:all.length,source:source});renderProducts(data.products||[]);
     var currentStatus=text(lastProductJson&&lastProductJson.status),hasResearchState=!!lastProductJson&&currentStatus&&currentStatus!=='candidate_ledger'&&currentStatus!=='not_started',preserve=options.preserveResearchReport===true||(options.preserveResearchReport!==false&&hasResearchState);
-    if(preserve){saveReviewSnapshot();if(partialError)throw partialError;return data;}lastProductJson=data;rememberReport('product',data);renderProductProgress(data);saveReviewSnapshot();if(partialError)throw partialError;return data;
+    if(preserve){saveReviewSnapshot();return data;}lastProductJson=data;rememberReport('product',data);renderProductProgress(data);saveReviewSnapshot();return data;
   }
   function wireQueueControls(){
     var all=$('queueSelectAll');if(all)all.addEventListener('change',function(){var checked=all.checked,body=$('queueRows');if(body)Array.prototype.forEach.call(body.querySelectorAll('[data-queue-select]'),function(box){box.checked=checked;});syncQueueSelectionControls();});

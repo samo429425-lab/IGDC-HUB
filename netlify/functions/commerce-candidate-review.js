@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.13.0-fast-snapshot-fallback";
+const VERSION = "commerce-candidate-review-api-v1.14.0-merged-scope-snapshot";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -158,7 +158,10 @@ async function scopedProductCandidateRows(countryInput,regionInput,limitInput){
     }
     if(seen.size>=limit)break;
   }
-  if(!seen.size&&queryFailed){
+  if(!seen.size){
+    /* A successful JSON-path query that returns [] is not proof that the scope is empty.
+       Older/current candidate rows can carry equivalent scope data under legacy
+       projections. Scan the bounded source_ref ledger and apply scopeMatch in JS. */
     try{for(const row of await fallbackPagedScopeRows(country,region,limit)){const id=text(row&&row.id);if(id&&!seen.has(id))seen.set(id,row);}}catch(_fallbackError){}
   }
   return Array.from(seen.values()).sort((a,b)=>text(b&&b.updated_at).localeCompare(text(a&&a.updated_at))).slice(0,limit);
@@ -232,30 +235,52 @@ function fastManagementCandidate(candidate){
   live.managementProjection="source_payload_fast";
   return live;
 }
+function normalizeManagementSnapshotRow(row){
+  if(row&&row.source_payload)return fastManagementCandidate(row);
+  if(row&&row.candidateId)return row;
+  return fastManagementCandidate(row||{});
+}
+
+async function mergedManagementScopeRows(country,region,limit){
+  const merged=new Map();
+  const stored=CommerceIntake.readStage(process.cwd())||{candidates:[]};
+  const storedScoped=filteredStage(stored,country,region);
+  for(const row of Array.isArray(storedScoped.candidates)?storedScoped.candidates:[]){
+    const normalized=normalizeManagementSnapshotRow(row),id=text(normalized&&normalized.candidateId||row&&row.id);
+    if(id&&!merged.has(id))merged.set(id,normalized);
+    if(merged.size>=limit)break;
+  }
+  /* The runtime diagnostic proved that the direct marketScope JSON-path can
+     return [] while the canonical candidate ledger still exists. Read the
+     bounded source_ref ledger and apply the same scopeMatch used by the old
+     working dashboard. DB rows override staged rows so fresh admin decisions win. */
+  if(merged.size<limit){
+    const live=await fallbackPagedScopeRows(country,region,limit);
+    for(const row of live){const normalized=fastManagementCandidate(row),id=text(normalized&&normalized.candidateId||row&&row.id);if(id)merged.set(id,normalized);if(merged.size>=limit)break;}
+  }
+  return Array.from(merged.values()).slice(0,limit);
+}
+
 async function managementCandidatePage(countryInput,regionInput,offsetInput,limitInput){
   const started=Date.now(),country=normalizeCountry(countryInput),region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE",offset=Math.max(0,Number(offsetInput)||0),limit=Math.max(25,Math.min(150,Number(limitInput)||100));
   if(!country||country==="GLOBAL")return {rows:[],pagination:{offset,limit,returned:0,hasMore:false,nextOffset:null,mode:"empty"},relationErrors:[],timing:{totalMs:Date.now()-started}};
   let raw=[],queryStarted=Date.now();
-  try{raw=await lightSelect("gslot_candidates",managementPageQuery(country,region,limit,offset));}catch(error){error.statusCode=Number(error.statusCode)||503;throw error;}
-  const queryMs=Date.now()-queryStarted;raw=Array.isArray(raw)?raw:[];
-  // Legacy rows without marketScope are rare. Only use the existing scoped
-  // fallback when the current projection is empty at the first page so normal
-  // countries never pay the old multi-query cost.
-  let mode="marketScope_fast_page";
-  if(offset===0&&!raw.length){
-    const legacy=await scopedProductCandidateRows(country,region,limit);
-    raw=legacy.slice(0,limit);mode="legacy_first_page";
+  try{raw=await lightSelect("gslot_candidates",managementPageQuery(country,region,limit,offset));}catch(_error){raw=[];}
+  const directQueryMs=Date.now()-queryStarted;raw=Array.isArray(raw)?raw:[];
+  let rows=[],mode="marketScope_fast_page",fallbackMs=0,hasMore=false;
+  if(raw.length){rows=raw.map(fastManagementCandidate);hasMore=raw.length===limit;}
+  else{
+    const fallbackStarted=Date.now(),wanted=Math.min(3000,offset+limit+1),merged=await mergedManagementScopeRows(country,region,wanted);fallbackMs=Date.now()-fallbackStarted;
+    rows=merged.slice(offset,offset+limit);hasMore=merged.length>offset+limit;mode="merged_scope_page";
   }
-  const projectionStarted=Date.now(),rows=raw.map(fastManagementCandidate),projectionMs=Date.now()-projectionStarted,returned=rows.length,hasMore=mode==="marketScope_fast_page"&&raw.length===limit;
-  return {rows,relationErrors:[],pagination:{offset,limit,returned,hasMore,nextOffset:hasMore?offset+raw.length:null,mode},timing:{candidateQueryMs:queryMs,projectionMs,totalMs:Date.now()-started,relationHydration:false}};
+  return {rows,relationErrors:[],pagination:{offset,limit,returned:rows.length,hasMore,nextOffset:hasMore?offset+rows.length:null,mode},timing:{candidateQueryMs:directQueryMs,fallbackMs,totalMs:Date.now()-started,relationHydration:false}};
 }
 
 async function managementCandidateSnapshot(countryInput,regionInput,limitInput){
   const started=Date.now(),country=normalizeCountry(countryInput),region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE",limit=Math.max(50,Math.min(3000,Number(limitInput)||3000));
   if(!country||country==="GLOBAL")return {rows:[],pagination:{total:0,loadedItems:0,loadedPages:1,complete:true,mode:"empty"},timing:{totalMs:Date.now()-started}};
-  const queryStarted=Date.now(),raw=await scopedProductCandidateRows(country,region,limit),queryMs=Date.now()-queryStarted;
-  const projectionStarted=Date.now(),rows=(Array.isArray(raw)?raw:[]).map(fastManagementCandidate),projectionMs=Date.now()-projectionStarted;
-  return {rows,pagination:{total:rows.length,loadedItems:rows.length,loadedPages:1,complete:true,mode:"source_payload_fast_snapshot"},timing:{candidateQueryMs:queryMs,projectionMs,totalMs:Date.now()-started,relationHydration:false}};
+  const queryStarted=Date.now(),rows=await mergedManagementScopeRows(country,region,limit),queryMs=Date.now()-queryStarted;
+  return {rows,pagination:{total:rows.length,loadedItems:rows.length,loadedPages:1,complete:true,mode:"merged_stage_plus_db_scope_snapshot"},timing:{candidateQueryMs:queryMs,projectionMs:0,totalMs:Date.now()-started,relationHydration:false}};
 }
 
 async function scopedLiveProductResearchQueue(country,region,limit){
