@@ -4135,31 +4135,42 @@ async function productCandidatePsomPlace(actorId, input) {
   const rows = await frontSyncSelectCandidates(ids), rowById = new Map(array(rows).map((row) => [text(row && row.id), row]));
   const counts = normalizeProductSectionCounts(plain(input && input.balanceCounts)), results = [], now = iso();
   for (const id of ids) {
-    const row = plain(rowById.get(id));
-    if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { results.push({candidateId:id,assigned:false,error:"candidate_not_found"}); continue; }
-    const payload = Object.assign({}, plain(row.source_payload)), current = lower(payload.slotDecision || "undecided");
-    if (["reject","purge","removed"].includes(current) || plain(payload.queueControl).permanentExcluded === true) { results.push({candidateId:id,assigned:false,error:"candidate_excluded"}); continue; }
-    const product = candidateRuntimeProduct(row, scope);
-    if (!product) { results.push({candidateId:id,assigned:false,error:"candidate_product_payload_missing"}); continue; }
-    product.candidateId = id; product.id = id;
-    const plan = candidateRuntimePlacementOptions(product, payload), picked = automaticBalancedPlacement(product, plan.options, counts);
-    if (!picked) { results.push({candidateId:id,assigned:false,error:"no_compatible_psom_section"}); continue; }
-    const placement = candidateLedgerPlacementRecord(scope, picked, actor, "ai_psom_bulk"), key = productPlacementKey(placement);
-    if (!placement || !validProductSectionKey(key)) { results.push({candidateId:id,assigned:false,error:"invalid_psom_section"}); continue; }
-    payload.slotDecision = "slot_candidate";
-    payload.approvedPlacement = placement; payload.placement = placement;
-    payload.page = placement.page; payload.channel = placement.page; payload.section = placement.sectionKey; payload.psom_key = placement.sectionKey;
-    payload.productCategory = plan.category.primary; payload.productCategoryTags = plan.category.tags;
-    payload.productRanking = Object.assign({}, plain(payload.productRanking), {category:plan.category.primary,categoryTags:plan.category.tags});
-    payload.queueControl = Object.assign({}, plain(payload.queueControl), {schema:"igdc-private-product-queue-control.v1",action:"section_selected",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor});
-    payload.managementControl = Object.assign({}, plain(payload.managementControl), {schema:"igdc-product-management-control.v1",source:"ai_psom_bulk",administratorLocked:false,aiReclassificationAllowed:true,automaticPrivatePlacement:true,publicPublication:false,productImport:false,checkout:false,paymentExecution:false,decidedAt:now,decidedBy:actor});
-    payload.review = Object.assign({}, plain(payload.review), {state:"pending",nextGate:"administrator_front_match",psomPlacementAt:now,psomPlacementBy:actor});
-    await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), {status:"approval_pending",source_payload:payload,updated_at:now});
-    counts[key] = Number(counts[key] || 0) + 1;
-    results.push({candidateId:id,assigned:true,sectionKey:key,category:plan.category.primary,score:Number(picked.score||0),source:"psom_saved_research"});
+    try {
+      const row = plain(rowById.get(id));
+      if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { results.push({candidateId:id,assigned:false,error:"candidate_not_found"}); continue; }
+      const payload = Object.assign({}, plain(row.source_payload)), current = lower(payload.slotDecision || "undecided");
+      if (["reject","purge","removed"].includes(current) || plain(payload.queueControl).permanentExcluded === true) { results.push({candidateId:id,assigned:false,error:"candidate_excluded"}); continue; }
+      const product = candidateRuntimeProduct(row, scope);
+      if (!product) { results.push({candidateId:id,assigned:false,error:"candidate_product_payload_missing"}); continue; }
+      product.candidateId = id; product.id = id;
+      const plan = candidateRuntimePlacementOptions(product, payload), picked = automaticBalancedPlacement(product, plan.options, counts);
+      if (!picked) { results.push({candidateId:id,assigned:false,error:"no_compatible_psom_section"}); continue; }
+      const placement = candidateLedgerPlacementRecord(scope, picked, actor, "ai_psom_bulk"), key = productPlacementKey(placement);
+      if (!placement || !validProductSectionKey(key)) { results.push({candidateId:id,assigned:false,error:"invalid_psom_section"}); continue; }
+      payload.slotDecision = "slot_candidate";
+      payload.approvedPlacement = placement; payload.placement = placement;
+      payload.page = placement.page; payload.channel = placement.page; payload.section = placement.sectionKey; payload.psom_key = placement.sectionKey;
+      payload.productCategory = plan.category.primary; payload.productCategoryTags = plan.category.tags;
+      payload.productRanking = Object.assign({}, plain(payload.productRanking), {category:plan.category.primary,categoryTags:plan.category.tags});
+      payload.queueControl = Object.assign({}, plain(payload.queueControl), {schema:"igdc-private-product-queue-control.v1",action:"section_selected",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor});
+      payload.managementControl = Object.assign({}, plain(payload.managementControl), {schema:"igdc-product-management-control.v1",source:"ai_psom_bulk",administratorLocked:false,aiReclassificationAllowed:true,automaticPrivatePlacement:true,publicPublication:false,productImport:false,checkout:false,paymentExecution:false,decidedAt:now,decidedBy:actor});
+      payload.review = Object.assign({}, plain(payload.review), {state:"pending",nextGate:"administrator_front_match",psomPlacementAt:now,psomPlacementBy:actor});
+      await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), {status:"approval_pending",source_payload:payload,updated_at:now});
+      counts[key] = Number(counts[key] || 0) + 1;
+      results.push({candidateId:id,assigned:true,sectionKey:key,category:plan.category.primary,score:Number(picked.score||0),source:"psom_saved_research"});
+    } catch (error) {
+      // One damaged/slow row must never invalidate already-durable placements in
+      // the same Netlify invocation. Return the exact failed candidate so the
+      // administrator UI can keep it selected for another review pass.
+      results.push({candidateId:id,assigned:false,error:text(error&&error.message||error)||"candidate_psom_write_failed"});
+    }
   }
   const assigned = results.filter((row)=>row.assigned===true).length, failed = results.length-assigned;
-  return {ok:failed===0,candidateLedger:true,mode:"psom_private_pre_front",requested:ids.length,processed:assigned,assigned,failed,unassigned:failed,results,balanceCounts:counts,publicPublication:false,frontMatchRequired:true,runtimeValidationDeferredToFrontMatch:true};
+  // HTTP/application success means the batch was processed and every per-row
+  // outcome is explicit. A partial placement is not a request failure: returning
+  // ok:false made the browser discard successful writes and retry/mark the whole
+  // chunk failed, which left the unassigned screen visually stale.
+  return {ok:true,status:failed?(assigned?"partial":"review_required"):"complete",complete:failed===0,candidateLedger:true,mode:"psom_private_pre_front",requested:ids.length,processed:assigned,assigned,failed,unassigned:failed,processedIds:results.filter((row)=>row.assigned===true).map((row)=>row.candidateId),results,balanceCounts:counts,publicPublication:false,frontMatchRequired:true,runtimeValidationDeferredToFrontMatch:true};
 }
 
 async function productCandidateAiRecover(actorId, input) {

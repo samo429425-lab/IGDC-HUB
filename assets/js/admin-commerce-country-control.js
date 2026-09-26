@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.14.0-ledger-fallback-runtime-download
+/* IGDC Global/Region/Country Commerce Control v3.14.1-psom-partial-durable-ui-sync
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -766,6 +766,20 @@
     }
     return{ok:failures.length===0,complete:failures.length===0,requested:placements.length,processed:processed,failed:failures.length,processedIds:processedIds,results:results,failures:failures};
   }
+  function applyPsomPlacementResultsLocally(results){
+    var changed=0;
+    (Array.isArray(results)?results:[]).forEach(function(result){
+      if(!result||result.assigned!==true)return;
+      var id=text(result.candidateId),key=text(result.sectionKey),section=PRODUCT_SECTION_MAP[key],row=productById(id);
+      if(!id||!section||!row)return;
+      var placement={page:section.page,section:section.section,sectionKey:section.section,country:selectedCountry,region:selectedSubdivision||'NATIONWIDE',administratorSelected:false,aiSelected:true,publicPublication:false};
+      row.slotDecision='slot_candidate';row.approvedPlacement=placement;row.primaryPlacement=placement;row.sectionAssignments=Array.isArray(row.sectionAssignments)?row.sectionAssignments:[];
+      row.review=Object.assign({},row.review||{},{state:'pending',nextGate:'administrator_front_match'});
+      productPlacementSelections[id]='section:'+key;changed+=1;
+    });
+    if(changed)renderProducts(productRows);
+    return changed;
+  }
   async function aiPlaceCandidateIds(candidateIds,options){
     options=options||{};candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
     var requested=candidateIds.length,chunkSize=Math.max(1,Math.min(10,Number(options.chunkSize||8))),processed=0,failed=0,results=[],processedIds=[],counts=productSectionCounts();
@@ -778,11 +792,25 @@
       if(data){
         counts=Object.assign({},counts,data.balanceCounts||{});processed+=Number(data.processed||data.assigned||0);failed+=Number(data.failed||0);
         (data.results||[]).forEach(function(row){results.push(row);if(row&&row.assigned===true){var id=text(row.candidateId);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);}});
+        // Reflect confirmed durable placements immediately. This makes the card's
+        // management select show the chosen 18-section destination and removes
+        // successful rows from the unassigned pool even if the follow-up read is slow.
+        applyPsomPlacementResultsLocally(data.results||[]);
       }else{failed+=chunk.length;chunk.forEach(function(id){results.push({candidateId:id,assigned:false,error:text(lastError&&lastError.message)||'psom_bulk_place_failed'});});}
       if(typeof options.onProgress==='function')options.onProgress('analysis',Math.min(candidateIds.length,offset+chunk.length),candidateIds.length,failed);
     }
-    try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}catch(_refreshError){}
-    return{ok:failed===0,requested:requested,validated:requested,processed:processed,failed:failed,processedIds:processedIds,results:results,balanceCounts:counts,mode:'psom_private_pre_front'};
+    var refreshError=null;
+    try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}
+    catch(error){refreshError=error;}
+    // Verify the post-write UI model. Successful IDs must now be slot candidates
+    // with a valid 18-section assignment. Failed rows remain in the unassigned
+    // list and stay selectable; do not erase them just because siblings succeeded.
+    var verifiedIds=[];processedIds.forEach(function(id){var row=productById(id);if(row&&productDecision(row)==='slot_candidate'&&!!assignedSectionKey(row))verifiedIds.push(id);});
+    if(!refreshError&&verifiedIds.length<processedIds.length){
+      var missing={};verifiedIds.forEach(function(id){missing[id]=true;});processedIds.forEach(function(id){if(!missing[id])results.push({candidateId:id,assigned:false,error:'placement_write_not_visible_after_refresh'});});
+      failed+=processedIds.length-verifiedIds.length;processed=Math.max(0,processed-(processedIds.length-verifiedIds.length));processedIds=verifiedIds;
+    }
+    return{ok:failed===0,requested:requested,validated:requested,processed:processed,failed:failed,processedIds:processedIds,results:results,balanceCounts:counts,mode:'psom_private_pre_front',refreshWarning:refreshError?text(refreshError&&refreshError.message):null};
   }
   async function releaseCandidateSection(candidateIds){
     candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
@@ -827,14 +855,14 @@
       if(action==='ai'){
         var aiResult=await aiPlaceCandidateIds(ids,{onProgress:function(stage,done,total,failCount){setCandidateBulkState(groupKey,(stage==='analysis'?'AI 분석·배치':'배치 원장 확정')+' · '+done+'/'+total+'건'+(failCount?' · 실패 '+failCount+'건':''),failCount?'warn':'working');}});
         succeeded=Number(aiResult&&aiResult.processed||0);failed=Number(aiResult&&aiResult.failed||0);
-        var stillVisible={};candidateGroupRows(groupKey).forEach(function(row){stillVisible[text(row.id)]=true;});ids.forEach(function(id){if(!stillVisible[id])delete candidateSelectedProducts[id];});saveReviewSnapshot();
+        var aiDone={};(aiResult&&aiResult.processedIds||[]).forEach(function(id){aiDone[text(id)]=true;});ids.forEach(function(id){if(aiDone[id])delete candidateSelectedProducts[id];});saveReviewSnapshot();
         setCandidateBulkState(groupKey,'AI 배치 완료 · 성공 '+succeeded+'건 · 실패 '+failed+'건',failed?'warn':'ok');
         show('선택 후보 '+ids.length+'건 AI 배치 요청 · 배치 '+succeeded+'건 · 실패 '+failed+'건',failed?'warn':'ok');return;
       }
       if(action==='place'&&!placement){
         var psomResult=await aiPlaceCandidateIds(ids,{onProgress:function(stage,done,total,failCount){setCandidateBulkState(groupKey,'PSOM 정책 배치 · '+done+'/'+total+'건'+(failCount?' · 확인 필요 '+failCount+'건':''),failCount?'warn':'working');}});
         succeeded=Number(psomResult&&psomResult.processed||0);failed=Number(psomResult&&psomResult.failed||0);
-        ids.forEach(function(id){delete candidateSelectedProducts[id];});saveReviewSnapshot();
+        var psomDone={};(psomResult&&psomResult.processedIds||[]).forEach(function(id){psomDone[text(id)]=true;});ids.forEach(function(id){if(psomDone[id])delete candidateSelectedProducts[id];});saveReviewSnapshot();
         var psomText='PSOM 기준 18개 섹션 배치 예정 이동 · 성공 '+succeeded+'건 · 추가 확인 '+failed+'건';setCandidateBulkState(groupKey,psomText,failed?'warn':'ok');show(psomText+'. 프론트 공개는 실행하지 않았으며 실제 프론트 매칭 단계에서 상품 페이지를 다시 검증합니다.',failed?'warn':'ok');return;
       }
       var selectedRows=candidateGroupRows(groupKey).filter(function(row){return ids.indexOf(text(row&&row.id))>=0;}),ledgerRows=selectedRows.filter(function(row){return row&&row.ledgerSource==='candidate';});
