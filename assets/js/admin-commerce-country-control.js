@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.14.1-psom-partial-durable-ui-sync
+/* IGDC Global/Region/Country Commerce Control v3.14.2-exclusion-bucket-canonical-actions
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -945,6 +945,52 @@
     return{ok:failed===0,requested:requested,processed:processed,failed:failed};
   }
   async function applyProductDecision(productId,decision,placementKey,skipConfirm){var row=productById(productId),title=text(row&&row.productName||row&&row.title||productId);if(decision==='purge'&&row&&frontPublicationActive(row)&&!skipConfirm){if(!window.confirm('현재 프론트 매칭을 먼저 해제한 뒤 이 상품을 영구 제외·목록 삭제합니다. 계속할까요?'))return false;skipConfirm=true;}var message={slot_candidate:'선택 상품을 '+sectionLabel(placementKey)+' 섹션의 비공개 배치 예정 목록으로 보내고 관리자 결정으로 고정합니다.',hold:'선택 상품을 보류 목록으로 이동하고 관리자 결정으로 고정합니다.',reject:'선택 상품을 제외 목록으로 이동하고 관리자 결정으로 고정합니다.',purge:'선택 상품을 영구 제외합니다. 같은 원장 후보의 자동 승격을 차단합니다.',undecided:'선택 상품을 미배정 후보 목록으로 복원하고 관리자 결정으로 유지합니다.',ai_reclassify:'관리자 고정을 해제하고 다음 AI 자동화의 재분류 대상으로 돌립니다.'}[decision]||'상품 상태를 변경합니다.';if(!skipConfirm&&(decision==='reject'||decision==='purge')&&!window.confirm(message+'\n\n'+title))return false;try{if(row&&['hold','reject','purge','undecided','ai_reclassify'].indexOf(decision)>=0&&frontPublicationActive(row))await unmatchRowsBeforeManagementChange([row]);if(row&&row.ledgerSource==='candidate'){var candidateId=text(row.candidateId||row.id),ledgerResult;if(decision==='ai_reclassify')ledgerResult=await api(CONTROL,'product_candidate_ledger_action','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateId:candidateId,decision:decision,placementKey:placementKey||''});else ledgerResult=await authorityCandidateAction(decision,[candidateId],placementKey||'',{source:'administrator'});await refreshCandidateLedgerProducts();var ledgerRows=Array.isArray(ledgerResult&&ledgerResult.results)?ledgerResult.results:[],lp=(ledgerRows[0]&&ledgerRows[0].placement)||(ledgerResult.actionResult&&ledgerResult.actionResult.placement),ledgerMessage=decision==='slot_candidate'?'상품 1건을 '+sectionLabel(sectionKeyOf(lp)||placementKey)+' 섹션 후보로 지정했습니다.':decision==='hold'?'상품 1건을 보류 목록으로 이동했습니다.':decision==='reject'?'상품 1건을 제외 목록으로 이동했습니다.':decision==='purge'?'상품 1건을 영구 제외했습니다.':decision==='ai_reclassify'?'상품 1건의 관리자 고정을 해제하고 AI 재분류 대상으로 돌렸습니다.':'상품 1건을 미배정 후보 목록으로 복원했습니다.';show(ledgerMessage+' 자동 공개나 결제는 실행하지 않았습니다.','ok');return true;}var data=await api(CONTROL,'product_candidate_action','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',productId:productId,decision:decision,placementKey:placementKey||''});lastProductJson=data;rememberReport('product',data);renderProductProgress(data);renderProducts(data.products||[]);saveReviewSnapshot();var placement=data.actionResult&&data.actionResult.placement,doneMessage=decision==='slot_candidate'?'상품 1건을 '+sectionLabel(sectionKeyOf(placement)||placementKey)+' 섹션에 관리자 우선으로 지정했습니다.':decision==='hold'?'상품 1건을 보류 목록으로 이동했습니다.':decision==='reject'?'상품 1건을 제외 목록으로 이동했습니다.':decision==='purge'?'상품 1건을 영구 제외했습니다.':decision==='ai_reclassify'?'상품 1건의 관리자 고정을 해제하고 AI 재분류 대상으로 돌렸습니다.':'상품 1건을 미배정 후보 목록으로 복원했습니다.';show(doneMessage+' 자동 공개나 결제는 실행하지 않았습니다.','ok');return true;}catch(e){show(text(e.message)||'상품 판정을 저장하지 못했습니다.','fail');return false;}}
+  function expectedExclusionDecision(decision){
+    if(decision==='undecided')return'restore';
+    return decision;
+  }
+  function verifyProductExclusionTransition(kind,decision,ids){
+    var missing=[],wrong=[],map={};productRows.forEach(function(row){map[managementRowId(row)]=row;});
+    (ids||[]).forEach(function(id){
+      id=text(id);var row=map[id],d=row?productDecision(row):'';
+      if(decision==='dismiss'||decision==='remove_from_list'){
+        if(row)wrong.push(id);
+        return;
+      }
+      if(!row){missing.push(id);return;}
+      if(decision==='undecided'&&d!=='undecided')wrong.push(id);
+      else if(decision==='reject'&&d!=='reject')wrong.push(id);
+      else if(decision==='purge'&&d!=='purge')wrong.push(id);
+    });
+    return{ok:missing.length===0&&wrong.length===0,missing:missing,wrong:wrong,failed:missing.length+wrong.length};
+  }
+  async function exclusionQueueBulk(kind,ids,decision,onProgress){
+    ids=Array.from(new Set((ids||[]).map(text).filter(Boolean)));var action=expectedExclusionDecision(decision),processed=0,failures=[],processedIds=[];
+    for(var offset=0;offset<ids.length;offset+=8){
+      var chunk=ids.slice(offset,offset+8),data=null,lastError=null;
+      for(var attempt=0;attempt<3&&!data;attempt++){
+        try{
+          data=await api(QUEUE_CONTROL,'bulk_action','POST',{},{
+            candidateIds:chunk,decision:action,expectedBucket:kind,
+            countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE'
+          },30000);
+        }catch(error){
+          lastError=error;
+          if(!transientResearchRequestError(error)||attempt>=2)break;
+          await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});
+        }
+      }
+      if(data){
+        processed+=Number(data.processed||0);
+        (data.processedIds||[]).forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});
+        (data.failures||[]).forEach(function(row){failures.push(row);});
+      }else{
+        chunk.forEach(function(id){failures.push({id:id,error:text(lastError&&lastError.message)||'queue_control_request_failed'});});
+      }
+      if(typeof onProgress==='function')onProgress(Math.min(ids.length,offset+chunk.length),ids.length,failures.length);
+    }
+    return{ok:failures.length===0,requested:ids.length,processed:processed,failed:failures.length,processedIds:processedIds,failures:failures};
+  }
   async function applyProductExclusionBulk(kind,decision){
     if(productExclusionActionActive)return;
     var ids=Array.prototype.slice.call(document.querySelectorAll('[data-product-exclusion-select="'+kind+'"]:checked')).map(function(box){return text(box.value);}).filter(Boolean);if(!ids.length){show('처리할 상품을 선택해 주세요.','warn');return;}
@@ -952,13 +998,34 @@
     if(['reject','purge','dismiss','remove_from_list'].indexOf(decision)>=0&&!window.confirm('선택 '+ids.length+'건을 '+(labels[decision]||decision)+' 처리하시겠습니까?'+(decision==='dismiss'?'\n\n현재 관리 목록에서 숨기되 공유 후보 원장과 검토 증빙은 보존하며, 다음 공식 리서치에서 다시 발견될 수 있습니다.':decision==='purge'?'\n\n재수집 차단 기록은 유지됩니다.':'')))return;
     productExclusionActionActive=true;syncProductExclusionSelection('hold');syncProductExclusionSelection('reject');
     try{
-      var selectedRows=ids.map(productById).filter(Boolean);
+      var selectedRows=ids.map(productById).filter(Boolean),candidateRows=selectedRows.filter(function(row){return row&&row.ledgerSource==='candidate';}),legacyRows=selectedRows.filter(function(row){return row&&row.ledgerSource!=='candidate';}),result={processed:0,failed:0,failures:[],processedIds:[]};
       if(decision==='undecided'){var actuallyLiveRows=selectedRows.filter(frontPublicationLive);if(actuallyLiveRows.length)await unmatchRowsBeforeManagementChange(actuallyLiveRows);}
       else await unmatchRowsBeforeManagementChange(selectedRows);
-      var result=await managementCandidateBulk(ids,decision,'');
+
+      if(candidateRows.length){
+        var candidateIds=candidateRows.map(function(row){return text(row.candidateId||row.id);}).filter(Boolean);
+        var queueResult=await exclusionQueueBulk(kind,candidateIds,decision,function(done,total,failCount){
+          var count=$(kind==='hold'?'productHoldSelectedCount':'productRejectSelectedCount');
+          if(count)count.textContent='처리 '+done+'/'+total+'건'+(failCount?' · 실패 '+failCount:'');
+        });
+        result.processed+=Number(queueResult.processed||0);result.failed+=Number(queueResult.failed||0);result.failures=result.failures.concat(queueResult.failures||[]);result.processedIds=result.processedIds.concat(queueResult.processedIds||[]);
+      }
+
+      if(legacyRows.length){
+        var legacyIds=legacyRows.map(function(row){return text(row.id);}).filter(Boolean),legacyResult=await managementCandidateBulk(legacyIds,decision,'');
+        result.processed+=Number(legacyResult.processed||0);result.failed+=Number(legacyResult.failed||0);result.failures=result.failures.concat(legacyResult.failures||[]);result.processedIds=result.processedIds.concat(legacyResult.processedIds||[]);
+      }
+
+      if(candidateRows.length)await refreshCandidateLedgerProducts({preserveResearchReport:true});
+      var verifyIds=(result.processedIds||[]).filter(Boolean),verification=verifyProductExclusionTransition(kind,decision,verifyIds);
+      if(!verification.ok){
+        result.processed=Math.max(0,Number(result.processed||0)-verification.failed);result.failed=Number(result.failed||0)+verification.failed;
+        verification.missing.forEach(function(id){result.failures.push({id:id,error:'post_action_row_missing'});});
+        verification.wrong.forEach(function(id){result.failures.push({id:id,error:'post_action_state_mismatch'});});
+      }
       var summary='요청 '+ids.length+'건 · 성공 '+Number(result.processed||0)+'건 · 실패 '+Number(result.failed||0)+'건',failureText='';
       if(Array.isArray(result.failures)&&result.failures.length)failureText=' · '+result.failures.slice(0,2).map(function(f){return text(f&&f.error||f&&f.message||'처리 실패');}).filter(Boolean).join(' / ');
-      var suffix=decision==='undecided'?' · 선택 상품을 보류·제외 목록에서 빼고 전체 상품 후보·배치 관리 목록으로 복원했습니다.':decision==='purge'?' · 영구 제외·재수집 차단을 저장했습니다.':decision==='dismiss'?' · 현재 관리 목록에서 제거하고 공유 원장·증빙은 보존했습니다. 이후 리서치에서 재발견될 수 있습니다.':decision==='remove_from_list'?' · 원장을 보존하고 현재 관리 목록에서 숨겼습니다.':' · 관리자 후보 상태를 변경했습니다. 프론트 공개는 실행하지 않았습니다.';
+      var suffix=decision==='undecided'?' · 선택 상품을 보류·제외 목록에서 빼고 전체 상품 후보·배치 관리 목록으로 복원했습니다.':decision==='reject'?' · 보류 상품을 제외 상품 목록으로 이동했습니다.':decision==='purge'?' · 영구 제외·재수집 차단을 저장했습니다.':decision==='dismiss'?' · 현재 관리 목록에서 제거하고 공유 원장·증빙은 보존했습니다. 이후 리서치에서 재발견될 수 있습니다.':decision==='remove_from_list'?' · 원장을 보존하고 현재 관리 목록에서 숨겼습니다.':' · 관리자 후보 상태를 변경했습니다. 프론트 공개는 실행하지 않았습니다.';
       show(summary+suffix+failureText,result.failed?'warn':'ok');
     }catch(error){show(text(error&&error.message)||'선택 상품 일괄 처리를 완료하지 못했습니다.','fail');}
     finally{productExclusionActionActive=false;renderExcludedLedger();syncProductExclusionSelection('hold');syncProductExclusionSelection('reject');}
