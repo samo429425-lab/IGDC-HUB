@@ -772,8 +772,11 @@
       if(!result||result.assigned!==true)return;
       var id=text(result.candidateId),key=text(result.sectionKey),section=PRODUCT_SECTION_MAP[key],row=productById(id);
       if(!id||!section||!row)return;
-      var placement={page:section.page,section:section.section,sectionKey:section.section,country:selectedCountry,region:selectedSubdivision||'NATIONWIDE',administratorSelected:false,aiSelected:true,publicPublication:false};
-      row.slotDecision='slot_candidate';row.approvedPlacement=placement;row.primaryPlacement=placement;row.sectionAssignments=Array.isArray(row.sectionAssignments)?row.sectionAssignments:[];
+      var placement={page:section.page,section:section.section,sectionKey:section.section,country:selectedCountry,region:selectedSubdivision||'NATIONWIDE',administratorSelected:false,aiSelected:true,automaticPrivatePlacement:true,publicPublication:false};
+      row.slotDecision='slot_candidate';row.approvedPlacement=placement;row.primaryPlacement=placement;row.placement=placement;
+      row.sectionAssignments=Array.isArray(row.sectionAssignments)?row.sectionAssignments:[];
+      if(!row.sectionAssignments.some(function(item){return sectionKeyOf(item)===key;}))row.sectionAssignments.unshift(Object.assign({reviewEligible:true,valueQualified:true,privateReviewOnly:true},placement));
+      row.managementControl=Object.assign({},row.managementControl||{},{source:'ai_psom_bulk',administratorLocked:false,aiReclassificationAllowed:true,automaticPrivatePlacement:true});
       row.review=Object.assign({},row.review||{},{state:'pending',nextGate:'administrator_front_match'});
       productPlacementSelections[id]='section:'+key;changed+=1;
     });
@@ -810,7 +813,8 @@
       var missing={};verifiedIds.forEach(function(id){missing[id]=true;});processedIds.forEach(function(id){if(!missing[id])results.push({candidateId:id,assigned:false,error:'placement_write_not_visible_after_refresh'});});
       failed+=processedIds.length-verifiedIds.length;processed=Math.max(0,processed-(processedIds.length-verifiedIds.length));processedIds=verifiedIds;
     }
-    return{ok:failed===0,requested:requested,validated:requested,processed:processed,failed:failed,processedIds:processedIds,results:results,balanceCounts:counts,mode:'psom_private_pre_front',refreshWarning:refreshError?text(refreshError&&refreshError.message):null};
+    var sectionSummary={};results.forEach(function(row){var key=text(row&&row.sectionKey);if(row&&row.assigned===true&&key)sectionSummary[key]=Number(sectionSummary[key]||0)+1;});
+    return{ok:failed===0,requested:requested,validated:requested,processed:processed,failed:failed,processedIds:processedIds,results:results,balanceCounts:counts,sectionSummary:sectionSummary,mode:'psom_private_pre_front',refreshWarning:refreshError?text(refreshError&&refreshError.message):null};
   }
   async function releaseCandidateSection(candidateIds){
     candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));

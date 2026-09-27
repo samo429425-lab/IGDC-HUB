@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.24.0-canonical-transfer-state";
+const VERSION = "commerce-country-automation-v3.25.0-psom-private-auto-routing";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -3329,13 +3329,19 @@ function privateReviewFallbackAssignments(rowInput) {
     });
   };
 
-  // Home main rows share one front policy (쇼핑 핫템 추천). Keeping all five
-  // as equal-fit choices lets the balancing allocator spread thumbnails rather
-  // than concentrating every candidate in the first row.
-  ["home_1", "home_2", "home_3", "home_4", "home_5"].forEach((section) => add("home|" + section, 82, "홈 쇼핑 핫템 추천 공통 정책 적합", "private_review_home_hot_item"));
-  if (topRightFit) add("home|home_right_top", 84, "자동차·웹툰·패션 우측 상단 정책 적합", "private_review_home_right_auto_webtoon_fashion");
-  if (middleRightFit) add("home|home_right_middle", 84, "푸드·리빙·책방 우측 중단 정책 적합", "private_review_home_right_food_living_books");
-  if (bottomRightFit) add("home|home_right_bottom", 80, "지식·건강·기타 우측 하단 정책 적합", "private_review_home_right_knowledge_health_other");
+  // Pure travel/booking services belong to the Tour right panel.  Do not let
+  // generic Home/Distribution rails compete with Tour simply because those
+  // rails have fewer candidates.  Physical outdoor/sports goods are not
+  // treated as pure services and may still participate in retail rails below.
+  if (!tourService) {
+    // Home main rows share one front policy (쇼핑 핫템 추천). Keeping all five
+    // as equal-fit choices lets the balancing allocator spread thumbnails rather
+    // than concentrating every candidate in the first row.
+    ["home_1", "home_2", "home_3", "home_4", "home_5"].forEach((section) => add("home|" + section, 82, "홈 쇼핑 핫템 추천 공통 정책 적합", "private_review_home_hot_item"));
+    if (topRightFit) add("home|home_right_top", 84, "자동차·웹툰·패션 우측 상단 정책 적합", "private_review_home_right_auto_webtoon_fashion");
+    if (middleRightFit) add("home|home_right_middle", 84, "푸드·리빙·책방 우측 중단 정책 적합", "private_review_home_right_food_living_books");
+    if (bottomRightFit) add("home|home_right_bottom", 80, "지식·건강·기타 우측 하단 정책 적합", "private_review_home_right_knowledge_health_other");
+  }
 
   // Tour right: travel/tourism + leisure/sports/outdoor commercial spectrum.
   // Dining is intentionally lower priority and separately capped by the AI
@@ -3359,16 +3365,19 @@ function privateReviewFallbackAssignments(rowInput) {
   }
 
   // Distribution six main rails. Broad recommendation/others are available to
-  // normal qualified goods; the evidence-gated rails are offered only when the
-  // corresponding policy signal exists.
-  add("distribution|distribution-recommend", 78, "대중 수요·효용 중심 추천 검토", "private_review_distribution_recommend");
-  // Sponsor is a normal Distribution rail. A real sponsorship contract is
-  // optional and, when present, only raises priority / activates disclosure.
-  add("distribution|distribution-sponsor", sponsorSignal && commercial.contractReady === true ? 88 : 79, sponsorSignal && commercial.contractReady === true ? "스폰서십 적용 상품" : "유통 스폰서 일반 운영 검토", "private_review_distribution_sponsor");
-  if (trending) add("distribution|distribution-trending", 83, "인기·판매상위 신호 상품", "private_review_distribution_trending");
-  if (newness || recentRegistration) add("distribution|distribution-new", 81, "신규 또는 최근 등록·확인 상품", "private_review_distribution_new");
-  if (special || localOrigin || tourRecreation) add("distribution|distribution-special", 82, "특산·인증·한정·지역·레저 테마 상품", "private_review_distribution_special");
-  add("distribution|distribution-others", 74, "정책 적격 일반·롱테일 상품", "private_review_distribution_others");
+  // normal qualified retail goods. Pure travel/booking services are excluded
+  // here and stay in Tour; this prevents hotel/tour/cruise products from being
+  // moved into 유통 · 오늘의 추천 merely because Distribution is less full.
+  if (!tourService) {
+    add("distribution|distribution-recommend", 78, "대중 수요·효용 중심 추천 검토", "private_review_distribution_recommend");
+    // Sponsor is a normal Distribution rail. A real sponsorship contract is
+    // optional and, when present, only raises priority / activates disclosure.
+    add("distribution|distribution-sponsor", sponsorSignal && commercial.contractReady === true ? 88 : 79, sponsorSignal && commercial.contractReady === true ? "스폰서십 적용 상품" : "유통 스폰서 일반 운영 검토", "private_review_distribution_sponsor");
+    if (trending) add("distribution|distribution-trending", 83, "인기·판매상위 신호 상품", "private_review_distribution_trending");
+    if (newness || recentRegistration) add("distribution|distribution-new", 81, "신규 또는 최근 등록·확인 상품", "private_review_distribution_new");
+    if (special || localOrigin || tourRecreation) add("distribution|distribution-special", 82, "특산·인증·한정·지역·레저 테마 상품", "private_review_distribution_special");
+    add("distribution|distribution-others", 74, "정책 적격 일반·롱테일 상품", "private_review_distribution_others");
+  }
   return map;
 }
 function combinedProductAssignments(rowInput) {
@@ -3954,23 +3963,117 @@ function candidateRuntimeHealth(productInput) {
   const state = hardDead ? "dead" : (inconclusive ? "inconclusive" : "live");
   return { ok:state === "live", live:state === "live", dead:state === "dead", inconclusive:state === "inconclusive", state, reasons:Array.from(new Set(reasons.filter(Boolean))) };
 }
+function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourProfileInput) {
+  const product = plain(productInput), category = plain(categoryInput), tourProfile = plain(tourProfileInput);
+  const primary = text(category.primary), options = [], assessment = productPrivateReviewAssessment(product);
+  const warnings = array(assessment.warnings).concat(assessment.reason && assessment.eligible !== true ? [assessment.reason] : []);
+  const add = (key, score, reason, role) => {
+    if (!validProductSectionKey(key) || options.some((row) => row.key === key)) return;
+    const split = splitProductSectionKey(key);
+    options.push({
+      key, page:split.page, sectionKey:split.sectionKey, section:split.sectionKey,
+      score, reason, policyRole:role, requiredEvidence:[], evidenceGaps:Array.from(new Set(warnings.filter(Boolean))),
+      valueQualified:true, reviewEligible:true, approvalEligible:false, privateReviewOnly:true,
+      provisionalPolicyPlacement:true, publicReleaseEvidencePending:true, proposalOnly:true, publicPublication:false
+    });
+  };
+
+  // Travel/booking services have one canonical automatic destination: Tour right.
+  // This rule intentionally beats load-balancing so hotels, cruises, tickets and
+  // tour packages can never drift into Distribution recommendation rails.
+  if (primary === "travel_local_services" || tourProfile.service === true) {
+    add("tour|tour", 120, "여행·관광·숙박·크루즈·예약 서비스는 투어 우측 전용", "psom_tour_service_only");
+    return options;
+  }
+
+  // Physical outdoor/sports products are strongly Tour-oriented, but they remain
+  // retail goods and may also use a themed Distribution rail when Tour is full.
+  if (tourProfile.recreationProduct === true) {
+    add("tour|tour", 112, "등산·캠핑·골프·스포츠·아웃도어 상품 투어 우측 우선", "psom_tour_recreation_primary");
+    add("distribution|distribution-special", 96, "레저·아웃도어 테마 유통 특별 후보", "psom_recreation_distribution_special");
+  }
+
+  const categoryMap = {
+    beauty_personal_care: [
+      ["social|rightPanel",108,"뷰티·퍼스널케어 소셜 반응 우선","psom_beauty_social"],
+      ["home|home_1",94,"대중 소비재 홈 쇼핑 후보","psom_beauty_home"],
+      ["distribution|distribution-recommend",90,"대중 수요 유통 추천 후보","psom_beauty_distribution"]
+    ],
+    fashion: [
+      ["home|home_right_top",108,"패션 홈 우측 상단 정책","psom_fashion_home_right"],
+      ["social|rightPanel",104,"패션 소셜 반응 후보","psom_fashion_social"],
+      ["distribution|distribution-recommend",90,"패션 유통 추천 후보","psom_fashion_distribution"]
+    ],
+    electronics_accessories: [
+      ["distribution|distribution-right",108,"전자·소형전자 유통 우측 정책","psom_electronics_distribution_right"],
+      ["network|network-right",102,"전자·공급망 네트워크 우측 정책","psom_electronics_network"],
+      ["home|home_1",92,"실생활 전자기기 홈 쇼핑 후보","psom_electronics_home"]
+    ],
+    home_appliances_living: [
+      ["home|home_right_middle",110,"리빙·가구·소형가전 홈 우측 중단 정책","psom_living_home_right"],
+      ["distribution|distribution-right",102,"가전·리빙 유통 우측 정책","psom_living_distribution_right"],
+      ["network|network-right",94,"제조·공급망 네트워크 후보","psom_living_network"]
+    ],
+    food_household_essentials: [
+      ["home|home_right_middle",110,"푸드·생활필수품 홈 우측 중단 정책","psom_food_home_right"],
+      ["distribution|distribution-recommend",100,"반복수요 생활필수품 유통 추천","psom_food_distribution"],
+      ["home|home_2",92,"생활밀착 상품 홈 쇼핑 후보","psom_food_home"]
+    ],
+    agriculture_fishery_forestry: [
+      ["home|home_right_middle",108,"식재료·농수축산물 홈 푸드 정책","psom_agri_home_right"],
+      ["distribution|distribution-special",104,"지역·산지·특산 유통 특별 후보","psom_agri_distribution_special"],
+      ["network|network-right",94,"생산자·조합 공급망 네트워크 후보","psom_agri_network"]
+    ],
+    local_products: [
+      ["distribution|distribution-special",108,"지역 특산·로컬 상품 유통 특별 후보","psom_local_distribution_special"],
+      ["home|home_right_middle",100,"로컬푸드·리빙 홈 우측 후보","psom_local_home_right"],
+      ["network|network-right",94,"지역 생산자 공급망 네트워크 후보","psom_local_network"]
+    ],
+    baby_family_education: [
+      ["home|home_right_bottom",106,"가족·교육·지식 홈 우측 하단 정책","psom_family_home_right"],
+      ["home|home_3",92,"가족 생활 상품 홈 쇼핑 후보","psom_family_home"],
+      ["distribution|distribution-recommend",88,"가족 소비재 유통 추천 후보","psom_family_distribution"]
+    ],
+    manufacturer_brands: [
+      ["network|network-right",108,"제조사·브랜드 공급망 네트워크 우선","psom_manufacturer_network"],
+      ["distribution|distribution-right",100,"제조·산업 상품 유통 우측 후보","psom_manufacturer_distribution_right"],
+      ["distribution|distribution-others",86,"일반 제조 상품 유통 기타 후보","psom_manufacturer_distribution_others"]
+    ]
+  };
+  for (const row of array(categoryMap[primary])) add(row[0], row[1], row[2], row[3]);
+
+  // Unknown-but-real product candidates are still allowed into a private
+  // pre-front placement so hundreds of rows do not require hand assignment.
+  // Final Front Match keeps the strict live/evidence/revenue safety gates.
+  if (!options.length) {
+    add("distribution|distribution-others", 84, "분류 보강이 필요한 일반 상품의 비공개 유통 후보", "psom_general_distribution_others");
+    add("home|home_right_bottom", 78, "기타 실생활 상품 홈 우측 하단 후보", "psom_general_home_other");
+  }
+  return options;
+}
 function candidateRuntimePlacementOptions(productInput, payloadInput) {
   const product = plain(productInput), payload = plain(payloadInput), category = ProductRanking.classifyCategory(product), tourProfile = ProductRanking.tourRightProfile(product);
-  const tourEligible = category.primary === "travel_local_services" || tourProfile.eligible;
+  const pureTourService = category.primary === "travel_local_services" || tourProfile.service === true;
   product.productCategory = category.primary; product.productCategoryTags = category.tags;
-  const byKey = new Map(), fallback = privateReviewFallbackAssignments(product);
-  const allowedKeys = new Set(fallback.map(productPlacementKey).filter(validProductSectionKey));
+  const strictFallback = privateReviewFallbackAssignments(product);
+  const draftFallback = candidateRuntimeDraftPolicyOptions(product, category, tourProfile);
+  const fallback = pureTourService
+    ? draftFallback.filter((item) => productPlacementKey(item) === "tour|tour")
+    : strictFallback.concat(draftFallback);
+  const byKey = new Map(), allowedKeys = new Set(fallback.map(productPlacementKey).filter(validProductSectionKey));
   const source = array(payload.proposedPlacements).concat(array(product.sectionAssignments)).concat(fallback);
   for (const itemInput of source) {
     const item = plain(itemInput), key = productPlacementKey(item);
     if (!validProductSectionKey(key) || !allowedKeys.has(key)) continue;
-    if (key === "tour|tour" && !tourEligible) continue;
+    if (pureTourService && key !== "tour|tour") continue;
+    if (key === "tour|tour" && !pureTourService && tourProfile.eligible !== true) continue;
     if (item.reviewEligible === false || item.valueQualified === false) continue;
     const prior = byKey.get(key), nextScore = Number(item.score || 0), priorScore = Number(prior && prior.score || 0);
     if (!prior || nextScore > priorScore) byKey.set(key, Object.assign({}, item, { key }));
   }
-  return { category, options: Array.from(byKey.values()).sort((a,b) => Number(b && b.score || 0) - Number(a && a.score || 0) || PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(a)) - PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(b))) };
+  return { category, options:Array.from(byKey.values()).sort((a,b) => Number(b && b.score || 0) - Number(a && a.score || 0) || PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(a)) - PRODUCT_SECTION_KEYS.indexOf(productPlacementKey(b))) };
 }
+
 function candidateRuntimePublishedStatus(value) { return ["publish_requested","published","matched","active","queued"].includes(lower(value)); }
 function candidateRuntimeAssignmentKey(rowInput) { const row = plain(rowInput); return text(row.hub_key) && text(row.slot_key) ? text(row.hub_key) + "|" + text(row.slot_key) : ""; }
 function candidateRuntimeCard(payloadInput, productInput) {
@@ -4140,6 +4243,19 @@ async function productCandidatePsomPlace(actorId, input) {
       if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { results.push({candidateId:id,assigned:false,error:"candidate_not_found"}); continue; }
       const payload = Object.assign({}, plain(row.source_payload)), current = lower(payload.slotDecision || "undecided");
       if (["reject","purge","removed"].includes(current) || plain(payload.queueControl).permanentExcluded === true) { results.push({candidateId:id,assigned:false,error:"candidate_excluded"}); continue; }
+      // Administrator/manual decisions always outrank automatic PSOM placement.
+      // A bulk AI click must never silently rewrite a manually fixed section or
+      // a manually held/undecided candidate.
+      if (candidateRuntimeManualLock(payload)) {
+        const manualKey = productPlacementKey(payload.approvedPlacement || payload.placement || payload.selectedPlacement);
+        if (current === "slot_candidate" && validProductSectionKey(manualKey)) {
+          counts[manualKey] = Number(counts[manualKey] || 0) + 1;
+          results.push({candidateId:id,assigned:true,sectionKey:manualKey,preservedManual:true,source:"administrator_manual_precedence"});
+        } else {
+          results.push({candidateId:id,assigned:false,preservedManual:true,error:"administrator_manual_precedence"});
+        }
+        continue;
+      }
       const product = candidateRuntimeProduct(row, scope);
       if (!product) { results.push({candidateId:id,assigned:false,error:"candidate_product_payload_missing"}); continue; }
       product.candidateId = id; product.id = id;
