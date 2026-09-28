@@ -36,7 +36,7 @@ const FRONT_SECTION_KEYS = Object.freeze({
   social: Object.freeze(["rightPanel"])
 });
 
-const SECTION_CAPACITY = 100;
+const SECTION_CAPACITY = 200;
 const TOUR_RIGHT_DINING_AUTO_CAP = 2;
 const AI_AUTO_BALANCE_GROUPS = Object.freeze({
   homeMain: Object.freeze(["home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5"]),
@@ -462,7 +462,7 @@ function classifyCategory(rowInput) {
   const addSupplier = (key, score, pattern) => { if (pattern.test(supplierHay)) scores[key] += score; };
   const addCombined = (key, score, pattern) => { if (pattern.test(combinedHay)) scores[key] += score; };
 
-  addProduct("food_household_essentials", 80, /(화장지|두루마리|휴지|티슈|물티슈|키친타올|생리대|위생|세제|세정제|주방용품|생활용품|생필품|식료품|건강식품|가공식품|즉석식품|냉동식품|신선식품|수입식품|유기농식품|(?:^|[^가-힣])식품(?:[^가-힣]|$)|김치|장류|반찬|떡|한과|household|tissue|detergent|grocery|food)/i);
+  addProduct("food_household_essentials", 80, /(화장지|두루마리|휴지|티슈|물티슈|키친타올|생리대|위생|세제|세정제|주방용품|생활용품|생필품|식료품|건강식품|가공식품|즉석식품|냉동식품|신선식품|수입식품|유기농식품|(?:^|[^가-힣])식품(?:[^가-힣]|$)|김치|장류|고추장|된장|쌈장|간장|젓갈|양념|소스|식초|식용유|쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|반찬|떡|한과|household|tissue|detergent|grocery|food)/i);
   addProduct("food_household_essentials", 35, /(미용티슈|각티슈|롤화장지|배변패드|발티슈|키친타월|키친타올|생리대|오버나이트)/i);
   addProduct("beauty_personal_care", 85, /(화장품|뷰티|스킨케어|세럼|앰플|에센스|토너|크림|로션(?!\s*\d*겹)|보습제|선크림|자외선차단|샴푸|린스|컨디셔너|트리트먼트|헤어팩|클렌징|클렌저|마스크팩|메이크업|파운데이션|쿠션|BB\s*크림|CC\s*크림|립스틱|립틴트|립밤|마스카라|아이라이너|아이브로우|아이섀도|블러셔|컨실러|페이스파우더|향수|미스트|네일|매니큐어|바디워시|헤어케어|바디케어|그루밍|전동면도기|고데기|헤어스타일러|미용기기|LED\s*마스크|갈바닉|피부마사지|두피관리|이어클리너|이어클렌저|personal care|beauty|cosmetic|skincare|serum|ampoule|essence|toner|moisturizer|cleanser|sunscreen|makeup|foundation|cushion|bb cream|cc cream|lipstick|lip tint|lip balm|mascara|eyeliner|eyebrow|eyeshadow|blush|concealer|face powder|perfume|fragrance|nail polish|manicure|shampoo|conditioner|treatment|body wash|hair care|body care|grooming|electric shaver|hair straightener|hair styler|beauty device|led mask|galvanic|facial massager|scalp care)/i);
   addProduct("fashion", 75, /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|등산복|등산화|아웃도어의류|fashion|apparel|jewelry|ring|watch|shoes|bag|outdoor wear)/i);

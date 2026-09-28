@@ -459,6 +459,8 @@ function restoredKrRows(geo, sourceTerms, maxQueries){
     if(/화장품|스킨케어|색조화장품|메이크업|뷰티기기|LED마스크|갈바닉/.test(query)) return "beauty_focus";
     if(/블루투스|이어폰|이어버드|헤드폰|스피커|마이크|태블릿|USB|충전기|보조배터리|웹캠/.test(query)) return "electronics_focus";
     if(/소형가전|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피메이커|커피머신|에어프라이어/.test(query)) return "small_appliance_focus";
+    if(/김치|장류|고추장|된장|쌈장|간장|젓갈|양념|소스|식용유|식초|가공식품|전통식품|반찬/.test(query)) return "food_focus";
+    if(/쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|버섯|농산물|수산물|임산물|농가|농장|농협|수협|산림조합/.test(query)) return "agri_food_focus";
     if(/기계|금속|플라스틱|목재|포장재|공구|산업용품|전자제품|부품/.test(query)) return "industrial_manufacturing";
     if(/전통시장|지역특산품|공동몰/.test(query)) return "regional_market";
     if(/지역 유통업체|도매|총판|공판장/.test(query)) return "wholesale_distribution";
@@ -489,7 +491,9 @@ function buildCountryRows(geo, locales, sourceTerms, maxQueries){
   const focusedCommerceQueries=[
     ["beauty_focus","beauty skincare makeup foundation cushion BB CC lipstick lip tint mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance nail hair body grooming beauty device electric shaver hair styler LED mask galvanic facial massager scalp care manufacturer brand official store"],
     ["electronics_focus","small electronics bluetooth earbuds earphones headphones speakers microphone tablet USB hub flash drive cable charger power bank webcam manufacturer brand official store"],
-    ["small_appliance_focus","small home appliances portable fan desk fan handheld fan circulator humidifier dehumidifier air purifier vacuum electric kettle toaster blender coffee maker manufacturer brand official store"]
+    ["small_appliance_focus","small home appliances portable fan desk fan handheld fan circulator humidifier dehumidifier air purifier vacuum electric kettle toaster blender coffee maker manufacturer brand official store"],
+    ["food_focus","popular food groceries condiments fermented paste soy sauce sauces cooking ingredients rice grains local food producer official store"],
+    ["agri_food_focus","agricultural fishery forestry products rice grains beans sesame garlic onion mushrooms local producer cooperative official store"]
   ];
   for(const item of focusedCommerceQueries){if(rows.length>=maxQueries)break;add(`${regionPart} ${focusName} ${item[1]} ${focusPack.commerce}`,focusLocale,`country-policy-focused:${item[0]}`,item[0],focusName);}
   for(let index=0;index<lanes.length&&rows.length<maxQueries;index+=1){

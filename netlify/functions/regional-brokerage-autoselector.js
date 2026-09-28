@@ -176,27 +176,37 @@ const FOCUSED_CATEGORY_SUFFIXES=Object.freeze({
   en:Object.freeze({
     beauty_personal_care:"skincare serum ampoule essence toner moisturizer cream lotion cleanser sunscreen mask makeup cosmetics foundation cushion BB CC lipstick lip tint lip balm mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance perfume nail manicure hair care body care grooming electric shaver hair straightener hair styler beauty device LED mask galvanic facial massager scalp care",
     electronics_accessories:"small electronics portable speaker bluetooth speaker earbuds earphones headphones microphone tablet USB hub flash drive cable charger power bank webcam",
-    home_appliances_living:"small home appliances portable fan desk fan handheld fan circulator electric kettle toaster blender mixer coffee maker humidifier dehumidifier air purifier vacuum hair dryer"
+    home_appliances_living:"small home appliances portable fan desk fan handheld fan circulator electric kettle toaster blender mixer coffee maker humidifier dehumidifier air purifier vacuum hair dryer",
+    food_household_essentials:"food groceries condiments fermented paste gochujang doenjang ssamjang soy sauce sauces cooking ingredients rice grains local food",
+    agriculture_fishery_forestry:"agricultural fishery forestry products rice grains beans sesame garlic onion mushrooms local producer cooperative"
   }),
   ko:Object.freeze({
     beauty_personal_care:"스킨케어 세럼 앰플 에센스 토너 보습제 크림 로션 클렌저 선크림 마스크팩 메이크업 화장품 파운데이션 쿠션 BB CC 립스틱 립틴트 립밤 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 향수 네일 매니큐어 헤어케어 바디케어 그루밍 전동면도기 고데기 헤어스타일러 미용기기 LED마스크 갈바닉 피부마사지 두피관리",
     electronics_accessories:"소형 전자제품 스피커 블루투스 스피커 이어버드 블루투스 이어폰 헤드폰 마이크 태블릿 USB 허브 USB 메모리 케이블 충전기 보조배터리 웹캠",
-    home_appliances_living:"소형가전 선풍기 휴대용 선풍기 탁상용 선풍기 핸디 선풍기 써큘레이터 전기포트 토스터 블렌더 믹서 커피메이커 가습기 제습기 공기청정기 청소기 헤어드라이어"
+    home_appliances_living:"소형가전 선풍기 휴대용 선풍기 탁상용 선풍기 핸디 선풍기 써큘레이터 전기포트 토스터 블렌더 믹서 커피메이커 가습기 제습기 공기청정기 청소기 헤어드라이어",
+    food_household_essentials:"식품 식재료 고추장 된장 쌈장 간장 장류 젓갈 양념 소스 식초 식용유 김치 반찬 쌀 잡곡",
+    agriculture_fishery_forestry:"농산물 수산물 임산물 쌀 잡곡 콩 참깨 들깨 고춧가루 마늘 양파 버섯 농가 농장 농협 수협 산림조합"
   }),
   ja:Object.freeze({
     beauty_personal_care:"スキンケア 美容液 アンプル エッセンス 化粧水 保湿 クリーム ローション クレンザー 日焼け止め マスク メイク 化粧品 ヘアケア ボディケア",
     electronics_accessories:"小型電子機器 スピーカー Bluetoothスピーカー イヤホン ヘッドホン マイク タブレット USBハブ USBメモリ ケーブル 充電器 モバイルバッテリー ウェブカメラ",
-    home_appliances_living:"小型家電 電気ケトル トースター ブレンダー ミキサー コーヒーメーカー 加湿器 除湿機 空気清浄機 掃除機 ヘアドライヤー"
+    home_appliances_living:"小型家電 電気ケトル トースター ブレンダー ミキサー コーヒーメーカー 加湿器 除湿機 空気清浄機 掃除機 ヘアドライヤー",
+    food_household_essentials:"食品 食材 調味料 味噌 醤油 ソース 米 穀物 地域食品",
+    agriculture_fishery_forestry:"農産物 水産物 林産物 米 穀物 豆 ごま にんにく 玉ねぎ きのこ 生産者 協同組合"
   }),
   "zh-hans":Object.freeze({
     beauty_personal_care:"护肤 精华 安瓶 爽肤水 保湿 乳霜 乳液 洁面 防晒 面膜 彩妆 化妆品 护发 身体护理",
     electronics_accessories:"小型电子产品 音箱 蓝牙音箱 耳机 蓝牙耳机 头戴耳机 麦克风 平板电脑 USB集线器 U盘 数据线 充电器 充电宝 摄像头",
-    home_appliances_living:"小家电 电热水壶 烤面包机 搅拌机 咖啡机 加湿器 除湿机 空气净化器 吸尘器 吹风机"
+    home_appliances_living:"小家电 电热水壶 烤面包机 搅拌机 咖啡机 加湿器 除湿机 空气净化器 吸尘器 吹风机",
+    food_household_essentials:"食品 食材 调味料 发酵酱 酱油 酱料 米 谷物 地方食品",
+    agriculture_fishery_forestry:"农产品 水产品 林产品 米 谷物 豆 芝麻 大蒜 洋葱 蘑菇 生产者 合作社"
   }),
   "zh-hant":Object.freeze({
     beauty_personal_care:"護膚 精華 安瓶 化妝水 保濕 乳霜 乳液 潔面 防曬 面膜 彩妝 化妝品 護髮 身體護理",
     electronics_accessories:"小型電子產品 音箱 藍牙音箱 耳機 藍牙耳機 頭戴耳機 麥克風 平板電腦 USB集線器 隨身碟 數據線 充電器 行動電源 網路攝影機",
-    home_appliances_living:"小家電 電熱水壺 烤麵包機 攪拌機 咖啡機 加濕器 除濕機 空氣清淨機 吸塵器 吹風機"
+    home_appliances_living:"小家電 電熱水壺 烤麵包機 攪拌機 咖啡機 加濕器 除濕機 空氣清淨機 吸塵器 吹風機",
+    food_household_essentials:"食品 食材 調味料 發酵醬 醬油 醬料 米 穀物 地方食品",
+    agriculture_fishery_forestry:"農產品 水產品 林產品 米 穀物 豆 芝麻 大蒜 洋蔥 蘑菇 生產者 合作社"
   })
 });
 function focusedCategorySuffix(locale,key){
@@ -223,7 +233,7 @@ function queryCategories(geo){
   const weights=geo&&geo.categoryWeights&&typeof geo.categoryWeights==="object"?geo.categoryWeights:{};
   const ranked=rotated.slice().sort((a,b)=>{const aw=Number(weights[CATEGORY_KEYS[a]])||0,bw=Number(weights[CATEGORY_KEYS[b]])||0;return bw-aw||rotated.indexOf(a)-rotated.indexOf(b);});
   const positive=ranked.filter(index=>(Number(weights[CATEGORY_KEYS[index]])||0)>0);
-  const defaultFocus=["beauty_personal_care","electronics_accessories","home_appliances_living"]
+  const defaultFocus=["beauty_personal_care","electronics_accessories","home_appliances_living","food_household_essentials","agriculture_fishery_forestry"]
     .map(key=>CATEGORY_KEYS.indexOf(key))
     .filter(index=>index>=0&&(Number(weights[CATEGORY_KEYS[index]])||0)>=0);
   const neutral=ranked.filter(index=>(Number(weights[CATEGORY_KEYS[index]])||0)>=0);

@@ -10,7 +10,7 @@ const SlotStore=require("./lib/global-slot-console-supabase");
 const MarketSaleScope=require("./lib/market-sale-scope.v1");
 const ProductPipeline=require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION="commerce-candidate-management-ledger-v1.0.0-direct-source-ref";
+const VERSION="commerce-candidate-management-ledger-v1.1.0-management-ranking-projection";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const PRODUCT_SOURCE_REF=ProductPipeline.SOURCE_REF; // country-product-ranking-review
 function text(v){return v==null?"":String(v).trim();}
@@ -40,9 +40,10 @@ function scopeMatch(payload,countryInput,regionInput){
 }
 function compact(candidate){
   const payload=plain(candidate&&candidate.source_payload),live=ProductPipeline.liveQueueRow(candidate,{assignments:[],markets:[],revenues:[],evidence:[]});
-  live.queueControl=plain(payload.queueControl);live.slotDecision=text(payload.slotDecision);
+  live.queueControl=plain(payload.queueControl);live.slotDecision=text(payload.slotDecision);live.managementControl=plain(payload.managementControl);live.decisionSource=text(payload.decisionSource);
+  live.createdAt=text(candidate&&candidate.created_at);live.updatedAt=text(candidate&&candidate.updated_at);
   const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.placement),front=plain(payload.frontPublication||payload.publication||payload.frontSync);
-  if(Object.keys(placement).length){live.placement=Object.assign({},plain(live.placement),{page:text(placement.page),section:text(placement.section||placement.sectionKey),slot:text(placement.slot),country:text(placement.country||plain(payload.marketScope).marketCountry),region:text(placement.region||plain(payload.marketScope).marketRegion)});}
+  if(Object.keys(placement).length){live.placement=Object.assign({},plain(live.placement),placement,{page:text(placement.page),section:text(placement.section||placement.sectionKey),sectionKey:text(placement.sectionKey||placement.section),slot:text(placement.slot),country:text(placement.country||plain(payload.marketScope).marketCountry),region:text(placement.region||plain(payload.marketScope).marketRegion)});}
   if(Object.keys(front).length){live.lifecycle=Object.assign({},plain(live.lifecycle),{assignment:{publicationStatus:text(front.status||front.publicationStatus||front.publication_status),hubKey:text(front.hubKey||front.hub_key),slotKey:text(front.slotKey||front.slot_key)}});}
   live.managementProjection="direct_source_ref";return live;
 }
