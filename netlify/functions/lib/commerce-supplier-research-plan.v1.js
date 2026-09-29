@@ -11,7 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "commerce-supplier-research-plan-v1.6.0-focused-beauty-small-appliance-depth";
+const VERSION = "commerce-supplier-research-plan-v1.7.0-balanced-consumer-supplier-lanes";
 
 function text(value){ return String(value == null ? "" : value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
@@ -96,6 +96,17 @@ const KR_PRIORITY_QUERIES = Object.freeze([
   "대한민국 미니가전 탁상용 선풍기 휴대용 선풍기 미니 가습기 제습기 공기청정기 핸디청소기 무선청소기 제조사 브랜드 공식몰",
   "대한민국 주방 미니가전 미니밥솥 전기그릴 샌드위치메이커 와플메이커 계란찜기 착즙기 전동다지기 에어프라이어 제조사 브랜드 공식몰"
 ]);
+const KR_BALANCED_PRIORITY_QUERIES = Object.freeze([
+  "대한민국 화장품 스킨케어 메이크업 헤어 바디 뷰티 브랜드 책임판매업자 제조사 공식몰 직영몰 배송 반품 환불 고객센터",
+  "대한민국 블루투스 이어폰 이어버드 헤드폰 스피커 마이크 태블릿 충전기 보조배터리 액션카메라 스마트워치 미니프로젝터 소형전자 제조사 브랜드 공식몰",
+  "대한민국 소형가전 선풍기 써큘레이터 가습기 제습기 공기청정기 청소기 전기포트 블렌더 커피메이커 제조사 브랜드 공식몰",
+  "대한민국 생필품 생활용품 화장지 티슈 물티슈 세제 세정제 위생용품 욕실용품 청소용품 수납용품 주방용품 침구 제조사 브랜드 공식몰",
+  "대한민국 건강식품 건강식재료 영양식 차 음료 발효식품 곡물 견과 버섯 약초 꿀 생산자 제조사 공식몰 직거래",
+  "대한민국 의류 신발 가방 패션잡화 브랜드 제조사 봉제업체 직영몰 공식 온라인 판매처 배송 반품",
+  "대한민국 식품 식료품 농수축임산물 로컬푸드 생산자 농협 축협 수협 산림조합 협동조합 공식몰 직거래",
+  "대한민국 가구 리빙 침구 인테리어 생활가전 생활소모품 제조사 브랜드 공식몰 직영몰"
+]);
+
 const KR_FOUNDATION_QUERIES = Object.freeze([
   "대한민국 생활필수품 식료품 농수축임산물 생산자 농협 축협 수협 산림조합 협동조합 공식몰 직거래 배송 반품 환불 고객센터",
   "대한민국 화장품 스킨케어 메이크업 파운데이션 쿠션 BB CC 립스틱 립틴트 립밤 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 향수 네일 샴푸 트리트먼트 바디워시 미용기기 LED마스크 갈바닉 피부마사지 두피관리 전동면도기 헤어스타일러 제조사 브랜드 본사 책임판매업자 공식몰 제품 구매 배송 반품 환불 고객센터",
@@ -459,17 +470,26 @@ function restoredKrRows(geo, sourceTerms, maxQueries){
     if(/화장품|스킨케어|색조화장품|메이크업|뷰티기기|LED마스크|갈바닉/.test(query)) return "beauty_focus";
     if(/블루투스|이어폰|이어버드|헤드폰|스피커|마이크|태블릿|USB|충전기|보조배터리|웹캠/.test(query)) return "electronics_focus";
     if(/소형가전|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피메이커|커피머신|에어프라이어/.test(query)) return "small_appliance_focus";
+    if(/건강식품|건강식재료|영양식|곡물|견과|약초|꿀|발효식품/.test(query)) return "health_food_focus";
     if(/김치|장류|고추장|된장|쌈장|간장|젓갈|양념|소스|식용유|식초|가공식품|전통식품|반찬/.test(query)) return "food_focus";
     if(/쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|버섯|농산물|수산물|임산물|농가|농장|농협|수협|산림조합/.test(query)) return "agri_food_focus";
     if(/기계|금속|플라스틱|목재|포장재|공구|산업용품|전자제품|부품/.test(query)) return "industrial_manufacturing";
     if(/전통시장|지역특산품|공동몰/.test(query)) return "regional_market";
     if(/지역 유통업체|도매|총판|공판장/.test(query)) return "wholesale_distribution";
     if(/사회적기업|마을기업|자활기업/.test(query)) return "small_business";
+    if(/생필품|생활용품|화장지|티슈|물티슈|세제|세정제|위생용품|욕실용품|청소용품|수납용품|주방용품|침구/.test(query)) return "household_essentials_focus";
+    if(/의류|신발|가방|패션잡화|봉제/.test(query)) return "fashion_focus";
     if(/화장품|생활용품|가구|침구|의류|신발|가방|유아용품|교육용품|문구|완구/.test(query)) return "consumer_manufacturing";
     if(/농협|축협|수협|산림조합|협동조합|영농조합|농업회사법인|농장|농가|수산물|임산물/.test(query)) return "agri_cooperative";
     return index<KR_FOUNDATION_QUERIES.length?"food_essentials":"kr_rotating";
   }
-  return unique(KR_PRIORITY_QUERIES.concat(KR_FOUNDATION_QUERIES,dynamic),maxQueries).map((query,index)=>({query,locale:"ko",origin:`country-supply-lane:${laneFor(query,index)}`,lane:laneFor(query,index),localName:"대한민국",localizationError:null}));
+  // Start every Korean research cycle with a deliberately balanced set of
+  // consumer/supplier lanes. Detailed beauty/electronics queries still follow,
+  // but can no longer consume the whole query budget before household,
+  // health-food, fashion and local-food suppliers are represented.
+  const foundationOrder=[0,4,10,11,12,13,14,15,3,5,6,7,8,9,1,2];
+  const balancedFoundation=foundationOrder.map((index)=>KR_FOUNDATION_QUERIES[index]).filter(Boolean);
+  return unique(KR_BALANCED_PRIORITY_QUERIES.concat(balancedFoundation,KR_PRIORITY_QUERIES,dynamic),maxQueries).map((query,index)=>({query,locale:"ko",origin:`country-supply-lane:${laneFor(query,index)}`,lane:laneFor(query,index),localName:"대한민국",localizationError:null}));
 }
 function buildCountryRows(geo, locales, sourceTerms, maxQueries){
   const country=text(geo&&geo.country).toUpperCase();
@@ -492,6 +512,9 @@ function buildCountryRows(geo, locales, sourceTerms, maxQueries){
     ["beauty_focus","beauty skincare makeup foundation cushion BB CC lipstick lip tint mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance nail hair body grooming beauty device electric shaver hair styler LED mask galvanic facial massager scalp care manufacturer brand official store"],
     ["electronics_focus","small electronics bluetooth earbuds earphones headphones speakers microphone tablet USB hub flash drive cable charger power bank webcam manufacturer brand official store"],
     ["small_appliance_focus","small home appliances portable fan desk fan handheld fan circulator humidifier dehumidifier air purifier vacuum electric kettle toaster blender coffee maker manufacturer brand official store"],
+    ["household_essentials_focus","household essentials tissue wet wipes detergent cleaner hygiene bathroom cleaning storage kitchen bedding daily consumables manufacturer brand official store"],
+    ["health_food_focus","health foods healthy ingredients grains nuts mushrooms herbs honey tea fermented foods producer manufacturer official store"],
+    ["fashion_focus","apparel clothing shoes bags fashion accessories brand manufacturer factory official store"],
     ["food_focus","popular food groceries condiments fermented paste soy sauce sauces cooking ingredients rice grains local food producer official store"],
     ["agri_food_focus","agricultural fishery forestry products rice grains beans sesame garlic onion mushrooms local producer cooperative official store"]
   ];

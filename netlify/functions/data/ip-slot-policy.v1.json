@@ -1,5 +1,5 @@
 {
-  "version": "ip-slot-policy-v1.3.0-social-right-market-evidence-integrity",
+  "version": "ip-slot-policy-v1.7.0-consumer-section-alignment",
   "contractVersion": "sanmaru-searchbank-ip-slot-contract-v1.3-social-right-market-evidence-integrity",
   "derivedFrom": {
     "psom": "data/psom.json",
@@ -49,112 +49,107 @@
   "slotStrategies": {
     "home": {
       "home_1": {
-        "strategyId": "home-featured-local-verified",
-        "role": "featured_local_verified",
+        "strategyId": "home-ranked-consumer-hot-product",
+        "role": "ranked_consumer_hot_product",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "home-featured-local-verified"
+          "home-ranked-consumer-hot-product"
         ]
       },
       "home_2": {
-        "strategyId": "home-essential-local-supply",
-        "role": "essential_local_supply",
+        "strategyId": "home-ranked-consumer-hot-product",
+        "role": "ranked_consumer_hot_product",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
+          "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "home-essential-local-supply"
+          "home-ranked-consumer-hot-product"
         ]
       },
       "home_3": {
-        "strategyId": "home-producer-cooperative",
-        "role": "producer_cooperative_or_local_origin",
+        "strategyId": "home-ranked-consumer-hot-product",
+        "role": "ranked_consumer_hot_product",
         "allowedProductClasses": [
-          "producer_cooperative_offer",
-          "physical_product"
+          "physical_product",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "home-producer-cooperative"
+          "home-ranked-consumer-hot-product"
         ]
       },
       "home_4": {
-        "strategyId": "home-local-service-market",
-        "role": "local_service_or_market",
+        "strategyId": "home-ranked-consumer-hot-product",
+        "role": "ranked_consumer_hot_product",
         "allowedProductClasses": [
-          "local_service",
+          "physical_product",
           "verified_marketplace_offer",
-          "physical_product"
+          "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "home-local-service-market"
+          "home-ranked-consumer-hot-product"
         ]
       },
       "home_5": {
-        "strategyId": "home-newly-verified-discovery",
-        "role": "newly_verified_discovery",
+        "strategyId": "home-ranked-consumer-hot-product",
+        "role": "ranked_consumer_hot_product",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "home-newly-verified-discovery"
+          "home-ranked-consumer-hot-product"
         ]
       },
       "home_right_top": {
-        "strategyId": "home-right-top-trust",
-        "role": "highest_trust_featured",
+        "strategyId": "home-right-top-knowledge-health-other",
+        "role": "knowledge_health_other",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
-          "producer_cooperative_offer",
-          "verified_marketplace_offer"
-        ],
-        "requiredSlotProfiles": [
-          "home-right-top-trust"
-        ]
-      },
-      "home_right_middle": {
-        "strategyId": "home-right-middle-local-value",
-        "role": "local_value_and_responsibility",
-        "allowedProductClasses": [
-          "physical_product",
-          "local_service",
-          "producer_cooperative_offer"
-        ],
-        "requiredSlotProfiles": [
-          "home-right-middle-local-value"
-        ]
-      },
-      "home_right_bottom": {
-        "strategyId": "home-right-bottom-discovery",
-        "role": "new_local_discovery",
-        "allowedProductClasses": [
-          "physical_product",
-          "local_service",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "home-right-bottom-discovery"
+          "home-right-top-knowledge-health-other"
+        ]
+      },
+      "home_right_middle": {
+        "strategyId": "home-right-middle-living-books-other",
+        "role": "living_books_other",
+        "allowedProductClasses": [
+          "physical_product",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-right-middle-living-books-other"
+        ]
+      },
+      "home_right_bottom": {
+        "strategyId": "home-right-bottom-automotive-everyday",
+        "role": "automotive_everyday_life",
+        "allowedProductClasses": [
+          "physical_product",
+          "verified_marketplace_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-right-bottom-automotive-everyday"
         ]
       }
     },
     "distribution": {
       "distribution-recommend": {
         "strategyId": "distribution-recommend",
-        "role": "verified_recommended_offer",
+        "role": "consumer_hot_recommended_offer",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
@@ -164,24 +159,21 @@
       },
       "distribution-sponsor": {
         "strategyId": "distribution-sponsor",
-        "role": "disclosed_sponsored_offer",
+        "role": "sponsor_or_consumer_brand_offer",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
           "distribution-sponsor"
-        ],
-        "requires": "sponsorDisclosure"
+        ]
       },
       "distribution-trending": {
         "strategyId": "distribution-trending",
-        "role": "verified_market_demand",
+        "role": "verified_popular_consumer_goods",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
@@ -192,10 +184,9 @@
       },
       "distribution-new": {
         "strategyId": "distribution-new",
-        "role": "recently_verified_listing",
+        "role": "recent_consumer_product",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
@@ -206,11 +197,11 @@
       },
       "distribution-special": {
         "strategyId": "distribution-special",
-        "role": "certified_or_producer_special",
+        "role": "special_consumer_or_local_product",
         "allowedProductClasses": [
-          "producer_cooperative_offer",
           "physical_product",
-          "local_service"
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
           "distribution-special"
@@ -219,10 +210,9 @@
       },
       "distribution-others": {
         "strategyId": "distribution-others",
-        "role": "verified_long_tail_offer",
+        "role": "qualified_general_consumer_product",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
@@ -232,10 +222,9 @@
       },
       "distribution-right": {
         "strategyId": "distribution-right-curated",
-        "role": "curated_high_confidence_offer",
+        "role": "curated_consumer_product",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
@@ -246,45 +235,42 @@
     },
     "network": {
       "network-right": {
-        "strategyId": "network-market-right",
-        "role": "market_hub_verified_offer",
+        "strategyId": "network-household-essentials-living",
+        "role": "household_essentials_living",
         "allowedProductClasses": [
-          "verified_marketplace_offer",
           "physical_product",
-          "local_service",
+          "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "network-market-right"
+          "network-household-essentials-living"
         ]
       }
     },
     "tour": {
       "tour": {
-        "strategyId": "tour-local-responsible-offer",
-        "role": "local_travel_or_tourism_offer",
+        "strategyId": "tour-travel-booking-exclusive",
+        "role": "travel_accommodation_ticket_booking_exclusive",
         "allowedProductClasses": [
           "travel_service",
           "travel_product"
         ],
         "requiredSlotProfiles": [
-          "tour-local-responsible-offer"
+          "tour-travel-booking-exclusive"
         ],
         "requires": "travelOperatorEvidence"
       }
     },
     "social": {
       "rightPanel": {
-        "strategyId": "social-right-market-verified",
-        "role": "social_context_market_offer",
+        "strategyId": "social-right-hot-consumer",
+        "role": "beauty_small_electronics_fashion_hot",
         "allowedProductClasses": [
           "physical_product",
-          "local_service",
-          "verified_marketplace_offer",
-          "producer_cooperative_offer"
+          "verified_marketplace_offer"
         ],
         "requiredSlotProfiles": [
-          "social-right-market-verified"
+          "social-right-hot-consumer"
         ]
       }
     }

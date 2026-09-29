@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.17.0-tour-exclusive-consumer-hot-distribution";
+const VERSION = "commerce-product-ranking-v1.18.0-staged-consumer-section-policy";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -124,8 +124,8 @@ const POLICY = Object.freeze({
     mainSections: AI_AUTO_BALANCE_GROUPS.homeMain,
     mainDistributionRule: "same_policy_hot_items_evenly_spread_across_home_1_to_home_5",
     rightTop: Object.freeze({ section: "home|home_right_top", label: "지식 · 건강 · 기타", families: Object.freeze(["knowledge", "health", "other"]) }),
-    rightMiddle: Object.freeze({ section: "home|home_right_middle", label: "푸드 · 리빙 · 책방", families: Object.freeze(["food", "living", "books"]) }),
-    rightBottom: Object.freeze({ section: "home|home_right_bottom", label: "자동차 · 웹툰 · 패션", families: Object.freeze(["automotive", "webtoon_comic", "fashion"]) }),
+    rightMiddle: Object.freeze({ section: "home|home_right_middle", label: "리빙 · 책방 · 기타", families: Object.freeze(["living", "books", "other"]) }),
+    rightBottom: Object.freeze({ section: "home|home_right_bottom", label: "자동차 · 생활", families: Object.freeze(["automotive", "everyday_life"]) }),
     rightDistributionRule: "policy_fit_first_then_even_distribution_among_compatible_right_sections"
   }),
   distributionPolicy: Object.freeze({
@@ -1045,25 +1045,26 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   // interchangeable merely to make the counts look even.
   const fashionFit = category.primary === "fashion" || /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|fashion|apparel|clothing|shoes|bag|jewelry|watch)/i.test(hay);
   const automotiveFit = /(자동차|차량|자동차용품|차량용품|타이어|휠|블랙박스|대시캠|카케어|모빌리티|전기차|오토바이|모터사이클|car\b|vehicle|automotive|tire|wheel|dashcam|car care|mobility|motorcycle)/i.test(hay);
-  const webtoonComicFit = /(웹툰|만화|코믹|그래픽노블|webtoon|webcomic|comic(?:s)?|graphic novel|manga)/i.test(hay);
-  const bookShopFit = /(도서|책방|서점|책\b|출판|전자책|bookstore|book\b|books\b|publishing|ebook)/i.test(hay);
+    const bookShopFit = /(도서|책방|서점|책\b|출판|전자책|bookstore|book\b|books\b|publishing|ebook)/i.test(hay);
   const foodLivingFit = ["food_household_essentials","agriculture_fishery_forestry","home_appliances_living","local_products"].includes(category.primary) || /(푸드|식품|식료품|농산물|수산물|축산물|리빙|생활용품|주방|가구|침구|인테리어|food|grocery|produce|seafood|living|household|kitchen|furniture|interior)/i.test(hay);
+  const everydayLifeFit = ["food_household_essentials","home_appliances_living","electronics_accessories"].includes(category.primary) || /(생활|생필품|청소|위생|주방|욕실|수납|가정용|소형가전|휴대용|차량용|household|daily|everyday|cleaning|hygiene|kitchen|bath|storage|small appliance|portable)/i.test(hay);
   const knowledgeHealthFit = category.primary === "baby_family_education" || category.primary === "beauty_personal_care" || /(지식|교육|학습|강의|자격증|건강|헬스|피트니스|영양제|비타민|건강식품|웰니스|knowledge|education|learning|course|health|fitness|supplement|vitamin|wellness)/i.test(hay);
   const homeMainEligible = risk.gatePassed === true && (value.privatePlacementEligible === true || baseScore >= 34 || officialProductText);
   if (homeMainEligible) {
-    const mainScore = baseScore + (verifiedTrend ? 4 : 0) + (recurringEssential ? 2 : 0);
+    const homeConsumerPriority = ["fashion","beauty_personal_care","electronics_accessories","home_appliances_living","food_household_essentials"].includes(category.primary) || consumerHotFit;
+    const mainScore = baseScore + (verifiedTrend ? 4 : 0) + (recurringEssential ? 2 : 0) + (homeConsumerPriority ? 6 : 0);
     ["home_1","home_2","home_3","home_4","home_5"].forEach(function(sectionKey){
       add("home", sectionKey, mainScore, "홈 쇼핑 핫템 추천 공통 정책 적합 상품", "home_hot_item_balanced_candidate", []);
     });
   }
-  if ((knowledgeHealthFit || (!automotiveFit && !webtoonComicFit && !fashionFit && !foodLivingFit && !bookShopFit)) && risk.gatePassed === true) {
+  if ((knowledgeHealthFit || (!automotiveFit && !fashionFit && !foodLivingFit && !bookShopFit && !everydayLifeFit)) && risk.gatePassed === true) {
     add("home", "home_right_top", baseScore + (knowledgeHealthFit ? 2 : 0), "지식·건강·기타 우측 상단 정책 적합", "home_right_knowledge_health_other", []);
   }
-  if ((foodLivingFit || bookShopFit) && risk.gatePassed === true) {
-    add("home", "home_right_middle", baseScore + 2, "푸드·리빙·책방 우측 중단 정책 적합", "home_right_food_living_books", []);
+  if ((foodLivingFit || bookShopFit || (consumerHotFit && !fashionFit && !automotiveFit)) && risk.gatePassed === true) {
+    add("home", "home_right_middle", baseScore + 2, "리빙·책방·기타 우측 중단 정책 적합", "home_right_living_books_other", []);
   }
-  if ((automotiveFit || webtoonComicFit || fashionFit) && risk.gatePassed === true) {
-    add("home", "home_right_bottom", baseScore + 2, "자동차·웹툰·패션 우측 하단 정책 적합", "home_right_auto_webtoon_fashion", []);
+  if ((automotiveFit || everydayLifeFit) && risk.gatePassed === true) {
+    add("home", "home_right_bottom", baseScore + (automotiveFit ? 4 : 1), "자동차·일상생활 우측 하단 정책 적합", "home_right_automotive_everyday_life", []);
   }
 
   // DISTRIBUTION. The Sponsor rail is a normal product rail by default.
@@ -1072,8 +1073,9 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   // publication policy rather than making the rail unusable in normal mode.
   const distributionStandardEligible = risk.gatePassed === true && (value.privatePlacementEligible === true || Number(audience.audienceDemandScore || 0) >= 40 || recurringEssential || socialLifestyle || electronicsUtility || officialProductText);
   if (distributionStandardEligible) {
-    const sponsorBoost = sponsorshipActive && sponsorEvidence && revenueValue.contractReady === true ? 6 : 2;
-    add("distribution", "distribution-sponsor", baseScore + sponsorBoost, sponsorshipActive ? "스폰서십 적용 가능 상품" : "유통 스폰서 일반 운영 상품", sponsorshipActive ? "optional_sponsorship_offer" : "distribution_sponsor_standard_offer", []);
+    const sponsorConsumerFit = ["beauty_personal_care","fashion","electronics_accessories","home_appliances_living","food_household_essentials"].includes(category.primary);
+    const sponsorBoost = sponsorshipActive && sponsorEvidence && revenueValue.contractReady === true ? 8 : (sponsorConsumerFit ? 4 : 1);
+    add("distribution", "distribution-sponsor", baseScore + sponsorBoost, sponsorshipActive ? "검증된 스폰서 상품" : (sponsorConsumerFit ? "뷰티·브랜드 패션·가전·생필품 중심 일반 스폰서 레일 후보" : "유통 스폰서 일반 운영 상품"), sponsorshipActive ? "verified_sponsorship_offer" : "distribution_sponsor_consumer_fallback", []);
   }
   if (consumerHotFit && verifiedTrend && Number(audience.audienceDemandScore || 0) >= 55 && risk.gatePassed === true) add("distribution", "distribution-trending", baseScore + 7, "검증된 인기 신호가 높은 가전·뷰티·패션·생필품 중심 실시간 인기", "verified_consumer_hot_market_demand", []);
   if ((verifiedNewness || recentDiscovery) && risk.gatePassed === true) add("distribution", "distribution-new", baseScore + 2, "신규 상품 또는 최근 공식 상세페이지 확인 상품", "recently_verified_or_registered_listing", []);
@@ -1083,9 +1085,10 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   if (highTrust && baseScore >= 62) add("distribution", "distribution-right", baseScore + 2, "고신뢰·고가치 큐레이션 상품", "curated_high_total_value", []);
   if ((industrialTool || electronicsUtility) && risk.gatePassed === true) add("distribution", "distribution-right", baseScore + 3, "공구·전자·산업 효용 상품의 우측 유통 검토", "private_review_industrial_distribution_right", []);
 
-  if ((manufacturerBrand || cooperative || marketplace) && value.privatePlacementEligible === true) {
-    const networkScore = ["electronics_accessories","home_appliances_living","manufacturer_brands"].includes(category.primary) ? baseScore + 3 : baseScore - 1;
-    add("network", "network-right", networkScore, "제조·생산·조합·마켓 공급망 연결 가치 상품", "market_hub_verified_offer", []);
+  const networkHouseholdFit = ["food_household_essentials","home_appliances_living"].includes(category.primary) || /(생필품|생활용품|세제|청소|위생|주방|욕실|수납|침구|가정용|household|essential|detergent|cleaning|hygiene|kitchen|bedding)/i.test(hay);
+  if (networkHouseholdFit && risk.gatePassed === true) {
+    const networkScore = baseScore + (recurringEssential ? 5 : 2);
+    add("network", "network-right", networkScore, "생필품·생활용품 중심 네트워크 우측 배치", "network_household_essentials_living", []);
   }
   if (travel && Number(audience.audienceDemandScore || 0) >= 42) {
     add("tour", "tour", baseScore - 4, "여행·관광·숙박·교통·예약 서비스", "local_travel_or_tourism_service", travelOperatorEvidence ? [] : ["travelOperatorEvidence"]);
@@ -1099,8 +1102,9 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   if (policyTourMatch && risk.gatePassed === true && !out.some((row)=>row.key==="tour|tour")) {
     add("tour", "tour", baseScore + 4, "관리자 확정 정책과 일치하는 투어 우측 우선 검토 대상", "administrator_policy_tour_right_priority", []);
   }
-  if ((commercial.visual || commercial.promotional || localOrigin || socialLifestyle) && (socialLifestyle || Number(audience.audienceDemandScore || 0) >= 52)) {
-    add("social", "rightPanel", baseScore + (socialLifestyle ? 2 : -3), socialLifestyle ? "패션·뷰티·가족 소비재의 소셜 반응 검토" : "소셜 반응 가능성과 실제 수요가 함께 확인된 상품", socialLifestyle ? "social_lifestyle_offer" : "social_context_market_offer", socialLifestyle ? [] : (socialMarketEvidence ? [] : ["socialMarketEvidence"]));
+  const socialHotFit = socialLifestyle || category.primary === "electronics_accessories" || category.primary === "home_appliances_living" || /(소형가전|이어폰|이어버드|헤드폰|스마트워치|카메라|뷰티|패션|의류|small appliance|earbud|headphone|smartwatch|camera|beauty|fashion|apparel)/i.test(hay);
+  if ((commercial.visual || commercial.promotional || localOrigin || socialHotFit) && (socialHotFit || Number(audience.audienceDemandScore || 0) >= 52)) {
+    add("social", "rightPanel", baseScore + (socialHotFit ? 4 : -3), socialHotFit ? "소형가전·뷰티·인기 의류 중심 소셜 우측 배치" : "소셜 반응 가능성과 실제 수요가 함께 확인된 상품", socialHotFit ? "social_hot_consumer_offer" : "social_context_market_offer", socialHotFit ? [] : (socialMarketEvidence ? [] : ["socialMarketEvidence"]));
   }
 
   // Private management fallback: products that passed the hard product/risk
@@ -1111,7 +1115,7 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   if (risk.gatePassed === true && !out.length) {
     if (travel) add("tour", "tour", baseScore, "검증 완료 여행·지역 서비스의 비공개 검토 배치", "private_review_travel_fit", []);
     else if (tourRecreationProduct) add("tour", "tour", baseScore + 2, "검증 완료 여행·레저 연계 실상품의 투어 우측 비공개 검토 배치", "private_review_tour_recreation_fit", []);
-    else if (["electronics_accessories", "home_appliances_living", "manufacturer_brands"].includes(category.primary) || manufacturerBrand) add("network", "network-right", baseScore + 1, "검증 완료 제조·전자·가전 상품의 비공개 공급망 검토 배치", "private_review_supply_network_fit", []);
+    else if (networkHouseholdFit) add("network", "network-right", baseScore + 1, "검증 완료 생필품·생활용품의 네트워크 우측 비공개 검토 배치", "private_review_network_household_fit", []);
     else if (["food_household_essentials", "beauty_personal_care", "fashion", "baby_family_education", "agriculture_fishery_forestry", "local_products"].includes(category.primary) || localOrigin) add("distribution", "distribution-others", baseScore, "검증 완료 생활·소비재 상품의 비공개 일반 유통 검토 배치", "private_review_general_distribution_fit", []);
     else add("distribution", "distribution-others", baseScore - 1, "검증 완료 상품의 비공개 일반 유통 검토 배치", "private_review_fallback_distribution_fit", []);
   }

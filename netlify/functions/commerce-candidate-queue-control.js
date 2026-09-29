@@ -10,7 +10,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 const CommerceAutomation = require("./lib/commerce-country-automation.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.8.0-management-research-sync";
+const VERSION = "commerce-candidate-queue-control-v1.9.0-staged-admin-withdrawal-marker";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore"]);
 const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce-candidate-review-api"]);
@@ -19,6 +19,7 @@ const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce
 function text(value){ return value == null ? "" : String(value).trim(); }
 function lower(value){ return text(value).toLowerCase().replace(/[\s.]+/g,"_"); }
 function plain(value){ return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
+function array(value){ return Array.isArray(value) ? value : []; }
 function json(statusCode,body){ return {statusCode,headers:{"content-type":"application/json; charset=utf-8","cache-control":"private, no-store, max-age=0","x-content-type-options":"nosniff","access-control-allow-headers":"Content-Type, Authorization","access-control-allow-methods":"POST,OPTIONS"},body:statusCode===204?"":JSON.stringify(body)}; }
 function parse(event){ try{return event&&event.body?JSON.parse(event.isBase64Encoded?Buffer.from(event.body,"base64").toString("utf8"):event.body):{};}catch(_error){const error=new Error("요청 JSON 형식이 올바르지 않습니다.");error.statusCode=400;throw error;} }
 function roles(actor){ return Array.from(new Set((actor&&actor.roles||[]).map(lower).filter(Boolean))); }
@@ -29,12 +30,37 @@ function candidateIds(value){
   return out;
 }
 async function readCandidate(id){
-  const rows=await SlotStore.select("gslot_candidates","select=id,kind,status,source_ref,source_payload,owner_note&limit=1&id=eq."+encodeURIComponent(id));
+  const rows=await SlotStore.select("gslot_candidates","select=id,kind,status,source_ref,official_url,source_payload,owner_note&limit=1&id=eq."+encodeURIComponent(id));
   return Array.isArray(rows)?rows[0]||null:null;
+}
+async function readAssignments(candidateId){
+  try{const rows=await SlotStore.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=100");return Array.isArray(rows)?rows:[];}
+  catch(_error){return[];}
 }
 async function releaseSectionAssignment(candidateId){
   try{const rows=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId));return{ok:true,count:Array.isArray(rows)?rows.length:0};}
   catch(error){return{ok:false,error:text(error&&error.message||error)};}
+}
+function frontStateActive(value){return ["queued","publish_requested","published","matched","active"].includes(lower(value));}
+function previousFrontPlacement(payload,assignments){
+  const front=plain(payload&&payload.frontPublication),placement=plain(payload&&payload.approvedPlacement||payload&&payload.selectedPlacement||payload&&payload.placement||payload&&payload.primaryPlacement);
+  const live=array(assignments).find((row)=>frontStateActive(row&&row.publication_status))||array(assignments)[0]||null;
+  const page=text(live&&live.hub_key)||text(placement.page),section=text(live&&live.slot_key)||text(placement.sectionKey||placement.section),country=text(live&&live.country_code)||text(placement.country),region=text(live&&live.region_code)||text(placement.region)||"NATIONWIDE";
+  const active=(!!live&&frontStateActive(live.publication_status))||frontStateActive(front.status);
+  if(!page||!section)return null;
+  return{key:page+"|"+section,page,section,sectionKey:section,country:country||null,region:region||"NATIONWIDE",assignmentId:text(live&&live.id)||text(front.assignmentId)||null,publicationStatus:text(live&&live.publication_status)||text(front.status)||null,frontActive:active,priority:Number(live&&live.priority||placement.priority||0)||0,manualPinned:live&&live.manual_pinned===true||placement.manualPinned===true};
+}
+function stageFrontWithdrawal(payload,candidateId,prior,actorId,now,reason){
+  if(prior)payload.previousApprovedPlacement=Object.assign({},prior,{removedAt:now,removedReason:reason});
+  const shouldWithdraw=!!(prior&&prior.frontActive);
+  payload.frontPublication=Object.assign({},plain(payload.frontPublication),shouldWithdraw?{
+    schema:"igdc-product-front-publication-control.v4",candidateId,operation:"unmatch",status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,publicSnapshotConfirmed:false,buildVerificationRequired:true,deferredBuild:true,
+    reason,page:prior.page,section:prior.sectionKey||prior.section,sectionKey:prior.sectionKey||prior.section,country:prior.country||null,region:prior.region||"NATIONWIDE",assignmentId:prior.assignmentId||null,requestedAt:now,requestedBy:text(actorId)||"administrator"
+  }:{
+    schema:"igdc-product-front-publication-control.v4",candidateId,operation:"unmatch",status:"unmatched",queued:false,persisted:true,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:false,deferredBuild:false,
+    reason,requestedAt:now,requestedBy:text(actorId)||"administrator"
+  });
+  return shouldWithdraw;
 }
 function candidateManagementBucket(row){
   const payload=plain(row&&row.source_payload),status=lower(row&&row.status),decision=lower(payload.slotDecision),review=lower(plain(payload.review).state),queueAction=lower(plain(payload.queueControl).action);
@@ -66,6 +92,7 @@ function requireExpectedBucket(row,expectedBucket,action){
 }
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
+  const oldAssignments=await readAssignments(id),priorFront=previousFrontPlacement(payload,oldAssignments);
   if(action==="restore"){
     if(candidateAlreadyRestored(row))return{id,action,status:text(row&&row.status)||"approval_pending",restoredToCandidate:true,idempotent:true,assignmentCleanup:{ok:true,count:0}};
     const previousStatus=text(row&&row.status)||"approval_pending",previousBucket=candidateManagementBucket(row),assignmentCleanup=await releaseSectionAssignment(id);
@@ -96,7 +123,7 @@ async function applyAction(actorId,row,action){
     payload.queueControl=queueControl;payload.slotDecision="removed";
     delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
     payload.review=Object.assign({},plain(payload.review),{state:"deleted_from_management",decidedAt:now,decidedBy:text(actorId)||"administrator"});
-    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{operation:"unmatch",status:"deferred_section_release",queued:false,pendingBuild:true,publicSnapshotConfirmed:false,buildVerificationRequired:true,deferredBuild:true,requestedAt:now,requestedBy:text(actorId)||"administrator"});
+    stageFrontWithdrawal(payload,id,priorFront,actorId,now,"administrator_management_dismiss");
     await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"removed",source_payload:payload,owner_note:"관리자가 보류·제외 관리 목록에서 삭제했습니다. 공유 후보 원장은 보존하며 재수집을 허용합니다.",updated_at:now});
     return {id,action,status:"removed",deletedFromManagement:true,masterLedgerPreserved:true,rediscoveryAllowed:true,assignmentCleanup};
   }
@@ -124,7 +151,7 @@ async function applyAction(actorId,row,action){
     decidedBy:text(actorId)||"administrator"
   });
   const assignmentCleanup=await releaseSectionAssignment(id);
-  payload.frontPublication=Object.assign({},plain(payload.frontPublication),{operation:"unmatch",status:"deferred_section_release",queued:false,pendingBuild:true,publicSnapshotConfirmed:false,buildVerificationRequired:true,deferredBuild:true,requestedAt:now,requestedBy:text(actorId)||"administrator"});
+  stageFrontWithdrawal(payload,id,priorFront,actorId,now,"administrator_management_"+action);
   const status=action==="purge"?"suppressed":action==="reject"?"rejected":action==="remove_from_list"?"removed":"hold";
   const note=action==="purge"
     ?"관리자가 이 상품 후보를 보류·제외 관리에서 영구 제외했습니다. 자동 상품 리서치가 같은 후보를 다시 승격하지 않도록 원장 기록을 보존합니다."

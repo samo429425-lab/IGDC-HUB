@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.26.0-management-visibility-sync";
+const VERSION = "commerce-country-automation-v3.27.0-staged-admin-safe-front-sync";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1299,7 +1299,7 @@ function reindexCandidateRows(rows){return array(rows).map((row,index)=>Object.a
 function preservePinnedReviewPool(pool,sources){const out=[],seen=new Set();for(const row of array(sources).filter((item)=>item&&item.adminPinned===true).concat(array(pool))){const url=researchCandidateUrl(row),key=text(url).toLowerCase();if(!key||seen.has(key))continue;seen.add(key);out.push(row);}return out.slice(0,SUPPLIER_REVIEW_LIMIT);}
 function supplierFocusLane(item){
   const payload=plain(item&&item.payload),evidence=plain(item&&item.evidence),lane=lower(first(payload.supplyLane,evidence.supplyLane,item&&item.supplyLane));
-  return ["beauty_focus","electronics_focus","small_appliance_focus","food_focus","agri_food_focus"].includes(lane)?lane:(lane==="food_essentials"?"food_focus":lane==="agri_cooperative"?"agri_food_focus":"");
+  return ["beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"].includes(lane)?lane:(lane==="food_essentials"?"food_focus":lane==="agri_cooperative"?"agri_food_focus":"");
 }
 function supplierRankEntries(reviewPool,maxCandidates,policyHintsInput){
   const hints=plain(policyHintsInput);
@@ -1307,11 +1307,11 @@ function supplierRankEntries(reviewPool,maxCandidates,policyHintsInput){
   const pinned=scored.filter((row)=>row.item&&row.item.adminPinned===true),normal=scored.filter((row)=>!(row.item&&row.item.adminPinned===true)),limit=Math.max(1,Number(maxCandidates)||DEFAULT_MAX_CANDIDATES),capacity=Math.max(0,limit-pinned.length);
   if(!capacity)return pinned;
   // Private research needs category coverage as well as trust ordering. Reserve a
-  // small lane quota so beauty/electronics/small-appliance suppliers are not
+  // small lane quota so beauty/electronics/small-appliance/household/health-food/fashion suppliers are not
   // crowded out by a single high-volume category. This does NOT bypass hard
   // trust, approval or public-release gates; it only decides which private
   // candidates receive the next detailed assessment.
-  const focusLanes=["beauty_focus","electronics_focus","small_appliance_focus","food_focus","agri_food_focus"],reserveEach=capacity>=9?2:1,selected=[],used=new Set();
+  const focusLanes=["beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"],reserveEach=capacity>=16?2:1,selected=[],used=new Set();
   for(const lane of focusLanes){
     let taken=0;
     for(const row of normal){
@@ -3286,13 +3286,16 @@ function privateReviewFallbackAssignments(rowInput) {
   const localOrigin = ["local_products", "agriculture_fishery_forestry"].includes(category);
   const fashionFit = category === "fashion" || /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|fashion|apparel|clothing|shoes|bag|jewelry|watch)/i.test(titleHay);
   const automotiveFit = /(자동차|차량|자동차용품|차량용품|타이어|휠|블랙박스|대시캠|카케어|모빌리티|전기차|오토바이|모터사이클|car\b|vehicle|automotive|tire|wheel|dashcam|car care|mobility|motorcycle)/i.test(titleHay);
-  const webtoonFit = /(웹툰|만화|코믹|그래픽노블|webtoon|webcomic|comic(?:s)?|graphic novel|manga)/i.test(titleHay);
   const bookFit = /(도서|책방|서점|책\b|출판|전자책|bookstore|book\b|books\b|publishing|ebook)/i.test(titleHay);
-  const foodLivingFit = ["food_household_essentials", "agriculture_fishery_forestry", "home_appliances_living", "local_products"].includes(category) || /(푸드|식품|식료품|농산물|수산물|축산물|리빙|생활용품|주방|가구|침구|인테리어|food|grocery|produce|seafood|living|household|kitchen|furniture|interior)/i.test(titleHay);
-  const knowledgeHealthFit = category === "baby_family_education" || category === "beauty_personal_care" || /(지식|교육|학습|강의|자격증|건강|헬스|피트니스|영양제|비타민|건강식품|웰니스|knowledge|education|learning|course|health|fitness|supplement|vitamin|wellness)/i.test(titleHay);
-  const topRightFit = automotiveFit || webtoonFit || fashionFit;
-  const middleRightFit = foodLivingFit || bookFit;
-  const bottomRightFit = !topRightFit && !middleRightFit;
+  const livingFit = ["food_household_essentials", "home_appliances_living", "local_products"].includes(category) || /(리빙|생활용품|생필품|주방|가구|침구|인테리어|세제|청소|위생|욕실|수납|living|household|essential|kitchen|furniture|interior|detergent|cleaning|hygiene|storage)/i.test(titleHay);
+  const everydayFit = ["food_household_essentials","home_appliances_living","electronics_accessories"].includes(category) || /(생활|생필품|가정용|소형가전|휴대용|차량용|daily|everyday|household|small appliance|portable)/i.test(titleHay);
+  const knowledgeHealthFit = category === "baby_family_education" || /(지식|교육|학습|강의|자격증|건강|헬스|피트니스|영양제|비타민|건강식품|웰니스|knowledge|education|learning|course|health|fitness|supplement|vitamin|wellness)/i.test(titleHay);
+  const consumerHotFit = ["beauty_personal_care","fashion","electronics_accessories","home_appliances_living","food_household_essentials"].includes(category) || socialLifestyle || electronics || livingFit;
+  const socialHotFit = socialLifestyle || electronics || category === "home_appliances_living";
+  const networkHouseholdFit = ["food_household_essentials","home_appliances_living"].includes(category) || /(생필품|생활용품|세제|청소|위생|주방|욕실|수납|침구|household|essential|detergent|cleaning|hygiene|kitchen|bedding)/i.test(titleHay);
+  const topRightFit = knowledgeHealthFit || (!automotiveFit && !livingFit && !bookFit && !fashionFit && !consumerHotFit);
+  const middleRightFit = livingFit || bookFit || (consumerHotFit && !fashionFit && !automotiveFit);
+  const bottomRightFit = automotiveFit || everydayFit;
   const commercial = plain(row.commercialAssessment), sponsorSignal = commercial.sponsorReady === true || /(스폰서|협찬|sponsor(?:ed)?)/i.test(titleHay);
   const candidateStamp = first(row.candidateRegisteredAt, row.firstVerifiedAt, row.listedAt, row.discoveredAt, row.createdAt, row.inspectedAt);
   const stamp = Date.parse(candidateStamp), recentRegistration = Number.isFinite(stamp) && Date.now() - stamp <= 45 * 86400000;
@@ -3332,10 +3335,10 @@ function privateReviewFallbackAssignments(rowInput) {
   // Home main rows share one front policy (쇼핑 핫템 추천). Keeping all five
   // as equal-fit choices lets the balancing allocator spread thumbnails rather
   // than concentrating every candidate in the first row.
-  ["home_1", "home_2", "home_3", "home_4", "home_5"].forEach((section) => add("home|" + section, 82, "홈 쇼핑 핫템 추천 공통 정책 적합", "private_review_home_hot_item"));
-  if (topRightFit) add("home|home_right_top", 84, "자동차·웹툰·패션 우측 상단 정책 적합", "private_review_home_right_auto_webtoon_fashion");
-  if (middleRightFit) add("home|home_right_middle", 84, "푸드·리빙·책방 우측 중단 정책 적합", "private_review_home_right_food_living_books");
-  if (bottomRightFit) add("home|home_right_bottom", 80, "지식·건강·기타 우측 하단 정책 적합", "private_review_home_right_knowledge_health_other");
+  ["home_1", "home_2", "home_3", "home_4", "home_5"].forEach((section) => add("home|" + section, consumerHotFit ? 88 : 78, consumerHotFit ? "의류·뷰티·소형가전·생필품 중심 홈 핫템 공통 정책 적합" : "홈 쇼핑 랭킹 상품 공통 정책 적합", "private_review_home_hot_item"));
+  if (topRightFit) add("home|home_right_top", 84, "지식·건강·기타 우측 상단 정책 적합", "private_review_home_right_knowledge_health_other");
+  if (middleRightFit) add("home|home_right_middle", 84, "리빙·책방·기타 우측 중단 정책 적합", "private_review_home_right_living_books_other");
+  if (bottomRightFit) add("home|home_right_bottom", automotiveFit ? 88 : 81, "자동차·일상생활 우측 하단 정책 적합", "private_review_home_right_automotive_everyday_life");
 
   // Tour right also accepts physical leisure/sports/outdoor commercial goods.
   // Dining is intentionally lower priority and separately capped by the AI
@@ -3344,29 +3347,26 @@ function privateReviewFallbackAssignments(rowInput) {
   if (tourDiningAuxiliary) add("tour|tour", 70, "지역 맛집·레스토랑·카페 보조 후보", "private_review_tour_dining_auxiliary");
 
   if (industrialTool) {
-    add("network|network-right", 88, "전동공구·산업재 공급망 상품 비공개 검토", "private_review_industrial_network");
     add("distribution|distribution-right", 84, "공구·산업재 우측 유통 검토", "private_review_industrial_distribution_right");
   } else if (electronics || living) {
-    add("network|network-right", 80, "제조·공급망 연결 상품 비공개 검토", "private_review_supply_network");
-    add("distribution|distribution-right", 77, "전자·가전 우측 유통 검토", "private_review_utility_distribution_right");
+    add("distribution|distribution-right", 80, "전자·가전·생활 상품 우측 유통 검토", "private_review_utility_distribution_right");
   }
-  if (socialLifestyle) add("social|rightPanel", 86, "패션·뷰티·가족 소비재 소셜 반응 검토", "private_review_social_lifestyle");
-  if (localOrigin) add("network|network-right", 71, "생산자·조합 공급망 검토", "private_review_local_network");
-  if (manufacturer && !industrialTool && !electronics && !living && !socialLifestyle && !localOrigin && category !== "travel_local_services") {
-    add("network|network-right", 84, "공식 제조사·브랜드 공급망 상품 비공개 검토", "private_review_manufacturer_network");
-    add("distribution|distribution-right", 80, "공식 제조사·브랜드 우측 유통 검토", "private_review_manufacturer_distribution_right");
+  if (networkHouseholdFit) add("network|network-right", 88, "생필품·생활용품 중심 네트워크 우측 검토", "private_review_network_household_essentials");
+  if (socialHotFit) add("social|rightPanel", 88, "소형가전·뷰티·인기 의류 중심 소셜 우측 검토", "private_review_social_hot_consumer");
+  if (manufacturer && consumerHotFit && !industrialTool && category !== "travel_local_services") {
+    add("distribution|distribution-right", 82, "공식 소비재 제조사·브랜드 우측 유통 검토", "private_review_manufacturer_distribution_right");
   }
 
   // Distribution six main rails. Pure travel/booking services have already
   // returned above, so only normal qualified retail goods reach this block.
-  add("distribution|distribution-recommend", 78, "대중 수요·효용 중심 추천 검토", "private_review_distribution_recommend");
-  // Sponsor is a normal Distribution rail. A real sponsorship contract is
-  // optional and, when present, only raises priority / activates disclosure.
-  add("distribution|distribution-sponsor", sponsorSignal && commercial.contractReady === true ? 88 : 79, sponsorSignal && commercial.contractReady === true ? "스폰서십 적용 상품" : "유통 스폰서 일반 운영 검토", "private_review_distribution_sponsor");
-  if (trending) add("distribution|distribution-trending", 83, "인기·판매상위 신호 상품", "private_review_distribution_trending");
-  if (newness || recentRegistration) add("distribution|distribution-new", 81, "신규 또는 최근 등록·확인 상품", "private_review_distribution_new");
-  if (special || localOrigin || tourRecreation) add("distribution|distribution-special", 82, "특산·인증·한정·지역·레저 테마 상품", "private_review_distribution_special");
-  add("distribution|distribution-others", 74, "정책 적격 일반·롱테일 상품", "private_review_distribution_others");
+  if (consumerHotFit) add("distribution|distribution-recommend", 88, "뷰티·의류·소형가전·전자·생필품 중심 오늘의 추천", "private_review_distribution_consumer_hot_recommend");
+  // Sponsor is a normal Distribution rail. A verified sponsor contract wins;
+  // otherwise high-quality beauty/brand-fashion/consumer goods may occupy it.
+  if (consumerHotFit || sponsorSignal) add("distribution|distribution-sponsor", sponsorSignal && commercial.contractReady === true ? 94 : 84, sponsorSignal && commercial.contractReady === true ? "검증된 스폰서 상품" : "뷰티·브랜드 의류·가전·생필품 중심 스폰서 대체 후보", "private_review_distribution_sponsor");
+  if (trending && consumerHotFit) add("distribution|distribution-trending", 92, "인기 신호가 확인된 가전·뷰티·의류·생필품", "private_review_distribution_trending");
+  if ((newness || recentRegistration) && consumerHotFit) add("distribution|distribution-new", 84, "신규 또는 최근 등록 소비재 상품", "private_review_distribution_new");
+  if ((special || localOrigin || tourRecreation || consumerHotFit)) add("distribution|distribution-special", consumerHotFit ? 85 : 80, "특산·인증·한정 또는 우수 소비재 특별 상품", "private_review_distribution_special");
+  add("distribution|distribution-others", consumerHotFit ? 78 : 72, "정책 적격 일반·롱테일 상품", "private_review_distribution_others");
   return map;
 }
 function combinedProductAssignments(rowInput) {
@@ -3886,18 +3886,33 @@ async function productCandidateLedgerAction(actorId, input) {
     payload.affiliateSettlement = normalizeAffiliateSettlement(input && input.affiliateSettlement, { existing: payload.affiliateSettlement }); effectiveDecision = lower(payload.slotDecision || "undecided");
   } else { const error = new Error("지원하지 않는 상품 후보 관리 작업입니다."); error.statusCode = 400; throw error; }
 
-  let assignmentCleanup={ok:true,count:0,deferred:true,reason:"front_relation_preserved_until_explicit_front_apply"};
+  let assignmentCleanup={ok:true,count:0,deferred:false};
   if (releaseAssignment) {
-    const priorSplit = validProductSectionKey(priorKey) ? splitProductSectionKey(priorKey) : null;
-    if (priorSplit) payload.previousApprovedPlacement = Object.assign({}, priorPlacement, { key:priorKey, page:priorSplit.page, section:priorSplit.sectionKey, sectionKey:priorSplit.sectionKey, country:scope.country, region:scope.region, removedAt:now, removedReason:"administrator_section_release" });
+    let assignmentRows=[];
+    try{assignmentRows=array(await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at",[candidateId]));}catch(_assignmentReadError){}
+    const scopedAssignments=assignmentRows.filter((assignment)=>normalizeCountry(assignment&&assignment.country_code)===scope.country&&frontSyncExpectedRegion(assignment,scope.country)===scope.region);
+    const liveAssignment=scopedAssignments.find((assignment)=>["queued","publish_requested","published","matched","active"].includes(lower(assignment&&assignment.publication_status)))||null;
+    const priorAssignment=liveAssignment||scopedAssignments[0]||null;
+    const assignmentKey=priorAssignment&&validProductSectionKey(text(priorAssignment.hub_key)+"|"+text(priorAssignment.slot_key))?text(priorAssignment.hub_key)+"|"+text(priorAssignment.slot_key):"";
+    const effectivePriorKey=validProductSectionKey(priorKey)?priorKey:assignmentKey;
+    const priorSplit = validProductSectionKey(effectivePriorKey) ? splitProductSectionKey(effectivePriorKey) : null;
+    if (priorSplit) payload.previousApprovedPlacement = Object.assign({}, priorPlacement, { key:effectivePriorKey, page:priorSplit.page, section:priorSplit.sectionKey, sectionKey:priorSplit.sectionKey, country:scope.country, region:scope.region, assignmentId:text(priorAssignment&&priorAssignment.id)||null, removedAt:now, removedReason:"administrator_section_release" });
     delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement; delete payload.page; delete payload.channel; delete payload.section; delete payload.psom_key; delete payload.slot;
-    payload.frontPublication = Object.assign({}, plain(payload.frontPublication), { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"unmatch", status:"unpublish_requested", queued:false, persisted:true, pendingBuild:true, publicSnapshotConfirmed:false, buildVerificationRequired:true, deferredBuild:true, reason:"administrator_section_release", page:priorSplit&&priorSplit.page||text(plain(payload.frontPublication).page)||null, section:priorSplit&&priorSplit.sectionKey||text(plain(payload.frontPublication).section)||null, sectionKey:priorSplit&&priorSplit.sectionKey||text(plain(payload.frontPublication).sectionKey)||null, country:scope.country, region:scope.region, requestedAt:now, requestedBy:actor });
+    const existingFront=plain(payload.frontPublication),frontWasActive=!!liveAssignment||["queued","publish_requested","published","matched","active"].includes(lower(existingFront.status));
+    payload.frontPublication = Object.assign({}, existingFront, frontWasActive ? { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"unmatch", status:"unpublish_requested", queued:false, persisted:true, pendingBuild:true, publicSnapshotConfirmed:false, buildVerificationRequired:true, deferredBuild:true, reason:"administrator_section_release", page:priorSplit&&priorSplit.page||text(existingFront.page)||null, section:priorSplit&&priorSplit.sectionKey||text(existingFront.section)||null, sectionKey:priorSplit&&priorSplit.sectionKey||text(existingFront.sectionKey)||null, country:scope.country, region:scope.region, assignmentId:text(priorAssignment&&priorAssignment.id)||text(existingFront.assignmentId)||null, requestedAt:now, requestedBy:actor } : { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"unmatch", status:"unmatched", queued:false, persisted:true, pendingBuild:false, publicSnapshotConfirmed:false, buildVerificationRequired:false, deferredBuild:false, reason:"administrator_section_release", requestedAt:now, requestedBy:actor });
+    let removed=0,removeFailed=[];
+    for(const assignment of scopedAssignments){
+      if(!text(assignment&&assignment.id))continue;
+      try{await SlotStore.remove("gslot_slot_assignments","id=eq."+encodeURIComponent(text(assignment.id)));removed+=1;}
+      catch(error){removeFailed.push({id:text(assignment.id),error:text(error&&error.message)||"assignment_remove_failed"});}
+    }
+    assignmentCleanup={ok:removeFailed.length===0,count:removed,failed:removeFailed.length,failures:removeFailed,deferredFrontBuild:frontWasActive};
   }
   payload.decisionAt = now; payload.decisionBy = actor; payload.decisionSource = "candidate_ledger_control"; payload.publicPublication = false; payload.automaticImport = false;
   if (decision !== "affiliate_settlement") payload.review = Object.assign({}, plain(payload.review), { state: decision === "remove_from_list" ? "removed_from_list" : (effectiveDecision === "slot_candidate" ? "pending" : effectiveDecision), decidedAt: now, decidedBy: actor });
   await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: payload, updated_at: now });
   const researchVisibility = await syncCandidateManagementResearchVisibility(actorId,scope,candidateId,effectiveDecision);
-  return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, assignmentCleanup, researchVisibility, deferredFrontBuild:releaseAssignment, publicPublication: false, paymentExecution: false } };
+  return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, assignmentCleanup, researchVisibility, deferredFrontBuild:assignmentCleanup.deferredFrontBuild===true, publicPublication: false, paymentExecution: false } };
 }
 async function productCandidateLedgerBulkAction(actorId, input) {
   const scope = researchScope(input), ids = Array.from(new Set(array(input && (input.candidateIds || input.productIds)).map(text).filter(Boolean))).slice(0, 3000), decision = lower(input && input.decision), placementKey = text(input && input.placementKey);
@@ -4016,49 +4031,54 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
 
   const categoryMap = {
     beauty_personal_care: [
-      ["social|rightPanel",108,"뷰티·퍼스널케어 소셜 반응 우선","psom_beauty_social"],
-      ["home|home_1",94,"대중 소비재 홈 쇼핑 후보","psom_beauty_home"],
-      ["distribution|distribution-recommend",90,"대중 수요 유통 추천 후보","psom_beauty_distribution"]
+      ["home|home_1",112,"뷰티 홈 메인 핫상품 우선","psom_beauty_home_hot"],
+      ["distribution|distribution-recommend",108,"뷰티 오늘의 추천 우선","psom_beauty_distribution"],
+      ["distribution|distribution-sponsor",102,"뷰티 스폰서 대체 레일 우선","psom_beauty_sponsor"],
+      ["social|rightPanel",106,"뷰티 소셜 우측 반응 후보","psom_beauty_social"]
     ],
     fashion: [
-      ["home|home_right_top",108,"패션 홈 우측 상단 정책","psom_fashion_home_right"],
-      ["social|rightPanel",104,"패션 소셜 반응 후보","psom_fashion_social"],
-      ["distribution|distribution-recommend",90,"패션 유통 추천 후보","psom_fashion_distribution"]
+      ["home|home_2",112,"브랜드 의류·패션 홈 메인 핫상품 우선","psom_fashion_home_hot"],
+      ["distribution|distribution-recommend",108,"의류·패션 오늘의 추천 우선","psom_fashion_distribution"],
+      ["distribution|distribution-sponsor",104,"브랜드 의류 스폰서 대체 레일 우선","psom_fashion_sponsor"],
+      ["social|rightPanel",106,"인기 의류·패션 소셜 우측 후보","psom_fashion_social"]
     ],
     electronics_accessories: [
-      ["distribution|distribution-right",108,"전자·소형전자 유통 우측 정책","psom_electronics_distribution_right"],
-      ["network|network-right",102,"전자·공급망 네트워크 우측 정책","psom_electronics_network"],
-      ["home|home_1",92,"실생활 전자기기 홈 쇼핑 후보","psom_electronics_home"]
+      ["home|home_3",112,"소형전자 홈 메인 핫상품 우선","psom_electronics_home_hot"],
+      ["distribution|distribution-recommend",108,"소형전자 오늘의 추천 우선","psom_electronics_distribution"],
+      ["distribution|distribution-right",102,"전자·소형전자 유통 우측 후보","psom_electronics_distribution_right"],
+      ["social|rightPanel",104,"소형전자 소셜 우측 후보","psom_electronics_social"]
     ],
     home_appliances_living: [
-      ["home|home_right_middle",110,"리빙·가구·소형가전 홈 우측 중단 정책","psom_living_home_right"],
-      ["distribution|distribution-right",102,"가전·리빙 유통 우측 정책","psom_living_distribution_right"],
-      ["network|network-right",94,"제조·공급망 네트워크 후보","psom_living_network"]
+      ["home|home_right_middle",112,"리빙·가구·소형가전 홈 우측 중단 정책","psom_living_home_right"],
+      ["home|home_4",106,"소형가전·리빙 홈 메인 핫상품","psom_living_home_hot"],
+      ["distribution|distribution-recommend",106,"소형가전·리빙 오늘의 추천","psom_living_distribution"],
+      ["distribution|distribution-right",100,"가전·리빙 유통 우측 후보","psom_living_distribution_right"],
+      ["network|network-right",98,"생활가전·리빙 네트워크 우측 후보","psom_living_network"]
     ],
     food_household_essentials: [
-      ["home|home_right_middle",110,"푸드·생활필수품 홈 우측 중단 정책","psom_food_home_right"],
-      ["distribution|distribution-recommend",100,"반복수요 생활필수품 유통 추천","psom_food_distribution"],
-      ["home|home_2",92,"생활밀착 상품 홈 쇼핑 후보","psom_food_home"]
+      ["home|home_right_middle",112,"생필품·생활용품 홈 우측 중단 정책","psom_household_home_right"],
+      ["home|home_5",108,"생활밀착 상품 홈 메인 핫상품","psom_household_home"],
+      ["distribution|distribution-recommend",110,"반복수요 생필품 오늘의 추천","psom_household_distribution"],
+      ["network|network-right",110,"생필품·생활용품 네트워크 우측 우선","psom_household_network"]
     ],
     agriculture_fishery_forestry: [
-      ["home|home_right_middle",108,"식재료·농수축산물 홈 푸드 정책","psom_agri_home_right"],
-      ["distribution|distribution-special",104,"지역·산지·특산 유통 특별 후보","psom_agri_distribution_special"],
-      ["network|network-right",94,"생산자·조합 공급망 네트워크 후보","psom_agri_network"]
+      ["home|home_right_top",108,"건강 식재료·농수축산물 홈 우측 상단 후보","psom_agri_health_home_right"],
+      ["distribution|distribution-special",106,"지역·산지·특산 유통 특별 후보","psom_agri_distribution_special"],
+      ["distribution|distribution-others",92,"일반 식재료 유통 후보","psom_agri_distribution"]
     ],
     local_products: [
       ["distribution|distribution-special",108,"지역 특산·로컬 상품 유통 특별 후보","psom_local_distribution_special"],
-      ["home|home_right_middle",100,"로컬푸드·리빙 홈 우측 후보","psom_local_home_right"],
-      ["network|network-right",94,"지역 생산자 공급망 네트워크 후보","psom_local_network"]
+      ["home|home_right_middle",100,"로컬 리빙·생활 상품 홈 우측 후보","psom_local_home_right"]
     ],
     baby_family_education: [
-      ["home|home_right_bottom",106,"가족·교육·지식 홈 우측 하단 정책","psom_family_home_right"],
-      ["home|home_3",92,"가족 생활 상품 홈 쇼핑 후보","psom_family_home"],
-      ["distribution|distribution-recommend",88,"가족 소비재 유통 추천 후보","psom_family_distribution"]
+      ["home|home_right_top",110,"가족·교육·지식 홈 우측 상단 정책","psom_family_home_right"],
+      ["home|home_5",94,"가족 생활 상품 홈 메인 후보","psom_family_home"],
+      ["distribution|distribution-others",90,"가족 소비재 유통 일반 후보","psom_family_distribution"]
     ],
     manufacturer_brands: [
-      ["network|network-right",108,"제조사·브랜드 공급망 네트워크 우선","psom_manufacturer_network"],
-      ["distribution|distribution-right",100,"제조·산업 상품 유통 우측 후보","psom_manufacturer_distribution_right"],
-      ["distribution|distribution-others",86,"일반 제조 상품 유통 기타 후보","psom_manufacturer_distribution_others"]
+      ["distribution|distribution-right",104,"공식 제조사·브랜드 유통 우측 후보","psom_manufacturer_distribution_right"],
+      ["distribution|distribution-others",92,"일반 제조 상품 유통 기타 후보","psom_manufacturer_distribution_others"],
+      ["home|home_4",88,"검증 제조 소비재 홈 메인 후보","psom_manufacturer_home"]
     ]
   };
   for (const row of array(categoryMap[primary])) add(row[0], row[1], row[2], row[3]);
@@ -4068,7 +4088,7 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
   // Final Front Match keeps the strict live/evidence/revenue safety gates.
   if (!options.length) {
     add("distribution|distribution-others", 84, "분류 보강이 필요한 일반 상품의 비공개 유통 후보", "psom_general_distribution_others");
-    add("home|home_right_bottom", 78, "기타 실생활 상품 홈 우측 하단 후보", "psom_general_home_other");
+    add("home|home_right_middle", 78, "기타 실생활 상품 홈 우측 중단 후보", "psom_general_home_other");
   }
   return options;
 }
@@ -5081,7 +5101,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
 }
 
 async function productFrontReplacementPlan(input) {
-  const scope = researchScope(input), authoritative = input && input.authoritativeReplacement === true;
+  const scope = researchScope(input), authoritative = input && input.authoritativeReplacement === true && input.explicitReplacementCleanup === true;
   const sectionKeys = Array.from(new Set(array(input && input.replacementSectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
   const desiredCandidateIds = Array.from(new Set(array(input && input.replacementCandidateIds).map(text).filter(Boolean))).slice(0, 3000);
   if (!authoritative || !sectionKeys.length) return { ok:true, applied:false, scope, sectionKeys:[], desiredCandidateIds, staleCandidateIds:[], withdrawAssignments:[] };

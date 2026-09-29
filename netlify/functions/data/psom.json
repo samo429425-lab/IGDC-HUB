@@ -3219,5 +3219,103 @@
   },
   "alias": {
     "social-maru": "social-instagram"
+  },
+  "commercePlacementPolicy": {
+    "version": "commerce-18-section-policy-2026-09-29",
+    "authority": "administrator-ledger-first",
+    "manualPlacementPriority": true,
+    "frontSnapshotReverseWrite": false,
+    "travelServiceExclusiveSection": "tour|tour",
+    "sections": {
+      "home|home_1": {
+        "intent": "ranked_consumer_hot",
+        "priority": [
+          "fashion",
+          "beauty",
+          "small_electronics",
+          "small_appliances",
+          "household_essentials"
+        ]
+      },
+      "home|home_2": {
+        "intent": "ranked_consumer_hot",
+        "priority": [
+          "fashion",
+          "beauty",
+          "small_electronics",
+          "small_appliances",
+          "household_essentials"
+        ]
+      },
+      "home|home_3": {
+        "intent": "ranked_consumer_hot",
+        "priority": [
+          "fashion",
+          "beauty",
+          "small_electronics",
+          "small_appliances",
+          "household_essentials"
+        ]
+      },
+      "home|home_4": {
+        "intent": "ranked_consumer_hot",
+        "priority": [
+          "fashion",
+          "beauty",
+          "small_electronics",
+          "small_appliances",
+          "household_essentials"
+        ]
+      },
+      "home|home_5": {
+        "intent": "ranked_consumer_hot",
+        "priority": [
+          "fashion",
+          "beauty",
+          "small_electronics",
+          "small_appliances",
+          "household_essentials"
+        ]
+      },
+      "home|home_right_top": {
+        "intent": "knowledge_health_other"
+      },
+      "home|home_right_middle": {
+        "intent": "living_books_other"
+      },
+      "home|home_right_bottom": {
+        "intent": "automotive_everyday_life"
+      },
+      "distribution|distribution-recommend": {
+        "intent": "consumer_hot_recommendation"
+      },
+      "distribution|distribution-sponsor": {
+        "intent": "verified_sponsor_then_consumer_brand_fallback"
+      },
+      "distribution|distribution-trending": {
+        "intent": "verified_popular_electronics_beauty_household"
+      },
+      "distribution|distribution-new": {
+        "intent": "recent_verified_consumer_product"
+      },
+      "distribution|distribution-special": {
+        "intent": "special_consumer_or_local_product"
+      },
+      "distribution|distribution-others": {
+        "intent": "qualified_general_consumer_product"
+      },
+      "distribution|distribution-right": {
+        "intent": "curated_consumer_product"
+      },
+      "network|network-right": {
+        "intent": "household_essentials_living"
+      },
+      "social|rightPanel": {
+        "intent": "small_electronics_beauty_popular_apparel"
+      },
+      "tour|tour": {
+        "intent": "travel_accommodation_transport_ticket_booking_exclusive"
+      }
+    }
   }
 }
