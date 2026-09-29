@@ -16,7 +16,7 @@
   const FEED_URL = '/.netlify/functions/feed?page=homeproducts';
   // The Edge function resolves this path to an approved same-country snapshot.
   // Do not try a legacy root fallback because that would bypass the IP gate.
-  const SNAPSHOT_CANDIDATES = [ '/data/front.snapshot.json' ];
+  const SNAPSHOT_CANDIDATES = [ '/data/front.snapshot.json?view=front' ];
 
   const KEYS_MAIN = ['home_1', 'home_2', 'home_3', 'home_4', 'home_5'];
   const KEYS_RIGHT = ['home_right_top', 'home_right_middle', 'home_right_bottom'];
@@ -26,6 +26,7 @@
   const MAIN_BATCH = 12;
   const RIGHT_LIMIT = 100;
   const RIGHT_BATCH = 12;
+  const FIRST_VIEW_EAGER = 6;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
@@ -347,7 +348,7 @@
     deferredBackgroundObserver.observe(el);
   }
 
-  function buildMainCard(item) {
+  function buildMainCard(item, eager) {
     const a = document.createElement('a');
     a.className = 'shop-card';
     applyAnchorDestination(a, item);
@@ -356,38 +357,70 @@
       a.setAttribute('aria-hidden', 'true');
     }
 
-    if (item.thumb) deferBackground(a, item.thumb);
+    // Image and title are separate DOM rows.
+    // Do not paint the product image on the card background because that lets
+    // the title visually overlap the thumbnail.
+    const imageWrap = document.createElement('div');
+    imageWrap.className = 'shop-card-image';
+    imageWrap.style.width = '100%';
+    imageWrap.style.minHeight = '0';
+    imageWrap.style.overflow = 'hidden';
+    imageWrap.style.background = '#fff';
+    imageWrap.style.display = 'flex';
+    imageWrap.style.alignItems = 'center';
+    imageWrap.style.justifyContent = 'center';
+
+    if (item.thumb) {
+      const img = document.createElement('img');
+      img.className = 'shop-card-image-el';
+      img.loading = eager ? 'eager' : 'lazy';
+      img.decoding = 'async';
+      if (eager) { try { img.fetchPriority = 'high'; } catch (_e) {} }
+      img.src = item.thumb;
+      img.alt = '';
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'contain';
+      img.style.display = 'block';
+      imageWrap.appendChild(img);
+    }
 
     const cap = document.createElement('div');
     cap.className = 'shop-card-cap';
     cap.textContent = item.title || '';
-    cap.style.alignSelf = 'end';
     cap.style.width = '100%';
-    cap.style.background = 'rgba(255,255,255,.88)';
-    cap.style.padding = '6px 8px';
+    cap.style.boxSizing = 'border-box';
+    cap.style.background = '#f8f8f8';
+    cap.style.borderTop = '1px solid #d9d9d9';
+    cap.style.padding = '7px 8px';
+    cap.style.margin = '0';
     cap.style.fontWeight = '700';
     cap.style.fontSize = '14px';
     cap.style.color = '#222';
-    cap.style.textAlign = 'center';
+    cap.style.textAlign = 'left';
     cap.style.whiteSpace = 'normal';
     cap.style.overflow = 'hidden';
     cap.style.overflowWrap = 'anywhere';
     cap.style.wordBreak = 'break-word';
     cap.style.lineHeight = '1.35';
+    cap.style.minHeight = '42px';
     cap.style.display = '-webkit-box';
     cap.style.webkitBoxOrient = 'vertical';
     cap.style.webkitLineClamp = '2';
 
     a.style.display = 'grid';
-    a.style.gridTemplateRows = '1fr auto';
+    a.style.gridTemplateRows = 'minmax(0, 1fr) auto';
     a.style.alignItems = 'stretch';
     a.style.justifyItems = 'stretch';
-    a.appendChild(cap);
+    a.style.background = '#fff';
+    a.style.backgroundImage = 'none';
 
+    a.appendChild(imageWrap);
+    a.appendChild(cap);
     return a;
   }
 
-  function buildRightCard(item) {
+  function buildRightCard(item, eager) {
     const a = document.createElement('a');
     a.className = 'ad-box news-btn';
     applyAnchorDestination(a, item);
@@ -396,46 +429,57 @@
       a.setAttribute('aria-hidden', 'true');
     }
 
+    a.style.display = 'grid';
+    a.style.gridTemplateRows = 'minmax(0, 1fr) auto';
+    a.style.overflow = 'hidden';
+    a.style.background = '#fff';
+
+    const imageWrap = document.createElement('div');
+    imageWrap.className = 'home-right-card-image';
+    imageWrap.style.minHeight = '0';
+    imageWrap.style.overflow = 'hidden';
+    imageWrap.style.display = 'flex';
+    imageWrap.style.alignItems = 'center';
+    imageWrap.style.justifyContent = 'center';
+    imageWrap.style.background = '#fff';
+
     const img = document.createElement('img');
-    img.loading = 'lazy';
+    img.loading = eager ? 'eager' : 'lazy';
     img.decoding = 'async';
+    if (eager) { try { img.fetchPriority = 'high'; } catch (_e) {} }
     img.src = item.thumb || '';
     img.alt = '';
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'contain';
+    img.style.display = 'block';
+    imageWrap.appendChild(img);
 
-    const showFallbackLabel = function () {
-      if (a.querySelector('.home-right-sample-label')) return;
-      img.style.display = 'none';
+    const cap = document.createElement('div');
+    cap.className = 'home-right-card-cap';
+    cap.textContent = item.title || '';
+    cap.style.boxSizing = 'border-box';
+    cap.style.width = '100%';
+    cap.style.minHeight = '34px';
+    cap.style.padding = '5px 6px';
+    cap.style.margin = '0';
+    cap.style.background = '#f7f7f7';
+    cap.style.borderTop = '1px solid #d9d9d9';
+    cap.style.color = '#222';
+    cap.style.fontSize = '12px';
+    cap.style.fontWeight = '700';
+    cap.style.lineHeight = '1.3';
+    cap.style.textAlign = 'left';
+    cap.style.whiteSpace = 'normal';
+    cap.style.overflow = 'hidden';
+    cap.style.overflowWrap = 'anywhere';
+    cap.style.wordBreak = 'break-word';
+    cap.style.display = '-webkit-box';
+    cap.style.webkitBoxOrient = 'vertical';
+    cap.style.webkitLineClamp = '2';
 
-      const label = document.createElement('div');
-      label.className = 'home-right-sample-label';
-      label.textContent = item.title || '';
-      label.style.width = '100%';
-      label.style.height = '100%';
-      label.style.boxSizing = 'border-box';
-      label.style.padding = '8px';
-      label.style.display = 'flex';
-      label.style.alignItems = 'center';
-      label.style.justifyContent = 'center';
-      label.style.textAlign = 'center';
-      label.style.whiteSpace = 'normal';
-      label.style.overflowWrap = 'anywhere';
-      label.style.wordBreak = 'break-word';
-      label.style.lineHeight = '1.35';
-      label.style.color = '#004080';
-      label.style.fontWeight = '600';
-      label.style.overflow = 'hidden';
-      a.appendChild(label);
-    };
-
-    img.addEventListener('error', showFallbackLabel, { once: true });
-    a.appendChild(img);
-
-    // Snapshot seed cards use the known transparent sample GIF.
-    // Render their names as normal centered fallback content instead of browser ALT text.
-    if (/^data:image\/gif;base64,R0lGODlhAQABAAAAACw=/i.test(String(item.thumb || ''))) {
-      showFallbackLabel();
-    }
-
+    a.appendChild(imageWrap);
+    a.appendChild(cap);
     return a;
   }
 
@@ -541,7 +585,8 @@ function bindIncremental(target, items) {
 
     for (let i = offset; i < end; i++) {
       const it = items[i];
-      frag.appendChild(isRight ? buildRightCard(it) : buildMainCard(it));
+      const eager = i < FIRST_VIEW_EAGER;
+      frag.appendChild(isRight ? buildRightCard(it, eager) : buildMainCard(it, eager));
     }
 
     target.list.appendChild(frag);
@@ -614,11 +659,17 @@ function bindIncremental(target, items) {
   }
 
   async function fetchJSON(url) {
-    const res = await fetch(url, { cache: 'no-store' });
+    const res = await fetch(url, { cache: 'no-store', priority: 'high' });
     if (!res.ok) {
       throw new Error('HTTP ' + res.status + ' @ ' + url);
     }
     return await res.json();
+  }
+
+  let initialSnapshotPromise = null;
+  function getInitialSnapshotPromise() {
+    if (!initialSnapshotPromise) initialSnapshotPromise = fetchJSON(SNAPSHOT_CANDIDATES[0]);
+    return initialSnapshotPromise;
   }
 
   async function loadFromFeed() {
@@ -632,7 +683,7 @@ function bindIncremental(target, items) {
 
     for (const url of SNAPSHOT_CANDIDATES) {
       try {
-        const snapshot = await fetchJSON(url);
+        const snapshot = url === SNAPSHOT_CANDIDATES[0] ? await getInitialSnapshotPromise() : await fetchJSON(url);
         const sections = buildSectionsFromSnapshot(snapshot);
         return { source: 'snapshot', sections };
       } catch (e) {
@@ -698,6 +749,9 @@ function bindIncremental(target, items) {
   }
 
   installHomeNewsTopNavigation();
+  // Start the canonical snapshot request as soon as this script is evaluated.
+  // Rendering still waits for the DOM, but network/JSON time overlaps page parsing.
+  getInitialSnapshotPromise().catch(function(){ initialSnapshotPromise = null; });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function(){
