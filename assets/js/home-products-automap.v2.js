@@ -18,15 +18,16 @@
   // Do not try a legacy root fallback because that would bypass the IP gate.
   const SNAPSHOT_CANDIDATES = [ '/data/front.snapshot.json?view=front' ];
 
-  const KEYS_MAIN = ['home_1', 'home_2', 'home_3', 'home_4', 'home_5'];
+  const KEYS_MAIN = ['home_1', 'home_2', 'home_3', 'home_4', 'home_5', 'home_6'];
+  window.__HOME_PRODUCTS_AUTOMAP_V2_HOME6__ = true;
   const KEYS_RIGHT = ['home_right_top', 'home_right_middle', 'home_right_bottom'];
   const ALL_KEYS = KEYS_MAIN.concat(KEYS_RIGHT);
 
   const MAIN_LIMIT = 100;
-  const MAIN_BATCH = 12;
+  const MAIN_BATCH = 6;
   const RIGHT_LIMIT = 100;
-  const RIGHT_BATCH = 12;
-  const FIRST_VIEW_EAGER = 6;
+  const RIGHT_BATCH = 4;
+  const FIRST_VIEW_EAGER = 5;
 
   const EMPTY_I18N = {
     de: 'Inhalte werden vorbereitet.',
@@ -58,6 +59,40 @@
       if (typeof v === 'string' && v.trim()) return v.trim();
     }
     return '';
+  }
+
+  const TITLE_KEYS = [
+    'title','name','label','caption',
+    'productName','product_name','productTitle','product_title',
+    'itemName','item_name','itemTitle','item_title',
+    'displayName','display_name','displayTitle','display_title',
+    'offerTitle','offer_title','sourceTitle','source_title'
+  ];
+  const TITLE_NESTED_KEYS = [
+    'product','item','offer','metadata','meta',
+    'sourcePayload','source_payload','raw','data'
+  ];
+
+  function resolveTitle(src, fallback) {
+    const seen = new Set();
+
+    function visit(obj, depth) {
+      if (!obj || typeof obj !== 'object' || seen.has(obj)) return '';
+      seen.add(obj);
+
+      const direct = pick(obj, TITLE_KEYS);
+      if (direct) return direct;
+      if (depth >= 2) return '';
+
+      for (const key of TITLE_NESTED_KEYS) {
+        const nested = obj[key];
+        const found = visit(nested, depth + 1);
+        if (found) return found;
+      }
+      return '';
+    }
+
+    return visit(src, 0) || visit(fallback, 0) || '상품';
   }
 
   function toArray(v) {
@@ -203,7 +238,7 @@
 
     return {
       id,
-      title: pick(src, ['title', 'name', 'label', 'caption', 'productName', 'product_name', 'itemName', 'item_name', 'displayName', 'display_name']) || pick(fb, ['title', 'name', 'label', 'caption', 'productName', 'product_name', 'itemName', 'item_name', 'displayName', 'display_name']) || '상품',
+      title: resolveTitle(src, fb),
       thumb: pick(src, ['thumb', 'image', 'image_url', 'img', 'photo', 'thumbnail', 'thumbnailUrl', 'cover', 'coverUrl']),
       url: sourceUrl,
       sourceUrl,
@@ -357,14 +392,12 @@
       a.setAttribute('aria-hidden', 'true');
     }
 
-    // Image and title are separate DOM rows.
-    // Do not paint the product image on the card background because that lets
-    // the title visually overlap the thumbnail.
     const imageWrap = document.createElement('div');
     imageWrap.className = 'shop-card-image';
     imageWrap.style.width = '100%';
-    imageWrap.style.minHeight = '0';
     imageWrap.style.height = '100%';
+    imageWrap.style.minWidth = '0';
+    imageWrap.style.minHeight = '0';
     imageWrap.style.overflow = 'hidden';
     imageWrap.style.background = '#fff';
     imageWrap.style.display = 'flex';
@@ -388,35 +421,49 @@
 
     const cap = document.createElement('div');
     cap.className = 'shop-card-cap';
-    cap.textContent = item.title || '상품';
+    cap.style.gridRow = '2';
+    cap.style.justifySelf = 'stretch';
+    cap.style.alignSelf = 'stretch';
     cap.style.width = '100%';
+    cap.style.minWidth = '100%';
+    cap.style.maxWidth = '100%';
+    cap.style.height = '72px';
+    cap.style.minHeight = '72px';
+    cap.style.maxHeight = '72px';
     cap.style.boxSizing = 'border-box';
-    cap.style.background = '#f8f8f8';
-    cap.style.borderTop = '1px solid #d9d9d9';
-    cap.style.padding = '7px 8px';
+    cap.style.background = '#f4f6f8';
+    cap.style.borderTop = '1px solid #cfd5db';
+    cap.style.padding = '6px 8px';
     cap.style.margin = '0';
-    cap.style.fontWeight = '700';
-    cap.style.fontSize = '14px';
     cap.style.color = '#222';
-    cap.style.textAlign = 'left';
-    cap.style.whiteSpace = 'normal';
     cap.style.overflow = 'hidden';
-    cap.style.overflowWrap = 'anywhere';
-    cap.style.wordBreak = 'break-word';
-    cap.style.lineHeight = '1.35';
-    cap.style.height = '54px';
-    cap.style.minHeight = '54px';
-    cap.style.maxHeight = '54px';
-    cap.style.display = '-webkit-box';
-    cap.style.webkitBoxOrient = 'vertical';
-    cap.style.webkitLineClamp = '2';
+    cap.style.display = 'block';
+
+    const capText = document.createElement('span');
+    capText.className = 'shop-card-cap-text';
+    capText.textContent = item.title || '상품';
+    capText.style.display = '-webkit-box';
+    capText.style.width = '100%';
+    capText.style.maxWidth = '100%';
+    capText.style.fontWeight = '700';
+    capText.style.fontSize = '14px';
+    capText.style.lineHeight = '1.35';
+    capText.style.textAlign = 'left';
+    capText.style.whiteSpace = 'normal';
+    capText.style.overflow = 'hidden';
+    capText.style.overflowWrap = 'anywhere';
+    capText.style.wordBreak = 'break-word';
+    capText.style.webkitBoxOrient = 'vertical';
+    capText.style.webkitLineClamp = '3';
+    cap.appendChild(capText);
 
     a.style.display = 'grid';
-    a.style.gridTemplateRows = 'minmax(0, 1fr) 54px';
+    a.style.gridTemplateRows = 'minmax(0, 1fr) 72px';
     a.style.alignItems = 'stretch';
     a.style.justifyItems = 'stretch';
     a.style.background = '#fff';
     a.style.backgroundImage = 'none';
+    a.style.overflow = 'hidden';
 
     a.appendChild(imageWrap);
     a.appendChild(cap);
@@ -433,12 +480,17 @@
     }
 
     a.style.display = 'grid';
-    a.style.gridTemplateRows = 'minmax(0, 1fr) 42px';
+    a.style.gridTemplateRows = 'minmax(0, 1fr) 58px';
+    a.style.alignItems = 'stretch';
+    a.style.justifyItems = 'stretch';
     a.style.overflow = 'hidden';
     a.style.background = '#fff';
 
     const imageWrap = document.createElement('div');
     imageWrap.className = 'home-right-card-image';
+    imageWrap.style.width = '100%';
+    imageWrap.style.height = '100%';
+    imageWrap.style.minWidth = '0';
     imageWrap.style.minHeight = '0';
     imageWrap.style.overflow = 'hidden';
     imageWrap.style.display = 'flex';
@@ -460,28 +512,41 @@
 
     const cap = document.createElement('div');
     cap.className = 'home-right-card-cap';
-    cap.textContent = item.title || '상품';
+    cap.style.gridRow = '2';
+    cap.style.justifySelf = 'stretch';
+    cap.style.alignSelf = 'stretch';
     cap.style.boxSizing = 'border-box';
     cap.style.width = '100%';
-    cap.style.height = '42px';
-    cap.style.minHeight = '42px';
-    cap.style.maxHeight = '42px';
+    cap.style.minWidth = '100%';
+    cap.style.maxWidth = '100%';
+    cap.style.height = '58px';
+    cap.style.minHeight = '58px';
+    cap.style.maxHeight = '58px';
     cap.style.padding = '5px 6px';
     cap.style.margin = '0';
-    cap.style.background = '#f7f7f7';
-    cap.style.borderTop = '1px solid #d9d9d9';
+    cap.style.background = '#f4f6f8';
+    cap.style.borderTop = '1px solid #cfd5db';
     cap.style.color = '#222';
-    cap.style.fontSize = '12px';
-    cap.style.fontWeight = '700';
-    cap.style.lineHeight = '1.3';
-    cap.style.textAlign = 'left';
-    cap.style.whiteSpace = 'normal';
     cap.style.overflow = 'hidden';
-    cap.style.overflowWrap = 'anywhere';
-    cap.style.wordBreak = 'break-word';
-    cap.style.display = '-webkit-box';
-    cap.style.webkitBoxOrient = 'vertical';
-    cap.style.webkitLineClamp = '2';
+    cap.style.display = 'block';
+
+    const capText = document.createElement('span');
+    capText.className = 'home-right-card-cap-text';
+    capText.textContent = item.title || '상품';
+    capText.style.display = '-webkit-box';
+    capText.style.width = '100%';
+    capText.style.maxWidth = '100%';
+    capText.style.fontSize = '12px';
+    capText.style.fontWeight = '700';
+    capText.style.lineHeight = '1.3';
+    capText.style.textAlign = 'left';
+    capText.style.whiteSpace = 'normal';
+    capText.style.overflow = 'hidden';
+    capText.style.overflowWrap = 'anywhere';
+    capText.style.wordBreak = 'break-word';
+    capText.style.webkitBoxOrient = 'vertical';
+    capText.style.webkitLineClamp = '3';
+    cap.appendChild(capText);
 
     a.appendChild(imageWrap);
     a.appendChild(cap);
@@ -664,11 +729,33 @@ function bindIncremental(target, items) {
   }
 
   async function fetchJSON(url) {
-    const res = await fetch(url, { cache: 'no-store', priority: 'high' });
-    if (!res.ok) {
-      throw new Error('HTTP ' + res.status + ' @ ' + url);
+    const isHomeSnapshot = url === SNAPSHOT_CANDIDATES[0];
+
+    if (isHomeSnapshot && window.__IGDC_HOME_SNAPSHOT_DATA__) {
+      return window.__IGDC_HOME_SNAPSHOT_DATA__;
     }
-    return await res.json();
+    if (isHomeSnapshot && window.__IGDC_HOME_SNAPSHOT_PROMISE__) {
+      return await window.__IGDC_HOME_SNAPSHOT_PROMISE__;
+    }
+
+    const request = fetch(url, { cache: 'no-store', priority: 'high' }).then(async function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' @ ' + url);
+      return await res.json();
+    });
+
+    if (isHomeSnapshot) {
+      window.__IGDC_HOME_SNAPSHOT_PROMISE__ = request;
+      try {
+        const data = await request;
+        window.__IGDC_HOME_SNAPSHOT_DATA__ = data;
+        return data;
+      } catch (e) {
+        window.__IGDC_HOME_SNAPSHOT_PROMISE__ = null;
+        throw e;
+      }
+    }
+
+    return await request;
   }
 
   let initialSnapshotPromise = null;
@@ -726,17 +813,19 @@ function bindIncremental(target, items) {
 
 
   function installCardLayoutGuard() {
-    if (document.getElementById('igdc-home-card-layout-guard-v3')) return;
+    if (document.getElementById('igdc-home-card-layout-guard-v4')) return;
     const style = document.createElement('style');
-    style.id = 'igdc-home-card-layout-guard-v3';
+    style.id = 'igdc-home-card-layout-guard-v4';
     style.textContent = `
       section.shopping-section .shop-row > .shop-card {
         display:grid !important;
-        grid-template-rows:minmax(0,1fr) 54px !important;
+        grid-template-rows:minmax(0,1fr) 72px !important;
         align-items:stretch !important;
-        height:312px !important;
-        min-height:312px !important;
-        max-height:312px !important;
+        justify-items:stretch !important;
+        width:250px !important;
+        height:330px !important;
+        min-height:330px !important;
+        max-height:330px !important;
         aspect-ratio:auto !important;
         background:#fff !important;
         background-image:none !important;
@@ -744,7 +833,11 @@ function bindIncremental(target, items) {
       }
       section.shopping-section .shop-row > .shop-card > .shop-card-image {
         grid-row:1 !important;
+        justify-self:stretch !important;
+        align-self:stretch !important;
         width:100% !important;
+        min-width:100% !important;
+        max-width:100% !important;
         height:100% !important;
         min-height:0 !important;
         overflow:hidden !important;
@@ -752,6 +845,8 @@ function bindIncremental(target, items) {
       }
       section.shopping-section .shop-row > .shop-card > .shop-card-image > img {
         width:100% !important;
+        min-width:100% !important;
+        max-width:100% !important;
         height:100% !important;
         object-fit:contain !important;
         display:block !important;
@@ -759,63 +854,110 @@ function bindIncremental(target, items) {
       section.shopping-section .shop-row > .shop-card > .shop-card-cap {
         grid-row:2 !important;
         position:static !important;
+        justify-self:stretch !important;
+        align-self:stretch !important;
         box-sizing:border-box !important;
         width:100% !important;
-        height:54px !important;
-        min-height:54px !important;
-        max-height:54px !important;
+        min-width:100% !important;
+        max-width:100% !important;
+        height:72px !important;
+        min-height:72px !important;
+        max-height:72px !important;
         margin:0 !important;
-        padding:7px 8px !important;
+        padding:6px 8px !important;
         background:#f4f6f8 !important;
         border-top:1px solid #cfd5db !important;
-        color:#222 !important;
-        line-height:1.35 !important;
         overflow:hidden !important;
-        white-space:normal !important;
-        display:-webkit-box !important;
-        -webkit-box-orient:vertical !important;
-        -webkit-line-clamp:2 !important;
+        display:block !important;
         text-align:left !important;
       }
+      section.shopping-section .shop-row > .shop-card > .shop-card-cap > .shop-card-cap-text {
+        display:-webkit-box !important;
+        width:100% !important;
+        min-width:0 !important;
+        max-width:100% !important;
+        margin:0 !important;
+        color:#222 !important;
+        font-size:14px !important;
+        font-weight:700 !important;
+        line-height:1.35 !important;
+        white-space:normal !important;
+        overflow:hidden !important;
+        overflow-wrap:anywhere !important;
+        word-break:break-word !important;
+        -webkit-box-orient:vertical !important;
+        -webkit-line-clamp:3 !important;
+      }
+
       .ad-panel .ad-section .ad-list > .ad-box {
         display:grid !important;
-        grid-template-rows:minmax(0,1fr) 42px !important;
+        grid-template-rows:minmax(0,1fr) 58px !important;
+        align-items:stretch !important;
+        justify-items:stretch !important;
         overflow:hidden !important;
       }
       .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-image {
         grid-row:1 !important;
+        justify-self:stretch !important;
+        align-self:stretch !important;
+        width:100% !important;
+        min-width:100% !important;
+        max-width:100% !important;
         min-height:0 !important;
         overflow:hidden !important;
       }
       .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-image > img {
         width:100% !important;
+        min-width:100% !important;
+        max-width:100% !important;
         height:100% !important;
         object-fit:contain !important;
       }
       .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-cap {
         grid-row:2 !important;
+        justify-self:stretch !important;
+        align-self:stretch !important;
         box-sizing:border-box !important;
         width:100% !important;
-        height:42px !important;
-        min-height:42px !important;
-        max-height:42px !important;
+        min-width:100% !important;
+        max-width:100% !important;
+        height:58px !important;
+        min-height:58px !important;
+        max-height:58px !important;
         margin:0 !important;
         padding:5px 6px !important;
         background:#f4f6f8 !important;
         border-top:1px solid #cfd5db !important;
-        color:#222 !important;
         overflow:hidden !important;
-        display:-webkit-box !important;
-        -webkit-box-orient:vertical !important;
-        -webkit-line-clamp:2 !important;
+        display:block !important;
+        text-align:left !important;
       }
+      .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-cap > .home-right-card-cap-text {
+        display:-webkit-box !important;
+        width:100% !important;
+        min-width:0 !important;
+        max-width:100% !important;
+        margin:0 !important;
+        color:#222 !important;
+        font-size:12px !important;
+        font-weight:700 !important;
+        line-height:1.3 !important;
+        white-space:normal !important;
+        overflow:hidden !important;
+        overflow-wrap:anywhere !important;
+        word-break:break-word !important;
+        -webkit-box-orient:vertical !important;
+        -webkit-line-clamp:3 !important;
+      }
+
       @media (max-width:600px){
         section.shopping-section .shop-row > .shop-card{
+          width:100% !important;
           height:auto !important;
           min-height:0 !important;
           max-height:none !important;
           aspect-ratio:4/5 !important;
-          grid-template-rows:minmax(0,1fr) 54px !important;
+          grid-template-rows:minmax(0,1fr) 72px !important;
         }
       }
     `;
@@ -838,6 +980,12 @@ function bindIncremental(target, items) {
       }
 
       window.__HOME_PRODUCTS_AUTOMAP_V2_SOURCE__ = loaded.source;
+      window.__IGDC_HOME_AUTOMAP_RENDERED__ = true;
+      try {
+        document.dispatchEvent(new CustomEvent('igdc:home-automap-rendered', {
+          detail: { source: loaded.source }
+        }));
+      } catch (_e) {}
     } catch (e) {
       for (const key of ALL_KEYS) {
         const psomEl = qs('[data-psom-key="' + key + '"]');

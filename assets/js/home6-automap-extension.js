@@ -1,63 +1,137 @@
-/* IGDC Home 6 AutoMap extension
- * Front-only first-stage patch.
- * - home_6 = webtoon / books / ebooks / digital reading
- * - Reads the same country-scoped front.snapshot.json used by Home AutoMap.
- * - Keeps 100 slots. Real snapshot items replace sample slots; if they disappear,
- *   the sample slots are restored automatically on the next load.
+/* IGDC Home 6 + Home right-panel compatibility
+ * 2026-09-30
+ *
+ * Main Home AutoMap v2 now renders home_1..home_6 directly.
+ * This file remains as:
+ * 1) backward-compatible home_6 fallback when an older Home AutoMap is loaded;
+ * 2) temporary semantic rebalance for the three Home right-panel pools until
+ *    the administrator/PSOM migration publishes the new section policy.
+ *
+ * It reuses the same snapshot promise/data as Home AutoMap to avoid duplicate
+ * network requests and duplicate JSON parsing.
  */
 (function(){
   'use strict';
   if(window.__IGDC_HOME6_AUTOMAP__) return;
   window.__IGDC_HOME6_AUTOMAP__=true;
 
-  var KEY='home_6', LIMIT=100, SNAPSHOT='/data/front.snapshot.json';
+  var SNAPSHOT='/data/front.snapshot.json?view=front';
+  var HOME6='home_6';
+  var RIGHT_KEYS=['home_right_top','home_right_middle','home_right_bottom'];
+  var LIMIT=100;
+  var HOME6_BATCH=6;
+  var RIGHT_BATCH=4;
 
-  function q(sel){return document.querySelector(sel);}
-  function str(v){return String(v==null?'':v).trim();}
-  function pick(o,keys){for(var i=0;i<keys.length;i++){var v=o&&o[keys[i]];if(typeof v==='string'&&v.trim())return v.trim();}return '';}
-  function lang(){
-    return str(document.documentElement&&document.documentElement.getAttribute('lang')||navigator.language||'en').toLowerCase().split('-')[0];
-  }
-  var SAMPLE={
-    ko:'웹툰 · 서적 · 디지털 독서',
-    en:'Webtoons · Books · Digital Reading',
-    ja:'ウェブトゥーン・書籍・デジタル読書',
-    zh:'网络漫画 · 书籍 · 数字阅读',
-    ar:'ويب تون · الكتب · القراءة الرقمية',
-    fa:'وب‌تون · کتاب · مطالعه دیجیتال',
-    ur:'ویب ٹون · کتابیں · ڈیجیٹل مطالعہ'
-  };
-  function sampleTitle(){return SAMPLE[lang()]||SAMPLE.en;}
-
-  function hrefOf(it){
-    var id=pick(it,['id','contentId','productId','itemId','sku','code','pid']);
-    if(id)return '/content.html?id='+encodeURIComponent(id);
-    var u=pick(it,['affiliateOutboundUrl','externalOutboundUrl','outboundUrl','productUrl','purchaseUrl','url','href','link']);
-    return /^https?:\/\//i.test(u)?u:'#';
+  function arr(v){ return Array.isArray(v) ? v : []; }
+  function pick(o,keys){
+    for(var i=0;i<keys.length;i++){
+      var v=o&&o[keys[i]];
+      if(typeof v==='string'&&v.trim()) return v.trim();
+    }
+    return '';
   }
 
-  function card(it,isSample,index){
+  var TITLE_KEYS=[
+    'title','name','label','caption',
+    'productName','product_name','productTitle','product_title',
+    'itemName','item_name','itemTitle','item_title',
+    'displayName','display_name','displayTitle','display_title',
+    'offerTitle','offer_title','sourceTitle','source_title'
+  ];
+  var TITLE_NESTED_KEYS=[
+    'product','item','offer','metadata','meta',
+    'sourcePayload','source_payload','raw','data'
+  ];
+
+  function resolveTitle(obj){
+    var seen=[];
+    function visited(x){ return seen.indexOf(x)>=0; }
+    function visit(x,depth){
+      if(!x || typeof x!=='object' || visited(x)) return '';
+      seen.push(x);
+      var direct=pick(x,TITLE_KEYS);
+      if(direct) return direct;
+      if(depth>=2) return '';
+      for(var i=0;i<TITLE_NESTED_KEYS.length;i++){
+        var got=visit(x[TITLE_NESTED_KEYS[i]],depth+1);
+        if(got) return got;
+      }
+      return '';
+    }
+    return visit(obj,0)||'상품';
+  }
+
+  function imageOf(it){
+    return pick(it,['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']);
+  }
+
+  function stableId(it,key,idx){
+    return pick(it,['id','contentId','productId','itemId','sku','code','pid']) ||
+      (key+'-'+String(idx+1).padStart(3,'0'));
+  }
+
+  function hrefOf(it,key,idx){
+    var id=stableId(it,key,idx);
+    if(id) return '/content.html?id='+encodeURIComponent(id);
+    var u=pick(it,[
+      'affiliateOutboundUrl','affiliate_outbound_url',
+      'externalOutboundUrl','external_outbound_url',
+      'productUrl','purchaseUrl','orderUrl','url','href','link'
+    ]);
+    return /^https?:\/\//i.test(u) ? u : '#';
+  }
+
+  function getSnapshot(){
+    if(window.__IGDC_HOME_SNAPSHOT_DATA__) {
+      return Promise.resolve(window.__IGDC_HOME_SNAPSHOT_DATA__);
+    }
+    if(window.__IGDC_HOME_SNAPSHOT_PROMISE__) {
+      return window.__IGDC_HOME_SNAPSHOT_PROMISE__;
+    }
+
+    var p=fetch(SNAPSHOT,{cache:'no-store',priority:'high'}).then(function(res){
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      return res.json();
+    }).then(function(data){
+      window.__IGDC_HOME_SNAPSHOT_DATA__=data;
+      return data;
+    }).catch(function(err){
+      window.__IGDC_HOME_SNAPSHOT_PROMISE__=null;
+      throw err;
+    });
+
+    window.__IGDC_HOME_SNAPSHOT_PROMISE__=p;
+    return p;
+  }
+
+  function productCard(it,isSample,key,idx){
     var a=document.createElement('a');
     a.className='shop-card';
+
     if(isSample){
       a.href='#';
       a.setAttribute('aria-disabled','true');
       a.setAttribute('data-igdc-slot-placeholder','1');
       a.addEventListener('click',function(e){e.preventDefault();});
     }else{
-      var h=hrefOf(it);
+      var h=hrefOf(it,key,idx);
       a.href=h;
       if(/^https?:\/\//i.test(h)){a.target='_top';a.rel='noopener';}
     }
 
     a.style.display='grid';
-    a.style.gridTemplateRows='minmax(0,1fr) 54px';
+    a.style.gridTemplateRows='minmax(0,1fr) 72px';
+    a.style.alignItems='stretch';
+    a.style.justifyItems='stretch';
     a.style.background='#fff';
     a.style.backgroundImage='none';
     a.style.overflow='hidden';
 
     var imageWrap=document.createElement('div');
     imageWrap.className='shop-card-image';
+    imageWrap.style.width='100%';
+    imageWrap.style.height='100%';
+    imageWrap.style.minWidth='0';
     imageWrap.style.minHeight='0';
     imageWrap.style.overflow='hidden';
     imageWrap.style.background='#fff';
@@ -65,11 +139,12 @@
     imageWrap.style.alignItems='center';
     imageWrap.style.justifyContent='center';
 
-    var image=pick(it,['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']);
+    var image=imageOf(it);
     if(image){
       var img=document.createElement('img');
-      img.loading='lazy';
+      img.loading=idx<5?'eager':'lazy';
       img.decoding='async';
+      if(idx<5){ try{img.fetchPriority='high';}catch(_e){} }
       img.src=image;
       img.alt='';
       img.style.width='100%';
@@ -81,149 +156,79 @@
 
     var cap=document.createElement('div');
     cap.className='shop-card-cap';
-    cap.textContent=isSample ? sampleTitle() : (pick(it,['title','name','label','caption','productName','product_name','itemName','item_name','displayName','display_name'])||sampleTitle());
     cap.style.width='100%';
+    cap.style.minWidth='100%';
+    cap.style.maxWidth='100%';
+    cap.style.height='72px';
+    cap.style.minHeight='72px';
+    cap.style.maxHeight='72px';
     cap.style.boxSizing='border-box';
-    cap.style.background='#f8f8f8';
-    cap.style.borderTop='1px solid #d9d9d9';
-    cap.style.padding='7px 8px';
+    cap.style.background='#f4f6f8';
+    cap.style.borderTop='1px solid #cfd5db';
+    cap.style.padding='6px 8px';
     cap.style.margin='0';
-    cap.style.fontWeight='700';
-    cap.style.fontSize='14px';
-    cap.style.color='#222';
-    cap.style.textAlign='left';
-    cap.style.lineHeight='1.35';
-    cap.style.height='54px';
-    cap.style.minHeight='54px';
-    cap.style.maxHeight='54px';
-    cap.style.display='-webkit-box';
-    cap.style.webkitBoxOrient='vertical';
-    cap.style.webkitLineClamp='2';
     cap.style.overflow='hidden';
-    cap.style.overflowWrap='anywhere';
-    cap.style.wordBreak='break-word';
+    cap.style.display='block';
+
+    var text=document.createElement('span');
+    text.className='shop-card-cap-text';
+    text.textContent=isSample?'웹툰 · 서적 · 디지털 독서':resolveTitle(it);
+    text.style.display='-webkit-box';
+    text.style.width='100%';
+    text.style.maxWidth='100%';
+    text.style.fontWeight='700';
+    text.style.fontSize='14px';
+    text.style.lineHeight='1.35';
+    text.style.color='#222';
+    text.style.textAlign='left';
+    text.style.whiteSpace='normal';
+    text.style.overflow='hidden';
+    text.style.overflowWrap='anywhere';
+    text.style.wordBreak='break-word';
+    text.style.webkitBoxOrient='vertical';
+    text.style.webkitLineClamp='3';
+    cap.appendChild(text);
 
     a.appendChild(imageWrap);
     a.appendChild(cap);
     return a;
   }
 
-  function render(items){
-    var row=q('#shopRow6');
-    if(!row)return;
+  function fallbackRenderHome6(items){
+    if(window.__HOME_PRODUCTS_AUTOMAP_V2_HOME6__) return;
+
+    var row=document.querySelector('#shopRow6');
+    var scroller=document.querySelector('#shopScroller6');
+    if(!row) return;
+
+    var list=arr(items).slice(0,LIMIT);
+    var offset=0;
     row.innerHTML='';
-    var list=Array.isArray(items)?items.slice(0,LIMIT):[];
-    for(var i=0;i<LIMIT;i++)row.appendChild(card(list[i]||{},i>=list.length,i));
-  }
 
-  async function boot(){
-    try{
-      var r=await fetch(SNAPSHOT,{cache:'no-store'});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      var d=await r.json();
-      var items=d&&d.pages&&d.pages.home&&d.pages.home.sections&&d.pages.home.sections[KEY];
-      render(Array.isArray(items)?items:[]);
-    }catch(_e){render([]);}
-  }
-
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
-  else boot();
-})();
-
-
-/* HOME visual correction + right-panel semantic rebalance, 2026-09-30 */
-(function(){
-  'use strict';
-  if(window.__IGDC_HOME_VISUAL_RIGHT_FIX_V1__) return;
-  window.__IGDC_HOME_VISUAL_RIGHT_FIX_V1__=true;
-
-  var SNAPSHOT='/data/front.snapshot.json';
-  var RIGHT_KEYS=['home_right_top','home_right_middle','home_right_bottom'];
-  var LIMIT=100, BATCH=12;
-
-  function arr(v){return Array.isArray(v)?v:[];}
-  function pick(o,keys){
-    for(var i=0;i<keys.length;i++){
-      var v=o&&o[keys[i]];
-      if(typeof v==='string'&&v.trim()) return v.trim();
+    function more(){
+      var end=Math.min(offset+HOME6_BATCH,LIMIT);
+      var frag=document.createDocumentFragment();
+      for(var i=offset;i<end;i++){
+        var isSample=i>=list.length;
+        frag.appendChild(productCard(isSample?{}:list[i],isSample,HOME6,i));
+      }
+      row.appendChild(frag);
+      offset=end;
     }
-    return '';
-  }
-  function stableId(it,key,idx){
-    return pick(it,['id','contentId','productId','itemId','sku','code','pid']) || (key+'-'+String(idx+1).padStart(3,'0'));
-  }
-  function hrefOf(it,key,idx){
-    var id=stableId(it,key,idx);
-    if(id) return '/content.html?id='+encodeURIComponent(id);
-    var u=pick(it,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','productUrl','purchaseUrl','orderUrl','url','href','link']);
-    return /^https?:\/\//i.test(u)?u:'#';
-  }
-  function imageOf(it){
-    return pick(it,['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']);
-  }
 
-  /* Thumbnail above, product name below. */
-  function fixMainCard(card){
-    if(!card || card.nodeType!==1 || card.dataset.igdcCaptionBelow==='1') return;
-    if(!card.classList.contains('shop-card')) return;
-    var cap=card.querySelector('.shop-card-cap');
-    if(!cap) return;
+    more();
 
-    var bg=card.style.backgroundImage||'';
-    var pending=card.dataset.igdcDeferredBg||'';
-    if(!bg && !pending) return;
-
-    var image=document.createElement('div');
-    image.className='home-product-image';
-    if(bg) image.style.backgroundImage=bg;
-    else if(pending) image.style.backgroundImage='url("'+pending.replace(/"/g,'&quot;')+'")';
-    image.style.backgroundPosition='center';
-    image.style.backgroundSize='contain';
-    image.style.backgroundRepeat='no-repeat';
-    image.style.width='100%';
-    image.style.minHeight='0';
-
-    card.style.display='grid';
-    card.style.gridTemplateRows='minmax(0,1fr) auto';
-    card.style.backgroundImage='none';
-    card.style.backgroundColor='#fff';
-
-    cap.style.position='static';
-    cap.style.alignSelf='stretch';
-    cap.style.boxSizing='border-box';
-    cap.style.background='#fff';
-    cap.style.borderTop='1px solid #eee';
-    cap.style.padding='6px 8px';
-    cap.style.minHeight='42px';
-
-    card.insertBefore(image,cap);
-    card.dataset.igdcCaptionBelow='1';
-  }
-
-  function fixAllMainCards(root){
-    var scope=root&&root.querySelectorAll?root:document;
-    Array.prototype.forEach.call(scope.querySelectorAll('.shop-row .shop-card'),fixMainCard);
-  }
-
-  function installCardObserver(){
-    fixAllMainCards(document);
-    var root=document.querySelector('.shopping-section')||document.body;
-    if(!root || typeof MutationObserver==='undefined') return;
-    var queued=false;
-    var obs=new MutationObserver(function(){
-      if(queued) return;
-      queued=true;
-      (window.requestAnimationFrame||function(fn){return setTimeout(fn,0);})(function(){
-        queued=false;
-        fixAllMainCards(root);
-      });
-    });
-    obs.observe(root,{childList:true,subtree:true});
+    if(scroller){
+      scroller.addEventListener('scroll',function(){
+        if(offset>=LIMIT) return;
+        if(scroller.scrollLeft+scroller.clientWidth>=scroller.scrollWidth-24) more();
+      },{passive:true});
+    }
   }
 
   function categoryFor(item,sourceKey){
     var hay=[
-      pick(item,['title','name','label','caption']),
+      resolveTitle(item),
       pick(item,['category','subcategory','type','kind']),
       arr(item&&item.tags).join(' ')
     ].join(' ').toLowerCase();
@@ -236,13 +241,13 @@
     if(livingBooks.test(hay)) return 'home_right_bottom';
     if(healthLife.test(hay)) return 'home_right_top';
 
-    /* Current production snapshot still has the previous right-rail order. */
+    // Compatibility with the currently published legacy right-panel order.
     if(sourceKey==='home_right_top') return 'home_right_middle';
     if(sourceKey==='home_right_middle') return 'home_right_bottom';
     return 'home_right_top';
   }
 
-  function buildRightCard(item,key,idx){
+  function rightCard(item,key,idx){
     var a=document.createElement('a');
     a.className='ad-box news-btn';
     var href=hrefOf(item,key,idx);
@@ -250,12 +255,17 @@
     if(/^https?:\/\//i.test(href)){a.target='_top';a.rel='noopener';}
 
     a.style.display='grid';
-    a.style.gridTemplateRows='minmax(0,1fr) 42px';
+    a.style.gridTemplateRows='minmax(0,1fr) 58px';
+    a.style.alignItems='stretch';
+    a.style.justifyItems='stretch';
     a.style.overflow='hidden';
     a.style.background='#fff';
 
     var imageWrap=document.createElement('div');
     imageWrap.className='home-right-card-image';
+    imageWrap.style.width='100%';
+    imageWrap.style.height='100%';
+    imageWrap.style.minWidth='0';
     imageWrap.style.minHeight='0';
     imageWrap.style.overflow='hidden';
     imageWrap.style.display='flex';
@@ -264,8 +274,9 @@
     imageWrap.style.background='#fff';
 
     var img=document.createElement('img');
-    img.loading='lazy';
+    img.loading=idx<3?'eager':'lazy';
     img.decoding='async';
+    if(idx<3){ try{img.fetchPriority='high';}catch(_e){} }
     img.src=imageOf(item)||'';
     img.alt='';
     img.style.width='100%';
@@ -276,35 +287,45 @@
 
     var cap=document.createElement('div');
     cap.className='home-right-card-cap';
-    cap.textContent=pick(item,['title','name','label','caption','productName','product_name','itemName','item_name','displayName','display_name'])||'상품';
-    cap.style.boxSizing='border-box';
     cap.style.width='100%';
-    cap.style.height='42px';
-    cap.style.minHeight='42px';
-    cap.style.maxHeight='42px';
+    cap.style.minWidth='100%';
+    cap.style.maxWidth='100%';
+    cap.style.height='58px';
+    cap.style.minHeight='58px';
+    cap.style.maxHeight='58px';
+    cap.style.boxSizing='border-box';
     cap.style.padding='5px 6px';
     cap.style.margin='0';
-    cap.style.background='#f7f7f7';
-    cap.style.borderTop='1px solid #d9d9d9';
-    cap.style.color='#222';
-    cap.style.fontSize='12px';
-    cap.style.fontWeight='700';
-    cap.style.lineHeight='1.3';
-    cap.style.textAlign='left';
-    cap.style.whiteSpace='normal';
+    cap.style.background='#f4f6f8';
+    cap.style.borderTop='1px solid #cfd5db';
     cap.style.overflow='hidden';
-    cap.style.overflowWrap='anywhere';
-    cap.style.wordBreak='break-word';
-    cap.style.display='-webkit-box';
-    cap.style.webkitBoxOrient='vertical';
-    cap.style.webkitLineClamp='2';
+    cap.style.display='block';
+
+    var text=document.createElement('span');
+    text.className='home-right-card-cap-text';
+    text.textContent=resolveTitle(item);
+    text.style.display='-webkit-box';
+    text.style.width='100%';
+    text.style.maxWidth='100%';
+    text.style.fontSize='12px';
+    text.style.fontWeight='700';
+    text.style.lineHeight='1.3';
+    text.style.color='#222';
+    text.style.textAlign='left';
+    text.style.whiteSpace='normal';
+    text.style.overflow='hidden';
+    text.style.overflowWrap='anywhere';
+    text.style.wordBreak='break-word';
+    text.style.webkitBoxOrient='vertical';
+    text.style.webkitLineClamp='3';
+    cap.appendChild(text);
 
     a.appendChild(imageWrap);
     a.appendChild(cap);
     return a;
   }
 
-  function targetList(key){
+  function rightList(key){
     var marker=document.querySelector('[data-psom-key="'+key+'"]');
     if(!marker) return null;
     var section=marker.closest('.ad-section');
@@ -312,15 +333,17 @@
   }
 
   function renderRight(key,items){
-    var list=targetList(key);
+    var list=rightList(key);
     if(!list) return;
-    var offset=0, data=arr(items).slice(0,LIMIT);
+
+    var data=arr(items).slice(0,LIMIT);
+    var offset=0;
     list.innerHTML='';
 
     function more(){
-      var end=Math.min(offset+BATCH,data.length);
+      var end=Math.min(offset+RIGHT_BATCH,data.length);
       var frag=document.createDocumentFragment();
-      for(var i=offset;i<end;i++) frag.appendChild(buildRightCard(data[i],key,i));
+      for(var i=offset;i<end;i++) frag.appendChild(rightCard(data[i],key,i));
       list.appendChild(frag);
       offset=end;
     }
@@ -328,8 +351,8 @@
 
     var section=list.closest('.ad-section');
     var scroller=section&&(section.querySelector('.ad-scroll')||section);
-    if(scroller && !scroller.dataset.igdcRightSemanticScroll){
-      scroller.dataset.igdcRightSemanticScroll='1';
+    if(scroller && !scroller.dataset.igdcRightSemanticScrollV2){
+      scroller.dataset.igdcRightSemanticScrollV2='1';
       scroller.addEventListener('scroll',function(){
         if(offset>=data.length) return;
         var horizontal=scroller.scrollWidth>scroller.clientWidth+1;
@@ -341,32 +364,59 @@
     }
   }
 
-  async function rebalanceRight(){
-    try{
-      var res=await fetch(SNAPSHOT,{cache:'no-store'});
-      if(!res.ok) return;
-      var doc=await res.json();
+  var lastRightRenderToken=0;
+  function rebalanceRight(){
+    var token=++lastRightRenderToken;
+    return getSnapshot().then(function(doc){
+      if(token!==lastRightRenderToken) return;
       var sections=doc&&doc.pages&&doc.pages.home&&doc.pages.home.sections;
       if(!sections) return;
 
-      var buckets={home_right_top:[],home_right_middle:[],home_right_bottom:[]};
+      var buckets={
+        home_right_top:[],
+        home_right_middle:[],
+        home_right_bottom:[]
+      };
+
       RIGHT_KEYS.forEach(function(sourceKey){
         arr(sections[sourceKey]).forEach(function(item){
           var target=categoryFor(item,sourceKey);
           if(buckets[target].length<LIMIT) buckets[target].push(item);
         });
       });
+
       RIGHT_KEYS.forEach(function(key){renderRight(key,buckets[key]);});
-    }catch(_e){}
+    }).catch(function(){});
+  }
+
+  function fallbackHome6(){
+    if(window.__HOME_PRODUCTS_AUTOMAP_V2_HOME6__) return;
+    getSnapshot().then(function(doc){
+      var items=doc&&doc.pages&&doc.pages.home&&doc.pages.home.sections&&doc.pages.home.sections[HOME6];
+      fallbackRenderHome6(items);
+    }).catch(function(){fallbackRenderHome6([]);});
   }
 
   function boot(){
-    installCardObserver();
-    rebalanceRight();
-    setTimeout(rebalanceRight,700);
-    setTimeout(function(){fixAllMainCards(document);},900);
+    fallbackHome6();
+
+    document.addEventListener('igdc:home-automap-rendered',function(){
+      rebalanceRight();
+    });
+
+    if(window.__IGDC_HOME_AUTOMAP_RENDERED__) {
+      rebalanceRight();
+    } else {
+      // Fallback only; normal path is the explicit event from Home AutoMap.
+      setTimeout(function(){
+        if(!window.__IGDC_HOME_AUTOMAP_RENDERED__) rebalanceRight();
+      },1200);
+    }
   }
 
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true});
-  else boot();
+  if(document.readyState==='loading') {
+    document.addEventListener('DOMContentLoaded',boot,{once:true});
+  } else {
+    boot();
+  }
 })();
