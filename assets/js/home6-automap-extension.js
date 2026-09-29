@@ -51,7 +51,7 @@
     }
 
     a.style.display='grid';
-    a.style.gridTemplateRows='minmax(0,1fr) auto';
+    a.style.gridTemplateRows='minmax(0,1fr) 54px';
     a.style.background='#fff';
     a.style.backgroundImage='none';
     a.style.overflow='hidden';
@@ -81,7 +81,7 @@
 
     var cap=document.createElement('div');
     cap.className='shop-card-cap';
-    cap.textContent=isSample ? sampleTitle() : (pick(it,['title','name','label','caption'])||sampleTitle());
+    cap.textContent=isSample ? sampleTitle() : (pick(it,['title','name','label','caption','productName','product_name','itemName','item_name','displayName','display_name'])||sampleTitle());
     cap.style.width='100%';
     cap.style.boxSizing='border-box';
     cap.style.background='#f8f8f8';
@@ -93,7 +93,9 @@
     cap.style.color='#222';
     cap.style.textAlign='left';
     cap.style.lineHeight='1.35';
-    cap.style.minHeight='42px';
+    cap.style.height='54px';
+    cap.style.minHeight='54px';
+    cap.style.maxHeight='54px';
     cap.style.display='-webkit-box';
     cap.style.webkitBoxOrient='vertical';
     cap.style.webkitLineClamp='2';
@@ -248,7 +250,7 @@
     if(/^https?:\/\//i.test(href)){a.target='_top';a.rel='noopener';}
 
     a.style.display='grid';
-    a.style.gridTemplateRows='minmax(0,1fr) auto';
+    a.style.gridTemplateRows='minmax(0,1fr) 42px';
     a.style.overflow='hidden';
     a.style.background='#fff';
 
@@ -274,10 +276,12 @@
 
     var cap=document.createElement('div');
     cap.className='home-right-card-cap';
-    cap.textContent=pick(item,['title','name','label','caption'])||'';
+    cap.textContent=pick(item,['title','name','label','caption','productName','product_name','itemName','item_name','displayName','display_name'])||'상품';
     cap.style.boxSizing='border-box';
     cap.style.width='100%';
-    cap.style.minHeight='34px';
+    cap.style.height='42px';
+    cap.style.minHeight='42px';
+    cap.style.maxHeight='42px';
     cap.style.padding='5px 6px';
     cap.style.margin='0';
     cap.style.background='#f7f7f7';

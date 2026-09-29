@@ -203,7 +203,7 @@
 
     return {
       id,
-      title: pick(src, ['title', 'name', 'label', 'caption']) || 'Item',
+      title: pick(src, ['title', 'name', 'label', 'caption', 'productName', 'product_name', 'itemName', 'item_name', 'displayName', 'display_name']) || pick(fb, ['title', 'name', 'label', 'caption', 'productName', 'product_name', 'itemName', 'item_name', 'displayName', 'display_name']) || '상품',
       thumb: pick(src, ['thumb', 'image', 'image_url', 'img', 'photo', 'thumbnail', 'thumbnailUrl', 'cover', 'coverUrl']),
       url: sourceUrl,
       sourceUrl,
@@ -364,6 +364,7 @@
     imageWrap.className = 'shop-card-image';
     imageWrap.style.width = '100%';
     imageWrap.style.minHeight = '0';
+    imageWrap.style.height = '100%';
     imageWrap.style.overflow = 'hidden';
     imageWrap.style.background = '#fff';
     imageWrap.style.display = 'flex';
@@ -387,7 +388,7 @@
 
     const cap = document.createElement('div');
     cap.className = 'shop-card-cap';
-    cap.textContent = item.title || '';
+    cap.textContent = item.title || '상품';
     cap.style.width = '100%';
     cap.style.boxSizing = 'border-box';
     cap.style.background = '#f8f8f8';
@@ -403,13 +404,15 @@
     cap.style.overflowWrap = 'anywhere';
     cap.style.wordBreak = 'break-word';
     cap.style.lineHeight = '1.35';
-    cap.style.minHeight = '42px';
+    cap.style.height = '54px';
+    cap.style.minHeight = '54px';
+    cap.style.maxHeight = '54px';
     cap.style.display = '-webkit-box';
     cap.style.webkitBoxOrient = 'vertical';
     cap.style.webkitLineClamp = '2';
 
     a.style.display = 'grid';
-    a.style.gridTemplateRows = 'minmax(0, 1fr) auto';
+    a.style.gridTemplateRows = 'minmax(0, 1fr) 54px';
     a.style.alignItems = 'stretch';
     a.style.justifyItems = 'stretch';
     a.style.background = '#fff';
@@ -430,7 +433,7 @@
     }
 
     a.style.display = 'grid';
-    a.style.gridTemplateRows = 'minmax(0, 1fr) auto';
+    a.style.gridTemplateRows = 'minmax(0, 1fr) 42px';
     a.style.overflow = 'hidden';
     a.style.background = '#fff';
 
@@ -457,10 +460,12 @@
 
     const cap = document.createElement('div');
     cap.className = 'home-right-card-cap';
-    cap.textContent = item.title || '';
+    cap.textContent = item.title || '상품';
     cap.style.boxSizing = 'border-box';
     cap.style.width = '100%';
-    cap.style.minHeight = '34px';
+    cap.style.height = '42px';
+    cap.style.minHeight = '42px';
+    cap.style.maxHeight = '42px';
     cap.style.padding = '5px 6px';
     cap.style.margin = '0';
     cap.style.background = '#f7f7f7';
@@ -719,6 +724,104 @@ function bindIncremental(target, items) {
     }, true);
   }
 
+
+  function installCardLayoutGuard() {
+    if (document.getElementById('igdc-home-card-layout-guard-v3')) return;
+    const style = document.createElement('style');
+    style.id = 'igdc-home-card-layout-guard-v3';
+    style.textContent = `
+      section.shopping-section .shop-row > .shop-card {
+        display:grid !important;
+        grid-template-rows:minmax(0,1fr) 54px !important;
+        align-items:stretch !important;
+        height:312px !important;
+        min-height:312px !important;
+        max-height:312px !important;
+        aspect-ratio:auto !important;
+        background:#fff !important;
+        background-image:none !important;
+        overflow:hidden !important;
+      }
+      section.shopping-section .shop-row > .shop-card > .shop-card-image {
+        grid-row:1 !important;
+        width:100% !important;
+        height:100% !important;
+        min-height:0 !important;
+        overflow:hidden !important;
+        background:#fff !important;
+      }
+      section.shopping-section .shop-row > .shop-card > .shop-card-image > img {
+        width:100% !important;
+        height:100% !important;
+        object-fit:contain !important;
+        display:block !important;
+      }
+      section.shopping-section .shop-row > .shop-card > .shop-card-cap {
+        grid-row:2 !important;
+        position:static !important;
+        box-sizing:border-box !important;
+        width:100% !important;
+        height:54px !important;
+        min-height:54px !important;
+        max-height:54px !important;
+        margin:0 !important;
+        padding:7px 8px !important;
+        background:#f4f6f8 !important;
+        border-top:1px solid #cfd5db !important;
+        color:#222 !important;
+        line-height:1.35 !important;
+        overflow:hidden !important;
+        white-space:normal !important;
+        display:-webkit-box !important;
+        -webkit-box-orient:vertical !important;
+        -webkit-line-clamp:2 !important;
+        text-align:left !important;
+      }
+      .ad-panel .ad-section .ad-list > .ad-box {
+        display:grid !important;
+        grid-template-rows:minmax(0,1fr) 42px !important;
+        overflow:hidden !important;
+      }
+      .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-image {
+        grid-row:1 !important;
+        min-height:0 !important;
+        overflow:hidden !important;
+      }
+      .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-image > img {
+        width:100% !important;
+        height:100% !important;
+        object-fit:contain !important;
+      }
+      .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-cap {
+        grid-row:2 !important;
+        box-sizing:border-box !important;
+        width:100% !important;
+        height:42px !important;
+        min-height:42px !important;
+        max-height:42px !important;
+        margin:0 !important;
+        padding:5px 6px !important;
+        background:#f4f6f8 !important;
+        border-top:1px solid #cfd5db !important;
+        color:#222 !important;
+        overflow:hidden !important;
+        display:-webkit-box !important;
+        -webkit-box-orient:vertical !important;
+        -webkit-line-clamp:2 !important;
+      }
+      @media (max-width:600px){
+        section.shopping-section .shop-row > .shop-card{
+          height:auto !important;
+          min-height:0 !important;
+          max-height:none !important;
+          aspect-ratio:4/5 !important;
+          grid-template-rows:minmax(0,1fr) 54px !important;
+        }
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
   async function boot() {
     try {
       const loaded = await loadSections();
@@ -748,6 +851,7 @@ function bindIncremental(target, items) {
     }
   }
 
+  installCardLayoutGuard();
   installHomeNewsTopNavigation();
   // Start the canonical snapshot request as soon as this script is evaluated.
   // Rendering still waits for the DOM, but network/JSON time overlaps page parsing.
