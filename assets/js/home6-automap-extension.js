@@ -294,3 +294,71 @@
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true});
   else boot();
 })();
+
+/* Force main product title below thumbnail — 2026-09-30 */
+(function(){
+  'use strict';
+  if(window.__IGDC_HOME_TITLE_BELOW_FIX_V2__) return;
+  window.__IGDC_HOME_TITLE_BELOW_FIX_V2__=true;
+
+  var style=document.createElement('style');
+  style.id='igdc-home-title-below-fix-v2';
+  style.textContent=[
+    '.shop-row .shop-card{',
+    'display:grid!important;',
+    'grid-template-rows:minmax(0,1fr) auto!important;',
+    'align-items:stretch!important;',
+    'justify-items:stretch!important;',
+    'background-position:center top!important;',
+    'background-repeat:no-repeat!important;',
+    '}',
+    '.shop-row .shop-card .shop-card-cap{',
+    'grid-row:2!important;',
+    'position:static!important;',
+    'align-self:stretch!important;',
+    'width:100%!important;',
+    'box-sizing:border-box!important;',
+    'background:#fff!important;',
+    'border-top:1px solid #e7e7e7!important;',
+    'padding:6px 8px!important;',
+    'margin:0!important;',
+    'z-index:2!important;',
+    'text-align:left!important;',
+    '}'
+  ].join('');
+  (document.head||document.documentElement).appendChild(style);
+
+  function apply(){
+    var cards=document.querySelectorAll('.shop-row .shop-card');
+    for(var i=0;i<cards.length;i++){
+      var card=cards[i];
+      var cap=card.querySelector('.shop-card-cap');
+      if(!cap) continue;
+      cap.style.gridRow='2';
+      cap.style.position='static';
+      cap.style.background='#fff';
+      cap.style.borderTop='1px solid #e7e7e7';
+      cap.style.margin='0';
+      card.style.display='grid';
+      card.style.gridTemplateRows='minmax(0,1fr) auto';
+    }
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',function(){
+      apply();
+      setTimeout(apply,300);
+      setTimeout(apply,900);
+    },{once:true});
+  }else{
+    apply();
+    setTimeout(apply,300);
+    setTimeout(apply,900);
+  }
+
+  if(typeof MutationObserver!=='undefined'){
+    var obs=new MutationObserver(function(){apply();});
+    var root=document.querySelector('.shopping-section')||document.body;
+    if(root) obs.observe(root,{childList:true,subtree:true});
+  }
+})();
