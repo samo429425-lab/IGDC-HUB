@@ -126,6 +126,9 @@
     a.style.background='#fff';
     a.style.backgroundImage='none';
     a.style.overflow='hidden';
+    a.style.padding='0';
+    a.style.margin='0';
+    a.style.boxSizing='border-box';
 
     var imageWrap=document.createElement('div');
     imageWrap.className='shop-card-image';
@@ -172,7 +175,7 @@
 
     var text=document.createElement('span');
     text.className='shop-card-cap-text';
-    text.textContent=isSample?'웹툰 · 서적 · 디지털 독서':resolveTitle(it);
+    text.textContent=isSample?'홈6':resolveTitle(it);
     text.style.display='-webkit-box';
     text.style.width='100%';
     text.style.maxWidth='100%';
@@ -260,6 +263,9 @@
     a.style.justifyItems='stretch';
     a.style.overflow='hidden';
     a.style.background='#fff';
+    a.style.padding='0';
+    a.style.margin='0';
+    a.style.boxSizing='border-box';
 
     var imageWrap=document.createElement('div');
     imageWrap.className='home-right-card-image';
@@ -419,4 +425,61 @@
   } else {
     boot();
   }
+})();
+
+/* Final caption full-width guard — 2026-09-30 */
+(function(){
+  'use strict';
+  if (document.getElementById('igdc-home-caption-fullwidth-final-v4')) return;
+  var st=document.createElement('style');
+  st.id='igdc-home-caption-fullwidth-final-v4';
+  st.textContent=`
+    section.shopping-section .shop-row > .shop-card{
+      padding:0 !important;
+      margin:0 !important;
+      box-sizing:border-box !important;
+    }
+    section.shopping-section .shop-row > .shop-card > .shop-card-cap{
+      width:100% !important;
+      min-width:100% !important;
+      max-width:100% !important;
+      margin:0 !important;
+      padding:6px 8px !important;
+      box-sizing:border-box !important;
+      justify-self:stretch !important;
+    }
+    section.shopping-section .shop-row > .shop-card > .shop-card-cap > .shop-card-cap-text{
+      display:-webkit-box !important;
+      width:100% !important;
+      min-width:100% !important;
+      max-width:100% !important;
+      box-sizing:border-box !important;
+      -webkit-box-orient:vertical !important;
+      -webkit-line-clamp:3 !important;
+    }
+    .ad-panel .ad-section .ad-list > .ad-box{
+      padding:0 !important;
+      margin:0 !important;
+      box-sizing:border-box !important;
+    }
+    .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-cap{
+      width:100% !important;
+      min-width:100% !important;
+      max-width:100% !important;
+      margin:0 !important;
+      padding:5px 6px !important;
+      box-sizing:border-box !important;
+      justify-self:stretch !important;
+    }
+    .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-cap > .home-right-card-cap-text{
+      display:-webkit-box !important;
+      width:100% !important;
+      min-width:100% !important;
+      max-width:100% !important;
+      box-sizing:border-box !important;
+      -webkit-box-orient:vertical !important;
+      -webkit-line-clamp:3 !important;
+    }
+  `;
+  (document.head||document.documentElement).appendChild(st);
 })();

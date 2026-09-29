@@ -441,7 +441,7 @@
 
     const capText = document.createElement('span');
     capText.className = 'shop-card-cap-text';
-    capText.textContent = item.title || '상품';
+    capText.textContent = (item && item.__igdcFallbackSlot && item.section === 'home_6') ? '홈6' : (item.title || '상품');
     capText.style.display = '-webkit-box';
     capText.style.width = '100%';
     capText.style.maxWidth = '100%';
@@ -464,6 +464,9 @@
     a.style.background = '#fff';
     a.style.backgroundImage = 'none';
     a.style.overflow = 'hidden';
+    a.style.padding = '0';
+    a.style.margin = '0';
+    a.style.boxSizing = 'border-box';
 
     a.appendChild(imageWrap);
     a.appendChild(cap);
@@ -485,6 +488,9 @@
     a.style.justifyItems = 'stretch';
     a.style.overflow = 'hidden';
     a.style.background = '#fff';
+    a.style.padding = '0';
+    a.style.margin = '0';
+    a.style.boxSizing = 'border-box';
 
     const imageWrap = document.createElement('div');
     imageWrap.className = 'home-right-card-image';
@@ -830,6 +836,9 @@ function bindIncremental(target, items) {
         background:#fff !important;
         background-image:none !important;
         overflow:hidden !important;
+        padding:0 !important;
+        margin:0 !important;
+        box-sizing:border-box !important;
       }
       section.shopping-section .shop-row > .shop-card > .shop-card-image {
         grid-row:1 !important;
@@ -857,10 +866,13 @@ function bindIncremental(target, items) {
         justify-self:stretch !important;
         align-self:stretch !important;
         box-sizing:border-box !important;
-        width:100% !important;
-        min-width:100% !important;
-        max-width:100% !important;
+        width:auto !important;
+        min-width:0 !important;
+        max-width:none !important;
         height:72px !important;
+        position:relative !important;
+        left:0 !important;
+        right:0 !important;
         min-height:72px !important;
         max-height:72px !important;
         margin:0 !important;
@@ -895,6 +907,9 @@ function bindIncremental(target, items) {
         align-items:stretch !important;
         justify-items:stretch !important;
         overflow:hidden !important;
+        padding:0 !important;
+        margin:0 !important;
+        box-sizing:border-box !important;
       }
       .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-image {
         grid-row:1 !important;
@@ -918,9 +933,12 @@ function bindIncremental(target, items) {
         justify-self:stretch !important;
         align-self:stretch !important;
         box-sizing:border-box !important;
-        width:100% !important;
-        min-width:100% !important;
-        max-width:100% !important;
+        width:auto !important;
+        min-width:0 !important;
+        max-width:none !important;
+        position:relative !important;
+        left:0 !important;
+        right:0 !important;
         height:58px !important;
         min-height:58px !important;
         max-height:58px !important;
