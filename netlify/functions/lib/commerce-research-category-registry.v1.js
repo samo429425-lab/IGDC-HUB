@@ -17,12 +17,12 @@ const FOCUS_KEYS = Object.freeze([
 const TERMS = Object.freeze({
   en:Object.freeze({
     beauty_personal_care:"beauty personal care skincare serum ampoule essence toner moisturizer cream lotion cleanser cleansing foam sunscreen sun care sheet mask makeup foundation cushion BB cream CC cream lipstick lip tint lip balm mascara eyeliner eyebrow eyeshadow blush concealer face powder nail polish manicure shampoo conditioner hair treatment hair mask body wash body lotion perfume fragrance grooming razor electric shaver beauty device LED mask galvanic facial massager scalp care hair straightener hair styler",
-    electronics_accessories:"small electronics bluetooth speaker portable speaker earbuds bluetooth earphones headphones microphone tablet USB hub USB flash drive memory stick cable charger power bank webcam docking station adapter",
+    electronics_accessories:"small electronics bluetooth speaker portable speaker earbuds bluetooth earphones headphones wireless lavalier microphone microphone tablet USB hub USB flash drive memory stick cable charger power bank webcam action camera vlog camera gimbal camera portable camera smartwatch mini projector car electronics docking station adapter",
     home_appliances_living:"small home appliances portable fan handheld fan fan circulator electric kettle toaster blender mixer coffee maker coffee machine humidifier dehumidifier air purifier vacuum cleaner hair dryer"
   }),
   ko:Object.freeze({
     beauty_personal_care:"뷰티 개인용품 화장품 스킨케어 세럼 앰플 에센스 토너 보습제 크림 로션 클렌저 클렌징폼 선크림 자외선차단 마스크팩 메이크업 파운데이션 쿠션 BB크림 CC크림 립스틱 립틴트 립밤 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 페이스파우더 네일 매니큐어 샴푸 린스 컨디셔너 트리트먼트 헤어팩 바디워시 바디로션 향수 그루밍 면도기 전동면도기 뷰티기기 피부미용기기 LED마스크 갈바닉 페이스마사지기 두피관리기 고데기 헤어스타일러",
-    electronics_accessories:"소형 전자제품 블루투스 스피커 휴대용 스피커 이어버드 블루투스 이어폰 헤드폰 마이크 태블릿 USB 허브 USB 메모리 플래시 드라이브 케이블 충전기 보조배터리 웹캠 도킹스테이션 어댑터",
+    electronics_accessories:"소형 전자제품 블루투스 스피커 휴대용 스피커 이어버드 블루투스 이어폰 헤드폰 무선 핀마이크 마이크 태블릿 USB 허브 USB 메모리 플래시 드라이브 케이블 충전기 보조배터리 웹캠 액션카메라 브이로그카메라 짐벌카메라 휴대용카메라 스마트워치 미니프로젝터 차량용전자기기 도킹스테이션 어댑터",
     home_appliances_living:"소형가전 휴대용 선풍기 손선풍기 선풍기 써큘레이터 전기포트 토스터 블렌더 믹서 커피메이커 커피머신 가습기 제습기 공기청정기 청소기 헤어드라이어"
   }),
   ja:Object.freeze({

@@ -10,7 +10,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 const CommerceAutomation = require("./lib/commerce-country-automation.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.7.0-reliable-bulk-exclusion";
+const VERSION = "commerce-candidate-queue-control-v1.8.0-management-research-sync";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore"]);
 const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce-candidate-review-api"]);
@@ -155,7 +155,10 @@ exports.handler=async function(event){
         if(lower(row&&row.kind)!=="product"||!MANAGEABLE_PRODUCT_SOURCES.has(text(row.source_ref)))throw Object.assign(new Error("unsupported_candidate_source"),{candidateId:id});
         requireExpectedBucket(row,expectedBucket,action);
         const applied=await applyAction(actorId,row,action);
-        if(action==="purge"||action==="restore") applied.researchVisibility=await CommerceAutomation.syncCandidateManagementResearchVisibilityByInput(actorId,body,id,action==="restore"?"undecided":action);
+        // Keep the latest research view aligned with every management decision,
+        // not only permanent exclusion. Otherwise hold/reject/list-removal rows
+        // can be reloaded from the research job and appear to "come back".
+        applied.researchVisibility=await CommerceAutomation.syncCandidateManagementResearchVisibilityByInput(actorId,body,id,action==="restore"?"undecided":action);
         return applied;
       }));
       settled.forEach((entry,index)=>{const id=chunk[index];if(entry.status==="fulfilled")processed.push(entry.value);else failures.push({id,error:text(entry.reason&&entry.reason.message||entry.reason)});});

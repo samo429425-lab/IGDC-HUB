@@ -272,9 +272,9 @@
           <option value="home|home_3">홈 · home_3</option>
           <option value="home|home_4">홈 · home_4</option>
           <option value="home|home_5">홈 · home_5</option>
-          <option value="home|home_right_top">홈 · 우측 상단 (자동차·웹툰·패션)</option>
+          <option value="home|home_right_top">홈 · 우측 상단 (지식·건강·기타)</option>
           <option value="home|home_right_middle">홈 · 우측 중단 (푸드·리빙·책방)</option>
-          <option value="home|home_right_bottom">홈 · 우측 하단 (지식·건강·기타)</option>
+          <option value="home|home_right_bottom">홈 · 우측 하단 (자동차·웹툰·패션)</option>
           <option value="distribution|distribution-recommend">유통 · 오늘의 추천</option>
           <option value="distribution|distribution-sponsor">유통 · 스폰서</option>
           <option value="distribution|distribution-trending">유통 · 실시간 인기</option>
@@ -331,7 +331,7 @@
     <details id="excludedLedgerPanel" class="product-management-details heavy-data-panel" data-heavy-panel="excluded">
       <summary class="heavy-panel-summary"><span><strong>제외·보류 업체 및 상품 목록</strong> <span id="excludedLedgerSummary" class="small">0건</span></span><span id="excludedLedgerToggleLabel" class="pill info">목록 펼치기</span></summary>
       <div class="heavy-panel-content">
-        <div class="small">후보 목록에서 제외·보류한 업체와 상품을 한곳에서 확인합니다. 페이지당 최대 100건을 선택 관리합니다. <strong>삭제·재수집 허용</strong>은 선택 항목을 현재 관리목록에서 제거하되 공유 마스터 원장은 안전하게 보존하고 이후 리서치 재발견을 허용합니다. <strong>영구 제외</strong>는 동일 URL·도메인·상품이 다시 자동 승격되지 않도록 차단 기록을 남깁니다. <strong>목록에서만 제거</strong>는 원장을 보존한 채 현재 관리 목록에서만 숨깁니다.</div>
+        <div class="small">후보 목록에서 제외·보류한 업체와 상품을 한곳에서 확인합니다. 페이지당 최대 100건을 선택 관리합니다. <strong>삭제·재수집 허용</strong>은 선택 항목을 현재 관리목록에서 제거하되 공유 마스터 원장은 안전하게 보존하고 이후 리서치 재발견을 허용합니다. <strong>영구 제외</strong>는 현재 리서치/관리 목록에서 제거하고 동일 URL·도메인·상품이 다시 자동 승격되지 않도록 차단 기록만 원장에 남깁니다. <strong>목록에서만 제거</strong>는 원장을 보존한 채 현재 관리 목록에서만 숨깁니다.</div>
         <details id="supplierControlQueue" class="supplier-control-queue">
           <summary><span id="supplierControlToggleLabel">후보 제외 업체 목록 · 보류 0건 · 차단 0건</span><span id="supplierControlActionLabel" class="pill info">목록 펼치기</span></summary>
           <div class="supplier-control-content">
@@ -534,7 +534,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260929-bulk-actions-permanent-exclusion-v2"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20260929-exclusion-tour-distribution-v3"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

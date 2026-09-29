@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.25.0-psom-private-auto-routing";
+const VERSION = "commerce-country-automation-v3.26.0-management-visibility-sync";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -3830,7 +3830,15 @@ async function syncCandidateManagementResearchVisibility(actorId, scope, candida
     const runtime = await productRuntimeRule(scope), permanent = new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean)), deleted = new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));
     if (decision === "purge") {
       identities.forEach((identity) => { permanent.add(identity); deleted.add(identity); });
+    } else if (["hold","reject","dismiss","remove_from_list","removed"].includes(decision)) {
+      // A management action must immediately remove the row from the current
+      // research result view. The durable candidate/suppression ledger remains
+      // the authority for whether a future research run may rediscover it.
+      identities.forEach((identity) => deleted.add(identity));
     } else if (decision === "undecided" || decision === "restore" || decision === "ai_reclassify") {
+      // Restore removes permanent suppression. Keep the item out of the old
+      // research-result snapshot; it now belongs to the candidate-management
+      // ledger and a fresh research run may discover it again.
       identities.forEach((identity) => permanent.delete(identity));
     }
     await saveProductRuntime(scope,actorId,{jobId:text(runtime.jobId)||text(job.jobId)||null,permanentExcludedIdentities:Array.from(permanent).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(deleted).slice(0,PRODUCT_PORTFOLIO_LIMIT)});
