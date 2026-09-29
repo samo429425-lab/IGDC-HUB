@@ -10,11 +10,10 @@
   if (window.__NETWORK_AUTOMAP_V6__) return;
   window.__NETWORK_AUTOMAP_V6__ = true;
 
-  const SNAPSHOT_URL = '/data/networkhub-snapshot.json?view=front';
+  const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
   const FEED_URL = ''; // IP-scoped network market slots never fall back to a generic feed.
   const LIMIT = 100;
   const RENDER_BATCH = 12;
-  const FIRST_VIEW_EAGER = 6;
 
   const MOBILE_ID = 'nh-mobile-rail-list';
   const MOBILE_CSS_ID = 'nh-mobile-rail-fix-v2';
@@ -216,18 +215,12 @@
 
   async function fetchJson(url){
     try{
-      const r = await fetch(url, { cache:'no-store', priority:'high' });
+      const r = await fetch(url, { cache:'no-store' });
       if (!r.ok) return null;
       return await r.json();
     }catch{
       return null;
     }
-  }
-
-  let initialSnapshotPromise = null;
-  function getInitialSnapshotPromise(){
-    if(!initialSnapshotPromise) initialSnapshotPromise = fetchJson(SNAPSHOT_URL);
-    return initialSnapshotPromise;
   }
 
   function normalizeItems(raw){
@@ -251,7 +244,7 @@
     return out;
   }
 
-  function createCard(item, mobile, index){
+  function createCard(item, mobile){
     const card = document.createElement('div');
     card.className = mobile ? 'card' : 'ad-box';
 
@@ -261,10 +254,8 @@
     const img = document.createElement('img');
     img.src = item.thumb;
     img.alt = item.title || '';
-    const eager = Number(index) >= 0 && Number(index) < FIRST_VIEW_EAGER;
-    img.loading = eager ? 'eager' : 'lazy';
+    img.loading = 'lazy';
     img.decoding = 'async';
-    if(eager){try{img.fetchPriority='high';}catch(_e){}}
 
     a.appendChild(img);
     card.appendChild(a);
@@ -281,7 +272,6 @@
     document.querySelectorAll('.thumb-grid[data-psom-key="network-right"]').forEach(function(grid){
       grid.innerHTML = '';
       grid.style.display = 'none';
-      grid.dataset.mounted = '1';
       grid.setAttribute('data-psom-mode', 'disabled');
       grid.setAttribute('data-disabled', '1');
       grid.setAttribute('aria-hidden', 'true');
@@ -315,7 +305,7 @@
       if(!current || railRenderJobs.get(container)!==current) return;
       const end=Math.min(current.offset+RENDER_BATCH,current.items.length);
       const frag=document.createDocumentFragment();
-      for(let i=current.offset;i<end;i++) frag.appendChild(createCard(current.items[i],current.mobile,i));
+      for(let i=current.offset;i<end;i++) frag.appendChild(createCard(current.items[i],current.mobile));
       current.container.appendChild(frag);
       current.offset=end;
       armObserver(current);
@@ -353,7 +343,7 @@
   async function run(){
     disablePsomThumbGrid();
     installExternalTopNavigation();
-    const snap = await getInitialSnapshotPromise();
+    const snap = await fetchJson(SNAPSHOT_URL);
 
     let items = snap && Array.isArray(snap.items)
       ? normalizeItems(snap.items)
@@ -365,17 +355,13 @@
   }
 
   disablePsomThumbGrid();
-  // Start snapshot I/O immediately and ensure DOM/load events cannot issue a second fetch.
-  getInitialSnapshotPromise().catch(function(){initialSnapshotPromise=null;});
-  let bootStarted=false;
-  function bootOnce(){if(bootStarted)return;bootStarted=true;run();}
 
   if (document.readyState === 'complete' || document.readyState === 'interactive'){
-    setTimeout(bootOnce, 0);
+    setTimeout(run, 0);
   } else {
     installExternalTopNavigation();
-    document.addEventListener('DOMContentLoaded', bootOnce, { once:true });
-    window.addEventListener('load', bootOnce, { once:true });
+    document.addEventListener('DOMContentLoaded', run, { once:true });
+    window.addEventListener('load', run, { once:true });
   }
 
 })();

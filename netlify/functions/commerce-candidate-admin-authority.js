@@ -5,7 +5,7 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 
-const VERSION = "commerce-candidate-admin-authority-v1.2.0-front-live-admin-restore";
+const VERSION = "commerce-candidate-admin-authority-v1.3.0-permanent-exclusion-guard";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ALLOWED_SOURCE_REFS = new Set(["country-product-ranking-review","commerce-candidate-review-api"]);
 const SECTION_KEYS = new Set([
@@ -81,6 +81,11 @@ async function applyOne(actor,candidateId,scope,decision,key,source){
   const oldRows=await assignments(candidateId),oldPayload=Object.assign({},plain(row.source_payload)),payload=Object.assign({},oldPayload),now=new Date().toISOString();
   const actorId=text(actor&&actor.sub)||"administrator",prior=currentPlacement(payload,scope,oldRows);
   let status=text(row.status)||"approval_pending",effective=decision,assignment=null;
+  const oldQueue=plain(oldPayload.queueControl),oldDecision=lower(oldPayload.slotDecision);
+
+  if((decision==="slot_candidate"||decision==="sync_ai")&&(oldQueue.permanentExcluded===true||oldDecision==="purge"||lower(row.status)==="suppressed"&&lower(oldQueue.action)==="purge")){
+    throw Object.assign(new Error("영구 제외된 상품은 배치할 수 없습니다. 먼저 제외 목록에서 후보로 복원해 주세요."),{statusCode:409,code:"candidate_permanently_excluded"});
+  }
 
   if(decision==="slot_candidate"||decision==="sync_ai"||decision==="recover_live_assignment"){
     const target=placementKey(key||text(plain(payload.approvedPlacement||payload.placement).key)||((text(plain(payload.approvedPlacement||payload.placement).page)&&text(plain(payload.approvedPlacement||payload.placement).sectionKey||plain(payload.approvedPlacement||payload.placement).section))?text(plain(payload.approvedPlacement||payload.placement).page)+"|"+text(plain(payload.approvedPlacement||payload.placement).sectionKey||plain(payload.approvedPlacement||payload.placement).section):""));

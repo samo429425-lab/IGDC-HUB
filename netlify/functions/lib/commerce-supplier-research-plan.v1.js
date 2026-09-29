@@ -11,7 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "commerce-supplier-research-plan-v1.6.0-focused-beauty-small-appliance-depth";
+const VERSION = "commerce-supplier-research-plan-v1.5.0-kr-focused-gap-discovery";
 
 function text(value){ return String(value == null ? "" : value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
@@ -88,13 +88,7 @@ const KR_PRIORITY_QUERIES = Object.freeze([
   "대한민국 블루투스 이어폰 이어버드 헤드폰 블루투스 스피커 마이크 태블릿 웹캠 제조사 브랜드 공식몰 직영몰 온라인 판매",
   "대한민국 USB 허브 USB 메모리 케이블 충전기 보조배터리 멀티탭 소형 전자 액세서리 제조사 브랜드 공식몰 직영몰",
   "대한민국 소형가전 선풍기 휴대용 선풍기 써큘레이터 가습기 제습기 공기청정기 청소기 제조사 브랜드 직영몰 공식 판매처",
-  "대한민국 주방 소형가전 전기포트 토스터 블렌더 믹서 커피메이커 커피머신 에어프라이어 제조사 브랜드 직영몰 공식 판매처",
-  "대한민국 중소 화장품 브랜드 스킨케어 립케어 립밤 선케어 클렌징 헤어케어 바디케어 책임판매업자 제조사 브랜드 공식몰 직영몰",
-  "대한민국 헤어드라이어 고데기 헤어아이론 헤어스타일러 전동면도기 이발기 전동칫솔 구강세정기 개인 미용 소형가전 제조사 브랜드 공식몰",
-  "대한민국 TWS 무선이어폰 이어버드 블루투스 스피커 휴대용 스피커 USB 마이크 콘덴서 마이크 오디오 액세서리 제조사 브랜드 공식몰",
-  "대한민국 USB-C 허브 멀티허브 도킹스테이션 GaN 충전기 무선충전기 보조배터리 메모리카드 카드리더기 케이블 제조사 브랜드 공식몰",
-  "대한민국 미니가전 탁상용 선풍기 휴대용 선풍기 미니 가습기 제습기 공기청정기 핸디청소기 무선청소기 제조사 브랜드 공식몰",
-  "대한민국 주방 미니가전 미니밥솥 전기그릴 샌드위치메이커 와플메이커 계란찜기 착즙기 전동다지기 에어프라이어 제조사 브랜드 공식몰"
+  "대한민국 주방 소형가전 전기포트 토스터 블렌더 믹서 커피메이커 커피머신 에어프라이어 제조사 브랜드 직영몰 공식 판매처"
 ]);
 const KR_FOUNDATION_QUERIES = Object.freeze([
   "대한민국 생활필수품 식료품 농수축임산물 생산자 농협 축협 수협 산림조합 협동조합 공식몰 직거래 배송 반품 환불 고객센터",
@@ -459,8 +453,6 @@ function restoredKrRows(geo, sourceTerms, maxQueries){
     if(/화장품|스킨케어|색조화장품|메이크업|뷰티기기|LED마스크|갈바닉/.test(query)) return "beauty_focus";
     if(/블루투스|이어폰|이어버드|헤드폰|스피커|마이크|태블릿|USB|충전기|보조배터리|웹캠/.test(query)) return "electronics_focus";
     if(/소형가전|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피메이커|커피머신|에어프라이어/.test(query)) return "small_appliance_focus";
-    if(/김치|장류|고추장|된장|쌈장|간장|젓갈|양념|소스|식용유|식초|가공식품|전통식품|반찬/.test(query)) return "food_focus";
-    if(/쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|버섯|농산물|수산물|임산물|농가|농장|농협|수협|산림조합/.test(query)) return "agri_food_focus";
     if(/기계|금속|플라스틱|목재|포장재|공구|산업용품|전자제품|부품/.test(query)) return "industrial_manufacturing";
     if(/전통시장|지역특산품|공동몰/.test(query)) return "regional_market";
     if(/지역 유통업체|도매|총판|공판장/.test(query)) return "wholesale_distribution";
@@ -491,9 +483,7 @@ function buildCountryRows(geo, locales, sourceTerms, maxQueries){
   const focusedCommerceQueries=[
     ["beauty_focus","beauty skincare makeup foundation cushion BB CC lipstick lip tint mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance nail hair body grooming beauty device electric shaver hair styler LED mask galvanic facial massager scalp care manufacturer brand official store"],
     ["electronics_focus","small electronics bluetooth earbuds earphones headphones speakers microphone tablet USB hub flash drive cable charger power bank webcam manufacturer brand official store"],
-    ["small_appliance_focus","small home appliances portable fan desk fan handheld fan circulator humidifier dehumidifier air purifier vacuum electric kettle toaster blender coffee maker manufacturer brand official store"],
-    ["food_focus","popular food groceries condiments fermented paste soy sauce sauces cooking ingredients rice grains local food producer official store"],
-    ["agri_food_focus","agricultural fishery forestry products rice grains beans sesame garlic onion mushrooms local producer cooperative official store"]
+    ["small_appliance_focus","small home appliances portable fan desk fan handheld fan circulator humidifier dehumidifier air purifier vacuum electric kettle toaster blender coffee maker manufacturer brand official store"]
   ];
   for(const item of focusedCommerceQueries){if(rows.length>=maxQueries)break;add(`${regionPart} ${focusName} ${item[1]} ${focusPack.commerce}`,focusLocale,`country-policy-focused:${item[0]}`,item[0],focusName);}
   for(let index=0;index<lanes.length&&rows.length<maxQueries;index+=1){

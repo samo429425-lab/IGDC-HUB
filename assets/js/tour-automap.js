@@ -14,13 +14,12 @@
   window.__TOUR_RIGHTPANEL_AUTOMAP_V72__ = true;
 
   const HUB = "tour";
-  const SNAPSHOT_URL = "/data/tour-snapshot.json?view=front";
+  const SNAPSHOT_URL = "/data/tour-snapshot.json";
   const FEED_URL = ""; // No non-IP fallback for the tour offer rail.
 
   const RIGHT_PANEL_ID = "rightAutoPanel";
   const RIGHT_SLOT_COUNT = 100;
   const RENDER_BATCH = 12;
-  const FIRST_VIEW_EAGER = 6;
   const SOURCE_SCAN_LIMIT = RIGHT_SLOT_COUNT + 40;
 
   const MOBILE_RAIL_ID = "tour-mobile-rail";
@@ -258,7 +257,7 @@
 
   async function fetchJson(url) {
     try {
-      const r = await fetch(url, { cache: "no-store", priority: "high" });
+      const r = await fetch(url, { cache: "no-store" });
       if (!r.ok) return null;
       return await r.json();
     } catch {
@@ -266,18 +265,11 @@
     }
   }
 
-  let initialSnapshotPromise = null;
-  function getInitialSnapshotPromise(){
-    if(!initialSnapshotPromise) initialSnapshotPromise = fetchJson(SNAPSHOT_URL);
-    return initialSnapshotPromise;
-  }
-
   function disablePsomThumbGrid() {
     const grids = document.querySelectorAll('.thumb-grid[data-psom-key="tour"]');
     grids.forEach(function(grid){
       grid.innerHTML = "";
       grid.style.display = "none";
-      grid.dataset.mounted = "1";
       grid.setAttribute("data-psom-mode", "disabled");
       grid.setAttribute("data-disabled", "1");
       grid.setAttribute("aria-hidden", "true");
@@ -475,7 +467,7 @@
     }
   }
 
-  function createRightBox(item, index) {
+  function createRightBox(item) {
     const box = document.createElement("div");
     box.className = "ad-box";
 
@@ -485,10 +477,8 @@
     const img = document.createElement("img");
     img.src = item.thumb;
     img.alt = item.title || "";
-    const eager = Number(index) >= 0 && Number(index) < FIRST_VIEW_EAGER;
-    img.loading = eager ? "eager" : "lazy";
+    img.loading = "lazy";
     img.decoding = "async";
-    if (eager) { try { img.fetchPriority = "high"; } catch (_e) {} }
 
     const cap = document.createElement("div");
     cap.className = "tour-card-title";
@@ -528,7 +518,7 @@
       const end = Math.min(current.offset + RENDER_BATCH, current.items.length);
       const frag = document.createDocumentFragment();
       for (let i=current.offset;i<end;i++) {
-        const card = createRightBox(current.items[i], i);
+        const card = createRightBox(current.items[i]);
         if (current.mobile) card.classList.add("card");
         frag.appendChild(card);
       }
@@ -571,7 +561,7 @@
     disablePsomThumbGrid();
     installExternalTopNavigation();
 
-    const snap = await getInitialSnapshotPromise();
+    const snap = await fetchJson(SNAPSHOT_URL);
     let items = [];
 
     // Match content-engine.js collection context exactly so a generated id in
@@ -591,17 +581,13 @@
   }
 
   disablePsomThumbGrid();
-  // Start snapshot I/O immediately and prevent DOM/load from duplicating the same request.
-  getInitialSnapshotPromise().catch(function(){ initialSnapshotPromise = null; });
-  let bootStarted = false;
-  function bootOnce(){ if (bootStarted) return; bootStarted = true; run(); }
 
   if (document.readyState === "complete" || document.readyState === "interactive") {
-    setTimeout(bootOnce, 0);
+    setTimeout(run, 0);
   } else {
     installExternalTopNavigation();
-    document.addEventListener("DOMContentLoaded", bootOnce, { once: true });
-    window.addEventListener("load", bootOnce, { once: true });
+    document.addEventListener("DOMContentLoaded", run, { once: true });
+    window.addEventListener("load", run, { once: true });
   }
 })();
 

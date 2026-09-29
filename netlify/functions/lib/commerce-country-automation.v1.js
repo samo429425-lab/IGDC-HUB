@@ -1786,7 +1786,7 @@ function attachProductRuntime(dataInput, runtimeInput) {
       privateQueue: Object.assign({}, plain(plain(data.progress).privateQueue), { done: Number(partialQueue.done || 0), total: Number(partialQueue.eligible || 0) })
     });
   }
-  const sameJob = !text(runtime.jobId) || !text(data.jobId) || text(runtime.jobId) === text(data.jobId), deletedLatest = sameJob ? new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)) : new Set();
+  const sameJob = !text(runtime.jobId) || !text(data.jobId) || text(runtime.jobId) === text(data.jobId), deletedLatest = new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean).concat(sameJob ? array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean) : []));
   if (deletedLatest.size) {
     const pagination = plain(data.pagination), alreadyFiltered = lower(pagination.kind) === "latest" && pagination.deletedFiltered === true;
     const visibleLatest = alreadyFiltered ? array(data.latestProducts) : array(data.latestProducts).filter((row) => !deletedLatest.has(ProductRanking.productIdentity(row) || text(row && row.id)));
@@ -2892,7 +2892,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
     const rows=await resolveChunkedProductSelection(job,input),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)),details=[];let excluded=0,failed=0;
     for(const product of rows){try{const saved=await persistLatestProductPermanentExclusion(actorId,scope,product),identity=saved.identity;if(identity)deletedLatest.add(identity);excluded+=1;details.push(saved);}catch(error){failed+=1;details.push({productId:text(product&&product.id),status:"failed",error:text(error&&error.message||error)});}}
     const deletedKeys=Array.from(new Set(rows.flatMap(productSelectionAliases))).slice(0,400),partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"purge",source:"latest_list_manual",eligible:rows.length,done:excluded,remaining:0,attempted:rows.length,handled:excluded,permanentExcluded:excluded,deletedKeys,blocked:0,failed,complete:true,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsPreserved:false,latestResearchRowsDeleted:excluded,rediscoveryAllowed:false,automaticFullCompletionStaging:false,stagedAt:iso(),stagedBy:text(actorId)||"administrator",details};
-    runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
+    {const permanent=new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean));for(const product of rows){const identity=ProductRanking.productIdentity(product)||text(product&&product.id)||productUrl(product);if(identity)permanent.add(identity);}runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),permanentExcludedIdentities:Array.from(permanent).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});}
     return{ok:failed===0,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,currentCyclePermanentExclude:true,rediscoveryAllowedNextResearch:false,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
   }
   if(operation==="delete"){
@@ -3036,7 +3036,7 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
     const selectedPurgeRows=requestedRows.slice(0,100),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)),details=[];let excluded=0,failed=0;
     for(const product of selectedPurgeRows){try{const saved=await persistLatestProductPermanentExclusion(actorId,scope,product),identity=saved.identity;if(identity)deletedLatest.add(identity);excluded+=1;details.push(saved);}catch(error){failed+=1;details.push({productId:text(product&&product.id),status:"failed",error:text(error&&error.message||error)});}}
     const deletedKeys=Array.from(new Set(selectedPurgeRows.flatMap(productSelectionAliases))).slice(0,400),partialQueue={schema:"igdc-product-research-partial-private-queue.v3",operation:"purge",source:"latest_list_manual",eligible:selectedPurgeRows.length,done:excluded,remaining:0,attempted:selectedPurgeRows.length,handled:excluded,permanentExcluded:excluded,deletedKeys,blocked:0,failed,complete:true,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsPreserved:false,latestResearchRowsDeleted:excluded,rediscoveryAllowed:false,automaticFullCompletionStaging:false,stagedAt:iso(),stagedBy:text(actorId)||"administrator",details};
-    runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
+    {const permanent=new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean));for(const product of selectedPurgeRows){const identity=ProductRanking.productIdentity(product)||text(product&&product.id)||productUrl(product);if(identity)permanent.add(identity);}runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),permanentExcludedIdentities:Array.from(permanent).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});}
     return{ok:failed===0,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,currentCyclePermanentExclude:true,rediscoveryAllowedNextResearch:false,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
   }
 
@@ -3819,6 +3819,29 @@ function candidateLedgerPlacementRecord(scope, placementInput, actorId, source) 
     selectedAt: now, selectedBy: text(actorId) || "administrator", selectionSource: source || "candidate_ledger"
   });
 }
+async function syncCandidateManagementResearchVisibility(actorId, scope, candidateId, decision) {
+  try {
+    const job = await loadProductResearchJob(scope);
+    if (!job || job.schema !== PRODUCT_JOB_SCHEMA) return { ok:true, skipped:true, reason:"product_research_job_missing" };
+    const rows = array(job.products).concat(array(job.rawProducts));
+    const matched = rows.filter((row) => productCandidateId(scope,row) === candidateId);
+    const identities = Array.from(new Set(matched.map((row) => ProductRanking.productIdentity(row) || text(row&&row.id) || productUrl(row)).filter(Boolean)));
+    if (!identities.length) return { ok:true, skipped:true, reason:"research_identity_not_found" };
+    const runtime = await productRuntimeRule(scope), permanent = new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean)), deleted = new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));
+    if (decision === "purge") {
+      identities.forEach((identity) => { permanent.add(identity); deleted.add(identity); });
+    } else if (decision === "undecided" || decision === "restore" || decision === "ai_reclassify") {
+      identities.forEach((identity) => permanent.delete(identity));
+    }
+    await saveProductRuntime(scope,actorId,{jobId:text(runtime.jobId)||text(job.jobId)||null,permanentExcludedIdentities:Array.from(permanent).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(deleted).slice(0,PRODUCT_PORTFOLIO_LIMIT)});
+    return { ok:true, identities, permanentExcluded:decision === "purge" };
+  } catch (error) {
+    return { ok:false, error:text(error&&error.message||error)||"research_visibility_sync_failed" };
+  }
+}
+async function syncCandidateManagementResearchVisibilityByInput(actorId, input, candidateId, decision) {
+  return syncCandidateManagementResearchVisibility(actorId,researchScope(input),text(candidateId),lower(decision));
+}
 async function productCandidateLedgerAction(actorId, input) {
   const scope = researchScope(input), candidateId = text(input && (input.candidateId || input.productId)), decision = lower(input && input.decision);
   if (!candidateId) { const error = new Error("관리할 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
@@ -3865,7 +3888,8 @@ async function productCandidateLedgerAction(actorId, input) {
   payload.decisionAt = now; payload.decisionBy = actor; payload.decisionSource = "candidate_ledger_control"; payload.publicPublication = false; payload.automaticImport = false;
   if (decision !== "affiliate_settlement") payload.review = Object.assign({}, plain(payload.review), { state: decision === "remove_from_list" ? "removed_from_list" : (effectiveDecision === "slot_candidate" ? "pending" : effectiveDecision), decidedAt: now, decidedBy: actor });
   await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: payload, updated_at: now });
-  return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, assignmentCleanup, deferredFrontBuild:releaseAssignment, publicPublication: false, paymentExecution: false } };
+  const researchVisibility = await syncCandidateManagementResearchVisibility(actorId,scope,candidateId,effectiveDecision);
+  return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, assignmentCleanup, researchVisibility, deferredFrontBuild:releaseAssignment, publicPublication: false, paymentExecution: false } };
 }
 async function productCandidateLedgerBulkAction(actorId, input) {
   const scope = researchScope(input), ids = Array.from(new Set(array(input && (input.candidateIds || input.productIds)).map(text).filter(Boolean))).slice(0, 3000), decision = lower(input && input.decision), placementKey = text(input && input.placementKey);
@@ -4235,16 +4259,20 @@ async function productCandidatePsomPlace(actorId, input) {
       // Administrator/manual decisions always outrank automatic PSOM placement.
       // A bulk AI click must never silently rewrite a manually fixed section or
       // a manually held/undecided candidate.
-      if (candidateRuntimeManualLock(payload)) {
+      if (candidateRuntimeManualLock(payload) && current === "slot_candidate") {
         const manualKey = productPlacementKey(payload.approvedPlacement || payload.placement || payload.selectedPlacement);
-        if (current === "slot_candidate" && validProductSectionKey(manualKey)) {
+        if (validProductSectionKey(manualKey)) {
           counts[manualKey] = Number(counts[manualKey] || 0) + 1;
           results.push({candidateId:id,assigned:true,sectionKey:manualKey,preservedManual:true,source:"administrator_manual_precedence"});
         } else {
-          results.push({candidateId:id,assigned:false,preservedManual:true,error:"administrator_manual_precedence"});
+          results.push({candidateId:id,assigned:false,preservedManual:true,error:"administrator_manual_assignment_invalid"});
         }
         continue;
       }
+      // An explicit administrator click on AI/PSOM placement is itself a new
+      // administrator instruction. An undecided/restored row may carry an old
+      // administrator lock, but that lock must not make the placement buttons inert.
+      // Rejected/purged/removed rows were blocked above and remain protected.
       const product = candidateRuntimeProduct(row, scope);
       if (!product) { results.push({candidateId:id,assigned:false,error:"candidate_product_payload_missing"}); continue; }
       product.candidateId = id; product.id = id;
@@ -5607,5 +5635,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, productCandidatePsomPlace, productCandidateAiRecover, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateAiRecover, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, globalControlDiagnostic, diagnostic
 };

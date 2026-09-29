@@ -15,7 +15,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-review-api-v1.14.0-merged-scope-snapshot";
+const VERSION = "commerce-candidate-review-api-v1.10.1-3000-ledger-cleanup-state";
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
@@ -104,10 +104,6 @@ function candidateScopeQuery(basePath,country,region,limit){
   const countryPath=basePath+"->>country",regionPath=basePath+"->>region";
   return "select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at"+
     "&source_ref=eq."+encodeURIComponent(ProductPipeline.SOURCE_REF)+
-    /* Current rows are projected by marketScope. The legacy fallback must not
-       reread every current row again through countrySupply/placement, or a
-       600-row country becomes 1,800 heavy JSON rows before relation hydration. */
-    "&source_payload->marketScope->>marketCountry=is.null"+
     "&source_payload->"+countryPath+"=eq."+encodeURIComponent(country)+
     "&source_payload->"+regionPath+"=eq."+encodeURIComponent(region)+
     "&order=updated_at.desc&limit="+Math.max(1,Number(limit)||600);
@@ -158,10 +154,7 @@ async function scopedProductCandidateRows(countryInput,regionInput,limitInput){
     }
     if(seen.size>=limit)break;
   }
-  if(!seen.size){
-    /* A successful JSON-path query that returns [] is not proof that the scope is empty.
-       Older/current candidate rows can carry equivalent scope data under legacy
-       projections. Scan the bounded source_ref ledger and apply scopeMatch in JS. */
+  if(!seen.size&&queryFailed){
     try{for(const row of await fallbackPagedScopeRows(country,region,limit)){const id=text(row&&row.id);if(id&&!seen.has(id))seen.set(id,row);}}catch(_fallbackError){}
   }
   return Array.from(seen.values()).sort((a,b)=>text(b&&b.updated_at).localeCompare(text(a&&a.updated_at))).slice(0,limit);
@@ -179,110 +172,6 @@ async function scopedRelationRows(table,fields,ids,order){
   }
   return {rows,errors};
 }
-function managementPageQuery(countryInput,regionInput,limitInput,offsetInput){
-  const country=normalizeCountry(countryInput),region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE";
-  const limit=Math.max(25,Math.min(150,Number(limitInput)||100)),offset=Math.max(0,Number(offsetInput)||0);
-  const regions=scopedRegionValues(country,region),regionFilter=regions.length>1?"in.("+regions.map((value)=>encodeURIComponent(value)).join(",")+")":"eq."+encodeURIComponent(regions[0]||"NATIONWIDE");
-  return "select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at"+
-    "&source_ref=eq."+encodeURIComponent(ProductPipeline.SOURCE_REF)+
-    "&source_payload->marketScope->>marketCountry=eq."+encodeURIComponent(country)+
-    "&source_payload->marketScope->>marketRegion="+regionFilter+
-    "&order=updated_at.desc,id.asc&limit="+limit+"&offset="+offset;
-}
-async function hydrateManagementCandidates(candidates){
-  candidates=Array.isArray(candidates)?candidates:[];
-  if(!candidates.length)return {rows:[],relationErrors:[]};
-  const ids=candidates.map((row)=>text(row&&row.id)).filter(Boolean),settled=await Promise.all([
-    scopedRelationRows("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at",ids,"updated_at.desc"),
-    scopedRelationRows("gslot_candidate_availability","candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at",ids,"updated_at.desc"),
-    scopedRelationRows("gslot_candidate_revenue","id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at",ids,"updated_at.desc"),
-    scopedRelationRows("gslot_candidate_evidence","id,candidate_id,evidence_type,evidence_url,note,verified,created_at",ids,"created_at.desc")
-  ]);
-  const grouped={assignments:new Map(),markets:new Map(),revenues:new Map(),evidence:new Map()};
-  function add(map,row){const id=text(row&&row.candidate_id);if(!id)return;if(!map.has(id))map.set(id,[]);map.get(id).push(row);}
-  settled[0].rows.forEach((row)=>add(grouped.assignments,row));settled[1].rows.forEach((row)=>add(grouped.markets,row));settled[2].rows.forEach((row)=>add(grouped.revenues,row));settled[3].rows.forEach((row)=>add(grouped.evidence,row));
-  const rows=candidates.map((candidate)=>{const id=text(candidate&&candidate.id),payload=plain(candidate&&candidate.source_payload),live=ProductPipeline.liveQueueRow(candidate,{assignments:grouped.assignments.get(id)||[],markets:grouped.markets.get(id)||[],revenues:grouped.revenues.get(id)||[],evidence:grouped.evidence.get(id)||[]});live.queueControl=plain(payload.queueControl);live.slotDecision=text(payload.slotDecision);return live;});
-  const names=["assignments","markets","revenues","evidence"],relationErrors=[];settled.forEach((result,index)=>result.errors.forEach((message)=>relationErrors.push({source:names[index],message})));
-  return {rows,relationErrors};
-}
-function fastManagementCandidate(candidate){
-  const payload=plain(candidate&&candidate.source_payload);
-  // Routine administrator lists do not need four relation-table joins for every
-  // 100-row page.  The canonical management decision, product card, supplier,
-  // market scope and approved placement are already persisted in source_payload.
-  // Relation-heavy lifecycle verification stays available in diagnostic/go-live
-  // flows; this fast projection is intentionally read-only.
-  const live=ProductPipeline.liveQueueRow(candidate,{assignments:[],markets:[],revenues:[],evidence:[]});
-  live.queueControl=plain(payload.queueControl);
-  live.slotDecision=text(payload.slotDecision);
-  const persistedPlacement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.placement);
-  if(persistedPlacement&&Object.keys(persistedPlacement).length){
-    live.placement=Object.assign({},plain(live.placement),{
-      page:text(persistedPlacement.page||live.placement&&live.placement.page),
-      section:text(persistedPlacement.section||persistedPlacement.sectionKey||live.placement&&live.placement.section),
-      slot:text(persistedPlacement.slot||live.placement&&live.placement.slot),
-      country:text(persistedPlacement.country||plain(payload.marketScope).marketCountry||live.placement&&live.placement.country),
-      region:text(persistedPlacement.region||plain(payload.marketScope).marketRegion||live.placement&&live.placement.region)
-    });
-  }
-  const front=plain(payload.frontPublication||payload.publication||payload.frontSync);
-  if(Object.keys(front).length){
-    live.lifecycle=Object.assign({},plain(live.lifecycle),{assignment:Object.assign({},plain(live.lifecycle&&live.lifecycle.assignment),{
-      publicationStatus:text(front.status||front.publicationStatus||front.publication_status),
-      hubKey:text(front.hubKey||front.hub_key),slotKey:text(front.slotKey||front.slot_key)
-    })});
-  }
-  live.managementProjection="source_payload_fast";
-  return live;
-}
-function normalizeManagementSnapshotRow(row){
-  if(row&&row.source_payload)return fastManagementCandidate(row);
-  if(row&&row.candidateId)return row;
-  return fastManagementCandidate(row||{});
-}
-
-async function mergedManagementScopeRows(country,region,limit){
-  const merged=new Map();
-  const stored=CommerceIntake.readStage(process.cwd())||{candidates:[]};
-  const storedScoped=filteredStage(stored,country,region);
-  for(const row of Array.isArray(storedScoped.candidates)?storedScoped.candidates:[]){
-    const normalized=normalizeManagementSnapshotRow(row),id=text(normalized&&normalized.candidateId||row&&row.id);
-    if(id&&!merged.has(id))merged.set(id,normalized);
-    if(merged.size>=limit)break;
-  }
-  /* The runtime diagnostic proved that the direct marketScope JSON-path can
-     return [] while the canonical candidate ledger still exists. Read the
-     bounded source_ref ledger and apply the same scopeMatch used by the old
-     working dashboard. DB rows override staged rows so fresh admin decisions win. */
-  if(merged.size<limit){
-    const live=await fallbackPagedScopeRows(country,region,limit);
-    for(const row of live){const normalized=fastManagementCandidate(row),id=text(normalized&&normalized.candidateId||row&&row.id);if(id)merged.set(id,normalized);if(merged.size>=limit)break;}
-  }
-  return Array.from(merged.values()).slice(0,limit);
-}
-
-async function managementCandidatePage(countryInput,regionInput,offsetInput,limitInput){
-  const started=Date.now(),country=normalizeCountry(countryInput),region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE",offset=Math.max(0,Number(offsetInput)||0),limit=Math.max(25,Math.min(150,Number(limitInput)||100));
-  if(!country||country==="GLOBAL")return {rows:[],pagination:{offset,limit,returned:0,hasMore:false,nextOffset:null,mode:"empty"},relationErrors:[],timing:{totalMs:Date.now()-started}};
-  let raw=[],queryStarted=Date.now();
-  try{raw=await lightSelect("gslot_candidates",managementPageQuery(country,region,limit,offset));}catch(_error){raw=[];}
-  const directQueryMs=Date.now()-queryStarted;raw=Array.isArray(raw)?raw:[];
-  let rows=[],mode="marketScope_fast_page",fallbackMs=0,hasMore=false;
-  if(raw.length){rows=raw.map(fastManagementCandidate);hasMore=raw.length===limit;}
-  else{
-    const fallbackStarted=Date.now(),wanted=Math.min(3000,offset+limit+1),merged=await mergedManagementScopeRows(country,region,wanted);fallbackMs=Date.now()-fallbackStarted;
-    rows=merged.slice(offset,offset+limit);hasMore=merged.length>offset+limit;mode="merged_scope_page";
-  }
-  return {rows,relationErrors:[],pagination:{offset,limit,returned:rows.length,hasMore,nextOffset:hasMore?offset+rows.length:null,mode},timing:{candidateQueryMs:directQueryMs,fallbackMs,totalMs:Date.now()-started,relationHydration:false}};
-}
-
-async function managementCandidateSnapshot(countryInput,regionInput,limitInput){
-  const started=Date.now(),country=normalizeCountry(countryInput),region=normalizeRegion(regionInput||"NATIONWIDE",country)||"NATIONWIDE",limit=Math.max(50,Math.min(3000,Number(limitInput)||3000));
-  if(!country||country==="GLOBAL")return {rows:[],pagination:{total:0,loadedItems:0,loadedPages:1,complete:true,mode:"empty"},timing:{totalMs:Date.now()-started}};
-  const queryStarted=Date.now(),rows=await mergedManagementScopeRows(country,region,limit),queryMs=Date.now()-queryStarted;
-  return {rows,pagination:{total:rows.length,loadedItems:rows.length,loadedPages:1,complete:true,mode:"merged_stage_plus_db_scope_snapshot"},timing:{candidateQueryMs:queryMs,projectionMs:0,totalMs:Date.now()-started,relationHydration:false}};
-}
-
 async function scopedLiveProductResearchQueue(country,region,limit){
   try{
     const candidates=await scopedProductCandidateRows(country,region,limit);
@@ -334,21 +223,6 @@ async function stage(root){
   });
 }
 function summaryDoc(doc){return {version:VERSION,stageVersion:doc.version||null,generatedAt:doc.generatedAt||null,releaseGate:doc.releaseGate||null,summary:doc.summary||{},pipeline:doc.pipeline||{},candidateCount:Array.isArray(doc.candidates)?doc.candidates.length:0};}
-function compactManagementCandidate(rowInput){
-  const row=plain(rowInput),card=plain(row.productCard),supplier=plain(row.supplier),readiness=plain(row.researchReadiness),placement=plain(row.placement),revenue=plain(row.revenue),review=plain(row.review),life=plain(row.lifecycle),assignment=plain(life.assignment);
-  return {
-    candidateId:text(row.candidateId),title:text(row.title),stageStatus:text(row.stageStatus),releaseEligible:row.releaseEligible===true,
-    productCard:{title:text(card.title),image:text(card.image),checkoutUrl:text(card.checkoutUrl),supplierUrl:text(card.supplierUrl),supplierName:text(card.supplierName),price:card.price==null?null:card.price,priceDisplay:text(card.priceDisplay),priceCurrency:text(card.priceCurrency),availability:card.availability==null?null:card.availability,checkoutMode:text(card.checkoutMode),sourceTitle:text(card.sourceTitle)},
-    supplier:{name:text(supplier.name),officialUrl:text(supplier.officialUrl),trustScore:Number(supplier.trustScore||0),evidenceReady:supplier.evidenceReady===true},
-    placement:{page:text(placement.page),section:text(placement.section),slot:text(placement.slot),country:text(placement.country),region:text(placement.region)},
-    proposedPlacements:array(row.proposedPlacements).slice(0,12),
-    researchReadiness:{stage:text(readiness.stage),queueEligible:readiness.queueEligible===true,blockers:array(readiness.blockers).slice(0,16),reviewGaps:array(readiness.reviewGaps).slice(0,16),warnings:array(readiness.warnings).slice(0,8)},
-    marketKeys:array(row.marketKeys).slice(0,24),revenue:{type:text(revenue.type),monetizationState:text(revenue.monetizationState),contractId:text(revenue.contractId),outboundRoute:plain(revenue.outboundRoute)},
-    review:{state:text(review.state),nextGate:text(review.nextGate)},reasons:array(row.reasons).slice(0,20),queueControl:plain(row.queueControl),slotDecision:text(row.slotDecision),
-    lifecycle:{stage:text(life.stage),nextGate:text(life.nextGate),assignment:Object.keys(assignment).length?{id:text(assignment.id),hubKey:text(assignment.hubKey),slotKey:text(assignment.slotKey),countryCode:text(assignment.countryCode),regionCode:text(assignment.regionCode),state:text(assignment.state),publicationStatus:text(assignment.publicationStatus),priority:Number(assignment.priority||0)}:null}
-  };
-}
-function compactManagementCandidates(rows){return array(rows).map(compactManagementCandidate);}
 function pageMap(hub){const h=lower(hub);return ({home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"})[h]||"";}
 
 function normalizeCountry(value){return MarketSaleScope.normalizeCountry(value);}
@@ -773,29 +647,15 @@ exports.handler=async function(event){
       const probe=geoProbe(event);const requested=text(query.country).toUpperCase();
       const scopeCountry=requested||(probe.resolved?probe.country:"UNRESOLVED");
       const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
-      const compactRequested=["1","true","yes"].includes(lower(query.compact));
-      /* Product management is capped at 3,000 rows by operating policy. Avoid a
-         5,000-row hydrate that can time out before the admin sees a successful
-         latest-list transfer. */
-      if(action==="candidate_page"){
-        const page=await managementCandidatePage(scopeCountry,scopeRegion,query.offset,query.pageSize||query.limit);
-        const rows=compactRequested?compactManagementCandidates(page.rows):page.rows;
-        return json(200,{ok:true,scope:{country:scopeCountry,region:scopeRegion||"NATIONWIDE",source:"administrator-selected",crossCountry:false},candidates:rows,pagination:page.pagination,timing:page.timing||{},pipeline:{version:VERSION,pagedManagementLedger:true,fastManagementProjection:true,relationErrors:page.relationErrors||[]}});
-      }
-      if(action==="management_snapshot"){
-        const snap=await managementCandidateSnapshot(scopeCountry,scopeRegion,query.limit);
-        const rows=compactRequested?compactManagementCandidates(snap.rows):snap.rows;
-        return json(200,{ok:true,scope:{country:scopeCountry,region:scopeRegion||"NATIONWIDE",source:"administrator-selected",crossCountry:false},candidates:rows,pagination:snap.pagination,timing:snap.timing||{},pipeline:{version:VERSION,fastManagementProjection:true,fastSnapshotFallback:true,relationHydration:false}});
-      }
-      const stageLimit=action==="diagnostic"?600:(action==="summary"?250:3000);
+      const stageLimit=action==="diagnostic"?600:(action==="summary"?800:5000);
       const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion,stageLimit);
       if(action==="dashboard"){
-        const summary=summaryDoc(doc),rows=(doc.candidates||[]).slice(0,3000),response={ok:true,scope:doc.selectedScope,summary,candidates:compactRequested?compactManagementCandidates(rows):rows};
-        if(!compactRequested)response.diagnostic=diagnosticDoc(doc,member);
+        const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,5000)};
+        if(!["1","true","yes"].includes(lower(query.compact)))response.diagnostic=diagnosticDoc(doc,member);
         return json(200,response);
       }
       if(action==="summary")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc)});
-      if(action==="candidates"){const rows=(doc.candidates||[]).slice(0,3000);return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:compactRequested?compactManagementCandidates(rows):rows});}
+      if(action==="candidates")return json(200,{ok:true,scope:doc.selectedScope,summary:summaryDoc(doc),candidates:(doc.candidates||[]).slice(0,5000)});
       if(action==="diagnostic")return json(200,diagnosticDoc(doc,member));
       return json(404,{ok:false,error:"지원하지 않는 조회 요청입니다."});
     }
