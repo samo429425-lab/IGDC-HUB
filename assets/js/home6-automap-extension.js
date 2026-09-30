@@ -175,7 +175,7 @@
 
     var text=document.createElement('span');
     text.className='shop-card-cap-text';
-    text.textContent=isSample?'홈6':resolveTitle(it);
+    text.textContent=isSample?'Home 6':resolveTitle(it);
     text.style.display='-webkit-box';
     text.style.width='100%';
     text.style.maxWidth='100%';
@@ -427,167 +427,56 @@
   }
 })();
 
-/* IGDC HOME card caption geometry final guard v5 — 2026-09-30
- * Guarantees edge-to-edge title strips for every Home main/right card.
- * Works for all lazy/incremental batches, not only the first visible cards.
- */
+/* Final caption full-width guard — 2026-09-30 */
 (function(){
   'use strict';
-  if (document.getElementById('igdc-home-caption-geometry-final-v5')) return;
+  if (document.getElementById('igdc-home-caption-fullwidth-final-v4')) return;
   var st=document.createElement('style');
-  st.id='igdc-home-caption-geometry-final-v5';
+  st.id='igdc-home-caption-fullwidth-final-v4';
   st.textContent=`
-    /* MAIN: home_1 ... home_6 */
     section.shopping-section .shop-row > .shop-card{
-      position:relative !important;
-      display:block !important;
       padding:0 !important;
       margin:0 !important;
       box-sizing:border-box !important;
-      overflow:hidden !important;
-      background:#fff !important;
-      background-image:none !important;
     }
-    section.shopping-section .shop-row > .shop-card > .shop-card-image{
-      position:absolute !important;
-      top:0 !important;
-      left:0 !important;
-      right:0 !important;
-      bottom:72px !important;
-      width:auto !important;
-      min-width:0 !important;
-      max-width:none !important;
-      height:auto !important;
-      min-height:0 !important;
-      margin:0 !important;
-      padding:0 !important;
-      box-sizing:border-box !important;
-      overflow:hidden !important;
-      background:#fff !important;
-    }
-    section.shopping-section .shop-row > .shop-card > .shop-card-image > img{
-      display:block !important;
+    section.shopping-section .shop-row > .shop-card > .shop-card-cap{
       width:100% !important;
       min-width:100% !important;
       max-width:100% !important;
-      height:100% !important;
-      margin:0 !important;
-      padding:0 !important;
-      object-fit:contain !important;
-    }
-    section.shopping-section .shop-row > .shop-card > .shop-card-cap{
-      position:absolute !important;
-      left:0 !important;
-      right:0 !important;
-      bottom:0 !important;
-      top:auto !important;
-      width:auto !important;
-      min-width:0 !important;
-      max-width:none !important;
-      height:72px !important;
-      min-height:72px !important;
-      max-height:72px !important;
       margin:0 !important;
       padding:6px 8px !important;
       box-sizing:border-box !important;
-      background:#f4f6f8 !important;
-      border-top:1px solid #cfd5db !important;
-      overflow:hidden !important;
-      text-align:left !important;
+      justify-self:stretch !important;
     }
     section.shopping-section .shop-row > .shop-card > .shop-card-cap > .shop-card-cap-text{
       display:-webkit-box !important;
       width:100% !important;
       min-width:100% !important;
       max-width:100% !important;
-      margin:0 !important;
-      padding:0 !important;
       box-sizing:border-box !important;
-      color:#222 !important;
-      font-size:14px !important;
-      font-weight:700 !important;
-      line-height:1.35 !important;
-      white-space:normal !important;
-      overflow:hidden !important;
-      overflow-wrap:anywhere !important;
-      word-break:break-word !important;
       -webkit-box-orient:vertical !important;
       -webkit-line-clamp:3 !important;
     }
-
-    /* RIGHT: top / middle / bottom */
     .ad-panel .ad-section .ad-list > .ad-box{
-      position:relative !important;
-      display:block !important;
       padding:0 !important;
       margin:0 !important;
       box-sizing:border-box !important;
-      overflow:hidden !important;
-      background:#fff !important;
     }
-    .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-image{
-      position:absolute !important;
-      top:0 !important;
-      left:0 !important;
-      right:0 !important;
-      bottom:58px !important;
-      width:auto !important;
-      min-width:0 !important;
-      max-width:none !important;
-      height:auto !important;
-      min-height:0 !important;
-      margin:0 !important;
-      padding:0 !important;
-      box-sizing:border-box !important;
-      overflow:hidden !important;
-      background:#fff !important;
-    }
-    .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-image > img{
-      display:block !important;
+    .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-cap{
       width:100% !important;
       min-width:100% !important;
       max-width:100% !important;
-      height:100% !important;
-      margin:0 !important;
-      padding:0 !important;
-      object-fit:contain !important;
-    }
-    .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-cap{
-      position:absolute !important;
-      left:0 !important;
-      right:0 !important;
-      bottom:0 !important;
-      top:auto !important;
-      width:auto !important;
-      min-width:0 !important;
-      max-width:none !important;
-      height:58px !important;
-      min-height:58px !important;
-      max-height:58px !important;
       margin:0 !important;
       padding:5px 6px !important;
       box-sizing:border-box !important;
-      background:#f4f6f8 !important;
-      border-top:1px solid #cfd5db !important;
-      overflow:hidden !important;
-      text-align:left !important;
+      justify-self:stretch !important;
     }
     .ad-panel .ad-section .ad-list > .ad-box > .home-right-card-cap > .home-right-card-cap-text{
       display:-webkit-box !important;
       width:100% !important;
       min-width:100% !important;
       max-width:100% !important;
-      margin:0 !important;
-      padding:0 !important;
       box-sizing:border-box !important;
-      color:#222 !important;
-      font-size:12px !important;
-      font-weight:700 !important;
-      line-height:1.3 !important;
-      white-space:normal !important;
-      overflow:hidden !important;
-      overflow-wrap:anywhere !important;
-      word-break:break-word !important;
       -webkit-box-orient:vertical !important;
       -webkit-line-clamp:3 !important;
     }

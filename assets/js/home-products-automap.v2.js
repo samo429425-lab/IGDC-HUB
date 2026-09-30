@@ -441,7 +441,7 @@
 
     const capText = document.createElement('span');
     capText.className = 'shop-card-cap-text';
-    capText.textContent = item.title || ((item && item.section === 'home_6') ? '홈6' : '상품');
+    capText.textContent = (item && item.__igdcFallbackSlot && item.section === 'home_6') ? 'Home 6' : (item.title || '상품');
     capText.style.display = '-webkit-box';
     capText.style.width = '100%';
     capText.style.maxWidth = '100%';
@@ -563,7 +563,7 @@
     const slotNo = index + 1;
     return {
       id: key + '-slot-' + pad3(slotNo),
-      title: key === 'home_6' ? '홈6' : '',
+      title: '',
       thumb: '',
       url: '#',
       sourceUrl: '#',
