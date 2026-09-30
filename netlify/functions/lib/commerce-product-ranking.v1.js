@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.18.0-staged-consumer-section-policy";
+const VERSION = "commerce-product-ranking-v1.19.0-distribution-category-sections";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -130,13 +130,15 @@ const POLICY = Object.freeze({
   }),
   distributionPolicy: Object.freeze({
     mainSections: AI_AUTO_BALANCE_GROUPS.distributionMain,
-    recommend: "hot_beauty_fashion_electronics_small_appliances_household_utility_first",
-    sponsor: "explicit_sponsor_evidence_and_contract_ready_only",
-    trending: "verified_top_popularity_for_consumer_electronics_beauty_household_goods",
-    new: "verified_newness_or_recently_registered_live_product",
-    special: "special_local_certified_or_theme_fit",
-    others: "qualified_general_or_long_tail_offer",
-    distributionRule: "balance_only_among_policy_compatible_sections; never_force_sponsor_or_evidence_gated_sections"
+    recommend: "mixed_today_pick_beauty_small_appliance_hot_fashion",
+    trending: "verified_realtime_popularity_beauty_small_appliance_hot_fashion",
+    beauty: "distribution-sponsor legacy key now serves beauty category",
+    smallAppliance: "distribution-new legacy key now serves small_appliance_and_consumer_electronics category",
+    apparelFashion: "distribution-special legacy key now serves apparel_fashion category",
+    essentialsLiving: "distribution-others legacy key now serves household_essentials_food_and_daily_living category",
+    right: "brand_focused_mixed_picks; beauty_small_appliance_essentials_priority; fashion_lower_share",
+    legacyStatusFlags: "sponsor_new_special_are_priority_attributes_not_visible_section_meanings",
+    distributionRule: "category_fit_first; recommend_and_trending_may_overlap; category_sections_are_not_interchangeable; administrator_pins_preserved"
   }),
   tourRightPolicy: Object.freeze({
     role: "travel_tourism_recreation_commercial_panel",
@@ -1067,24 +1069,57 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
     add("home", "home_right_bottom", baseScore + (automotiveFit ? 4 : 1), "자동차·일상생활 우측 하단 정책 적합", "home_right_automotive_everyday_life", []);
   }
 
-  // DISTRIBUTION. The Sponsor rail is a normal product rail by default.
-  // If sponsorship mode is explicitly activated, verified sponsor evidence
-  // boosts the placement; missing sponsorship evidence is handled by the
-  // publication policy rather than making the rail unusable in normal mode.
+  // DISTRIBUTION FRONT POLICY (legacy section keys retained for snapshot compatibility):
+  // recommend = Today’s Picks, trending = Real-Time Popularity,
+  // sponsor = Beauty, new = Small Appliances, special = Apparel/Fashion,
+  // others = Household Essentials/Daily Life, right = Brand Picks.
+  // Sponsor/new/special evidence remains a ranking attribute only; it no longer
+  // defines a visible Distribution section. Travel/service inventory is already
+  // returned to Tour exclusively above and cannot enter these rails.
+  const beautyDistributionFit = category.primary === "beauty_personal_care" || /(뷰티|화장품|스킨케어|메이크업|헤어케어|바디케어|향수|선크림|세럼|크림|립|마스크팩|beauty|cosmetic|skincare|makeup|hair care|body care|perfume|serum|sunscreen)/i.test(hay);
+  const smallApplianceDistributionFit = ["electronics_accessories","home_appliances_living"].includes(category.primary) || /(소형가전|이어폰|이어버드|헤드폰|태블릿|카메라|액션카메라|브이로그|짐벌|마이크|핀마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|earphone|headphone|tablet|camera|action camera|vlog|gimbal|microphone|smartwatch|projector|fan|humidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(hay);
+  const apparelFashionDistributionFit = category.primary === "fashion" || /(패션|의류|옷|자켓|재킷|코트|셔츠|블라우스|원피스|팬츠|청바지|정장|캐주얼|빈티지|스니커즈|신발|가방|아웃도어 의류|등산복|fashion|apparel|clothing|jacket|coat|shirt|blouse|dress|pants|jeans|suit|casual|vintage|sneaker|shoes|bag|outdoor wear|hiking wear)/i.test(hay);
+  const essentialsLivingDistributionFit = ["food_household_essentials","agriculture_fishery_forestry","local_products"].includes(category.primary) || /(생필품|생활필수|생활용품|위생|세제|세정제|청소|화장지|티슈|물티슈|주방용품|욕실용품|수납|생활소모품|식재료|식료품|조미료|간편식|음료|농산물|수산물|축산물|household|essential|hygiene|detergent|cleaning|tissue|kitchen|bath|storage|daily supply|grocery|ingredient|seasoning|meal|beverage|produce|seafood)/i.test(hay);
+  const distributionCoreHotFit = beautyDistributionFit || smallApplianceDistributionFit || apparelFashionDistributionFit;
+  const explicitBrandText = lower(first(row.brandName, row.brand, row.manufacturerName, row.manufacturer, supplier.brandName, supplier.brand, supplier.companyName));
+  const distributionBrandEvidence = !!explicitBrandText || category.primary === "manufacturer_brands" || /(공식 브랜드|브랜드관|브랜드 스토어|official brand|brand store|flagship)/i.test(hay) || (highTrust && supplier.verified === true);
+  const statusAttributeBoost = (sponsorshipActive && sponsorEvidence && revenueValue.contractReady === true ? 4 : 0) + (verifiedNewness ? 2 : 0) + (verifiedSpecial ? 2 : 0);
   const distributionStandardEligible = risk.gatePassed === true && (value.privatePlacementEligible === true || Number(audience.audienceDemandScore || 0) >= 40 || recurringEssential || socialLifestyle || electronicsUtility || officialProductText);
-  if (distributionStandardEligible) {
-    const sponsorConsumerFit = ["beauty_personal_care","fashion","electronics_accessories","home_appliances_living","food_household_essentials"].includes(category.primary);
-    const sponsorBoost = sponsorshipActive && sponsorEvidence && revenueValue.contractReady === true ? 8 : (sponsorConsumerFit ? 4 : 1);
-    add("distribution", "distribution-sponsor", baseScore + sponsorBoost, sponsorshipActive ? "검증된 스폰서 상품" : (sponsorConsumerFit ? "뷰티·브랜드 패션·가전·생필품 중심 일반 스폰서 레일 후보" : "유통 스폰서 일반 운영 상품"), sponsorshipActive ? "verified_sponsorship_offer" : "distribution_sponsor_consumer_fallback", []);
-  }
-  if (consumerHotFit && verifiedTrend && Number(audience.audienceDemandScore || 0) >= 55 && risk.gatePassed === true) add("distribution", "distribution-trending", baseScore + 7, "검증된 인기 신호가 높은 가전·뷰티·패션·생필품 중심 실시간 인기", "verified_consumer_hot_market_demand", []);
-  if ((verifiedNewness || recentDiscovery) && risk.gatePassed === true) add("distribution", "distribution-new", baseScore + 2, "신규 상품 또는 최근 공식 상세페이지 확인 상품", "recently_verified_or_registered_listing", []);
-  if ((verifiedSpecial || localOrigin || tourRecreationProduct || (consumerHotFit && (highestValue || verifiedNewness))) && risk.gatePassed === true) add("distribution", "distribution-special", baseScore + (consumerHotFit ? 4 : 3), "특산·인증·한정 상품 및 가치가 높은 가전·뷰티·생활 테마 상품", "special_local_or_consumer_theme_offer", []);
-  if (consumerHotFit && (value.privatePlacementEligible === true || Number(audience.audienceDemandScore || 0) >= 42 || recurringEssential || socialLifestyle || electronicsUtility || officialProductText) && risk.gatePassed === true) add("distribution", "distribution-recommend", baseScore + 6, "핫한 뷰티·패션·소형가전·전자·생필품 중심 오늘의 추천", "distribution_consumer_hot_recommend_fit", []);
-  if (risk.gatePassed === true) add("distribution", "distribution-others", baseScore + 1, "정책 적격 일반·롱테일 상품", "qualified_long_tail_offer", []);
-  if (highTrust && baseScore >= 62) add("distribution", "distribution-right", baseScore + 2, "고신뢰·고가치 큐레이션 상품", "curated_high_total_value", []);
-  if ((industrialTool || electronicsUtility) && risk.gatePassed === true) add("distribution", "distribution-right", baseScore + 3, "공구·전자·산업 효용 상품의 우측 유통 검토", "private_review_industrial_distribution_right", []);
 
+  // Mixed discovery rails.
+  if (distributionCoreHotFit && distributionStandardEligible) {
+    add("distribution", "distribution-recommend", baseScore + 7 + statusAttributeBoost, "뷰티·소형가전·핫한 최신 의류 중심 오늘의 추천", "distribution_today_core_consumer_pick", []);
+  }
+  if (distributionCoreHotFit && verifiedTrend && Number(audience.audienceDemandScore || 0) >= 55 && risk.gatePassed === true) {
+    add("distribution", "distribution-trending", baseScore + 8 + Math.min(3, statusAttributeBoost), "검증된 인기 신호 기반 뷰티·소형가전·핫 패션 실시간 인기", "distribution_realtime_core_popularity", []);
+  }
+
+  // Category rails. Keep the old technical keys so SearchBank/Snapshot/Admin
+  // contracts remain compatible while the visible semantics become explicit.
+  if (risk.gatePassed === true) {
+    if (beautyDistributionFit) {
+      add("distribution", "distribution-sponsor", baseScore + 7 + statusAttributeBoost, "뷰티 전용 섹션", "distribution_beauty_category", []);
+    } else if (smallApplianceDistributionFit) {
+      add("distribution", "distribution-new", baseScore + 7 + statusAttributeBoost, "소형가전·소형 전자 전용 섹션", "distribution_small_appliance_category", []);
+    } else if (apparelFashionDistributionFit) {
+      add("distribution", "distribution-special", baseScore + 6 + statusAttributeBoost, "캐주얼·정장·빈티지·브랜드·아웃도어 의류 중심 의류·패션 섹션", "distribution_apparel_fashion_category", []);
+    } else if (essentialsLivingDistributionFit) {
+      add("distribution", "distribution-others", baseScore + 6 + statusAttributeBoost, "생필품·생활용품·식재료·식품 중심 생활 섹션", "distribution_essentials_living_category", []);
+    }
+  }
+
+  // Brand Picks right rail: mixed across the four consumer families. Fashion
+  // receives a smaller score so beauty, small appliances and essentials occupy
+  // a larger share when equivalent branded candidates are available.
+  const brandRightFit = beautyDistributionFit || smallApplianceDistributionFit || apparelFashionDistributionFit || essentialsLivingDistributionFit;
+  if (risk.gatePassed === true && brandRightFit && distributionBrandEvidence) {
+    const brandCategoryBoost = beautyDistributionFit ? 5 : (smallApplianceDistributionFit ? 6 : (essentialsLivingDistributionFit ? 5 : 2));
+    add("distribution", "distribution-right", baseScore + brandCategoryBoost + Math.min(4, statusAttributeBoost), "브랜드 중심 우측 추천: 소형가전·뷰티·생필품 우선, 의류는 낮은 비중", "distribution_brand_focused_mixed_right", []);
+  }
+
+  // Valid consumer goods that fit none of the four visible category rails stay
+  // private/unassigned for administrator review instead of contaminating a
+  // mismatched visible category.
   const networkHouseholdFit = ["food_household_essentials","home_appliances_living"].includes(category.primary) || /(생필품|생활용품|세제|청소|위생|주방|욕실|수납|침구|가정용|household|essential|detergent|cleaning|hygiene|kitchen|bedding)/i.test(hay);
   if (networkHouseholdFit && risk.gatePassed === true) {
     const networkScore = baseScore + (recurringEssential ? 5 : 2);
@@ -1116,8 +1151,11 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
     if (travel) add("tour", "tour", baseScore, "검증 완료 여행·지역 서비스의 비공개 검토 배치", "private_review_travel_fit", []);
     else if (tourRecreationProduct) add("tour", "tour", baseScore + 2, "검증 완료 여행·레저 연계 실상품의 투어 우측 비공개 검토 배치", "private_review_tour_recreation_fit", []);
     else if (networkHouseholdFit) add("network", "network-right", baseScore + 1, "검증 완료 생필품·생활용품의 네트워크 우측 비공개 검토 배치", "private_review_network_household_fit", []);
-    else if (["food_household_essentials", "beauty_personal_care", "fashion", "baby_family_education", "agriculture_fishery_forestry", "local_products"].includes(category.primary) || localOrigin) add("distribution", "distribution-others", baseScore, "검증 완료 생활·소비재 상품의 비공개 일반 유통 검토 배치", "private_review_general_distribution_fit", []);
-    else add("distribution", "distribution-others", baseScore - 1, "검증 완료 상품의 비공개 일반 유통 검토 배치", "private_review_fallback_distribution_fit", []);
+    else if (beautyDistributionFit) add("distribution", "distribution-sponsor", baseScore, "검증 완료 뷰티 상품의 비공개 카테고리 검토 배치", "private_review_beauty_distribution_fit", []);
+    else if (smallApplianceDistributionFit) add("distribution", "distribution-new", baseScore, "검증 완료 소형가전 상품의 비공개 카테고리 검토 배치", "private_review_small_appliance_distribution_fit", []);
+    else if (apparelFashionDistributionFit) add("distribution", "distribution-special", baseScore, "검증 완료 의류·패션 상품의 비공개 카테고리 검토 배치", "private_review_apparel_distribution_fit", []);
+    else if (essentialsLivingDistributionFit) add("distribution", "distribution-others", baseScore, "검증 완료 생필품·생활 상품의 비공개 카테고리 검토 배치", "private_review_essentials_distribution_fit", []);
+    else add("distribution", "distribution-others", baseScore - 4, "카테고리 재확인이 필요한 검증 완료 상품의 비공개 검토 배치", "private_review_uncategorized_distribution_fit", []);
   }
 
   const pageOrder = { home: 0, distribution: 1, network: 2, tour: 3, social: 4 };

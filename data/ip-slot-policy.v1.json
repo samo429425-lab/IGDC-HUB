@@ -147,7 +147,7 @@
     "distribution": {
       "distribution-recommend": {
         "strategyId": "distribution-recommend",
-        "role": "consumer_hot_recommended_offer",
+        "role": "today_mixed_beauty_small_appliance_hot_fashion",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
@@ -159,7 +159,7 @@
       },
       "distribution-sponsor": {
         "strategyId": "distribution-sponsor",
-        "role": "sponsor_or_consumer_brand_offer",
+        "role": "beauty_category_section",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
@@ -171,7 +171,7 @@
       },
       "distribution-trending": {
         "strategyId": "distribution-trending",
-        "role": "verified_popular_consumer_goods",
+        "role": "verified_realtime_popularity_core_consumer_goods",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
@@ -184,7 +184,7 @@
       },
       "distribution-new": {
         "strategyId": "distribution-new",
-        "role": "recent_consumer_product",
+        "role": "small_appliance_electronics_category_section",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
@@ -192,12 +192,11 @@
         ],
         "requiredSlotProfiles": [
           "distribution-new"
-        ],
-        "requires": "newnessEvidence"
+        ]
       },
       "distribution-special": {
         "strategyId": "distribution-special",
-        "role": "special_consumer_or_local_product",
+        "role": "apparel_fashion_category_section",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
@@ -205,12 +204,11 @@
         ],
         "requiredSlotProfiles": [
           "distribution-special"
-        ],
-        "requires": "specialEvidence"
+        ]
       },
       "distribution-others": {
         "strategyId": "distribution-others",
-        "role": "qualified_general_consumer_product",
+        "role": "household_essentials_living_food_category_section",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
@@ -222,7 +220,7 @@
       },
       "distribution-right": {
         "strategyId": "distribution-right-curated",
-        "role": "curated_consumer_product",
+        "role": "brand_focused_mixed_consumer_picks",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",

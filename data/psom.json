@@ -3287,25 +3287,25 @@
         "intent": "automotive_everyday_life"
       },
       "distribution|distribution-recommend": {
-        "intent": "consumer_hot_recommendation"
+        "intent": "today_mixed_beauty_small_appliance_hot_fashion"
       },
       "distribution|distribution-sponsor": {
-        "intent": "verified_sponsor_then_consumer_brand_fallback"
+        "intent": "beauty_category_section_legacy_key"
       },
       "distribution|distribution-trending": {
-        "intent": "verified_popular_electronics_beauty_household"
+        "intent": "verified_realtime_popularity_beauty_small_appliance_hot_fashion"
       },
       "distribution|distribution-new": {
-        "intent": "recent_verified_consumer_product"
+        "intent": "small_appliance_electronics_category_section_legacy_key"
       },
       "distribution|distribution-special": {
-        "intent": "special_consumer_or_local_product"
+        "intent": "apparel_fashion_category_section_legacy_key"
       },
       "distribution|distribution-others": {
-        "intent": "qualified_general_consumer_product"
+        "intent": "household_essentials_living_food_category_section_legacy_key"
       },
       "distribution|distribution-right": {
-        "intent": "curated_consumer_product"
+        "intent": "brand_focused_mixed_consumer_picks"
       },
       "network|network-right": {
         "intent": "household_essentials_living"
