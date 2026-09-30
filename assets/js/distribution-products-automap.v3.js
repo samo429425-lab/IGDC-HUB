@@ -163,9 +163,13 @@
   let deferredBackgroundObserver=null;
   function applyDeferredBackground(el,url){
     if(!el||!url)return;
-    el.style.backgroundImage="url('"+escUrl(url)+"')";
-    el.style.backgroundSize='cover';
-    el.style.backgroundPosition='center';
+    // Match Home Hub product-image behavior: show the complete product instead of
+    // cropping it to fill the slot. White side/top/bottom breathing room is allowed.
+    el.style.setProperty('background-image',"url('"+escUrl(url)+"')",'important');
+    el.style.setProperty('background-size','contain','important');
+    el.style.setProperty('background-position','center center','important');
+    el.style.setProperty('background-repeat','no-repeat','important');
+    el.style.setProperty('background-color','#fff','important');
     delete el.dataset.igdcDeferredBg;
   }
   function deferBackground(el,url){
@@ -501,6 +505,27 @@
   getInitialStaticFetchPromise().catch(function(){initialStaticFetchPromise=null;});
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true});
   else boot();
+})();
+
+
+/* IGDC Distribution Hub thumbnail-fit guard v1 — Home-style full-product view.
+ * Applies to all six main rails and the right Brand Recommendation rail, including
+ * cards already present in the DOM before the current AutoMap render.
+ */
+(function installDistributionThumbnailContainGuard(){
+  'use strict';
+  if(document.getElementById('igdc-distribution-thumbnail-contain-v1')) return;
+  var st=document.createElement('style');
+  st.id='igdc-distribution-thumbnail-contain-v1';
+  st.textContent=`
+    [data-psom-key^="distribution-"] .thumb-card .thumb-img{
+      background-size:contain !important;
+      background-position:center center !important;
+      background-repeat:no-repeat !important;
+      background-color:#fff !important;
+    }
+  `;
+  (document.head||document.documentElement).appendChild(st);
 })();
 
 /* Revenue support remains non-blocking and does not control slot rendering. */
