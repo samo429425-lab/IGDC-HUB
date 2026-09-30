@@ -40,6 +40,7 @@
     {key:'distribution-special',selector:'[data-psom-key="distribution-special"]',limit:LIMIT_MAIN,label:'Special Item'},
     {key:'distribution-sponsor',selector:'[data-psom-key="distribution-sponsor"]',limit:LIMIT_MAIN,label:'Sponsor Item'},
     {key:'distribution-others',selector:'[data-psom-key="distribution-others"]',limit:LIMIT_MAIN,label:'Product Item'},
+    {key:'distribution-extra',selector:'[data-psom-key="distribution-extra"]',limit:LIMIT_MAIN,label:'Other Outdoor Food Item'},
     {key:'distribution-right',selector:'[data-psom-key="distribution-right"]',limit:LIMIT_RIGHT,label:'Recommended Brand'}
   ];
   const ALIAS={
@@ -49,6 +50,9 @@
     'distribution-special':'distribution_4',
     'distribution-sponsor':'distribution_5',
     'distribution-others':'distribution_6',
+    // Keep the long-standing right-rail alias stable; the newly added seventh main rail
+    // receives a new compatibility alias until the admin/PSOM migration is performed.
+    'distribution-extra':'distribution_8',
     'distribution-right':'distribution_7'
   };
   let activePriority=-1;
@@ -509,7 +513,7 @@
 
 
 /* IGDC Distribution Hub thumbnail-fit guard v1 — Home-style full-product view.
- * Applies to all six main rails and the right Brand Recommendation rail, including
+ * Applies to all seven main rails and the right Brand Recommendation rail, including
  * cards already present in the DOM before the current AutoMap render.
  */
 (function installDistributionThumbnailContainGuard(){

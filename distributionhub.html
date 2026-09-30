@@ -1106,7 +1106,7 @@ a[id*="qna"]{
 
 <style id="igdc-distribution-main-card-ratio-final-v2">
 /* DISTRIBUTION final nano patch:
-   Six main product sections use a balanced portrait slot close to 4:5.
+   Seven main product sections use a balanced portrait slot close to 4:5.
    Existing card widths, horizontal scrolling, section count and right rail stay unchanged.
 */
 #sec-reco .thumb-scroller > .thumb-card,
@@ -1114,7 +1114,8 @@ a[id*="qna"]{
 #sec-trend .thumb-scroller > .thumb-card,
 #sec-new .thumb-scroller > .thumb-card,
 #sec-special .thumb-scroller > .thumb-card,
-#sec-others .thumb-scroller > .thumb-card{
+#sec-others .thumb-scroller > .thumb-card,
+#sec-extra .thumb-scroller > .thumb-card{
   height:auto !important;
   min-height:0 !important;
   max-height:none !important;
@@ -1131,7 +1132,8 @@ a[id*="qna"]{
 #sec-trend .thumb-card .thumb-img,
 #sec-new .thumb-card .thumb-img,
 #sec-special .thumb-card .thumb-img,
-#sec-others .thumb-card .thumb-img{
+#sec-others .thumb-card .thumb-img,
+#sec-extra .thumb-card .thumb-img{
   width:100% !important;
   height:auto !important;
   min-height:0 !important;
@@ -1145,7 +1147,8 @@ a[id*="qna"]{
 #sec-trend .thumb-card .thumb-body,
 #sec-new .thumb-card .thumb-body,
 #sec-special .thumb-card .thumb-body,
-#sec-others .thumb-card .thumb-body{
+#sec-others .thumb-card .thumb-body,
+#sec-extra .thumb-card .thumb-body{
   padding:10px 12px !important;
   gap:7px !important;
 }
@@ -1155,7 +1158,8 @@ a[id*="qna"]{
 #sec-trend .thumb-card > .thumb-title,
 #sec-new .thumb-card > .thumb-title,
 #sec-special .thumb-card > .thumb-title,
-#sec-others .thumb-card > .thumb-title{
+#sec-others .thumb-card > .thumb-title,
+#sec-extra .thumb-card > .thumb-title{
   padding:8px 9px 4px !important;
   line-height:1.35 !important;
 }
@@ -1165,7 +1169,8 @@ a[id*="qna"]{
 #sec-trend .thumb-card > .thumb-meta,
 #sec-new .thumb-card > .thumb-meta,
 #sec-special .thumb-card > .thumb-meta,
-#sec-others .thumb-card > .thumb-meta{
+#sec-others .thumb-card > .thumb-meta,
+#sec-extra .thumb-card > .thumb-meta{
   padding:0 9px 8px !important;
 }
 </style>
@@ -1179,7 +1184,8 @@ a[id*="qna"]{
 #sec-trend .thumb-scroller > .thumb-card,
 #sec-new .thumb-scroller > .thumb-card,
 #sec-special .thumb-scroller > .thumb-card,
-#sec-others .thumb-scroller > .thumb-card{
+#sec-others .thumb-scroller > .thumb-card,
+#sec-extra .thumb-scroller > .thumb-card{
   display:grid !important;
   grid-template-rows:minmax(0,1fr) auto auto !important;
   height:auto !important;
@@ -1195,7 +1201,8 @@ a[id*="qna"]{
 #sec-trend .thumb-card .thumb-img,
 #sec-new .thumb-card .thumb-img,
 #sec-special .thumb-card .thumb-img,
-#sec-others .thumb-card .thumb-img{
+#sec-others .thumb-card .thumb-img,
+#sec-extra .thumb-card .thumb-img{
   width:100% !important;
   height:100% !important;
   min-height:0 !important;
@@ -1210,7 +1217,8 @@ a[id*="qna"]{
 #sec-trend .thumb-card > .thumb-title,
 #sec-new .thumb-card > .thumb-title,
 #sec-special .thumb-card > .thumb-title,
-#sec-others .thumb-card > .thumb-title{
+#sec-others .thumb-card > .thumb-title,
+#sec-extra .thumb-card > .thumb-title{
   margin:0 !important;
   padding:9px 9px 5px !important;
   line-height:1.35 !important;
@@ -1223,7 +1231,8 @@ a[id*="qna"]{
 #sec-trend .thumb-card > .thumb-meta,
 #sec-new .thumb-card > .thumb-meta,
 #sec-special .thumb-card > .thumb-meta,
-#sec-others .thumb-card > .thumb-meta{
+#sec-others .thumb-card > .thumb-meta,
+#sec-extra .thumb-card > .thumb-meta{
   margin:0 !important;
   padding:0 9px 9px !important;
   min-height:0 !important;
@@ -1245,6 +1254,7 @@ a[id*="qna"]{
   #sec-new .thumb-scroller,
   #sec-special .thumb-scroller,
   #sec-others .thumb-scroller,
+  #sec-extra .thumb-scroller,
   #mobile-ad-rail-list,
   .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"]{
     overflow-x:auto !important;
@@ -1261,6 +1271,7 @@ a[id*="qna"]{
   #sec-new .thumb-scroller > *,
   #sec-special .thumb-scroller > *,
   #sec-others .thumb-scroller > *,
+  #sec-extra .thumb-scroller > *,
   #mobile-ad-rail-list > *,
   .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"] > *{
     scroll-snap-stop:normal !important;
@@ -1274,6 +1285,7 @@ a[id*="qna"]{
   #sec-new .thumb-scroller,
   #sec-special .thumb-scroller,
   #sec-others .thumb-scroller,
+  #sec-extra .thumb-scroller,
   #mobile-ad-rail-list,
   .brand-rail[data-mobile-in-main="1"] .thumb-grid[data-psom-key="distribution-right"]{
     scroll-snap-type:none !important;
@@ -1291,7 +1303,8 @@ a[id*="qna"]{
 #sec-trend .thumb-scroller > .thumb-card,
 #sec-new .thumb-scroller > .thumb-card,
 #sec-special .thumb-scroller > .thumb-card,
-#sec-others .thumb-scroller > .thumb-card{
+#sec-others .thumb-scroller > .thumb-card,
+#sec-extra .thumb-scroller > .thumb-card{
   display:grid !important;
   grid-template-rows:minmax(0,1fr) auto auto !important;
   align-items:stretch !important;
@@ -1301,7 +1314,8 @@ a[id*="qna"]{
 #sec-trend .thumb-card > .thumb-title,
 #sec-new .thumb-card > .thumb-title,
 #sec-special .thumb-card > .thumb-title,
-#sec-others .thumb-card > .thumb-title{
+#sec-others .thumb-card > .thumb-title,
+#sec-extra .thumb-card > .thumb-title{
   min-height:48px !important;
   max-height:none !important;
   margin:0 !important;
@@ -1324,7 +1338,8 @@ a[id*="qna"]{
 #sec-trend .thumb-card > .thumb-meta:empty,
 #sec-new .thumb-card > .thumb-meta:empty,
 #sec-special .thumb-card > .thumb-meta:empty,
-#sec-others .thumb-card > .thumb-meta:empty{
+#sec-others .thumb-card > .thumb-meta:empty,
+#sec-extra .thumb-card > .thumb-meta:empty{
   display:none !important;
 }
 /* Distribution right rail: match the 14px lower-caption pattern used by the other hubs. */
@@ -1418,6 +1433,14 @@ a[id*="qna"]{
 <h3>🧺 생필품 · 생활</h3>
 <div class="scroller-wrap">
 <div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-others"></div>
+<button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button>
+<button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
+</div>
+</section>
+<section class="content-box" id="sec-extra">
+<h3>🏕️ 기타 · 아웃도어 · 식품</h3>
+<div class="scroller-wrap">
+<div class="thumb-grid thumb-scroller thumb-list" data-psom-key="distribution-extra"></div>
 <button aria-label="왼쪽으로 스크롤" class="rscroll left" type="button">‹</button>
 <button aria-label="오른쪽으로 스크롤" class="rscroll right" type="button">›</button>
 </div>
