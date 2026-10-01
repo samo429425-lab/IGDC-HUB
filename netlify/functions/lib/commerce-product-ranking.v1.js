@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.19.0-distribution-category-sections";
+const VERSION = "commerce-product-ranking-v1.20.0-admin20-front-policy-sync";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -29,8 +29,8 @@ const CATEGORY_KEYS = Object.freeze([
 ]);
 
 const FRONT_SECTION_KEYS = Object.freeze({
-  home: Object.freeze(["home_1", "home_2", "home_3", "home_4", "home_5", "home_right_top", "home_right_middle", "home_right_bottom"]),
-  distribution: Object.freeze(["distribution-recommend", "distribution-sponsor", "distribution-trending", "distribution-new", "distribution-special", "distribution-others", "distribution-right"]),
+  home: Object.freeze(["home_1", "home_2", "home_3", "home_4", "home_5", "home_6", "home_right_top", "home_right_middle", "home_right_bottom"]),
+  distribution: Object.freeze(["distribution-recommend", "distribution-trending", "distribution-sponsor", "distribution-new", "distribution-special", "distribution-others", "distribution-extra", "distribution-right"]),
   network: Object.freeze(["network-right"]),
   tour: Object.freeze(["tour"]),
   social: Object.freeze(["rightPanel"])
@@ -42,17 +42,18 @@ const AI_AUTO_BALANCE_GROUPS = Object.freeze({
   homeMain: Object.freeze(["home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5"]),
   homeRight: Object.freeze(["home|home_right_top", "home|home_right_middle", "home|home_right_bottom"]),
   distributionMain: Object.freeze([
-    "distribution|distribution-recommend", "distribution|distribution-sponsor",
-    "distribution|distribution-trending", "distribution|distribution-new",
-    "distribution|distribution-special", "distribution|distribution-others"
+    "distribution|distribution-recommend", "distribution|distribution-trending",
+    "distribution|distribution-sponsor", "distribution|distribution-new",
+    "distribution|distribution-special", "distribution|distribution-others",
+    "distribution|distribution-extra"
   ])
 });
 const SECTION_ORDER = Object.freeze([
-  "home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5",
+  "home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5", "home|home_6",
   "home|home_right_top", "home|home_right_middle", "home|home_right_bottom",
-  "distribution|distribution-recommend", "distribution|distribution-sponsor",
-  "distribution|distribution-trending", "distribution|distribution-new",
-  "distribution|distribution-special", "distribution|distribution-others",
+  "distribution|distribution-recommend", "distribution|distribution-trending",
+  "distribution|distribution-sponsor", "distribution|distribution-new",
+  "distribution|distribution-special", "distribution|distribution-others", "distribution|distribution-extra",
   "distribution|distribution-right", "network|network-right", "social|rightPanel", "tour|tour"
 ]);
 
@@ -123,9 +124,9 @@ const POLICY = Object.freeze({
     mainRole: "shopping_hot_item_recommendation",
     mainSections: AI_AUTO_BALANCE_GROUPS.homeMain,
     mainDistributionRule: "same_policy_hot_items_evenly_spread_across_home_1_to_home_5",
-    rightTop: Object.freeze({ section: "home|home_right_top", label: "지식 · 건강 · 기타", families: Object.freeze(["knowledge", "health", "other"]) }),
-    rightMiddle: Object.freeze({ section: "home|home_right_middle", label: "리빙 · 책방 · 기타", families: Object.freeze(["living", "books", "other"]) }),
-    rightBottom: Object.freeze({ section: "home|home_right_bottom", label: "자동차 · 생활", families: Object.freeze(["automotive", "everyday_life"]) }),
+    rightTop: Object.freeze({ section: "home|home_right_top", label: "지식 · 건강 · 생활", families: Object.freeze(["knowledge", "health", "everyday_life"]) }),
+    rightMiddle: Object.freeze({ section: "home|home_right_middle", label: "자동차 · 아웃도어", families: Object.freeze(["automotive", "outdoor"]) }),
+    rightBottom: Object.freeze({ section: "home|home_right_bottom", label: "리빙 · 책방 · 기타", families: Object.freeze(["living", "books", "other"]) }),
     rightDistributionRule: "policy_fit_first_then_even_distribution_among_compatible_right_sections"
   }),
   distributionPolicy: Object.freeze({
@@ -135,7 +136,8 @@ const POLICY = Object.freeze({
     beauty: "distribution-sponsor legacy key now serves beauty category",
     smallAppliance: "distribution-new legacy key now serves small_appliance_and_consumer_electronics category",
     apparelFashion: "distribution-special legacy key now serves apparel_fashion category",
-    essentialsLiving: "distribution-others legacy key now serves household_essentials_food_and_daily_living category",
+    essentialsLiving: "distribution-others legacy key now serves household_essentials_and_daily_living category",
+    extra: "distribution-extra serves other_outdoor_food category",
     right: "brand_focused_mixed_picks; beauty_small_appliance_essentials_priority; fashion_lower_share",
     legacyStatusFlags: "sponsor_new_special_are_priority_attributes_not_visible_section_meanings",
     distributionRule: "category_fit_first; recommend_and_trending_may_overlap; category_sections_are_not_interchangeable; administrator_pins_preserved"
@@ -1047,7 +1049,9 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   // interchangeable merely to make the counts look even.
   const fashionFit = category.primary === "fashion" || /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|fashion|apparel|clothing|shoes|bag|jewelry|watch)/i.test(hay);
   const automotiveFit = /(자동차|차량|자동차용품|차량용품|타이어|휠|블랙박스|대시캠|카케어|모빌리티|전기차|오토바이|모터사이클|car\b|vehicle|automotive|tire|wheel|dashcam|car care|mobility|motorcycle)/i.test(hay);
-    const bookShopFit = /(도서|책방|서점|책\b|출판|전자책|bookstore|book\b|books\b|publishing|ebook)/i.test(hay);
+  const bookShopFit = /(도서|책방|서점|책\b|출판|전자책|웹툰|코믹|만화|디지털\s*독서|bookstore|book\b|books\b|publishing|ebook|webtoon|comic|digital reading)/i.test(hay);
+  const home6DigitalReadingFit = bookShopFit;
+  const outdoorProductFit = tourProfile.outdoorGear || tourProfile.golfGear || tourProfile.sportsGear || /(아웃도어|등산|트레킹|캠핑|골프|스포츠용품|텐트|침낭|등산화|등산스틱|outdoor|hiking|trekking|camping|golf|sports gear|tent|sleeping bag)/i.test(hay);
   const foodLivingFit = ["food_household_essentials","agriculture_fishery_forestry","home_appliances_living","local_products"].includes(category.primary) || /(푸드|식품|식료품|농산물|수산물|축산물|리빙|생활용품|주방|가구|침구|인테리어|food|grocery|produce|seafood|living|household|kitchen|furniture|interior)/i.test(hay);
   const everydayLifeFit = ["food_household_essentials","home_appliances_living","electronics_accessories"].includes(category.primary) || /(생활|생필품|청소|위생|주방|욕실|수납|가정용|소형가전|휴대용|차량용|household|daily|everyday|cleaning|hygiene|kitchen|bath|storage|small appliance|portable)/i.test(hay);
   const knowledgeHealthFit = category.primary === "baby_family_education" || category.primary === "beauty_personal_care" || /(지식|교육|학습|강의|자격증|건강|헬스|피트니스|영양제|비타민|건강식품|웰니스|knowledge|education|learning|course|health|fitness|supplement|vitamin|wellness)/i.test(hay);
@@ -1059,14 +1063,17 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
       add("home", sectionKey, mainScore, "홈 쇼핑 핫템 추천 공통 정책 적합 상품", "home_hot_item_balanced_candidate", []);
     });
   }
-  if ((knowledgeHealthFit || (!automotiveFit && !fashionFit && !foodLivingFit && !bookShopFit && !everydayLifeFit)) && risk.gatePassed === true) {
-    add("home", "home_right_top", baseScore + (knowledgeHealthFit ? 2 : 0), "지식·건강·기타 우측 상단 정책 적합", "home_right_knowledge_health_other", []);
+  if (home6DigitalReadingFit && risk.gatePassed === true) {
+    add("home", "home_6", baseScore + 7, "웹툰·서적·전자책·디지털 독서 Home 6 정책 적합", "home_6_digital_reading_books", []);
   }
-  if ((foodLivingFit || bookShopFit || (consumerHotFit && !fashionFit && !automotiveFit)) && risk.gatePassed === true) {
-    add("home", "home_right_middle", baseScore + 2, "리빙·책방·기타 우측 중단 정책 적합", "home_right_living_books_other", []);
+  if ((knowledgeHealthFit || everydayLifeFit) && risk.gatePassed === true) {
+    add("home", "home_right_top", baseScore + (knowledgeHealthFit ? 3 : 1), "지식·건강·생활 우측 상단 정책 적합", "home_right_knowledge_health_life", []);
   }
-  if ((automotiveFit || everydayLifeFit) && risk.gatePassed === true) {
-    add("home", "home_right_bottom", baseScore + (automotiveFit ? 4 : 1), "자동차·일상생활 우측 하단 정책 적합", "home_right_automotive_everyday_life", []);
+  if ((automotiveFit || outdoorProductFit) && risk.gatePassed === true) {
+    add("home", "home_right_middle", baseScore + (automotiveFit ? 4 : 2), "자동차·아웃도어 우측 중단 정책 적합", "home_right_automotive_outdoor", []);
+  }
+  if ((foodLivingFit || bookShopFit || (!automotiveFit && !knowledgeHealthFit && !fashionFit && consumerHotFit)) && risk.gatePassed === true) {
+    add("home", "home_right_bottom", baseScore + (bookShopFit ? 2 : 1), "리빙·책방·기타 우측 하단 정책 적합", "home_right_living_books_other", []);
   }
 
   // DISTRIBUTION FRONT POLICY (legacy section keys retained for snapshot compatibility):
@@ -1077,9 +1084,12 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   // defines a visible Distribution section. Travel/service inventory is already
   // returned to Tour exclusively above and cannot enter these rails.
   const beautyDistributionFit = category.primary === "beauty_personal_care" || /(뷰티|화장품|스킨케어|메이크업|헤어케어|바디케어|향수|선크림|세럼|크림|립|마스크팩|beauty|cosmetic|skincare|makeup|hair care|body care|perfume|serum|sunscreen)/i.test(hay);
-  const smallApplianceDistributionFit = ["electronics_accessories","home_appliances_living"].includes(category.primary) || /(소형가전|이어폰|이어버드|헤드폰|태블릿|카메라|액션카메라|브이로그|짐벌|마이크|핀마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|earphone|headphone|tablet|camera|action camera|vlog|gimbal|microphone|smartwatch|projector|fan|humidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(hay);
+  const smallApplianceDistributionFit = !home6DigitalReadingFit && (["electronics_accessories","home_appliances_living"].includes(category.primary) || /(소형가전|이어폰|이어버드|헤드폰|태블릿|카메라|액션카메라|브이로그|짐벌|마이크|핀마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|earphone|headphone|tablet|camera|action camera|vlog|gimbal|microphone|smartwatch|projector|fan|humidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(hay));
   const apparelFashionDistributionFit = category.primary === "fashion" || /(패션|의류|옷|자켓|재킷|코트|셔츠|블라우스|원피스|팬츠|청바지|정장|캐주얼|빈티지|스니커즈|신발|가방|아웃도어 의류|등산복|fashion|apparel|clothing|jacket|coat|shirt|blouse|dress|pants|jeans|suit|casual|vintage|sneaker|shoes|bag|outdoor wear|hiking wear)/i.test(hay);
-  const essentialsLivingDistributionFit = ["food_household_essentials","agriculture_fishery_forestry","local_products"].includes(category.primary) || /(생필품|생활필수|생활용품|위생|세제|세정제|청소|화장지|티슈|물티슈|주방용품|욕실용품|수납|생활소모품|식재료|식료품|조미료|간편식|음료|농산물|수산물|축산물|household|essential|hygiene|detergent|cleaning|tissue|kitchen|bath|storage|daily supply|grocery|ingredient|seasoning|meal|beverage|produce|seafood)/i.test(hay);
+  const distributionProductText = lower([row.productName, row.title, row.description, row.summary].map(text).join(" "));
+  const explicitFoodDistributionFit = /(식재료|식료품|조미료|간편식|음료|농산물|수산물|축산물|건강식품|과자|커피|차\b|grocery|ingredient|seasoning|meal|beverage|produce|seafood|food|health food|snack|coffee|tea\b)/i.test(distributionProductText);
+  const essentialsLivingDistributionFit = !explicitFoodDistributionFit && (category.primary === "food_household_essentials" || /(생필품|생활필수|생활용품|위생|세제|세정제|청소|화장지|티슈|물티슈|주방용품|욕실용품|수납|생활소모품|household|essential|hygiene|detergent|cleaning|tissue|kitchen|bath|storage|daily supply)/i.test(hay));
+  const distributionExtraFit = outdoorProductFit || explicitFoodDistributionFit || category.primary === "agriculture_fishery_forestry";
   const distributionCoreHotFit = beautyDistributionFit || smallApplianceDistributionFit || apparelFashionDistributionFit;
   const explicitBrandText = lower(first(row.brandName, row.brand, row.manufacturerName, row.manufacturer, supplier.brandName, supplier.brand, supplier.companyName));
   const distributionBrandEvidence = !!explicitBrandText || category.primary === "manufacturer_brands" || /(공식 브랜드|브랜드관|브랜드 스토어|official brand|brand store|flagship)/i.test(hay) || (highTrust && supplier.verified === true);
@@ -1104,14 +1114,16 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
     } else if (apparelFashionDistributionFit) {
       add("distribution", "distribution-special", baseScore + 6 + statusAttributeBoost, "캐주얼·정장·빈티지·브랜드·아웃도어 의류 중심 의류·패션 섹션", "distribution_apparel_fashion_category", []);
     } else if (essentialsLivingDistributionFit) {
-      add("distribution", "distribution-others", baseScore + 6 + statusAttributeBoost, "생필품·생활용품·식재료·식품 중심 생활 섹션", "distribution_essentials_living_category", []);
+      add("distribution", "distribution-others", baseScore + 6 + statusAttributeBoost, "생필품·생활용품 중심 생활 섹션", "distribution_essentials_living_category", []);
+    } else if (distributionExtraFit) {
+      add("distribution", "distribution-extra", baseScore + 6 + statusAttributeBoost, "기타·아웃도어·식품 전용 섹션", "distribution_extra_outdoor_food_category", []);
     }
   }
 
   // Brand Picks right rail: mixed across the four consumer families. Fashion
   // receives a smaller score so beauty, small appliances and essentials occupy
   // a larger share when equivalent branded candidates are available.
-  const brandRightFit = beautyDistributionFit || smallApplianceDistributionFit || apparelFashionDistributionFit || essentialsLivingDistributionFit;
+  const brandRightFit = beautyDistributionFit || smallApplianceDistributionFit || apparelFashionDistributionFit || essentialsLivingDistributionFit || distributionExtraFit;
   if (risk.gatePassed === true && brandRightFit && distributionBrandEvidence) {
     const brandCategoryBoost = beautyDistributionFit ? 5 : (smallApplianceDistributionFit ? 6 : (essentialsLivingDistributionFit ? 5 : 2));
     add("distribution", "distribution-right", baseScore + brandCategoryBoost + Math.min(4, statusAttributeBoost), "브랜드 중심 우측 추천: 소형가전·뷰티·생필품 우선, 의류는 낮은 비중", "distribution_brand_focused_mixed_right", []);
@@ -1155,7 +1167,8 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
     else if (smallApplianceDistributionFit) add("distribution", "distribution-new", baseScore, "검증 완료 소형가전 상품의 비공개 카테고리 검토 배치", "private_review_small_appliance_distribution_fit", []);
     else if (apparelFashionDistributionFit) add("distribution", "distribution-special", baseScore, "검증 완료 의류·패션 상품의 비공개 카테고리 검토 배치", "private_review_apparel_distribution_fit", []);
     else if (essentialsLivingDistributionFit) add("distribution", "distribution-others", baseScore, "검증 완료 생필품·생활 상품의 비공개 카테고리 검토 배치", "private_review_essentials_distribution_fit", []);
-    else add("distribution", "distribution-others", baseScore - 4, "카테고리 재확인이 필요한 검증 완료 상품의 비공개 검토 배치", "private_review_uncategorized_distribution_fit", []);
+    else if (distributionExtraFit) add("distribution", "distribution-extra", baseScore, "검증 완료 기타·아웃도어·식품 상품의 비공개 카테고리 검토 배치", "private_review_distribution_extra_fit", []);
+    else add("distribution", "distribution-extra", baseScore - 4, "카테고리 재확인이 필요한 검증 완료 상품의 비공개 검토 배치", "private_review_uncategorized_distribution_extra", []);
   }
 
   const pageOrder = { home: 0, distribution: 1, network: 2, tour: 3, social: 4 };

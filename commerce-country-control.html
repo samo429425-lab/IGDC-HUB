@@ -190,9 +190,9 @@
     <div class="commerce-flow">
       <div class="flow-step"><strong>1</strong><span>책임 공급업체 리서치</span><small>AI 정책 반영 · 업체 발견·검증·후보 원장</small></div>
       <div class="flow-step"><strong>2</strong><span>공식 상품 리서치</span><small>활성 공급업체에서 실상품 발견·검증 · 전체 상품 후보 관리목록 등록</small></div>
-      <div class="flow-step publish"><strong>3</strong><span>상품 관리·18개 섹션·프론트 매칭</span><small>미배치·배치·보류·제외·영구 제외 후 관리자 프론트 매칭</small></div>
+      <div class="flow-step publish"><strong>3</strong><span>상품 관리·20개 섹션·프론트 매칭</span><small>미배치·배치·보류·제외·영구 제외 후 관리자 프론트 매칭</small></div>
     </div>
-    <div class="small" style="margin-top:10px">중간 후보 저장·수익 판정은 내부 자동 처리합니다. 운영자는 업체 → 상품 → 18개 섹션/프론트의 3단계만 관리합니다.</div>
+    <div class="small" style="margin-top:10px">중간 후보 저장·수익 판정은 내부 자동 처리합니다. 운영자는 업체 → 상품 → 20개 섹션/프론트의 3단계만 관리합니다.</div>
   </section>
 
   <section class="panel">
@@ -264,7 +264,7 @@
         <label class="supplier-select-label"><input id="queueSelectAll" type="checkbox" data-queue-select-all> 전체 선택</label>
         <span id="queueSelectedCount" class="supplier-selection-count">선택 0건</span>
         <button id="queueOpenInProductManagerBtn" type="button" disabled>선택 상품 관리목록에서 보기</button>
-        <button id="queueSelectedAiPlaceBtn" type="button" disabled>선택 상품 AI로 18개 섹션 자동배치</button>
+        <button id="queueSelectedAiPlaceBtn" type="button" disabled>선택 상품 AI로 20개 섹션 자동배치</button>
         <select id="queueSelectedManualSection" class="product-management-select">
           <option value="">수동 배치 섹션 선택</option>
           <option value="home|home_1">홈 · home_1</option>
@@ -296,7 +296,7 @@
   </details>
 
   <section id="productResearchPanel" class="panel">
-    <div class="panel-heading"><h2>공식 상품 리서치·후보 심사·18개 섹션 배치 관리</h2><div class="actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="policy" data-policy-workspace-label="상품 리서치 적용 정책" data-policy-scope="country">AI 운영·정책 대화</button></div></div>
+    <div class="panel-heading"><h2>공식 상품 리서치·후보 심사·20개 섹션 배치 관리</h2><div class="actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="policy" data-policy-workspace-label="상품 리서치 적용 정책" data-policy-scope="country">AI 운영·정책 대화</button></div></div>
     <div class="small">현재 책임 공급업체 비공개 후보 목록의 활성 업체를 모두 조사합니다. 새로 등록된 업체도 다음 실행부터 자동 포함됩니다. 조사 도중 일시정지하면 그 시점까지 발견·점검되어 저장된 상품을 최신 상품 리서치 목록에서 즉시 다시 확인할 수 있으므로 전체 업체 조사가 끝날 때까지 기다릴 필요가 없습니다. 최신 목록에서 선택 상품 또는 현재 목록 전체를 후보 관리목록 등록·AI 검증 자동 배치할 수 있으며, 검증 실패 상품은 보류·제외 목록으로 분류됩니다.</div>
     <div class="review-return-note">상품·업체 링크는 현재 탭에서 열립니다. 뒤로가기를 누르면 이 관리 화면의 기존 국가·목록 위치로 돌아옵니다.</div>
     <div class="operation-actions">
@@ -323,7 +323,7 @@
     <details id="productCandidatePanel" class="product-management-details heavy-data-panel" data-heavy-panel="product-candidates">
       <summary class="heavy-panel-summary"><span><strong>전체 상품 후보·배치 관리 목록</strong> <span id="productCandidateSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="product_candidate_management" data-policy-workspace-label="전체 상품 후보·배치 관리" data-policy-scope="country">AI 운영·정책 대화</button><button type="button" class="product-section-ai-button" data-section-ai-auto="__all__">미배정·빈 배정정보 AI 자동 복구</button><span id="productCandidateToggleLabel" class="pill info">목록 펼치기</span></span></summary>
       <div class="heavy-panel-content">
-        <div class="small">미배정 후보, 배정정보 복구 필요 상품, 18개 섹션별 배치 상품을 함께 표시합니다. 각 상품 카드에서 섹션 이동·보류·제외·AI 재분류를 처리하며, 관리자 수동 지정은 이후 AI 자동화보다 우선합니다.</div>
+        <div class="small">미배정 후보, 배정정보 복구 필요 상품, 20개 섹션별 배치 상품을 함께 표시합니다. 각 상품 카드에서 섹션 이동·보류·제외·AI 재분류를 처리하며, 관리자 수동 지정은 이후 AI 자동화보다 우선합니다.</div>
         <div id="productGrid" class="product-candidate-groups"><div class="small">아직 리서치된 상품 후보가 없습니다.</div></div>
       </div>
     </details>
@@ -378,7 +378,7 @@
         </details>
 
         <details id="productRejectQueue" class="supplier-control-queue">
-          <summary><span id="productRejectToggleLabel">제외 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
+          <summary><span id="productRejectToggleLabel">연구 제외 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
           <div class="supplier-control-content">
             <div class="supplier-queue-toolbar">
               <label class="supplier-select-label"><input id="productRejectSelectAll" type="checkbox" data-product-exclusion-select-all="reject"> 전체 선택</label>
@@ -388,20 +388,20 @@
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="reject" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="reject" disabled>선택 목록에서만 제거</button>
             </div>
-            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>썸네일·상품·원본 확인</th><th>업체</th><th>제외 상태</th></tr></thead><tbody id="productRejectRows"></tbody></table></div>
+            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>썸네일·상품·원본 확인</th><th>업체</th><th>연구 제외 상태</th></tr></thead><tbody id="productRejectRows"></tbody></table></div>
           </div>
         </details>
       </div>
     </details>
 
     <section id="productTransitionAuditPanel" class="product-transition-audit" aria-label="대기열·배치 전환 검증">
-      <div class="product-transition-audit-head"><div><h3>대기열·배치 전환 검증</h3><div class="small">최신 리서치 → 비공개 상품 대기열 → 후보 관리 → 18개 섹션 배치 사이의 수량과 연결 상태를 읽기 전용으로 교차 점검합니다. 이 검증은 프론트 공개·상품 수입·결제를 실행하지 않습니다.</div></div><div class="actions"><button id="productTransitionAuditBtn" type="button" class="secondary">대기열·배치 전환 검증</button><button id="productTransitionAuditDownloadBtn" type="button" class="ghost" disabled>검증 JSON 다운로드</button></div></div>
+      <div class="product-transition-audit-head"><div><h3>대기열·배치 전환 검증</h3><div class="small">최신 리서치 → 비공개 상품 대기열 → 후보 관리 → 20개 섹션 배치 사이의 수량과 연결 상태를 읽기 전용으로 교차 점검합니다. 이 검증은 프론트 공개·상품 수입·결제를 실행하지 않습니다.</div></div><div class="actions"><button id="productTransitionAuditBtn" type="button" class="secondary">대기열·배치 전환 검증</button><button id="productTransitionAuditDownloadBtn" type="button" class="ghost" disabled>검증 JSON 다운로드</button></div></div>
       <div id="productTransitionAuditGrid" class="product-transition-audit-grid"><div class="product-transition-audit-item"><span class="small">검증 상태</span><strong>대기</strong></div></div>
       <div id="productTransitionAuditState" class="product-transition-audit-state">대기열 등록 또는 후보 정리 후 검증 버튼을 누르면 현재 국가·지역의 리서치 상태와 상품 후보 원장을 다시 읽어 연결 수량을 확인합니다.</div>
     </section>
 
-    <section id="productSectionBoard" class="product-section-board" aria-label="18개 섹션 배치 예정 상품 목록">
-      <div class="section-board-head"><div><h3>18개 섹션 배치 예정 상품 목록</h3><div class="small">각 섹션은 관리자 후보 200건(프론트 100 + 예비 100)까지 보관합니다. 프론트에는 랭킹 상위 100건만 반영하며, 관리자 수동 지정은 AI 자동 정리보다 우선합니다.</div></div><div class="section-board-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="distribution_18_sections" data-policy-workspace-label="18개 섹션 배치 예정 상품" data-policy-scope="country">AI 운영·정책 대화</button><span id="productSectionSummary" class="pill info section-board-count">배치 예정 0건</span><label class="section-select-label"><input id="allSectionsSelect" type="checkbox"> 18개 전체 선택</label><span id="selectedSectionCount" class="pill info">선택 섹션 0개</span><button id="selectedSectionsMatchBtn" type="button" class="product-section-front-button" disabled>선택 섹션 프론트 매칭</button><button id="allSectionsRankTrimBtn" type="button" class="product-section-ai-button">18개 섹션 AI 상위100 정리</button><button id="allSectionsMatchBtn" type="button" class="product-section-front-button" disabled>전체 섹션 프론트 매칭</button><button id="selectedSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>선택 섹션 매칭 해제</button><button id="allSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>전체 섹션 매칭 해제</button></div></div>
+    <section id="productSectionBoard" class="product-section-board" aria-label="20개 섹션 배치 예정 상품 목록">
+      <div class="section-board-head"><div><h3>20개 섹션 배치 예정 상품 목록</h3><div class="small">각 섹션은 관리자 후보 200건(프론트 100 + 예비 100)까지 보관합니다. 프론트에는 랭킹 상위 100건만 반영하며, 관리자 수동 지정은 AI 자동 정리보다 우선합니다.</div></div><div class="section-board-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="distribution_20_sections" data-policy-workspace-label="20개 섹션 배치 예정 상품" data-policy-scope="country">AI 운영·정책 대화</button><span id="productSectionSummary" class="pill info section-board-count">배치 예정 0건</span><label class="section-select-label"><input id="allSectionsSelect" type="checkbox"> 20개 전체 선택</label><span id="selectedSectionCount" class="pill info">선택 섹션 0개</span><button id="selectedSectionsMatchBtn" type="button" class="product-section-front-button" disabled>선택 섹션 프론트 매칭</button><button id="allSectionsRankTrimBtn" type="button" class="product-section-ai-button">20개 섹션 AI 상위100 정리</button><button id="allSectionsMatchBtn" type="button" class="product-section-front-button" disabled>전체 섹션 프론트 매칭</button><button id="selectedSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>선택 섹션 매칭 해제</button><button id="allSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>전체 섹션 매칭 해제</button></div></div>
       <div id="productSectionList" class="product-section-list"></div>
     </section>
   </section>
@@ -524,7 +524,7 @@
     var el=document.getElementById("supplierResearchRounds");
     if(el){try{var saved=Number(localStorage.getItem("igdc_supplier_research_rounds")||1);if(saved>=1&&saved<=5)el.value=String(saved);}catch(_e){}el.addEventListener("change",function(){try{localStorage.setItem("igdc_supplier_research_rounds",String(rounds()));}catch(_e){}});}
     var state=document.getElementById("productResearchState");
-    if(state&&window.MutationObserver)new MutationObserver(function(){var t=String(state.textContent||"");if(/대기열 등록 버튼|비공개 후보·중개수익 대기열/.test(t))state.textContent="상품 검증 결과를 전체 상품 후보·배치 관리 목록으로 자동 반영 중입니다. 완료 후 해당 목록에서 18개 섹션 배치·보류·제외·삭제를 결정하세요.";}).observe(state,{childList:true,subtree:true,characterData:true});
+    if(state&&window.MutationObserver)new MutationObserver(function(){var t=String(state.textContent||"");if(/대기열 등록 버튼|비공개 후보·중개수익 대기열/.test(t))state.textContent="상품 검증 결과를 전체 상품 후보·배치 관리 목록으로 자동 반영 중입니다. 완료 후 해당 목록에서 20개 섹션 배치·보류·제외·삭제를 결정하세요.";}).observe(state,{childList:true,subtree:true,characterData:true});
   });
 })();
 </script>
@@ -534,7 +534,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20260929-staged-admin-front-sync-v4"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261001-admin20-v1"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

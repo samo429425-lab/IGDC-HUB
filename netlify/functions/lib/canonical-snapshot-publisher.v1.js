@@ -59,8 +59,8 @@ const PAGE_ALIASES = Object.freeze({
 
 const SECTION_ALIASES = Object.freeze({
   home: {
-    main1: "home_1", main2: "home_2", main3: "home_3", main4: "home_4", main5: "home_5",
-    "home-1": "home_1", "home-2": "home_2", "home-3": "home_3", "home-4": "home_4", "home-5": "home_5",
+    main1: "home_1", main2: "home_2", main3: "home_3", main4: "home_4", main5: "home_5", main6: "home_6",
+    "home-1": "home_1", "home-2": "home_2", "home-3": "home_3", "home-4": "home_4", "home-5": "home_5", "home-6": "home_6",
     right_top: "home_right_top", right_mid: "home_right_middle", right_middle: "home_right_middle", right_bottom: "home_right_bottom"
   },
   network: {
@@ -69,7 +69,7 @@ const SECTION_ALIASES = Object.freeze({
   distribution: {
     recommend: "distribution-recommend", today: "distribution-recommend", sponsored: "distribution-sponsor", sponsor: "distribution-sponsor",
     trending: "distribution-trending", popular: "distribution-trending", new: "distribution-new", special: "distribution-special",
-    others: "distribution-others", etc: "distribution-others", right_panel: "distribution-right", rightpanel: "distribution-right"
+    others: "distribution-others", etc: "distribution-others", extra: "distribution-extra", outdoor_food: "distribution-extra", "distribution-extra": "distribution-extra", right_panel: "distribution-right", rightpanel: "distribution-right"
   },
   social: {
     maru: "social-maru", youtube: "social-youtube", instagram: "social-instagram", tiktok: "social-tiktok", facebook: "social-facebook",

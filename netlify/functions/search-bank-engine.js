@@ -884,9 +884,9 @@ function itemSlotValues(item){
 }
 
 const FRONT_SECTION_ALIAS_MAP = Object.freeze({
-  main1:"home_1", main2:"home_2", main3:"home_3", main4:"home_4", main5:"home_5",
-  home1:"home_1", home2:"home_2", home3:"home_3", home4:"home_4", home5:"home_5",
-  "home-1":"home_1", "home-2":"home_2", "home-3":"home_3", "home-4":"home_4", "home-5":"home_5",
+  main1:"home_1", main2:"home_2", main3:"home_3", main4:"home_4", main5:"home_5", main6:"home_6",
+  home1:"home_1", home2:"home_2", home3:"home_3", home4:"home_4", home5:"home_5", home6:"home_6",
+  "home-1":"home_1", "home-2":"home_2", "home-3":"home_3", "home-4":"home_4", "home-5":"home_5", "home-6":"home_6",
   "right-top":"home_right_top", right_top:"home_right_top", "home-right-top":"home_right_top",
   "right-middle":"home_right_middle", right_middle:"home_right_middle", right_mid:"home_right_middle", "home-right-middle":"home_right_middle",
   "right-bottom":"home_right_bottom", right_bottom:"home_right_bottom", "home-right-bottom":"home_right_bottom",
@@ -897,6 +897,7 @@ const FRONT_SECTION_ALIAS_MAP = Object.freeze({
   dist5:"distribution-sponsor", dist_5:"distribution-sponsor", "dist-5":"distribution-sponsor", distribution5:"distribution-sponsor", distribution_5:"distribution-sponsor", "distribution-5":"distribution-sponsor",
   dist6:"distribution-others", dist_6:"distribution-others", "dist-6":"distribution-others", distribution6:"distribution-others", distribution_6:"distribution-others", "distribution-6":"distribution-others",
   dist7:"distribution-right", dist_7:"distribution-right", "dist-7":"distribution-right", distribution7:"distribution-right", distribution_7:"distribution-right", "distribution-7":"distribution-right",
+  dist8:"distribution-extra", dist_8:"distribution-extra", "dist-8":"distribution-extra", distribution8:"distribution-extra", distribution_8:"distribution-extra", "distribution-8":"distribution-extra", "distribution-extra":"distribution-extra",
   youtube:"social-youtube", instagram:"social-instagram", tiktok:"social-tiktok", facebook:"social-facebook", wechat:"social-wechat", weibo:"social-weibo", pinterest:"social-pinterest", reddit:"social-reddit", twitter:"social-twitter", x:"social-twitter",
   movie:"media-movie", movies:"media-movie", drama:"media-drama", thriller:"media-thriller", romance:"media-romance", variety:"media-variety", documentary:"media-documentary", animation:"media-animation", music:"media-music", shorts:"media-shorts"
 });

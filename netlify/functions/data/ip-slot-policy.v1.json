@@ -1,5 +1,5 @@
 {
-  "version": "ip-slot-policy-v1.7.0-consumer-section-alignment",
+  "version": "ip-slot-policy-v1.8.0-admin20-front-policy-sync",
   "contractVersion": "sanmaru-searchbank-ip-slot-contract-v1.3-social-right-market-evidence-integrity",
   "derivedFrom": {
     "psom": "data/psom.json",
@@ -109,19 +109,30 @@
         ]
       },
       "home_right_top": {
-        "strategyId": "home-right-top-knowledge-health-other",
-        "role": "knowledge_health_other",
+        "strategyId": "home-right-top-knowledge-health-life",
+        "role": "knowledge_health_daily_life",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
           "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "home-right-top-knowledge-health-other"
+          "home-right-top-knowledge-health-life"
         ]
       },
       "home_right_middle": {
-        "strategyId": "home-right-middle-living-books-other",
+        "strategyId": "home-right-middle-automotive-outdoor",
+        "role": "automotive_outdoor",
+        "allowedProductClasses": [
+          "physical_product",
+          "verified_marketplace_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-right-middle-automotive-outdoor"
+        ]
+      },
+      "home_right_bottom": {
+        "strategyId": "home-right-bottom-living-books-other",
         "role": "living_books_other",
         "allowedProductClasses": [
           "physical_product",
@@ -129,18 +140,19 @@
           "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "home-right-middle-living-books-other"
+          "home-right-bottom-living-books-other"
         ]
       },
-      "home_right_bottom": {
-        "strategyId": "home-right-bottom-automotive-everyday",
-        "role": "automotive_everyday_life",
+      "home_6": {
+        "strategyId": "home-6-digital-reading",
+        "role": "webtoon_books_ebooks_digital_reading",
         "allowedProductClasses": [
           "physical_product",
-          "verified_marketplace_offer"
+          "verified_marketplace_offer",
+          "digital_product"
         ],
         "requiredSlotProfiles": [
-          "home-right-bottom-automotive-everyday"
+          "home-6-digital-reading"
         ]
       }
     },
@@ -157,18 +169,6 @@
           "distribution-recommend"
         ]
       },
-      "distribution-sponsor": {
-        "strategyId": "distribution-sponsor",
-        "role": "beauty_category_section",
-        "allowedProductClasses": [
-          "physical_product",
-          "verified_marketplace_offer",
-          "producer_cooperative_offer"
-        ],
-        "requiredSlotProfiles": [
-          "distribution-sponsor"
-        ]
-      },
       "distribution-trending": {
         "strategyId": "distribution-trending",
         "role": "verified_realtime_popularity_core_consumer_goods",
@@ -181,6 +181,18 @@
           "distribution-trending"
         ],
         "requires": "trendEvidence"
+      },
+      "distribution-sponsor": {
+        "strategyId": "distribution-sponsor",
+        "role": "beauty_category_section",
+        "allowedProductClasses": [
+          "physical_product",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-sponsor"
+        ]
       },
       "distribution-new": {
         "strategyId": "distribution-new",
@@ -208,7 +220,7 @@
       },
       "distribution-others": {
         "strategyId": "distribution-others",
-        "role": "household_essentials_living_food_category_section",
+        "role": "household_essentials_living_category_section",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
@@ -216,6 +228,18 @@
         ],
         "requiredSlotProfiles": [
           "distribution-others"
+        ]
+      },
+      "distribution-extra": {
+        "strategyId": "distribution-extra",
+        "role": "other_outdoor_food_category_section",
+        "allowedProductClasses": [
+          "physical_product",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-extra"
         ]
       },
       "distribution-right": {

@@ -10,7 +10,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 const CommerceAutomation = require("./lib/commerce-country-automation.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.9.0-staged-admin-withdrawal-marker";
+const VERSION = "commerce-candidate-queue-control-v1.10.0-research-exclusion-ledger";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore"]);
 const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce-candidate-review-api"]);
@@ -99,7 +99,7 @@ async function applyAction(actorId,row,action){
     payload.slotDecision="undecided";
     delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.primaryPlacement;
     delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
-    payload.queueControl=Object.assign({},plain(payload.queueControl),{schema:"igdc-private-product-queue-control.v1",action:"restored",previousStatus,previousBucket,hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:text(actorId)||"administrator",decidedAt:now,decidedBy:text(actorId)||"administrator"});
+    payload.queueControl=Object.assign({},plain(payload.queueControl),{schema:"igdc-private-product-queue-control.v1",action:"restored",previousStatus,previousBucket,hiddenFromCountryQueue:false,permanentExcluded:false,researchExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:text(actorId)||"administrator",decidedAt:now,decidedBy:text(actorId)||"administrator"});
     payload.review=Object.assign({},plain(payload.review),{state:"pending",restoredFrom:previousBucket,decidedAt:now,decidedBy:text(actorId)||"administrator"});
     payload.managementControl={schema:"igdc-product-management-control.v1",source:"administrator_restore",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:text(actorId)||"administrator"};
     payload.frontPublication=Object.assign({},plain(payload.frontPublication),{operation:"unmatch",status:"unmatched",queued:false,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:false,deferredBuild:false,reason:"administrator_restored_to_candidate_pool",requestedAt:now,requestedBy:text(actorId)||"administrator"});
@@ -134,6 +134,7 @@ async function applyAction(actorId,row,action){
     previousStatus,
     hiddenFromCountryQueue:true,
     permanentExcluded:action==="purge",
+    researchExcluded:action==="reject"||action==="purge",
     rediscoveryAllowed:action==="dismiss"||action==="remove_from_list",
     permanentExclusionUrl:action==="purge"?text(payload.externalProductUrl||payload.url||row&&row.official_url)||null:plain(payload.queueControl).permanentExclusionUrl||null,
     decidedAt:now,

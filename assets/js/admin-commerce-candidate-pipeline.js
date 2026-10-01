@@ -1,4 +1,4 @@
-/* IGDC Commerce Candidate Pipeline Admin View v1.10.0
+/* IGDC Commerce Candidate Pipeline Admin View v1.11.0-admin20
  * Ordered private research/staging workflow and commerce queue diagnostic.
  * It reuses the existing administrator session.  No second commerce login,
  * provider call, seller navigation, publication, payment, or browser secret.
@@ -233,19 +233,19 @@
   function formText(id){return text($(id)&&$(id).value);}
   function formBool(id){return !!($(id)&&$(id).checked);}
   function openSectionManager(){
-    var scope=controlScope();if(!scope){show('18개 섹션 관리는 국가 범위를 먼저 확정해야 합니다.','warn');return;}
+    var scope=controlScope();if(!scope){show('20개 섹션 관리는 국가 범위를 먼저 확정해야 합니다.','warn');return;}
     var target=new URL('/commerce-country-control.html',location.origin);target.searchParams.set('country',scope.country);target.searchParams.set('region',scope.region);target.searchParams.set('returnPath',location.pathname+location.search);location.href=target.pathname+target.search;
   }
   async function runSelectedFront(operation){
     var row=selectedCandidate();if(!row||!selectedCandidateId){show('먼저 관리할 상품 후보를 선택해 주세요.','warn');return;}
-    var p=row.placement||{},section=text(p.sectionKey||p.section||p.slot);if(!section){show('이 상품은 아직 PSOM 섹션 배정이 없습니다. 먼저 PSOM 승인·배정을 완료하거나 18개 섹션 관리 화면에서 배정하세요.','warn');return;}
+    var p=row.placement||{},section=text(p.sectionKey||p.section||p.slot);if(!section){show('이 상품은 아직 PSOM 섹션 배정이 없습니다. 먼저 PSOM 승인·배정을 완료하거나 20개 섹션 관리 화면에서 배정하세요.','warn');return;}
     var match=operation==='match',label=match?'실상품 프론트 매칭':'실상품 프론트 매칭 해제';
     if(!window.confirm((row.productCard&&row.productCard.title||row.title||selectedCandidateId)+'\n\n'+label+'을 실행하시겠습니까?\n현재 PSOM 배정은 '+(match?'그대로 사용됩니다.':'삭제하지 않고 보존됩니다.')))return;
     var btn=$(match?'frontMatchBtn':'frontUnmatchBtn'),other=$(match?'frontUnmatchBtn':'frontMatchBtn');if(btn)btn.disabled=true;if(other)other.disabled=true;show(label+'을 처리하는 중입니다.','warn');
     try{
       var result=await controlRequest(match?'product_front_match':'product_front_unmatch','POST',{ledgerMode:'candidate',mode:'candidates',candidateIds:[selectedCandidateId],confirmation:match?'SITE_PUBLISH':'SITE_UNPUBLISH',deferRelease:false,scopeRefresh:false,compactResponse:true,reuseFreshValidation:true,freshValidationMinutes:720});
       var fs=result.frontSyncResult||result,requested=Number(fs.requested||0),persisted=Number(fs.persisted||0),queued=Number(fs.queued||0),blocked=Number(fs.blocked||0);
-      if(!requested){show(label+' 대상이 0건입니다. 현재 PSOM 배정·보류/제외 상태를 18개 섹션 관리 화면에서 확인해 주세요.','warn');}
+      if(!requested){show(label+' 대상이 0건입니다. 현재 PSOM 배정·보류/제외 상태를 20개 섹션 관리 화면에서 확인해 주세요.','warn');}
       else if(blocked&&!persisted&&!queued){show(label+'이 안전 게이트에서 차단되었습니다. 차단 사유를 점검해 주세요.','warn');}
       else show(label+' 완료 · 요청 '+requested+' · 저장 '+persisted+' · 빌드 '+queued+(blocked?' · 차단 '+blocked:''),'ok');
       await refresh(true);

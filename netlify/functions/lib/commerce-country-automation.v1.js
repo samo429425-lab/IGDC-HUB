@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.27.0-staged-admin-safe-front-sync";
+const VERSION = "commerce-country-automation-v3.23.0-latest-transfer-routing-admin20-v3.28.0";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -43,7 +43,7 @@ const DEFAULT_INTERVAL_DAYS = 7;
 const DEFAULT_MAX_CANDIDATES = 20;
 const DEFAULT_SCOPES_PER_RUN = 12;
 const MAX_SCOPES_PER_RUN = 24;
-const PRODUCT_PORTFOLIO_LIMIT = 3000;
+const PRODUCT_PORTFOLIO_LIMIT = 4500;
 const PRODUCT_STATUS_PAGE_LIMIT = 200;
 const PRODUCT_STAGE_BATCH = 10;
 const PRODUCT_STAGE_CONCURRENCY = 2;
@@ -52,11 +52,11 @@ const PRODUCT_PARTIAL_STAGE_CONCURRENCY = 2;
 const PRODUCT_SECTION_CAPACITY = 200;
 const PRODUCT_AI_ENRICH_BATCH = 12;
 const PRODUCT_SECTION_KEYS = Object.freeze([
-  "home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5",
+  "home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5", "home|home_6",
   "home|home_right_top", "home|home_right_middle", "home|home_right_bottom",
-  "distribution|distribution-recommend", "distribution|distribution-sponsor",
-  "distribution|distribution-trending", "distribution|distribution-new",
-  "distribution|distribution-special", "distribution|distribution-others",
+  "distribution|distribution-recommend", "distribution|distribution-trending",
+  "distribution|distribution-sponsor", "distribution|distribution-new",
+  "distribution|distribution-special", "distribution|distribution-others", "distribution|distribution-extra",
   "distribution|distribution-right", "network|network-right", "social|rightPanel", "tour|tour"
 ]);
 const AI_AUTO_BALANCE_GROUPS = ProductRanking.AI_AUTO_BALANCE_GROUPS || Object.freeze({
@@ -1786,7 +1786,7 @@ function attachProductRuntime(dataInput, runtimeInput) {
       privateQueue: Object.assign({}, plain(plain(data.progress).privateQueue), { done: Number(partialQueue.done || 0), total: Number(partialQueue.eligible || 0) })
     });
   }
-  const sameJob = !text(runtime.jobId) || !text(data.jobId) || text(runtime.jobId) === text(data.jobId), deletedLatest = new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean).concat(sameJob ? array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean) : []));
+  const sameJob = !text(runtime.jobId) || !text(data.jobId) || text(runtime.jobId) === text(data.jobId), deletedLatest = new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean).concat(array(runtime.researchExcludedIdentities).map(text).filter(Boolean), sameJob ? array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean) : []));
   if (deletedLatest.size) {
     const pagination = plain(data.pagination), alreadyFiltered = lower(pagination.kind) === "latest" && pagination.deletedFiltered === true;
     const visibleLatest = alreadyFiltered ? array(data.latestProducts) : array(data.latestProducts).filter((row) => !deletedLatest.has(ProductRanking.productIdentity(row) || text(row && row.id)));
@@ -2918,7 +2918,8 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   let scanCursor=Math.max(0,Number(runtime.partialQueueScanCursor||0)),selectedRows=hasSelection?await resolveChunkedProductSelection(job,input):[],batch=[],scanned=0,total=Math.max(0,Number(job.resultCount||0)),manualReviewQueue=lower(input&&input.source)==="latest_list_manual",selectionReconcile={actualCandidateIds:[],actualIdentities:new Set(),staleHandledRepaired:0,reactivationPending:0,checked:0};
   const durableLedgerCheckpointFresh=text(runtime.partialQueueLedgerVerifiedVersion)===VERSION;
   if(!hasSelection&&!durableLedgerCheckpointFresh){scanCursor=0;handled.clear();}
-  const queueAccepts=(row)=>row&&row.inspectionComplete===true&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));
+  const researchSuppressed=new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean).concat(array(runtime.researchExcludedIdentities).map(text).filter(Boolean)));
+  const queueAccepts=(row)=>{const identity=productQueueIdentity(row);return row&&(!identity||!researchSuppressed.has(identity))&&row.inspectionComplete===true&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));};
   // An explicit latest-list registration/AI request is an administrator command to
   // re-check the selected product pages now. Product discovery may have produced a
   // provisional row (for example a catalog anchor with an image) before the normal
@@ -3020,7 +3021,7 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
   // Partial pause/manual queue registration is a PRIVATE ledger operation,
   // not an AI placement/ranking run.  The inspected job rows already contain
   // the current product evidence needed by ProductPipeline.researchReadiness().
-  // Rebuilding the full 18-section portfolio on every 20-item queue request
+  // Rebuilding the full 20-section portfolio on every 20-item queue request
   // was both semantically unnecessary and an O(N)-to-O(N log N) hot path that
   // repeated up to 120 times for a 2,400-row country.  Keep original inspected
   // order and evaluate queue readiness directly; AI/front placement stays fully
@@ -3743,11 +3744,11 @@ async function productCandidateAction(actorId, input) {
     const privateReview = productPrivateReviewAssessment(evaluated), manualReview = manualPrivatePlacementAssessment(evaluated);
     if (!privateReview.eligible && !manualReview.eligible) { const error = new Error("비공개 섹션 후보로 지정할 수 없는 상품입니다. 보완 사항: " + (manualReview.reason || privateReview.reason)); error.statusCode = 409; throw error; }
     const requestedKey = text(input && input.placementKey);
-    if (requestedKey && !validProductSectionKey(requestedKey)) { const error = new Error("18개 관리 섹션 중 하나를 선택해 주세요."); error.statusCode = 400; throw error; }
+    if (requestedKey && !validProductSectionKey(requestedKey)) { const error = new Error("20개 관리 섹션 중 하나를 선택해 주세요."); error.statusCode = 400; throw error; }
     const eligibleAssignments = array(evaluated.sectionAssignments).concat(privateReviewFallbackAssignments(evaluated)).filter((row) => row && (row.approvalEligible === true || row.reviewEligible === true));
     const fallbackKey = productPlacementKey(evaluated.approvedPlacement || evaluated.primaryPlacement || eligibleAssignments[0]);
     const selectedKey = requestedKey || fallbackKey;
-    if (!selectedKey) { const error = new Error("선택 가능한 배치 섹션이 없습니다. 18개 섹션 드롭다운에서 대상을 지정해 주세요."); error.statusCode = 409; throw error; }
+    if (!selectedKey) { const error = new Error("선택 가능한 배치 섹션이 없습니다. 20개 섹션 드롭다운에서 대상을 지정해 주세요."); error.statusCode = 409; throw error; }
     const split = splitProductSectionKey(selectedKey), selectedAssignment = eligibleAssignments.find((row) => productPlacementKey(row) === selectedKey);
     const placementWarnings = Array.from(new Set(array(privateReview.warnings).concat(array(manualReview.warnings)).concat(privateReview.eligible ? [] : [privateReview.reason]).filter(Boolean)));
     approvedPlacement = Object.assign({}, selectedAssignment || {
@@ -3827,22 +3828,19 @@ async function syncCandidateManagementResearchVisibility(actorId, scope, candida
     const matched = rows.filter((row) => productCandidateId(scope,row) === candidateId);
     const identities = Array.from(new Set(matched.map((row) => ProductRanking.productIdentity(row) || text(row&&row.id) || productUrl(row)).filter(Boolean)));
     if (!identities.length) return { ok:true, skipped:true, reason:"research_identity_not_found" };
-    const runtime = await productRuntimeRule(scope), permanent = new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean)), deleted = new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));
+    const runtime = await productRuntimeRule(scope), permanent = new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean)), researchExcluded = new Set(array(runtime.researchExcludedIdentities).map(text).filter(Boolean)), deleted = new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));
     if (decision === "purge") {
-      identities.forEach((identity) => { permanent.add(identity); deleted.add(identity); });
-    } else if (["hold","reject","dismiss","remove_from_list","removed"].includes(decision)) {
-      // A management action must immediately remove the row from the current
-      // research result view. The durable candidate/suppression ledger remains
-      // the authority for whether a future research run may rediscover it.
+      identities.forEach((identity) => { permanent.add(identity); researchExcluded.add(identity); deleted.add(identity); });
+    } else if (decision === "reject") {
+      // Reversible research exclusion, separate from URL/domain permanent blocking.
+      identities.forEach((identity) => { researchExcluded.add(identity); deleted.add(identity); });
+    } else if (["hold","dismiss","remove_from_list","removed"].includes(decision)) {
       identities.forEach((identity) => deleted.add(identity));
     } else if (decision === "undecided" || decision === "restore" || decision === "ai_reclassify") {
-      // Restore removes permanent suppression. Keep the item out of the old
-      // research-result snapshot; it now belongs to the candidate-management
-      // ledger and a fresh research run may discover it again.
-      identities.forEach((identity) => permanent.delete(identity));
+      identities.forEach((identity) => { permanent.delete(identity); researchExcluded.delete(identity); });
     }
-    await saveProductRuntime(scope,actorId,{jobId:text(runtime.jobId)||text(job.jobId)||null,permanentExcludedIdentities:Array.from(permanent).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(deleted).slice(0,PRODUCT_PORTFOLIO_LIMIT)});
-    return { ok:true, identities, permanentExcluded:decision === "purge" };
+    await saveProductRuntime(scope,actorId,{jobId:text(runtime.jobId)||text(job.jobId)||null,permanentExcludedIdentities:Array.from(permanent).slice(0,PRODUCT_PORTFOLIO_LIMIT),researchExcludedIdentities:Array.from(researchExcluded).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(deleted).slice(0,PRODUCT_PORTFOLIO_LIMIT)});
+    return { ok:true, identities, permanentExcluded:decision === "purge", researchExcluded:decision === "reject" || decision === "purge" };
   } catch (error) {
     return { ok:false, error:text(error&&error.message||error)||"research_visibility_sync_failed" };
   }
@@ -3861,7 +3859,7 @@ async function productCandidateLedgerAction(actorId, input) {
   if (decision === "slot_candidate") {
     const key = text(input && input.placementKey), sourcePlacement = array(payload.proposedPlacements).find((item) => productPlacementKey(item) === key) || { key };
     placement = candidateLedgerPlacementRecord(scope, sourcePlacement, actor, "administrator");
-    if (!placement) { const error = new Error("지정할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+    if (!placement) { const error = new Error("지정할 20개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
     payload.slotDecision = "slot_candidate"; payload.approvedPlacement = placement; payload.placement = placement; payload.page = placement.page; payload.channel = placement.page; payload.section = placement.sectionKey; payload.psom_key = placement.sectionKey; status = "approval_pending";
     payload.queueControl = Object.assign({}, plain(payload.queueControl), { hiddenFromCountryQueue:false, permanentExcluded:false, action:"section_selected", restoredAt:now, restoredBy:actor });
     payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
@@ -4180,7 +4178,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     };
     if (validationOnly && health.dead) {
       // A hard-dead/non-product result cannot remain counted on the administrator
-      // 18-section board while the public Snapshot correctly rejects it.  That
+      // 20-section board while the public Snapshot correctly rejects it.  That
       // split state was the root cause of admin counts such as 6/7 while the
       // Distribution front could safely render only 5.  Quarantine only hard
       // failures; transient 403/429/5xx checks continue to preserve the admin
@@ -4367,7 +4365,7 @@ async function revalidateProductFrontTargets(actorId, input, targetsInput, optio
   const publishedIds = options.includePublishedScope === true ? await scopePublishedCandidateIds(input) : [];
   const ids = Array.from(new Set(selectedIds.concat(publishedIds))).slice(0,500);
   // Front Match is a publication check, not another placement pass. Preserve the
-  // exact 18-section assignment selected on the administrator screen; only a
+  // exact 20-section assignment selected on the administrator screen; only a
   // hard runtime failure may hold/withdraw the product. AI reclassification is
   // reserved for the explicit AI placement controls.
   const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:false, reuseFreshValidation:input&&input.reuseFreshValidation===true, freshValidationMinutes:Number(input&&input.freshValidationMinutes)||720 });
@@ -4472,7 +4470,7 @@ async function productAiAutomation(actorId, input) {
   });
   const placementOnly = requestedMode === "placement", placementBatch = requestedMode === "placement_batch", selectedProductIds = new Set(array(input && input.productIds).map((id) => text(id)).filter(Boolean)), selectionOnly = requestedMode === "products" || placementBatch, repairOnly = requestedMode === "repair", mode = requestedMode === "section" ? "section" : (repairOnly ? "repair" : (requestedMode === "products" ? "products" : "all")), sectionKey = text(input && input.sectionKey);
   const deferQueueSync=placementBatch&&input&&input.deferQueueSync===true,aiRunToken=placementBatch?text(input&&input.aiRunToken)||("ai_draft_"+sha256(iso()+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20)):"";
-  if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+  if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 20개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   if (selectionOnly && !selectedProductIds.size) { const error = new Error("AI 자동 배치할 선택 후보를 확인하세요."); error.statusCode = 400; throw error; }
   const unassignedPlacementOnly = placementOnly || placementBatch || (mode === "all" && array(job.products).some((row) =>
     lower(row && row.slotDecision || "undecided") === "undecided" && !productAdministratorLocked(row)
@@ -5128,7 +5126,7 @@ async function productFrontSyncTargets(input, jobInput) {
   const requestedSectionKeys = Array.from(new Set(array(input && input.sectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
   const requestedProductIds = Array.from(new Set(array(input && input.productIds).map(text).filter(Boolean))).slice(0, 500);
   const requestedCandidateIds = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 500);
-  if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("프론트에 매칭할 18개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+  if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("프론트에 매칭할 20개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   if (mode === "sections" && !requestedSectionKeys.length) { const error = new Error("프론트에 매칭할 섹션을 하나 이상 선택하세요."); error.statusCode = 400; throw error; }
   if (mode === "candidate" && !requestedProductId && !requestedCandidateId) { const error = new Error("프론트에 매칭할 상품 한 건을 선택하세요."); error.statusCode = 400; throw error; }
   if (mode === "candidates" && !requestedProductIds.length && !requestedCandidateIds.length) { const error = new Error("프론트에 매칭할 상품을 하나 이상 선택하세요."); error.statusCode = 400; throw error; }
@@ -5205,7 +5203,7 @@ async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
         // separate management action (undecided/hold/reject). Keeping the
         // placement here lets one product, one section, selected sections or all
         // sections be matched and unmatched independently without rebuilding the
-        // 18-section allocation first.
+        // 20-section allocation first.
         const existingReview=plain(payload.review), existingPipeline=plain(payload.pipeline);
         payload.review = Object.assign({}, existingReview, { publicationRequested:false, explicitPublicationRequested:false, publicationStatus:"unpublish_requested", nextGate:"administrator_front_match", decidedAt:now, decidedBy:actor });
         payload.pipeline = Object.assign({}, existingPipeline, { nextGate:"administrator_front_match", explicitPublicationRequested:false, publicationStatus:"unpublish_requested", updatedAt:now, updatedBy:actor });

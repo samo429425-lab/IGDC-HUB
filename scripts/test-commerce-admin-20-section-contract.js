@@ -1,0 +1,23 @@
+"use strict";
+const fs=require("fs"),path=require("path"),assert=require("assert");
+const root=path.resolve(__dirname,"..");
+const expected=[
+  "home|home_1","home|home_2","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",
+  "distribution|distribution-recommend","distribution|distribution-trending","distribution|distribution-sponsor","distribution|distribution-new","distribution|distribution-special","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
+  "network|network-right","social|rightPanel","tour|tour"
+];
+const ranking=require(path.join(root,"netlify/functions/lib/commerce-product-ranking.v1.js"));
+const actual=[];Object.entries(ranking.FRONT_SECTION_KEYS).forEach(([page,sections])=>sections.forEach(section=>actual.push(page+"|"+section)));
+assert.strictEqual(actual.length,20,"ranking must expose exactly 20 commerce sections");expected.forEach(key=>assert(actual.includes(key),"missing ranking section "+key));
+assert.strictEqual(ranking.POLICY.sectionCapacity,200,"private section capacity must remain 200 (100 front + 100 reserve)");
+for(const file of ["data/psom.json","netlify/functions/data/psom.json","assets/hero/psom.json"]){const d=JSON.parse(fs.readFileSync(path.join(root,file),"utf8"));const keys=Object.keys(d.commercePlacementPolicy.sections||{});assert.strictEqual(keys.length,20,file+" policy count");expected.forEach(key=>assert(keys.includes(key),file+" missing "+key));assert.strictEqual(d.commercePlacementPolicy.manualPlacementPriority,true,file+" manual priority");assert.strictEqual(d.commercePlacementPolicy.frontSnapshotReverseWrite,false,file+" reverse-write must be false");}
+for(const file of ["commerce-country-control.html","commerce-candidate-pipeline.html","assets/js/admin-commerce-country-control.js","assets/js/admin-commerce-candidate-pipeline.js"]){const text=fs.readFileSync(path.join(root,file),"utf8");assert(!/18개 섹션|distribution_18_sections/.test(text),file+" still exposes old 18-section contract");}
+const control=fs.readFileSync(path.join(root,"netlify/functions/commerce-country-control.js"),"utf8");assert(control.includes('action==="product_candidate_psom_place"'),"missing product_candidate_psom_place route");
+const automation=fs.readFileSync(path.join(root,"netlify/functions/lib/commerce-country-automation.v1.js"),"utf8");assert(automation.includes("const PRODUCT_PORTFOLIO_LIMIT = 4500"),"research pool must support 4k+ candidates");assert(automation.includes("researchExcludedIdentities"),"reversible research exclusion ledger missing");
+const admin=fs.readFileSync(path.join(root,"assets/js/admin-commerce-country-control.js"),"utf8");assert(admin.includes("distribution|distribution-extra"),"admin missing distribution-extra");assert(admin.includes("home|home_6"),"admin missing home_6");assert(admin.includes("batchSize=8,maxConcurrent=2"),"front sync must remain bounded");assert(admin.includes("off+=20")&&admin.includes("slice(off,off+20)"),"management ledger writes must be chunked");
+function base(id,name){return{id,productName:name,title:name,productUrl:`https://shop.example.com/products/${id}`,url:`https://shop.example.com/products/${id}`,imageUrl:`https://shop.example.com/images/${id}.jpg`,imageOriginalUrl:`https://shop.example.com/images/${id}.jpg`,supplierSiteUrl:"https://shop.example.com/",supplierName:"Official Brand",supplierEvidenceReady:true,supplierApprovalReady:true,supplierTrustScore:96,supplierDecision:"approve",sameSupplierSite:true,researchStatus:"ready_for_admin_review",inspectionComplete:true,jsonLdProduct:true,offerPresent:true,productPageLive:true,availability:"in_stock",price:50000,priceCurrency:"KRW"};}
+const book=ranking.buildPortfolio([base("book","웹툰 전자책 디지털 독서 세트")],{}).products[0];assert.strictEqual(book.primaryPlacement.key,"home|home_6","digital reading must prefer Home 6");
+const outdoor=ranking.buildPortfolio([base("outdoor","프리미엄 캠핑 텐트 아웃도어 용품")],{}).products[0];assert((outdoor.sectionAssignments||[]).some(x=>x.key==="distribution|distribution-extra"),"outdoor must reach distribution-extra");
+const food=ranking.buildPortfolio([base("food","건강 식품 지역 농산물 선물세트")],{}).products[0];assert((food.sectionAssignments||[]).some(x=>x.key==="distribution|distribution-extra"),"food must reach distribution-extra");
+const soap=ranking.buildPortfolio([base("soap","세탁 세제 생활필수품")],{}).products[0];assert((soap.sectionAssignments||[]).some(x=>x.key==="distribution|distribution-others"),"daily essentials must remain in distribution-others");
+console.log("PASS commerce admin 20-section contract");

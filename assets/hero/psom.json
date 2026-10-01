@@ -91,6 +91,7 @@
         "main3",
         "main4",
         "main5",
+        "main6",
         "right_top",
         "right_mid",
         "right_bottom"
@@ -104,11 +105,12 @@
     "distribution": {
       "sections": [
         "today",
-        "sponsor",
         "popular",
+        "sponsor",
         "new",
         "special",
         "etc",
+        "extra",
         "right_panel"
       ]
     },
@@ -187,6 +189,7 @@
       "main3",
       "main4",
       "main5",
+      "main6",
       "right_top",
       "right_mid",
       "right_bottom"
@@ -196,11 +199,12 @@
     ],
     "distribution": [
       "today",
-      "sponsor",
       "popular",
+      "sponsor",
       "new",
       "special",
       "etc",
+      "extra",
       "right_panel"
     ],
     "social": [
@@ -314,7 +318,19 @@
     },
     "maru-global-insight": {
       "main": "마지막"
-    }
+    },
+    "main6": "Home 6",
+    "right_top": "지식·건강·생활",
+    "right_mid": "자동차·아웃도어",
+    "right_bottom": "리빙·책방·기타",
+    "today": "오늘의 추천",
+    "popular": "실시간 인기",
+    "sponsor": "뷰티",
+    "new": "소형가전",
+    "special": "의류·패션",
+    "etc": "생필품·생활",
+    "extra": "기타·아웃도어·식품",
+    "right_panel": "브랜드 추천"
   },
   "items": [
     {
@@ -6162,6 +6178,110 @@
       ],
       "version": "2.0",
       "updated": "2026-03-28"
+    },
+    {
+      "id": "home-main-006",
+      "page": "home",
+      "section": "main6",
+      "title": "Home 6",
+      "category": "platform",
+      "type": "thumbnail",
+      "url": "/index.html",
+      "keywords": [
+        "home",
+        "main",
+        "books",
+        "webtoon",
+        "ebook"
+      ],
+      "weight": 3,
+      "enabled": true,
+      "order": 6,
+      "lang": [
+        "ko",
+        "en",
+        "ja",
+        "zh",
+        "zht",
+        "de",
+        "fr",
+        "es",
+        "pt",
+        "ru",
+        "it",
+        "nl",
+        "sv",
+        "pl",
+        "tr",
+        "ar",
+        "th",
+        "vi",
+        "bn",
+        "fa",
+        "hi",
+        "hu",
+        "id",
+        "ms",
+        "sw",
+        "ta",
+        "tl",
+        "uk",
+        "ur",
+        "uz"
+      ],
+      "version": "2.0",
+      "updated": "2026-10-01"
+    },
+    {
+      "id": "distribution-extra-001",
+      "page": "distribution",
+      "section": "extra",
+      "title": "Other · Outdoor · Food Item 1",
+      "category": "distribution",
+      "type": "thumbnail",
+      "url": "#",
+      "keywords": [
+        "other",
+        "outdoor",
+        "food"
+      ],
+      "weight": 1,
+      "enabled": true,
+      "order": 1,
+      "lang": [
+        "ko",
+        "en",
+        "ja",
+        "zh",
+        "zht",
+        "de",
+        "fr",
+        "es",
+        "pt",
+        "ru",
+        "it",
+        "nl",
+        "sv",
+        "pl",
+        "tr",
+        "ar",
+        "th",
+        "vi",
+        "bn",
+        "fa",
+        "hi",
+        "hu",
+        "id",
+        "ms",
+        "sw",
+        "ta",
+        "tl",
+        "uk",
+        "ur",
+        "uz"
+      ],
+      "version": "2.0",
+      "updated": "2026-10-01"
     }
   ],
   "financeMeta": {
@@ -6254,7 +6374,7 @@
     "social-maru": "social-instagram"
   },
   "commercePlacementPolicy": {
-    "version": "commerce-18-section-policy-2026-09-29",
+    "version": "commerce-20-section-policy-2026-10-01",
     "authority": "administrator-ledger-first",
     "manualPlacementPriority": true,
     "frontSnapshotReverseWrite": false,
@@ -6310,32 +6430,45 @@
           "household_essentials"
         ]
       },
+      "home|home_6": {
+        "intent": "webtoon_books_ebooks_digital_reading_publishers_bookstores",
+        "priority": [
+          "fashion",
+          "beauty",
+          "small_electronics",
+          "small_appliances",
+          "household_essentials"
+        ]
+      },
       "home|home_right_top": {
-        "intent": "knowledge_health_other"
+        "intent": "knowledge_health_daily_life"
       },
       "home|home_right_middle": {
-        "intent": "living_books_other"
+        "intent": "automotive_outdoor"
       },
       "home|home_right_bottom": {
-        "intent": "automotive_everyday_life"
+        "intent": "living_books_other"
       },
       "distribution|distribution-recommend": {
         "intent": "today_mixed_beauty_small_appliance_hot_fashion"
       },
-      "distribution|distribution-sponsor": {
-        "intent": "beauty_category_section_legacy_key"
-      },
       "distribution|distribution-trending": {
-        "intent": "verified_realtime_popularity_beauty_small_appliance_hot_fashion"
+        "intent": "verified_realtime_popularity_core_consumer_goods"
+      },
+      "distribution|distribution-sponsor": {
+        "intent": "beauty_category_section"
       },
       "distribution|distribution-new": {
-        "intent": "small_appliance_electronics_category_section_legacy_key"
+        "intent": "small_appliance_electronics_category_section"
       },
       "distribution|distribution-special": {
-        "intent": "apparel_fashion_category_section_legacy_key"
+        "intent": "apparel_fashion_category_section"
       },
       "distribution|distribution-others": {
-        "intent": "household_essentials_living_food_category_section_legacy_key"
+        "intent": "household_essentials_living_category_section"
+      },
+      "distribution|distribution-extra": {
+        "intent": "other_outdoor_food_category_section"
       },
       "distribution|distribution-right": {
         "intent": "brand_focused_mixed_consumer_picks"
