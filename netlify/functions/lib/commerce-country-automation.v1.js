@@ -4212,21 +4212,14 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       if (currentKey === "tour|tour" && tourProfile.diningAuxiliary === true) tourDiningAutomaticCount = Math.max(0, tourDiningAutomaticCount - 1);
       currentBalanceReleased = true;
     };
-    if (validationOnly && health.dead) {
-      // A hard-dead/non-product result cannot remain counted on the administrator
-      // 20-section board while the public Snapshot correctly rejects it.  That
-      // split state was the root cause of admin counts such as 6/7 while the
-      // Distribution front could safely render only 5.  Quarantine only hard
-      // failures; transient 403/429/5xx checks continue to preserve the admin
-      // assignment below.
-      releaseCurrentBalance();
-      nextDecision = "hold"; nextPlacement = null; status = "hold"; assigned = false;
-      changeReason = manualLocked ? "front_validation_hard_invalid_administrator_assignment_quarantined" : "front_validation_hard_invalid_quarantined";
-    } else if (validationOnly) {
-      // Front Match validates publication safety only. Preserve the exact
-      // administrator placement for live or inconclusive/transient checks.
+    if (validationOnly) {
+      // Front Match is publication validation only. Even a hard-dead/non-product
+      // result MUST NOT demote, hold, unassign, rebalance, or move the durable
+      // administrator ledger. Publication can be blocked independently while
+      // the operator decides whether to repair, hold, reject, or delete later.
       assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey);
-      changeReason = health.inconclusive ? (priorLiveFallback ? "front_validation_inconclusive_prior_verified_admin_state_preserved" : "front_validation_inconclusive_admin_state_preserved") : "front_validation_live_admin_state_preserved";
+      changeReason = health.dead ? "front_validation_hard_invalid_admin_state_preserved" :
+        (health.inconclusive ? (priorLiveFallback ? "front_validation_inconclusive_prior_verified_admin_state_preserved" : "front_validation_inconclusive_admin_state_preserved") : "front_validation_live_admin_state_preserved");
     } else if (health.dead) {
       releaseCurrentBalance();
       nextDecision = "hold"; nextPlacement = null; status = "hold"; assigned = false;
@@ -4276,25 +4269,46 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     payload.productCategory = category.primary; payload.productCategoryTags = category.tags; payload.productRanking = Object.assign({}, plain(payload.productRanking), { category:category.primary, categoryTags:category.tags });
     payload.researchReadiness = Object.assign({}, plain(payload.researchReadiness), { stage:payload.researchStatus, productPageLive:payload.productPageLive, inspectionComplete:payload.inspectionComplete, productCard:card, lastVerifiedAt:now });
     payload.runtimeValidation = { schema:"igdc-product-runtime-validation.v3", source:options.source || "administrator_refresh", checkedAt:now, checkedBy:actor, state:health.state, live:health.live, dead:health.dead, inconclusive:health.inconclusive, priorLiveFallbackAllowed:priorLiveFallback, priorLiveVerifiedAt:priorLiveFallback?priorLiveProof.verifiedAt:null, reasons:health.reasons, exactProductUrl:payload.url || null, imageUrl:payload.image || null, category:category.primary, previousSectionKey:currentKey || null, nextSectionKey:productPlacementKey(nextPlacement) || null };
-    payload.slotDecision = validationOnly && !health.dead ? currentDecision : nextDecision; payload.publicPublication = false; payload.automaticImport = false;
-    if (!validationOnly || health.dead) {
+    // CRITICAL INVARIANT: front-match validation is publication-only.
+    // It must never rewrite the administrator candidate ledger, placement,
+    // assignment, hold/reject state, or management lock. A dead/unreachable
+    // product may be blocked from publication, but the administrator's work
+    // remains exactly where it was until an explicit management action changes it.
+    payload.publicPublication = false; payload.automaticImport = false;
+    if (validationOnly) {
+      payload.slotDecision = currentDecision;
+      // Preserve every administrator placement field byte-for-byte where possible.
+      if (Object.keys(currentPlacement).length) {
+        payload.approvedPlacement = Object.assign({}, currentPlacement);
+        if (existingPayload.placement) payload.placement = Object.assign({}, plain(existingPayload.placement));
+        if (existingPayload.selectedPlacement) payload.selectedPlacement = Object.assign({}, plain(existingPayload.selectedPlacement));
+      }
+      payload.review = Object.assign({}, plain(payload.review), {
+        runtimeValidation:health.dead?"failed":(health.inconclusive?"inconclusive":"passed"),
+        runtimeReasons:health.reasons, runtimeCheckedAt:now,
+        administratorPlacementPreserved:true,
+        publicationEligible:health.dead?false:true,
+        publicationBlockedReason:health.dead?"runtime_product_unavailable":null,
+        quarantinedByFrontMatch:false
+      });
+      status = text(row.status) || status;
+    } else {
+      payload.slotDecision = nextDecision;
       if (nextPlacement && validProductSectionKey(productPlacementKey(nextPlacement))) {
         payload.approvedPlacement = nextPlacement; payload.placement = nextPlacement; payload.page = nextPlacement.page; payload.channel = nextPlacement.page; payload.section = nextPlacement.sectionKey || nextPlacement.section; payload.psom_key = nextPlacement.sectionKey || nextPlacement.section;
       } else if (!manualLocked || !health.ok) {
         if (currentKey) payload.previousApprovedPlacement = Object.assign({}, currentPlacement, { removedAt:now, removedReason:changeReason });
         delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement; delete payload.page; delete payload.channel; delete payload.section; delete payload.psom_key; delete payload.slot;
       }
+      if (!manualLocked) payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema:"igdc-product-management-control.v1", source:"ai_automation", administratorLocked:false, aiReclassificationAllowed:true, automationMode:"runtime_refresh", updatedAt:now, decidedBy:actor });
+      if (health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now });
+      else if (health.inconclusive) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"inconclusive", runtimeReasons:health.reasons, runtimeCheckedAt:now });
+      else payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"passed", runtimeReasons:[], runtimeCheckedAt:now });
     }
-    if (!validationOnly && !manualLocked) payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema:"igdc-product-management-control.v1", source:"ai_automation", administratorLocked:false, aiReclassificationAllowed:true, automationMode:"runtime_refresh", updatedAt:now, decidedBy:actor });
-    if (validationOnly && health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now, administratorPlacementPreserved:false, quarantinedByFrontMatch:true });
-    else if (validationOnly) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:health.inconclusive?"inconclusive":"passed", runtimeReasons:health.reasons, runtimeCheckedAt:now, administratorPlacementPreserved:true });
-    else if (health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now });
-    else if (health.inconclusive) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"inconclusive", runtimeReasons:health.reasons, runtimeCheckedAt:now });
-    else payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"passed", runtimeReasons:[], runtimeCheckedAt:now });
     await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), { title:payload.title || row.title, official_url:payload.url || row.official_url, thumbnail_url:payload.image || row.thumbnail_url, status, source_payload:payload, updated_at:now });
     const nextKey = productPlacementKey(payload.approvedPlacement || payload.placement);
     for (const assignment of activeAssignments) {
-      const assignmentKey = candidateRuntimeAssignmentKey(assignment), shouldWithdraw = health.dead || (!validationOnly && !health.inconclusive && (nextDecision !== "slot_candidate" || !validProductSectionKey(nextKey) || assignmentKey !== nextKey));
+      const assignmentKey = candidateRuntimeAssignmentKey(assignment), shouldWithdraw = !validationOnly && !health.inconclusive && (health.dead || nextDecision !== "slot_candidate" || !validProductSectionKey(nextKey) || assignmentKey !== nextKey);
       if (shouldWithdraw) { withdrawAssignments.push({ candidateId:id, assignmentId:text(assignment.id), sectionKey:assignmentKey, reason:health.dead?"runtime_product_unavailable":"runtime_section_changed" }); withdrawCandidateIds.add(id); }
     }
     results.push({ candidateId:id, status:health.dead?"invalid":(health.inconclusive?"inconclusive":(assigned?"assigned":"unassigned")), live:health.live, invalid:health.dead, inconclusive:health.inconclusive, assigned, manualLocked, reason:changeReason, reasons:health.reasons, previousSectionKey:currentKey || null, sectionKey:nextKey || null, changedSection:!!(currentKey && nextKey && currentKey !== nextKey), activePublication:activeAssignments.length>0 });
@@ -5052,9 +5066,9 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     const row = plain(freshById.get(candidateId)), target = plain(targetById.get(candidateId)), readiness = plain(readinessByCandidate.get(candidateId));
     if (!Object.keys(row).length) { candidatePrepareErrors.push({candidateId,error:"candidate_missing_after_relation_prepare"}); continue; }
     const payload = Object.assign({}, plain(row.source_payload)), key = text(target.sectionKey), split = splitProductSectionKey(key), assignmentId = text(assignmentIdByCandidate.get(candidateId));
-    payload.slotDecision = "slot_candidate";
-    payload.approvedPlacement = Object.assign({}, plain(payload.approvedPlacement), { key, page:split.page, section:split.sectionKey, sectionKey:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, aiSelected:false, proposalOnly:false, publicPublication:false, publicationPending:true, selectedAt:now, selectedBy:actor, selectionSource:"explicit_front_match" });
-    payload.placement = Object.assign({}, plain(payload.placement), { page:split.page, section:split.sectionKey, sectionKey:split.sectionKey, country:scope.country, region:scope.region });
+    // Publication preparation must not mutate administrator placement.
+    // `key` was derived from the already-approved placement/assignment above.
+    // Keep slotDecision/approvedPlacement/placement untouched.
     payload.outboundReferral = Object.assign({}, plain(payload.outboundReferral), { operatorApproved:true, approved:true, status:"approved", officialDestination:true, officialSeller:true, disclosureReady:true, verifiedAt:now, destinationUrl:readiness.productPageUrl, providerName:readiness.supplierName, approvalSource:"explicit_front_match" });
     payload.revenue = Object.assign({}, plain(payload.revenue), { type:"external_referral", monetizationState:"administrator_nonpayable_external_referral", trafficValueOnly:true, payableRevenueRightVerified:false, settlementExecution:false });
     payload.review = Object.assign({}, plain(payload.review), { state:"approved", decidedAt:now, decidedBy:actor, approvalSource:"explicit_front_match", publicationRequested:false, explicitPublicationRequested:false });
@@ -5062,7 +5076,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     payload.frontPublication = { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"match", status:"ready", queued:false, persisted:true, pendingBuild:false, persistenceVerified:true, authority:"gslot_slot_assignments.publication_status", assignmentId, sectionKey:key, country:scope.country, region:scope.region, preparedAt:now, preparedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true };
     payload.publicPublication=false; payload.automaticImport=false;
     try {
-      await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status:"enrollable", source_payload:payload, updated_at:now });
+      await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status:text(row.status)||"approval_pending", source_payload:payload, updated_at:now });
       candidatePreparedIds.push(candidateId);
     } catch (error) {
       candidatePrepareErrors.push({ candidateId, error:text(error && (error.code || error.message)) || "candidate_lifecycle_annotation_failed" });
@@ -5133,9 +5147,9 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
       const row=plain(byId.get(candidateId)), target=plain(targetById.get(candidateId)), assignment=plain(finalByCandidate.get(candidateId)); if(!Object.keys(row).length)continue;
       const payload=Object.assign({},plain(row.source_payload)), key=text(target.sectionKey);
       payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"match",status:"publish_requested",queued:false,persisted:true,pendingBuild:true,persistenceVerified:true,authority:"gslot_slot_assignments.publication_status",assignmentId:text(assignment.id),sectionKey:key,country:scope.country,region:scope.region,requestedAt:iso(),requestedBy:actor,publicSnapshotConfirmed:false,buildVerificationRequired:true});
-      payload.review=Object.assign({},plain(payload.review),{state:"approved",publicationRequested:true,explicitPublicationRequested:true,decidedAt:first(plain(payload.review).decidedAt,now),decidedBy:first(plain(payload.review).decidedBy,actor)});
-      payload.pipeline=Object.assign({},plain(payload.pipeline),{stage:"registry_sync_ready",nextGate:"publication_build_requested",explicitPublicationRequested:true,publicationRequestedAt:iso(),publicationRequestedBy:actor});
-      try { await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{status:"enrollable",source_payload:payload,updated_at:iso()}); }
+      payload.review=Object.assign({},plain(payload.review),{publicationRequested:true,explicitPublicationRequested:true,publicationRequestedAt:iso(),publicationRequestedBy:actor});
+      payload.pipeline=Object.assign({},plain(payload.pipeline),{nextGate:"publication_build_requested",explicitPublicationRequested:true,publicationRequestedAt:iso(),publicationRequestedBy:actor});
+      try { await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{status:text(row.status)||"approval_pending",source_payload:payload,updated_at:iso()}); }
       catch(error){annotationErrors.push({candidateId,error:text(error&&(error.code||error.message))||"publication_annotation_failed"});}
     }
   }
@@ -5255,10 +5269,8 @@ async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
       const previousFront = plain(payload.frontPublication);
       payload.frontPublication = Object.assign({}, previousFront, { schema:"igdc-product-front-publication-control.v4", candidateId:id, operation:itemOperation, status, queued:item.queued===true, persisted:item.persisted===true, pendingBuild:item.pendingBuild===true, persistenceVerified:item.persistenceVerified!==false&&item.persisted===true, reason:text(item.reason)||null, assignmentId:text(item.assignmentId)||text(previousFront.assignmentId)||null, page:split&&split.page||text(previousFront.page)||null, section:split&&split.sectionKey||text(previousFront.section)||null, sectionKey:split&&split.sectionKey||text(previousFront.sectionKey)||null, country:scope.country, region:scope.region, requestedAt:now, requestedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true });
       if (itemOperation === "match" && item.persisted === true && split) {
-        payload.slotDecision = "slot_candidate";
-        payload.approvedPlacement = Object.assign({}, plain(payload.approvedPlacement), { page:split.page, section:split.sectionKey, sectionKey:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, aiSelected:false, proposalOnly:false, publicPublication:false, publicationPending:true });
-        payload.review = Object.assign({}, plain(payload.review), { state:"approved", decidedAt:now, decidedBy:actor, approvalSource:"explicit_front_match", publicationRequested:true });
-        payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage:"registry_sync_ready", nextGate:"publication_build_requested", explicitPublicationRequested:true, preparedAt:now, preparedBy:actor });
+        // Publication marker only. Never rewrite candidate placement/decision here.
+        payload.pipeline = Object.assign({}, plain(payload.pipeline), { nextGate:"publication_build_requested", explicitPublicationRequested:true, preparedAt:now, preparedBy:actor });
       }
       const unmatchCompleted = itemOperation === "unmatch" && ["unpublish_requested","unmatched","already_unmatched"].includes(lower(status));
       if (unmatchCompleted) {
