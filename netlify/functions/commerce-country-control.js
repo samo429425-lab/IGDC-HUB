@@ -181,9 +181,15 @@ exports.handler=async function(event){
           repairUnpublish=await ProductGoLiveAudit.requestUnpublicationAssignments(event,actor,{mode:"production",confirmation:"SITE_UNPUBLISH",assignments:withdrawAssignments,deferRelease:true},scope);
         }
         refresh=Object.assign({},refresh,{withdrawn:withdrawAssignments.length,withdrawRequested:withdrawAssignments.length,withdrawPersisted:Array.isArray(repairUnpublish&&repairUnpublish.items)?repairUnpublish.items.filter((item)=>item&&item.persisted===true).length:0});
-        // Re-read targets because runtime validation may have removed or moved a
-        // placement.  Never prepare a stale pre-validation section assignment.
+        // Front validation is diagnostic/publication-only. It must never rewrite
+        // the administrator's 20-section board. Re-read the same administrator
+        // authority after validation, then filter only hard-invalid rows from
+        // THIS publication attempt while leaving their placement untouched.
         plan=await Automation.productFrontSyncTargets(request,loadedJob);
+        const hardInvalidIds=new Set((Array.isArray(refresh&&refresh.results)?refresh.results:[]).filter((item)=>item&&item.invalid===true).map((item)=>String(item.candidateId||"").trim()).filter(Boolean));
+        if(hardInvalidIds.size){
+          plan=Object.assign({},plan,{targets:(Array.isArray(plan.targets)?plan.targets:[]).filter((row)=>!hardInvalidIds.has(String(row&&row.candidateId||"").trim())),publicationBlockedCandidateIds:Array.from(hardInvalidIds)});
+        }
         const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
         const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds:[];
         const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked");

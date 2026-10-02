@@ -249,19 +249,11 @@
   function normalizedFrontUrl(item){item=item||{};return safeExternalUrl(item.affiliateOutboundUrl||item.externalOutboundUrl||item.externalProductUrl||item.officialProductUrl||item.productUrl||item.product_url||item.productPageUrl||item.detailUrl||item.checkoutUrl||item.purchaseUrl||item.orderUrl||item.displayUrl||item.url||item.href||item.link);}
   function restoreIdsForFrontSection(key){var items=Array.isArray(frontSnapshotItems[key])?frontSnapshotItems[key]:[],byId={},byUrl={};productRows.forEach(function(row){var id=text(row&&row.candidateId||row&&row.id),url=safeExternalUrl(row&&row.productUrl||row&&row.url);if(id)byId[id]=id;if(url)byUrl[url]=id;});var ids=[];items.forEach(function(item){var found='';frontItemIds(item).some(function(id){if(byId[id]){found=byId[id];return true;}return false;});if(!found){var url=normalizedFrontUrl(item);if(url&&byUrl[url])found=byUrl[url];}if(!found){var direct=frontItemIds(item)[0];if(direct)found=direct;}if(found&&ids.indexOf(found)<0)ids.push(found);});return ids.slice(0,100);}
   async function restoreTrendingAdminFromFrontOnce(){
-    var key='distribution|distribution-trending',scope=scopeKey(),front=currentFrontCount(key),admin=Number(productSectionCounts()[key]||0),guard=scope+'|'+key;
-    if(frontRestoreAttempted[guard]||!selectedCountry||front<=0||admin>0)return{skipped:true};
-    if(!geo||!geo.country||text(geo.country).toUpperCase()!==text(selectedCountry).toUpperCase())return{skipped:true,reason:'scope_not_ip_match'};
-    var selectedRegion=text(selectedSubdivision||'NATIONWIDE').toUpperCase(),geoRegion=text(geo.region||'NATIONWIDE').toUpperCase();if(selectedRegion!=='NATIONWIDE'&&geoRegion&&selectedRegion!==geoRegion)return{skipped:true,reason:'region_not_ip_match'};
-    var ids=restoreIdsForFrontSection(key);if(!ids.length)return{skipped:true,reason:'no_front_candidate_ids'};
-    frontRestoreAttempted[guard]=true;
-    try{
-      var result=await api(ADMIN_AUTHORITY,'apply','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:ids,decision:'recover_live_assignment',placementKey:key,source:'front_snapshot_recovery'},60000);
-      await refreshCandidateLedgerProducts({preserveResearchReport:true});
-      var restored=Number(result&&result.processed||0),failed=Number(result&&result.failed||0);if(restored)show('유통 · 실시간 인기 관리자 원장을 현재 정상 프론트 상태에서 '+restored+'건 복원했습니다. 이후부터는 관리자 페이지를 기준으로 프론트가 동기화됩니다.'+(failed?' · 복원 실패 '+failed+'건':''),failed?'warn':'ok');
-      return result||{};
-    }catch(error){return{ok:false,error:text(error&&error.message),transient:transientResearchRequestError(error)};}
+    // One-way authority contract: Front snapshots are OUTPUT/monitoring only.
+    // They must never rewrite the administrator candidate/placement ledger.
+    return {skipped:true,reason:'front_to_admin_reverse_write_disabled'};
   }
+
   function tourDiningAuxiliaryRow(row){var hay=[row&&row.productName,row&&row.title,row&&row.priorityLabel,row&&row.description,row&&row.summary,row&&row.productUrl,row&&row.url].map(text).join(' ').toLowerCase(),misleading=/(여행용\s*(?:티슈|물티슈|휴지|세면|파우치)|포켓물티슈|캠핑용?\s*(?:물티슈|휴지)|체험팩|travel\s*(?:size|tissue|wipe))/i.test(hay),packaged=/(밀키트|냉동|즉석|가공식품|포장제품|배송상품|세트상품|meal\s*kit|frozen|packaged|grocery)/i.test(hay);return!misleading&&!packaged&&/(맛집|레스토랑|식당|음식점|다이닝|카페|뷔페|브런치|비스트로|그릴|스테이크하우스|펍|restaurant|dining|cafe|café|buffet|brunch|bistro|grill|steakhouse|pub)/i.test(hay);}
   function tourDiningPlacementCount(){return productRows.filter(function(row){return productDecision(row)==='slot_candidate'&&productPlacementKey(row)==='tour|tour'&&tourDiningAuxiliaryRow(row);}).length;}
   function productManagementLocked(row){var control=row&&row.managementControl||{},placement=row&&row.approvedPlacement||{},source=text(control.source||row&&row.decisionSource).toLowerCase();return control.administratorLocked===true||control.aiReclassificationAllowed===false||source==='administrator'||(placement.administratorSelected===true&&placement.aiSelected!==true);}
@@ -379,9 +371,11 @@
     row=row||{};var rr=row.researchReadiness||{},card=(row.productCard&&row.productCard.checkoutUrl)?row.productCard:(rr.productCard||row.productCard||{}),supplier=row.supplier||{},placement=row.placement||{},stage=text(row.stageStatus).toLowerCase(),queueControl=row.queueControl||{},explicit=text(row.slotDecision).toLowerCase(),queueAction=text(queueControl.action).toLowerCase(),page=text(placement.page),section=text(placement.section||placement.sectionKey),key=page&&section?page+'|'+section:'',decision='undecided';
     if(queueControl.permanentExcluded===true||explicit==='purge'||queueAction==='purge')decision='purge';
     else if(['removed','removed_from_list','dismiss','deleted','deleted_from_management'].indexOf(explicit)>=0||['remove_from_list','dismiss'].indexOf(queueAction)>=0||stage==='removed')decision='removed_from_list';
-    else if(explicit==='hold'||queueAction==='hold'||stage==='held'||stage==='hold')decision='hold';
-    else if(explicit==='reject'||queueAction==='reject'||stage==='rejected'||stage==='reject'||stage==='suppressed')decision='reject';
+    else if(explicit==='hold'||queueAction==='hold')decision='hold';
+    else if(explicit==='reject'||queueAction==='reject')decision='reject';
     else if(explicit==='slot_candidate')decision='slot_candidate';
+    else if(stage==='held'||stage==='hold')decision='hold';
+    else if(stage==='rejected'||stage==='reject'||stage==='suppressed')decision='reject';
     else if(key&&PRODUCT_SECTION_MAP[key]&&stage!=='administrator_selection_pending')decision='slot_candidate';
     else if(explicit==='undecided')decision='undecided';
     var approved=decision==='slot_candidate'?{page:page,section:section,sectionKey:section,country:selectedCountry,region:selectedSubdivision||'NATIONWIDE',administratorSelected:placement.administratorSelected===true,aiSelected:placement.aiSelected===true,automaticPrivatePlacement:placement.automaticPrivatePlacement===true,publicPublication:false,publicReleaseEvidencePending:row.releaseEligible!==true}:null;
@@ -1394,7 +1388,7 @@
     // the controls behave as one chained action instead of separate commands.
     var unmatch=operation==='unmatch',sectionMode=mode==='section',sectionsMode=mode==='sections',candidateMode=mode==='candidate',candidatesMode=mode==='candidates',selectedSections=sectionsMode?(Array.isArray(selection)?selection:[]):[],selectedProducts=candidatesMode?(Array.isArray(selection)?selection:[]):[],selectedProduct=candidateMode?productById(productId):null,label=candidateMode?(text(selectedProduct&&selectedProduct.productName||selectedProduct&&selectedProduct.title||productId)+' · 상품 1건'):(candidatesMode?'선택 상품 '+selectedProducts.length+'건':(sectionsMode?(selectedSections.length===1?sectionLabel(selectedSections[0]):'선택 섹션 '+selectedSections.length+'개'):(sectionMode?sectionLabel(sectionKey):'20개 전체 섹션'))),confirmation=unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH';
     if(sectionsMode&&!selectedSections.length){show('매칭할 섹션을 먼저 선택해 주세요.','warn');return;}if(candidatesMode&&!selectedProducts.length){show('매칭할 상품을 먼저 선택해 주세요.','warn');return;}
-    var replacementRun=false,pendingManagement=unmatch?[]:pendingFrontManagementChanges(mode,sectionKey,productId,selection),selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
+    var replacementRun=!unmatch&&(mode==='all'||sectionMode||sectionsMode),pendingManagement=unmatch?[]:pendingFrontManagementChanges(mode,sectionKey,productId,selection),selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
     var targetRows=productRows.filter(function(row){
       var key=assignedSectionKey(row),id=text(row&&row.id),placed=productDecision(row)==='slot_candidate'&&!!key;
       // The 20-section board owns only rows that still have a valid placement.
@@ -1493,7 +1487,7 @@
           var replacementRows=replacementRun?capFrontReplacementRows(productRows.filter(function(row){var key=assignedSectionKey(row);return productDecision(row)==='slot_candidate'&&!!key&&(mode==='all'||replacementSectionKeys.indexOf(key)>=0);}),replacementSectionKeys):[];
           var replacementCandidateIds=replacementRows.map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean);
           replacementCandidateIds=Array.from(new Set(replacementCandidateIds));
-          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true,authoritativeReplacement:replacementRun,replacementSectionKeys:replacementSectionKeys,replacementCandidateIds:replacementCandidateIds},90000);
+          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true,authoritativeReplacement:replacementRun,explicitReplacementCleanup:replacementRun,replacementSectionKeys:replacementSectionKeys,replacementCandidateIds:replacementCandidateIds},90000);
           var finalResult=finalized.frontSyncResult||{},finalRelease=finalResult.release||{};aggregate.finalize=finalResult;aggregate.release=finalRelease;if(finalRelease.queued===true){aggregate.queued=1;aggregate.pendingBuild=0;}else{aggregate.queued=0;aggregate.pendingBuild=Math.max(1,Number(finalResult.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1));}
         }catch(finalizeFailure){aggregate.queued=0;aggregate.pendingBuild=Math.max(1,aggregate.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1);aggregate.batchErrors.push({offset:'finalize',candidateIds:aggregate.changedCandidateIds.slice(),message:text(finalizeFailure&&finalizeFailure.message)||'finalize_failed'});}
       }
@@ -2054,9 +2048,8 @@
     await refreshFrontSnapshotCounts();
     var dataRestored=restored&&applySessionDataResume();
     if(!dataRestored)await loadScope(restored?'session-resume':'initial');
-    /* One-time Front->admin recovery is exceptional repair work. Never block
-       the normal admin ledger load or compete with a large candidate refresh. */
-    setTimeout(function(){restoreTrendingAdminFromFrontOnce().catch(function(){});},1200);
+    /* Front snapshots are read-only monitoring data. Never reverse-write them
+       into the administrator ledger during boot or any later refresh. */
     if(restored){sessionResumeActive=true;applySessionUiResume();restoreReviewReturn();stateEl.textContent=dataRestored?'관리 작업 범위·원장·화면 위치를 현재 브라우저 세션에서 즉시 복원했습니다. 실제 프론트는 방문자의 접속 IP로 계속 라우팅됩니다.':'관리 범위를 복원하고 최신 원장을 읽었습니다. 실제 프론트는 방문자의 접속 IP로 계속 라우팅됩니다.';saveReviewSnapshot();}
   }
   document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';acceptedSession=null;if(sessionResumeActive||returnRestoreActive||Date.now()-lastPassiveRestoreAt<15000){ensureSession(false).catch(function(){});return;}reloadData(false).then(function(){loadScope('auth-refresh');});});

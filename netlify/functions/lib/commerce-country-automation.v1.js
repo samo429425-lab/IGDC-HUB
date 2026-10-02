@@ -4170,6 +4170,42 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     const inspected = Object.keys(inspectedRaw).length ? Object.assign({}, sourceProduct, inspectedRaw, { candidateId:id, id:id }) : Object.assign({}, sourceProduct, { candidateId:id, id:id, productPageLive:false, inspectionComplete:true, researchStatus:"inspection_error" });
     const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = forceSelectedAi ? false : candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
     let nextDecision = currentDecision, nextPlacement = currentPlacement, status = text(row.status) || "research_pending", assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey), changeReason = "runtime_revalidated", currentBalanceReleased = false;
+    if (validationOnly) {
+      // FRONT MATCH IS READ-ONLY AGAINST THE ADMINISTRATOR LEDGER.
+      // Runtime checks may decide whether a public assignment should be built,
+      // but they must never rewrite candidate.status, slotDecision, placement,
+      // page/section/psom_key, managementControl, or any administrator choice.
+      assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey);
+      changeReason = health.dead
+        ? (manualLocked ? "front_validation_hard_invalid_admin_ledger_preserved" : "front_validation_hard_invalid_ledger_preserved")
+        : (health.inconclusive
+          ? (priorLiveFallback ? "front_validation_inconclusive_prior_verified_admin_ledger_preserved" : "front_validation_inconclusive_admin_ledger_preserved")
+          : "front_validation_live_admin_ledger_preserved");
+      for (const assignment of activeAssignments) {
+        const assignmentKey = candidateRuntimeAssignmentKey(assignment);
+        if (health.dead) {
+          withdrawAssignments.push({ candidateId:id, assignmentId:text(assignment.id), sectionKey:assignmentKey, reason:"runtime_product_unavailable" });
+          withdrawCandidateIds.add(id);
+        }
+      }
+      results.push({
+        candidateId:id,
+        status:health.dead?"invalid":(health.inconclusive?"inconclusive":(assigned?"assigned":"unassigned")),
+        live:health.live,
+        invalid:health.dead,
+        inconclusive:health.inconclusive,
+        assigned,
+        manualLocked,
+        reason:changeReason,
+        reasons:health.reasons,
+        previousSectionKey:currentKey || null,
+        sectionKey:currentKey || null,
+        changedSection:false,
+        activePublication:activeAssignments.length>0,
+        administratorLedgerPreserved:true
+      });
+      continue;
+    }
     const releaseCurrentBalance = () => {
       if (!rebalance || currentBalanceReleased || currentDecision !== "slot_candidate" || !validProductSectionKey(currentKey)) return;
       workingCounts[currentKey] = Math.max(0, Number(workingCounts[currentKey] || 0) - 1);
@@ -4177,19 +4213,19 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       currentBalanceReleased = true;
     };
     if (validationOnly && health.dead) {
-      // FRONT MATCH IS PUBLICATION-ONLY. A failed URL/image/runtime check may
-      // block or withdraw the public assignment, but it must NEVER rewrite the
-      // administrator's 20-section board. Preserve the exact slot decision and
-      // placement even for a hard failure so a front-match click cannot undo
-      // hours of manual section allocation.
-      assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey);
-      nextDecision = currentDecision; nextPlacement = currentPlacement;
-      changeReason = manualLocked ? "front_validation_hard_invalid_administrator_assignment_preserved_publication_blocked" : "front_validation_hard_invalid_assignment_preserved_publication_blocked";
+      // A hard-dead/non-product result cannot remain counted on the administrator
+      // 20-section board while the public Snapshot correctly rejects it.  That
+      // split state was the root cause of admin counts such as 6/7 while the
+      // Distribution front could safely render only 5.  Quarantine only hard
+      // failures; transient 403/429/5xx checks continue to preserve the admin
+      // assignment below.
+      releaseCurrentBalance();
+      nextDecision = "hold"; nextPlacement = null; status = "hold"; assigned = false;
+      changeReason = manualLocked ? "front_validation_hard_invalid_administrator_assignment_quarantined" : "front_validation_hard_invalid_quarantined";
     } else if (validationOnly) {
       // Front Match validates publication safety only. Preserve the exact
       // administrator placement for live or inconclusive/transient checks.
       assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey);
-      nextDecision = currentDecision; nextPlacement = currentPlacement;
       changeReason = health.inconclusive ? (priorLiveFallback ? "front_validation_inconclusive_prior_verified_admin_state_preserved" : "front_validation_inconclusive_admin_state_preserved") : "front_validation_live_admin_state_preserved";
     } else if (health.dead) {
       releaseCurrentBalance();
@@ -4240,18 +4276,8 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     payload.productCategory = category.primary; payload.productCategoryTags = category.tags; payload.productRanking = Object.assign({}, plain(payload.productRanking), { category:category.primary, categoryTags:category.tags });
     payload.researchReadiness = Object.assign({}, plain(payload.researchReadiness), { stage:payload.researchStatus, productPageLive:payload.productPageLive, inspectionComplete:payload.inspectionComplete, productCard:card, lastVerifiedAt:now });
     payload.runtimeValidation = { schema:"igdc-product-runtime-validation.v3", source:options.source || "administrator_refresh", checkedAt:now, checkedBy:actor, state:health.state, live:health.live, dead:health.dead, inconclusive:health.inconclusive, priorLiveFallbackAllowed:priorLiveFallback, priorLiveVerifiedAt:priorLiveFallback?priorLiveProof.verifiedAt:null, reasons:health.reasons, exactProductUrl:payload.url || null, imageUrl:payload.image || null, category:category.primary, previousSectionKey:currentKey || null, nextSectionKey:productPlacementKey(nextPlacement) || null };
-    payload.slotDecision = validationOnly ? currentDecision : nextDecision; payload.publicPublication = false; payload.automaticImport = false;
-    if (validationOnly) {
-      // Strong invariant: front publication checks cannot alter assignment
-      // authority. Re-assert the administrator's current placement fields before
-      // the durable write, regardless of validation outcome.
-      if (currentDecision === "slot_candidate" && validProductSectionKey(currentKey)) {
-        payload.approvedPlacement = currentPlacement; payload.placement = currentPlacement;
-        payload.page = currentPlacement.page; payload.channel = currentPlacement.page;
-        payload.section = currentPlacement.sectionKey || currentPlacement.section;
-        payload.psom_key = currentPlacement.sectionKey || currentPlacement.section;
-      }
-    } else {
+    payload.slotDecision = validationOnly && !health.dead ? currentDecision : nextDecision; payload.publicPublication = false; payload.automaticImport = false;
+    if (!validationOnly || health.dead) {
       if (nextPlacement && validProductSectionKey(productPlacementKey(nextPlacement))) {
         payload.approvedPlacement = nextPlacement; payload.placement = nextPlacement; payload.page = nextPlacement.page; payload.channel = nextPlacement.page; payload.section = nextPlacement.sectionKey || nextPlacement.section; payload.psom_key = nextPlacement.sectionKey || nextPlacement.section;
       } else if (!manualLocked || !health.ok) {
@@ -4260,7 +4286,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       }
     }
     if (!validationOnly && !manualLocked) payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema:"igdc-product-management-control.v1", source:"ai_automation", administratorLocked:false, aiReclassificationAllowed:true, automationMode:"runtime_refresh", updatedAt:now, decidedBy:actor });
-    if (validationOnly && health.dead) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now, administratorPlacementPreserved:true, publicationBlockedByFrontValidation:true, quarantinedByFrontMatch:false });
+    if (validationOnly && health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now, administratorPlacementPreserved:false, quarantinedByFrontMatch:true });
     else if (validationOnly) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:health.inconclusive?"inconclusive":"passed", runtimeReasons:health.reasons, runtimeCheckedAt:now, administratorPlacementPreserved:true });
     else if (health.dead) payload.review = Object.assign({}, plain(payload.review), { state:"hold", runtimeValidation:"failed", runtimeReasons:health.reasons, runtimeCheckedAt:now });
     else if (health.inconclusive) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"inconclusive", runtimeReasons:health.reasons, runtimeCheckedAt:now });
