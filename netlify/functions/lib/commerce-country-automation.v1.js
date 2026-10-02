@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.23.0-latest-transfer-routing-admin20-v3.28.0";
+const VERSION = "commerce-country-automation-v3.29.0-cumulative-supplier-research";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1566,10 +1566,10 @@ function expandSupplierResearchRounds(planInput,scopeInput,roundsInput){
     }
     for(const taskInput of baseTasks){
       const task=plain(taskInput),mapped=rowMap.get(Number(task.rowIndex));if(mapped==null)continue;
-      tasks.push(Object.assign({},task,{rowIndex:mapped,query:text(rows[mapped]&&rows[mapped].query),origin:text(task.origin||"supplier-research")+":round"+round,researchRound:round,attempt:0}));
+      tasks.push(Object.assign({},task,{rowIndex:mapped,query:text(rows[mapped]&&rows[mapped].query),origin:text(task.origin||"supplier-research")+":round"+round,researchRound:round,searchPage:round,attempt:0}));
     }
   }
-  plan.rows=rows;plan.tasks=tasks;plan.diagnostics=Object.assign({},plain(plan.diagnostics),{researchRounds:rounds,baseQueryCount:baseRows.length,totalQueryCount:rows.length,totalTaskCount:tasks.length,roundDeduplication:true,perRoundCandidateCap:50});
+  plan.rows=rows;plan.tasks=tasks.map((task)=>Object.assign({searchPage:Math.max(1,Number(task&&task.searchPage)||1)},task));plan.diagnostics=Object.assign({},plain(plan.diagnostics),{researchRounds:rounds,baseQueryCount:baseRows.length,totalQueryCount:rows.length,totalTaskCount:tasks.length,roundDeduplication:true,deepResultPaging:true,perRoundCandidateCap:50});
   return plan;
 }
 
@@ -1621,7 +1621,7 @@ async function advanceResearchJob(actorId, input, event) {
   try {
     if (job.status === "searching") {
       const task = array(job.searchTasks)[Number(job.searchCursor || 0)];
-      if (!task) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 4)) })); job.status = "inspecting"; job.inspectCursor = 0; }
+      if (!task) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.newCandidateTarget||job.effective && job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES) * 2)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       else {
         const matchingGoogleTrace = task.lane === "sanmaru" ? array(job.trace).slice().reverse().find((row) => row && row.source === "google" && text(row.query) === text(task.query)) : null;
         const externalFallback = scope.country !== "KR" && task.lane === "sanmaru" && (!matchingGoogleTrace || matchingGoogleTrace.status !== "ok" || Number(matchingGoogleTrace.count || matchingGoogleTrace.returned || 0) <= 0);
@@ -1629,16 +1629,16 @@ async function advanceResearchJob(actorId, input, event) {
         const novelItems=filterKnownSupplierItems(result.items,new Set(array(job.knownSupplierKeys)));
         job.supplierHoldingCandidates=mergeSupplierHolding(job.supplierHoldingCandidates,novelItems,job.blockedSupplierKeys,300); job.supplierBlockedCandidates=mergeSupplierBlocked(job.supplierBlockedCandidates,novelItems,job.blockedSupplierKeys,300); job.rawCandidates = mergeResearchItems(job.rawCandidates, novelItems, SUPPLIER_RAW_LIMIT, job.blockedSupplierKeys); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0), returned:Number(array(result.items).length), novel:Number(novelItems.length), duplicateExistingSkipped:Math.max(0,array(result.items).length-novelItems.length) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
         if (retryableResearchStatus(result.status) && Number(task.attempt || 0) < 1) job.searchTasks.push(Object.assign({}, task, { attempt: Number(task.attempt || 0) + 1, retryOf: Number(job.searchCursor || 0) - 1 }));
-        if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES) * 4)) })); job.status = "inspecting"; job.inspectCursor = 0; }
+        if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.newCandidateTarget||job.effective && job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES) * 2)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       }
     } else if (job.status === "inspecting") {
       const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 3);
       if (!batch.length) {
-        job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*3,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));
+        job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.newCandidateTarget||job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*2,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));
         job.rankQueue=supplierRankEntries(job.reviewPool,Math.max(0,Number(job.newCandidateTarget!=null?job.newCandidateTarget:(job.effective&&job.effective.maxCandidates)||DEFAULT_MAX_CANDIDATES)),plain(job.selectorInput).policyHints).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;
       } else {
         const inspected = await RegionalSelector.inspectSupplierResearchStep(batch, Object.assign({},selectorInput,{timeoutMs:6500})); job.inspectedCandidates = mergeResearchItems(job.inspectedCandidates, inspected.items, 300); job.inspectCursor = Number(job.inspectCursor || 0) + batch.length; job.trace = array(job.trace).concat([{ source: "page-evidence-inspection", status: "ok", at: iso(), count: array(inspected.items).length, done: job.inspectCursor, total: array(job.inspectionPool).length }]);
-        if(job.inspectCursor>=array(job.inspectionPool).length){job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*3,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));job.rankQueue=supplierRankEntries(job.reviewPool,Math.max(0,Number(job.newCandidateTarget!=null?job.newCandidateTarget:(job.effective&&job.effective.maxCandidates)||DEFAULT_MAX_CANDIDATES)),plain(job.selectorInput).policyHints).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;}
+        if(job.inspectCursor>=array(job.inspectionPool).length){job.reviewPool=preservePinnedReviewPool(RegionalSelector.buildSupplierReviewPool(job.rawCandidates,job.inspectedCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_REVIEW_LIMIT,Math.max(Number(job.newCandidateTarget||job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*2,60))})),array(job.inspectedCandidates).concat(array(job.rawCandidates)));job.rankQueue=supplierRankEntries(job.reviewPool,Math.max(0,Number(job.newCandidateTarget!=null?job.newCandidateTarget:(job.effective&&job.effective.maxCandidates)||DEFAULT_MAX_CANDIDATES)),plain(job.selectorInput).policyHints).map((row)=>row.item);job.status="ranking";job.rankCursor=0;job.rankAttempt=0;}
       }
     } else if (job.status === "ranking") {
       const start = Number(job.rankCursor || 0), batch = array(job.rankQueue).slice(start, start + 3);

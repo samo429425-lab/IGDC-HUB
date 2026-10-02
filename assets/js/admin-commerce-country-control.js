@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.19.0-admin20-safe-front-sync
+/* IGDC Global/Region/Country Commerce Control v3.20.0-admin-ledger-supplier-expansion
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -1793,12 +1793,16 @@
     }catch(e){if(scopeKey()===requestedKey)show((reason==='ip'?'현재 접속 IP 범위는 적용됐지만 상세 원장을 읽는 중 오류가 발생했습니다: ':'범위를 읽는 중 오류가 발생했습니다: ')+(text(e.message)||'알 수 없는 오류'),'fail');}
     finally{$('refreshScopeBtn').disabled=false;}
   }
+  function selectedSupplierResearchRounds(){
+    var el=$('supplierResearchRounds'),n=Number(el&&el.value||1);
+    return Math.max(1,Math.min(5,Math.round(n)||1));
+  }
   async function runAutomation(dry){
     if(!selectedCountry||researchLoopActive)return;if(dry!==true){show('먼저 책임 공급업체 단계별 검색을 완료한 뒤 공급업체 후보 원장 등록을 눌러 주세요.','warn');return;}
     var requested=scopeSnapshot(),requestedKey=scopeKey(requested),restart=!!(lastCountryPreview&&(lastCountryPreview.status==='complete'||lastCountryPreview.status==='committed'));if(restart&&!window.confirm('현재 완료된 검색 결과는 관리 DB에 보존되어 있습니다. 같은 국가 범위에서 새 리서치를 시작하시겠습니까?'))return;
     closeManagementPanels();closeSupplierControlQueue();hide();researchStopRequested=false;researchLoopActive=true;var btn=$('previewRunBtn'),autoProductAfter=false;btn.disabled=true;setButtonEnabled('researchPauseBtn',true);setButtonEnabled('runNowBtn',false);
     try{
-      var data=await api(CONTROL,'research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,restart:restart,scopeAuthority:'administrator-selected',ignoreRequestGeo:true});
+      var data=await api(CONTROL,'research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,restart:restart,researchRounds:selectedSupplierResearchRounds(),scopeAuthority:'administrator-selected',ignoreRequestGeo:true});
       while(true){
         if(scopeKey()!==requestedKey){researchStopRequested=true;show('검색 중 선택 범위가 바뀌어 화면 진행을 중단했습니다. 서버에 저장된 작업은 해당 범위에서 다시 이어갈 수 있습니다.','warn');break;}
         if(!data.scope)data.scope=requested;else{data.scope.source=requested.source;data.scope.detectedGeo=requested.detectedGeo;}lastCountryPreview=data;rememberReport('country',data);renderResearchProgress(data);renderSummary(data,{candidates:data.candidates||[]},'단계별 리서치 진행');if((Array.isArray(data.candidates)&&data.candidates.length)||(Array.isArray(data.holdingCandidates)&&data.holdingCandidates.length)||(Array.isArray(data.blockedCandidates)&&data.blockedCandidates.length))renderAi(data.candidates||[],data.holdingCandidates||[],data.blockedCandidates||[]);saveReviewSnapshot();

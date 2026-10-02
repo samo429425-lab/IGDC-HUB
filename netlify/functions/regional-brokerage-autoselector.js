@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.6.4-bounded-staged-network-timeouts";
+const VERSION="regional-brokerage-autoselector-v2.7.0-paged-supplier-discovery";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -770,14 +770,14 @@ async function fetchJsonStaged(url,options,timeoutMs){
   const controller=typeof AbortController!=="undefined"?new AbortController():null;const timer=controller?setTimeout(()=>controller.abort(),Math.max(5000,timeoutMs||18000)):null;
   try{const response=await fetch(url,Object.assign({},options||{},{signal:controller?controller.signal:undefined}));const raw=await response.text();let body={};try{body=raw?JSON.parse(raw):{};}catch(_e){body={raw:raw.slice(0,500)};}if(!response.ok){const error=new Error("HTTP_"+response.status);error.code="HTTP_"+response.status;error.detail=text(body&&body.error&&body.error.message||body&&body.message||body&&body.error_description||body&&body.raw).slice(0,240);throw error;}return body;}finally{if(timer)clearTimeout(timer);}
 }
-async function stagedNaver(row,geo,limit,timeoutMs){
+async function stagedNaver(row,geo,limit,timeoutMs,pageInput){
   const keys=naverKeys();if(!keys.id||!keys.secret)return{provider:"naver",status:"not_configured",detail:"NAVER_API_KEY_or_NAVER_CLIENT_SECRET_missing",items:[]};
-  const params=new URLSearchParams({query:row.query,display:String(Math.max(1,Math.min(100,limit||20))),start:"1"});
+  const display=Math.max(1,Math.min(100,limit||20)),page=Math.max(1,Math.min(5,Number(pageInput)||1)),start=Math.min(1000,1+(page-1)*display),params=new URLSearchParams({query:row.query,display:String(display),start:String(start)});
   try{const data=await fetchJsonStaged("https://openapi.naver.com/v1/search/webkr.json?"+params.toString(),{headers:{"X-Naver-Client-Id":keys.id,"X-Naver-Client-Secret":keys.secret}},boundedResearchTimeout(timeoutMs,7500,5000,10000));const items=researchFirst(array(data.items).map(x=>({title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.description),snippet:stripHtml(x&&x.description),source:"naver_country_discovery",provider:"naver",type:"web",payload:{source:"naver",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane||"general"}})).filter(x=>x.title&&x.url));return{provider:"naver",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"naver",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
-async function stagedGoogle(row,geo,limit,timeoutMs){
+async function stagedGoogle(row,geo,limit,timeoutMs,pageInput){
   const keys=googleKeys();if(!keys.key||!keys.cx)return{provider:"google",status:"not_configured",detail:"GOOGLE_API_KEY_or_GOOGLE_CSE_ID_missing",items:[]};
-  const lang=googleLocale(row.locale||"en"),params=new URLSearchParams({key:keys.key,cx:keys.cx,q:(row.query+" -filetype:pdf -filetype:doc -filetype:ppt -filetype:xls -wikipedia -wiki -report -research -news").slice(0,900),num:String(Math.max(1,Math.min(10,limit||10))),start:"1",safe:"active",filter:"1",hl:lang});if(/^[A-Z]{2}$/.test(geo.country||"")){params.set("gl",geo.country.toLowerCase());params.set("cr","country"+geo.country);}
+  const lang=googleLocale(row.locale||"en"),params=new URLSearchParams({key:keys.key,cx:keys.cx,q:(row.query+" -filetype:pdf -filetype:doc -filetype:ppt -filetype:xls -wikipedia -wiki -report -research -news").slice(0,900),num:String(Math.max(1,Math.min(10,limit||10))),start:String(Math.min(91,1+(Math.max(1,Math.min(10,Number(pageInput)||1))-1)*10)),safe:"active",filter:"1",hl:lang});if(/^[A-Z]{2}$/.test(geo.country||"")){params.set("gl",geo.country.toLowerCase());params.set("cr","country"+geo.country);}
   try{const data=await fetchJsonStaged("https://www.googleapis.com/customsearch/v1?"+params.toString(),null,boundedResearchTimeout(timeoutMs,7500,5000,10000));const items=researchFirst(array(data.items).map(x=>{const map=x&&x.pagemap||{},thumb=first(map.cse_image&&map.cse_image[0]&&map.cse_image[0].src,map.cse_thumbnail&&map.cse_thumbnail[0]&&map.cse_thumbnail[0].src);return{title:stripHtml(x&&x.title),url:text(x&&x.link),link:text(x&&x.link),summary:stripHtml(x&&x.snippet),snippet:stripHtml(x&&x.snippet),source:"google_country_discovery",provider:"google",type:"web",thumbnail:thumb,image:thumb,payload:{source:"google",country:geo.country,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane||"general"}};}).filter(x=>x.title&&x.url));return{provider:"google",status:items.length?"ok":"empty",detail:null,items};}catch(error){return{provider:"google",status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
 async function stagedSanmaru(event,row,geo,limit,timeoutMs,externalFallback){
@@ -816,11 +816,11 @@ async function bridgeOfficialDirectory(item,geo,row,max){
 async function searchSupplierResearchStep(event,params){
   const geo=stagedGeo(params),task=plain(params&&params.task),row={query:text(task.query),locale:text(task.locale)||"en",origin:text(task.origin)||"searchbank-psom-policy-plan",supplyLane:text(task.supplyLane)||"general"};
   const providerTimeoutMs=boundedResearchTimeout(params&&params.timeoutMs,7500,5000,10000);
-  let result;if(task.lane==="naver")result=await stagedNaver(row,geo,Math.max(20,Number(params&&params.limit)||20),providerTimeoutMs);else if(task.lane==="google")result=await stagedGoogle(row,geo,Math.min(10,Number(params&&params.limit)||10),providerTimeoutMs);else result=await stagedSanmaru(event,row,geo,Math.max(18,Number(params&&params.limit)||18),providerTimeoutMs,params&&params.externalFallback===true);
+  const searchPage=Math.max(1,Number(task.searchPage||task.researchRound)||1);let result;if(task.lane==="naver")result=await stagedNaver(row,geo,Math.max(20,Number(params&&params.limit)||20),providerTimeoutMs,searchPage);else if(task.lane==="google")result=await stagedGoogle(row,geo,Math.min(10,Number(params&&params.limit)||10),providerTimeoutMs,searchPage);else result=await stagedSanmaru(event,row,geo,Math.max(18,Number(params&&params.limit)||18),providerTimeoutMs,params&&params.externalFallback===true);
   let items=researchFirst(result.items||[]).filter(item=>!blockedByAdministratorPolicy(item,geo)).map((item)=>{const compact=compactResearchItem(item);if(compact){compact.payload=Object.assign({},plain(compact.payload),{supplyLane:row.supplyLane});}return compact;}).filter(Boolean);
   let bridged=[];
   if(row.supplyLane==="public_directory_bridge"&&items.length){bridged=await bridgeOfficialDirectory(items[0],geo,row,12);items=items.concat(bridged);}
-  return{ok:true,version:VERSION,task:Object.assign({},task),status:result.status,detail:result.detail||null,items,trace:{source:result.provider,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane,status:result.status,detail:result.detail||null,count:items.length,directoryBridgeCount:bridged.length,externalFallback:params&&params.externalFallback===true,scopeAuthority:geo.scopeAuthority||"explicit-request",targetCountry:geo.country,timeoutMs:providerTimeoutMs}};
+  return{ok:true,version:VERSION,task:Object.assign({},task),status:result.status,detail:result.detail||null,items,trace:{source:result.provider,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane,status:result.status,detail:result.detail||null,count:items.length,directoryBridgeCount:bridged.length,externalFallback:params&&params.externalFallback===true,scopeAuthority:geo.scopeAuthority||"explicit-request",targetCountry:geo.country,timeoutMs:providerTimeoutMs,searchPage}};
 }
 function prepareSupplierInspectionPool(rawItems,params){
   const geo=stagedGeo(params),limit=Math.max(10,Math.min(100,Number(params&&params.limit)||60)),out=[],seen=new Set(),hostCounts=new Map();

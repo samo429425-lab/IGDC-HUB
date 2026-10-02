@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.3.1-removed-management-state";
+const VERSION = "commerce-product-pipeline-state-v1.4.0-exact-product-destination";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -39,6 +39,34 @@ function safeHttpsUrl(value){ try{ const url=new URL(text(value)); return url.pr
 function bool(value){ return value === true || ["1","true","yes","on","approved","verified","active","enabled"].includes(lower(value)); }
 function unique(values){ return Array.from(new Set(array(values).map(text).filter(Boolean))); }
 
+function normalizedHttpsUrl(value){
+  const url=safeHttpsUrl(value); if(!url) return "";
+  try{ const u=new URL(url); u.hash=""; if(u.pathname!=="/")u.pathname=u.pathname.replace(/\/+$/,"" ); return u.toString(); }catch(_error){ return ""; }
+}
+function isRootOrGenericListingUrl(value){
+  const url=safeHttpsUrl(value); if(!url) return true;
+  try{
+    const u=new URL(url),path=(u.pathname||"/").toLowerCase().replace(/\/+$/,"" )||"/",q=(u.search||"").toLowerCase();
+    if(path==="/"&&!q) return true;
+    if(/\/(?:search|category|categories|catalog|collections?|shop|store|products?)$/.test(path)&&!/\/products?\/[^/]+/.test(path)) return true;
+    if(/(?:^|[?&])(q|query|search|keyword)=/.test(q)&&!/product|item|goods|sku/.test(path)) return true;
+    return false;
+  }catch(_error){ return true; }
+}
+function exactProductDestination(productInput,supplierUrlInput){
+  const product=plain(productInput),supplierKey=normalizedHttpsUrl(supplierUrlInput),candidates=[
+    product.externalProductUrl,product.officialProductUrl,product.productPageUrl,product.detailUrl,
+    product.checkoutUrl,product.purchaseUrl,product.orderUrl,product.productLink,product.productUrl,
+    plain(product.productCard).checkoutUrl,plain(product.productCard).productUrl,product.url
+  ];
+  for(const value of candidates){
+    const url=safeHttpsUrl(value); if(!url||isRootOrGenericListingUrl(url)||ProductRanking.isTemplateOrPlaceholderUrl(url)||!ProductRanking.isSpecificProductUrl(url)) continue;
+    if(supplierKey&&normalizedHttpsUrl(url)===supplierKey) continue;
+    return url;
+  }
+  return "";
+}
+
 function priceDisplay(product){
   const row=plain(product), raw=text(row.price), currency=text(row.priceCurrency).toUpperCase();
   if(!raw) return "판매처에서 현재 가격 확인";
@@ -48,8 +76,8 @@ function priceDisplay(product){
 
 function productCard(productInput){
   const product=plain(productInput), rawTitle=first(product.productName,product.title), title=ProductRanking.isGenericProductName(rawTitle)?"상품명 확인 중":rawTitle, image=safeHttpsUrl(first(product.imageUrl,product.imageOriginalUrl,product.image,product.thumb));
-  const checkoutUrl=safeHttpsUrl(first(product.externalProductUrl,product.productUrl,product.url));
   const supplierUrl=safeHttpsUrl(first(product.supplierSiteUrl,product.supplierOfficialUrl,plain(product.supplier).officialUrl));
+  const checkoutUrl=exactProductDestination(product,supplierUrl);
   const supplierName=first(product.supplierName,plain(product.supplier).name);
   return {
     schema:"igdc-external-seller-product-card.v1",
