@@ -3288,15 +3288,21 @@ function privateReviewFallbackAssignments(rowInput) {
   const fashionFit = category === "fashion" || /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|fashion|apparel|clothing|shoes|bag|jewelry|watch)/i.test(titleHay);
   const automotiveFit = /(자동차|차량|자동차용품|차량용품|타이어|휠|블랙박스|대시캠|카케어|모빌리티|전기차|오토바이|모터사이클|car\b|vehicle|automotive|tire|wheel|dashcam|car care|mobility|motorcycle)/i.test(titleHay);
   const bookFit = /(도서|책방|서점|책\b|출판|전자책|bookstore|book\b|books\b|publishing|ebook)/i.test(titleHay);
-  const livingFit = ["food_household_essentials", "home_appliances_living", "local_products"].includes(category) || /(리빙|생활용품|생필품|주방|가구|침구|인테리어|세제|청소|위생|욕실|수납|living|household|essential|kitchen|furniture|interior|detergent|cleaning|hygiene|storage)/i.test(titleHay);
-  const everydayFit = ["food_household_essentials","home_appliances_living","electronics_accessories"].includes(category) || /(생활|생필품|가정용|소형가전|휴대용|차량용|daily|everyday|household|small appliance|portable)/i.test(titleHay);
-  const knowledgeHealthFit = category === "baby_family_education" || /(지식|교육|학습|강의|자격증|건강|헬스|피트니스|영양제|비타민|건강식품|웰니스|knowledge|education|learning|course|health|fitness|supplement|vitamin|wellness)/i.test(titleHay);
-  const consumerHotFit = ["beauty_personal_care","fashion","electronics_accessories","home_appliances_living","food_household_essentials"].includes(category) || socialLifestyle || electronics || livingFit;
-  const socialHotFit = socialLifestyle || electronics || category === "home_appliances_living";
-  const networkHouseholdFit = ["food_household_essentials","home_appliances_living"].includes(category) || /(생필품|생활용품|세제|청소|위생|주방|욕실|수납|침구|household|essential|detergent|cleaning|hygiene|kitchen|bedding)/i.test(titleHay);
-  const topRightFit = knowledgeHealthFit || (!automotiveFit && !livingFit && !bookFit && !fashionFit && !consumerHotFit);
-  const middleRightFit = livingFit || bookFit || (consumerHotFit && !fashionFit && !automotiveFit);
-  const bottomRightFit = automotiveFit || everydayFit;
+  const explicitFoodFit = /(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|쌀|잡곡|과일|채소|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b)/i.test(titleHay) || ["agriculture_fishery_forestry"].includes(category);
+  const householdEssentialFit = !explicitFoodFit && (category === "food_household_essentials" || /(생필품|생활필수|생활용품|화장지|휴지|티슈|물티슈|세제|세정제|청소|위생|주방용품|욕실용품|수납|household|essential|tissue|detergent|cleaning|hygiene|kitchen|bath|storage)/i.test(titleHay));
+  const furnitureLivingFit = /(가구|소파|의자|테이블|책상|수납장|침대|매트리스|침구|조명|인테리어|리빙|furniture|sofa|chair|table|desk|cabinet|bed|mattress|bedding|lighting|interior|living)/i.test(titleHay);
+  const smallApplianceFit = !furnitureLivingFit && (category === "electronics_accessories" || /(소형가전|이어폰|이어버드|헤드폰|스피커|태블릿|웹캠|카메라|짐벌|마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|earphone|headphone|speaker|tablet|webcam|camera|gimbal|microphone|smartwatch|projector|fan|humidifier|dehumidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(titleHay));
+  const livingFit = furnitureLivingFit || householdEssentialFit;
+  const everydayFit = householdEssentialFit || /(생활잡화|일상잡화|잡화|가정용|휴대용|daily goods|everyday goods|general goods|household accessory)/i.test(titleHay);
+  const knowledgeHealthFit = category === "baby_family_education" || /(지식|교육|학습|강의|자격증|건강|헬스|피트니스|영양제|비타민|웰니스|knowledge|education|learning|course|health|fitness|supplement|vitamin|wellness)/i.test(titleHay);
+  const outdoorFit = tourRecreation || /(아웃도어|등산|트레킹|캠핑|골프|스포츠용품|텐트|침낭|등산화|등산스틱|outdoor|hiking|trekking|camping|golf|sports gear|tent|sleeping bag)/i.test(titleHay);
+  const beautyFit = category === "beauty_personal_care" || /(뷰티|화장품|스킨케어|세럼|앰플|토너|크림|로션|선크림|클렌징|메이크업|립스틱|립틴트|마스크팩|향수|샴푸|beauty|cosmetic|skincare|serum|toner|cream|sunscreen|makeup|lipstick|perfume|shampoo)/i.test(titleHay);
+  const consumerHotFit = beautyFit || fashionFit || smallApplianceFit || householdEssentialFit || explicitFoodFit;
+  const socialHotFit = beautyFit || fashionFit || smallApplianceFit;
+  const networkHouseholdFit = householdEssentialFit || furnitureLivingFit;
+  const topRightFit = knowledgeHealthFit;
+  const middleRightFit = automotiveFit || outdoorFit;
+  const bottomRightFit = furnitureLivingFit || bookFit || (!topRightFit && !middleRightFit && !beautyFit && !fashionFit && !smallApplianceFit && !explicitFoodFit && !householdEssentialFit);
   const commercial = plain(row.commercialAssessment), sponsorSignal = commercial.sponsorReady === true || /(스폰서|협찬|sponsor(?:ed)?)/i.test(titleHay);
   const candidateStamp = first(row.candidateRegisteredAt, row.firstVerifiedAt, row.listedAt, row.discoveredAt, row.createdAt, row.inspectedAt);
   const stamp = Date.parse(candidateStamp), recentRegistration = Number.isFinite(stamp) && Date.now() - stamp <= 45 * 86400000;
@@ -3333,18 +3339,20 @@ function privateReviewFallbackAssignments(rowInput) {
     return map;
   }
 
-  // Home main rows share one front policy (쇼핑 핫템 추천). Keeping all five
-  // as equal-fit choices lets the balancing allocator spread thumbnails rather
-  // than concentrating every candidate in the first row.
-  ["home_1", "home_2", "home_3", "home_4", "home_5"].forEach((section) => add("home|" + section, consumerHotFit ? 88 : 78, consumerHotFit ? "의류·뷰티·소형가전·생필품 중심 홈 핫템 공통 정책 적합" : "홈 쇼핑 랭킹 상품 공통 정책 적합", "private_review_home_hot_item"));
-  if (topRightFit) add("home|home_right_top", 84, "지식·건강·기타 우측 상단 정책 적합", "private_review_home_right_knowledge_health_other");
-  if (middleRightFit) add("home|home_right_middle", 84, "리빙·책방·기타 우측 중단 정책 적합", "private_review_home_right_living_books_other");
-  if (bottomRightFit) add("home|home_right_bottom", automotiveFit ? 88 : 81, "자동차·일상생활 우측 하단 정책 적합", "private_review_home_right_automotive_everyday_life");
+  // Home main sections are category lanes, not interchangeable buckets.
+  // This prevents the allocator from putting food into beauty or apparel into essentials.
+  if (beautyFit || (fashionFit && trending)) add("home|home_1", beautyFit ? 116 : 104, beautyFit ? "홈 1 뷰티 중심" : "홈 1 인기 의류 보조", "private_review_home1_beauty_hot_fashion");
+  if (explicitFoodFit) add("home|home_2", 116, "홈 2 식품·푸드", "private_review_home2_food");
+  if (fashionFit || smallApplianceFit) add("home|home_3", 114, fashionFit ? "홈 3 의류·패션" : "홈 3 소형가전·소형전자", "private_review_home3_fashion_small_appliance");
+  if (householdEssentialFit) add("home|home_4", 114, "홈 4 생필품·생활필수", "private_review_home4_essentials");
+  if (everydayFit && !householdEssentialFit) add("home|home_5", 108, "홈 5 일상 잡화·기타 생활상품", "private_review_home5_everyday_misc");
+  if (bookFit) add("home|home_6", 116, "홈 6 웹툰·서적·전자책", "private_review_home6_books");
+  if (topRightFit) add("home|home_right_top", 112, "지식·건강·생활 우측 상단 정책 적합", "private_review_home_right_knowledge_health_life");
+  if (middleRightFit) add("home|home_right_middle", automotiveFit ? 118 : 114, "자동차·아웃도어 우측 중단 정책 적합", "private_review_home_right_automotive_outdoor");
+  if (bottomRightFit) add("home|home_right_bottom", 112, "리빙·책방·기타 우측 하단 정책 적합", "private_review_home_right_living_books_other");
 
-  // Tour right also accepts physical leisure/sports/outdoor commercial goods.
-  // Dining is intentionally lower priority and separately capped by the AI
-  // allocator, so it remains only a one/two-item auxiliary presence.
-  if (tourRecreation) add("tour|tour", 92, "등산·캠핑·골프·스포츠·아웃도어 투어 우측 검토", "private_review_tour_recreation");
+  // Physical outdoor/sports goods are retail inventory: Home right-middle / Distribution extra.
+  // Only travel/booking services are Tour-exclusive (handled above).
   if (tourDiningAuxiliary) add("tour|tour", 70, "지역 맛집·레스토랑·카페 보조 후보", "private_review_tour_dining_auxiliary");
 
   if (industrialTool) {
@@ -3358,16 +3366,24 @@ function privateReviewFallbackAssignments(rowInput) {
     add("distribution|distribution-right", 82, "공식 소비재 제조사·브랜드 우측 유통 검토", "private_review_manufacturer_distribution_right");
   }
 
-  // Distribution six main rails. Pure travel/booking services have already
-  // returned above, so only normal qualified retail goods reach this block.
-  if (consumerHotFit) add("distribution|distribution-recommend", 88, "뷰티·의류·소형가전·전자·생필품 중심 오늘의 추천", "private_review_distribution_consumer_hot_recommend");
-  // Sponsor is a normal Distribution rail. A verified sponsor contract wins;
-  // otherwise high-quality beauty/brand-fashion/consumer goods may occupy it.
-  if (consumerHotFit || sponsorSignal) add("distribution|distribution-sponsor", sponsorSignal && commercial.contractReady === true ? 94 : 84, sponsorSignal && commercial.contractReady === true ? "검증된 스폰서 상품" : "뷰티·브랜드 의류·가전·생필품 중심 스폰서 대체 후보", "private_review_distribution_sponsor");
-  if (trending && consumerHotFit) add("distribution|distribution-trending", 92, "인기 신호가 확인된 가전·뷰티·의류·생필품", "private_review_distribution_trending");
-  if ((newness || recentRegistration) && consumerHotFit) add("distribution|distribution-new", 84, "신규 또는 최근 등록 소비재 상품", "private_review_distribution_new");
-  if ((special || localOrigin || tourRecreation || consumerHotFit)) add("distribution|distribution-special", consumerHotFit ? 85 : 80, "특산·인증·한정 또는 우수 소비재 특별 상품", "private_review_distribution_special");
-  add("distribution|distribution-others", consumerHotFit ? 78 : 72, "정책 적격 일반·롱테일 상품", "private_review_distribution_others");
+  // Distribution category rails are strict. Do not use a convenient empty rail for a mismatched product.
+  if (beautyFit) {
+    add("distribution|distribution-sponsor", 116, "유통 뷰티 전용", "private_review_distribution_beauty");
+    add("distribution|distribution-recommend", 104, "뷰티 오늘의 추천 후보", "private_review_distribution_recommend_beauty");
+  } else if (smallApplianceFit) {
+    add("distribution|distribution-new", 116, "유통 소형가전·소형전자 전용", "private_review_distribution_small_appliance");
+    add("distribution|distribution-recommend", 104, "소형가전 오늘의 추천 후보", "private_review_distribution_recommend_small_appliance");
+  } else if (fashionFit) {
+    add("distribution|distribution-special", 116, "유통 의류·패션 전용", "private_review_distribution_fashion");
+    add("distribution|distribution-recommend", 102, "인기 의류 오늘의 추천 후보", "private_review_distribution_recommend_fashion");
+  } else if (householdEssentialFit || furnitureLivingFit) {
+    add("distribution|distribution-others", 114, furnitureLivingFit ? "유통 리빙·가구" : "유통 생필품·생활", "private_review_distribution_essentials_living");
+  } else if (explicitFoodFit || outdoorFit) {
+    add("distribution|distribution-extra", 114, explicitFoodFit ? "유통 식품" : "유통 아웃도어", "private_review_distribution_food_outdoor");
+  }
+  if (trending && (beautyFit || smallApplianceFit || fashionFit)) add("distribution|distribution-trending", 108, "검증된 인기 신호 상품", "private_review_distribution_trending");
+  const premiumBrandFit = /(프리미엄|명품|럭셔리|고급|하이엔드|밍크|모피|디자이너|premium|luxury|high[- ]?end|mink|fur|designer|flagship)/i.test(titleHay) || (manufacturer && (furnitureLivingFit || outdoorFit) && special);
+  if (premiumBrandFit) add("distribution|distribution-right", 118, "프리미엄·고가 브랜드 중심 우측 추천", "private_review_distribution_premium_brand_right");
   return map;
 }
 function combinedProductAssignments(rowInput) {
@@ -4020,73 +4036,57 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
     return options;
   }
 
-  // Physical outdoor/sports products are strongly Tour-oriented, but they remain
-  // retail goods and may also use a themed Distribution rail when Tour is full.
-  if (tourProfile.recreationProduct === true) {
-    add("tour|tour", 112, "등산·캠핑·골프·스포츠·아웃도어 상품 투어 우측 우선", "psom_tour_recreation_primary");
-    add("distribution|distribution-special", 96, "레저·아웃도어 테마 유통 특별 후보", "psom_recreation_distribution_special");
+  const hay = lower([product.productName,product.title,product.sourceTitle,product.description,product.summary,product.supplierName,product.supplierType,product.productUrl].map(text).join(" "));
+  const automotiveFit=/(자동차|차량|자동차용품|차량용품|타이어|휠|블랙박스|대시캠|카케어|세차기|카샴푸|차량청소|car\b|vehicle|automotive|tire|wheel|dashcam|car care|car wash)/i.test(hay);
+  const outdoorFit=tourProfile.recreationProduct===true||/(아웃도어|등산|트레킹|캠핑|골프|스포츠용품|텐트|침낭|등산화|등산스틱|outdoor|hiking|trekking|camping|golf|sports gear|tent|sleeping bag)/i.test(hay);
+  const furnitureFit=/(가구|소파|의자|테이블|책상|수납장|침대|매트리스|침구|조명|인테리어|리빙|furniture|sofa|chair|table|desk|cabinet|bed|mattress|bedding|lighting|interior|living)/i.test(hay);
+  const explicitFoodFit=/(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|쌀|잡곡|과일|채소|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b)/i.test(hay)||primary==="agriculture_fishery_forestry";
+  const householdFit=!explicitFoodFit&&(primary==="food_household_essentials"||/(생필품|생활필수|생활용품|화장지|휴지|티슈|물티슈|세제|세정제|청소|위생|주방용품|욕실용품|수납|household|essential|tissue|detergent|cleaning|hygiene|kitchen|bath|storage)/i.test(hay));
+  const smallApplianceFit=!furnitureFit&&(primary==="electronics_accessories"||/(소형가전|이어폰|이어버드|헤드폰|스피커|태블릿|웹캠|카메라|짐벌|마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|headphone|speaker|tablet|webcam|camera|gimbal|microphone|smartwatch|projector|fan|humidifier|dehumidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(hay));
+  const beautyFit=primary==="beauty_personal_care"||/(뷰티|화장품|스킨케어|세럼|앰플|토너|크림|로션|선크림|클렌징|메이크업|립스틱|립틴트|마스크팩|향수|샴푸|beauty|cosmetic|skincare|serum|toner|cream|sunscreen|makeup|lipstick|perfume|shampoo)/i.test(hay);
+  const fashionFit=primary==="fashion"||/(패션|의류|옷|자켓|재킷|코트|셔츠|블라우스|원피스|팬츠|청바지|정장|캐주얼|빈티지|신발|가방|밍크|모피|fashion|apparel|clothing|jacket|coat|shirt|dress|pants|jeans|suit|casual|vintage|shoes|bag|mink|fur)/i.test(hay);
+  const bookFit=/(도서|책방|서점|책\b|출판|전자책|웹툰|코믹|만화|bookstore|book\b|books\b|publishing|ebook|webtoon|comic)/i.test(hay);
+  const healthKnowledgeFit=primary==="baby_family_education"||/(지식|교육|학습|건강|헬스|피트니스|영양제|비타민|웰니스|knowledge|education|learning|health|fitness|supplement|vitamin|wellness)/i.test(hay);
+  const premiumBrandFit=/(프리미엄|명품|럭셔리|고급|하이엔드|밍크|모피|디자이너|premium|luxury|high[- ]?end|mink|fur|designer|flagship)/i.test(hay);
+
+  // Physical outdoor/sports goods are retail products. Only travel/booking services are Tour-exclusive.
+  if (automotiveFit || outdoorFit) add("home|home_right_middle", 124, automotiveFit?"자동차 용품 홈 우측 중단":"아웃도어 홈 우측 중단", "psom_home_right_automotive_outdoor");
+  if (outdoorFit) add("distribution|distribution-extra", 112, "유통 아웃도어 전용", "psom_distribution_outdoor");
+  if (furnitureFit) add("home|home_right_bottom", 122, "가구·리빙 홈 우측 하단", "psom_home_right_living");
+  if (bookFit) { add("home|home_6", 124, "웹툰·서적·전자책 Home 6", "psom_home6_books"); add("home|home_right_bottom", 108, "책방·리빙 우측 하단", "psom_home_right_books"); }
+  if (healthKnowledgeFit) add("home|home_right_top", 118, "지식·건강·생활 우측 상단", "psom_home_right_health_knowledge");
+
+  if (beautyFit) {
+    add("home|home_1",124,"홈 1 뷰티 중심","psom_home1_beauty");
+    add("distribution|distribution-sponsor",122,"유통 뷰티 전용","psom_distribution_beauty");
+    add("distribution|distribution-recommend",108,"뷰티 오늘의 추천","psom_distribution_recommend_beauty");
+    add("social|rightPanel",104,"뷰티 소셜 우측 후보","psom_social_beauty");
+  } else if (fashionFit) {
+    add("home|home_3",122,"홈 3 의류·패션","psom_home3_fashion");
+    add("distribution|distribution-special",122,"유통 의류·패션 전용","psom_distribution_fashion");
+    add("social|rightPanel",104,"인기 의류·패션 소셜 우측 후보","psom_social_fashion");
+  } else if (smallApplianceFit) {
+    add("home|home_3",122,"홈 3 소형가전·소형전자","psom_home3_small_appliance");
+    add("distribution|distribution-new",122,"유통 소형가전 전용","psom_distribution_small_appliance");
+    add("distribution|distribution-recommend",106,"소형가전 오늘의 추천","psom_distribution_recommend_small_appliance");
+  } else if (explicitFoodFit) {
+    add("home|home_2",124,"홈 2 식품·푸드","psom_home2_food");
+    add("distribution|distribution-extra",122,"유통 식품 전용","psom_distribution_food");
+  } else if (householdFit) {
+    add("home|home_4",122,"홈 4 생필품·생활필수","psom_home4_essentials");
+    add("distribution|distribution-others",120,"유통 생필품·생활","psom_distribution_essentials");
+  } else if (furnitureFit) {
+    add("distribution|distribution-others",112,"유통 리빙·가구","psom_distribution_living");
+  } else if (!automotiveFit && !outdoorFit && !bookFit && !healthKnowledgeFit) {
+    add("home|home_5",108,"홈 5 일상 잡화·기타","psom_home5_misc");
   }
-
-  const categoryMap = {
-    beauty_personal_care: [
-      ["home|home_1",112,"뷰티 홈 메인 핫상품 우선","psom_beauty_home_hot"],
-      ["distribution|distribution-recommend",108,"뷰티 오늘의 추천 우선","psom_beauty_distribution"],
-      ["distribution|distribution-sponsor",102,"뷰티 스폰서 대체 레일 우선","psom_beauty_sponsor"],
-      ["social|rightPanel",106,"뷰티 소셜 우측 반응 후보","psom_beauty_social"]
-    ],
-    fashion: [
-      ["home|home_2",112,"브랜드 의류·패션 홈 메인 핫상품 우선","psom_fashion_home_hot"],
-      ["distribution|distribution-recommend",108,"의류·패션 오늘의 추천 우선","psom_fashion_distribution"],
-      ["distribution|distribution-sponsor",104,"브랜드 의류 스폰서 대체 레일 우선","psom_fashion_sponsor"],
-      ["social|rightPanel",106,"인기 의류·패션 소셜 우측 후보","psom_fashion_social"]
-    ],
-    electronics_accessories: [
-      ["home|home_3",112,"소형전자 홈 메인 핫상품 우선","psom_electronics_home_hot"],
-      ["distribution|distribution-recommend",108,"소형전자 오늘의 추천 우선","psom_electronics_distribution"],
-      ["distribution|distribution-right",102,"전자·소형전자 유통 우측 후보","psom_electronics_distribution_right"],
-      ["social|rightPanel",104,"소형전자 소셜 우측 후보","psom_electronics_social"]
-    ],
-    home_appliances_living: [
-      ["home|home_right_middle",112,"리빙·가구·소형가전 홈 우측 중단 정책","psom_living_home_right"],
-      ["home|home_4",106,"소형가전·리빙 홈 메인 핫상품","psom_living_home_hot"],
-      ["distribution|distribution-recommend",106,"소형가전·리빙 오늘의 추천","psom_living_distribution"],
-      ["distribution|distribution-right",100,"가전·리빙 유통 우측 후보","psom_living_distribution_right"],
-      ["network|network-right",98,"생활가전·리빙 네트워크 우측 후보","psom_living_network"]
-    ],
-    food_household_essentials: [
-      ["home|home_right_middle",112,"생필품·생활용품 홈 우측 중단 정책","psom_household_home_right"],
-      ["home|home_5",108,"생활밀착 상품 홈 메인 핫상품","psom_household_home"],
-      ["distribution|distribution-recommend",110,"반복수요 생필품 오늘의 추천","psom_household_distribution"],
-      ["network|network-right",110,"생필품·생활용품 네트워크 우측 우선","psom_household_network"]
-    ],
-    agriculture_fishery_forestry: [
-      ["home|home_right_top",108,"건강 식재료·농수축산물 홈 우측 상단 후보","psom_agri_health_home_right"],
-      ["distribution|distribution-special",106,"지역·산지·특산 유통 특별 후보","psom_agri_distribution_special"],
-      ["distribution|distribution-others",92,"일반 식재료 유통 후보","psom_agri_distribution"]
-    ],
-    local_products: [
-      ["distribution|distribution-special",108,"지역 특산·로컬 상품 유통 특별 후보","psom_local_distribution_special"],
-      ["home|home_right_middle",100,"로컬 리빙·생활 상품 홈 우측 후보","psom_local_home_right"]
-    ],
-    baby_family_education: [
-      ["home|home_right_top",110,"가족·교육·지식 홈 우측 상단 정책","psom_family_home_right"],
-      ["home|home_5",94,"가족 생활 상품 홈 메인 후보","psom_family_home"],
-      ["distribution|distribution-others",90,"가족 소비재 유통 일반 후보","psom_family_distribution"]
-    ],
-    manufacturer_brands: [
-      ["distribution|distribution-right",104,"공식 제조사·브랜드 유통 우측 후보","psom_manufacturer_distribution_right"],
-      ["distribution|distribution-others",92,"일반 제조 상품 유통 기타 후보","psom_manufacturer_distribution_others"],
-      ["home|home_4",88,"검증 제조 소비재 홈 메인 후보","psom_manufacturer_home"]
-    ]
-  };
-  for (const row of array(categoryMap[primary])) add(row[0], row[1], row[2], row[3]);
-
+  if (premiumBrandFit) add("distribution|distribution-right",126,"프리미엄·고가 브랜드 우측 추천","psom_distribution_premium_brand");
   // Unknown-but-real product candidates are still allowed into a private
   // pre-front placement so hundreds of rows do not require hand assignment.
   // Final Front Match keeps the strict live/evidence/revenue safety gates.
   if (!options.length) {
-    add("distribution|distribution-others", 84, "분류 보강이 필요한 일반 상품의 비공개 유통 후보", "psom_general_distribution_others");
-    add("home|home_right_middle", 78, "기타 실생활 상품 홈 우측 중단 후보", "psom_general_home_other");
+    add("home|home_5", 86, "분류 보강이 필요한 일반 일상 잡화의 홈 5 비공개 후보", "psom_general_home5_misc");
+    add("distribution|distribution-extra", 78, "분류 보강이 필요한 기타 상품의 유통 기타 비공개 후보", "psom_general_distribution_extra");
   }
   return options;
 }
