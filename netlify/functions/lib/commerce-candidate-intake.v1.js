@@ -329,8 +329,8 @@ function administratorFrontAuthority(item,pos,market,origin){
   const strictScopeMatches=!!authorityCountry&&authorityCountry===scopeCountry&&authorityRegion===scopeRegion;
   const queueScopeMatches=!!scopeCountry&&country===scopeCountry&&scopeRegion===(normalizeRegion(first(publicationRequest.region,publicationScope.region,"NATIONWIDE"),scopeCountry)||"NATIONWIDE");
   const marketMatches=array(market&&market.validRecords).some((record)=>{if(normalizeCountry(record&&record.country)!==country)return false;if(scopeRegion==="NATIONWIDE")return record&&record.nationwide===true;return array(record&&record.regions).map((value)=>normalizeRegion(value,country)).includes(scopeRegion);});
-  const strictOk=authority.verified===true&&!!text(authority.assignmentId)&&lower(authority.publicationStatus)==="publish_requested"&&authority.externalSeller===true&&authority.noIgdcCheckout===true&&authority.noIgdcPayment===true&&strictPlacementMatches&&strictScopeMatches&&marketMatches;
-  const queueFallbackOk=(origin||"")==="admin_review_queue"&&review.explicitPublicationRequested===true&&!!text(review.approvalId)&&lower(review.publicationStatus)==="publish_requested"&&queuePlacementMatches&&queueScopeMatches&&marketMatches&&!!safeHttpsUrl(productDestination(item));
+  const strictOk=authority.verified===true&&!!text(authority.assignmentId)&&lower(authority.publicationStatus)==="publish_requested"&&authority.externalSeller===true&&authority.noIgdcCheckout===true&&authority.noIgdcPayment===true&&strictPlacementMatches&&strictScopeMatches;
+  const queueFallbackOk=(origin||"")==="admin_review_queue"&&review.explicitPublicationRequested===true&&!!text(review.approvalId)&&lower(review.publicationStatus)==="publish_requested"&&queuePlacementMatches&&queueScopeMatches&&!!safeHttpsUrl(productDestination(item));
   return {ok:strictOk||queueFallbackOk,mode:strictOk?"explicit_authority_marker":(queueFallbackOk?"authoritative_admin_review_queue":null),assignmentId:text(authority.assignmentId||review.approvalId)||null,country:country||null,region:scopeRegion||null,placementMatches:strictOk?strictPlacementMatches:queuePlacementMatches,scopeMatches:strictOk?strictScopeMatches:queueScopeMatches,marketMatches};
 }
 
@@ -479,17 +479,19 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
 
   const explicitAdministratorFrontMatch=(origin||"searchbank")==="admin_review_queue" && tier==="approved_commerce_member" &&
     approval.ok===true && approval.explicitPublicationRequested===true && titlePresent && !!destination && !!image &&
-    !!pos.page && !!pos.section && eligibilityFlagsOk && trustedForExplicitFront && market.ok===true && adminSafety.ok===true;
+    !!pos.page && !!pos.section && adminAuthority.ok===true && adminSafety.ok===true;
 
   // Revenue/affiliate readiness is a monetization concern, not a reason to
   // discard an administrator-approved, verified external seller card.  For the
   // explicit Front Match path only, convert the route to a non-payable external
   // referral while retaining every hard SearchBank/product/market gate above.
   const effectiveRevenue=explicitAdministratorFrontMatch?administratorReferralRevenue(item,revenue,market):revenue;
+  const authorityMarketRecord=explicitAdministratorFrontMatch&&adminAuthority.country?{country:adminAuthority.country,nationwide:adminAuthority.region==="NATIONWIDE",regions:adminAuthority.region&&adminAuthority.region!=="NATIONWIDE"?[adminAuthority.region]:[],verified:true,verifiedAt:new Date().toISOString()}:null;
+  const effectiveAdminMarkets=market.validRecords.length?market.validRecords.slice():(authorityMarketRecord?[authorityMarketRecord]:[]);
   const effectivePublishMarkets=explicitAdministratorFrontMatch
-    ? {ok:market.validRecords.length>0,validRecords:market.validRecords.slice(),blocked:[],allowedCountries:marketCountries(market.validRecords)}
+    ? {ok:effectiveAdminMarkets.length>0,validRecords:effectiveAdminMarkets,blocked:[],allowedCountries:marketCountries(effectiveAdminMarkets)}
     : normalPublishMarkets;
-  const adminSoftReasons=new Set(["REVENUE_OPPORTUNITY_EVIDENCE_MISSING","PAYABLE_NON_PG_REVENUE_RIGHT_NOT_VERIFIED","REVENUE_ROUTE_HAS_NO_ALLOWED_VERIFIED_MARKET"]);
+  const adminSoftReasons=new Set(["REVENUE_OPPORTUNITY_EVIDENCE_MISSING","PAYABLE_NON_PG_REVENUE_RIGHT_NOT_VERIFIED","REVENUE_ROUTE_HAS_NO_ALLOWED_VERIFIED_MARKET","MARKET_SALE_EVIDENCE_INCOMPLETE_OR_STALE","LIFE_ESSENTIAL_CATEGORY_NOT_CONFIRMED","SEARCHBANK_ELIGIBILITY_FLAGS_MISSING","TRUSTED_SELLER_OR_PRODUCER_EVIDENCE_MISSING"]);
   const effectiveReasons=explicitAdministratorFrontMatch?reasons.filter(reason=>!adminSoftReasons.has(reason)):reasons.slice();
   const releaseEligible=effectiveReasons.length===0;
   const profitability=profitabilityAssessment(item,tier,effectiveRevenue);
