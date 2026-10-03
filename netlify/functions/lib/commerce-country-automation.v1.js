@@ -4727,8 +4727,10 @@ async function verifyProductFrontPreparation(candidateIdsInput, scope, targetByI
   for (const candidateId of candidateIds) {
     const target = plain(targetById.get(candidateId)), split = splitProductSectionKey(target.sectionKey), reasons = [];
     const candidate = candidates.get(candidateId);
-    const candidateStatus = lower(candidate && candidate.status);
-    if (!candidate || !["revenue_ready","enrollable"].includes(candidateStatus)) reasons.push("candidate_lifecycle_status_not_ready");
+    const candidatePayload = plain(candidate && candidate.source_payload);
+    const candidateDecision = lower(candidatePayload.slotDecision);
+    const candidatePlacementKey = productPlacementKey(candidatePayload.approvedPlacement || candidatePayload.selectedPlacement || candidatePayload.placement);
+    if (!candidate || candidateDecision !== "slot_candidate" || !validProductSectionKey(candidatePlacementKey)) reasons.push("administrator_candidate_placement_not_ready");
     const candidateAssignments = array(assignments.get(candidateId));
     const candidateMarkets = array(availability.get(candidateId));
     const candidateRevenues = array(revenues.get(candidateId));
@@ -4751,7 +4753,9 @@ async function verifyProductFrontPreparation(candidateIdsInput, scope, targetByI
     let lifecycle = null;
     if (candidate) {
       lifecycle = ProductPipeline.registryState(candidate,{assignments:candidateAssignments,markets:candidateMarkets,revenues:candidateRevenues,evidence:candidateEvidence});
-      if (text(lifecycle && lifecycle.stage) !== "registry_sync_ready") reasons.push("canonical_lifecycle_not_registry_sync_ready:" + (text(lifecycle && lifecycle.stage) || "unknown"));
+      // Front publication may inspect lifecycle state, but it must not require a candidate-payload
+      // rewrite to manufacture registry_sync_ready. The administrator placement plus canonical
+      // assignment/market/revenue/evidence relations are the only write authorities here.
     }
     const verified = reasons.length === 0;
     if (verified) verifiedCandidateIds.push(candidateId);
@@ -4970,34 +4974,12 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     throw attachTrace(error, "relation_prepare");
   }
 
-  // 3) Align the candidate lifecycle with the canonical relations.  This is a
-  // normal lifecycle annotation, not the publication authority.  If one row
-  // cannot be annotated, that row is held out of the final publication commit.
-  const freshRows = await frontSyncSelectCandidates(plannedCandidateIds);
-  const freshById = new Map(freshRows.map((row)=>[text(row&&row.id),row]));
-  const candidatePreparedIds = [], candidatePrepareErrors = [];
-  for (const candidateId of plannedCandidateIds) {
-    const row = plain(freshById.get(candidateId)), target = plain(targetById.get(candidateId)), readiness = plain(readinessByCandidate.get(candidateId));
-    if (!Object.keys(row).length) { candidatePrepareErrors.push({candidateId,error:"candidate_missing_after_relation_prepare"}); continue; }
-    const payload = Object.assign({}, plain(row.source_payload)), key = text(target.sectionKey), split = splitProductSectionKey(key), assignmentId = text(assignmentIdByCandidate.get(candidateId));
-    // Publication preparation must not mutate administrator placement.
-    // `key` was derived from the already-approved placement/assignment above.
-    // Keep slotDecision/approvedPlacement/placement untouched.
-    payload.outboundReferral = Object.assign({}, plain(payload.outboundReferral), { operatorApproved:true, approved:true, status:"approved", officialDestination:true, officialSeller:true, disclosureReady:true, verifiedAt:now, destinationUrl:readiness.productPageUrl, providerName:readiness.supplierName, approvalSource:"explicit_front_match" });
-    payload.revenue = Object.assign({}, plain(payload.revenue), { type:"external_referral", monetizationState:"administrator_nonpayable_external_referral", trafficValueOnly:true, payableRevenueRightVerified:false, settlementExecution:false });
-    payload.review = Object.assign({}, plain(payload.review), { state:"approved", decidedAt:now, decidedBy:actor, approvalSource:"explicit_front_match", publicationRequested:false, explicitPublicationRequested:false });
-    payload.pipeline = Object.assign({}, plain(payload.pipeline), { stage:"registry_sync_ready", nextGate:"go_live_audit_and_explicit_publication_request", explicitPublicationRequested:false, preparedAt:now, preparedBy:actor });
-    payload.frontPublication = { schema:"igdc-product-front-publication-control.v4", candidateId, operation:"match", status:"ready", queued:false, persisted:true, pendingBuild:false, persistenceVerified:true, authority:"gslot_slot_assignments.publication_status", assignmentId, sectionKey:key, country:scope.country, region:scope.region, preparedAt:now, preparedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true };
-    payload.publicPublication=false; payload.automaticImport=false;
-    try {
-      await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status:text(row.status)||"approval_pending", source_payload:payload, updated_at:now });
-      candidatePreparedIds.push(candidateId);
-    } catch (error) {
-      candidatePrepareErrors.push({ candidateId, error:text(error && (error.code || error.message)) || "candidate_lifecycle_annotation_failed" });
-    }
-  }
-  writeTrace.candidatePreparation = { attempted:plannedCandidateIds.length, prepared:candidatePreparedIds.length, failed:candidatePrepareErrors.length, errors:candidatePrepareErrors };
-  phase("candidate_prepare", { ok:candidatePrepareErrors.length===0, prepared:candidatePreparedIds.length, failed:candidatePrepareErrors.length });
+  // 3) STRICT ONE-WAY BOUNDARY. Front preparation is forbidden from writing
+  // gslot_candidates. The administrator candidate ledger is the immutable input
+  // to publication. Only publication relations may change below.
+  const candidatePreparedIds = plannedCandidateIds.slice(), candidatePrepareErrors = [];
+  writeTrace.candidatePreparation = { attempted:plannedCandidateIds.length, prepared:candidatePreparedIds.length, failed:0, errors:[], readOnlyCandidateLedger:true };
+  phase("candidate_prepare", { ok:true, prepared:candidatePreparedIds.length, failed:0, readOnlyCandidateLedger:true });
 
   // 4) Read back the complete standard lifecycle before committing publication.
   // ProductPipeline.registryState must say registry_sync_ready; this catches a
@@ -5051,23 +5033,10 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   writeTrace.publicationReadback = { requested:commitCandidateIds.length, verified:persistedCandidateIds.length, failed:commitCandidateIds.length-persistedCandidateIds.length, assignmentIds:persistedCandidateIds.map((id)=>text(finalByCandidate.get(id)&&finalByCandidate.get(id).id)).filter(Boolean) };
   phase("publication_readback", { ok:persistedCandidateIds.length===commitCandidateIds.length, verified:persistedCandidateIds.length, failed:commitCandidateIds.length-persistedCandidateIds.length });
 
-  // 6) Mirror the committed relation state back into source_payload for the
-  // administrator UI and diagnostics.  This annotation is secondary; the
-  // authoritative relation commit above is never rolled back or hidden by it.
+  // 6) No candidate/source_payload annotation is allowed from Front Match.
+  // Publication state lives only in gslot_slot_assignments and downstream publication/snapshot ledgers.
   const annotationErrors=[];
-  if (persistedCandidateIds.length) {
-    const rows = await frontSyncSelectCandidates(persistedCandidateIds), byId=new Map(rows.map((row)=>[text(row&&row.id),row]));
-    for (const candidateId of persistedCandidateIds) {
-      const row=plain(byId.get(candidateId)), target=plain(targetById.get(candidateId)), assignment=plain(finalByCandidate.get(candidateId)); if(!Object.keys(row).length)continue;
-      const payload=Object.assign({},plain(row.source_payload)), key=text(target.sectionKey);
-      payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"match",status:"publish_requested",queued:false,persisted:true,pendingBuild:true,persistenceVerified:true,authority:"gslot_slot_assignments.publication_status",assignmentId:text(assignment.id),sectionKey:key,country:scope.country,region:scope.region,requestedAt:iso(),requestedBy:actor,publicSnapshotConfirmed:false,buildVerificationRequired:true});
-      payload.review=Object.assign({},plain(payload.review),{publicationRequested:true,explicitPublicationRequested:true,publicationRequestedAt:iso(),publicationRequestedBy:actor});
-      payload.pipeline=Object.assign({},plain(payload.pipeline),{nextGate:"publication_build_requested",explicitPublicationRequested:true,publicationRequestedAt:iso(),publicationRequestedBy:actor});
-      try { await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{status:text(row.status)||"approval_pending",source_payload:payload,updated_at:iso()}); }
-      catch(error){annotationErrors.push({candidateId,error:text(error&&(error.code||error.message))||"publication_annotation_failed"});}
-    }
-  }
-  writeTrace.annotation = { attempted:persistedCandidateIds.length, failed:annotationErrors.length, errors:annotationErrors };
+  writeTrace.annotation = { attempted:0, failed:0, errors:[], skipped:true, reason:"candidate_ledger_read_only" };
 
   const verifyById = new Map(array(preparationVerification.items).map((row)=>[text(row&&row.candidateId),row]));
   const prepareErrorById = new Map(candidatePrepareErrors.map((row)=>[text(row&&row.candidateId),row]));
@@ -5167,42 +5136,9 @@ async function productFrontSyncTargets(input, jobInput) {
 async function recordProductFrontSync(actorId, input, batchResult, jobInput) {
   const scope = researchScope(input), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate";
   if (candidateLedgerMode) {
-    const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match", now = iso(), actor = text(actorId) || "administrator", items = array(batchResult && batchResult.items), ids = Array.from(new Set(items.map((item) => text(item && item.candidateId)).filter(Boolean)));
-    const rows = await frontSyncSelectCandidates(ids), byId = new Map(rows.map((row) => [text(row && row.id), row])), byItem = new Map(items.map((item) => [text(item && item.candidateId), plain(item)]));
-    const annotationErrors = [];
-    for (const id of ids) {
-      const row = plain(byId.get(id)), item = plain(byItem.get(id)); if (!Object.keys(row).length) continue;
-      const payload = Object.assign({}, plain(row.source_payload)), status = text(item.status) || (item.queued === true ? (operation === "match" ? "publish_requested" : "unpublish_requested") : "blocked");
-      // A match run may contain runtime-repair unpublication items for dead old
-      // products. Preserve the per-item lifecycle direction instead of stamping
-      // those repair rows as a new match merely because the outer action was
-      // "match".
-      const itemOperation = ["unpublish_requested","unmatched","already_unmatched"].includes(lower(status)) ? "unmatch" : operation;
-      const key = text(item.sectionKey || productPlacementKey(payload.approvedPlacement || payload.selectedPlacement || payload.primaryPlacement || payload.placement));
-      const split = validProductSectionKey(key) ? splitProductSectionKey(key) : null;
-      const previousFront = plain(payload.frontPublication);
-      payload.frontPublication = Object.assign({}, previousFront, { schema:"igdc-product-front-publication-control.v4", candidateId:id, operation:itemOperation, status, queued:item.queued===true, persisted:item.persisted===true, pendingBuild:item.pendingBuild===true, persistenceVerified:item.persistenceVerified!==false&&item.persisted===true, reason:text(item.reason)||null, assignmentId:text(item.assignmentId)||text(previousFront.assignmentId)||null, page:split&&split.page||text(previousFront.page)||null, section:split&&split.sectionKey||text(previousFront.section)||null, sectionKey:split&&split.sectionKey||text(previousFront.sectionKey)||null, country:scope.country, region:scope.region, requestedAt:now, requestedBy:actor, publicSnapshotConfirmed:false, buildVerificationRequired:true });
-      if (itemOperation === "match" && item.persisted === true && split) {
-        // Publication marker only. Never rewrite candidate placement/decision here.
-        payload.pipeline = Object.assign({}, plain(payload.pipeline), { nextGate:"publication_build_requested", explicitPublicationRequested:true, preparedAt:now, preparedBy:actor });
-      }
-      const unmatchCompleted = itemOperation === "unmatch" && ["unpublish_requested","unmatched","already_unmatched"].includes(lower(status));
-      if (unmatchCompleted) {
-        // Front unmatch is intentionally reversible and must not erase the
-        // administrator/AI section placement. Unassigning a product is a
-        // separate management action (undecided/hold/reject). Keeping the
-        // placement here lets one product, one section, selected sections or all
-        // sections be matched and unmatched independently without rebuilding the
-        // 20-section allocation first.
-        const existingReview=plain(payload.review), existingPipeline=plain(payload.pipeline);
-        payload.review = Object.assign({}, existingReview, { publicationRequested:false, explicitPublicationRequested:false, publicationStatus:"unpublish_requested", nextGate:"administrator_front_match", decidedAt:now, decidedBy:actor });
-        payload.pipeline = Object.assign({}, existingPipeline, { nextGate:"administrator_front_match", explicitPublicationRequested:false, publicationStatus:"unpublish_requested", updatedAt:now, updatedBy:actor });
-      }
-      payload.publicPublication=false;
-      try { await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{source_payload:payload,updated_at:now}); }
-      catch (error) { annotationErrors.push({candidateId:id,error:text(error&&error.message)||"candidate_annotation_failed"}); }
-    }
-    return { ok:true, candidateLedger:true, compact:true, status:"candidate_ledger", frontSyncResult:Object.assign({},plain(batchResult),{operation,publicSnapshotConfirmed:false,buildVerificationRequired:true,annotationErrors}) };
+    const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match";
+    // Front Match/Unmatch is publication-only. Never annotate or mutate gslot_candidates.
+    return { ok:true, candidateLedger:true, compact:true, status:"candidate_ledger_read_only", frontSyncResult:Object.assign({},plain(batchResult),{operation,publicSnapshotConfirmed:false,buildVerificationRequired:true,annotationErrors:[],candidateLedgerReadOnly:true}) };
   }
   const job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }

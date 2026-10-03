@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.20.0-admin-ledger-supplier-expansion
+/* IGDC Global/Region/Country Commerce Control v3.22.0-masterboard-front-authority
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -707,7 +707,10 @@
     var busy=productLoopActive||productAutomationActive||productFrontSyncActive||productSectionCleanupActive,matchBusy=busy,sections=selectedSectionKeys(),placed=productRows.filter(function(row){return productDecision(row)==='slot_candidate'&&!!assignedSectionKey(row);}),active=placed.filter(frontPublicationActive),refreshable=placed;
     if($('selectedSectionCount'))$('selectedSectionCount').textContent='선택 섹션 '+sections.length+'개';
     var master=$('allSectionsSelect');if(master){master.checked=sections.length===PRODUCT_SECTIONS.length;master.indeterminate=sections.length>0&&sections.length<PRODUCT_SECTIONS.length;master.disabled=busy;}
-    setButtonEnabled('selectedSectionsMatchBtn',!matchBusy&&sections.some(function(key){return sectionRows(key).length>0;}));setButtonEnabled('allSectionsMatchBtn',!matchBusy&&placed.length>0);setButtonEnabled('selectedSectionsUnmatchBtn',!busy&&sections.some(function(key){return sectionRows(key).some(frontPublicationActive);}));setButtonEnabled('allSectionsUnmatchBtn',!busy&&active.length>0);
+    // Master-board publication controls must also be able to replace a section with
+    // an empty real-product set. That is how an administrator intentionally clears
+    // stale front data and lets the sample fallback return.
+    setButtonEnabled('selectedSectionsMatchBtn',!matchBusy&&sections.length>0);setButtonEnabled('allSectionsMatchBtn',!matchBusy&&!!selectedCountry);setButtonEnabled('selectedSectionsUnmatchBtn',!busy&&sections.some(function(key){return sectionRows(key).some(frontPublicationActive);}));setButtonEnabled('allSectionsUnmatchBtn',!busy&&active.length>0);
     Array.prototype.forEach.call(document.querySelectorAll('[data-section-front-select]'),function(box){box.checked=frontSelectedSections[box.value]===true;box.disabled=busy;});
     Array.prototype.forEach.call(document.querySelectorAll('[data-product-front-select]'),function(box){box.checked=frontSelectedProducts[box.value]===true;box.disabled=busy;});
     PRODUCT_SECTIONS.forEach(function(section){var ids=selectedProductIds(section.key),rows=sectionRows(section.key),all=$('sectionProductSelectAll-'+section.key.replace(/[^a-z0-9_-]/gi,'_')),count=$('sectionProductSelectedCount-'+section.key.replace(/[^a-z0-9_-]/gi,'_'));if(all){all.checked=rows.length>0&&ids.length===rows.length;all.indeterminate=ids.length>0&&ids.length<rows.length;all.disabled=busy||!rows.length;}if(count)count.textContent='선택 상품 '+ids.length+'건';Array.prototype.forEach.call(document.querySelectorAll('[data-selected-products-front="'+section.key+'"]'),function(button){var unmatch=button.getAttribute('data-front-operation')==='unmatch';button.disabled=(unmatch?busy:matchBusy)||!ids.length;});Array.prototype.forEach.call(document.querySelectorAll('[data-section-selected-remove="'+section.key+'"]'),function(button){button.disabled=busy||!ids.length;});});
@@ -734,8 +737,12 @@
     else if(kind==='candidate'&&validSection)autoButton='<button type="button" class="product-section-ai-button" data-section-ai-auto="'+esc(key)+'" '+(autoDisabled||!count?'disabled':'')+'>이 후보군 AI 자동 배치</button>';
     else if(kind==='candidate'&&key==='assignment_repair')autoButton='<button type="button" class="product-section-ai-button" data-candidate-repair-auto="1" '+(autoDisabled||!count?'disabled':'')+'>배정정보 복구 필요 전체 AI 복구</button>';
     else if(kind==='candidate'&&key==='unassigned')autoButton='<button type="button" class="product-section-ai-button" data-section-ai-auto="__all__" '+(autoDisabled||!count?'disabled':'')+'>미배정 AI 자동 배치</button>';
-    var sectionSelect=kind==='section'&&validSection?'<label class="section-select-label"><input type="checkbox" data-section-front-select="1" value="'+esc(key)+'" '+(frontSelectedSections[key]===true?'checked ':'')+(controlsBusy||!count?'disabled ':'')+'> 섹션 선택</label>':'';
-    var frontButtons=kind==='section'&&validSection?'<button type="button" class="product-section-front-button" data-section-front-match="'+esc(key)+'" '+(matchBusy||!count?'disabled':'')+'>이 섹션 프론트 매칭</button><button type="button" class="product-section-unmatch-button" data-section-front-unmatch="'+esc(key)+'" '+(controlsBusy||!rows.some(frontPublicationActive)?'disabled':'')+'>이 섹션 매칭 해제</button>':'';
+    // The candidate/master board is now the only active 20-section authority.
+    // Section selection and front publication controls live here; the legacy
+    // productSectionBoard is retained only as a disabled rollback shell.
+    var masterSectionControl=(kind==='candidate'||kind==='section')&&validSection;
+    var sectionSelect=masterSectionControl?'<label class="section-select-label"><input type="checkbox" data-section-front-select="1" value="'+esc(key)+'" '+(frontSelectedSections[key]===true?'checked ':'')+(controlsBusy?'disabled ':'')+'> 섹션 선택</label>':'';
+    var frontButtons=masterSectionControl?'<button type="button" class="product-section-front-button" data-section-front-match="'+esc(key)+'" '+(matchBusy?'disabled':'')+'>이 섹션 프론트 매칭</button><button type="button" class="product-section-unmatch-button" data-section-front-unmatch="'+esc(key)+'" '+(controlsBusy||!rows.some(frontPublicationActive)?'disabled':'')+'>이 섹션 매칭 해제</button>':'';
     var workspaceKey=kind==='section'&&validSection?'section_'+key.replace(/[^a-z0-9_-]/gi,'_'):(kind==='candidate'?'candidate_group_'+key.replace(/[^a-z0-9_-]/gi,'_'):'');
     var policyButton=workspaceKey?'<button type="button" class="ghost policy-workspace-button" data-policy-workspace="'+esc(workspaceKey)+'" data-policy-workspace-label="'+esc(label)+(kind==='candidate'?' 후보 관리 대화':' 섹션 운영 대화')+'" data-policy-scope="country">AI 운영·정책 대화</button>':'';
     var safeKey=key.replace(/[^a-z0-9_-]/gi,'_');
@@ -932,7 +939,7 @@
     finally{candidateBulkActionActive[groupKey]=false;syncCandidateSelectionControls(groupKey);}
   }
   function renderProductCandidateGroups(){var root=$('productGrid');if(!root)return;var rows=productRows.filter(candidatePoolRow),groups={};PRODUCT_SECTIONS.forEach(function(section){groups[section.key]=[];});rows.forEach(function(row){var key=candidateGroupKey(row);(groups[key]||(groups[key]=[])).push(row);});var keys=[];if(queueFocusedCandidateIds.length){var focused=rows.filter(function(row){var candidate=text(row&&row.candidateId),id=text(row&&row.id);return queueFocusedCandidateIds.indexOf(candidate)>=0||queueFocusedCandidateIds.indexOf(id)>=0;});if(focused.length){groups.queue_selected=focused;keys.push('queue_selected');}}if(groups.assignment_repair&&groups.assignment_repair.length)keys.push('assignment_repair');PRODUCT_SECTIONS.forEach(function(section){keys.push(section.key);});if(!groups.unassigned)groups.unassigned=[];keys.push('unassigned');var labels={queue_selected:'선택한 상품 · 아래 버튼으로 AI 자동배치/수동배치/제외 처리',assignment_repair:'배정정보 복구 필요',unassigned:'미배치 상품 목록 · 추가 확인 필요'};root.innerHTML=keys.map(function(key){return productGroupDetails(key,labels[key]||sectionLabel(key),groups[key]||[],'candidate');}).join('');wireProductGroupDetails(root,groups,'candidate');keys.forEach(syncCandidateSelectionControls);}
-  function renderProductSectionBoard(){var root=$('productSectionList');if(!root)return;var groups={};PRODUCT_SECTIONS.forEach(function(section){groups[section.key]=[];});productRows.filter(function(row){return productDecision(row)==='slot_candidate';}).forEach(function(row){var key=productPlacementKey(row);if(groups[key])groups[key].push(row);});root.innerHTML=PRODUCT_SECTIONS.map(function(section){return productGroupDetails(section.key,section.label,groups[section.key]||[],'section');}).join('');wireProductGroupDetails(root,groups,'section');}
+  function renderProductSectionBoard(){var root=$('productSectionList'),board=$('productSectionBoard');if(!root)return;if(board&&board.getAttribute('aria-disabled')==='true'){root.innerHTML='';return;}var groups={};PRODUCT_SECTIONS.forEach(function(section){groups[section.key]=[];});productRows.filter(function(row){return productDecision(row)==='slot_candidate';}).forEach(function(row){var key=productPlacementKey(row);if(groups[key])groups[key].push(row);});root.innerHTML=PRODUCT_SECTIONS.map(function(section){return productGroupDetails(section.key,section.label,groups[section.key]||[],'section');}).join('');wireProductGroupDetails(root,groups,'section');}
   function wireProductGroupDetails(root,groups,kind){
     Array.prototype.forEach.call(root.querySelectorAll('details[data-product-group]'),function(panel){
       function draw(){
@@ -1429,7 +1436,7 @@
     // the controls behave as one chained action instead of separate commands.
     var unmatch=operation==='unmatch',sectionMode=mode==='section',sectionsMode=mode==='sections',candidateMode=mode==='candidate',candidatesMode=mode==='candidates',selectedSections=sectionsMode?(Array.isArray(selection)?selection:[]):[],selectedProducts=candidatesMode?(Array.isArray(selection)?selection:[]):[],selectedProduct=candidateMode?productById(productId):null,label=candidateMode?(text(selectedProduct&&selectedProduct.productName||selectedProduct&&selectedProduct.title||productId)+' · 상품 1건'):(candidatesMode?'선택 상품 '+selectedProducts.length+'건':(sectionsMode?(selectedSections.length===1?sectionLabel(selectedSections[0]):'선택 섹션 '+selectedSections.length+'개'):(sectionMode?sectionLabel(sectionKey):'20개 전체 섹션'))),confirmation=unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH';
     if(sectionsMode&&!selectedSections.length){show('매칭할 섹션을 먼저 선택해 주세요.','warn');return;}if(candidatesMode&&!selectedProducts.length){show('매칭할 상품을 먼저 선택해 주세요.','warn');return;}
-    var replacementRun=!unmatch&&(mode==='all'||sectionMode||sectionsMode),pendingManagement=unmatch?[]:pendingFrontManagementChanges(mode,sectionKey,productId,selection),selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
+    var replacementRun=!unmatch&&(mode==='all'||sectionMode||sectionsMode),pendingManagement=[],selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
     var targetRows=productRows.filter(function(row){
       var key=assignedSectionKey(row),id=text(row&&row.id),placed=productDecision(row)==='slot_candidate'&&!!key;
       // The 20-section board owns only rows that still have a valid placement.
@@ -1450,33 +1457,18 @@
     });
     if(replacementRun&&!unmatch){var replacementScopeKeys=mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice());targetRows=capFrontReplacementRows(targetRows,replacementScopeKeys);}
     var targetIds=targetRows.map(function(row){return text(row.id);}).filter(Boolean);
-    if(!targetIds.length&&!pendingManagement.length&&!replacementRun){show(unmatch?'선택 범위에 매칭 해제할 상품이 없습니다.':'선택 범위에 최종 재검증·프론트 적용할 상품이 없습니다.','warn');return;}
-    var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'의 현재 배치 상품을 프론트 공개 원장에 적용합니다.'+(pendingManagement.length?' 화면에서 바꾼 관리자 위치·상태 '+pendingManagement.length+'건을 먼저 원장에 확정 저장합니다.':'')+' 최근 검증이 살아 있는 상품은 저장된 검증을 재사용하고, 오래됐거나 실제 공개 중인 상품만 다시 확인합니다. 이 작업은 현재 관리자 배치 상품을 추가·갱신하며 다른 기존 프론트 상품을 자동으로 일괄 제거하지 않습니다. 보류·제외·삭제·매칭해제처럼 관리자가 명시적으로 제거한 상품만 프론트 해제 대상으로 남기고 빈 슬롯은 기존 샘플 fallback 정책을 유지합니다.';
-    if(!window.confirm(explanation+'\n\n'+(unmatch?'프론트에서 해당 매칭을 해제하시겠습니까?\n변경은 소량 묶음으로 저장한 뒤 마지막에 스냅샷 빌드를 1회만 실행합니다.':'프론트 실상품 매칭 절차를 실행하시겠습니까?\n선택 범위의 현재 관리자 배치 상품을 프론트 원장에 추가·갱신합니다. 명시적으로 해제된 실상품만 빠지고 빈 슬롯은 샘플로 복귀합니다. 마지막 빌드는 1회만 실행합니다.')))return;
+    if(!targetIds.length&&!replacementRun){show(unmatch?'선택 범위에 매칭 해제할 상품이 없습니다.':'선택 범위에 최종 재검증·프론트 적용할 상품이 없습니다.','warn');return;}
+    var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'을 현재 전체 상품 후보·배치 관리 목록의 상태로 치환합니다. 선택 범위의 기존 프론트 공개 원장은 현재 관리자 배치 목록과 비교해 오래된 항목을 공개 해제하고, 현재 배치된 상품만 공개 대상으로 다시 확정합니다. 관리자 후보·배치 원장 자체는 절대 수정하지 않으며 빈 슬롯은 기존 샘플 fallback 정책을 유지합니다.';
+    if(!window.confirm(explanation+'\n\n'+(unmatch?'프론트에서 해당 매칭을 해제하시겠습니까?\n변경은 소량 묶음으로 저장한 뒤 마지막에 스냅샷 빌드를 1회만 실행합니다.':'현재 관리자 배치 목록으로 프론트 공개 원장을 치환하시겠습니까?\nSupabase 공개 배정 상태를 현재 목록과 맞춘 뒤 SearchBank/Snapshot 빌드를 마지막에 1회 실행합니다.')))return;
     productFrontSyncActive=true;
     var state=$('productFrontSyncState'),batchSize=8,maxConcurrent=2,requestTimeout=75000,aggregate={requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,revalidated:0,remoteChecked:0,freshReused:0,invalid:0,inconclusive:0,withdrawn:0,changedSection:0,items:[],persistedCandidateIds:[],changedCandidateIds:[],preparation:{requested:0,prepared:0,blocked:0},batchErrors:[]},publishPersistedMap={},changedMap={},completed=0,managementCommit={changedCount:0,changedCandidateIds:[],movedCandidateIds:[],releasedCandidateIds:[]};
     if(state){state.className='front-sync-state running';state.textContent=label+' '+(unmatch?'매칭 해제':'프론트 실상품 매칭')+' · '+targetIds.length+'건을 처리합니다. 최근 정상 검증은 재사용하고 필요한 상품만 다시 확인합니다.';}
     renderProducts(productRows);
     try{
-      if(pendingManagement.length){
-        if(state){state.className='front-sync-state running';state.textContent=label+' · 화면에서 바꾼 위치·상태 '+pendingManagement.length+'건을 관리자 원장에 먼저 저장합니다.';}
-        managementCommit=await persistFrontManagementChanges(pendingManagement,state,label);
-        (managementCommit.changedCandidateIds||[]).forEach(function(id){if(id)changedMap[text(id)]=true;});
-        selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
-        targetRows=productRows.filter(function(row){
-          var key=assignedSectionKey(row),id=text(row&&row.id),candidateId=text(row&&row.candidateId||row&&row.id),placed=productDecision(row)==='slot_candidate'&&!!key;
-          if(!key)return false;
-          var eligible=unmatch?(placed&&frontPublicationActive(row)):(placed||frontPublicationLive(row));
-          if(!eligible)return false;
-          if(candidateMode)return id===text(productId)||candidateId===text(productId);
-          if(candidatesMode)return selectedProductMap[id]===true||selectedProductMap[candidateId]===true||(managementCommit.movedCandidateIds||[]).indexOf(candidateId)>=0;
-          if(sectionMode)return key===sectionKey||(managementCommit.movedCandidateIds||[]).indexOf(candidateId)>=0;
-          if(sectionsMode)return selectedSections.indexOf(key)>=0||(managementCommit.movedCandidateIds||[]).indexOf(candidateId)>=0;
-          return true;
-        });
-        if(replacementRun&&!unmatch){var updatedReplacementKeys=mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice());targetRows=capFrontReplacementRows(targetRows,updatedReplacementKeys);}
-        targetIds=Array.from(new Set(targetRows.map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean)));
-      }
+      // CRITICAL AUTHORITY RULE: Front Match is publish-only.
+      // It must never save, infer, repair, or rewrite administrator management choices.
+      // Any manual change in the 20-section board must be committed by that board's own
+      // explicit management control before this publication command is allowed to consume it.
       var action=unmatch?'product_front_unmatch':'product_front_match',batches=[];
       for(var offset=0;offset<targetIds.length;offset+=batchSize)batches.push({offset:offset,ids:targetIds.slice(offset,offset+batchSize)});
       var nextBatch=0;
@@ -1528,7 +1520,7 @@
           var replacementRows=replacementRun?capFrontReplacementRows(productRows.filter(function(row){var key=assignedSectionKey(row);return productDecision(row)==='slot_candidate'&&!!key&&(mode==='all'||replacementSectionKeys.indexOf(key)>=0);}),replacementSectionKeys):[];
           var replacementCandidateIds=replacementRows.map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean);
           replacementCandidateIds=Array.from(new Set(replacementCandidateIds));
-          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true,authoritativeReplacement:false,explicitReplacementCleanup:false,replacementSectionKeys:replacementSectionKeys,replacementCandidateIds:replacementCandidateIds},90000);
+          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true,publicationReplacement:replacementRun,authoritativeReplacement:false,explicitReplacementCleanup:false,replacementSectionKeys:replacementSectionKeys,replacementCandidateIds:replacementCandidateIds},90000);
           var finalResult=finalized.frontSyncResult||{},finalRelease=finalResult.release||{};aggregate.finalize=finalResult;aggregate.release=finalRelease;if(finalRelease.queued===true){aggregate.queued=1;aggregate.pendingBuild=0;}else{aggregate.queued=0;aggregate.pendingBuild=Math.max(1,Number(finalResult.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1));}
         }catch(finalizeFailure){aggregate.queued=0;aggregate.pendingBuild=Math.max(1,aggregate.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1);aggregate.batchErrors.push({offset:'finalize',candidateIds:aggregate.changedCandidateIds.slice(),message:text(finalizeFailure&&finalizeFailure.message)||'finalize_failed'});}
       }

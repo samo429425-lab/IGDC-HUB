@@ -321,9 +321,9 @@
     </details>
 
     <details id="productCandidatePanel" class="product-management-details heavy-data-panel" data-heavy-panel="product-candidates">
-      <summary class="heavy-panel-summary"><span><strong>전체 상품 후보·배치 관리 목록</strong> <span id="productCandidateSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="product_candidate_management" data-policy-workspace-label="전체 상품 후보·배치 관리" data-policy-scope="country">AI 운영·정책 대화</button><button id="productCandidateSmartAutoPlaceBtn" type="button" class="product-section-ai-button">전체 후보 AI 카테고리 자동 배치</button><button type="button" class="product-section-ai-button" data-section-ai-auto="__all__">미배정·빈 배정정보 AI 자동 복구</button><span id="productCandidateToggleLabel" class="pill info">목록 펼치기</span></span></summary>
+      <summary class="heavy-panel-summary"><span><strong>전체 상품 후보·배치 관리 목록</strong> <span id="productCandidateSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="product_candidate_management" data-policy-workspace-label="전체 상품 후보·배치 관리" data-policy-scope="country">AI 운영·정책 대화</button><button id="productCandidateSmartAutoPlaceBtn" type="button" class="product-section-ai-button">전체 후보 AI 카테고리 자동 배치</button><button type="button" class="product-section-ai-button" data-section-ai-auto="__all__">미배정·빈 배정정보 AI 자동 복구</button><label class="section-select-label"><input id="allSectionsSelect" type="checkbox"> 20개 전체 선택</label><span id="selectedSectionCount" class="pill info">선택 섹션 0개</span><button id="selectedSectionsMatchBtn" type="button" class="product-section-front-button" disabled>선택 섹션 프론트 매칭</button><button id="allSectionsMatchBtn" type="button" class="product-section-front-button" disabled>전체 섹션 프론트 매칭</button><span id="productCandidateToggleLabel" class="pill info">목록 펼치기</span></span></summary>
       <div class="heavy-panel-content">
-        <div class="small">미배정 후보, 배정정보 복구 필요 상품, 20개 섹션별 배치 상품을 함께 표시합니다. 각 상품 카드에서 섹션 이동·보류·제외·AI 재분류를 처리하며, 관리자 수동 지정은 이후 AI 자동화보다 우선합니다.</div>
+        <div class="small">이 목록이 상품 배치의 유일한 관리자 기준입니다. 미배정·복구 필요·20개 섹션 배치 상품을 여기서만 수정합니다. 개별/선택/전체 프론트 매칭을 실행하면 현재 이 목록을 기준으로 Supabase 공개 배정 원장을 동기화하고 Netlify Snapshot 빌드를 요청합니다. 프론트·과거 Snapshot 상태가 이 관리자 목록을 역으로 변경하는 것은 금지됩니다.</div>
         <div id="productGrid" class="product-candidate-groups"><div class="small">아직 리서치된 상품 후보가 없습니다.</div></div>
       </div>
     </details>
@@ -401,9 +401,9 @@
       <div id="productTransitionAuditState" class="product-transition-audit-state">대기열 등록 또는 후보 정리 후 검증 버튼을 누르면 현재 국가·지역의 리서치 상태와 상품 후보 원장을 다시 읽어 연결 수량을 확인합니다.</div>
     </section>
 
-    <section id="productSectionBoard" class="product-section-board" aria-label="20개 섹션 배치 예정 상품 목록">
-      <div class="section-board-head"><div><h3>20개 섹션 배치 예정 상품 목록</h3><div class="small">각 섹션은 관리자 후보 200건(프론트 100 + 예비 100)까지 보관합니다. 프론트에는 랭킹 상위 100건만 반영하며, 관리자 수동 지정은 AI 자동 정리보다 우선합니다.</div></div><div class="section-board-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="distribution_20_sections" data-policy-workspace-label="20개 섹션 배치 예정 상품" data-policy-scope="country">AI 운영·정책 대화</button><span id="productSectionSummary" class="pill info section-board-count">배치 예정 0건</span><label class="section-select-label"><input id="allSectionsSelect" type="checkbox"> 20개 전체 선택</label><span id="selectedSectionCount" class="pill info">선택 섹션 0개</span><button id="selectedSectionsMatchBtn" type="button" class="product-section-front-button" disabled>선택 섹션 프론트 매칭</button><button id="allSectionsRankTrimBtn" type="button" class="product-section-ai-button">20개 섹션 AI 상위100 정리</button><button id="allSectionsMatchBtn" type="button" class="product-section-front-button" disabled>전체 섹션 프론트 매칭</button><button id="selectedSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>선택 섹션 매칭 해제</button><button id="allSectionsUnmatchBtn" type="button" class="product-section-unmatch-button" disabled>전체 섹션 매칭 해제</button></div></div>
-      <div id="productSectionList" class="product-section-list"></div>
+    <section id="productSectionBoard" class="product-section-board" aria-label="20개 섹션 배치 예정 상품 목록" aria-disabled="true" style="pointer-events:none;opacity:.55">
+      <div class="section-board-head"><div><h3>20개 섹션 배치 예정 상품 목록 · 사용 중지</h3><div class="small">이 블록은 역방향 관리자 원장 변경 위험을 제거하기 위해 작동을 중지했습니다. 삭제하지 않고 보존만 합니다. 모든 섹션 배치·수동 수정·개별/선택/전체 프론트 매칭은 위의 ‘전체 상품 후보·배치 관리 목록’에서만 실행합니다.</div></div><span class="pill warn">작동 차단</span></div>
+      <div id="productSectionList" class="product-section-list hidden" aria-hidden="true"></div>
     </section>
   </section>
 

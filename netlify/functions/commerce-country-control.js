@@ -81,6 +81,19 @@ async function restoreAdminPlacementGuard(snapshots,scope){
   return{ok:failures.length===0,restored,failures};
 }
 
+async function frontPublicationWithdrawAssignmentsOnly(assignments,actorId){
+  const rows=array(assignments),results=[];
+  for(const item of rows){
+    const assignmentId=text(item&&item.assignmentId);
+    if(!assignmentId)continue;
+    try{
+      await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(assignmentId),{publication_status:"not_ready",updated_at:new Date().toISOString(),updated_by:text(actorId)||"administrator"});
+      results.push({candidateId:text(item&&item.candidateId),assignmentId,status:"unpublish_requested",persisted:true,pendingBuild:true,reason:text(item&&item.reason)||"front_runtime_unavailable"});
+    }catch(error){results.push({candidateId:text(item&&item.candidateId),assignmentId,status:"unpublish_failed",persisted:false,pendingBuild:false,reason:text(error&&error.message)||"assignment_unpublish_failed"});}
+  }
+  return{ok:true,items:results,requested:rows.length,persisted:results.filter(r=>r.persisted===true).length,candidateLedgerReadOnly:true};
+}
+
 function readGeoObject(value){const raw=text(value);if(!raw)return{};for(const candidate of [raw,(()=>{try{return decodeURIComponent(raw);}catch(_e){return"";}})()]){try{const parsed=JSON.parse(candidate);if(parsed&&typeof parsed==="object"&&!Array.isArray(parsed))return parsed;}catch(_e){}}return{};}
 function normalizeGeo(event){
   const headers={};for(const [key,value] of Object.entries(event&&event.headers||{}))headers[String(key).toLowerCase()]=value;
@@ -180,25 +193,23 @@ exports.handler=async function(event){
     if(action==="product_front_finalize"){
       const requestedOperation=lower(body.operation)==="unmatch"?"unmatch":(lower(body.operation)==="refresh"?"refresh":"match");
       const requestedCandidateIds=Array.from(new Set((Array.isArray(body.candidateIds)?body.candidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
-      const authoritativeReplacement=body.authoritativeReplacement===true;
-      const requestedReplacementCandidateIds=Array.from(new Set((Array.isArray(body.replacementCandidateIds)?body.replacementCandidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
-      let replacementEligibility={requested:requestedReplacementCandidateIds,eligible:requestedReplacementCandidateIds,blocked:[]};
-      if(authoritativeReplacement&&requestedReplacementCandidateIds.length){
-        replacementEligibility=await authoritativeReplacementEligibility(body,requestedReplacementCandidateIds);
-      }
-      const replacementCandidateIds=authoritativeReplacement?replacementEligibility.eligible:requestedReplacementCandidateIds;
-      const candidateIds=authoritativeReplacement?replacementCandidateIds:requestedCandidateIds;
+      // publicationReplacement is intentionally NOT an administrator-placement replacement.
+      // It only makes the selected front publication scope mirror the current master board.
+      // gslot_candidates and assignment hub/slot/state/manual_pinned remain read-only here.
+      const publicationReplacement=body.publicationReplacement===true;
+      const requestedReplacementCandidateIds=Array.from(new Set((Array.isArray(body.replacementCandidateIds)?body.replacementCandidateIds:[]).map(text).filter(Boolean))).slice(0,3000);
+      const candidateIds=requestedCandidateIds;
       const scope=ProductGoLiveAudit.selectedScope(text(body.countryCode||body.country).toUpperCase(),text(body.subdivisionCode||body.regionCode||body.region||"NATIONWIDE").toUpperCase());
-      const guardIds=Array.from(new Set(requestedCandidateIds.concat(requestedReplacementCandidateIds))).filter(Boolean);
-      const adminGuard=await captureAdminPlacementGuard(guardIds,scope);
       let replacementPlan=null,replacementUnpublish=null;
-      if(authoritativeReplacement){
-        replacementPlan=await Automation.productFrontReplacementPlan(Object.assign({},body,{authoritativeReplacement:true,replacementCandidateIds:candidateIds}));
+      if(publicationReplacement){
+        replacementPlan=await Automation.productFrontReplacementPlan(Object.assign({},body,{authoritativeReplacement:true,explicitReplacementCleanup:true,replacementCandidateIds:requestedReplacementCandidateIds}));
         const staleAssignments=Array.isArray(replacementPlan&&replacementPlan.withdrawAssignments)?replacementPlan.withdrawAssignments:[];
         if(staleAssignments.length){
-          replacementUnpublish=await ProductGoLiveAudit.requestUnpublicationAssignments(event,actor,{mode:"production",confirmation:"SITE_UNPUBLISH",assignments:staleAssignments,deferRelease:true},scope);
+          // Publication-only stale cleanup: only publication_status is changed.
+          // Never call candidate marker cleanup and never alter administrator placement fields.
+          replacementUnpublish=await frontPublicationWithdrawAssignmentsOnly(staleAssignments,actorId);
           const failed=(Array.isArray(replacementUnpublish&&replacementUnpublish.items)?replacementUnpublish.items:[]).filter((item)=>item&&item.status==="unpublish_failed");
-          if(failed.length){const error=new Error("관리자 기준 프론트 치환 중 기존 상품 "+failed.length+"건의 해제 원장을 저장하지 못했습니다. 기존 프론트를 보존하고 다시 실행해 주세요.");error.statusCode=409;error.code="authoritative_replacement_unpublish_failed";throw error;}
+          if(failed.length){const error=new Error("현재 관리자 배치 목록으로 프론트를 치환하는 중 기존 공개 상품 "+failed.length+"건의 공개 해제 상태를 저장하지 못했습니다. 관리자 배치는 보존됐으며 다시 실행해 주세요.");error.statusCode=409;error.code="publication_replacement_unpublish_failed";throw error;}
         }
       }
       const effectiveOperation=requestedOperation==="unmatch"?"unmatch":(candidateIds.length?"match":"refresh");
@@ -206,16 +217,16 @@ exports.handler=async function(event){
         const liveDoc={candidates:[]};
         const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:"SITE_PUBLISH",candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
         const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null);
-        if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish,requestedCandidateIds:replacementEligibility.requested,eligibleCandidateIds:replacementEligibility.eligible,blockedCandidateIds:replacementEligibility.blocked};
-        const guardRestore=await restoreAdminPlacementGuard(adminGuard,scope);if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
+        if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={publicationOnly:publicationReplacement,administratorPlacementReadOnly:true,plan:replacementPlan,unpublication:replacementUnpublish,desiredCandidateIds:requestedReplacementCandidateIds};
+        const guardRestore={ok:true,restored:[],failures:[],skipped:true,reason:"front_candidate_ledger_read_only"};if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
         return json(200,recorded);
       }
       const staleIds=Array.from(new Set((replacementPlan&&replacementPlan.staleCandidateIds||[]).map(text).filter(Boolean))),refreshIds=Array.from(new Set(candidateIds.concat(requestedCandidateIds,staleIds))).slice(0,1800);
-      const refreshUnpublish=requestedOperation==="unmatch"||(authoritativeReplacement&&candidateIds.length===0&&staleIds.length>0);
+      const refreshUnpublish=requestedOperation==="unmatch"||(publicationReplacement&&candidateIds.length===0&&staleIds.length>0);
       const refreshResult=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:refreshUnpublish?"unmatch":"refresh",confirmation:refreshUnpublish?"SITE_UNPUBLISH":"SITE_PUBLISH",candidateId:refreshIds[0]||null,candidateIds:refreshIds,candidateCount:Math.max(1,Number(body.changedCount)||refreshIds.length||1)},scope);
       const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:requestedOperation==="unmatch"?"unmatch":"match",mode:"candidates",candidateIds:refreshIds,ledgerMode:"candidate",compactResponse:true}),refreshResult,null);
-      if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish,requestedCandidateIds:replacementEligibility.requested,eligibleCandidateIds:replacementEligibility.eligible,blockedCandidateIds:replacementEligibility.blocked};
-      const guardRestore=await restoreAdminPlacementGuard(adminGuard,scope);if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
+      if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={publicationOnly:publicationReplacement,administratorPlacementReadOnly:true,plan:replacementPlan,unpublication:replacementUnpublish,desiredCandidateIds:requestedReplacementCandidateIds};
+      const guardRestore={ok:true,restored:[],failures:[],skipped:true,reason:"front_candidate_ledger_read_only"};if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
       return json(200,recorded);
     }
     if(action==="product_front_match"||action==="product_front_unmatch"){
@@ -226,7 +237,7 @@ exports.handler=async function(event){
       let plan=await Automation.productFrontSyncTargets(request,loadedJob);
       const scope=ProductGoLiveAudit.selectedScope(plan.scope.country,plan.scope.region);
       const initialGuardIds=Array.from(new Set((Array.isArray(plan.targets)?plan.targets:[]).map((row)=>text(row&&row.candidateId)).filter(Boolean)));
-      const adminGuard=await captureAdminPlacementGuard(initialGuardIds,scope);
+      const adminGuard=new Map();
       let batchResult, refresh=null, repairUnpublish=null;
       if(!plan.targets.length){
         batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
@@ -239,7 +250,7 @@ exports.handler=async function(event){
         refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets,{includePublishedScope:request.scopeRefresh===true});
         const withdrawAssignments=Array.isArray(refresh&&refresh.withdrawAssignments)?refresh.withdrawAssignments:[];
         if(withdrawAssignments.length){
-          repairUnpublish=await ProductGoLiveAudit.requestUnpublicationAssignments(event,actor,{mode:"production",confirmation:"SITE_UNPUBLISH",assignments:withdrawAssignments,deferRelease:true},scope);
+          repairUnpublish=await frontPublicationWithdrawAssignmentsOnly(withdrawAssignments,actorId);
         }
         refresh=Object.assign({},refresh,{withdrawn:withdrawAssignments.length,withdrawRequested:withdrawAssignments.length,withdrawPersisted:Array.isArray(repairUnpublish&&repairUnpublish.items)?repairUnpublish.items.filter((item)=>item&&item.persisted===true).length:0});
         // Front validation is diagnostic/publication-only. It must never rewrite
@@ -281,7 +292,7 @@ exports.handler=async function(event){
         batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId),deferRelease:request.deferRelease===true},scope);
       }
       const recorded=await Automation.recordProductFrontSync(actorId,request,Object.assign({},batchResult,{refresh:refresh||batchResult.refresh||null,repairUnpublish:repairUnpublish||batchResult.repairUnpublish||null}),loadedJob);
-      const guardRestore=await restoreAdminPlacementGuard(adminGuard,scope);if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
+      const guardRestore={ok:true,restored:[],failures:[],skipped:true,reason:"front_candidate_ledger_read_only"};if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
       return json(200,recorded);
     }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});

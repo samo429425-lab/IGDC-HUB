@@ -312,19 +312,23 @@ function validateExplicitCommerceSelection(upstream, intent) {
     return String(candidate.id || entry && entry.candidateId || "").trim();
   }).filter(Boolean));
   const missingCandidateIds = selectedIds.filter(id => !authoritativeIds.has(id));
-  if (missingCandidateIds.length) {
-    const error = new Error("Explicit administrator Front Match candidates are missing from the authoritative publication queue: " + missingCandidateIds.join(","));
-    error.code = "FRONT_MATCH_SELECTION_NOT_IN_AUTHORITATIVE_QUEUE";
-    error.missingCandidateIds = missingCandidateIds;
-    throw error;
-  }
+  // Do not abort the entire Netlify deployment when a clicked candidate was
+  // rejected by the authoritative publication queue.  The Supabase-backed
+  // administrator master board remains the source of truth for placement, but
+  // only candidates that the registry sync actually admitted are materialized
+  // into SearchBank/Snapshots.  Missing IDs are reported for diagnostics and
+  // remain unpublished; they must never make the build roll back or rewrite the
+  // administrator ledger.
   return {
     applied:true,
     selectedCandidateIds:selectedIds,
     selectedCount:selectedIds.length,
     authoritativeCount:authoritativeItems.length,
     fullQueuePreserved:true,
-    missingCandidateIds:[]
+    missingCandidateIds,
+    admittedCandidateIds:selectedIds.filter(id => authoritativeIds.has(id)),
+    rejectedCandidateIds:missingCandidateIds,
+    buildBlocked:false
   };
 }
 
