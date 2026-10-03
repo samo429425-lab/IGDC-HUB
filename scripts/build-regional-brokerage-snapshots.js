@@ -828,6 +828,16 @@ async function main() {
   }
 
   function preserveOrFail(reason, details) {
+    // An explicit administrator Front Match is a master-board replacement build.
+    // Never preserve/carry forward an older live Snapshot in that path.  If the
+    // current Supabase-backed authoritative queue cannot be materialized, fail
+    // this deploy so stale front data cannot be mistaken for the new admin state.
+    if (explicitAdminPublicationInBuild) {
+      const error = new Error("Explicit administrator Front Match cannot preserve previous snapshots: " + reason);
+      error.code = "EXPLICIT_FRONT_MATCH_CANNOT_PRESERVE_OLD_SNAPSHOTS";
+      error.details = details || null;
+      throw error;
+    }
     // data/auto is build output, not a committed source tree. On a fresh Netlify
     // production build, returning before the regional/IP publishers would deploy
     // root sample fallbacks without the Distribution-owned scoped snapshots.

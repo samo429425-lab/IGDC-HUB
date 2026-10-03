@@ -247,7 +247,11 @@
   }
   function frontItemIds(item){item=item||{};return Array.from(new Set([item.candidateId,item.candidate_id,item.id,item.uid,item.productId,item.product_id,item.contentId,item.content_id,item.trackId,item.track_id].map(text).filter(Boolean)));}
   function normalizedFrontUrl(item){item=item||{};return safeExternalUrl(item.affiliateOutboundUrl||item.externalOutboundUrl||item.externalProductUrl||item.officialProductUrl||item.productUrl||item.product_url||item.productPageUrl||item.detailUrl||item.checkoutUrl||item.purchaseUrl||item.orderUrl||item.displayUrl||item.url||item.href||item.link);}
-  function restoreIdsForFrontSection(key){var items=Array.isArray(frontSnapshotItems[key])?frontSnapshotItems[key]:[],byId={},byUrl={};productRows.forEach(function(row){var id=text(row&&row.candidateId||row&&row.id),url=safeExternalUrl(row&&row.productUrl||row&&row.url);if(id)byId[id]=id;if(url)byUrl[url]=id;});var ids=[];items.forEach(function(item){var found='';frontItemIds(item).some(function(id){if(byId[id]){found=byId[id];return true;}return false;});if(!found){var url=normalizedFrontUrl(item);if(url&&byUrl[url])found=byUrl[url];}if(!found){var direct=frontItemIds(item)[0];if(direct)found=direct;}if(found&&ids.indexOf(found)<0)ids.push(found);});return ids.slice(0,100);}
+  function restoreIdsForFrontSection(_key){
+    // Strict one-way authority: a published/front Snapshot is output-only.
+    // It must never seed, restore, or select administrator candidates.
+    return [];
+  }
   async function restoreTrendingAdminFromFrontOnce(){
     // One-way authority contract: Front snapshots are OUTPUT/monitoring only.
     // They must never rewrite the administrator candidate/placement ledger.
