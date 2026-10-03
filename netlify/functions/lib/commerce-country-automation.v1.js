@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.29.0-cumulative-supplier-research";
+const VERSION = "commerce-country-automation-v3.30.0-oneway-admin-authority-admin20-v3.28.0";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1551,25 +1551,34 @@ function supplierResearchRoundCount(input){
   const n=Math.round(Number(plain(input).researchRounds||1));
   return Math.max(1,Math.min(5,Number.isFinite(n)?n:1));
 }
-function expandSupplierResearchRounds(planInput,scopeInput,roundsInput){
-  const rounds=Math.max(1,Math.min(5,Math.round(Number(roundsInput)||1))),plan=Object.assign({},plain(planInput));
-  if(rounds<=1){plan.diagnostics=Object.assign({},plain(plan.diagnostics),{researchRounds:1});return plan;}
-  const baseRows=array(plan.rows).slice(),baseTasks=array(plan.tasks).slice(),rows=baseRows.slice(),tasks=baseTasks.slice(),scope=plain(scopeInput);
+function expandSupplierResearchRounds(planInput,scopeInput,roundsInput,pageOffsetInput){
+  const rounds=Math.max(1,Math.min(5,Math.round(Number(roundsInput)||1))),pageOffset=Math.max(0,Math.round(Number(pageOffsetInput)||0)),plan=Object.assign({},plain(planInput));
+  const baseRows=array(plan.rows).slice(),baseTasks=array(plan.tasks).slice(),scope=plain(scopeInput),searchCycle=Math.floor(pageOffset/5),providerPageOffset=pageOffset%5;
+  // A fresh administrator run must continue beyond the pages already researched.
+  // Existing suppliers are preserved/deduplicated, but they must never turn the
+  // New Supplier Search button into a no-op that repeats page 1 forever. Naver's
+  // staged search is intentionally capped at five pages, so after page five we
+  // rotate the query wording and continue from page one instead of repeating the
+  // same terminal result page.
+  const cycleQualifier=searchCycle>0?(scope.country==="KR"?("신규 공식 공급업체 추가 탐색 "+(searchCycle+1)+"차"):("new official supplier discovery cycle "+(searchCycle+1))):"";
+  const rows=baseRows.map((row)=>cycleQualifier?Object.assign({},plain(row),{query:(text(row&&row.query)+" "+cycleQualifier).replace(/\s+/g," ").trim().slice(0,880),origin:text(row&&row.origin||"supplier-research")+":cycle"+(searchCycle+1)}):row);
+  const tasks=baseTasks.map((task)=>{const mapped=rows[Number(task&&task.rowIndex)]||{},page=providerPageOffset+Math.max(1,Number(task&&task.searchPage)||1);return Object.assign({},task,{query:text(mapped.query)||text(task&&task.query),origin:text(mapped.origin)||text(task&&task.origin),searchPage:page,researchRound:1,attempt:0});});
+  if(rounds<=1){plan.rows=rows;plan.tasks=tasks;plan.diagnostics=Object.assign({},plain(plan.diagnostics),{researchRounds:1,searchPageOffset:pageOffset,searchCycle,deepResultPaging:true,perRoundCandidateCap:50});return plan;}
   const ko=["","브랜드 공식몰 전문 판매처","제조사 직영몰 공식 판매처","온라인 공식 스토어 전문점","공식 제조사 판매점 추가 탐색"];
   const en=["","brand official store specialty retailer","manufacturer direct official store","official online shop authorized retailer","additional official manufacturer seller"];
   const modifiers=scope.country==="KR"?ko:en;
   for(let round=2;round<=rounds;round+=1){
     const rowMap=new Map();
     for(let index=0;index<baseRows.length;index+=1){
-      const base=plain(baseRows[index]),query=(text(base.query)+" "+text(modifiers[round-1])).replace(/\s+/g," ").trim().slice(0,880),newIndex=rows.length;
+      const base=plain(rows[index]||baseRows[index]),query=(text(base.query)+" "+text(modifiers[round-1])).replace(/\s+/g," ").trim().slice(0,880),newIndex=rows.length;
       rows.push(Object.assign({},base,{query,origin:text(base.origin||"supplier-research")+":round"+round,researchRound:round}));rowMap.set(index,newIndex);
     }
     for(const taskInput of baseTasks){
       const task=plain(taskInput),mapped=rowMap.get(Number(task.rowIndex));if(mapped==null)continue;
-      tasks.push(Object.assign({},task,{rowIndex:mapped,query:text(rows[mapped]&&rows[mapped].query),origin:text(task.origin||"supplier-research")+":round"+round,researchRound:round,searchPage:round,attempt:0}));
+      tasks.push(Object.assign({},task,{rowIndex:mapped,query:text(rows[mapped]&&rows[mapped].query),origin:text(task.origin||"supplier-research")+":round"+round,researchRound:round,searchPage:providerPageOffset+round,attempt:0}));
     }
   }
-  plan.rows=rows;plan.tasks=tasks.map((task)=>Object.assign({searchPage:Math.max(1,Number(task&&task.searchPage)||1)},task));plan.diagnostics=Object.assign({},plain(plan.diagnostics),{researchRounds:rounds,baseQueryCount:baseRows.length,totalQueryCount:rows.length,totalTaskCount:tasks.length,roundDeduplication:true,deepResultPaging:true,perRoundCandidateCap:50});
+  plan.rows=rows;plan.tasks=tasks;plan.diagnostics=Object.assign({},plain(plan.diagnostics),{researchRounds:rounds,baseQueryCount:baseRows.length,totalQueryCount:rows.length,totalTaskCount:tasks.length,roundDeduplication:true,deepResultPaging:true,searchPageOffset:pageOffset,searchCycle,perRoundCandidateCap:50});
   return plan;
 }
 
@@ -1586,7 +1595,7 @@ async function beginResearchJob(actorId, input, event) {
     policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},
     marketSignal:{active:context.marketSignalPlan&&context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan&&context.marketSignalPlan.categoryWeights)}
   }));
-  const existingStatus=lower(existing&&existing.status), forceNewRun=raw.restart===true||raw.forceNewRun===true;
+  const existingStatus=lower(existing&&existing.status), forceNewRun=raw.restart===true||raw.forceNewRun===true||raw.appendExisting===true;
   const resumableExisting=existing&&existing.schema===RESEARCH_JOB_SCHEMA&&existing.manualOnly!==true&&!["complete","committed","cancelled","failed"].includes(existingStatus)&&text(existing.researchSignature)===researchSignature;
   if(resumableExisting&&!forceNewRun)return publicResearchJob(existing);
 
@@ -1606,10 +1615,11 @@ async function beginResearchJob(actorId, input, event) {
   const newCandidateTarget=perRunCandidateLimit*researchRounds;
   const targetTotal=preservedCandidates.length+newCandidateTarget;
 
-  const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,scopeAuthority:"administrator-selected",ignoreRequestGeo:true,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},basePlan=augmentAdministratorPriorityResearchPlan(augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope,context.policyControl),scope,context.policyControl),plan=expandSupplierResearchRounds(basePlan,scope,researchRounds),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
+  const previousPageOffset=forceNewRun&&existing?Math.max(0,Number(existing.nextSearchPageOffset!=null?existing.nextSearchPageOffset:(Number(existing.searchPageOffset||0)+Math.max(1,Number(existing.researchRounds||1))))||0):0;
+  const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,scopeAuthority:"administrator-selected",ignoreRequestGeo:true,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},basePlan=augmentAdministratorPriorityResearchPlan(augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope,context.policyControl),scope,context.policyControl),plan=expandSupplierResearchRounds(basePlan,scope,researchRounds,previousPageOffset),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
   const novelSeeds=filterKnownSupplierItems(manualSeeds.concat(array(plan.seeds)),knownSupplierKeys);
   const initialStatus=newCandidateTarget<=0?"complete":(array(plan.tasks).length?"searching":"inspecting");
-  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
+  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,searchPageOffset:previousPageOffset,nextSearchPageOffset:previousPageOffset+researchRounds,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds,searchPageOffset:previousPageOffset,nextSearchPageOffset:previousPageOffset+researchRounds}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,searchPageOffset:previousPageOffset,nextSearchPageOffset:previousPageOffset+researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
   if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
   await saveResearchJob(job,actorId);return publicResearchJob(job);
 }
@@ -3864,6 +3874,27 @@ async function syncCandidateManagementResearchVisibility(actorId, scope, candida
 async function syncCandidateManagementResearchVisibilityByInput(actorId, input, candidateId, decision) {
   return syncCandidateManagementResearchVisibility(actorId,researchScope(input),text(candidateId),lower(decision));
 }
+async function syncCandidateAdminPlacementProjection(actorId, scope, candidateId, placementKey) {
+  const key=text(placementKey),split=validProductSectionKey(key)?splitProductSectionKey(key):null,actor=text(actorId)||"administrator",now=iso();
+  if(!split){const error=new Error("관리자 배치 원장의 20개 섹션 키가 올바르지 않습니다.");error.statusCode=400;throw error;}
+  const rows=array(await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at",[candidateId]));
+  const scoped=rows.filter((row)=>normalizeCountry(row&&row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region);
+  const same=scoped.find((row)=>text(row&&row.hub_key)===split.page&&text(row&&row.slot_key)===split.sectionKey)||null;
+  const liveStates=new Set(["queued","publish_requested","published","matched","active"]),removed=[],preservedLive=[];
+  for(const old of scoped){
+    const oldKey=text(old&&old.hub_key)+"|"+text(old&&old.slot_key);
+    if(oldKey===key||!text(old&&old.id))continue;
+    if(liveStates.has(lower(old&&old.publication_status))){preservedLive.push(text(old.id));continue;}
+    await SlotStore.remove("gslot_slot_assignments","id=eq."+encodeURIComponent(text(old.id)));removed.push(text(old.id));
+  }
+  const assignment={
+    id:text(same&&same.id)||frontSyncAssignmentId(candidateId,scope,key),candidate_id:candidateId,hub_key:split.page,country_code:scope.country,region_code:scope.region||"NATIONWIDE",slot_key:split.sectionKey,
+    priority:Math.max(0,Number(same&&same.priority||0)),state:lower(same&&same.state)==="pinned"?"pinned":"approved",publication_status:liveStates.has(lower(same&&same.publication_status))?text(same.publication_status):"audit_ready",manual_pinned:true,
+    created_at:text(same&&same.created_at)||now,updated_at:now,updated_by:actor
+  };
+  await frontSyncUpsert("gslot_slot_assignments",[assignment],"id");
+  return{ok:true,assignmentId:assignment.id,sectionKey:key,removedStaleAssignments:removed,preservedLiveAssignments:preservedLive,authority:"gslot_candidates.source_payload",projection:"gslot_slot_assignments"};
+}
 async function productCandidateLedgerAction(actorId, input) {
   const scope = researchScope(input), candidateId = text(input && (input.candidateId || input.productId)), decision = lower(input && input.decision);
   if (!candidateId) { const error = new Error("관리할 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
@@ -3871,7 +3902,7 @@ async function productCandidateLedgerAction(actorId, input) {
   if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { const error = new Error("선택 상품 후보 원장을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
   const payload = Object.assign({}, plain(row.source_payload)), now = iso(), actor = text(actorId) || "administrator";
   const priorPlacement = plain(payload.approvedPlacement || payload.selectedPlacement || payload.placement), priorStructuredKey = productPlacementKey(priorPlacement), priorLegacyKey = text(payload.page) && text(payload.section) ? text(payload.page) + "|" + text(payload.section) : "", priorKey = validProductSectionKey(priorStructuredKey) ? priorStructuredKey : (validProductSectionKey(priorLegacyKey) ? priorLegacyKey : "");
-  let status = text(row.status) || "approval_pending", placement = null, effectiveDecision = decision, releaseAssignment = false;
+  let status = text(row.status) || "approval_pending", placement = null, effectiveDecision = decision, releaseAssignment = false, assignmentProjection = null;
   if (decision === "slot_candidate") {
     const key = text(input && input.placementKey), sourcePlacement = array(payload.proposedPlacements).find((item) => productPlacementKey(item) === key) || { key };
     placement = candidateLedgerPlacementRecord(scope, sourcePlacement, actor, "administrator");
@@ -3879,6 +3910,11 @@ async function productCandidateLedgerAction(actorId, input) {
     payload.slotDecision = "slot_candidate"; payload.approvedPlacement = placement; payload.placement = placement; payload.page = placement.page; payload.channel = placement.page; payload.section = placement.sectionKey; payload.psom_key = placement.sectionKey; status = "approval_pending";
     payload.queueControl = Object.assign({}, plain(payload.queueControl), { hiddenFromCountryQueue:false, permanentExcluded:false, action:"section_selected", restoredAt:now, restoredBy:actor });
     payload.managementControl = { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor };
+    // gslot_candidates.source_payload is the administrator authority.  The slot
+    // assignment table is only its synchronized front/publication projection.
+    // Never allow an older front assignment to become an alternative placement
+    // authority when the operator changes a section.
+    assignmentProjection = await syncCandidateAdminPlacementProjection(actorId,scope,candidateId,placement.key);
   } else if (decision === "undecided" || decision === "ai_reclassify") {
     payload.slotDecision = "undecided"; delete payload.approvedPlacement; delete payload.selectedPlacement; delete payload.placement; status = "research_pending"; releaseAssignment = true;
     payload.queueControl = Object.assign({}, plain(payload.queueControl), { hiddenFromCountryQueue:false, permanentExcluded:false, action:"restored", restoredAt:now, restoredBy:actor });
@@ -3926,7 +3962,7 @@ async function productCandidateLedgerAction(actorId, input) {
   if (decision !== "affiliate_settlement") payload.review = Object.assign({}, plain(payload.review), { state: decision === "remove_from_list" ? "removed_from_list" : (effectiveDecision === "slot_candidate" ? "pending" : effectiveDecision), decidedAt: now, decidedBy: actor });
   await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: payload, updated_at: now });
   const researchVisibility = await syncCandidateManagementResearchVisibility(actorId,scope,candidateId,effectiveDecision);
-  return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, assignmentCleanup, researchVisibility, deferredFrontBuild:assignmentCleanup.deferredFrontBuild===true, publicPublication: false, paymentExecution: false } };
+  return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, assignmentProjection, assignmentCleanup, researchVisibility, deferredFrontBuild:assignmentCleanup.deferredFrontBuild===true, publicPublication: false, paymentExecution: false } };
 }
 async function productCandidateLedgerBulkAction(actorId, input) {
   const scope = researchScope(input), ids = Array.from(new Set(array(input && (input.candidateIds || input.productIds)).map(text).filter(Boolean))).slice(0, 3000), decision = lower(input && input.decision), placementKey = text(input && input.placementKey);
@@ -5218,20 +5254,24 @@ async function productFrontSyncTargets(input, jobInput) {
       const product = candidateRuntimeProduct(candidate, scope); if (!product) continue;
       const payload = plain(candidate && candidate.source_payload), queueControl = plain(payload.queueControl), candidateStatus = lower(candidate && candidate.status), sourceDecision = lower(payload.slotDecision || product.slotDecision || "undecided"), candidateId = text(candidate.id);
       const activeAssignment = array(assignmentsByCandidate.get(candidateId)).find((row)=>normalizeCountry(row&&row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region&&candidateRuntimePublishedStatus(row&&row.publication_status));
-      const payloadKey = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), activeKey = candidateRuntimeAssignmentKey(activeAssignment), key = validProductSectionKey(payloadKey) ? payloadKey : activeKey;
+      const payloadKey = productPlacementKey(payload.approvedPlacement || payload.selectedPlacement || payload.primaryPlacement || payload.placement), activeKey = candidateRuntimeAssignmentKey(activeAssignment);
+      // One-way authority contract:
+      // MATCH reads placement only from the administrator candidate ledger.
+      // An old front/assignment row is output state and may never restore or
+      // override the administrator's current section decision.  UNMATCH may use
+      // the active assignment only to locate what is already published.
+      const key = operation === "match" ? payloadKey : (validProductSectionKey(payloadKey) ? payloadKey : activeKey);
       if (!validProductSectionKey(key)) continue;
       if (operation === "match") {
-        const blockedDecision = ["hold","reject","purge"].includes(sourceDecision);
-        // source_payload.slotDecision is the administrator's current board
-        // decision.  A legacy candidate.status="hold" left by an earlier
-        // research stage must not disconnect a later slot_candidate match.
-        // Permanent/rejected states still fail closed.
+        const blockedDecision = sourceDecision !== "slot_candidate" || ["hold","reject","purge"].includes(sourceDecision);
         const blockedStatus = ["suppressed","rejected"].includes(candidateStatus) || (candidateStatus === "hold" && sourceDecision !== "slot_candidate");
         const blocked = blockedDecision || blockedStatus || queueControl.permanentExcluded === true;
-        if (blocked && !activeAssignment) continue;
-        if (!blocked) { product.slotDecision = "slot_candidate"; if (!product.approvedPlacement) { const split=splitProductSectionKey(key); product.approvedPlacement = { page:split.page, sectionKey:split.sectionKey, section:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, proposalOnly:false, publicPublication:false }; } }
-      }
-      targets.push({ productId:text(product.id)||candidateId, candidateId, title:first(product.productName,product.title,candidate.title), sectionKey:key, existingPublicationActive:!!activeAssignment, digest:sha256({id:candidateId,placement:key,updatedAt:candidate.updated_at||null}) });
+        if (blocked) continue;
+        product.slotDecision = "slot_candidate";
+        const split=splitProductSectionKey(key);
+        product.approvedPlacement = Object.assign({},plain(payload.approvedPlacement || payload.placement),{key,page:split.page,sectionKey:split.sectionKey,section:split.sectionKey,country:scope.country,region:scope.region,administratorSelected:true,proposalOnly:false,publicPublication:false});
+      } else if (!activeAssignment && !["queued","publish_requested","published","matched","active","unpublish_failed"].includes(lower(plain(payload.frontPublication).status))) continue;
+      targets.push({ productId:text(product.id)||candidateId, candidateId, title:first(product.productName,product.title,candidate.title), sectionKey:key, existingPublicationActive:!!activeAssignment, authority:"administrator_candidate_ledger", digest:sha256({id:candidateId,placement:key,updatedAt:candidate.updated_at||null}) });
     }
     return { ok:true, candidateLedger:true, scope, mode, sectionKey:targets[0]&&targets[0].sectionKey||null, sectionKeys:requestedSectionKeys, productId:requestedProductId||null, productIds:requestedProductIds, candidateId:requestedCandidateId||null, candidateIds:ids, operation, targets, productCount:candidateRows.length };
   }

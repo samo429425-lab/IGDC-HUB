@@ -955,7 +955,8 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const row = plain(rowInput), out = [], evidence = plain(row.evidence), supplier = plain(supplierInput), value = plain(valueInput), context = plain(contextInput), policyAssessment = plain(policyAssessmentInput);
   const audience = plain(value.audience), revenueValue = plain(value.revenue);
   const baseScore = Number(value.portfolioPriorityScore || commercial.potentialScore || 0);
-  const hay = lower([row.productName, row.title, row.supplierName, row.supplierType, row.description, row.summary, category.tags.join(" ")].join(" "));
+  const productHay = lower([row.productName, row.title, row.description, row.summary].map(text).join(" "));
+  const hay = lower([productHay, row.supplierName, row.supplierType, category.tags.join(" ")].join(" "));
   const has = function(names){
     return array(names).some(function(name){
       const direct = row[name], nested = evidence[name];
@@ -1055,10 +1056,10 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const bookShopFit = /(도서|책방|서점|책\b|출판|전자책|웹툰|코믹|만화|디지털\s*독서|bookstore|book\b|books\b|publishing|ebook|webtoon|comic|digital reading)/i.test(hay);
   const home6DigitalReadingFit = bookShopFit;
   const outdoorProductFit = tourProfile.outdoorGear || tourProfile.golfGear || tourProfile.sportsGear || /(아웃도어|등산|트레킹|캠핑|골프|스포츠용품|텐트|침낭|등산화|등산스틱|outdoor|hiking|trekking|camping|golf|sports gear|tent|sleeping bag)/i.test(hay);
-  const explicitFoodHomeFit = /(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|쌀|잡곡|과일|채소|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b)/i.test(hay) || category.primary === "agriculture_fishery_forestry";
+  const explicitFoodHomeFit = /(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|쌀|잡곡|과일|채소|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b)/i.test(productHay) || category.primary === "agriculture_fishery_forestry";
   const householdEssentialHomeFit = !explicitFoodHomeFit && (category.primary === "food_household_essentials" || /(생필품|생활필수|생활용품|화장지|휴지|티슈|물티슈|세제|세정제|청소|위생|주방용품|욕실용품|수납|household|essential|tissue|detergent|cleaning|hygiene|kitchen|bath|storage)/i.test(hay));
   const furnitureLivingFit = /(가구|소파|의자|테이블|책상|수납장|침대|매트리스|침구|조명|인테리어|리빙|furniture|sofa|chair|table|desk|cabinet|bed|mattress|bedding|lighting|interior|living)/i.test(hay);
-  const smallApplianceHomeFit = !furnitureLivingFit && (category.primary === "electronics_accessories" || /(소형가전|이어폰|이어버드|헤드폰|스피커|태블릿|웹캠|카메라|짐벌|마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|earphone|headphone|speaker|tablet|webcam|camera|gimbal|microphone|smartwatch|projector|fan|humidifier|dehumidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(hay));
+  const smallApplianceHomeFit = !home6DigitalReadingFit && !furnitureLivingFit && (category.primary === "electronics_accessories" || /(소형가전|이어폰|이어버드|헤드폰|스피커|태블릿|웹캠|카메라|짐벌|마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|earphone|headphone|speaker|tablet|webcam|camera|gimbal|microphone|smartwatch|projector|fan|humidifier|dehumidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(hay));
   const beautyHomeFit = category.primary === "beauty_personal_care" || /(뷰티|화장품|스킨케어|세럼|앰플|토너|크림|로션|선크림|클렌징|메이크업|립스틱|립틴트|마스크팩|향수|샴푸|beauty|cosmetic|skincare|serum|toner|cream|sunscreen|makeup|lipstick|perfume|shampoo)/i.test(hay);
   const miscEverydayFit = /(생활잡화|일상잡화|잡화|가정용|휴대용|daily goods|everyday goods|general goods|household accessory)/i.test(hay);
   const foodLivingFit = ["food_household_essentials","agriculture_fishery_forestry","home_appliances_living","local_products"].includes(category.primary) || /(푸드|식품|식료품|농산물|수산물|축산물|리빙|생활용품|주방|가구|침구|인테리어|food|grocery|produce|seafood|living|household|kitchen|furniture|interior)/i.test(hay);
