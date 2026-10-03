@@ -1112,8 +1112,8 @@ snapshot.pages.distribution.sections = sections;
 
 const REQUIRED_SECTION_KEYS = [
   "distribution-recommend",
-  "distribution-trending",
   "distribution-sponsor",
+  "distribution-trending",
   "distribution-new",
   "distribution-special",
   "distribution-others",

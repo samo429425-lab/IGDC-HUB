@@ -261,7 +261,8 @@
       "main5": "메인 5",
       "right_top": "우측 상",
       "right_mid": "우측 중",
-      "right_bottom": "우측 하"
+      "right_bottom": "우측 하",
+      "main6": "웹툰·책·전자책"
     },
     "network": {
       "right_panel": "우측"
@@ -273,7 +274,8 @@
       "new": "신규 등록 상품",
       "special": "특별 상품",
       "etc": "기타 상품",
-      "right_panel": "우측"
+      "right_panel": "우측",
+      "extra": "기타·아웃도어·식품"
     },
     "social": {
       "social-maru": "social-maru",
@@ -330,7 +332,9 @@
     "special": "의류·패션",
     "etc": "생필품·생활",
     "extra": "기타·아웃도어·식품",
-    "right_panel": "브랜드 추천"
+    "right_panel": "브랜드 추천",
+    "home_6": "Home 6",
+    "distribution-extra": "기타·아웃도어·식품"
   },
   "items": [
     {

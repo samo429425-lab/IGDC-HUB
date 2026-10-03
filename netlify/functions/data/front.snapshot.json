@@ -4831,7 +4831,8 @@
             "url": "https://example.com/home_right_bottom/80",
             "priority": 119
           }
-        ]
+        ],
+        "home_6": []
       }
     },
     "distribution": {
@@ -10458,7 +10459,8 @@
             "priority": 119,
             "id": "distribution-right-100"
           }
-        ]
+        ],
+        "distribution-extra": []
       }
     }
   },

@@ -273,7 +273,8 @@
       "home_5": "메인 5",
       "home_right_top": "우측 상",
       "home_right_middle": "우측 중",
-      "home_right_bottom": "우측 하"
+      "home_right_bottom": "우측 하",
+      "home_6": "웹툰·책·전자책"
     },
     "network": {
       "network-right": "우측"
@@ -285,7 +286,8 @@
       "distribution-new": "신규 등록 상품",
       "distribution-special": "특별 상품",
       "distribution-others": "기타 상품",
-      "distribution-right": "우측"
+      "distribution-right": "우측",
+      "distribution-extra": "기타·아웃도어·식품"
     },
     "social": {
       "social-maru": "social-maru",
