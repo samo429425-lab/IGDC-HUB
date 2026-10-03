@@ -20,6 +20,17 @@ const SlotOverlay = require("./sample-slot-overlay.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
 const SNAPSHOT_FILE = "distribution.snapshot.json";
+const CANONICAL_DISTRIBUTION_SECTIONS = Object.freeze([
+  "distribution-recommend",
+  "distribution-trending",
+  "distribution-sponsor",
+  "distribution-new",
+  "distribution-special",
+  "distribution-others",
+  "distribution-extra",
+  "distribution-right"
+]);
+
 const REGISTRY_FILE = "regional-brokerage-outbound.json";
 const MANIFEST_FILE = "regional-brokerage-manifest.json";
 const DEFAULT_SECTION = "distribution-recommend";
@@ -230,7 +241,8 @@ function sectionFor(item, sections) {
     "dist_4": "distribution-new", "distribution_4": "distribution-new",
     "dist_5": "distribution-special", "distribution_5": "distribution-special",
     "dist_6": "distribution-others", "distribution_6": "distribution-others",
-    "dist_right": "distribution-right", "distribution-right": "distribution-right"
+    "dist_8": "distribution-extra", "distribution_8": "distribution-extra", "distribution-extra": "distribution-extra",
+    "dist_right": "distribution-right", "distribution_7": "distribution-right", "distribution-right": "distribution-right"
   };
   return map[raw] || map[aliases[raw]] || map[DEFAULT_SECTION] || Object.keys(sections || {})[0] || DEFAULT_SECTION;
 }
@@ -312,6 +324,9 @@ function distributionTemplateWithSamples(template) {
   const doc = clone(template);
   const sections = doc && doc.pages && doc.pages.distribution && doc.pages.distribution.sections;
   if (!sections || typeof sections !== "object") return null;
+  for (const key of CANONICAL_DISTRIBUTION_SECTIONS) {
+    if (!Array.isArray(sections[key]) && !(sections[key] && Array.isArray(sections[key].slots))) sections[key] = [];
+  }
   doc.pages.distribution.sections = SlotOverlay.overlaySections(sections, new Map());
   doc.meta = Object.assign({}, doc.meta || {}, {
     regionalBrokerageSnapshot: true,

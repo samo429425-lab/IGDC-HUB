@@ -447,6 +447,8 @@ function resolveLimitSectionKey(pageName, raw, sections) {
       "main3": "home_3",
       "main4": "home_4",
       "main5": "home_5",
+      "main6": "home_6",
+      "home_6": "home_6",
       "right_top": "home_right_top",
       "right_mid": "home_right_middle",
       "right_bottom": "home_right_bottom",
@@ -497,6 +499,11 @@ function resolveLimitSectionKey(pageName, raw, sections) {
       "distribution_6": "distribution-others",
       "distribution6": "distribution-others",
       "distribution-others": "distribution-others",
+      "distribution-extra": "distribution-extra",
+      "dist_8": "distribution-extra",
+      "dist8": "distribution-extra",
+      "distribution_8": "distribution-extra",
+      "distribution8": "distribution-extra",
       "dist_7": "distribution-right",
       "dist7": "distribution-right",
       "distribution_7": "distribution-right",
@@ -941,6 +948,8 @@ const HOME_SECTION_ALIAS = {
   "main3": "home_3",
   "main4": "home_4",
   "main5": "home_5",
+  "main6": "home_6",
+  "home_6": "home_6",
 
   "right_top": "home_right_top",
   "right_mid": "home_right_middle",
@@ -1103,11 +1112,12 @@ snapshot.pages.distribution.sections = sections;
 
 const REQUIRED_SECTION_KEYS = [
   "distribution-recommend",
-  "distribution-sponsor",
   "distribution-trending",
+  "distribution-sponsor",
   "distribution-new",
   "distribution-special",
   "distribution-others",
+  "distribution-extra",
   "distribution-right"
 ];
 

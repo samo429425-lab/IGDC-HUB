@@ -44,16 +44,16 @@
     {key:'distribution-right',selector:'[data-psom-key="distribution-right"]',limit:LIMIT_RIGHT,label:'Recommended Brand'}
   ];
   const ALIAS={
+    // Compatibility aliases must match Snapshot Engine / regional publisher.
+    // Canonical section names above are always preferred; these are legacy fallback only.
     'distribution-recommend':'distribution_1',
-    'distribution-new':'distribution_2',
+    'distribution-sponsor':'distribution_2',
     'distribution-trending':'distribution_3',
-    'distribution-special':'distribution_4',
-    'distribution-sponsor':'distribution_5',
+    'distribution-new':'distribution_4',
+    'distribution-special':'distribution_5',
     'distribution-others':'distribution_6',
-    // Keep the long-standing right-rail alias stable; the newly added seventh main rail
-    // receives a new compatibility alias until the admin/PSOM migration is performed.
-    'distribution-extra':'distribution_8',
-    'distribution-right':'distribution_7'
+    'distribution-right':'distribution_7',
+    'distribution-extra':'distribution_8'
   };
   let activePriority=-1;
   let activeFingerprint='';
