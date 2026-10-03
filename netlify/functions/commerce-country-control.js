@@ -6,6 +6,8 @@ const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./lib/commerce-policy-discussion.v1");
 const ProductGoLiveAudit = require("./product-go-live-audit");
 const CandidateReview = require("./commerce-candidate-review");
+const SlotStore = require("./lib/global-slot-console-supabase");
+const MarketSaleScope = require("./lib/market-sale-scope.v1");
 
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
@@ -27,6 +29,58 @@ async function authoritativeReplacementEligibility(body,candidateIdsInput){
   }
   return{requested,eligible:Array.from(new Set(eligible)),blocked:Array.from(new Set(blocked))};
 }
+
+const ADMIN_GUARD_FIELDS = ["slotDecision","approvedPlacement","selectedPlacement","placement","primaryPlacement","page","channel","section","psom_key","slot","managementControl","queueControl","decisionAt","decisionBy","decisionSource"];
+function array(value){return Array.isArray(value)?value:[];}
+function clone(value){return value&&typeof value==="object"?JSON.parse(JSON.stringify(value)):value;}
+function scopedAssignment(row,scope){
+  if(!row||text(row.country_code).toUpperCase()!==text(scope.country).toUpperCase())return false;
+  const region=MarketSaleScope.normalizeRegion(text(row.region_code||"NATIONWIDE"),scope.country)||"NATIONWIDE";
+  return region===scope.region;
+}
+async function captureAdminPlacementGuard(candidateIds,scope){
+  const ids=Array.from(new Set(array(candidateIds).map(text).filter(Boolean))).slice(0,2000);
+  const snapshots=new Map();
+  for(let off=0;off<ids.length;off+=300){
+    const chunk=ids.slice(off,off+300),filter=chunk.map(id=>encodeURIComponent(id)).join(",");
+    const rows=array(await SlotStore.select("gslot_candidates","select=id,status,source_payload&id=in.("+filter+")&limit=300"));
+    const assigns=array(await SlotStore.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at,updated_by&candidate_id=in.("+filter+")&limit=3000"));
+    for(const row of rows){
+      const payload=plain(row.source_payload),admin={};
+      for(const key of ADMIN_GUARD_FIELDS)if(Object.prototype.hasOwnProperty.call(payload,key))admin[key]=clone(payload[key]);
+      snapshots.set(text(row.id),{candidateId:text(row.id),status:text(row.status),admin,assignments:assigns.filter(a=>text(a.candidate_id)===text(row.id)&&scopedAssignment(a,scope)).map(clone)});
+    }
+  }
+  return snapshots;
+}
+async function restoreAdminPlacementGuard(snapshots,scope){
+  const restored=[],failures=[];
+  for(const snap of snapshots.values()){
+    try{
+      const rows=array(await SlotStore.select("gslot_candidates","select=id,status,source_payload&id=eq."+encodeURIComponent(snap.candidateId)+"&limit=1"));
+      const row=plain(rows[0]);if(!Object.keys(row).length)continue;
+      const payload=Object.assign({},plain(row.source_payload));
+      for(const key of ADMIN_GUARD_FIELDS){
+        if(Object.prototype.hasOwnProperty.call(snap.admin,key))payload[key]=clone(snap.admin[key]);
+        else delete payload[key];
+      }
+      await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(snap.candidateId),{status:snap.status,source_payload:payload,updated_at:new Date().toISOString()});
+      const current=array(await SlotStore.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at,updated_by&candidate_id=eq."+encodeURIComponent(snap.candidateId)+"&limit=100"));
+      const byId=new Map(current.filter(a=>scopedAssignment(a,scope)).map(a=>[text(a.id),a]));
+      for(const before of snap.assignments){
+        const now=byId.get(text(before.id));
+        const structuralChanged=!now||text(now.hub_key)!==text(before.hub_key)||text(now.slot_key)!==text(before.slot_key)||text(now.state)!==text(before.state)||Boolean(now.manual_pinned)!==Boolean(before.manual_pinned);
+        if(structuralChanged){
+          const replacement=Object.assign({},before,{publication_status:now?now.publication_status:before.publication_status,updated_at:new Date().toISOString()});
+          await SlotStore.insert("gslot_slot_assignments",replacement,"resolution=merge-duplicates,return=representation");
+        }
+      }
+      restored.push(snap.candidateId);
+    }catch(error){failures.push({candidateId:snap.candidateId,error:text(error&&error.message)||"admin_guard_restore_failed"});}
+  }
+  return{ok:failures.length===0,restored,failures};
+}
+
 function readGeoObject(value){const raw=text(value);if(!raw)return{};for(const candidate of [raw,(()=>{try{return decodeURIComponent(raw);}catch(_e){return"";}})()]){try{const parsed=JSON.parse(candidate);if(parsed&&typeof parsed==="object"&&!Array.isArray(parsed))return parsed;}catch(_e){}}return{};}
 function normalizeGeo(event){
   const headers={};for(const [key,value] of Object.entries(event&&event.headers||{}))headers[String(key).toLowerCase()]=value;
@@ -135,6 +189,8 @@ exports.handler=async function(event){
       const replacementCandidateIds=authoritativeReplacement?replacementEligibility.eligible:requestedReplacementCandidateIds;
       const candidateIds=authoritativeReplacement?replacementCandidateIds:requestedCandidateIds;
       const scope=ProductGoLiveAudit.selectedScope(text(body.countryCode||body.country).toUpperCase(),text(body.subdivisionCode||body.regionCode||body.region||"NATIONWIDE").toUpperCase());
+      const guardIds=Array.from(new Set(requestedCandidateIds.concat(requestedReplacementCandidateIds))).filter(Boolean);
+      const adminGuard=await captureAdminPlacementGuard(guardIds,scope);
       let replacementPlan=null,replacementUnpublish=null;
       if(authoritativeReplacement){
         replacementPlan=await Automation.productFrontReplacementPlan(Object.assign({},body,{authoritativeReplacement:true,replacementCandidateIds:candidateIds}));
@@ -151,6 +207,7 @@ exports.handler=async function(event){
         const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:"SITE_PUBLISH",candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
         const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null);
         if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish,requestedCandidateIds:replacementEligibility.requested,eligibleCandidateIds:replacementEligibility.eligible,blockedCandidateIds:replacementEligibility.blocked};
+        const guardRestore=await restoreAdminPlacementGuard(adminGuard,scope);if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
         return json(200,recorded);
       }
       const staleIds=Array.from(new Set((replacementPlan&&replacementPlan.staleCandidateIds||[]).map(text).filter(Boolean))),refreshIds=Array.from(new Set(candidateIds.concat(requestedCandidateIds,staleIds))).slice(0,1800);
@@ -158,6 +215,7 @@ exports.handler=async function(event){
       const refreshResult=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:refreshUnpublish?"unmatch":"refresh",confirmation:refreshUnpublish?"SITE_UNPUBLISH":"SITE_PUBLISH",candidateId:refreshIds[0]||null,candidateIds:refreshIds,candidateCount:Math.max(1,Number(body.changedCount)||refreshIds.length||1)},scope);
       const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:requestedOperation==="unmatch"?"unmatch":"match",mode:"candidates",candidateIds:refreshIds,ledgerMode:"candidate",compactResponse:true}),refreshResult,null);
       if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={authoritative:authoritativeReplacement,plan:replacementPlan,unpublication:replacementUnpublish,requestedCandidateIds:replacementEligibility.requested,eligibleCandidateIds:replacementEligibility.eligible,blockedCandidateIds:replacementEligibility.blocked};
+      const guardRestore=await restoreAdminPlacementGuard(adminGuard,scope);if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
       return json(200,recorded);
     }
     if(action==="product_front_match"||action==="product_front_unmatch"){
@@ -167,6 +225,8 @@ exports.handler=async function(event){
       const loadedJob=candidateLedgerMode?null:await Automation.loadProductResearchJob(request);
       let plan=await Automation.productFrontSyncTargets(request,loadedJob);
       const scope=ProductGoLiveAudit.selectedScope(plan.scope.country,plan.scope.region);
+      const initialGuardIds=Array.from(new Set((Array.isArray(plan.targets)?plan.targets:[]).map((row)=>text(row&&row.candidateId)).filter(Boolean)));
+      const adminGuard=await captureAdminPlacementGuard(initialGuardIds,scope);
       let batchResult, refresh=null, repairUnpublish=null;
       if(!plan.targets.length){
         batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
@@ -220,7 +280,9 @@ exports.handler=async function(event){
       }else{
         batchResult=await ProductGoLiveAudit.requestUnpublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:plan.targets.map((row)=>row.candidateId),deferRelease:request.deferRelease===true},scope);
       }
-      return json(200,await Automation.recordProductFrontSync(actorId,request,Object.assign({},batchResult,{refresh:refresh||batchResult.refresh||null,repairUnpublish:repairUnpublish||batchResult.repairUnpublish||null}),loadedJob));
+      const recorded=await Automation.recordProductFrontSync(actorId,request,Object.assign({},batchResult,{refresh:refresh||batchResult.refresh||null,repairUnpublish:repairUnpublish||batchResult.repairUnpublish||null}),loadedJob);
+      const guardRestore=await restoreAdminPlacementGuard(adminGuard,scope);if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
+      return json(200,recorded);
     }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
     if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));

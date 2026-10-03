@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.21.0-oneway-admin-authority
+/* IGDC Global/Region/Country Commerce Control v3.20.0-admin-ledger-supplier-expansion
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -1278,7 +1278,7 @@
     try{
       for(var off=0;off<targets.length;off+=10){
         var batch=targets.slice(off,off+10),part=null,lastError=null;
-        if(ledgerState)ledgerState.textContent='후보 실제 페이지 재검증·정책 균형 배치 '+Math.min(off+batch.length,targets.length)+'/'+targets.length+'건';
+        if(ledgerState)ledgerState.textContent='후보 실제 페이지 재검증·엄격 카테고리 배치 '+Math.min(off+batch.length,targets.length)+'/'+targets.length+'건';
         for(var attempt=0;attempt<3&&!part;attempt++){
           try{part=await api(CONTROL,'product_candidate_ai_recover','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:batch,balanceCounts:balanceCounts,tourDiningAutomaticCount:tourDiningCount},35000);}
           catch(e){lastError=e;if(!transientCandidateBatchError(e)||attempt>=2)break;if(ledgerState)ledgerState.textContent='후보 재검증 '+Math.min(off+batch.length,targets.length)+'/'+targets.length+'건 · 일시 응답 지연으로 '+(attempt+2)+'회차 재확인 중';await new Promise(function(resolve){setTimeout(resolve,700*(attempt+1));});}
@@ -1288,7 +1288,7 @@
       }
       await refreshCandidateLedgerProducts({preserveResearchReport:true});
       try{var researchState=await loadProductResearchCompact(selectedCountry,selectedSubdivision||'NATIONWIDE');if(researchState&&researchState.status&&researchState.status!=='not_started'){lastProductJson=mergeCompactProductStatus(researchState);rememberReport('product',lastProductJson);renderProductProgress(lastProductJson);saveReviewSnapshot();}}catch(_researchStateError){}
-      var hasWarn=failedBatches.length||invalidTotal||inconclusiveTotal;if(ledgerState){ledgerState.className='product-auto-state '+(hasWarn?'warn':'complete');ledgerState.textContent='후보 갱신 '+(failedBatches.length?'부분 완료':'완료')+' · 재검증 '+revalidatedTotal+'건 · 정상 배치 '+assignedTotal+'건 · 정책 균형 재분류 '+changedTotal+'건 · 삭제/불량 '+invalidTotal+'건 · 일시 확인보류 '+inconclusiveTotal+'건 · 관리자 고정 유지 '+preservedTotal+'건'+(failedBatches.length?' · 실패 묶음 '+failedBatches.length+'개는 다음 실행에서 재시도 가능':'');}
+      var hasWarn=failedBatches.length||invalidTotal||inconclusiveTotal;if(ledgerState){ledgerState.className='product-auto-state '+(hasWarn?'warn':'complete');ledgerState.textContent='후보 갱신 '+(failedBatches.length?'부분 완료':'완료')+' · 재검증 '+revalidatedTotal+'건 · 정상 배치 '+assignedTotal+'건 · 카테고리 엄격 재분류 '+changedTotal+'건 · 삭제/불량 '+invalidTotal+'건 · 일시 확인보류 '+inconclusiveTotal+'건 · 관리자 고정 유지 '+preservedTotal+'건'+(failedBatches.length?' · 실패 묶음 '+failedBatches.length+'개는 다음 실행에서 재시도 가능':'');}
       show('실제 상품 페이지 '+revalidatedTotal+'건을 다시 확인했습니다.'+(failedBatches.length?' 일시 오류 묶음 '+failedBatches.length+'개는 건너뛰고 나머지 묶음을 계속 처리했으며, 해당 후보는 원장에 그대로 남아 다음 실행에서 재시도할 수 있습니다.':'')+' 프론트 공개·결제는 실행하지 않았습니다.',hasWarn?'warn':'ok');
       return{ok:failedBatches.length===0,revalidated:revalidatedTotal,assigned:assignedTotal,invalid:invalidTotal,inconclusive:inconclusiveTotal,failedBatches:failedBatches};
     }finally{productAutomationActive=false;renderProducts(productRows);syncLatestProductQueueControls();}
@@ -1449,15 +1449,9 @@
       return true;
     });
     if(replacementRun&&!unmatch){var replacementScopeKeys=mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice());targetRows=capFrontReplacementRows(targetRows,replacementScopeKeys);}
-    var targetIds=targetRows.map(function(row){return text(row.id);}).filter(Boolean),authoritativeReplacementCandidateIds=[];
-    function freezeAdministratorReplacement(){
-      if(!replacementRun||unmatch)return[];
-      var keys=mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice());
-      var rows=capFrontReplacementRows(productRows.filter(function(row){var key=assignedSectionKey(row);return productDecision(row)==='slot_candidate'&&!!key&&(mode==='all'||keys.indexOf(key)>=0);}),keys);
-      return Array.from(new Set(rows.map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean)));
-    }
+    var targetIds=targetRows.map(function(row){return text(row.id);}).filter(Boolean);
     if(!targetIds.length&&!pendingManagement.length&&!replacementRun){show(unmatch?'선택 범위에 매칭 해제할 상품이 없습니다.':'선택 범위에 최종 재검증·프론트 적용할 상품이 없습니다.','warn');return;}
-    var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'의 현재 관리자 배치를 프론트에 단방향 적용합니다.'+(pendingManagement.length?' 화면에서 바꾼 관리자 위치·상태 '+pendingManagement.length+'건을 먼저 관리자 원장에 확정 저장합니다.':'')+' 관리자 후보·배치 원장이 유일한 입력 기준이며 기존 프론트 스냅샷이나 이전 공개 배치는 관리자 섹션을 되돌리는 입력으로 사용하지 않습니다. 버튼을 누른 시점의 관리자 배치를 고정한 뒤 검증하고, 그 고정 결과로 선택 범위 프론트를 치환합니다. 빈 슬롯은 기존 샘플 fallback 정책을 유지합니다.';
+    var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'의 현재 배치 상품을 프론트 공개 원장에 적용합니다.'+(pendingManagement.length?' 화면에서 바꾼 관리자 위치·상태 '+pendingManagement.length+'건을 먼저 원장에 확정 저장합니다.':'')+' 최근 검증이 살아 있는 상품은 저장된 검증을 재사용하고, 오래됐거나 실제 공개 중인 상품만 다시 확인합니다. 이 작업은 현재 관리자 배치 상품을 추가·갱신하며 다른 기존 프론트 상품을 자동으로 일괄 제거하지 않습니다. 보류·제외·삭제·매칭해제처럼 관리자가 명시적으로 제거한 상품만 프론트 해제 대상으로 남기고 빈 슬롯은 기존 샘플 fallback 정책을 유지합니다.';
     if(!window.confirm(explanation+'\n\n'+(unmatch?'프론트에서 해당 매칭을 해제하시겠습니까?\n변경은 소량 묶음으로 저장한 뒤 마지막에 스냅샷 빌드를 1회만 실행합니다.':'프론트 실상품 매칭 절차를 실행하시겠습니까?\n선택 범위의 현재 관리자 배치 상품을 프론트 원장에 추가·갱신합니다. 명시적으로 해제된 실상품만 빠지고 빈 슬롯은 샘플로 복귀합니다. 마지막 빌드는 1회만 실행합니다.')))return;
     productFrontSyncActive=true;
     var state=$('productFrontSyncState'),batchSize=8,maxConcurrent=2,requestTimeout=75000,aggregate={requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,revalidated:0,remoteChecked:0,freshReused:0,invalid:0,inconclusive:0,withdrawn:0,changedSection:0,items:[],persistedCandidateIds:[],changedCandidateIds:[],preparation:{requested:0,prepared:0,blocked:0},batchErrors:[]},publishPersistedMap={},changedMap={},completed=0,managementCommit={changedCount:0,changedCandidateIds:[],movedCandidateIds:[],releasedCandidateIds:[]};
@@ -1483,10 +1477,6 @@
         if(replacementRun&&!unmatch){var updatedReplacementKeys=mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice());targetRows=capFrontReplacementRows(targetRows,updatedReplacementKeys);}
         targetIds=Array.from(new Set(targetRows.map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean)));
       }
-      // Freeze the administrator board exactly once. Front/publication writes that
-      // happen below may change lifecycle markers, but can never change this desired
-      // section set or feed old front state back into the administrator decision.
-      authoritativeReplacementCandidateIds=freezeAdministratorReplacement();
       var action=unmatch?'product_front_unmatch':'product_front_match',batches=[];
       for(var offset=0;offset<targetIds.length;offset+=batchSize)batches.push({offset:offset,ids:targetIds.slice(offset,offset+batchSize)});
       var nextBatch=0;
@@ -1521,17 +1511,24 @@
       var workers=[];for(var w=0;w<Math.min(maxConcurrent,batches.length);w++)workers.push(worker());await Promise.all(workers);
 
       aggregate.persistedCandidateIds=Object.keys(publishPersistedMap);aggregate.changedCandidateIds=Array.from(new Set(Object.keys(changedMap).concat(managementCommit.changedCandidateIds||[])));
-      // Do not reload the board before finalize. The administrator state captured
-      // above is authoritative for this command; front validation/publication is
-      // output processing only and cannot replace the desired admin arrangement.
+      // Front validation can quarantine a hard-invalid/non-product row.  Reload
+      // the durable administrator ledger before building an authoritative
+      // replacement list so the browser never sends the stale pre-validation
+      // 6/7-card board back to the server after the safety gate reduced it.
+      if(replacementRun){
+        try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}
+        catch(_replacementRefreshError){aggregate.batchErrors.push({offset:'replacement_refresh',candidateIds:aggregate.changedCandidateIds.slice(),message:'authoritative_board_refresh_failed'});}
+      }
       var needsFinalize=aggregate.persistedCandidateIds.length>0||aggregate.changedCandidateIds.length>0||aggregate.withdrawn>0||Number(managementCommit.changedCount||0)>0||replacementRun;
       if(needsFinalize){
         try{
           if(state){state.className='front-sync-state running';state.textContent=label+' · 원장 저장 완료 · 전체 변경분 스냅샷 갱신을 마지막에 1회 요청 중';}
           var finalizeOperation=unmatch?'unmatch':(aggregate.persistedCandidateIds.length?'match':'refresh'),finalizeIds=Array.from(new Set((aggregate.persistedCandidateIds.length?aggregate.persistedCandidateIds:aggregate.changedCandidateIds).concat(managementCommit.changedCandidateIds||[])));
           var replacementSectionKeys=replacementRun?(mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice())):[];
-          var replacementCandidateIds=replacementRun?authoritativeReplacementCandidateIds.slice():[];
-          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true,authoritativeReplacement:replacementRun,explicitReplacementCleanup:replacementRun,replacementSectionKeys:replacementSectionKeys,replacementCandidateIds:replacementCandidateIds},90000);
+          var replacementRows=replacementRun?capFrontReplacementRows(productRows.filter(function(row){var key=assignedSectionKey(row);return productDecision(row)==='slot_candidate'&&!!key&&(mode==='all'||replacementSectionKeys.indexOf(key)>=0);}),replacementSectionKeys):[];
+          var replacementCandidateIds=replacementRows.map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean);
+          replacementCandidateIds=Array.from(new Set(replacementCandidateIds));
+          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true,authoritativeReplacement:false,explicitReplacementCleanup:false,replacementSectionKeys:replacementSectionKeys,replacementCandidateIds:replacementCandidateIds},90000);
           var finalResult=finalized.frontSyncResult||{},finalRelease=finalResult.release||{};aggregate.finalize=finalResult;aggregate.release=finalRelease;if(finalRelease.queued===true){aggregate.queued=1;aggregate.pendingBuild=0;}else{aggregate.queued=0;aggregate.pendingBuild=Math.max(1,Number(finalResult.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1));}
         }catch(finalizeFailure){aggregate.queued=0;aggregate.pendingBuild=Math.max(1,aggregate.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1);aggregate.batchErrors.push({offset:'finalize',candidateIds:aggregate.changedCandidateIds.slice(),message:text(finalizeFailure&&finalizeFailure.message)||'finalize_failed'});}
       }
@@ -1843,10 +1840,10 @@
   }
   async function runAutomation(dry){
     if(!selectedCountry||researchLoopActive)return;if(dry!==true){show('먼저 책임 공급업체 단계별 검색을 완료한 뒤 공급업체 후보 원장 등록을 눌러 주세요.','warn');return;}
-    var requested=scopeSnapshot(),requestedKey=scopeKey(requested),restart=!!(lastCountryPreview&&(lastCountryPreview.status==='complete'||lastCountryPreview.status==='committed'));if(restart&&!window.confirm('현재 완료된 업체와 검토 결과는 그대로 보존합니다. 기존 업체를 다시 세는 작업이 아니라 다음 검색 페이지·추가 검색 경로로 새 책임 공급업체를 누적 조사합니다. 계속하시겠습니까?'))return;
+    var requested=scopeSnapshot(),requestedKey=scopeKey(requested),restart=!!(lastCountryPreview&&(lastCountryPreview.status==='complete'||lastCountryPreview.status==='committed'));if(restart&&!window.confirm('현재 완료된 검색 결과는 관리 DB에 보존되어 있습니다. 같은 국가 범위에서 새 리서치를 시작하시겠습니까?'))return;
     closeManagementPanels();closeSupplierControlQueue();hide();researchStopRequested=false;researchLoopActive=true;var btn=$('previewRunBtn'),autoProductAfter=false;btn.disabled=true;setButtonEnabled('researchPauseBtn',true);setButtonEnabled('runNowBtn',false);
     try{
-      var data=await api(CONTROL,'research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,restart:restart,forceNewRun:restart,appendExisting:restart,newRunToken:restart?('admin-append-'+Date.now()+'-'+Math.random().toString(36).slice(2)):null,researchRounds:selectedSupplierResearchRounds(),scopeAuthority:'administrator-selected',ignoreRequestGeo:true});
+      var data=await api(CONTROL,'research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,restart:restart,forceNewRun:restart,newRunToken:restart?('admin-'+Date.now()+'-'+Math.random().toString(36).slice(2)):null,researchRounds:selectedSupplierResearchRounds(),scopeAuthority:'administrator-selected',ignoreRequestGeo:true});
       while(true){
         if(scopeKey()!==requestedKey){researchStopRequested=true;show('검색 중 선택 범위가 바뀌어 화면 진행을 중단했습니다. 서버에 저장된 작업은 해당 범위에서 다시 이어갈 수 있습니다.','warn');break;}
         if(!data.scope)data.scope=requested;else{data.scope.source=requested.source;data.scope.detectedGeo=requested.detectedGeo;}lastCountryPreview=data;rememberReport('country',data);renderResearchProgress(data);renderSummary(data,{candidates:data.candidates||[]},'단계별 리서치 진행');if((Array.isArray(data.candidates)&&data.candidates.length)||(Array.isArray(data.holdingCandidates)&&data.holdingCandidates.length)||(Array.isArray(data.blockedCandidates)&&data.blockedCandidates.length))renderAi(data.candidates||[],data.holdingCandidates||[],data.blockedCandidates||[]);saveReviewSnapshot();

@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.21.0-semantic-admin20-autoplace";
+const VERSION = "commerce-product-ranking-v1.22.0-strict-merchandising-map";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -123,7 +123,7 @@ const POLICY = Object.freeze({
   homePolicy: Object.freeze({
     mainRole: "shopping_hot_item_recommendation",
     mainSections: AI_AUTO_BALANCE_GROUPS.homeMain,
-    mainDistributionRule: "same_policy_hot_items_evenly_spread_across_home_1_to_home_5",
+    mainDistributionRule: "home_1_beauty_premium_fashion; home_2_small_appliance_electronics; home_3_quality_food_kitchenware; home_4_household_essentials; home_5_misc_stationery",
     rightTop: Object.freeze({ section: "home|home_right_top", label: "지식 · 건강 · 생활", families: Object.freeze(["knowledge", "health", "everyday_life"]) }),
     rightMiddle: Object.freeze({ section: "home|home_right_middle", label: "자동차 · 아웃도어", families: Object.freeze(["automotive", "outdoor"]) }),
     rightBottom: Object.freeze({ section: "home|home_right_bottom", label: "리빙 · 책방 · 기타", families: Object.freeze(["living", "books", "other"]) }),
@@ -490,6 +490,89 @@ function classifyCategory(rowInput) {
     scores,
     tags: ranked.filter(([, score]) => score > 0).map(([key]) => key).slice(0, 5)
   };
+}
+
+
+// Hard semantic gate used by every automatic placement path.  Supplier names,
+// old placements and section load are intentionally NOT classification evidence.
+// If the product itself cannot be identified with enough confidence, AI leaves
+// it unassigned instead of guessing a convenient section.
+function strictPlacementFamily(rowInput) {
+  const row = plain(rowInput);
+  const hay = lower([
+    row.productName, row.title, row.sourceTitle, row.priorityLabel,
+    row.description, row.summary, row.productCategoryLabel
+  ].map(text).join(" "));
+  const tour = tourRightProfile(row);
+  const premiumBrand = /(프리미엄|명품|럭셔리|고급|하이엔드|밍크|모피|디자이너|premium|luxury|high[- ]?end|mink|fur|designer|flagship)/i.test(hay);
+  const trending = /(베스트(?:셀러)?|인기상품|인기\s*상품|판매\s*상위|핫딜|best\s*seller|most\s*popular|trending)/i.test(hay);
+
+  if (tour.service === true || /(숙박|호텔|리조트|관광|투어|입장권|여행\s*티켓|여행\s*패키지|항공권|렌터카|교통패스|철도패스|크루즈|페리|예약\s*서비스|hotel|resort|tour\b|ticket|travel\s*(?:package|booking)|flight|rental\s*car|rail\s*pass|cruise|ferry|booking)/i.test(hay)) return { family:"travel_service", premiumBrand, trending, confidence:100 };
+  if (tour.diningAuxiliary === true || /(레스토랑|맛집|카페|다이닝|식당\s*예약|restaurant|dining|cafe\s*reservation)/i.test(hay)) return { family:"travel_service", premiumBrand, trending, confidence:92 };
+
+  if (/(자동차|차량|자동차용품|차량용품|카케어|세차|세차기|카샴푸|타이어|휠|블랙박스|대시캠|차량청소|전기차|오토바이|모터사이클|car\b|vehicle|automotive|car\s*care|car\s*wash|tire|wheel|dashcam|motorcycle)/i.test(hay)) return { family:"automotive", premiumBrand, trending, confidence:98 };
+  if (/(도서|책방|서점|전자책|웹툰|코믹|만화|출판|bookstore|ebook|webtoon|comic|publishing|\bbooks?\b)/i.test(hay)) return { family:"books", premiumBrand, trending, confidence:96 };
+
+  // Beauty must be a real beauty/personal-care product.  Automotive shampoo is
+  // already captured above and can therefore never fall into Beauty.
+  if (/(화장품|뷰티|스킨케어|세럼|앰플|에센스|토너|페이스\s*크림|보습크림|로션|선크림|자외선차단|클렌징|클렌저|메이크업|파운데이션|쿠션|립스틱|립틴트|립밤|마스카라|아이라이너|아이브로우|아이섀도|블러셔|컨실러|향수|마스크팩|바디워시|헤어케어|샴푸|컨디셔너|트리트먼트|네일|미용기기|beauty|cosmetic|skincare|serum|ampoule|toner|moisturizer|sunscreen|cleanser|makeup|foundation|lipstick|perfume|shampoo|conditioner|body\s*wash|beauty\s*device)/i.test(hay)) return { family:"beauty", premiumBrand, trending, confidence:96 };
+
+  if (/(패션|의류|옷|자켓|재킷|코트|셔츠|블라우스|원피스|팬츠|청바지|정장|캐주얼|빈티지|스니커즈|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|등산복|아웃도어\s*의류|fashion|apparel|clothing|jacket|coat|shirt|blouse|dress|pants|jeans|suit|casual|vintage|sneaker|shoes|bag|jewelry|outdoor\s*wear|hiking\s*wear)/i.test(hay)) return { family:"fashion", premiumBrand, trending, confidence:95 };
+
+  // Specific appliance/electronics nouns outrank food words such as "coffee".
+  if (/(소형가전|전기장판|전기매트|온열매트|전기요|전기이불|이어폰|이어버드|헤드폰|스피커|태블릿|웹캠|카메라|캠코더|짐벌|마이크|스마트워치|프로젝터|선풍기|손선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|믹서|커피머신|커피메이커|충전기|보조배터리|USB\s*(?:허브|메모리|케이블|어댑터)|블루투스|small\s*appliance|electric\s*(?:blanket|mat)|heated\s*(?:blanket|mat)|earbud|earphone|headphone|speaker|tablet|webcam|camera|camcorder|gimbal|microphone|smartwatch|projector|fan|handheld\s*fan|circulator|humidifier|dehumidifier|air\s*purifier|vacuum|electric\s*kettle|toaster|blender|mixer|coffee\s*(?:machine|maker)|charger|power\s*bank|usb\s*(?:hub|drive|cable|adapter)|bluetooth)/i.test(hay)) return { family:"small_appliance", premiumBrand, trending, confidence:96 };
+
+  if (/(주방용품|조리도구|프라이팬|후라이팬|냄비|칼세트|도마|식기|그릇|접시|컵|텀블러|밀폐용기|키친툴|kitchenware|cookware|frying\s*pan|pan\b|pot\b|knife\s*set|cutting\s*board|tableware|dishware|plate|cup|tumbler|food\s*container)/i.test(hay)) return { family:"kitchenware", premiumBrand, trending, confidence:94 };
+
+  if (/(가구|소파|의자|테이블|책상|수납장|침대|매트리스|침구|조명|인테리어|리빙가구|furniture|sofa|chair|table|desk|cabinet|bed|mattress|bedding|lighting|interior)/i.test(hay)) return { family:"furniture_living", premiumBrand, trending, confidence:94 };
+
+  if (/(아웃도어|등산|트레킹|캠핑|골프|스포츠용품|텐트|타프|침낭|코펠|버너|캠핑의자|캠핑테이블|등산스틱|낚시|클라이밍|outdoor|hiking|trekking|camping|golf|sports\s*gear|tent|sleeping\s*bag|fishing|climbing)/i.test(hay)) return { family:"outdoor", premiumBrand, trending, confidence:94 };
+
+  if (/(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|식용유|쌀|잡곡|콩|과일|채소|육류|해산물|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b|sauce|rice|grain|fruit|vegetable|meat)/i.test(hay)) return { family:"food", premiumBrand, trending, confidence:94 };
+
+  if (/(생필품|생활필수|생활용품|화장지|두루마리|휴지|티슈|물티슈|생리대|기저귀|배변패드|세제|세정제|청소용품|위생용품|주방용품|욕실용품|수납용품|household|essential|tissue|wipe|diaper|detergent|cleaning|hygiene|kitchen\s*ware|bathroom|storage)/i.test(hay)) return { family:"household", premiumBrand, trending, confidence:94 };
+
+  if (/(지식|교육|학습|강의|자격증|건강관리|헬스|피트니스|영양제|비타민|웰니스|knowledge|education|learning|course|fitness|supplement|vitamin|wellness)/i.test(hay)) return { family:"health_knowledge", premiumBrand, trending, confidence:90 };
+
+  if (/(전동공구|공구세트|드릴|해머드릴|임팩트|그라인더|절단기|샌더|용접기|콤프레샤|에어공구|산업재|공업용|power\s*tool|drill|grinder|welder|compressor|industrial)/i.test(hay)) return { family:"industrial", premiumBrand, trending, confidence:90 };
+
+  if (/(문구|문구류|필기구|노트|수첩|볼펜|연필|샤프|파일|바인더|스테이플러|사무용품|stationery|notebook|pen\b|pencil|binder|stapler|office\s*supplies)/i.test(hay)) return { family:"stationery", premiumBrand, trending, confidence:92 };
+  if (/(생활잡화|일상잡화|잡화|가정용\s*잡화|휴대용\s*잡화|daily\s*goods|everyday\s*goods|general\s*goods|household\s*accessory)/i.test(hay)) return { family:"misc", premiumBrand, trending, confidence:82 };
+  return { family:"unknown", premiumBrand, trending, confidence:0 };
+}
+
+function strictPlacementSectionKeys(rowInput) {
+  const profile = strictPlacementFamily(rowInput), keys = [];
+  const add = (key) => { if (!keys.includes(key)) keys.push(key); };
+  switch (profile.family) {
+    case "travel_service": add("tour|tour"); break;
+    case "automotive": add("home|home_right_middle"); if (profile.premiumBrand) add("distribution|distribution-right"); break;
+    case "books": add("home|home_6"); add("home|home_right_bottom"); break;
+    case "beauty":
+      add("home|home_1"); add("distribution|distribution-sponsor"); add("distribution|distribution-recommend");
+      if (profile.trending) add("distribution|distribution-trending"); break;
+    case "fashion":
+      add("distribution|distribution-special"); add("distribution|distribution-recommend");
+      if (profile.trending || profile.premiumBrand) add("home|home_1");
+      if (profile.trending) add("distribution|distribution-trending"); break;
+    case "small_appliance":
+      add("home|home_2"); add("distribution|distribution-new"); add("distribution|distribution-recommend"); add("social|rightPanel");
+      if (profile.trending) add("distribution|distribution-trending"); break;
+    case "kitchenware": add("home|home_3"); add("distribution|distribution-others"); break;
+    case "furniture_living": add("home|home_right_bottom"); add("distribution|distribution-others"); if (profile.premiumBrand) add("distribution|distribution-right"); break;
+    case "outdoor": add("home|home_right_middle"); add("distribution|distribution-extra"); if (profile.premiumBrand) add("distribution|distribution-right"); break;
+    case "food": add("home|home_3"); add("distribution|distribution-extra"); break;
+    case "household": add("home|home_4"); add("distribution|distribution-others"); add("network|network-right"); break;
+    case "health_knowledge": add("home|home_right_top"); break;
+    case "industrial": if (profile.premiumBrand) add("distribution|distribution-right"); break;
+    case "stationery": add("home|home_5"); break;
+    case "misc": add("home|home_5"); break;
+    default: break;
+  }
+  // Network Hub right rail is a market/popularity showcase, not a product-category bucket.
+  // Only products with an explicit popularity signal may join it; Tour services remain Tour-only.
+  if (profile.trending && !["travel_service","books","unknown"].includes(profile.family)) add("network|network-right");
+  return { family:profile.family, confidence:profile.confidence, premiumBrand:profile.premiumBrand, trending:profile.trending, keys };
 }
 
 function metricContainers(rowInput) {
@@ -953,10 +1036,11 @@ function portfolioValueAssessment(rowInput, category, risk, supplier, audience, 
 
 function proposedSections(rowInput, category, risk, commercial, supplierInput, valueInput, contextInput, policyAssessmentInput) {
   const row = plain(rowInput), out = [], evidence = plain(row.evidence), supplier = plain(supplierInput), value = plain(valueInput), context = plain(contextInput), policyAssessment = plain(policyAssessmentInput);
+  const strictPlacement = strictPlacementSectionKeys(row);
+  const strictAllowedKeys = new Set(strictPlacement.keys);
   const audience = plain(value.audience), revenueValue = plain(value.revenue);
   const baseScore = Number(value.portfolioPriorityScore || commercial.potentialScore || 0);
-  const productHay = lower([row.productName, row.title, row.description, row.summary].map(text).join(" "));
-  const hay = lower([productHay, row.supplierName, row.supplierType, category.tags.join(" ")].join(" "));
+  const hay = lower([row.productName, row.title, row.supplierName, row.supplierType, row.description, row.summary, category.tags.join(" ")].join(" "));
   const has = function(names){
     return array(names).some(function(name){
       const direct = row[name], nested = evidence[name];
@@ -967,6 +1051,8 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   };
   const evidenceGaps = function(required){ return array(required).filter(function(name){ return !has([name]); }); };
   const add = function(page, sectionKey, score, reason, role, required){
+    const hardKey = page + "|" + sectionKey;
+    if (!strictAllowedKeys.has(hardKey)) return;
     if (!FRONT_SECTION_KEYS[page] || !FRONT_SECTION_KEYS[page].includes(sectionKey)) return;
     if (out.some(function(item){ return item.key === page + "|" + sectionKey; })) return;
     const requiredEvidence = array(required), gaps = evidenceGaps(requiredEvidence);
@@ -1056,10 +1142,10 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const bookShopFit = /(도서|책방|서점|책\b|출판|전자책|웹툰|코믹|만화|디지털\s*독서|bookstore|book\b|books\b|publishing|ebook|webtoon|comic|digital reading)/i.test(hay);
   const home6DigitalReadingFit = bookShopFit;
   const outdoorProductFit = tourProfile.outdoorGear || tourProfile.golfGear || tourProfile.sportsGear || /(아웃도어|등산|트레킹|캠핑|골프|스포츠용품|텐트|침낭|등산화|등산스틱|outdoor|hiking|trekking|camping|golf|sports gear|tent|sleeping bag)/i.test(hay);
-  const explicitFoodHomeFit = /(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|쌀|잡곡|과일|채소|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b)/i.test(productHay) || category.primary === "agriculture_fishery_forestry";
+  const explicitFoodHomeFit = /(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|쌀|잡곡|과일|채소|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b)/i.test(hay) || category.primary === "agriculture_fishery_forestry";
   const householdEssentialHomeFit = !explicitFoodHomeFit && (category.primary === "food_household_essentials" || /(생필품|생활필수|생활용품|화장지|휴지|티슈|물티슈|세제|세정제|청소|위생|주방용품|욕실용품|수납|household|essential|tissue|detergent|cleaning|hygiene|kitchen|bath|storage)/i.test(hay));
   const furnitureLivingFit = /(가구|소파|의자|테이블|책상|수납장|침대|매트리스|침구|조명|인테리어|리빙|furniture|sofa|chair|table|desk|cabinet|bed|mattress|bedding|lighting|interior|living)/i.test(hay);
-  const smallApplianceHomeFit = !home6DigitalReadingFit && !furnitureLivingFit && (category.primary === "electronics_accessories" || /(소형가전|이어폰|이어버드|헤드폰|스피커|태블릿|웹캠|카메라|짐벌|마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|earphone|headphone|speaker|tablet|webcam|camera|gimbal|microphone|smartwatch|projector|fan|humidifier|dehumidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(hay));
+  const smallApplianceHomeFit = !furnitureLivingFit && (category.primary === "electronics_accessories" || /(소형가전|이어폰|이어버드|헤드폰|스피커|태블릿|웹캠|카메라|짐벌|마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|earphone|headphone|speaker|tablet|webcam|camera|gimbal|microphone|smartwatch|projector|fan|humidifier|dehumidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(hay));
   const beautyHomeFit = category.primary === "beauty_personal_care" || /(뷰티|화장품|스킨케어|세럼|앰플|토너|크림|로션|선크림|클렌징|메이크업|립스틱|립틴트|마스크팩|향수|샴푸|beauty|cosmetic|skincare|serum|toner|cream|sunscreen|makeup|lipstick|perfume|shampoo)/i.test(hay);
   const miscEverydayFit = /(생활잡화|일상잡화|잡화|가정용|휴대용|daily goods|everyday goods|general goods|household accessory)/i.test(hay);
   const foodLivingFit = ["food_household_essentials","agriculture_fishery_forestry","home_appliances_living","local_products"].includes(category.primary) || /(푸드|식품|식료품|농산물|수산물|축산물|리빙|생활용품|주방|가구|침구|인테리어|food|grocery|produce|seafood|living|household|kitchen|furniture|interior)/i.test(hay);
@@ -1069,9 +1155,9 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   if (homeMainEligible) {
     const mainScore = baseScore + (verifiedTrend ? 4 : 0) + (recurringEssential ? 2 : 0) + 6;
     // Home rows are semantic category lanes. Never balance an item into an unrelated row.
-    if (beautyHomeFit || (fashionFit && verifiedTrend)) add("home", "home_1", mainScore + (beautyHomeFit ? 6 : 0), beautyHomeFit ? "홈 1 뷰티 중심" : "홈 1 인기 의류 보조", "home1_beauty_hot_fashion", []);
-    if (explicitFoodHomeFit) add("home", "home_2", mainScore + 6, "홈 2 식품·푸드", "home2_food", []);
-    if (fashionFit || smallApplianceHomeFit) add("home", "home_3", mainScore + 5, fashionFit ? "홈 3 의류·패션" : "홈 3 소형가전·소형전자", "home3_fashion_small_appliance", []);
+    if (beautyHomeFit || (fashionFit && (verifiedTrend || premiumBrandSignal))) add("home", "home_1", mainScore + (beautyHomeFit ? 6 : 2), beautyHomeFit ? "홈 1 뷰티 중심" : "홈 1 프리미엄·인기 의류", "home1_beauty_premium_fashion", []);
+    if (smallApplianceHomeFit) add("home", "home_2", mainScore + 6, "홈 2 소형가전·전자·배터리/전기 사용 제품", "home2_small_appliance_electronics", []);
+    if (explicitFoodHomeFit || /(?:주방용품|조리도구|프라이팬|후라이팬|냄비|식기|그릇|도마|kitchenware|cookware|tableware)/i.test(hay)) add("home", "home_3", mainScore + 5, explicitFoodHomeFit ? "홈 3 퀄리티 푸드" : "홈 3 주방용품", "home3_quality_food_kitchenware", []);
     if (householdEssentialHomeFit) add("home", "home_4", mainScore + 5, "홈 4 생필품·생활필수", "home4_essentials", []);
     if (miscEverydayFit && !householdEssentialHomeFit) add("home", "home_5", mainScore, "홈 5 일상 잡화·기타", "home5_misc_everyday", []);
   }
@@ -1136,10 +1222,10 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   // Brand Picks right rail: mixed across the four consumer families. Fashion
   // receives a smaller score so beauty, small appliances and essentials occupy
   // a larger share when equivalent branded candidates are available.
-  const brandRightFit = beautyDistributionFit || smallApplianceDistributionFit || apparelFashionDistributionFit || essentialsLivingDistributionFit || distributionExtraFit;
+  const brandRightFit = !apparelFashionDistributionFit && (beautyDistributionFit || smallApplianceDistributionFit || furnitureLivingFit || essentialsLivingDistributionFit || distributionExtraFit);
   if (risk.gatePassed === true && brandRightFit && distributionBrandEvidence) {
     const brandCategoryBoost = beautyDistributionFit ? 5 : (smallApplianceDistributionFit ? 6 : (essentialsLivingDistributionFit ? 5 : 2));
-    add("distribution", "distribution-right", baseScore + brandCategoryBoost + Math.min(4, statusAttributeBoost), "브랜드 중심 우측 추천: 소형가전·뷰티·생필품 우선, 의류는 낮은 비중", "distribution_brand_focused_mixed_right", []);
+    add("distribution", "distribution-right", baseScore + brandCategoryBoost + Math.min(4, statusAttributeBoost), "브랜드 중심 우측 추천: 프리미엄 가구·리빙·소형가전·뷰티·고급 아웃도어 중심, 일반 의류 제외", "distribution_brand_focused_mixed_right", []);
   }
 
   // Valid consumer goods that fit none of the four visible category rails stay
@@ -1160,9 +1246,9 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   if (policyTourMatch && risk.gatePassed === true && !out.some((row)=>row.key==="tour|tour")) {
     add("tour", "tour", baseScore + 4, "관리자 확정 정책과 일치하는 투어 우측 우선 검토 대상", "administrator_policy_tour_right_priority", []);
   }
-  const socialHotFit = socialLifestyle || category.primary === "electronics_accessories" || category.primary === "home_appliances_living" || /(소형가전|이어폰|이어버드|헤드폰|스마트워치|카메라|뷰티|패션|의류|small appliance|earbud|headphone|smartwatch|camera|beauty|fashion|apparel)/i.test(hay);
+  const socialHotFit = category.primary === "electronics_accessories" || /(?:소형가전|이어폰|이어버드|헤드폰|스마트워치|카메라|웹캠|캠코더|마이크|짐벌|USB\s*(?:허브|메모리|케이블|어댑터)|보조배터리|충전기|small appliance|earbud|headphone|smartwatch|camera|webcam|camcorder|microphone|gimbal|usb\s*(?:hub|drive|cable|adapter)|power\s*bank|charger)/i.test(hay);
   if ((commercial.visual || commercial.promotional || localOrigin || socialHotFit) && (socialHotFit || Number(audience.audienceDemandScore || 0) >= 52)) {
-    add("social", "rightPanel", baseScore + (socialHotFit ? 4 : -3), socialHotFit ? "소형가전·뷰티·인기 의류 중심 소셜 우측 배치" : "소셜 반응 가능성과 실제 수요가 함께 확인된 상품", socialHotFit ? "social_hot_consumer_offer" : "social_context_market_offer", socialHotFit ? [] : (socialMarketEvidence ? [] : ["socialMarketEvidence"]));
+    add("social", "rightPanel", baseScore + (socialHotFit ? 4 : -3), socialHotFit ? "SNS 제작·모바일 활용도가 높은 소형가전·USB·카메라 중심 소셜 우측 배치" : "소셜 반응 가능성과 실제 수요가 함께 확인된 상품", socialHotFit ? "social_hot_consumer_offer" : "social_context_market_offer", socialHotFit ? [] : (socialMarketEvidence ? [] : ["socialMarketEvidence"]));
   }
 
   // Private management fallback: products that passed the hard product/risk
@@ -1691,6 +1777,8 @@ module.exports = {
   isGenericProductName,
   normalizeFamilyTitle,
   classifyCategory,
+  strictPlacementFamily,
+  strictPlacementSectionKeys,
   tourRightProfile,
   supplierAssessment,
   riskAssessment,
