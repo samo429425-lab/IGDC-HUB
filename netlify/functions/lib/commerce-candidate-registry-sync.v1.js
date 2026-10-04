@@ -15,7 +15,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.12.0-authoritative-admin-replacement";
+const VERSION = "commerce-candidate-registry-sync-v1.12.1-assignment-authoritative-publication-bridge";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -182,6 +182,25 @@ function syntheticAssignmentFromMarker(candidate, marker){
     region_code:marker.region||"NATIONWIDE",slot_key:marker.section,
     priority:marker.priority||0,state:marker.manualPinned?"pinned":"approved",publication_status:"publish_requested",
     manual_pinned:marker.manualPinned===true,updated_at:marker.requestedAt||candidate.updated_at||now(),updated_by:marker.requestedBy||"administrator"
+  };
+}
+function publicationMarkerFromAssignment(candidate, assignment){
+  candidate=plain(candidate); assignment=plain(assignment);
+  if(!candidate.id || lower(assignment.publication_status)!=="publish_requested") return null;
+  const page=text(assignment.hub_key), section=text(assignment.slot_key);
+  const country=MarketSaleScope.normalizeCountry(assignment.country_code);
+  const region=MarketSaleScope.normalizeRegion(first(assignment.region_code,"NATIONWIDE"),country)||"NATIONWIDE";
+  if(!page||!section||!country) return null;
+  return {
+    status:"publish_requested",
+    candidateId:candidate.id,
+    assignmentId:first(assignment.id,"assignment-"+candidate.id),
+    page,section,country,region,
+    requestedAt:first(assignment.updated_at,candidate.updated_at,now()),
+    requestedBy:first(assignment.updated_by,"administrator"),
+    priority:Number(assignment.priority||0)||0,
+    manualPinned:assignment.manual_pinned===true,
+    authority:"gslot_slot_assignments.publication_status"
   };
 }
 function supplierIdentity(candidate,payload){
@@ -579,15 +598,20 @@ async function syncApprovedCandidates(input){
       // candidate selection, not to the publish bridge, and could otherwise
       // cancel an already matched Tour item before it reaches SearchBank.
       const publicationRequested=lower(assignment.publication_status)==="publish_requested";
+      // The persisted slot-assignment publication flag is authoritative.
+      // Front Match intentionally does not mutate gslot_candidates, so a missing
+      // candidate.frontPublication marker must not drop an administrator-approved
+      // product before SearchBank/Snapshot generation.
+      const publicationMarker=marker || publicationMarkerFromAssignment(candidate,assignment);
       let avail=(avBy.get(candidate.id)||[]).filter((row)=>availabilityMatchesAssignment(row,assignment));
-      if(!avail.length&&marker&&publicationRequested) avail=syntheticAvailabilityFromMarker(candidate,marker);
+      if(!avail.length&&publicationMarker&&publicationRequested) avail=syntheticAvailabilityFromMarker(candidate,publicationMarker);
       if(!avail.length) continue;
       const candidateRevenue=rBy.get(candidate.id)||[];
       const hasApprovedRevenue=candidateRevenue.some(row=>approvedRevenue(row.status));
       const explicitAdminReferral=explicitAuditSource&&publicationRequested&&explicitAdminReferralReady(candidate,assignment,avail);
       if(!hasApprovedRevenue&&!explicitAdminReferral) continue;
       let verifiedEvidence=(eBy.get(candidate.id)||[]).filter(verifiedEvidenceRow);
-      if(!verifiedEvidence.length&&explicitAdminReferral&&marker) verifiedEvidence=syntheticEvidenceFromMarker(candidate,marker);
+      if(!verifiedEvidence.length&&explicitAdminReferral&&publicationMarker) verifiedEvidence=syntheticEvidenceFromMarker(candidate,publicationMarker);
       if(!verifiedEvidence.length&&!explicitAdminReferral) continue;
       const publicationRevenue=hasApprovedRevenue?candidateRevenue:[explicitReferralRevenueRow(candidate,assignment)];
       const compact=compactPayload(candidate,assignment,avail,publicationRevenue,verifiedEvidence,ipPolicy,{administratorExternalSeller:explicitAdminReferral});
@@ -660,4 +684,4 @@ async function syncApprovedCandidates(input){
   }
 }
 
-module.exports={VERSION,QUEUE_FILE,PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF,syncApprovedCandidates,approvedAvailability,verifiedEvidenceRow};
+module.exports={VERSION,QUEUE_FILE,PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF,syncApprovedCandidates,approvedAvailability,verifiedEvidenceRow,publicationMarkerFromAssignment};
