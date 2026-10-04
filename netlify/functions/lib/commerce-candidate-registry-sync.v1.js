@@ -15,7 +15,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.12.1-assignment-authoritative-publication-bridge";
+const VERSION = "commerce-candidate-registry-sync-v1.12.2-source-agnostic-admin-publication-authority";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -597,10 +597,16 @@ async function syncApprovedCandidates(input){
       // move/hold/unassign a product privately without changing the live front
       // until an explicit Front Match/Unmatch demotes this relation.
       const explicitAuditSource=[PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF].includes(text(candidate.source_ref));
-      const currentFrontAssignment=explicitAuditSource?assignmentRows.find((row)=>lower(row.publication_status)==="publish_requested"):null;
+      // A persisted gslot_slot_assignments publish request is the administrator's
+      // authoritative front state regardless of which research adapter originally
+      // created the candidate. source_ref describes provenance, not publication
+      // authority. Restricting publication by source_ref silently dropped valid
+      // supplier products (for example research adapters outside the two legacy
+      // source refs) even though the administrator had already Front Matched them.
+      const currentFrontAssignment=assignmentRows.find((row)=>lower(row.publication_status)==="publish_requested")||null;
       if(!allowedCandidateStatus(candidate.status)&&!currentFrontAssignment) continue;
       const marker=explicitAuditSource?frontPublicationMarker(candidate):null;
-      let assignment=currentFrontAssignment||assignmentRows.find((row)=>explicitAuditSource?lower(row.publication_status)==="publish_requested":["ready","publish_requested"].includes(lower(row.publication_status)));
+      let assignment=currentFrontAssignment||assignmentRows.find((row)=>["ready","publish_requested"].includes(lower(row.publication_status)));
       if(!assignment&&marker) assignment=syntheticAssignmentFromMarker(candidate,marker);
       if(!assignment) continue;
       // A persisted Front Match is the authoritative publication route. Do not
@@ -618,7 +624,10 @@ async function syncApprovedCandidates(input){
       if(!avail.length) continue;
       const candidateRevenue=rBy.get(candidate.id)||[];
       const hasApprovedRevenue=candidateRevenue.some(row=>approvedRevenue(row.status));
-      const explicitAdminReferral=explicitAuditSource&&publicationRequested&&explicitAdminReferralReady(candidate,assignment,avail);
+      // The durable assignment itself is the authenticated administrator action.
+      // Do not require the candidate's discovery source_ref to belong to a legacy
+      // allow-list before honoring that explicit Front Match.
+      const explicitAdminReferral=publicationRequested&&explicitAdminReferralReady(candidate,assignment,avail);
       if(!hasApprovedRevenue&&!explicitAdminReferral) continue;
       let verifiedEvidence=(eBy.get(candidate.id)||[]).filter(verifiedEvidenceRow);
       if(!verifiedEvidence.length&&explicitAdminReferral&&publicationMarker) verifiedEvidence=syntheticEvidenceFromMarker(candidate,publicationMarker);
