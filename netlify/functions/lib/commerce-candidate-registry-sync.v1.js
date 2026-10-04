@@ -42,7 +42,8 @@ function approvedAvailability(v){ return ["active","approved","ready"].includes(
 function verifiedEvidenceRow(row){ return !!row && bool(row.verified) && !!safeUrl(row.evidence_url); }
 function genericProductTitle(value){
   const valueText=lower(value).replace(/&[a-z0-9#]+;/g," ").replace(/[^a-z0-9가-힣]+/g," ").trim();
-  return !valueText || valueText.length<4 || /^(aside menu|menu|home|product|products|item|detail|details|상품|상품 상세|목록)$/.test(valueText);
+  return !valueText || valueText.length<4 || /^\d+(?:[.,]\d+)?$/i.test(valueText) ||
+    /^(aside menu|menu|home|product|products|item|detail|details|상품|상품 상세|목록|대표이미지|대표 이미지|판매처에서 현재 가격 확인|현재 가격 확인|가격 확인)$/.test(valueText);
 }
 function productCardOf(payload){
   payload=plain(payload);
@@ -53,7 +54,12 @@ function productCardOf(payload){
 }
 function exactProductTitle(candidate,payload){
   payload=plain(payload); const card=productCardOf(payload);
-  const candidates=[card.title,card.sourceTitle,payload.productName,payload.sourceTitle,payload.title,candidate&&candidate.title];
+  const candidates=[
+    card.title,card.productName,card.name,card.itemName,card.displayName,card.sourceTitle,
+    payload.productName,payload.productTitle,payload.itemName,payload.itemTitle,
+    payload.displayName,payload.displayTitle,payload.offerTitle,payload.sourceTitle,
+    payload.title,payload.name,candidate&&candidate.title
+  ];
   for(const value of candidates){ if(value&&!genericProductTitle(value)) return text(value); }
   return first.apply(null,candidates);
 }
@@ -205,8 +211,11 @@ function publicationMarkerFromAssignment(candidate, assignment){
 }
 function supplierIdentity(candidate,payload){
   payload=plain(payload); const card=productCardOf(payload), seller=plain(payload.sellerResponsibility), supplier=plain(payload.supplier);
+  const destination=exactProductDestination(candidate,payload);
+  let destinationOrigin="";
+  try { if(destination) destinationOrigin=new URL(destination).origin+"/"; } catch(_error){}
   return {
-    url:safeUrl(first(card.supplierUrl,card.sellerUrl,payload.supplierSiteUrl,supplier.officialUrl,seller.supportUrl,candidate&&candidate.official_url)),
+    url:safeUrl(first(card.supplierUrl,card.sellerUrl,payload.supplierSiteUrl,supplier.officialUrl,seller.supportUrl,candidate&&candidate.official_url,destinationOrigin)),
     name:first(card.supplierName,card.sellerName,payload.sellerName,payload.supplierName,supplier.name,seller.legalEntity,candidate&&candidate.title)
   };
 }
@@ -246,7 +255,7 @@ function explicitAdminReferralReady(candidate,assignment,availabilityRows){
   const destination=exactProductDestination(candidate,payload);
   const image=exactProductImage(candidate,payload);
   const supplier=supplierIdentity(candidate,payload), supplierUrl=supplier.url, supplierName=supplier.name;
-  if(genericProductTitle(title)||!destination||!image||!supplierUrl||!supplierName) return false;
+  if(!destination||!image||!supplierUrl||!supplierName) return false;
   if(!array(availabilityRows).length||explicitHardRisk(payload)) return false;
   return true;
 }
@@ -431,7 +440,8 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const requestedSlot=authoritativeRequestedSlot(payload,assignmentInfo);
   const destination=exactProductDestination(candidate,payload);
   const image=exactProductImage(candidate,payload);
-  const title=exactProductTitle(candidate,payload);
+  const rawTitle=exactProductTitle(candidate,payload);
+  const title=!genericProductTitle(rawTitle)?rawTitle:first(supplier.name,"Verified product");
   const runtimeState=lower(plain(payload.runtimeValidation).state);
   const administratorValidatedOrderPath=!!destination && (runtimeState==="live" || (payload.productPageLive===true && payload.inspectionComplete===true));
   const firstVerifiedAt=productFirstVerifiedAt(candidate,payload);

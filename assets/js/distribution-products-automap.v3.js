@@ -624,15 +624,19 @@
       +'#igdcDistributionPendingEntry{position:fixed;inset:0;z-index:2147483550;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.48)}'
       +'#igdcDistributionPendingEntry.open{display:flex}'
       +'#igdcDistributionPendingEntry .igdc-pending-sheet{width:min(680px,96vw);max-height:min(76vh,720px);overflow:auto;background:#0b0c0f;color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:16px;box-shadow:0 18px 46px rgba(0,0,0,.55)}'
-      +'#igdcDistributionPendingEntry header{padding:15px 17px;border-bottom:1px solid rgba(255,255,255,.12)}'
-      +'#igdcDistributionPendingEntry h3{margin:0;font-size:18px;line-height:1.35}'
+      +'#igdcDistributionPendingEntry header{padding:15px 17px;border-bottom:1px solid rgba(255,255,255,.12);display:flex;align-items:center;gap:12px}'
+      +'#igdcDistributionPendingEntry h3{margin:0;font-size:18px;line-height:1.35;flex:1}'
+      +'#igdcDistributionPendingEntry .igdc-pending-close{border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:8px;min-width:38px;height:34px;font-size:22px;line-height:1;cursor:pointer}'
       +'#igdcDistributionPendingEntry .igdc-pending-body{padding:20px 17px;line-height:1.65}'
       +'#igdcDistributionPendingEntry .igdc-pending-state{font-weight:800;font-size:1.05rem;margin-bottom:8px}'
       +'@media(max-width:768px){#igdcDistributionPendingEntry{padding:10px}#igdcDistributionPendingEntry .igdc-pending-sheet{width:100%;max-height:82dvh}}';
     (document.head||document.documentElement).appendChild(st);
     root=document.createElement('div');root.id='igdcDistributionPendingEntry';root.setAttribute('aria-hidden','true');
-    root.innerHTML='<section class="igdc-pending-sheet" role="dialog" aria-modal="true" aria-labelledby="igdcDistributionPendingTitle"><header><h3 id="igdcDistributionPendingTitle"></h3></header><div class="igdc-pending-body"><div class="igdc-pending-state"></div><div class="igdc-pending-copy"></div></div></section>';
-    document.body.appendChild(root);return root;
+    root.innerHTML='<section class="igdc-pending-sheet" role="dialog" aria-modal="true" aria-labelledby="igdcDistributionPendingTitle"><header><h3 id="igdcDistributionPendingTitle"></h3><button type="button" class="igdc-pending-close" aria-label="Close">×</button></header><div class="igdc-pending-body"><div class="igdc-pending-state"></div><div class="igdc-pending-copy"></div></div></section>';
+    document.body.appendChild(root);
+    root.querySelector('.igdc-pending-close').addEventListener('click',function(){requestClose(true);});
+    root.addEventListener('click',function(e){if(e.target===root)requestClose(true);});
+    return root;
   }
   function open(card){
     var root=ensure(),copy=C[lang()]||C.en,title=t((card.querySelector('.thumb-title')||{}).textContent||card.getAttribute('aria-label')).trim()||copy[0];
@@ -641,7 +645,16 @@
     if(!state.open){state.open=true;try{history.pushState({igdcPendingDistribution:Date.now()},'',location.href);state.pushed=true;}catch(_){state.pushed=false;}}
   }
   function close(){var root=document.getElementById('igdcDistributionPendingEntry');if(root){root.classList.remove('open');root.setAttribute('aria-hidden','true');}var focus=state.last;state.open=false;state.pushed=false;if(focus&&focus.focus){try{focus.focus({preventScroll:true});}catch(_){}}}
+  function requestClose(unwindHistory){
+    if(!state.open)return;
+    if(unwindHistory&&state.pushed){try{history.back();return;}catch(_){}}
+    close();
+  }
   window.addEventListener('popstate',function(){if(state.open)close();});
+  document.addEventListener('keydown',function(e){
+    if(!state.open)return;
+    if(e.key==='Escape'||e.key==='Esc'){e.preventDefault();e.stopPropagation();requestClose(true);}
+  },true);
   document.addEventListener('click',function(e){
     if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
     var card=e.target&&e.target.closest&&e.target.closest('[data-psom-key^="distribution-"] .thumb-card');

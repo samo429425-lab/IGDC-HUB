@@ -387,7 +387,7 @@ function isGenericProductName(value) {
   if (!raw || raw.length < 2 || !normalized) return true;
   if (raw.length > 220) return true;
   if (/(?:\br\.push\s*\(|\b(?:item|product|goods)\.[a-z_$][\w$]*|document\.|window\.|function\s*\(|=>|<\/?script\b|getCurrency\s*\()/i.test(raw)) return true;
-  if (/^(?:상품명\s*확인\s*중|상품\s*확인\s*중|로고|검색|메뉴|홈|인스타그램|페이스북|유튜브|트위터|sns|instagram|facebook|youtube|twitter|logo|search|menu|home)$/i.test(raw.trim())) return true;
+  if (/^(?:상품명\s*확인\s*중|상품\s*확인\s*중|대표\s*이미지|판매처에서\s*현재\s*가격\s*확인|현재\s*가격\s*확인|aside\s*menu|로고|검색|메뉴|홈|인스타그램|페이스북|유튜브|트위터|sns|instagram|facebook|youtube|twitter|logo|search|menu|home|\d+(?:[.,]\d+)?)$/i.test(raw.trim())) return true;
   if (/^(?:상품명\s*확인\s*중|상품|제품|상품목록|제품목록|제품별|브랜드별|카테고리|전체상품|전체보기|보기|상세|더보기|구매|결과|검색|검색결과|로그인|로그아웃|회원가입|마이페이지|장바구니|주문조회|상품\s*삭제|최근\s*검색어\s*전체삭제|전체삭제|품절|다른\s*기획전\s*보기|브랜드\s*사이트\s*목록\s*열기|사이트\s*목록\s*열기|업체\s*사이트\s*열기|공식\s*사이트\s*열기|원본\s*링크|shop|store|view|detail|list|result|results|login|logout|cart|search)$/i.test(raw)) return true;
   if (/^(?:new|best|sale|event|lucky\s*\d+|기획전|이벤트|추천상품|오늘의\s*딜|오늘만\s*특가|타임\s*딜|핫\s*딜)$/i.test(raw)) return true;
   if (/(?:사이트|브랜드|업체|공식몰).*(?:목록|열기|바로가기)$/i.test(raw)) return true;
