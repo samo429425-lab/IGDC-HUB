@@ -21,7 +21,7 @@ const AffiliateRegistry = require("./affiliate-program-registry.v1");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-intake-v1.7.2-authoritative-admin-product-identity";
+const VERSION = "commerce-candidate-intake-v1.7.3-market-scope-materialized-admin-release";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -528,6 +528,49 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   result.digest=sha256({candidateId:id,sourceTier:result.sourceTier,origin:result.origin,releaseEligible,reasons:effectiveReasons,administratorFrontMatch:result.administratorFrontMatch,essentialClass:result.essentialClass,placement:pos,marketKeys:result.marketKeys,heldMarketReasons:result.heldMarketReasons,revenue:result.revenue,profitability:result.profitabilityAssessment,review:result.review,ranking:rank,destination});
   return result;
 }
+function releaseScopeItems(candidate, decision){
+  const publish=plain(decision&&decision.publishMarkets), records=array(publish.validRecords);
+  if(!records.length) return [];
+  const admin=plain(decision&&decision.administratorFrontMatch), explicit=admin.explicit===true;
+  const commerceCandidate=plain(candidate&&candidate.commerceCandidate), scope=plain(commerceCandidate.publicationScope);
+  const review=plain(candidate&&candidate.commerceReview), request=plain(review.publicationRequest);
+  const requestedCountry=normalizeCountry(first(request.country,scope.country,admin.authority&&admin.authority.country));
+  const requestedRegion=normalizeRegion(first(request.region,scope.region,admin.authority&&admin.authority.region,"NATIONWIDE"),requestedCountry)||"NATIONWIDE";
+  const out=[];
+  const seen=new Set();
+  for(const rawRecord of records){
+    const record=clone(rawRecord);
+    const country=normalizeCountry(record&&record.country);
+    if(!country) continue;
+    if(explicit&&requestedCountry&&country!==requestedCountry) continue;
+    let regions=[];
+    if(explicit){
+      regions=[requestedRegion];
+    }else{
+      regions=array(record&&record.regions).map(value=>normalizeRegion(value,country)).filter(Boolean);
+      if(record&&record.nationwide===true) regions.push("NATIONWIDE");
+    }
+    for(const regionRaw of unique(regions)){
+      const region=normalizeRegion(regionRaw,country)||"NATIONWIDE";
+      // Never invent a market outside the independently verified record.
+      if(region==="NATIONWIDE" && record.nationwide!==true) continue;
+      if(region!=="NATIONWIDE"){
+        const verifiedRegions=array(record.regions).map(value=>normalizeRegion(value,country)).filter(Boolean);
+        if(!verifiedRegions.includes(region)) continue;
+      }
+      const key=country+"|"+region;
+      if(seen.has(key)) continue;
+      seen.add(key);
+      // Canonical/IP-slot validation requires a materialized marketScope envelope
+      // containing the exact country/region and evidence digest. Previously the
+      // intake forwarded only marketAvailability, so a valid Admin Front Match
+      // could pass intake and then be rejected downstream as MARKET_SCOPE_ENVELOPE_MISSING.
+      out.push(MarketSaleScope.materialize(candidate,record,region));
+    }
+  }
+  return out;
+}
+
 function build(input){
   const root=rootOf(input); const policyPack=loadPolicy(root); const policy=policyPack.policy; const affiliateRegistry=AffiliateRegistry.load(root); const environmentGate=releaseGate(policy,input); const queue=loadReviewQueue(root,policy,input&&input.reviewQueueDoc);
   const queueAuthorization=plain(queue.releaseAuthorization), authorizationMode=lower(queueAuthorization.mode);
@@ -567,7 +610,7 @@ function build(input){
     if(environmentGate.enabled===true) return true;
     return authoritativeAdminQueue && decision.origin==="admin_review_queue" && decision.review && decision.review.explicitPublicationRequested===true;
   });
-  const outputItems=releaseDecisions.map(decision=>{
+  const outputItems=releaseDecisions.flatMap(decision=>{
     const candidate=clone(decision.item);
     // Canonical expands only the independently verified sales markets. Invalid
     // market records remain visible in the private audit, never in public input.
@@ -592,7 +635,7 @@ function build(input){
     candidate.candidateSelection={version:VERSION,releaseEligible:true,sourceTier:decision.sourceTier,selectionDigest:decision.digest,rankingScore:decision.ranking.finalScore,ranking:decision.ranking,revenue:decision.revenue,profitabilityAssessment:decision.profitabilityAssessment,commercialPriorityClass:decision.commercialPriorityClass,commercialPriority:decision.commercialPriority,review:decision.review,stagedAt:now()};
     candidate.priority=Math.max(number(candidate.priority,0),Number(decision.commercialPriority||0)*100000+Math.round(decision.ranking.finalScore*100));
     if(decision.sourceTier==="approved_commerce_member") candidate.managedPriority=true;
-    return candidate;
+    return releaseScopeItems(candidate,decision);
   });
   const summary={receivedSearchBank:raw.length,skippedNonCommerce,receivedReviewQueue:queue.stale?0:queue.items.length,queueStale:queue.stale,queueAuthoritative:authoritativeAdminQueue,explicitAdminRequested:Number(queueAuthorization.requestedCount||0),explicitAdminWithdrawn:Number(queueAuthorization.withdrawnCount||0),considered:decisions.length,eligibleForRelease:decisions.filter(x=>x.releaseEligible).length,administratorFrontMatchEligible:decisions.filter(x=>x.administratorFrontMatch&&x.administratorFrontMatch.explicit&&x.releaseEligible).length,releasedToCanonical:outputItems.length,held:decisions.filter(x=>!x.releaseEligible).length,profitabilityGatePassed:decisions.filter(x=>x.profitabilityAssessment&&x.profitabilityAssessment.gatePassed===true).length,profitabilityHeld:decisions.filter(x=>x.profitabilityAssessment&&x.profitabilityAssessment.applicable===true&&x.profitabilityAssessment.gatePassed!==true).length,directCommerceVerified:decisions.filter(x=>x.commercialPriorityClass==="DIRECT_COMMERCE_VERIFIED").length,formalPartnerPriority:decisions.filter(x=>x.commercialPriorityClass==="FORMAL_PARTNER").length,activeAffiliatePriority:decisions.filter(x=>x.commercialPriorityClass==="AFFILIATE_ACTIVE").length,bySource:{},byReason:{}};
   decisions.forEach(x=>{ summary.bySource[x.sourceTier||"unknown"]=(summary.bySource[x.sourceTier||"unknown"]||0)+1; x.reasons.forEach(r=>summary.byReason[r]=(summary.byReason[r]||0)+1); });
