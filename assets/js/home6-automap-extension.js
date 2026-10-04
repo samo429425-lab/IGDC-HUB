@@ -148,6 +148,7 @@
       img.loading=idx<5?'eager':'lazy';
       img.decoding='async';
       if(idx<5){ try{img.fetchPriority='high';}catch(_e){} }
+      if(/^https?:\/\//i.test(image)){ try{img.referrerPolicy='no-referrer';}catch(_e){} img.setAttribute('referrerpolicy','no-referrer'); }
       img.src=image;
       img.alt='';
       img.style.width='100%';
@@ -240,13 +241,14 @@
     var livingBooks=/(리빙|가구|책장|선반|수납장|수납|침구|인테리어|홈데코|조명|서적|도서|책방|서점|전자책|웹툰|만화|출판|living|furniture|shelf|cabinet|storage|bedding|interior|home decor|book\b|books|bookstore|ebook|webtoon|comic|publishing)/i;
     var healthLife=/(지식|교육|학습|건강|헬스|웰니스|영양제|비타민|건강식품|생필품|생활필수|위생|세제|세정제|청소|화장지|티슈|물티슈|주방소모품|욕실용품|식재료|식료품|조미료|간편식|음료|knowledge|education|learning|health|wellness|supplement|vitamin|essential|hygiene|detergent|cleaning|tissue|grocery|ingredient|seasoning|beverage)/i;
 
+    // Administrator/Snapshot section assignment is authoritative.
+    // Never rotate right-panel data between top/middle/bottom at render time.
+    // Semantic tests remain above only as diagnostics for old data, but a card
+    // that already belongs to a valid Home right section stays in that section.
+    if(RIGHT_KEYS.indexOf(sourceKey)>=0) return sourceKey;
     if(autoOutdoor.test(hay)) return 'home_right_middle';
     if(livingBooks.test(hay)) return 'home_right_bottom';
     if(healthLife.test(hay)) return 'home_right_top';
-
-    // Compatibility with the currently published legacy right-panel order.
-    if(sourceKey==='home_right_top') return 'home_right_middle';
-    if(sourceKey==='home_right_middle') return 'home_right_bottom';
     return 'home_right_top';
   }
 
@@ -283,7 +285,9 @@
     img.loading=idx<3?'eager':'lazy';
     img.decoding='async';
     if(idx<3){ try{img.fetchPriority='high';}catch(_e){} }
-    img.src=imageOf(item)||'';
+    var rightImage=imageOf(item)||'';
+    if(/^https?:\/\//i.test(rightImage)){ try{img.referrerPolicy='no-referrer';}catch(_e){} img.setAttribute('referrerpolicy','no-referrer'); }
+    img.src=rightImage;
     img.alt='';
     img.style.width='100%';
     img.style.height='100%';

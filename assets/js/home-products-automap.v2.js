@@ -383,6 +383,18 @@
     deferredBackgroundObserver.observe(el);
   }
 
+  function prepareRemoteImage(img, url) {
+    if (!img || !url) return;
+    // Some supplier/CDN hosts reject hotlinked images when the IGDC page URL is
+    // sent as Referer. Suppress cross-site Referer without rewriting the source
+    // URL so the exact administrator-approved thumbnail remains authoritative.
+    if (/^https?:\/\//i.test(String(url))) {
+      try { img.referrerPolicy = 'no-referrer'; } catch (_e) {}
+      img.setAttribute('referrerpolicy', 'no-referrer');
+    }
+    img.src = url;
+  }
+
   function buildMainCard(item, eager) {
     const a = document.createElement('a');
     a.className = 'shop-card';
@@ -410,7 +422,7 @@
       img.loading = eager ? 'eager' : 'lazy';
       img.decoding = 'async';
       if (eager) { try { img.fetchPriority = 'high'; } catch (_e) {} }
-      img.src = item.thumb;
+      prepareRemoteImage(img, item.thumb);
       img.alt = '';
       img.style.width = '100%';
       img.style.height = '100%';
