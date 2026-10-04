@@ -19,6 +19,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
+const ProductRanking = require("./commerce-product-ranking.v1");
 
 const VERSION = "commerce-candidate-intake-v1.7.1-authoritative-admin-front-match";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
@@ -122,8 +123,8 @@ function isCommerceSurface(item, tier){
 }
 function sourceName(item){ const src=plain(item&&item.source); return first(src.name,src.provider,src.engine,item&&item.sourceName,item&&item.provider,item&&item.seller,item&&plain(item&&item.producer).name,item&&item.engine); }
 function sourceUrl(item){ const src=plain(item&&item.source); return safeHttpsUrl(first(src.url,src.href,src.homepage,item&&item.sourceUrl,item&&item.source_url,item&&plain(item&&item.provenance).sourceUrl,item&&item.url)); }
-function productDestination(item){ return safeHttpsUrl(first(item&&item.url,item&&item.externalProductUrl,item&&item.link,item&&item.href)); }
-function productImage(item){ return safeHttpsUrl(first(item&&item.image,item&&item.thumbnail,item&&item.thumb,item&&item.imageUrl,plain(item&&item.media).image,plain(item&&item.media).thumb)); }
+function productDestination(item){ return safeHttpsUrl(first(item&&item.externalProductUrl,item&&item.officialProductUrl,item&&item.productUrl,item&&item.productPageUrl,item&&item.detailUrl,item&&item.checkoutUrl,item&&item.purchaseUrl,item&&item.orderUrl,item&&item.url,item&&item.link,item&&item.href)); }
+function productImage(item){ return ProductRanking.safeProductImageUrl(first(item&&item.imageUrl,item&&item.imageOriginalUrl,item&&item.image,item&&item.thumbnailUrl,item&&item.thumbnail,item&&item.thumb,plain(item&&item.media).imageUrl,plain(item&&item.media).image,plain(item&&item.media).thumb)); }
 function placement(item){ const p=plain(item&&item.placement), b=plain(item&&item.bind); return {page:first(p.page,b.page,item&&item.page,item&&item.channel),section:first(p.section,b.section,item&&item.section,item&&item.psom_key),slot:first(p.slot,p.slotId,b.slot,b.slotId,item&&item.slot,item&&item.slotId)}; }
 function contracts(item){ return plain(item&&item.searchBankContract) || {}; }
 function eligibilityFlags(item){ const c=plain(item&&item.searchBankContract); return ["frontSupplyAllowed","searchBankEligible","snapshotEligible","indexEligible"].map(k=>({k,v:first(c[k],item&&item[k])})); }
@@ -455,9 +456,14 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   const id=candidateId(item,index,tier);
   if(!tier) reasons.push("SOURCE_TIER_MISSING_OR_UNRECOGNIZED");
   const destination=productDestination(item), image=productImage(item), pos=placement(item);
-  const titlePresent=!!text(item&&item.title||item&&item.name);
+  const titleValue=text(item&&item.title||item&&item.name);
+  const titlePresent=!!titleValue;
+  const titleVerified=titlePresent && !ProductRanking.isGenericProductName(titleValue);
+  const specificDestination=!!destination && ProductRanking.isSpecificProductUrl(destination);
   if(!titlePresent) reasons.push("TITLE_MISSING");
+  else if(!titleVerified) reasons.push("PRODUCT_TITLE_NOT_VERIFIED");
   if(!destination) reasons.push("DESTINATION_NOT_HTTPS");
+  else if(!specificDestination) reasons.push("SPECIFIC_PRODUCT_PAGE_NOT_VERIFIED");
   if(!image) reasons.push("IMAGE_NOT_HTTPS");
   if(!pos.page || !pos.section) reasons.push("PSOM_PLACEMENT_MISSING");
   const eligibilityFlagsOk=plain(policy.eligibility).requireSearchBankEligibilityFlags===false || hasExplicitFlags(item);
@@ -478,7 +484,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   if(!trustedForExplicitFront) reasons.push("TRUSTED_SELLER_OR_PRODUCER_EVIDENCE_MISSING");
 
   const explicitAdministratorFrontMatch=(origin||"searchbank")==="admin_review_queue" && tier==="approved_commerce_member" &&
-    approval.ok===true && approval.explicitPublicationRequested===true && titlePresent && !!destination && !!image &&
+    approval.ok===true && approval.explicitPublicationRequested===true && titleVerified && specificDestination && !!image &&
     !!pos.page && !!pos.section && adminAuthority.ok===true && adminSafety.ok===true;
 
   // Revenue/affiliate readiness is a monetization concern, not a reason to

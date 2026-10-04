@@ -62,7 +62,7 @@
   }
 
   function imageOf(it){
-    return pick(it,['thumb','image','image_url','img','photo','thumbnail','thumbnailUrl','cover','coverUrl']);
+    return pick(it,['thumb','image','image_url','imageUrl','imageOriginalUrl','img','photo','thumbnail','thumbnail_url','thumbnailUrl','cover','coverUrl']);
   }
 
   function stableId(it,key,idx){
