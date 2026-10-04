@@ -116,7 +116,7 @@
     return "";
   }
 
-  function pickId(it){ return pick(it, ["id", "contentId", "productId", "itemId", "sku", "code", "pid"]); }
+  function pickId(it){ return pick(it, ["id", "contentId", "productId", "itemId", "sku", "code", "pid", "candidateId", "candidate_id"]); }
 
   const PRODUCT_ID_QUERY_KEYS = new Set([
     "goodsno","goods_no","goodsid","goods_id","productno","product_no","productid","product_id",
@@ -227,9 +227,9 @@
   }
   function contentHref(id){ return id ? ("/content.html?id=" + encodeURIComponent(id)) : ""; }
   function resolveItemHref(item){
-    // Match Home exactly: the visible card always enters the IGDC content route
-    // first.  content-engine.js then replaces that frame with the verified Tour
-    // product destination, preserving one-step browser Back.
+    // Use the exact booking/product detail URL approved in Admin.  A generated
+    // content id can point at a stale or missing snapshot row and must not win.
+    if (item && isSpecificTourDestination(item.sourceUrl)) return item.sourceUrl;
     return item && item.id ? contentHref(item.id) : "";
   }
 
@@ -239,7 +239,7 @@
     for (let index = 0; index < arr.length; index++) {
       const it = arr[index];
       const title = pick(it, ["title", "name", "label", "caption"]);
-      const thumb = pick(it, ["thumb", "image", "thumbnail", "img", "photo", "cover", "coverUrl", "thumbnailUrl"]);
+      const thumb = pick(it, ["thumb", "image", "imageUrl", "imageOriginalUrl", "thumbnail", "thumbnail_url", "img", "photo", "cover", "coverUrl", "thumbnailUrl"]);
       const sourceUrl = pickProductDestination(it);
       const id = stableTourContentId(it, collection, index);
       // The Tour rail is a transaction/detail surface.  Do not publish a card
@@ -357,10 +357,10 @@
   }
 
   function filteredRenderableItems(items){
-    return (items || []).filter(function(item){
-      const host = destinationHost(item && item.sourceUrl);
-      return !host || !blockedFrameHosts.has(host);
-    }).slice(0, RIGHT_SLOT_COUNT);
+    // A legitimate seller/booking page must not disappear merely because the
+    // remote host blocks iframe embedding.  Navigation can safely fall back to
+    // the exact product page at top level.
+    return (items || []).slice(0, RIGHT_SLOT_COUNT);
   }
 
   function rerenderAfterFrameGate(){
@@ -402,14 +402,15 @@
     if (!sourceUrl || !isExternal(sourceUrl)) return;
     ev.preventDefault();
     frameAllowedInsideIgdc(sourceUrl).then(function(allowed){
-      if (!allowed) {
-        const host = destinationHost(sourceUrl);
-        if (host) blockedFrameHosts.add(host);
-        rerenderAfterFrameGate();
-        return;
+      if (allowed) {
+        return ensureContainedViewer().then(function(viewer){
+          return viewer.open(sourceUrl, { label:item.title || '', kind:'tour-product' });
+        }).catch(function(){ (window.top || window).location.assign(sourceUrl); });
       }
-      window.location.assign(href);
-    });
+      // X-Frame/CSP is a remote-site policy, not a broken product. Open the same
+      // exact detail page normally rather than deleting the card or showing a blank frame.
+      (window.top || window).location.assign(sourceUrl);
+    }).catch(function(){ (window.top || window).location.assign(sourceUrl); });
   }
 
   function ensureMobileCss() {
@@ -479,6 +480,8 @@
     img.alt = item.title || "";
     img.loading = "lazy";
     img.decoding = "async";
+    try { img.referrerPolicy = "no-referrer"; } catch (_e) {}
+    img.setAttribute("referrerpolicy","no-referrer");
 
     const cap = document.createElement("div");
     cap.className = "tour-card-title";

@@ -118,8 +118,8 @@
       meta:pick(item,['meta','subtitle','summary','description']),
       summary:pick(item,['summary','description']),
       description:pick(item,['description','summary']),
-      thumb:pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']),
-      image:pick(item,['image','thumbnail','thumb','imageUrl']),
+      thumb:pick(item,['thumb','thumbnail','thumbnail_url','image','imageUrl','imageOriginalUrl','thumbnailUrl']),
+      image:pick(item,['image','imageUrl','imageOriginalUrl','thumbnail','thumbnail_url','thumbnailUrl','thumb']),
       // Canonical publication keeps the verified seller detail route under
       // product/display/detail/checkout fields. Preserve those fields here
       // instead of dropping them during the compact snapshot pass.
@@ -207,7 +207,7 @@
     // Distribution reverses the Home sample-card contrast: keep the thumbnail
     // canvas white and use a light-gray product-name band below it.
     img.style.setProperty('background-color','#fff','important');
-    const image=pick(item,['thumb','thumbnail','image','imageUrl','thumbnailUrl']);
+    const image=pick(item,['thumb','thumbnail','thumbnail_url','image','imageUrl','imageOriginalUrl','thumbnailUrl']);
     if(image){if(eager)applyDeferredBackground(img,image);else deferBackground(img,image);}
     const title=document.createElement('div'); title.className='thumb-title'; title.textContent=text(pick(item,['title','name','text'])||'Product');
     // Keep the product-name band visually distinct from the product image on every

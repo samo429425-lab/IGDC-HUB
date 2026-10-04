@@ -151,6 +151,18 @@ function cloneCard(item) {
         productCard.image_url ||
         productCard.thumbnail_url),
   );
+  const productUrl = text(
+    item && (
+      item.affiliateOutboundUrl || item.externalOutboundUrl ||
+      item.externalProductUrl || item.officialProductUrl || item.productUrl || item.product_url ||
+      item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl ||
+      item.orderUrl || item.productLink || item.displayUrl || item.url || item.link ||
+      productCard.checkoutUrl || productCard.purchaseUrl || productCard.orderUrl ||
+      productCard.externalProductUrl || productCard.officialProductUrl ||
+      productCard.productUrl || productCard.productPageUrl || productCard.detailUrl ||
+      productCard.url || productCard.link
+    )
+  );
   const card = {
     id: item.id || publication.candidateId,
     contentId: item.contentId || item.id || publication.candidateId,
@@ -158,8 +170,12 @@ function cloneCard(item) {
     name: text(item.name || item.title),
     summary: text(item.summary || item.description),
     description: text(item.description || item.summary),
-    url: text(item.url),
-    link: text(item.link || item.url),
+    url: productUrl,
+    link: productUrl,
+    sourceUrl: productUrl,
+    productUrl: productUrl,
+    productPageUrl: productUrl,
+    detailUrl: productUrl,
     // Keep all common image aliases in the scoped snapshot. Social's right
     // panel is a thumbnail surface, and older/newer SearchBank cards may expose
     // the same verified image under different aliases. Dropping those aliases
@@ -195,7 +211,11 @@ function cloneCard(item) {
     commerceCandidatePublication: clone(item.commerceCandidatePublication || null),
     outboundRoute: clone(item.outboundRoute || null),
     affiliateOutboundUrl: text(item.affiliateOutboundUrl || "") || undefined,
-    externalOutboundUrl: text(item.externalOutboundUrl || "") || undefined
+    externalOutboundUrl: text(item.externalOutboundUrl || "") || undefined,
+    externalProductUrl: text(item.externalProductUrl || productUrl || "") || undefined,
+    officialProductUrl: text(item.officialProductUrl || productUrl || "") || undefined,
+    imageOriginalUrl: image || undefined,
+    thumbnail_url: image || undefined
   };
   for (const key of Object.keys(card)) if (card[key] === undefined) delete card[key];
   return card;

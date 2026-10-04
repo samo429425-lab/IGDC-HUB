@@ -177,18 +177,14 @@
 
   function resolveSlotHref(item) {
     if (!item) return '';
-    // Keep product-card navigation inside IGDC first.  The internal content page
-    // owns the external seller hand-off; outbound URLs are fallback only when a
-    // legacy card has no stable IGDC product id.
-    // Use the internal one-page only when the ID actually came from the published
-    // snapshot/ledger.  A client-generated fallback ID does not exist in the raw
-    // snapshots and caused the old "content not found / wrong connection" path.
-    if (item.id && item.__igdcExplicitId !== false) return contentHref(item.id);
+    // Administrator-approved exact seller/product detail route is authoritative.
+    // Do not detour a valid front card through /content.html when the published
+    // snapshot already carries the same product URL that works in Admin.
     const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.outboundUrl || item.sourceUrl || item.productUrl || item.url || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
-    const url = item.url || '';
-    if (isBadUrl(url) || isExampleUrl(url)) return '';
-    return url;
+    // Internal IGDC detail remains a fallback only when a real published id exists.
+    if (item.id && item.__igdcExplicitId !== false) return contentHref(item.id);
+    return '';
   }
 
   function applyAnchorDestination(a, item) {

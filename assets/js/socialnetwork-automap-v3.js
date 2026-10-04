@@ -89,7 +89,9 @@
           it.image ||
           it.thumbnail ||
           it.imageUrl ||
-          it.thumbnailUrl),
+          it.thumbnailUrl ||
+          it.imageOriginalUrl ||
+          it.thumbnail_url),
     );
   }
 
@@ -254,6 +256,23 @@
     if (isValidSecondUrl(raw)) return raw;
 
     return "";
+  }
+
+  function resolveRightItemUrl(it) {
+    if (!it || isPlaceholderItem(it)) return "";
+    // Commercial right rail follows the administrator-verified product URL,
+    // not a synthetic /content.html id that may not exist in the public snapshot.
+    const direct = safeText(it && (
+      it.affiliateOutboundUrl || it.affiliate_outbound_url ||
+      it.externalOutboundUrl || it.external_outbound_url ||
+      it.externalProductUrl || it.officialProductUrl || it.productUrl ||
+      it.productPageUrl || it.detailUrl || it.checkoutUrl ||
+      it.purchaseUrl || it.orderUrl || it.productLink || it.displayUrl ||
+      it.sourceUrl || it.url || it.href || it.link || ""
+    )).trim();
+    if (isValidSecondUrl(direct)) return direct;
+    const id = pickProductId(it);
+    return id && !/^ph_/i.test(id) ? "/content.html?id=" + encodeURIComponent(id) : "";
   }
 
   function isRealItem(it) {
@@ -719,7 +738,7 @@
   function rightUsableItems(items) {
     return (Array.isArray(items) ? items : []).filter(function (it) {
       if (!it || isPlaceholderItem(it)) return false;
-      return !!(pickTitle(it).trim() && pickThumb(it).trim() && resolveItemUrl(it));
+      return !!(pickTitle(it).trim() && pickThumb(it).trim() && resolveRightItemUrl(it));
     }).slice(0, RIGHT_LIMIT);
   }
 
@@ -734,7 +753,7 @@
   function paintRightCard(box, it, index) {
     if (!box || !it) return;
     const title = pickTitle(it) || "Item";
-    const url = resolveItemUrl(it);
+    const url = resolveRightItemUrl(it);
     const productId = pickProductId(it);
     const thumb = pickThumb(it).trim();
     if (!url || !thumb) return;

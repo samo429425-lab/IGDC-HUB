@@ -107,7 +107,7 @@
 
   function pickId(it){ return pick(it, ['id','contentId','productId','itemId','sku','code','pid']); }
   function pickLink(it){ return pick(it, ['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','contentUrl','pageUrl','detailUrl','checkoutUrl','paymentUrl','productUrl','purchaseUrl','orderUrl','link','url','href']) || '#'; }
-  function pickThumb(it){ return pick(it, ['thumb','image','thumbnail','img','photo','cover','coverUrl','thumbnailUrl']); }
+  function pickThumb(it){ return pick(it, ['thumb','image','imageUrl','imageOriginalUrl','thumbnail','thumbnail_url','img','photo','cover','coverUrl','thumbnailUrl']); }
   function pickTitle(it){ return pick(it, ['title','name','label','caption']); }
 
   function isExternal(url){ return /^https?:\/\//i.test(String(url || '')); }
@@ -123,14 +123,13 @@
   }
   function contentHref(id){ return id ? ('/content.html?id=' + encodeURIComponent(id)) : ''; }
   function resolveItemHref(item){
-    // Prefer the IGDC content detail whenever this is an indexed product.  The
-    // seller URL is exposed from that page, not as the card's first navigation.
-    if (item && item.id) return contentHref(item.id);
-    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || '');
+    // Front must use the same exact product/detail route that Admin verified.
+    // An IGDC content id may be stale/missing from a public snapshot, so it is
+    // only a fallback when no usable seller/detail route survived publication.
+    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.sourceUrl || item.link || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
-    const link = item && item.link;
-    if (isBadUrl(link) || isExampleUrl(link)) return '';
-    return link || '';
+    if (item && item.id) return contentHref(item.id);
+    return '';
   }
 
   function applyAnchor(a, item){
@@ -256,6 +255,8 @@
     img.alt = item.title || '';
     img.loading = 'lazy';
     img.decoding = 'async';
+    try { img.referrerPolicy = 'no-referrer'; } catch (_e) {}
+    img.setAttribute('referrerpolicy','no-referrer');
 
     a.appendChild(img);
     card.appendChild(a);
