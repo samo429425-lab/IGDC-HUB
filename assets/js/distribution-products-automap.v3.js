@@ -226,7 +226,12 @@
       root.style.cursor='pointer'; root.setAttribute('role','link'); root.tabIndex=0;
       const open=function(){
         revenue(item,'trackClick');
-        window.location.assign(href);
+        try {
+          if(/^https?:\/\//i.test(href)) (window.top||window).location.assign(href);
+          else window.location.assign(href);
+        } catch(_e) {
+          window.location.assign(href);
+        }
       };
       root.addEventListener('click',open);
       root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});

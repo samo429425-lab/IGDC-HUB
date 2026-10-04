@@ -65,20 +65,29 @@
     return pick(it,['thumb','image','image_url','imageUrl','imageOriginalUrl','img','photo','thumbnail','thumbnail_url','thumbnailUrl','cover','coverUrl']);
   }
 
+  function explicitId(it){
+    return pick(it,['id','contentId','productId','itemId','sku','code','pid','candidateId','candidate_id']);
+  }
+
   function stableId(it,key,idx){
-    return pick(it,['id','contentId','productId','itemId','sku','code','pid']) ||
-      (key+'-'+String(idx+1).padStart(3,'0'));
+    return explicitId(it) || (key+'-'+String(idx+1).padStart(3,'0'));
   }
 
   function hrefOf(it,key,idx){
-    var id=stableId(it,key,idx);
-    if(id) return '/content.html?id='+encodeURIComponent(id);
+    // The administrator-verified seller/product detail URL is authoritative.
+    // Never let a client-generated fallback id hijack a valid external product
+    // into /content.html where that synthetic id does not exist.
     var u=pick(it,[
       'affiliateOutboundUrl','affiliate_outbound_url',
       'externalOutboundUrl','external_outbound_url',
-      'productUrl','purchaseUrl','orderUrl','url','href','link'
+      'externalProductUrl','officialProductUrl',
+      'productUrl','product_url','productPageUrl','detailUrl','checkoutUrl',
+      'purchaseUrl','orderUrl','productLink','displayUrl','sourceUrl',
+      'url','href','link'
     ]);
-    return /^https?:\/\//i.test(u) ? u : '#';
+    if(/^https?:\/\//i.test(u)) return u;
+    var id=explicitId(it);
+    return id ? '/content.html?id='+encodeURIComponent(id) : '#';
   }
 
   function getSnapshot(){

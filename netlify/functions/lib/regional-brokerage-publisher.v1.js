@@ -253,7 +253,18 @@ function sellerLabel(item) {
   return first(item && item.seller && item.seller.name, item && item.distributor && item.distributor.name, item && item.merchant && item.merchant.name, item && item.provider, item && item.source, item && item.org && item.org.name, "Verified external seller");
 }
 function imageOf(item) {
-  return first(item && item.thumbnail, item && item.thumb, item && item.image, item && item.imageUrl, item && item.media && item.media.thumb, "/assets/img/placeholder.png");
+  return first(
+    item && item.thumbnail,
+    item && item.thumbnailUrl,
+    item && item.thumbnail_url,
+    item && item.thumb,
+    item && item.image,
+    item && item.imageUrl,
+    item && item.imageOriginalUrl,
+    item && item.image_original_url,
+    item && item.media && (item.media.thumb || item.media.image || item.media.imageUrl),
+    "/assets/img/placeholder.png"
+  );
 }
 function managerListings(root) {
   const file = firstExisting([
@@ -360,7 +371,13 @@ function makeCard(item, decision, market, region, registry) {
   const affiliate = NonPgRevenue.publicAffiliate(item);
   const outboundRoute = item && item.outboundRoute && typeof item.outboundRoute === "object" ? clone(item.outboundRoute) : null;
   const providerOutbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl) || "";
-  const outboundUrl = providerOutbound || ("/.netlify/functions/regional-brokerage-outbound?id=" + encodeURIComponent(id));
+  const outboundTrackingUrl = "/.netlify/functions/regional-brokerage-outbound?id=" + encodeURIComponent(id);
+  // The primary navigation URL must remain the exact product/detail URL that
+  // passed administrator and canonical validation.  A generated redirect id is
+  // retained only as an optional tracking route; it must never be the only way
+  // to reach the seller page because a carried snapshot can outlive its old
+  // redirect registry entry.
+  const navigationUrl = providerOutbound || destination;
   registry[id] = {
     id,
     targetUrl: destination,
@@ -381,10 +398,17 @@ function makeCard(item, decision, market, region, registry) {
     price: item.price == null ? undefined : item.price,
     currency: item.currency || undefined,
     cta: first(item.cta, "View seller offer"),
-    url: outboundUrl,
+    url: navigationUrl,
+    href: navigationUrl,
+    link: navigationUrl,
+    sourceUrl: destination,
+    productUrl: destination,
+    productPageUrl: destination,
+    detailUrl: destination,
     externalProductUrl: destination,
     affiliateOutboundUrl: item && item.affiliateOutboundUrl || undefined,
     externalOutboundUrl: item && item.externalOutboundUrl || undefined,
+    outboundTrackingUrl,
     outboundRoute,
     thumb: imageOf(item),
     image: imageOf(item),

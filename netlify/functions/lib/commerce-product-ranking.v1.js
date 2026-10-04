@@ -172,6 +172,22 @@ const PRODUCT_ID_QUERY_KEYS = new Set([
   "packageid", "package_id", "bookingid", "booking_id"
 ]);
 
+// Some legitimate commerce platforms use deliberately generic query keys such
+// as ?no=43630 or ?idx=123 on a product-detail route.  Those keys are accepted
+// only when the URL path itself is clearly a product-detail path, so category,
+// search and article pages cannot become products merely because they carry
+// a generic numeric query parameter.
+const CONTEXTUAL_PRODUCT_ID_QUERY_KEYS = new Set(["no", "idx", "id"]);
+
+function productDetailPathHint(value) {
+  let path = "";
+  try { path = decodeURIComponent(String(value || "")); } catch (_error) { path = String(value || ""); }
+  path = lower(path);
+  return /(?:^|\/)(?:goods|product|item|prd)(?:\/|[_-])(?:view|detail)(?:[._\/-]|$)/i.test(path) ||
+    /(?:^|\/)(?:goods_view|product_view|item_view|prd_view|goods_detail|product_detail|item_detail|shopdetail)\.(?:php|html?|aspx?|jsp)$/i.test(path) ||
+    /\/(?:dp\/prod|i\/item)(?:\/|$)/i.test(path);
+}
+
 function text(value) { return value == null ? "" : String(value).trim(); }
 function lower(value) { return text(value).toLowerCase(); }
 function plain(value) { return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
@@ -276,6 +292,12 @@ function productIdFromUrl(value) {
       if (PRODUCT_ID_QUERY_KEYS.has(key) && text(rawValue)) return key + ":" + lower(rawValue);
     }
     const path = decodeURIComponent(parsed.pathname || "");
+    if (productDetailPathHint(path)) {
+      for (const [rawKey, rawValue] of parsed.searchParams.entries()) {
+        const key = lower(rawKey);
+        if (CONTEXTUAL_PRODUCT_ID_QUERY_KEYS.has(key) && text(rawValue)) return key + ":" + lower(rawValue);
+      }
+    }
     const patterns = [
       /\/(?:dp\/prod|i\/item|product\/detail|products?|items?|detail|prd)\/([^/?#]{1,})/i,
       /\/(?:product|item|goods|prd)[_-](?:view|detail)[._/-]?([^/?#]{1,})/i,
@@ -318,7 +340,11 @@ function isListOrCampaignUrl(value) {
   if (!url) return true;
   try {
     const parsed = new URL(url), path = lower(parsed.pathname), query = lower(parsed.search);
-    const queryProductId = Array.from(parsed.searchParams.entries()).some(([rawKey, rawValue]) => PRODUCT_ID_QUERY_KEYS.has(lower(rawKey)) && !!text(rawValue));
+    const detailContext = productDetailPathHint(parsed.pathname);
+    const queryProductId = Array.from(parsed.searchParams.entries()).some(([rawKey, rawValue]) => {
+      const key = lower(rawKey);
+      return !!text(rawValue) && (PRODUCT_ID_QUERY_KEYS.has(key) || (detailContext && CONTEXTUAL_PRODUCT_ID_QUERY_KEYS.has(key)));
+    });
     const obviousListPath = /(?:goods_list|product_list|products_list|item_list|goods_brand_list|brand_list|goods_best_list|goods_search|goods_today|first_time|event_sale|planshop|exhibition|category|categories|catalog|collection|collections|search|best|event)(?:[._/\-]|$)/i.test(path);
     if (obviousListPath && !queryProductId) return true;
     if (/(?:^|[?&])(?:category|cate|search|keyword|exhibitionno|sno)=/i.test(query) && !queryProductId) return true;
