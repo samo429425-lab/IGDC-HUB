@@ -25,7 +25,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.7.0-admin-publication-authority";
+const VERSION = "canonical-snapshot-publisher-v1.7.1-admin-ready-publication-authority";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
