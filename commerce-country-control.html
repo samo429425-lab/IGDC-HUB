@@ -402,10 +402,6 @@
       <div id="productTransitionAuditState" class="product-transition-audit-state">대기열 등록 또는 후보 정리 후 검증 버튼을 누르면 현재 국가·지역의 리서치 상태와 상품 후보 원장을 다시 읽어 연결 수량을 확인합니다.</div>
     </section>
 
-    <section id="productSectionBoard" class="product-section-board" aria-label="20개 섹션 배치 예정 상품 목록" aria-disabled="true" style="pointer-events:none;opacity:.55">
-      <div class="section-board-head"><div><h3>20개 섹션 배치 예정 상품 목록 · 사용 중지</h3><div class="small">이 블록은 역방향 관리자 원장 변경 위험을 제거하기 위해 작동을 중지했습니다. 삭제하지 않고 보존만 합니다. 모든 섹션 배치·수동 수정·개별/선택/전체 프론트 매칭은 위의 ‘전체 상품 후보·배치 관리 목록’에서만 실행합니다.</div></div><span class="pill warn">작동 차단</span></div>
-      <div id="productSectionList" class="product-section-list hidden" aria-hidden="true"></div>
-    </section>
   </section>
 
   <section id="jsonPanel" class="panel hidden"><div class="panel-heading"><h2>점검·실행 JSON</h2><div class="actions"><button id="runCurrentDiagnosticBtn" type="button">점검 실행 JSON</button><button id="downloadCurrentJsonBtn" type="button" class="secondary" disabled>전체 JSON 다운로드</button></div></div><pre id="jsonOutput" class="json"></pre></section>
@@ -536,7 +532,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20261005-1229-baseline-refresh1"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261005-1229-supplier-rerun-ui-clean1"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
