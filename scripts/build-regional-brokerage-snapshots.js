@@ -1078,11 +1078,12 @@ async function main() {
       });
       return;
     }
-    // An authenticated Front Match is a replacement instruction, not an append.
-    // When every requested real product is blocked by a hard safety check, do
-    // not resurrect the previous live products. Continue with the authoritative
-    // empty release so Snapshot Engine restores sample slots instead.
-    process.stderr.write("Administrator Front Match produced zero safe real products; materializing authoritative sample fallback instead of carrying old Distribution cards.\n");
+    // Front Match is a publish-only administrator instruction. Never substitute
+    // samples or an older Front state for a non-empty administrator request.
+    const error = new Error("Administrator Front Match requested products but produced an empty publication set. The previous front must not be used as a reverse source.");
+    error.code = "ADMIN_FRONT_MATCH_EMPTY_PUBLICATION_FORBIDDEN";
+    error.details = { requestedCount:administratorRequestedCount, heldSample:held };
+    throw error;
   }
   if (releaseItems.length === 0 && !queueAuthoritative) {
     preserveOrFail("no-release-ready-candidates", {
@@ -1104,7 +1105,7 @@ async function main() {
     source: "commerce-candidate-intake-release",
     items: releaseItems
   });
-  const publication = canonical.publish({ root, trigger: "netlify-build-country-region-admin-publication", bank: publicationBank, requireMirrorConsensus: false });
+  const publication = canonical.publish({ root, trigger: "netlify-build-country-region-admin-publication", bank: publicationBank, requireMirrorConsensus: false, authoritativeAdminPublication: explicitAdminPublicationInBuild });
   if (publication.status !== "published") {
     throw new Error("Canonical Snapshot Publisher blocked build: " + JSON.stringify(publication.errors || publication));
   }

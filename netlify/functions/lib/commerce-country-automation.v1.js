@@ -4846,243 +4846,60 @@ function frontSyncAssignmentId(candidateId, scope, sectionKey) {
 function frontSyncRevenueId(candidateId) { return "front_referral_" + sha256(candidateId).slice(0, 24); }
 function frontSyncEvidenceId(candidateId) { return "front_evidence_" + sha256(candidateId).slice(0, 24); }
 async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput) {
-  const scope = researchScope(input), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:(candidateLedgerMode?null:await loadProductResearchJob(scope));
-  if (!candidateLedgerMode && (!job || job.schema !== PRODUCT_JOB_SCHEMA || !array(job.products).length)) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
-  const targets = array(targetsInput), targetIds = Array.from(new Set(targets.map((row) => text(row && row.candidateId)).filter(Boolean))), targetById = new Map(targets.map((row) => [text(row && row.candidateId), row]));
-  const actor = text(actorId) || "administrator", now = iso();
-  const writeTrace = {
-    schema: "igdc-product-front-lifecycle-write-trace.v5",
-    version: VERSION,
-    requested: targetIds.length,
-    mode: "canonical-relations-two-phase-publication-commit",
-    phases: [],
-    relationOrder: { default: "updated_at", gslot_candidate_evidence: "created_at" },
-    authoritativePublicationLedger: "gslot_slot_assignments.publication_status"
-  };
-  function phase(name, data) { writeTrace.phases.push(Object.assign({ name, at: iso() }, plain(data))); }
-  function attachTrace(error, phaseName) {
-    if (error && !error.lifecycleTrace) error.lifecycleTrace = writeTrace;
-    if (error && !error.frontSyncPhase) error.frontSyncPhase = phaseName;
-    if (error && !error.code) error.code = "front_sync_" + phaseName + "_failed";
-    if (error && !error.statusCode) error.statusCode = 502;
-    return error;
-  }
+  // FRONT MATCH IS PUBLISH-ONLY.
+  // All research, trust, revenue, delivery/returns/support and ranking checks must
+  // finish before the administrator places a product.  This function therefore
+  // reads the current administrator ledger and changes only publication_status.
+  const scope = researchScope(input), targets = array(targetsInput);
+  const targetIds = Array.from(new Set(targets.map((row)=>text(row&&row.candidateId)).filter(Boolean)));
+  const targetById = new Map(targets.map((row)=>[text(row&&row.candidateId),plain(row)]));
+  const actor = text(actorId)||"administrator", now=iso();
+  const writeTrace={schema:"igdc-product-front-publish-only.v1",version:VERSION,requested:targetIds.length,mode:"admin-ledger-to-front-publish-only",candidateLedgerReadOnly:true,researchRecheck:false,revenueRecheck:false,marketRecheck:false,rankingRecheck:false};
+  if(!targetIds.length)return{ok:true,schema:"igdc-product-front-publish-only.v1",scope,requested:0,prepared:0,blocked:0,preparedCandidateIds:[],items:[],writeTrace};
 
-  if (!targetIds.length) return { ok:true, schema:"igdc-product-front-lifecycle-preparation.v4", scope, requested:0, prepared:0, blocked:0, preparedCandidateIds:[], items:[], writeTrace };
+  const [candidateRows,assignmentRows]=await Promise.all([
+    frontSyncSelectCandidates(targetIds),
+    frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at,updated_by",targetIds)
+  ]);
+  const candidateById=new Map(array(candidateRows).map((row)=>[text(row&&row.id),row]));
+  const assignmentsByCandidate=new Map();
+  for(const row of array(assignmentRows)){const id=text(row&&row.candidate_id);if(!assignmentsByCandidate.has(id))assignmentsByCandidate.set(id,[]);assignmentsByCandidate.get(id).push(row);}
 
-  // 1) Strict preflight.  No write is attempted until the candidate ledger and
-  // all four canonical relation ledgers can be read successfully.  This avoids
-  // guessing whether an availability/assignment row already exists.
-  let candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows;
-  try {
-    [candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
-      frontSyncSelectCandidates(targetIds),
-      frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", targetIds),
-      frontSyncSelectByCandidate("gslot_candidate_availability", "candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at", targetIds),
-      frontSyncSelectByCandidate("gslot_candidate_revenue", "id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at", targetIds),
-      frontSyncSelectByCandidate("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at", targetIds)
-    ]);
-    phase("preflight_read", { ok:true, candidates:array(candidateRows).length, assignments:array(assignmentRows).length, availability:array(availabilityRows).length, revenue:array(revenueRows).length, evidence:array(evidenceRows).length });
-  } catch (error) {
-    phase("preflight_read", { ok:false, error:text(error && (error.code || error.message)) || "preflight_read_failed" });
-    throw attachTrace(error, "preflight_read");
-  }
-
-  const candidateById = new Map(array(candidateRows).map((row) => [text(row && row.id), row]));
-  const productByCandidate = candidateLedgerMode
-    ? new Map(array(candidateRows).map((row) => [text(row && row.id), restoredProductFromCandidate(row, scope)]).filter((entry) => entry[1]))
-    : new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
-  const assignmentsByCandidate = new Map(), availabilityByCandidate = new Map(), revenuesByCandidate = new Map(), evidenceByCandidate = new Map();
-  function group(map, rows) { for (const row of array(rows)) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }
-  group(assignmentsByCandidate, assignmentRows); group(availabilityByCandidate, availabilityRows); group(revenuesByCandidate, revenueRows); group(evidenceByCandidate, evidenceRows);
-
-  const items = [], plannedCandidateIds = [], readinessByCandidate = new Map(), assignmentIdByCandidate = new Map();
-  const assignmentUpserts = [], staleAssignmentIds = [], availabilityUpdates = [], availabilityInserts = [], revenueUpserts = [], evidenceUpserts = [];
-  for (const candidateId of targetIds) {
-    const target = plain(targetById.get(candidateId)), product = plain(productByCandidate.get(candidateId)), existing = plain(candidateById.get(candidateId));
-    if (!Object.keys(product).length || !Object.keys(existing).length) { items.push({ candidateId, status:"blocked", queued:false, reason:"candidate_ledger_row_missing", assignmentId:null }); continue; }
-    const sectionKey = text(target.sectionKey || productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement));
-    if (!validProductSectionKey(sectionKey)) { items.push({ candidateId, status:"blocked", queued:false, reason:"invalid_product_section", assignmentId:null }); continue; }
-    const readiness = frontSyncPublicReadiness(product, existing);
-    if (!readiness.eligible) { items.push({ candidateId, status:"blocked", queued:false, reason:readiness.reasons.join(","), reasons:readiness.reasons, assignmentId:null }); continue; }
-    const split = splitProductSectionKey(sectionKey);
-    const assignmentExisting = array(assignmentsByCandidate.get(candidateId)).find((row) =>
-      text(row && row.hub_key) === split.page && text(row && row.slot_key) === split.sectionKey &&
-      normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region
+  const items=[],preparedCandidateIds=[];
+  for(const candidateId of targetIds){
+    const candidate=plain(candidateById.get(candidateId)),target=plain(targetById.get(candidateId));
+    if(!Object.keys(candidate).length){items.push({candidateId,status:"blocked",persisted:false,pendingBuild:false,reason:"candidate_ledger_row_missing"});continue;}
+    const payload=plain(candidate.source_payload),product=plain(restoredProductFromCandidate(candidate,scope));
+    const decision=lower(payload.slotDecision||product.slotDecision||"");
+    // Current administrator state is authoritative. A deleted/held/rejected row
+    // cannot be resurrected merely because an old Front/Snapshot assignment exists.
+    if(decision!=="slot_candidate") {items.push({candidateId,status:"blocked",persisted:false,pendingBuild:false,reason:"administrator_not_currently_placed"});continue;}
+    const sectionKey=text(target.sectionKey||productPlacementKey(payload.approvedPlacement||payload.selectedPlacement||payload.placement||payload.primaryPlacement||product.approvedPlacement||product.placement));
+    if(!validProductSectionKey(sectionKey)){items.push({candidateId,status:"blocked",persisted:false,pendingBuild:false,reason:"administrator_placement_missing"});continue;}
+    const split=splitProductSectionKey(sectionKey);
+    const existing=array(assignmentsByCandidate.get(candidateId)).find((row)=>
+      text(row&&row.hub_key)===split.page&&text(row&&row.slot_key)===split.sectionKey&&
+      normalizeCountry(row&&row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region
     );
-    const assignmentId = text(assignmentExisting && assignmentExisting.id) || frontSyncAssignmentId(candidateId, scope, sectionKey);
-    const alreadyPublicationRequested = lower(assignmentExisting && assignmentExisting.publication_status) === "publish_requested";
-    assignmentIdByCandidate.set(candidateId, assignmentId);
-    readinessByCandidate.set(candidateId, readiness);
-    for(const oldAssignment of array(assignmentsByCandidate.get(candidateId))){
-      const oldId=text(oldAssignment&&oldAssignment.id),sameScope=normalizeCountry(oldAssignment&&oldAssignment.country_code)===scope.country&&frontSyncExpectedRegion(oldAssignment,scope.country)===scope.region,samePlacement=text(oldAssignment&&oldAssignment.hub_key)===split.page&&text(oldAssignment&&oldAssignment.slot_key)===split.sectionKey,oldPublication=lower(oldAssignment&&oldAssignment.publication_status);
-      if(oldId&&sameScope&&!samePlacement&&["publish_requested","published"].includes(oldPublication))staleAssignmentIds.push(oldId);
-    }
-    assignmentUpserts.push({
-      id: assignmentId, candidate_id: candidateId, hub_key: split.page, country_code: scope.country, region_code: scope.region || "NATIONWIDE",
-      slot_key: split.sectionKey, priority: Math.max(0, Number(target.priority || product.rankingScore || 0)), state: assignmentExisting && lower(assignmentExisting.state) === "pinned" ? "pinned" : "approved",
-      // Phase 1 stores a non-public ready state.  A pre-existing explicit request
-      // is preserved on retry and is never rolled backwards.
-      publication_status: alreadyPublicationRequested ? "publish_requested" : "audit_ready",
-      manual_pinned: assignmentExisting && assignmentExisting.manual_pinned === true,
-      decision_note: "Explicit administrator Front Match prepared through canonical market/evidence/revenue/PSOM ledgers. External seller remains seller and merchant of record; IGDC does not execute checkout, payment, delivery, returns, refunds or after-sales service.",
-      created_at: text(assignmentExisting && assignmentExisting.created_at) || now, updated_at: now, updated_by: actor
-    });
-
-    const scopeAvailability = array(availabilityByCandidate.get(candidateId)).find((row) =>
-      normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region
-    );
-    const availabilityPatch = {
-      availability_state: "active",
-      legal_basis: "Administrator-confirmed official external-seller product reference for this market. The external seller remains seller and merchant of record.",
-      delivery_or_access: "Administrator selected the official external-seller product destination. Checkout, delivery, returns, refunds, customer support and after-sales obligations remain with the external seller.",
-      updated_at: now, updated_by: actor
+    const assignmentId=text(existing&&existing.id)||frontSyncAssignmentId(candidateId,scope,sectionKey);
+    const assignment={
+      id:assignmentId,candidate_id:candidateId,hub_key:split.page,country_code:scope.country,region_code:scope.region||"NATIONWIDE",
+      slot_key:split.sectionKey,priority:Math.max(0,Number(existing&&existing.priority||target.priority||0)),
+      state:lower(existing&&existing.state)==="pinned"?"pinned":"approved",publication_status:"publish_requested",
+      manual_pinned:existing&&existing.manual_pinned===true,created_at:text(existing&&existing.created_at)||now,updated_at:now,updated_by:actor,
+      decision_note:"Administrator placement is final. Front Match copies the current admin decision without research/ranking/revenue re-evaluation."
     };
-    if (scopeAvailability) availabilityUpdates.push({ candidateId, countryCode:scope.country, regionCode:scope.region, storedRegionCode:text(scopeAvailability.region_code), patch:availabilityPatch });
-    else availabilityInserts.push(Object.assign({ candidate_id:candidateId, country_code:scope.country, region_code:scope.region || "NATIONWIDE" }, availabilityPatch));
-
-    const hasApprovedExternalReferral = array(revenuesByCandidate.get(candidateId)).some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved" && !!safeUrl(row && row.affiliate_url));
-    if (!hasApprovedExternalReferral) revenueUpserts.push({
-      id:frontSyncRevenueId(candidateId), candidate_id:candidateId, revenue_type:"external_referral", status:"approved", affiliate_url:readiness.productPageUrl,
-      provider_name:first(readiness.supplierName,target.title,"External seller").slice(0,240), currency:null,
-      note:"Administrator-confirmed non-PG external-seller referral. Traffic/referral value only unless a separate payable affiliate or brokerage contract is verified.", updated_at:now, updated_by:actor
-    });
-    const hasVerifiedEvidence = array(evidenceByCandidate.get(candidateId)).some((row) => row && row.verified === true && !!safeUrl(row.evidence_url));
-    if (!hasVerifiedEvidence) evidenceUpserts.push({
-      id:frontSyncEvidenceId(candidateId), candidate_id:candidateId, evidence_type:"official_supplier_product_reference", evidence_url:first(readiness.supplierUrl,readiness.productPageUrl),
-      note:"Administrator-confirmed official supplier/product reference for Front Match. This verifies the selected destination only and does not transfer seller, payment, delivery, return, refund or support responsibility to IGDC.", verified:true, created_at:now, created_by:actor
-    });
-    plannedCandidateIds.push(candidateId);
-    items.push({ candidateId, status:"prepared", queued:false, reason:"canonical_front_lifecycle_planned", warnings:readiness.warnings || [], assignmentId, sectionKey, alreadyPublicationRequested });
+    await frontSyncUpsert("gslot_slot_assignments",[assignment],"id");
+    preparedCandidateIds.push(candidateId);
+    items.push({candidateId,status:"publish_requested",persisted:true,persistenceVerified:true,pendingBuild:true,reason:"administrator_publish_only",assignmentId,sectionKey,administratorLedgerReadOnly:true});
   }
-  writeTrace.policyEligible = plannedCandidateIds.length;
-  phase("policy", { ok:true, eligible:plannedCandidateIds.length, blocked:items.filter((item)=>item.status==="blocked").length });
-  if (!plannedCandidateIds.length) {
-    return { ok:true, schema:"igdc-product-front-lifecycle-preparation.v4", scope, requested:targetIds.length, prepared:0, blocked:items.filter((item)=>item.status==="blocked").length, preparedCandidateIds:[], items, writeTrace };
-  }
-
-  // 2) Canonical relation preparation.  Assignment is deliberately last and is
-  // written as audit_ready/ready, not publish_requested.  Thus a partial phase-1
-  // failure can never become a public request by itself.
-  try {
-    await frontSyncWriteStage(writeTrace, "availability_update", availabilityUpdates.length, async () => {
-      const output=[];
-      for (const row of availabilityUpdates) {
-        // Production gslot_candidate_availability.region_code is NOT NULL.
-        // New nationwide rows use the explicit NATIONWIDE sentinel.  When an
-        // older row still carries a legacy NULL, update that exact row once and
-        // migrate it to the canonical sentinel without creating a duplicate.
-        const storedRegion = text(row.storedRegionCode);
-        const regionQuery = storedRegion
-          ? "region_code=eq." + encodeURIComponent(storedRegion)
-          : "region_code=is.null";
-        const query = "candidate_id=eq." + encodeURIComponent(row.candidateId) + "&country_code=eq." + encodeURIComponent(row.countryCode) + "&" + regionQuery;
-        const patch = Object.assign({}, row.patch);
-        if (!storedRegion && row.regionCode === "NATIONWIDE") patch.region_code = "NATIONWIDE";
-        output.push(...array(await SlotStore.update("gslot_candidate_availability", query, patch)));
-      }
-      return output;
-    });
-    await frontSyncWriteStage(writeTrace, "availability_insert", availabilityInserts.length, async () => {
-      const output=[]; for (const batch of frontSyncUniformBatches(availabilityInserts,80)) output.push(...array(await SlotStore.insert("gslot_candidate_availability", batch, "return=representation"))); return output;
-    });
-    await frontSyncWriteStage(writeTrace, "evidence", evidenceUpserts.length, () => frontSyncUpsert("gslot_candidate_evidence", evidenceUpserts, "id"));
-    await frontSyncWriteStage(writeTrace, "revenue", revenueUpserts.length, () => frontSyncUpsert("gslot_candidate_revenue", revenueUpserts, "id"));
-    await frontSyncWriteStage(writeTrace, "stale_assignment_demote", staleAssignmentIds.length, async () => {
-      const output=[];for(const ids of frontSyncChunk(Array.from(new Set(staleAssignmentIds)),80))output.push(...array(await SlotStore.update("gslot_slot_assignments","id=in."+frontSyncInFilter(ids),{publication_status:"not_ready",updated_at:iso(),updated_by:actor})));return output;
-    });
-    await frontSyncWriteStage(writeTrace, "assignment_ready", assignmentUpserts.length, () => frontSyncUpsert("gslot_slot_assignments", assignmentUpserts, "id"));
-    phase("relation_prepare", { ok:true });
-  } catch (error) {
-    phase("relation_prepare", { ok:false, error:text(error && (error.code || error.message)) || "relation_prepare_failed" });
-    throw attachTrace(error, "relation_prepare");
-  }
-
-  // 3) STRICT ONE-WAY BOUNDARY. Front preparation is forbidden from writing
-  // gslot_candidates. The administrator candidate ledger is the immutable input
-  // to publication. Only publication relations may change below.
-  const candidatePreparedIds = plannedCandidateIds.slice(), candidatePrepareErrors = [];
-  writeTrace.candidatePreparation = { attempted:plannedCandidateIds.length, prepared:candidatePreparedIds.length, failed:0, errors:[], readOnlyCandidateLedger:true };
-  phase("candidate_prepare", { ok:true, prepared:candidatePreparedIds.length, failed:0, readOnlyCandidateLedger:true });
-
-  // 4) Read back the complete standard lifecycle before committing publication.
-  // ProductPipeline.registryState must say registry_sync_ready; this catches a
-  // missing market/evidence/revenue/PSOM relation instead of silently building.
-  let preparationVerification = { ok:false, requested:candidatePreparedIds.length, verified:0, failed:candidatePreparedIds.length, verifiedCandidateIds:[], items:[] };
-  try {
-    preparationVerification = await verifyProductFrontPreparation(candidatePreparedIds, scope, targetById);
-  } catch (error) {
-    phase("canonical_readback", { ok:false, error:text(error && (error.code || error.message)) || "canonical_readback_failed" });
-    throw attachTrace(error, "canonical_readback");
-  }
-  writeTrace.preparationVerification = preparationVerification;
-  phase("canonical_readback", { ok:preparationVerification.ok, verified:preparationVerification.verified, failed:preparationVerification.failed });
-
-  const commitCandidateIds = array(preparationVerification.verifiedCandidateIds);
-  const commitAssignmentIds = assignmentUpserts.filter((row)=>commitCandidateIds.includes(text(row&&row.candidate_id))).map((row)=>text(row&&row.id)).filter(Boolean);
-  if (commitAssignmentIds.length) {
-    try {
-      await frontSyncWriteStage(writeTrace, "publication_commit", commitAssignmentIds.length, async () => {
-        const output=[];
-        for (const ids of frontSyncChunk(commitAssignmentIds,80)) {
-          output.push(...array(await SlotStore.update("gslot_slot_assignments", "id=in." + frontSyncInFilter(ids), { publication_status:"publish_requested", updated_at:iso(), updated_by:actor })));
-        }
-        return output;
-      });
-      phase("publication_commit", { ok:true, assignments:commitAssignmentIds.length });
-    } catch (error) {
-      phase("publication_commit", { ok:false, error:text(error && (error.code || error.message)) || "publication_commit_failed" });
-      throw attachTrace(error, "publication_commit");
-    }
-  }
-
-  // 5) The assignment relation is the publication authority.  Verify it after
-  // the final commit and only those rows are reported as persisted to the UI,
-  // which is what triggers the single Netlify build hook call after batching.
-  let finalAssignmentRows=[];
-  try {
-    finalAssignmentRows = await frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", commitCandidateIds);
-  } catch (error) {
-    phase("publication_readback", { ok:false, error:text(error && (error.code || error.message)) || "publication_readback_failed" });
-    throw attachTrace(error, "publication_readback");
-  }
-  const finalByCandidate = new Map();
-  for (const row of array(finalAssignmentRows)) {
-    const candidateId=text(row&&row.candidate_id), target=plain(targetById.get(candidateId)); if(!target.sectionKey)continue;
-    const split=splitProductSectionKey(target.sectionKey);
-    if(text(row&&row.hub_key)===split.page && text(row&&row.slot_key)===split.sectionKey && normalizeCountry(row&&row.country_code)===scope.country && frontSyncExpectedRegion(row,scope.country)===scope.region && ["approved","pinned"].includes(lower(row&&row.state)) && lower(row&&row.publication_status)==="publish_requested") finalByCandidate.set(candidateId,row);
-  }
-  const persistedCandidateIds = commitCandidateIds.filter((id)=>finalByCandidate.has(id));
-  const persistedSet = new Set(persistedCandidateIds);
-  writeTrace.publicationReadback = { requested:commitCandidateIds.length, verified:persistedCandidateIds.length, failed:commitCandidateIds.length-persistedCandidateIds.length, assignmentIds:persistedCandidateIds.map((id)=>text(finalByCandidate.get(id)&&finalByCandidate.get(id).id)).filter(Boolean) };
-  phase("publication_readback", { ok:persistedCandidateIds.length===commitCandidateIds.length, verified:persistedCandidateIds.length, failed:commitCandidateIds.length-persistedCandidateIds.length });
-
-  // 6) No candidate/source_payload annotation is allowed from Front Match.
-  // Publication state lives only in gslot_slot_assignments and downstream publication/snapshot ledgers.
-  const annotationErrors=[];
-  writeTrace.annotation = { attempted:0, failed:0, errors:[], skipped:true, reason:"candidate_ledger_read_only" };
-
-  const verifyById = new Map(array(preparationVerification.items).map((row)=>[text(row&&row.candidateId),row]));
-  const prepareErrorById = new Map(candidatePrepareErrors.map((row)=>[text(row&&row.candidateId),row]));
-  for (let index=0; index<items.length; index+=1) {
-    const item=plain(items[index]); if(item.status!=="prepared")continue;
-    const id=text(item.candidateId), verified=persistedSet.has(id), verify=plain(verifyById.get(id)), prepErr=plain(prepareErrorById.get(id)), assignment=plain(finalByCandidate.get(id));
-    items[index]=Object.assign({},item,verified?{
-      status:"publish_requested",persisted:true,persistenceVerified:true,publicationStatus:"publish_requested",pendingBuild:true,reason:"canonical_publication_commit_verified",assignmentId:text(assignment.id)||item.assignmentId,relationVerified:true,relationWarnings:array(verify.reasons)
-    }:{
-      status:"blocked",persisted:false,persistenceVerified:false,pendingBuild:false,reason:text(prepErr.error)||array(verify.reasons)[0]||"canonical_publication_commit_not_verified",reasons:prepErr.error?[prepErr.error]:array(verify.reasons)
-    });
-  }
-
-  const blocked = items.filter((item)=>item&&item.status==="blocked").length;
-  return {
-    ok:persistedCandidateIds.length>0 || targetIds.length===0,
-    schema:"igdc-product-front-lifecycle-preparation.v4", scope, requested:targetIds.length, prepared:persistedCandidateIds.length, blocked,
-    preparedCandidateIds:persistedCandidateIds, items, writeTrace,
-    policy:{ explicitAdministratorConfirmationRequired:true, canonicalRelationLedgersRequired:true, assignmentPublicationStatusAuthoritative:true, twoPhasePublicationCommit:true, readBackVerificationRequired:true, candidateAnnotationSecondary:true, officialSellerExternalReferralOnly:true, hardUnsafeSignalsStillBlocking:true, noIgdcCheckout:true, noPaymentExecution:true, noCrossCountryFallback:true }
+  return{
+    ok:preparedCandidateIds.length>0||targetIds.length===0,schema:"igdc-product-front-publish-only.v1",scope,
+    requested:targetIds.length,prepared:preparedCandidateIds.length,blocked:items.filter((x)=>x.status==="blocked").length,
+    preparedCandidateIds,items,writeTrace,
+    policy:{administratorPlacementAuthoritative:true,candidateLedgerReadOnly:true,publishOnly:true,noResearchRecheck:true,noRankingRecheck:true,noRevenueRecheck:true,noMarketEvidenceRecheck:true,stockStatusHandledSeparately:true}
   };
 }
-
 async function productFrontReplacementPlan(input) {
   const scope = researchScope(input), authoritative = input && input.authoritativeReplacement === true && input.explicitReplacementCleanup === true;
   const sectionKeys = Array.from(new Set(array(input && input.replacementSectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
@@ -5128,15 +4945,11 @@ async function productFrontSyncTargets(input, jobInput) {
       const payloadKey = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), activeKey = candidateRuntimeAssignmentKey(activeAssignment), key = validProductSectionKey(payloadKey) ? payloadKey : activeKey;
       if (!validProductSectionKey(key)) continue;
       if (operation === "match") {
-        const blockedDecision = ["hold","reject","purge"].includes(sourceDecision);
-        // source_payload.slotDecision is the administrator's current board
-        // decision.  A legacy candidate.status="hold" left by an earlier
-        // research stage must not disconnect a later slot_candidate match.
-        // Permanent/rejected states still fail closed.
-        const blockedStatus = ["suppressed","rejected"].includes(candidateStatus) || (candidateStatus === "hold" && sourceDecision !== "slot_candidate");
-        const blocked = blockedDecision || blockedStatus || queueControl.permanentExcluded === true;
-        if (blocked && !activeAssignment) continue;
-        if (!blocked) { product.slotDecision = "slot_candidate"; if (!product.approvedPlacement) { const split=splitProductSectionKey(key); product.approvedPlacement = { page:split.page, sectionKey:split.sectionKey, section:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, proposalOnly:false, publicPublication:false }; } }
+        // Front Match is not a second review gate. Only the CURRENT administrator
+        // board decision controls whether this candidate is publishable.
+        if (sourceDecision !== "slot_candidate") continue;
+        product.slotDecision = "slot_candidate";
+        if (!product.approvedPlacement) { const split=splitProductSectionKey(key); product.approvedPlacement = { page:split.page, sectionKey:split.sectionKey, section:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, proposalOnly:false, publicPublication:false }; }
       }
       targets.push({ productId:text(product.id)||candidateId, candidateId, title:first(product.productName,product.title,candidate.title), sectionKey:key, existingPublicationActive:!!activeAssignment, digest:sha256({id:candidateId,placement:key,updatedAt:candidate.updated_at||null}) });
     }

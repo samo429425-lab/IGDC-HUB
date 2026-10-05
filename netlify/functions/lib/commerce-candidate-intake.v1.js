@@ -500,8 +500,19 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   const effectivePublishMarkets=explicitAdministratorFrontMatch
     ? {ok:effectiveAdminMarkets.length>0,validRecords:effectiveAdminMarkets,blocked:[],allowedCountries:marketCountries(effectiveAdminMarkets)}
     : normalPublishMarkets;
-  const adminSoftReasons=new Set(["TITLE_MISSING","PRODUCT_TITLE_NOT_VERIFIED","SPECIFIC_PRODUCT_PAGE_NOT_VERIFIED","REVENUE_OPPORTUNITY_EVIDENCE_MISSING","PAYABLE_NON_PG_REVENUE_RIGHT_NOT_VERIFIED","REVENUE_ROUTE_HAS_NO_ALLOWED_VERIFIED_MARKET","MARKET_SALE_EVIDENCE_INCOMPLETE_OR_STALE","LIFE_ESSENTIAL_CATEGORY_NOT_CONFIRMED","SEARCHBANK_ELIGIBILITY_FLAGS_MISSING","TRUSTED_SELLER_OR_PRODUCER_EVIDENCE_MISSING"].concat(adminSafety.reasons||[]));
-  const effectiveReasons=explicitAdministratorFrontMatch?reasons.filter(reason=>!adminSoftReasons.has(reason)):reasons.slice();
+  // Administrator placement is the end of business review.  Front publication
+  // keeps only immutable transport/safety identity failures; revenue, ranking,
+  // market-service, trust-score and research evidence are not re-adjudicated.
+  const administratorTransportBlockers=new Set([
+    "DESTINATION_NOT_HTTPS","IMAGE_NOT_HTTPS","PLACEHOLDER_OR_SAMPLE","DESTINATION_HOST_UNSAFE",
+    "DESTINATION_DOMAIN_DENIED","DESTINATION_TLD_DENIED","BLOCKLIST_PATTERN_MATCH",
+    "PAGE_MAPPING_CONFLICT","PAGE_MAPPING_MISSING","PAGE_NOT_IN_PSOM",
+    "SECTION_MAPPING_CONFLICT","SECTION_MAPPING_MISSING","SECTION_NOT_IN_PSOM_PAGE",
+    "PRODUCT_DETAIL_DESTINATION_REQUIRED","COUNTRY_REQUIRES_ISO_3166_ALPHA2","REGION_MISSING_OR_INVALID"
+  ]);
+  const effectiveReasons=explicitAdministratorFrontMatch
+    ? reasons.filter((reason)=>administratorTransportBlockers.has(reason))
+    : reasons.slice();
   const releaseEligible=effectiveReasons.length===0;
   const profitability=profitabilityAssessment(item,tier,effectiveRevenue);
   const rank=ranking(item,tier,essential,trust,effectiveRevenue,market,policy);

@@ -211,6 +211,7 @@ function cloneCard(item) {
     productMapping: clone(item.productMapping || null),
     searchBankContract: clone(item.searchBankContract || item.sanmaruSearchBankContract || item.searchBankUnifiedContract || null),
     commerceCandidatePublication: clone(item.commerceCandidatePublication || null),
+    administratorFrontMatchAuthority: clone(item.administratorFrontMatchAuthority || null),
     outboundRoute: clone(item.outboundRoute || null),
     affiliateOutboundUrl: text(item.affiliateOutboundUrl || "") || undefined,
     externalOutboundUrl: text(item.externalOutboundUrl || "") || undefined,
@@ -303,12 +304,13 @@ function sampleFallbackDocument(template, page) {
     if (!isObject(sections)) return null;
     for (const key of Object.keys(sections)) {
       const base = SlotOverlay.list(sections[key]);
-      SlotOverlay.setList(sections, key, safeTemplateRows(base, key, base.length || 100));
+      const capacity = page === "distribution" && key === "distribution-extra" ? 100 : (base.length || 100);
+      SlotOverlay.setList(sections, key, safeTemplateRows(base, key, capacity));
     }
   } else if (page === "network" || page === "tour") {
     const section = page === "network" ? "network-right" : "tour";
     const base = array(doc.items).length ? array(doc.items) : array(doc.slots);
-    const rows = safeTemplateRows(base, section, base.length || 100);
+    const rows = safeTemplateRows(base, section, page === "tour" ? 200 : (base.length || 100));
     doc.items = rows;
     doc.slots = clone(rows);
   } else if (page === "social") {
@@ -380,7 +382,9 @@ function renderPage(template, page, items, scope, policyDigest) {
   } else if (page === "network" || page === "tour") {
     const section = page === "network" ? "network-right" : "tour";
     const base = array(doc.items).length ? array(doc.items) : array(doc.slots);
-    const cards = SlotOverlay.overlayList(base, items.map(cloneCard), section, base.length || 100);
+    const capacity = page === "tour" ? 200 : (base.length || 100);
+    const preparedBase = safeTemplateRows(base, section, capacity);
+    const cards = SlotOverlay.overlayList(preparedBase, items.map(cloneCard), section, capacity);
     doc.items = cards;
     doc.slots = clone(cards);
   } else if (page === "social") {
@@ -472,10 +476,14 @@ function verifyDistributionSnapshot(file, scope, releaseId) {
     if (card.canonicalPublication.releaseId !== releaseId) return { ok: false, reason: "DISTRIBUTION_CARD_RELEASE_MISMATCH" };
     const placement = card.placement;
     if (placement.page !== "distribution" || placement.country !== scope.country) return { ok: false, reason: "DISTRIBUTION_CARD_SCOPE_COUNTRY_MISMATCH" };
-    const marketScope = card.marketScope;
-    const marketValidation = MarketSaleScope.validateMarketScope(marketScope, placement.country, placement.region, { maxVerificationAgeDays: 30, requireFresh: true });
-    if (!marketValidation.ok) return { ok: false, reason: "DISTRIBUTION_CARD_MARKET_SCOPE_EVIDENCE_INVALID:" + marketValidation.reasons.join(",") };
-    if (!card.ipSlot || card.ipSlot.marketEvidenceDigest !== marketValidation.evidenceDigest) return { ok: false, reason: "DISTRIBUTION_CARD_MARKET_EVIDENCE_DIGEST_MISMATCH" };
+    const adminAuthority = card && card.administratorFrontMatchAuthority || {};
+    const adminAuthoritative = adminAuthority.verified === true && text(adminAuthority.publicationStatus).toLowerCase() === "publish_requested";
+    if (!adminAuthoritative) {
+      const marketScope = card.marketScope;
+      const marketValidation = MarketSaleScope.validateMarketScope(marketScope, placement.country, placement.region, { maxVerificationAgeDays: 30, requireFresh: true });
+      if (!marketValidation.ok) return { ok: false, reason: "DISTRIBUTION_CARD_MARKET_SCOPE_EVIDENCE_INVALID:" + marketValidation.reasons.join(",") };
+      if (!card.ipSlot || card.ipSlot.marketEvidenceDigest !== marketValidation.evidenceDigest) return { ok: false, reason: "DISTRIBUTION_CARD_MARKET_EVIDENCE_DIGEST_MISMATCH" };
+    }
     const candidateRegion = IpPolicy.normalizeRegion(placement.region, scope.country);
     if (scope.region && candidateRegion !== scope.region && candidateRegion !== "NATIONWIDE") return { ok: false, reason: "DISTRIBUTION_CARD_SCOPE_REGION_MISMATCH" };
     if (!scope.region && candidateRegion !== "NATIONWIDE") return { ok: false, reason: "DISTRIBUTION_COUNTRY_SCOPE_NOT_NATIONWIDE" };
@@ -549,12 +557,16 @@ function validateScopedOutput(doc, output, manifest, policy) {
     const slotKey = [placement.section, placement.slot].join("|");
     if (slotSeen.has(slotKey)) problems.push("IP_SLOT_CARD_SLOT_COLLISION:" + output.path + ":" + slotKey);
     slotSeen.add(slotKey);
-    const scope = MarketSaleScope.validateMarketScope(card.marketScope, placement.country, placement.region, {
-      maxVerificationAgeDays: Number(policy && policy.validation && policy.validation.maxAvailabilityVerificationAgeDays || 30),
-      requireFresh: true
-    });
-    if (!scope.ok) problems.push("IP_SLOT_CARD_MARKET_EVIDENCE_INVALID:" + output.path + ":" + String(card.id) + ":" + scope.reasons.join(","));
-    if (!card.ipSlot || card.ipSlot.marketEvidenceDigest !== scope.evidenceDigest) problems.push("IP_SLOT_CARD_MARKET_EVIDENCE_DIGEST_MISMATCH:" + output.path + ":" + String(card.id));
+    const adminAuthority = card && card.administratorFrontMatchAuthority || {};
+    const adminAuthoritative = adminAuthority.verified === true && text(adminAuthority.publicationStatus).toLowerCase() === "publish_requested";
+    if (!adminAuthoritative) {
+      const scope = MarketSaleScope.validateMarketScope(card.marketScope, placement.country, placement.region, {
+        maxVerificationAgeDays: Number(policy && policy.validation && policy.validation.maxAvailabilityVerificationAgeDays || 30),
+        requireFresh: true
+      });
+      if (!scope.ok) problems.push("IP_SLOT_CARD_MARKET_EVIDENCE_INVALID:" + output.path + ":" + String(card.id) + ":" + scope.reasons.join(","));
+      if (!card.ipSlot || card.ipSlot.marketEvidenceDigest !== scope.evidenceDigest) problems.push("IP_SLOT_CARD_MARKET_EVIDENCE_DIGEST_MISMATCH:" + output.path + ":" + String(card.id));
+    }
   }
   if (!realCount) problems.push("IP_SLOT_SNAPSHOT_HAS_NO_REAL_CARD:" + output.path);
   return problems;

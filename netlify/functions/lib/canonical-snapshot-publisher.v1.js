@@ -544,14 +544,12 @@ function validateCandidate(raw, index, context) {
   if (explicitAdminPublication) {
     const structuralAdminReasons = new Set([
       "TITLE_MISSING","DESTINATION_NOT_HTTPS","IMAGE_NOT_HTTPS","PLACEHOLDER_OR_SAMPLE","DESTINATION_HOST_UNSAFE",
+      "DESTINATION_DOMAIN_DENIED","DESTINATION_TLD_DENIED","BLOCKLIST_PATTERN_MATCH",
       "PAGE_MAPPING_CONFLICT","PAGE_MAPPING_MISSING","PAGE_NOT_IN_PSOM","SECTION_MAPPING_CONFLICT","SECTION_MAPPING_MISSING","SECTION_NOT_IN_PSOM_PAGE",
       "PRODUCT_DETAIL_DESTINATION_REQUIRED","SLOT_MAPPING_CONFLICT","SLOT_OUT_OF_CAPACITY","COUNTRY_REQUIRES_ISO_3166_ALPHA2","REGION_MISSING_OR_INVALID",
-      "GLOBAL_SCOPE_NOT_EXPLICIT","GLOBAL_REGION_NOT_EXPLICIT","IP_SLOT_GLOBAL_SCOPE_FORBIDDEN","COMMERCE_CANDIDATE_RELEASE_ENVELOPE_MISSING","COMMERCE_CANDIDATE_PROVENANCE_MISSING"
+      "GLOBAL_SCOPE_NOT_EXPLICIT","GLOBAL_REGION_NOT_EXPLICIT","IP_SLOT_GLOBAL_SCOPE_FORBIDDEN"
     ]);
-    for (let i=reasons.length-1;i>=0;i--) {
-      const reason=reasons[i];
-      if (!structuralAdminReasons.has(reason) && !/^IP_/.test(reason)) reasons.splice(i,1);
-    }
+    for (let i=reasons.length-1;i>=0;i--) if (!structuralAdminReasons.has(reasons[i])) reasons.splice(i,1);
   }
 
   const fingerprint = sha256({
@@ -842,6 +840,7 @@ function publish(input) {
   const ipPolicy = IpSlotPolicy.load(root);
   const upstream = sourceSnapshot(root, { bank: input && input.bank, requireMirrorConsensus: policy.requireMirrorConsensus !== false && !(input && input.requireMirrorConsensus === false) });
   const startedAt = nowIso();
+  const authoritativeAdminPublication = !!(input && input.authoritativeAdminPublication === true);
   const report = {
     version: VERSION,
     contractVersion: CONTRACT_VERSION,
@@ -883,23 +882,29 @@ function publish(input) {
   // Build the private commerce staging queue first.  The intake owns category,
   // non-PG revenue-right, direct-listing approval and release-key gating;
   // Canonical remains the sole public publication boundary.
-  const commerceIntake = CommerceCandidateIntake.build({ root, items: Array.isArray(upstream.doc.items) ? upstream.doc.items : [], trigger: report.trigger });
+  const commerceIntake = authoritativeAdminPublication ? {
+    ok:true, digest:sha256({mode:"administrator-publish-only",upstreamDigest:upstream.digest}),
+    releaseGate:{enabled:true,mode:"explicit_admin_publish_only",reason:"administrator-placement-authoritative"},
+    summary:{considered:Array.isArray(upstream.doc.items)?upstream.doc.items.length:0},
+    queue:{digest:null,stale:false}, releaseItems:Array.isArray(upstream.doc.items)?upstream.doc.items:[], problems:[]
+  } : CommerceCandidateIntake.build({ root, items: Array.isArray(upstream.doc.items) ? upstream.doc.items : [], trigger: report.trigger });
   report.commerceCandidateIntake = {
     version: CommerceCandidateIntake.VERSION,
     digest: commerceIntake.digest,
     releaseGate: commerceIntake.releaseGate,
     summary: commerceIntake.summary,
     queue: { digest: commerceIntake.queue && commerceIntake.queue.digest || null, stale: !!(commerceIntake.queue && commerceIntake.queue.stale) },
-    stagePath: path.relative(root, path.join(root, "netlify", "functions", "data", CommerceCandidateIntake.STAGING_FILE)).replace(/\\/g, "/")
+    stagePath: authoritativeAdminPublication ? null : path.relative(root, path.join(root, "netlify", "functions", "data", CommerceCandidateIntake.STAGING_FILE)).replace(/\\/g, "/"),
+    authoritativeAdminPublication
   };
   if (!commerceIntake.ok) { report.errors.push(...(commerceIntake.problems || ["COMMERCE_CANDIDATE_INTAKE_BLOCKED"])); return report; }
   const effectiveUpstream = Object.assign({}, upstream, {
-    digest: sha256({ upstreamDigest: upstream.digest, commerceCandidateIntakeDigest: commerceIntake.digest }),
-    source: String(upstream.source || "upstream") + "+commerce-candidate-intake",
+    digest: sha256({ upstreamDigest: upstream.digest, commerceCandidateIntakeDigest: commerceIntake.digest, authoritativeAdminPublication }),
+    source: String(upstream.source || "upstream") + (authoritativeAdminPublication?"+administrator-publish-only":"+commerce-candidate-intake"),
     candidateIntakeDigest: commerceIntake.digest
   });
   const rawItems = commerceIntake.releaseItems;
-  report.counts.received = commerceIntake.summary.considered;
+  report.counts.received = Number(commerceIntake.summary && commerceIntake.summary.considered || rawItems.length);
   const expandedItems = [];
   for (let index = 0; index < rawItems.length; index += 1) {
     const marketVariants = MarketSaleScope.expand(rawItems[index]);
@@ -1075,13 +1080,17 @@ function verifyPublished(input) {
     const scoped = IpSlotPolicy.isScoped(ipPolicy, placement.page, placement.section);
     if (scoped && (!item.ipSlot || item.ipSlot.required !== true || item.ipSlot.marketCountry !== placement.country || item.ipSlot.marketRegion !== placement.region)) problems.push("PUBLISHED_IP_SLOT_ENVELOPE_INVALID:" + str(item && item.id));
     if (scoped) {
-      const marketScope = item && item.marketScope;
-      const marketValidation = MarketSaleScope.validateMarketScope(marketScope, placement.country, placement.region, {
-        maxVerificationAgeDays: Number(ipPolicy.policy && ipPolicy.policy.validation && ipPolicy.policy.validation.maxAvailabilityVerificationAgeDays || 30),
-        requireFresh: true
-      });
-      if (!marketValidation.ok) problems.push("PUBLISHED_MARKET_SCOPE_EVIDENCE_INVALID:" + str(item && item.id) + ":" + marketValidation.reasons.join(","));
-      if (!item.ipSlot || item.ipSlot.marketEvidenceDigest !== marketValidation.evidenceDigest) problems.push("PUBLISHED_MARKET_EVIDENCE_DIGEST_MISMATCH:" + str(item && item.id));
+      const adminAuthority = isObject(item && item.administratorFrontMatchAuthority) ? item.administratorFrontMatchAuthority : {};
+      const adminAuthoritative = adminAuthority.verified === true && lower(adminAuthority.publicationStatus) === "publish_requested";
+      if (!adminAuthoritative) {
+        const marketScope = item && item.marketScope;
+        const marketValidation = MarketSaleScope.validateMarketScope(marketScope, placement.country, placement.region, {
+          maxVerificationAgeDays: Number(ipPolicy.policy && ipPolicy.policy.validation && ipPolicy.policy.validation.maxAvailabilityVerificationAgeDays || 30),
+          requireFresh: true
+        });
+        if (!marketValidation.ok) problems.push("PUBLISHED_MARKET_SCOPE_EVIDENCE_INVALID:" + str(item && item.id) + ":" + marketValidation.reasons.join(","));
+        if (!item.ipSlot || item.ipSlot.marketEvidenceDigest !== marketValidation.evidenceDigest) problems.push("PUBLISHED_MARKET_EVIDENCE_DIGEST_MISMATCH:" + str(item && item.id));
+      }
     }
     slotSeen.add(key);
     if (isSampleLike(item, item.url) || !normalizeUrl(item.url)) problems.push("PUBLISHED_ITEM_NOT_REAL:" + str(item && item.id));
