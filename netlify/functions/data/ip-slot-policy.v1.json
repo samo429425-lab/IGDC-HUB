@@ -1,11 +1,11 @@
 {
-  "version": "ip-slot-policy-v1.8.0-admin20-front-policy-sync",
+  "version": "ip-slot-policy-v1.8.1-admin-authority-transport",
   "contractVersion": "sanmaru-searchbank-ip-slot-contract-v1.3-social-right-market-evidence-integrity",
   "derivedFrom": {
     "psom": "data/psom.json",
-    "purpose": "PSOM defines the strategic page and section map; the upper engine must explicitly classify, verify and bind each candidate to one exact IP-scoped slot profile."
+    "purpose": "PSOM defines page/section routing. Administrator-approved publication is authoritative after private research; public transport must not repeat business-evidence adjudication."
   },
-  "mode": "country-region-required-market-sale-scope-no-cross-market-snapshot-fallback-social-right-panel-only",
+  "mode": "country-region-required-admin-authority-transport-no-cross-country-fallback",
   "excludedPages": [
     "media",
     "donation"
@@ -26,10 +26,10 @@
   "validation": {
     "requireExplicitSlotProfile": true,
     "requireProductIdentity": true,
-    "requireMarketAvailabilityEvidence": true,
-    "requireSellerResponsibility": true,
+    "requireMarketAvailabilityEvidence": false,
+    "requireSellerResponsibility": false,
     "requireIpRegionCodeForRegionalSupply": true,
-    "requireFreshAvailabilityVerification": true,
+    "requireFreshAvailabilityVerification": false,
     "maxAvailabilityVerificationAgeDays": 30,
     "requireSponsorDisclosure": true,
     "requireTrendEvidenceForTrending": true,
@@ -37,14 +37,14 @@
     "newnessMaxAgeDays": 45,
     "requireSpecialEvidenceForSpecial": true,
     "requireTravelOperatorEvidence": true,
-    "requireMarketScopedSellerResponsibility": true,
-    "requireMarketFulfillmentEvidence": true,
-    "requireMarketReturnsEvidence": true,
-    "requireMarketSupportEvidence": true,
-    "requireMarketVerificationRecord": true,
+    "requireMarketScopedSellerResponsibility": false,
+    "requireMarketFulfillmentEvidence": false,
+    "requireMarketReturnsEvidence": false,
+    "requireMarketSupportEvidence": false,
+    "requireMarketVerificationRecord": false,
     "requireMarketScopeEnvelope": true,
     "requireMarketEvidenceDigest": true,
-    "requireFreshMarketEvidenceAtRequestTime": true
+    "requireFreshMarketEvidenceAtRequestTime": false
   },
   "slotStrategies": {
     "home": {
@@ -300,12 +300,12 @@
   "globalMarketRule": {
     "originCountryIsNotAnEligibilityGate": true,
     "publishPerVerifiedSaleMarket": true,
-    "requireMarketSpecificFulfillmentReturnsSupportAndResponsibleSeller": true,
+    "requireMarketSpecificFulfillmentReturnsSupportAndResponsibleSeller": false,
     "forbidGenericInternationalShippingInference": true,
     "forbidCrossCountrySnapshotFallback": true,
     "marketEvidenceDigestRequired": true,
     "requireMarketScopeEnvelope": true,
-    "rejectStaleMarketEvidenceAtRequestTime": true
+    "rejectStaleMarketEvidenceAtRequestTime": false
   },
   "ipScopedSections": {
     "social": [
