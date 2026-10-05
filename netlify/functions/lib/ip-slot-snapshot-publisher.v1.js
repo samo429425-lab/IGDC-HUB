@@ -22,7 +22,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const SlotOverlay = require("./sample-slot-overlay.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.2-social-thumbnail-alias-preservation";
+const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.4-admin-ready-identity-continuity";
 const MANIFEST_FILE = "ip-slot-manifest.json";
 const AUTO_ROOT = ["data", "auto"];
 const ROUTES = Object.freeze({
@@ -156,11 +156,13 @@ function cloneCard(item) {
       item.affiliateOutboundUrl || item.externalOutboundUrl ||
       item.externalProductUrl || item.officialProductUrl || item.productUrl || item.product_url ||
       item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl ||
-      item.orderUrl || item.productLink || item.displayUrl || item.url || item.link ||
+      item.orderUrl || item.productLink || item.displayUrl || item.sourceUrl || item.source_url ||
+      item.targetUrl || item.target_url || item.outboundUrl || item.outbound_url || item.url || item.link ||
       productCard.checkoutUrl || productCard.purchaseUrl || productCard.orderUrl ||
       productCard.externalProductUrl || productCard.officialProductUrl ||
-      productCard.productUrl || productCard.productPageUrl || productCard.detailUrl ||
-      productCard.url || productCard.link
+      productCard.productUrl || productCard.product_url || productCard.productPageUrl || productCard.detailUrl ||
+      productCard.sourceUrl || productCard.source_url || productCard.targetUrl || productCard.target_url ||
+      productCard.outboundUrl || productCard.outbound_url || productCard.url || productCard.link
     )
   );
   const card = {

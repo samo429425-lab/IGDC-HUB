@@ -180,7 +180,7 @@
     // Administrator-approved exact seller/product detail route is authoritative.
     // Do not detour a valid front card through /content.html when the published
     // snapshot already carries the same product URL that works in Admin.
-    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.outboundUrl || item.sourceUrl || item.productUrl || item.url || '');
+    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.externalProductUrl || item.officialProductUrl || item.productUrl || item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl || item.orderUrl || item.productLink || item.displayUrl || item.sourceUrl || item.targetUrl || item.outboundUrl || item.url || item.href || item.link || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     // Internal IGDC detail remains a fallback only when a real published id exists.
     if (item.id && item.__igdcExplicitId !== false) return contentHref(item.id);
@@ -228,7 +228,7 @@
 
     const page = src.page || fb.page || 'home';
     const section = src.section || fb.section || null;
-    const sourceUrl = pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url', 'externalOutboundUrl', 'external_outbound_url', 'checkoutUrl', 'paymentUrl', 'productUrl', 'purchaseUrl', 'orderUrl', 'url', 'href', 'link', 'path', 'detailUrl', 'contentUrl', 'pageUrl']) || '#';
+    const sourceUrl = pick(src, ['affiliateOutboundUrl', 'affiliate_outbound_url', 'externalOutboundUrl', 'external_outbound_url', 'externalProductUrl', 'officialProductUrl', 'productUrl', 'product_url', 'productPageUrl', 'detailUrl', 'checkoutUrl', 'paymentUrl', 'purchaseUrl', 'orderUrl', 'productLink', 'displayUrl', 'sourceUrl', 'source_url', 'targetUrl', 'target_url', 'outboundUrl', 'outbound_url', 'url', 'href', 'link', 'path', 'contentUrl', 'pageUrl']) || '#';
     const priority = (typeof src.priority === 'number')
       ? src.priority
       : (Number.isFinite(Number(src.priority)) ? Number(src.priority) : safeNumber(fb.priority, null));
