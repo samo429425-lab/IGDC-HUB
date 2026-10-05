@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.30.0-strict-semantic-autoplace";
+const VERSION = "commerce-country-automation-v3.31.0-admin-record-is-front-authority";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1820,16 +1820,16 @@ async function productJobRule(scope) {
   const row = array(rows)[0]; return row ? Object.assign({}, plain(row.rule)) : null;
 }
 function restoredProductFromCandidate(rowInput, scope) {
-  const row=plain(rowInput),payload=plain(row.source_payload),card=plain(payload.productCard),supplier=plain(payload.supplier),ranking=plain(payload.productRanking),placement=plain(payload.approvedPlacement||payload.placement),readiness=plain(payload.researchReadiness),url=safeUrl(first(payload.externalProductUrl,payload.url,row.official_url,card.checkoutUrl)),image=safeUrl(first(payload.image,payload.thumb,row.thumbnail_url,card.image));
-  if(!url||!image)return null;
-  const market=plain(payload.marketScope),country=normalizeCountry(first(market.marketCountry,plain(payload.countrySupply).country,placement.country,scope.country)),region=normalizeRegion(first(market.marketRegion,plain(payload.countrySupply).region,placement.region,"NATIONWIDE"),country)||"NATIONWIDE";
+  const row=plain(rowInput),payload=plain(row.source_payload),adminRecord=ProductPipeline.administratorProductRecord(row),card=plain(adminRecord.productCard),supplier=plain(payload.supplier),ranking=plain(payload.productRanking),placement=plain(adminRecord.placement),readiness=plain(payload.researchReadiness),url=safeUrl(adminRecord.productUrl),image=safeUrl(adminRecord.imageUrl);
+  if(!adminRecord.adminDisplayReady||!url||!image)return null;
+  const market=plain(payload.marketScope),country=normalizeCountry(first(placement.country,scope.country,market.marketCountry,plain(payload.countrySupply).country)),region=normalizeRegion(first(placement.region,scope.region,market.marketRegion,plain(payload.countrySupply).region,"NATIONWIDE"),country)||"NATIONWIDE";
   if(country!==scope.country||region!==scope.region)return null;
   const sectionAssignments=array(payload.proposedPlacements).map((item)=>Object.assign({},plain(item),{sectionKey:text(item&&item.sectionKey||item&&item.section)}));
   return Object.assign({},payload,{
     candidateId:text(row.id),id:first(payload.originalProductId,row.id),productIdentity:first(payload.productIdentity,row.id),
-    productName:first(payload.title,row.title,card.title),title:first(payload.title,row.title,card.title),sourceTitle:first(payload.sourceTitle,card.sourceTitle),
+    productName:first(adminRecord.title,payload.title,row.title,card.title),title:first(adminRecord.title,payload.title,row.title,card.title),sourceTitle:first(payload.sourceTitle,card.sourceTitle),
     productUrl:url,url,imageUrl:image,imageOriginalUrl:image,price:first(payload.price,card.price),priceCurrency:first(payload.priceCurrency,card.priceCurrency),availability:first(payload.availability,card.availability),
-    supplierId:first(supplier.id,payload.supplierId),supplierName:first(supplier.name,payload.supplierName,card.supplierName),supplierSiteUrl:first(supplier.officialUrl,payload.supplierSiteUrl,card.supplierUrl),supplierType:first(supplier.type,payload.supplierType),supplierTrustScore:Number(first(supplier.trustScore,payload.supplierTrustScore))||0,supplierEvidenceReady:supplier.evidenceReady===true||payload.supplierEvidenceReady===true,
+    supplierId:first(supplier.id,payload.supplierId),supplierName:first(adminRecord.supplierName,supplier.name,payload.supplierName,card.supplierName),supplierSiteUrl:first(adminRecord.supplierUrl,supplier.officialUrl,payload.supplierSiteUrl,card.supplierUrl),supplierType:first(supplier.type,payload.supplierType),supplierTrustScore:Number(first(supplier.trustScore,payload.supplierTrustScore))||0,supplierEvidenceReady:supplier.evidenceReady===true||payload.supplierEvidenceReady===true,
     productCategory:first(ranking.category,payload.productCategory),productCategoryTags:array(ranking.categoryTags).concat(array(payload.productCategoryTags)),rankingScore:Number(first(ranking.score,payload.rankingScore))||0,
     sectionAssignments,approvedPlacement:Object.keys(placement).length?placement:null,primaryPlacement:Object.keys(placement).length?placement:null,
     slotDecision:text(payload.slotDecision)||(["approved","revenue_ready"].includes(lower(row.status))?"slot_candidate":"undecided"),
@@ -3865,15 +3865,15 @@ function candidateRuntimeManualLock(payloadInput) {
   return control.administratorLocked === true || control.aiReclassificationAllowed === false || source === "administrator" || (placement.administratorSelected === true && placement.aiSelected !== true);
 }
 function candidateRuntimeProduct(rowInput, scope) {
-  const row = plain(rowInput), payload = plain(row.source_payload), card = plain(payload.productCard), supplier = plain(payload.supplier), placement = plain(payload.approvedPlacement || payload.placement);
-  const url = safeUrl(first(payload.externalProductUrl, payload.productUrl, payload.url, row.official_url, card.checkoutUrl, card.productUrl));
+  const row = plain(rowInput), payload = plain(row.source_payload), adminRecord = ProductPipeline.administratorProductRecord(row), card = plain(adminRecord.productCard), supplier = plain(payload.supplier), placement = plain(adminRecord.placement);
+  const url = safeUrl(adminRecord.productUrl);
   if (!url) return null;
-  const image = safeUrl(first(payload.image, payload.thumb, payload.imageUrl, row.thumbnail_url, card.image, card.imageUrl));
+  const image = safeUrl(adminRecord.imageUrl);
   return Object.assign({}, payload, {
     candidateId: text(row.id), id: first(payload.originalProductId, row.id), productIdentity: first(payload.productIdentity, row.id), candidateRegisteredAt: first(payload.candidateRegisteredAt, payload.createdAt, row.created_at),
-    productName: first(payload.title, row.title, card.title), title: first(payload.title, row.title, card.title), sourceTitle: first(payload.sourceTitle, card.sourceTitle),
+    productName: first(adminRecord.title, payload.title, row.title, card.title), title: first(adminRecord.title, payload.title, row.title, card.title), sourceTitle: first(payload.sourceTitle, card.sourceTitle),
     productUrl: url, url, imageUrl: image, imageOriginalUrl: image, price: first(payload.price, card.price), priceCurrency: first(payload.priceCurrency, card.priceCurrency), availability: first(payload.availability, card.availability),
-    supplierId: first(supplier.id, payload.supplierId), supplierName: first(supplier.name, payload.supplierName, card.supplierName), supplierSiteUrl: first(supplier.officialUrl, payload.supplierSiteUrl, card.supplierUrl), supplierType: first(supplier.type, payload.supplierType), supplierTrustScore: Number(first(supplier.trustScore, payload.supplierTrustScore)) || 0, supplierEvidenceReady: supplier.evidenceReady === true || payload.supplierEvidenceReady === true,
+    supplierId: first(supplier.id, payload.supplierId), supplierName: first(adminRecord.supplierName, supplier.name, payload.supplierName, card.supplierName), supplierSiteUrl: first(adminRecord.supplierUrl, supplier.officialUrl, payload.supplierSiteUrl, card.supplierUrl), supplierType: first(supplier.type, payload.supplierType), supplierTrustScore: Number(first(supplier.trustScore, payload.supplierTrustScore)) || 0, supplierEvidenceReady: supplier.evidenceReady === true || payload.supplierEvidenceReady === true,
     productCategory: first(plain(payload.productRanking).category, payload.productCategory), productCategoryTags: array(plain(payload.productRanking).categoryTags).concat(array(payload.productCategoryTags)),
     sectionAssignments: array(payload.proposedPlacements).map((item) => Object.assign({}, plain(item), { sectionKey: text(item && (item.sectionKey || item.section)) })),
     approvedPlacement: Object.keys(placement).length ? placement : null, primaryPlacement: Object.keys(placement).length ? placement : null,
@@ -4812,39 +4812,32 @@ async function frontSyncWriteStage(trace, name, attempted, writer) {
   }
 }
 function frontSyncPublicReadiness(productInput, existingCandidate) {
-  const product = plain(productInput), existingPayload = plain(existingCandidate && existingCandidate.source_payload), runtimeValidation = plain(existingPayload.runtimeValidation || product.runtimeValidation), risk = plain(product.riskAssessment), supplier = plain(product.supplierAssessment), reasons = [], warnings = [];
-  const productPageUrl = safeUrl(productUrl(product)), imageUrl = safeUrl(productImageUrl(product)), supplierUrl = safeUrl(first(product.supplierSiteUrl, plain(product.supplier).officialUrl)), supplierName = first(product.supplierName, plain(product.supplier).name);
-  const trustScore = Number(first(product.supplierTrustScore, supplier.trustScore, plain(product.supplier).trustScore)) || 0;
-  const evidenceReady = product.supplierEvidenceReady === true || supplier.evidenceReady === true || plain(product.supplier).evidenceReady === true;
-  const blockers = array(risk.blockers).map(lower).filter(Boolean);
-  const prohibited = blockers.filter((item) => /(malware|phishing|fraud|illegal|prohibited|sanction|counterfeit|adult|unsafe|product_page_unavailable|supplier_product_domain_mismatch)/.test(item));
-  if (plain(existingPayload.queueControl).permanentExcluded === true) reasons.push("permanently_excluded");
-  if (lower(runtimeValidation.state) === "inconclusive") { if (runtimeValidation.priorLiveFallbackAllowed === true) warnings.push("runtime_validation_inconclusive_recent_live_detail_preserved"); else reasons.push("runtime_validation_inconclusive"); }
-  if (lower(runtimeValidation.state) === "dead" || runtimeValidation.dead === true) reasons.push("runtime_product_unavailable");
-  if (!productPageUrl || !ProductRanking.isSpecificProductUrl(productPageUrl)) reasons.push("specific_product_url_missing");
-  if (!imageUrl) reasons.push("actual_product_image_missing");
-  if (!supplierUrl || !supplierName) reasons.push("official_supplier_identity_missing");
-  if (product.productPageLive === false || risk.explicitUnavailable === true) reasons.push("product_page_unavailable");
-  if (product.sameSupplierSite === false) reasons.push("supplier_product_domain_mismatch");
-  if (prohibited.length) reasons.push(...prohibited);
-  /* An authenticated administrator front-match is the explicit publication
-     selection.  A low/unscored trust value by itself is not an explicit danger
-     signal; preserve it as a warning and keep only concrete unsafe/dead/mismatch
-     findings as blockers above.  This prevents ordinary evidence-pending rows
-     from being stranded before Registry/SearchBank while retaining hard safety
-     exclusions. */
-  if (trustScore > 0 && trustScore < TRUST_POLICY.minimumTrustScore) warnings.push("supplier_trust_below_public_threshold_admin_confirmed");
-  if (ProductRanking.isGenericProductName(first(product.productName, product.title)) && !text(product.priorityLabel) && !supplierName) reasons.push("product_title_not_verified");
-  if (product.inspectionComplete !== true) warnings.push("product_inspection_pending");
-  if (risk.gatePassed !== true) warnings.push("risk_review_pending_admin_confirmed");
-  if (!evidenceReady) warnings.push("supplier_evidence_pending_admin_confirmed");
-  warnings.push(...blockers.filter((item) => !prohibited.includes(item)));
+  const product=plain(productInput), existingPayload=plain(existingCandidate&&existingCandidate.source_payload), adminRecord=ProductPipeline.administratorProductRecord(existingCandidate), runtimeValidation=plain(existingPayload.runtimeValidation||product.runtimeValidation), risk=plain(product.riskAssessment), reasons=[], warnings=[];
+  // Publication is a projection of the administrator ledger.  Once the Admin
+  // page has a real clickable product URL + thumbnail and the operator selected
+  // the placement, Front must carry that exact record forward.  Do not run a
+  // second URL classifier here; that was the source of Admin-normal/Front-empty
+  // divergence for food, appliances and other global suppliers.
+  const productPageUrl=safeUrl(adminRecord.productUrl), imageUrl=safeUrl(adminRecord.imageUrl), supplierUrl=safeUrl(adminRecord.supplierUrl), supplierName=first(adminRecord.supplierName,product.supplierName,plain(product.supplier).name,adminRecord.title,"External seller");
+  if(!adminRecord.adminDisplayReady||!productPageUrl) reasons.push("administrator_product_url_missing");
+  if(!imageUrl) reasons.push("administrator_product_image_missing");
+  if(plain(existingPayload.queueControl).permanentExcluded===true) reasons.push("administrator_permanently_excluded");
+  // Runtime/research signals are diagnostics only after an explicit Front Match.
+  // They may warn the administrator, but they may not silently cancel or rewrite
+  // the administrator's currently normal product card.
+  if(lower(runtimeValidation.state)==="dead"||runtimeValidation.dead===true) warnings.push("runtime_check_disagrees_with_admin_record");
+  if(lower(runtimeValidation.state)==="inconclusive") warnings.push("runtime_validation_inconclusive_admin_record_preserved");
+  if(product.productPageLive===false||risk.explicitUnavailable===true) warnings.push("research_availability_flag_admin_record_preserved");
+  if(product.sameSupplierSite===false) warnings.push("research_supplier_match_flag_admin_record_preserved");
+  if(!supplierUrl) warnings.push("supplier_site_url_missing_admin_product_url_used");
   return {
-    eligible: reasons.length === 0,
-    reasons: Array.from(new Set(reasons.filter(Boolean))),
-    warnings: Array.from(new Set(warnings.filter(Boolean))),
-    approvalMode: "explicit_administrator_front_match",
-    productPageUrl, imageUrl, supplierUrl, supplierName, trustScore, evidenceReady
+    eligible:reasons.length===0,
+    reasons:Array.from(new Set(reasons.filter(Boolean))),
+    warnings:Array.from(new Set(warnings.filter(Boolean))),
+    approvalMode:"administrator_display_record_authority",
+    productPageUrl,imageUrl,supplierUrl:supplierUrl||productPageUrl,supplierName,
+    adminRecordSource:adminRecord.source,
+    adminDisplayReady:adminRecord.adminDisplayReady===true
   };
 }
 function frontSyncAssignmentId(candidateId, scope, sectionKey) {
@@ -4951,12 +4944,12 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     const hasApprovedExternalReferral = array(revenuesByCandidate.get(candidateId)).some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved" && !!safeUrl(row && row.affiliate_url));
     if (!hasApprovedExternalReferral) revenueUpserts.push({
       id:frontSyncRevenueId(candidateId), candidate_id:candidateId, revenue_type:"external_referral", status:"approved", affiliate_url:readiness.productPageUrl,
-      provider_name:readiness.supplierName.slice(0,240), currency:null,
+      provider_name:first(readiness.supplierName,target.title,"External seller").slice(0,240), currency:null,
       note:"Administrator-confirmed non-PG external-seller referral. Traffic/referral value only unless a separate payable affiliate or brokerage contract is verified.", updated_at:now, updated_by:actor
     });
     const hasVerifiedEvidence = array(evidenceByCandidate.get(candidateId)).some((row) => row && row.verified === true && !!safeUrl(row.evidence_url));
     if (!hasVerifiedEvidence) evidenceUpserts.push({
-      id:frontSyncEvidenceId(candidateId), candidate_id:candidateId, evidence_type:"official_supplier_product_reference", evidence_url:readiness.supplierUrl,
+      id:frontSyncEvidenceId(candidateId), candidate_id:candidateId, evidence_type:"official_supplier_product_reference", evidence_url:first(readiness.supplierUrl,readiness.productPageUrl),
       note:"Administrator-confirmed official supplier/product reference for Front Match. This verifies the selected destination only and does not transfer seller, payment, delivery, return, refund or support responsibility to IGDC.", verified:true, created_at:now, created_by:actor
     });
     plannedCandidateIds.push(candidateId);

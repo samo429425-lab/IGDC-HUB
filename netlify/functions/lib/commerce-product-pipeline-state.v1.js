@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.4.0-exact-product-destination";
+const VERSION = "commerce-product-pipeline-state-v1.5.0-admin-display-publication-authority";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -101,6 +101,49 @@ function productCard(productInput){
     returnsResponsibility:"external_supplier",
     refundResponsibility:"external_supplier",
     lastVerifiedAt:first(product.inspectedAt,product.updatedAt)||null
+  };
+}
+
+
+/*
+ * One authoritative Admin -> Front product record.
+ *
+ * The administrator page renders the persisted productCard/checkoutUrl when it
+ * exists.  Front publication must consume that exact same record; it must not
+ * re-scrape or re-classify the URL with a different heuristic after the
+ * administrator has already reviewed and placed the product.
+ */
+function administratorProductRecord(candidateInput){
+  const candidate=plain(candidateInput), payload=plain(candidate.source_payload), readiness=plain(payload.researchReadiness);
+  const persistedCard=plain(payload.productCard), readinessCard=plain(readiness.productCard);
+  const fallbackCard=productCard(payload);
+  const card=persistedCard.checkoutUrl ? persistedCard : (readinessCard.checkoutUrl ? readinessCard : fallbackCard);
+  const productUrl=safeHttpsUrl(first(
+    card.checkoutUrl,card.productUrl,
+    payload.externalProductUrl,payload.officialProductUrl,payload.productUrl,payload.productPageUrl,payload.detailUrl,payload.checkoutUrl,payload.purchaseUrl,payload.orderUrl,payload.productLink,
+    payload.url,candidate.official_url
+  ));
+  const imageUrl=safeHttpsUrl(first(
+    card.image,card.imageUrl,card.imageOriginalUrl,card.thumbnail,card.thumbnailUrl,card.thumb,
+    payload.imageUrl,payload.imageOriginalUrl,payload.image,payload.thumbnail,payload.thumb,candidate.thumbnail_url
+  ));
+  const supplier=plain(payload.supplier), seller=plain(payload.sellerResponsibility);
+  const supplierUrl=safeHttpsUrl(first(card.supplierUrl,payload.supplierSiteUrl,supplier.officialUrl,seller.supportUrl));
+  const supplierName=first(card.supplierName,payload.supplierName,supplier.name,seller.legalEntity,candidate.title);
+  const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.primaryPlacement||payload.placement);
+  const title=first(card.title,payload.productName,payload.productTitle,payload.title,candidate.title,"상품");
+  return {
+    schema:"igdc-administrator-product-record.v1",
+    candidateId:text(candidate.id),
+    title,
+    productUrl:productUrl||"",
+    imageUrl:imageUrl||"",
+    supplierName:supplierName||"",
+    supplierUrl:supplierUrl||"",
+    placement,
+    productCard:Object.assign({},card,{title,checkoutUrl:productUrl||null,productUrl:productUrl||null,image:imageUrl||null,imageUrl:imageUrl||null,supplierName:supplierName||null,supplierUrl:supplierUrl||null}),
+    adminDisplayReady:!!(productUrl&&imageUrl),
+    source:"gslot_candidates.source_payload.productCard"
   };
 }
 
@@ -201,14 +244,17 @@ function registryState(candidateInput, relationsInput){
 }
 
 function liveQueueRow(candidateInput, relationsInput){
-  const candidate=plain(candidateInput), payload=plain(candidate.source_payload), lifecycle=registryState(candidate,relationsInput), card=plain(payload.productCard&&payload.productCard.schema?payload.productCard:productCard(payload));
-  const placement=plain(payload.approvedPlacement || payload.selectedPlacement || payload.placement), ranking=plain(payload.productRanking), revenue=plain(payload.revenue), readiness=plain(payload.researchReadiness);
+  const candidate=plain(candidateInput), payload=plain(candidate.source_payload), lifecycle=registryState(candidate,relationsInput), adminRecord=administratorProductRecord(candidate), card=plain(adminRecord.productCard);
+  const placement=plain(adminRecord.placement), ranking=plain(payload.productRanking), revenue=plain(payload.revenue), readiness=plain(payload.researchReadiness);
   const qualityReasons=unique(array(readiness.blockers).concat(array(readiness.reviewGaps),array(readiness.warnings)));
   return {
     candidateId:text(candidate.id),
     pipelineSource:"live_product_research_db",
-    title:first(card.title,candidate.title),
-    image:card.image||safeHttpsUrl(candidate.thumbnail_url),
+    title:first(adminRecord.title,card.title,candidate.title),
+    url:adminRecord.productUrl||"",
+    productUrl:adminRecord.productUrl||"",
+    image:adminRecord.imageUrl||card.image||safeHttpsUrl(candidate.thumbnail_url),
+    imageUrl:adminRecord.imageUrl||card.image||safeHttpsUrl(candidate.thumbnail_url),
     productCard:card,
     supplier:plain(payload.supplier),
     sourceTier:first(plain(payload.commerceCandidate).sourceTier,"risk_ranked_official_supplier_product"),
@@ -230,4 +276,4 @@ function liveQueueRow(candidateInput, relationsInput){
   };
 }
 
-module.exports={VERSION,SOURCE_REF,STAGES,productCard,researchReadiness,approvedRevenueRoute,registryState,liveQueueRow};
+module.exports={VERSION,SOURCE_REF,STAGES,productCard,administratorProductRecord,researchReadiness,approvedRevenueRoute,registryState,liveQueueRow};

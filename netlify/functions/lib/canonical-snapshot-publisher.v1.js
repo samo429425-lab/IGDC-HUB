@@ -25,7 +25,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.6.1-exact-product-destination-contract";
+const VERSION = "canonical-snapshot-publisher-v1.7.0-admin-publication-authority";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
@@ -495,6 +495,13 @@ function validateCandidate(raw, index, context) {
   if (!region) reasons.push("REGION_MISSING_OR_INVALID");
   if (country === "GLOBAL" && !geo.globalExplicit) reasons.push("GLOBAL_SCOPE_NOT_EXPLICIT");
   if (region === "GLOBAL" && !geo.globalExplicit) reasons.push("GLOBAL_REGION_NOT_EXPLICIT");
+  const adminAuthority = isObject(item.administratorFrontMatchAuthority) ? item.administratorFrontMatchAuthority : {};
+  const explicitAdminPublication = adminAuthority.verified === true &&
+    lower(adminAuthority.publicationStatus) === "publish_requested" &&
+    str(adminAuthority.assignmentId) &&
+    str(adminAuthority.page) === page && str(adminAuthority.section) === section &&
+    normalizeCountry(adminAuthority.country, false) === country &&
+    normalizeRegion(firstValue(adminAuthority.region, "NATIONWIDE"), false, true, country) === region;
   let ipSlot = { ok: true, scoped: false, reasons: [], mapping: null };
   if (context.ipPolicy && context.ipPolicy.ok && page && section && country && region) {
     ipSlot = IpSlotPolicy.validateCandidate(item, { policy: context.ipPolicy, page, section, country, region });
@@ -528,6 +535,24 @@ function validateCandidate(raw, index, context) {
   }
   if (!evidence.trusted.length && !evidence.source.length && !bool(firstValue(item.officialSource, contract.officialSource, item.institutionVerified, contract.institutionVerified, item.producerVerified, contract.producerVerified))) reasons.push("TRUST_EVIDENCE_MISSING");
   if (!verificationTimestampValid(evidence.verificationAt, context.policy.maxVerificationAgeDays)) reasons.push("VERIFICATION_TIMESTAMP_MISSING_OR_STALE");
+
+  // The administrator ledger is the publication authority.  Once Registry has
+  // emitted a verified Front Match marker, Canonical verifies transport,
+  // routing, scope and release-envelope integrity only.  It must not run a
+  // second trust/revenue/research verdict that can make an Admin-normal card
+  // disappear from Front.
+  if (explicitAdminPublication) {
+    const structuralAdminReasons = new Set([
+      "TITLE_MISSING","DESTINATION_NOT_HTTPS","IMAGE_NOT_HTTPS","PLACEHOLDER_OR_SAMPLE","DESTINATION_HOST_UNSAFE",
+      "PAGE_MAPPING_CONFLICT","PAGE_MAPPING_MISSING","PAGE_NOT_IN_PSOM","SECTION_MAPPING_CONFLICT","SECTION_MAPPING_MISSING","SECTION_NOT_IN_PSOM_PAGE",
+      "PRODUCT_DETAIL_DESTINATION_REQUIRED","SLOT_MAPPING_CONFLICT","SLOT_OUT_OF_CAPACITY","COUNTRY_REQUIRES_ISO_3166_ALPHA2","REGION_MISSING_OR_INVALID",
+      "GLOBAL_SCOPE_NOT_EXPLICIT","GLOBAL_REGION_NOT_EXPLICIT","IP_SLOT_GLOBAL_SCOPE_FORBIDDEN","COMMERCE_CANDIDATE_RELEASE_ENVELOPE_MISSING","COMMERCE_CANDIDATE_PROVENANCE_MISSING"
+    ]);
+    for (let i=reasons.length-1;i>=0;i--) {
+      const reason=reasons[i];
+      if (!structuralAdminReasons.has(reason) && !/^IP_/.test(reason)) reasons.splice(i,1);
+    }
+  }
 
   const fingerprint = sha256({
     candidateId, destination, page, section, country, region,

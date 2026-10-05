@@ -14,8 +14,9 @@ const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
+const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.12.2-source-agnostic-admin-publication-authority";
+const VERSION = "commerce-candidate-registry-sync-v1.13.0-admin-record-publication-authority";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -53,6 +54,7 @@ function productCardOf(payload){
   return Object.assign({},researchCard,directCard);
 }
 function exactProductTitle(candidate,payload){
+  const adminRecord=ProductPipeline.administratorProductRecord(candidate); if(adminRecord&&adminRecord.title)return text(adminRecord.title);
   payload=plain(payload); const card=productCardOf(payload);
   const candidates=[
     card.title,card.productName,card.name,card.itemName,card.displayName,card.sourceTitle,
@@ -64,6 +66,7 @@ function exactProductTitle(candidate,payload){
   return first.apply(null,candidates);
 }
 function exactProductImage(candidate,payload){
+  const adminRecord=ProductPipeline.administratorProductRecord(candidate); if(adminRecord&&adminRecord.imageUrl)return safeUrl(adminRecord.imageUrl);
   payload=plain(payload); const card=productCardOf(payload);
   const candidates=[card.image,card.imageUrl,card.imageOriginalUrl,card.thumbnail,card.thumbnailUrl,card.thumb,payload.imageUrl,payload.imageOriginalUrl,payload.image,payload.thumbnail,payload.thumb,candidate&&candidate.thumbnail_url];
   for(const value of candidates){ const url=safeUrl(value); if(url) return url; }
@@ -78,6 +81,7 @@ function isRootPageUrl(value){
   try{ const u=new URL(url); return (!u.pathname||u.pathname==="/")&&!u.search; }catch(_e){return true;}
 }
 function exactProductDestination(candidate,payload){
+  const adminRecord=ProductPipeline.administratorProductRecord(candidate); if(adminRecord&&adminRecord.productUrl)return safeUrl(adminRecord.productUrl);
   payload=plain(payload); const card=productCardOf(payload);
   const supplierCandidates=[card.supplierUrl,payload.supplierSiteUrl,plain(payload.supplier).officialUrl,plain(payload.sellerResponsibility).supportUrl].map(normalizedUrlKey).filter(Boolean);
   const candidates=[
@@ -250,13 +254,9 @@ function syntheticEvidenceFromMarker(candidate, marker){
 }
 function explicitAdminReferralReady(candidate,assignment,availabilityRows){
   if(lower(assignment&&assignment.publication_status)!=="publish_requested") return false;
-  const payload=sourcePayload(candidate);
-  const title=exactProductTitle(candidate,payload);
-  const destination=exactProductDestination(candidate,payload);
-  const image=exactProductImage(candidate,payload);
-  const supplier=supplierIdentity(candidate,payload), supplierUrl=supplier.url, supplierName=supplier.name;
-  if(!destination||!image||!supplierUrl||!supplierName) return false;
-  if(!array(availabilityRows).length||explicitHardRisk(payload)) return false;
+  const adminRecord=ProductPipeline.administratorProductRecord(candidate);
+  if(!adminRecord||adminRecord.adminDisplayReady!==true||!safeUrl(adminRecord.productUrl)||!safeUrl(adminRecord.imageUrl)) return false;
+  if(!array(availabilityRows).length) return false;
   return true;
 }
 function explicitReferralRevenueRow(candidate,assignment){
@@ -553,6 +553,17 @@ function currentAdministratorAssignmentMatches(candidate,row){
   return wantedRegion===rowRegion;
 }
 
+
+async function selectAllRows(sb,table,selectClause,orderClause,pageSize){
+  const size=Math.max(100,Math.min(1000,Number(pageSize)||1000)),out=[];
+  for(let offset=0;;offset+=size){
+    const query=selectClause+(orderClause?"&"+orderClause:"")+"&limit="+size+"&offset="+offset;
+    const rows=array(await sb.select(table,query));
+    out.push(...rows);
+    if(rows.length<size)break;
+  }
+  return out;
+}
 async function syncApprovedCandidates(input){
   const root=rootOf(input);
   const file=queuePath(root);
@@ -563,14 +574,14 @@ async function syncApprovedCandidates(input){
     const ipPolicy=IpSlotPolicy.load(root);
     if(!ipPolicy.ok) return {ok:false,status:"blocked",version:VERSION,wrote:false,file,reason:"ip-slot-policy-invalid",problems:ipPolicy.problems||[]};
     const [candidates,assignments,availability,revenue,evidence]=await Promise.all([
-      sb.select("gslot_candidates","select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,source_payload,updated_at,created_at&order=updated_at.desc&limit=2000"),
-      sb.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,priority,state,publication_status,manual_pinned,updated_at,updated_by&order=updated_at.desc&limit=5000"),
-      sb.select("gslot_candidate_availability","select=candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at,updated_by&order=updated_at.desc&limit=5000"),
-      sb.select("gslot_candidate_revenue","select=id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at&order=updated_at.desc&limit=5000"),
-      sb.select("gslot_candidate_evidence","select=id,candidate_id,evidence_type,evidence_url,note,verified,created_at&order=created_at.desc&limit=5000")
+      selectAllRows(sb,"gslot_candidates","select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,source_payload,updated_at,created_at","order=updated_at.desc",1000),
+      selectAllRows(sb,"gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,priority,state,publication_status,manual_pinned,updated_at,updated_by","order=updated_at.desc",1000),
+      selectAllRows(sb,"gslot_candidate_availability","select=candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at,updated_by","order=updated_at.desc",1000),
+      selectAllRows(sb,"gslot_candidate_revenue","select=id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at","order=updated_at.desc",1000),
+      selectAllRows(sb,"gslot_candidate_evidence","select=id,candidate_id,evidence_type,evidence_url,note,verified,created_at","order=created_at.desc",1000)
     ]);
     const assignmentByCandidate=new Map();
-    array(assignments).forEach(row=>{ if(!allowedAssignmentState(row.state))return; if(!assignmentByCandidate.has(row.candidate_id))assignmentByCandidate.set(row.candidate_id,[]); assignmentByCandidate.get(row.candidate_id).push(row); });
+    array(assignments).forEach(row=>{ const publicationRequested=lower(row&&row.publication_status)==="publish_requested"; if(!allowedAssignmentState(row.state)&&!publicationRequested)return; if(!assignmentByCandidate.has(row.candidate_id))assignmentByCandidate.set(row.candidate_id,[]); assignmentByCandidate.get(row.candidate_id).push(row); });
     const avBy=new Map(), rBy=new Map(), eBy=new Map();
     array(availability).forEach(row=>{ if(!approvedAvailability(row.availability_state)) return; if(!avBy.has(row.candidate_id)) avBy.set(row.candidate_id,[]); avBy.get(row.candidate_id).push(row); });
     array(revenue).forEach(row=>{ if(!rBy.has(row.candidate_id)) rBy.set(row.candidate_id,[]); rBy.get(row.candidate_id).push(row); });

@@ -304,42 +304,16 @@ exports.handler=async function(event){
       if(!plan.targets.length){
         batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
       }else if(operation==="match"){
-        // The front-match button is also the runtime maintenance pass.  Recheck
-        // selected rows and, on a full-scope run, every currently published row.
-        // Dead/redirected products are durably withdrawn first; valid rows keep
-        // their assignment and are then prepared through the canonical four
-        // relation ledgers.  All dispatches are deferred to one final build.
-        refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets,{includePublishedScope:request.scopeRefresh===true});
-        const withdrawAssignments=Array.isArray(refresh&&refresh.withdrawAssignments)?refresh.withdrawAssignments:[];
-        if(withdrawAssignments.length){
-          repairUnpublish=await frontPublicationWithdrawAssignmentsOnly(withdrawAssignments,actorId);
-        }
-        refresh=Object.assign({},refresh,{withdrawn:withdrawAssignments.length,withdrawRequested:withdrawAssignments.length,withdrawPersisted:Array.isArray(repairUnpublish&&repairUnpublish.items)?repairUnpublish.items.filter((item)=>item&&item.persisted===true).length:0});
-        // Front validation is diagnostic/publication-only. It must never rewrite
-        // the administrator's 20-section board. Re-read the same administrator
-        // authority after validation, then filter only hard-invalid rows from
-        // THIS publication attempt while leaving their placement untouched.
-        plan=await Automation.productFrontSyncTargets(request,loadedJob);
-        const hardInvalidIds=new Set((Array.isArray(refresh&&refresh.results)?refresh.results:[]).filter((item)=>item&&item.invalid===true).map((item)=>String(item.candidateId||"").trim()).filter(Boolean));
-        if(hardInvalidIds.size){
-          plan=Object.assign({},plan,{targets:(Array.isArray(plan.targets)?plan.targets:[]).filter((row)=>!hardInvalidIds.has(String(row&&row.candidateId||"").trim())),publicationBlockedCandidateIds:Array.from(hardInvalidIds)});
-        }
-        let preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
-        let preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds.slice():[];
-        // The administrator screen and the front preparation layer historically
-        // read different URL/image aliases.  If canonical preparation rejects a
-        // row only because that stale alias bridge lost productUrl/imageUrl, re-read
-        // the same authoritative candidate row that Admin displays.  Recover only
-        // rows that survived the hard runtime validation above and still have the
-        // exact administrator placement, a specific product-detail URL, a safe
-        // product image, and no explicit hard-risk flags.
+        // ADMIN -> FRONT ONE-WAY AUTHORITY.
+        // The administrator board is the publication source of truth.  If the
+        // Admin page already has a clickable product URL, thumbnail and placement,
+        // Front Match must publish that exact candidate record.  Do not re-scrape,
+        // re-classify, auto-withdraw or filter it with a second Front-only rule.
+        refresh={ok:true,status:"administrator_record_authoritative",requested:plan.targets.length,revalidated:0,remoteChecked:0,freshReused:0,invalid:0,inconclusive:0,withdrawn:0,administratorLedgerPreserved:true,frontRevalidationSkipped:true};
+        const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
+        const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds.slice():[];
         const preparedSet=new Set(preparedIds.map(text).filter(Boolean));
-        const recoveryRequested=(Array.isArray(plan.targets)?plan.targets:[]).map((row)=>text(row&&row.candidateId)).filter((id)=>id&&!preparedSet.has(id));
-        const authoritativeRecovery=await authoritativeFrontBridgeRecovery(recoveryRequested,scope,plan.targets);
-        for(const id of array(authoritativeRecovery&&authoritativeRecovery.recoveredCandidateIds)){const value=text(id);if(value&&!preparedSet.has(value)){preparedSet.add(value);preparedIds.push(value);}}
-        preparation=Object.assign({},preparation,{preparedCandidateIds:preparedIds,prepared:preparedIds.length,authoritativeCandidateRecovery:authoritativeRecovery});
-        const recoveryBlocked=new Set(array(authoritativeRecovery&&authoritativeRecovery.blocked).map((item)=>text(item&&item.candidateId)).filter(Boolean));
-        const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked"&&!preparedSet.has(text(item.candidateId))).map((item)=>Object.assign({},item,{authoritativeRecoveryAttempted:recoveryBlocked.has(text(item.candidateId))}));
+        const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked"&&!preparedSet.has(text(item.candidateId)));
         const repairItems=Array.isArray(repairUnpublish&&repairUnpublish.items)?repairUnpublish.items:[];
         if(!preparedIds.length){
           const items=repairItems.concat(preparationBlocked);
