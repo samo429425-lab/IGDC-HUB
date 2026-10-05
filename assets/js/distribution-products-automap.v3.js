@@ -112,7 +112,7 @@
   function compactItem(item){
     item=item&&typeof item==='object'?item:{};
     return {
-      id:pick(item,['id','uid','productId','contentId']),
+      id:pick(item,['id','uid','productId','contentId','candidateId','candidate_id']),
       title:pick(item,['title','name','text']),
       name:pick(item,['name','title']),
       meta:pick(item,['meta','subtitle','summary','description']),
@@ -123,9 +123,9 @@
       // Canonical publication keeps the verified seller detail route under
       // product/display/detail/checkout fields. Preserve those fields here
       // instead of dropping them during the compact snapshot pass.
-      url:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','url','href','link']),
-      href:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','href','url','link']),
-      link:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','link','url','href']),
+      url:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','sourceUrl','source_url','targetUrl','target_url','outboundUrl','outbound_url','url','href','link']),
+      href:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','sourceUrl','source_url','targetUrl','target_url','outboundUrl','outbound_url','href','url','link']),
+      link:pick(item,['affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','sourceUrl','source_url','targetUrl','target_url','outboundUrl','outbound_url','link','url','href']),
       affiliateOutboundUrl:pick(item,['affiliateOutboundUrl','affiliate_outbound_url']),
       externalOutboundUrl:pick(item,['externalOutboundUrl','external_outbound_url']),
       affiliate:item&&item.affiliate&&typeof item.affiliate==='object'?item.affiliate:null,

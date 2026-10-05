@@ -8,6 +8,7 @@ const ProductGoLiveAudit = require("./product-go-live-audit");
 const CandidateReview = require("./commerce-candidate-review");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
+const ProductRanking = require("./lib/commerce-product-ranking.v1");
 
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
@@ -92,6 +93,67 @@ async function frontPublicationWithdrawAssignmentsOnly(assignments,actorId){
     }catch(error){results.push({candidateId:text(item&&item.candidateId),assignmentId,status:"unpublish_failed",persisted:false,pendingBuild:false,reason:text(error&&error.message)||"assignment_unpublish_failed"});}
   }
   return{ok:true,items:results,requested:rows.length,persisted:results.filter(r=>r.persisted===true).length,candidateLedgerReadOnly:true};
+}
+
+function frontBridgeFirst(){
+  for(const value of arguments){const out=text(value);if(out)return out;}
+  return "";
+}
+function frontBridgeCandidateUrl(row){
+  const payload=plain(row&&row.source_payload),ready=plain(payload.researchReadiness),researchCard=plain(ready.productCard),card=Object.assign({},researchCard,plain(payload.productCard)),direct=plain(payload.directCommerceListing),broker=plain(payload.brokerageContract);
+  return frontBridgeFirst(
+    payload.externalProductUrl,payload.officialProductUrl,payload.productUrl,payload.productPageUrl,
+    card.externalProductUrl,card.officialProductUrl,card.productUrl,card.productPageUrl,
+    card.detailUrl,card.checkoutUrl,payload.detailUrl,payload.checkoutUrl,payload.purchaseUrl,payload.orderUrl,payload.productLink,
+    direct.destinationUrl,broker.destinationUrl,payload.url,payload.link,payload.href,row&&row.official_url
+  );
+}
+function frontBridgeCandidateImage(row){
+  const payload=plain(row&&row.source_payload),ready=plain(payload.researchReadiness),researchCard=plain(ready.productCard),card=Object.assign({},researchCard,plain(payload.productCard));
+  return frontBridgeFirst(
+    card.image,card.imageUrl,card.imageOriginalUrl,card.thumbnail,card.thumbnailUrl,card.thumbnail_url,card.thumb,
+    payload.imageUrl,payload.imageOriginalUrl,payload.image,payload.thumbnail,payload.thumbnailUrl,payload.thumbnail_url,payload.thumb,
+    row&&row.thumbnail_url
+  );
+}
+function frontBridgePlacementKey(row){
+  const payload=plain(row&&row.source_payload),placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.placement||payload.primaryPlacement);
+  const page=text(placement.page||payload.page||payload.channel),section=text(placement.sectionKey||placement.section||payload.section||payload.psom_key);
+  return page&&section?page+"|"+section:"";
+}
+function frontBridgeHardBlocked(row){
+  const payload=plain(row&&row.source_payload),queue=plain(payload.queueControl),risk=plain(payload.riskAssessment),runtimeRisk=plain(payload.risk),runtime=plain(payload.runtimeValidation),supplier=plain(payload.supplierAssessment);
+  if(queue.permanentExcluded===true)return true;
+  if(payload.productPageLive===false||payload.sameSupplierSite===false)return true;
+  if(runtime.dead===true||lower(runtime.state)==="dead")return true;
+  if(risk.explicitUnavailable===true||runtimeRisk.explicitUnavailable===true||risk.supplierSiteMatched===false||runtimeRisk.supplierSiteMatched===false)return true;
+  const blockers=[].concat(array(risk.blockers),array(runtimeRisk.blockers),array(supplier.blockers),array(payload.riskBlockers),array(payload.blockers),array(payload.hardBlockers)).map(lower).join(" ");
+  return /fraud|scam|phish|malware|illegal|counterfeit|forgery|adult|porn|sanction|prohibited|unsafe|product_page_unavailable|supplier_product_domain_mismatch|사기|악성|피싱|불법|위조|성인|음란|제재|금지/.test(blockers);
+}
+async function authoritativeFrontBridgeRecovery(candidateIdsInput,scope,targetRowsInput){
+  const ids=Array.from(new Set(array(candidateIdsInput).map(text).filter(Boolean))).slice(0,1800);
+  if(!ids.length)return{ok:true,recoveredCandidateIds:[],blocked:[],checked:0,source:"authoritative_candidate_row"};
+  const targetById=new Map(array(targetRowsInput).map((row)=>[text(row&&row.candidateId),row]));
+  const rows=[];
+  for(let offset=0;offset<ids.length;offset+=250){
+    const chunk=ids.slice(offset,offset+250),filter=chunk.map((id)=>encodeURIComponent(id)).join(",");
+    const found=await SlotStore.select("gslot_candidates","select=id,title,official_url,status,thumbnail_url,source_payload,updated_at&id=in.("+filter+")&limit=250");
+    rows.push(...array(found));
+  }
+  const byId=new Map(rows.map((row)=>[text(row&&row.id),row])),recoveredCandidateIds=[],blocked=[];
+  for(const candidateId of ids){
+    const row=plain(byId.get(candidateId)),target=plain(targetById.get(candidateId));
+    if(!Object.keys(row).length){blocked.push({candidateId,reason:"candidate_ledger_row_missing"});continue;}
+    const wanted=text(target.sectionKey),stored=frontBridgePlacementKey(row);
+    if(!wanted||stored!==wanted){blocked.push({candidateId,reason:"administrator_placement_mismatch",storedPlacement:stored||null,wantedPlacement:wanted||null});continue;}
+    if(frontBridgeHardBlocked(row)){blocked.push({candidateId,reason:"explicit_hard_risk"});continue;}
+    const destination=frontBridgeCandidateUrl(row),imageRaw=frontBridgeCandidateImage(row);
+    const image=ProductRanking.safeProductImageUrl(imageRaw);
+    if(!destination||!ProductRanking.isSpecificProductUrl(destination)){blocked.push({candidateId,reason:"specific_product_url_missing"});continue;}
+    if(!image){blocked.push({candidateId,reason:"actual_product_image_missing"});continue;}
+    recoveredCandidateIds.push(candidateId);
+  }
+  return{ok:true,recoveredCandidateIds,blocked,checked:ids.length,source:"authoritative_candidate_row",candidateLedgerReadOnly:true};
 }
 
 function readGeoObject(value){const raw=text(value);if(!raw)return{};for(const candidate of [raw,(()=>{try{return decodeURIComponent(raw);}catch(_e){return"";}})()]){try{const parsed=JSON.parse(candidate);if(parsed&&typeof parsed==="object"&&!Array.isArray(parsed))return parsed;}catch(_e){}}return{};}
@@ -262,9 +324,22 @@ exports.handler=async function(event){
         if(hardInvalidIds.size){
           plan=Object.assign({},plan,{targets:(Array.isArray(plan.targets)?plan.targets:[]).filter((row)=>!hardInvalidIds.has(String(row&&row.candidateId||"").trim())),publicationBlockedCandidateIds:Array.from(hardInvalidIds)});
         }
-        const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
-        const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds:[];
-        const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked");
+        let preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
+        let preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds.slice():[];
+        // The administrator screen and the front preparation layer historically
+        // read different URL/image aliases.  If canonical preparation rejects a
+        // row only because that stale alias bridge lost productUrl/imageUrl, re-read
+        // the same authoritative candidate row that Admin displays.  Recover only
+        // rows that survived the hard runtime validation above and still have the
+        // exact administrator placement, a specific product-detail URL, a safe
+        // product image, and no explicit hard-risk flags.
+        const preparedSet=new Set(preparedIds.map(text).filter(Boolean));
+        const recoveryRequested=(Array.isArray(plan.targets)?plan.targets:[]).map((row)=>text(row&&row.candidateId)).filter((id)=>id&&!preparedSet.has(id));
+        const authoritativeRecovery=await authoritativeFrontBridgeRecovery(recoveryRequested,scope,plan.targets);
+        for(const id of array(authoritativeRecovery&&authoritativeRecovery.recoveredCandidateIds)){const value=text(id);if(value&&!preparedSet.has(value)){preparedSet.add(value);preparedIds.push(value);}}
+        preparation=Object.assign({},preparation,{preparedCandidateIds:preparedIds,prepared:preparedIds.length,authoritativeCandidateRecovery:authoritativeRecovery});
+        const recoveryBlocked=new Set(array(authoritativeRecovery&&authoritativeRecovery.blocked).map((item)=>text(item&&item.candidateId)).filter(Boolean));
+        const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked"&&!preparedSet.has(text(item.candidateId))).map((item)=>Object.assign({},item,{authoritativeRecoveryAttempted:recoveryBlocked.has(text(item.candidateId))}));
         const repairItems=Array.isArray(repairUnpublish&&repairUnpublish.items)?repairUnpublish.items:[];
         if(!preparedIds.length){
           const items=repairItems.concat(preparationBlocked);
