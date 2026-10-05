@@ -18,13 +18,13 @@
   const FEED_URL = ""; // No non-IP fallback for the tour offer rail.
 
   const RIGHT_PANEL_ID = "rightAutoPanel";
-  const RIGHT_SLOT_COUNT = 100;
+  const RIGHT_SLOT_COUNT = 200;
   const RENDER_BATCH = 12;
   const SOURCE_SCAN_LIMIT = RIGHT_SLOT_COUNT + 40;
 
   const MOBILE_RAIL_ID = "tour-mobile-rail";
   const MOBILE_LIST_SEL = "#tour-mobile-rail .list";
-  const MOBILE_LIMIT = 100;
+  const MOBILE_LIMIT = 200;
 
   const MOBILE_CSS_ID = "tour-mobile-rail-cap-v2";
 

@@ -576,8 +576,8 @@
     const slotNo = index + 1;
     return {
       id: key + '-slot-' + pad3(slotNo),
-      title: key === 'home_6' ? 'Home 6' : '',
-      thumb: '',
+      title: key === 'home_6' ? 'Home 6' : 'Recommended',
+      thumb: '/assets/img/placeholder.png',
       url: '#',
       sourceUrl: '#',
       affiliateOutboundUrl: '',

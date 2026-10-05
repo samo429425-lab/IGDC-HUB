@@ -236,7 +236,7 @@
       root.addEventListener('click',open);
       root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
     }
-    if(track!==false) revenue(item,'trackImpression');
+    if(track!==false&&!(item&&item.__igdcReserveSlot===true)) revenue(item,'trackImpression');
     return root;
   }
   function addHash(hash,value){
@@ -320,10 +320,13 @@
   function makeSeedCard(cfg,index){
     const item={
       id:'distribution-seed-'+cfg.key+'-'+(index+1),
-      title:cfg.label+' '+(index+1),
-      meta:'',
+      title:'Recommended',
+      meta:'Auto-filled',
+      thumb:'/assets/img/placeholder.png',
+      image:'/assets/img/placeholder.png',
       section:cfg.key,
-      url:'#'
+      url:'#',
+      __igdcReserveSlot:true
     };
     const card=makeCard(item,false);
     card.classList.add('thumb-card--seed');
@@ -393,16 +396,14 @@
       if(!box) return;
       const raw=sections[cfg.key]||sections[ALIAS[cfg.key]];
       const list=normalizeList(raw).slice(0,cfg.limit);
-      // A canonical IP gate deliberately returns an empty scope when no exact
-      // same-country supply exists. Empty sections must therefore clear rather
-      // than preserve a previous-country cache or a local seed.
-      if(!list.length){
-        if(snapshot&&snapshot.meta&&snapshot.meta.geoResolutionRequired===true){
-          replaceChildren(box,document.createDocumentFragment());
-        }
-        return;
+      // The administrator snapshot is authoritative. Always replace the old DOM
+      // and pad the section to its reserved capacity. Deleted products therefore
+      // disappear immediately and their vacated slots revert to sample cards.
+      const padded=list.slice();
+      while(padded.length<cfg.limit){
+        padded.push({id:'distribution-seed-'+cfg.key+'-'+(padded.length+1),title:'Recommended',meta:'Auto-filled',thumb:'/assets/img/placeholder.png',image:'/assets/img/placeholder.png',section:cfg.key,url:'#',__igdcReserveSlot:true});
       }
-      bindIncremental(box,list,generation);
+      bindIncremental(box,padded,generation);
     });
     return true;
   }

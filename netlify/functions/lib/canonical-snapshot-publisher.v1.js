@@ -419,6 +419,10 @@ function placementValues(item) {
     slots: uniq(valuesFrom(placement.slot, placement.slotId, bind.slot, bind.slotId, pointer.slot, item && item.slot, item && item.slotId))
   };
 }
+function slotCapacityFor(page, section, policy) {
+  if (page === 'tour' && section === 'tour') return 200;
+  return Math.max(1, Number(policy && policy.slotCapacityDefault) || 100);
+}
 function requestedSlot(values) {
   if (!values || !values.length) return null;
   const parsed = uniq(values.map(value => String(Number(value))).filter(value => /^\d+$/.test(value) && Number(value) > 0));
@@ -487,7 +491,7 @@ function validateCandidate(raw, index, context) {
   if (page && section && !(context.registry.pages.get(page) || new Set()).has(section)) reasons.push("SECTION_NOT_IN_PSOM_PAGE");
   if (page && section && productBearingRoute(page, section) && !specificProductUrl(destination)) reasons.push("PRODUCT_DETAIL_DESTINATION_REQUIRED");
   if (Number.isNaN(requested)) reasons.push("SLOT_MAPPING_CONFLICT");
-  if (requested != null && requested > context.policy.slotCapacityDefault) reasons.push("SLOT_OUT_OF_CAPACITY");
+  if (requested != null && requested > slotCapacityFor(page, section, context.policy)) reasons.push("SLOT_OUT_OF_CAPACITY");
 
   const country = normalizeCountry(geo.countryRaw, geo.globalExplicit);
   const region = normalizeRegion(geo.regionRaw, geo.globalExplicit, geo.nationalExplicit, country);
@@ -619,7 +623,6 @@ function getPriority(candidate) {
 function assignSlots(candidates, ledger, policy) {
   const rejected = [];
   const assigned = [];
-  const capacity = Math.max(1, Number(policy.slotCapacityDefault) || 100);
   const groups = new Map();
   const firstFree = used => { for (let i = 1; i <= capacity; i += 1) if (!used.has(i)) return i; return null; };
   for (const candidate of candidates) {
@@ -628,6 +631,7 @@ function assignSlots(candidates, ledger, policy) {
     groups.get(key).push(candidate);
   }
   for (const [, group] of groups.entries()) {
+    const capacity = group.length ? slotCapacityFor(group[0].page, group[0].section, policy) : Math.max(1, Number(policy.slotCapacityDefault) || 100);
     const used = new Map();
     const priorFor = candidate => {
       const prior = ledger.entries[candidate.candidateId];
