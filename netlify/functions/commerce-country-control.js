@@ -99,8 +99,12 @@ function frontBridgeFirst(){
   for(const value of arguments){const out=text(value);if(out)return out;}
   return "";
 }
+function frontBridgePayload(row){
+  const root=plain(row&&row.source_payload),nested=plain(root.candidate);
+  return Object.assign({},nested,root);
+}
 function frontBridgeCandidateUrl(row){
-  const payload=plain(row&&row.source_payload),ready=plain(payload.researchReadiness),researchCard=plain(ready.productCard),card=Object.assign({},researchCard,plain(payload.productCard)),direct=plain(payload.directCommerceListing),broker=plain(payload.brokerageContract);
+  const payload=frontBridgePayload(row),ready=plain(payload.researchReadiness),researchCard=plain(ready.productCard),card=Object.assign({},researchCard,plain(payload.productCard)),direct=plain(payload.directCommerceListing),broker=plain(payload.brokerageContract);
   return frontBridgeFirst(
     payload.externalProductUrl,payload.officialProductUrl,payload.productUrl,payload.productPageUrl,
     card.externalProductUrl,card.officialProductUrl,card.productUrl,card.productPageUrl,
@@ -109,7 +113,7 @@ function frontBridgeCandidateUrl(row){
   );
 }
 function frontBridgeCandidateImage(row){
-  const payload=plain(row&&row.source_payload),ready=plain(payload.researchReadiness),researchCard=plain(ready.productCard),card=Object.assign({},researchCard,plain(payload.productCard));
+  const payload=frontBridgePayload(row),ready=plain(payload.researchReadiness),researchCard=plain(ready.productCard),card=Object.assign({},researchCard,plain(payload.productCard));
   return frontBridgeFirst(
     card.image,card.imageUrl,card.imageOriginalUrl,card.thumbnail,card.thumbnailUrl,card.thumbnail_url,card.thumb,
     payload.imageUrl,payload.imageOriginalUrl,payload.image,payload.thumbnail,payload.thumbnailUrl,payload.thumbnail_url,payload.thumb,
@@ -117,12 +121,12 @@ function frontBridgeCandidateImage(row){
   );
 }
 function frontBridgePlacementKey(row){
-  const payload=plain(row&&row.source_payload),placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.placement||payload.primaryPlacement);
+  const payload=frontBridgePayload(row),placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.placement||payload.primaryPlacement);
   const page=text(placement.page||payload.page||payload.channel),section=text(placement.sectionKey||placement.section||payload.section||payload.psom_key);
   return page&&section?page+"|"+section:"";
 }
 function frontBridgeHardBlocked(row){
-  const payload=plain(row&&row.source_payload),queue=plain(payload.queueControl),risk=plain(payload.riskAssessment),runtimeRisk=plain(payload.risk),runtime=plain(payload.runtimeValidation),supplier=plain(payload.supplierAssessment);
+  const payload=frontBridgePayload(row),queue=plain(payload.queueControl),risk=plain(payload.riskAssessment),runtimeRisk=plain(payload.risk),runtime=plain(payload.runtimeValidation),supplier=plain(payload.supplierAssessment);
   if(queue.permanentExcluded===true)return true;
   if(payload.productPageLive===false||payload.sameSupplierSite===false)return true;
   if(runtime.dead===true||lower(runtime.state)==="dead")return true;

@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.6.0-admin-ready-publication-authority";
+const VERSION = "commerce-product-pipeline-state-v1.6.1-merged-admin-candidate-payload";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -33,6 +33,13 @@ const STAGES = Object.freeze([
 function text(value){ return value == null ? "" : String(value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
 function plain(value){ return value && typeof value === "object" && !Array.isArray(value) ? value : {}; }
+function candidatePayload(candidateInput){
+  const candidate=plain(candidateInput), root=plain(candidate.source_payload), nested=plain(root.candidate);
+  // Research adapters may persist product identity under source_payload.candidate,
+  // while the administrator writes current placement/publication state at root.
+  // Preserve both views consistently; root wins only on explicit key conflicts.
+  return Object.assign({},nested,root);
+}
 function array(value){ return Array.isArray(value) ? value : []; }
 function first(){ for(const value of arguments){ const out=text(value); if(out) return out; } return ""; }
 function safeHttpsUrl(value){ try{ const url=new URL(text(value)); return url.protocol === "https:" && !url.username && !url.password && !!url.hostname ? url.toString() : ""; }catch(_error){ return ""; } }
@@ -115,7 +122,7 @@ function productCard(productInput){
  * administrator has already reviewed and placed the product.
  */
 function administratorProductRecord(candidateInput){
-  const candidate=plain(candidateInput), payload=plain(candidate.source_payload), readiness=plain(payload.researchReadiness);
+  const candidate=plain(candidateInput), payload=candidatePayload(candidate), readiness=plain(payload.researchReadiness);
   const persistedCard=plain(payload.productCard), readinessCard=plain(readiness.productCard);
   const fallbackCard=productCard(payload);
   const card=persistedCard.checkoutUrl ? persistedCard : (readinessCard.checkoutUrl ? readinessCard : fallbackCard);
@@ -212,7 +219,7 @@ function approvedRevenueRoute(payloadInput, revenueRows){
 }
 
 function registryState(candidateInput, relationsInput){
-  const candidate=plain(candidateInput), payload=plain(candidate.source_payload), relations=plain(relationsInput), status=lower(candidate.status);
+  const candidate=plain(candidateInput), payload=candidatePayload(candidate), relations=plain(relationsInput), status=lower(candidate.status);
   const assignments=array(relations.assignments), markets=array(relations.markets), revenues=array(relations.revenues), evidence=array(relations.evidence);
   const selected=lower(first(payload.slotDecision,plain(payload.review).state));
   const assignment=assignments.find((row)=>["approved","pinned"].includes(lower(row&&row.state)) && (["audit_ready"].includes(lower(row&&row.publication_status)) || administratorPublicationState(row&&row.publication_status))) || null;
@@ -245,7 +252,7 @@ function registryState(candidateInput, relationsInput){
 }
 
 function liveQueueRow(candidateInput, relationsInput){
-  const candidate=plain(candidateInput), payload=plain(candidate.source_payload), lifecycle=registryState(candidate,relationsInput), adminRecord=administratorProductRecord(candidate), card=plain(adminRecord.productCard);
+  const candidate=plain(candidateInput), payload=candidatePayload(candidate), lifecycle=registryState(candidate,relationsInput), adminRecord=administratorProductRecord(candidate), card=plain(adminRecord.productCard);
   const placement=plain(adminRecord.placement), ranking=plain(payload.productRanking), revenue=plain(payload.revenue), readiness=plain(payload.researchReadiness);
   const qualityReasons=unique(array(readiness.blockers).concat(array(readiness.reviewGaps),array(readiness.warnings)));
   return {
@@ -277,4 +284,4 @@ function liveQueueRow(candidateInput, relationsInput){
   };
 }
 
-module.exports={VERSION,SOURCE_REF,STAGES,productCard,administratorProductRecord,researchReadiness,approvedRevenueRoute,registryState,liveQueueRow};
+module.exports={VERSION,SOURCE_REF,STAGES,candidatePayload,productCard,administratorProductRecord,researchReadiness,approvedRevenueRoute,registryState,liveQueueRow};

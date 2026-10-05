@@ -16,7 +16,7 @@ const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.14.0-admin-ready-publication-authority";
+const VERSION = "commerce-candidate-registry-sync-v1.14.1-merged-admin-candidate-payload";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -312,9 +312,9 @@ function authoritativeRequestedSlot(payload, assignment){
   return Number.isInteger(value)&&value>=1&&value<=100?value:"";
 }
 function sourcePayload(candidate){
-  const payload=plain(candidate.source_payload);
-  if(isObject(payload.candidate)) return Object.assign({},payload.candidate);
-  return Object.assign({},payload);
+  // One shared Admin -> Front payload contract. Nested research identity is
+  // retained while current root administrator placement/publication state wins.
+  return ProductPipeline.candidatePayload(candidate);
 }
 const SERVICE_EVIDENCE_RX = Object.freeze({
   shipping: /(?:shipping|delivery|dispatch|fulfil(?:l)?ment|ship\s*to|배송|배달|출고|택배|配送|配達|発送|送貨|送货|env[ií]o|entrega|livraison|expédition|lieferung|versand|spedizione|bezorging|доставка|توصيل|شحن|डिलीवरी|वितरण|ডেলিভারি|ترسیل|pengiriman|penghantaran|giao\s*hàng|จัดส่ง|teslimat|usafirishaji)/i,
