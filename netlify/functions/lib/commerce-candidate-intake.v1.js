@@ -21,7 +21,7 @@ const AffiliateRegistry = require("./affiliate-program-registry.v1");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-intake-v1.8.1-admin-ready-publication-authority";
+const VERSION = "commerce-candidate-intake-v1.8.2-admin-publish-fatal-fix";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -527,7 +527,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
       explicit:explicitAdministratorFrontMatch, safety:adminSafety.ok, safetyReasons:adminSafety.reasons,
       authority:adminAuthority, trustedSeller:trust.ok===true, trustedForExplicitFront,
       softRiskWarnings:adminSafety.softBlockers, nonPayableReferral:explicitAdministratorFrontMatch&&effectiveRevenue.payable!==true,
-      removedSoftRevenueReasons:explicitAdministratorFrontMatch?reasons.filter(reason=>adminSoftReasons.has(reason)):[]
+      removedSoftRevenueReasons:explicitAdministratorFrontMatch?reasons.filter(reason=>!administratorTransportBlockers.has(reason)):[]
     },
     essentialClass:essential||null, placement:pos, market, publishMarkets:effectivePublishMarkets, marketCount:effectivePublishMarkets.validRecords.length,
     heldMarketCount:market.invalidRecords.length+effectivePublishMarkets.blocked.length,
