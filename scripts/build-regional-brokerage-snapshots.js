@@ -847,52 +847,19 @@ async function main() {
   const incomingSocialIntent = incomingSocialHookIntent();
   const explicitAdminPublicationInBuild = incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish";
   const explicitSocialPublicationInBuild = incomingSocialIntent.explicit === true;
-  let durableAdminPublicationInBuild = false;
   const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild || productionDeployBuild();
   let explicitSocialPublication = null;
 
-  // A normal code deploy must consult the administrator ledger *before* it
-  // decides to carry the currently-live scoped snapshots forward.  The previous
-  // order returned here before Registry Sync ever ran, so a code deploy could
-  // contain the fixed pipeline while Home/Distribution kept serving the old
-  // Snapshot forever until the administrator clicked Front Match again.
-  //
-  // Existing durable `ready` / `publish_requested` assignments are themselves
-  // publication instructions.  They must be consumed automatically on the next
-  // production deploy; only a production build with no authoritative admin
-  // publication/withdrawal work may reuse the previous live scoped artifacts.
-  let commerceRegistrySync = null;
+  // A normal code deploy must carry the currently published scoped product
+  // artifacts into the fresh Netlify filesystem.  Publication changes are the
+  // only builds allowed to replace them from the administrator pipeline.
   if (productionDeployBuild() && !explicitAdminPublicationInBuild && !explicitSocialPublicationInBuild) {
-    commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
-    const auth = commerceRegistrySync && commerceRegistrySync.releaseAuthorization || {};
-    const durableAdminPublication = !!(
-      commerceRegistrySync && commerceRegistrySync.ok === true &&
-      commerceRegistrySync.status === "synchronized" &&
-      commerceRegistrySync.authoritative === true &&
-      auth.authoritative === true &&
-      ((auth.explicitAdminRequest === true && Number(auth.requestedCount || commerceRegistrySync.requestedCount || 0) > 0) ||
-       (auth.explicitAdminWithdrawal === true && Number(auth.withdrawnCount || commerceRegistrySync.withdrawnCount || 0) > 0))
-    );
-    durableAdminPublicationInBuild = durableAdminPublication;
-    if (!durableAdminPublication) {
-      const carried = await carryForwardPublishedScopedOutputs();
-      if (carried.ok) {
-        writePreservedBuild("ordinary-production-live-scoped-output-carried-forward", {
-          carried,
-          registrySync: commerceRegistrySync && {
-            ok: commerceRegistrySync.ok,
-            status: commerceRegistrySync.status,
-            authoritative: commerceRegistrySync.authoritative,
-            requestedCount: commerceRegistrySync.requestedCount,
-            withdrawnCount: commerceRegistrySync.withdrawnCount
-          }
-        });
-        return;
-      }
-      process.stderr.write("Distribution live carry-forward unavailable; attempting authoritative rebuild: " + JSON.stringify(carried) + "\n");
-    } else {
-      process.stdout.write("Durable administrator publication state detected during ordinary production deploy; rebuilding Canonical/IP scoped snapshots from the administrator ledger.\n");
+    const carried = await carryForwardPublishedScopedOutputs();
+    if (carried.ok) {
+      writePreservedBuild("ordinary-production-live-scoped-output-carried-forward", carried);
+      return;
     }
+    process.stderr.write("Distribution live carry-forward unavailable; attempting authoritative rebuild: " + JSON.stringify(carried) + "\n");
   }
 
   function preserveOrFail(reason, details) {
@@ -900,7 +867,7 @@ async function main() {
     // Never preserve/carry forward an older live Snapshot in that path.  If the
     // current Supabase-backed authoritative queue cannot be materialized, fail
     // this deploy so stale front data cannot be mistaken for the new admin state.
-    if (explicitAdminPublicationInBuild || durableAdminPublicationInBuild) {
+    if (explicitAdminPublicationInBuild) {
       const error = new Error("Explicit administrator Front Match cannot preserve previous snapshots: " + reason);
       error.code = "EXPLICIT_FRONT_MATCH_CANNOT_PRESERVE_OLD_SNAPSHOTS";
       error.details = details || null;
@@ -1032,7 +999,7 @@ async function main() {
 
   // This sync only refreshes the private approved-candidate review queue. It
   // never writes a public Snapshot and cannot by itself publish front cards.
-  commerceRegistrySync = commerceRegistrySync || await commerceRegistry.syncApprovedCandidates({ root });
+  const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
 
   // A generic zero-count queue is never authoritative. The sole exception is
   // an explicit durable unpublication marker produced by the administrator

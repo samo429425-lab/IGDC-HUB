@@ -132,15 +132,7 @@ function administratorProductRecord(candidateInput){
   const supplierUrl=safeHttpsUrl(first(card.supplierUrl,payload.supplierSiteUrl,supplier.officialUrl,seller.supportUrl));
   const supplierName=first(card.supplierName,payload.supplierName,supplier.name,seller.legalEntity,candidate.title);
   const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.primaryPlacement||payload.placement);
-  const titleCandidates=[
-    card.sourceTitle,payload.sourceTitle,payload.productName,payload.productTitle,card.title,payload.title,candidate.title
-  ];
-  let title="";
-  for(const value of titleCandidates){
-    const candidateTitle=text(value);
-    if(candidateTitle && !ProductRanking.isGenericProductName(candidateTitle)){ title=candidateTitle; break; }
-  }
-  title=title||first.apply(null,titleCandidates)||"상품";
+  const title=first(card.title,payload.productName,payload.productTitle,payload.title,candidate.title,"상품");
   return {
     schema:"igdc-administrator-product-record.v1",
     candidateId:text(candidate.id),
