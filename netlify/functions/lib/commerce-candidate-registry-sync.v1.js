@@ -16,7 +16,7 @@ const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.14.0-admin-ready-publication-authority";
+const VERSION = "commerce-candidate-registry-sync-v1.13.0-admin-record-publication-authority";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -38,7 +38,6 @@ function safeUrl(v){ try { const u=new URL(text(v)); return u.protocol==="https:
 function requiredEnvPresent(){ return !!(text(process.env.GSLOT_SUPABASE_URL) && text(process.env.GSLOT_SUPABASE_SECRET_KEY||process.env.GSLOT_SUPABASE_SERVICE_ROLE_KEY||process.env.GSLOT_SUPABASE_SERVICE_KEY)); }
 function allowedCandidateStatus(v){ return ["revenue_ready","approval_pending","enrollable"].includes(lower(v)); }
 function allowedAssignmentState(v){ return ["approved","pinned"].includes(lower(v)); }
-function administratorPublicationState(v){ return ["ready","publish_requested","matched","published"].includes(lower(v)); }
 function approvedRevenue(v){ return ["approved","active","verified","live","enabled"].includes(lower(v)); }
 function approvedAvailability(v){ return ["active","approved","ready"].includes(lower(v)); }
 function verifiedEvidenceRow(row){ return !!row && bool(row.verified) && !!safeUrl(row.evidence_url); }
@@ -147,12 +146,7 @@ function explicitHardRisk(payload){
 function frontPublicationMarker(candidate){
   const payload=sourcePayload(candidate), front=plain(payload.frontPublication), review=plain(payload.review), pipeline=plain(payload.pipeline);
   const status=lower(first(front.status,review.publicationStatus,review.publicationRequested===true?"publish_requested":"",pipeline.explicitPublicationRequested===true?"publish_requested":""));
-  // Admin UI persists `frontPublication.status=ready` after a successful
-  // administrator-selected placement. The release dispatcher also treats the
-  // assignment's `publication_status=ready` as deployable. Registry must honor
-  // the same state instead of waiting for a second, redundant state rewrite.
-  const persistedReady=status==="ready" && front.persisted===true;
-  if(!["queued","publish_requested","matched","published"].includes(status) && !persistedReady) return null;
+  if(!["queued","publish_requested","matched","published"].includes(status)) return null;
   const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.primaryPlacement||payload.placement);
   const page=first(placement.page,payload.page), section=first(placement.sectionKey,placement.section,payload.section,payload.psom_key);
   const country=MarketSaleScope.normalizeCountry(first(placement.country,front.country,payload.country,payload.targetCountry));
@@ -202,7 +196,7 @@ function syntheticAssignmentFromMarker(candidate, marker){
 }
 function publicationMarkerFromAssignment(candidate, assignment){
   candidate=plain(candidate); assignment=plain(assignment);
-  if(!candidate.id || !administratorPublicationState(assignment.publication_status)) return null;
+  if(!candidate.id || lower(assignment.publication_status)!=="publish_requested") return null;
   const page=text(assignment.hub_key), section=text(assignment.slot_key);
   const country=MarketSaleScope.normalizeCountry(assignment.country_code);
   const region=MarketSaleScope.normalizeRegion(first(assignment.region_code,"NATIONWIDE"),country)||"NATIONWIDE";
@@ -259,7 +253,7 @@ function syntheticEvidenceFromMarker(candidate, marker){
   }];
 }
 function explicitAdminReferralReady(candidate,assignment,availabilityRows){
-  if(!administratorPublicationState(assignment&&assignment.publication_status)) return false;
+  if(lower(assignment&&assignment.publication_status)!=="publish_requested") return false;
   const adminRecord=ProductPipeline.administratorProductRecord(candidate);
   if(!adminRecord||adminRecord.adminDisplayReady!==true||!safeUrl(adminRecord.productUrl)||!safeUrl(adminRecord.imageUrl)) return false;
   if(!array(availabilityRows).length) return false;
@@ -456,7 +450,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const rawCurrency=first(card.priceCurrency,card.currency,payload.priceCurrency,payload.currency);
   const authorityCountry=MarketSaleScope.normalizeCountry(assignmentInfo.country_code), authorityRegion=MarketSaleScope.normalizeRegion(first(assignmentInfo.region_code,"NATIONWIDE"),authorityCountry)||"NATIONWIDE";
   const administratorFrontMatchAuthority=adminExternalSeller?{
-    schema:"igdc-administrator-front-match-authority.v1",verified:true,assignmentId:text(assignmentInfo.id),publicationStatus:adminExternalSeller?"publish_requested":lower(assignmentInfo.publication_status),
+    schema:"igdc-administrator-front-match-authority.v1",verified:true,assignmentId:text(assignmentInfo.id),publicationStatus:lower(assignmentInfo.publication_status),
     page,section,country:authorityCountry,region:authorityRegion,externalSeller:true,noIgdcCheckout:true,noIgdcPayment:true,
     verifiedAt:first(assignmentInfo.updated_at,candidate.updated_at,now()),verificationSource:"canonical-global-slot-relations"
   }:undefined;
@@ -587,7 +581,7 @@ async function syncApprovedCandidates(input){
       selectAllRows(sb,"gslot_candidate_evidence","select=id,candidate_id,evidence_type,evidence_url,note,verified,created_at","order=created_at.desc",1000)
     ]);
     const assignmentByCandidate=new Map();
-    array(assignments).forEach(row=>{ const publicationRequested=administratorPublicationState(row&&row.publication_status); if(!allowedAssignmentState(row.state)&&!publicationRequested)return; if(!assignmentByCandidate.has(row.candidate_id))assignmentByCandidate.set(row.candidate_id,[]); assignmentByCandidate.get(row.candidate_id).push(row); });
+    array(assignments).forEach(row=>{ const publicationRequested=lower(row&&row.publication_status)==="publish_requested"; if(!allowedAssignmentState(row.state)&&!publicationRequested)return; if(!assignmentByCandidate.has(row.candidate_id))assignmentByCandidate.set(row.candidate_id,[]); assignmentByCandidate.get(row.candidate_id).push(row); });
     const avBy=new Map(), rBy=new Map(), eBy=new Map();
     array(availability).forEach(row=>{ if(!approvedAvailability(row.availability_state)) return; if(!avBy.has(row.candidate_id)) avBy.set(row.candidate_id,[]); avBy.get(row.candidate_id).push(row); });
     array(revenue).forEach(row=>{ if(!rBy.has(row.candidate_id)) rBy.set(row.candidate_id,[]); rBy.get(row.candidate_id).push(row); });
@@ -603,7 +597,7 @@ async function syncApprovedCandidates(input){
       // same candidate. Otherwise the explicit withdrawal remains a durable
       // rebuild authorization, including when runtime revalidation put the
       // candidate into HOLD before the build hook executes.
-      if(currentAssignments.some((row)=>administratorPublicationState(row&&row.publication_status))) continue;
+      if(currentAssignments.some((row)=>lower(row&&row.publication_status)==="publish_requested")) continue;
       withdrawalRows.push(marker);
     }
     const output=[];
@@ -620,17 +614,17 @@ async function syncApprovedCandidates(input){
       // authority. Restricting publication by source_ref silently dropped valid
       // supplier products (for example research adapters outside the two legacy
       // source refs) even though the administrator had already Front Matched them.
-      const currentFrontAssignment=assignmentRows.find((row)=>administratorPublicationState(row.publication_status))||null;
+      const currentFrontAssignment=assignmentRows.find((row)=>lower(row.publication_status)==="publish_requested")||null;
       if(!allowedCandidateStatus(candidate.status)&&!currentFrontAssignment) continue;
       const marker=explicitAuditSource?frontPublicationMarker(candidate):null;
-      let assignment=currentFrontAssignment||assignmentRows.find((row)=>administratorPublicationState(row.publication_status));
+      let assignment=currentFrontAssignment||assignmentRows.find((row)=>["ready","publish_requested"].includes(lower(row.publication_status)));
       if(!assignment&&marker) assignment=syntheticAssignmentFromMarker(candidate,marker);
       if(!assignment) continue;
       // A persisted Front Match is the authoritative publication route. Do not
       // run the Tour classifier a second time here: reclassification belongs to
       // candidate selection, not to the publish bridge, and could otherwise
       // cancel an already matched Tour item before it reaches SearchBank.
-      const publicationRequested=administratorPublicationState(assignment.publication_status);
+      const publicationRequested=lower(assignment.publication_status)==="publish_requested";
       // The persisted slot-assignment publication flag is authoritative.
       // Front Match intentionally does not mutate gslot_candidates, so a missing
       // candidate.frontPublication marker must not drop an administrator-approved
@@ -657,7 +651,7 @@ async function syncApprovedCandidates(input){
       const listing=plain(compact.directCommerceListing);
       const trafficOnly=type==="external_referral";
       const payable=bool(first(contract.approved,listing.contractApproved)) && bool(first(contract.disclosureReady,listing.disclosureReady)) && bool(first(contract.payoutBasisVerified,listing.payoutBasisVerified));
-      const publicationStatus=publicationRequested?"publish_requested":lower(assignment.publication_status);
+      const publicationStatus=lower(assignment.publication_status);
       output.push({
         id:"gslot-"+candidate.id,
         sourceTier:"approved_commerce_member",

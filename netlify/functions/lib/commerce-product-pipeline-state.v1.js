@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.6.0-admin-ready-publication-authority";
+const VERSION = "commerce-product-pipeline-state-v1.5.0-admin-display-publication-authority";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -38,7 +38,6 @@ function first(){ for(const value of arguments){ const out=text(value); if(out) 
 function safeHttpsUrl(value){ try{ const url=new URL(text(value)); return url.protocol === "https:" && !url.username && !url.password && !!url.hostname ? url.toString() : ""; }catch(_error){ return ""; } }
 function bool(value){ return value === true || ["1","true","yes","on","approved","verified","active","enabled"].includes(lower(value)); }
 function unique(values){ return Array.from(new Set(array(values).map(text).filter(Boolean))); }
-function administratorPublicationState(value){ return ["ready","publish_requested","matched","published"].includes(lower(value)); }
 
 function normalizedHttpsUrl(value){
   const url=safeHttpsUrl(value); if(!url) return "";
@@ -215,7 +214,7 @@ function registryState(candidateInput, relationsInput){
   const candidate=plain(candidateInput), payload=plain(candidate.source_payload), relations=plain(relationsInput), status=lower(candidate.status);
   const assignments=array(relations.assignments), markets=array(relations.markets), revenues=array(relations.revenues), evidence=array(relations.evidence);
   const selected=lower(first(payload.slotDecision,plain(payload.review).state));
-  const assignment=assignments.find((row)=>["approved","pinned"].includes(lower(row&&row.state)) && (["audit_ready"].includes(lower(row&&row.publication_status)) || administratorPublicationState(row&&row.publication_status))) || null;
+  const assignment=assignments.find((row)=>["approved","pinned"].includes(lower(row&&row.state)) && ["audit_ready","publish_requested","ready"].includes(lower(row&&row.publication_status))) || null;
   const market=markets.find((row)=>["active","approved","ready"].includes(lower(row&&row.availability_state))) || null;
   const revenueState=approvedRevenueRoute(payload,revenues), revenue=revenueState.ready?revenueState.row:null;
   const verifiedEvidence=evidence.find((row)=>row&&row.verified===true) || null;
@@ -228,7 +227,7 @@ function registryState(candidateInput, relationsInput){
   else if(!verifiedEvidence){ stage="trust_evidence_pending"; nextGate="record_verified_supplier_or_product_evidence"; reasons.push("verified_evidence_missing"); }
   else if(!revenue){ stage="revenue_route_pending"; nextGate="record_affiliate_referral_brokerage_or_advertising_right"; reasons.push(revenueState.reason||"approved_revenue_route_missing"); }
   else if(!assignment){ stage="slot_assignment_pending"; nextGate="approve_psom_assignment"; reasons.push("approved_slot_assignment_missing"); }
-  else { stage="registry_sync_ready"; nextGate=administratorPublicationState(assignment&&assignment.publication_status)?"publication_build_requested":"go_live_audit_and_explicit_publication_request"; }
+  else { stage="registry_sync_ready"; nextGate=lower(assignment&&assignment.publication_status)==="publish_requested"?"publication_build_requested":"go_live_audit_and_explicit_publication_request"; }
   return {
     version:VERSION,
     stage,
