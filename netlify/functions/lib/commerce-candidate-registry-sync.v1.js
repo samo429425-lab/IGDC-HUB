@@ -16,7 +16,7 @@ const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.14.0-admin-ready-publication-authority";
+const VERSION = "commerce-candidate-registry-sync-v1.14.1-admin-source-title-continuity";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -55,7 +55,8 @@ function productCardOf(payload){
   return Object.assign({},researchCard,directCard);
 }
 function exactProductTitle(candidate,payload){
-  const adminRecord=ProductPipeline.administratorProductRecord(candidate); if(adminRecord&&adminRecord.title)return text(adminRecord.title);
+  const adminRecord=ProductPipeline.administratorProductRecord(candidate);
+  if(adminRecord&&adminRecord.title&&!genericProductTitle(adminRecord.title)) return text(adminRecord.title);
   payload=plain(payload); const card=productCardOf(payload);
   const candidates=[
     card.title,card.productName,card.name,card.itemName,card.displayName,card.sourceTitle,
