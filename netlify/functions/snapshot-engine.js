@@ -431,6 +431,12 @@ function resolveLimitSectionKey(pageName, raw, sections) {
   if (!sectionKeys.length) return null;
 
   const rawKey =
+    raw?.approvedPlacement?.sectionKey ||
+    raw?.approvedPlacement?.section ||
+    raw?.primaryPlacement?.sectionKey ||
+    raw?.primaryPlacement?.section ||
+    raw?.selectedPlacement?.sectionKey ||
+    raw?.selectedPlacement?.section ||
     raw?.psom_key ||
     raw?.bind?.psom_key ||
     raw?.bind?.section ||
@@ -822,6 +828,9 @@ function explicitPageOf(item) {
   // participate in cross-page isolation.
   return String(
     item.page ||
+    item?.approvedPlacement?.page ||
+    item?.primaryPlacement?.page ||
+    item?.selectedPlacement?.page ||
     item?.bind?.page ||
     item?.placement?.page ||
     item?.layerPointer?.page ||
@@ -937,8 +946,15 @@ function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
     if (!pageMatches(item, "home")) continue;
 
  const rawSectionKey =
+  item?.approvedPlacement?.sectionKey ||
+  item?.approvedPlacement?.section ||
+  item?.primaryPlacement?.sectionKey ||
+  item?.primaryPlacement?.section ||
+  item?.selectedPlacement?.sectionKey ||
+  item?.selectedPlacement?.section ||
   item?.bind?.section ||
   item?.psom_key ||
+  item?.section ||
   item?.category;
 
 // 🔥 HOME 매핑 테이블
