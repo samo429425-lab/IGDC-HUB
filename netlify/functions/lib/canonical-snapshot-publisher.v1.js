@@ -624,7 +624,6 @@ function assignSlots(candidates, ledger, policy) {
   const rejected = [];
   const assigned = [];
   const groups = new Map();
-  const firstFree = used => { for (let i = 1; i <= capacity; i += 1) if (!used.has(i)) return i; return null; };
   for (const candidate of candidates) {
     const key = candidate.page + "|" + candidate.section + "|" + candidate.country + "|" + candidate.region;
     if (!groups.has(key)) groups.set(key, []);
@@ -632,6 +631,7 @@ function assignSlots(candidates, ledger, policy) {
   }
   for (const [, group] of groups.entries()) {
     const capacity = group.length ? slotCapacityFor(group[0].page, group[0].section, policy) : Math.max(1, Number(policy.slotCapacityDefault) || 100);
+    const firstFree = used => { for (let i = 1; i <= capacity; i += 1) if (!used.has(i)) return i; return null; };
     const used = new Map();
     const priorFor = candidate => {
       const prior = ledger.entries[candidate.candidateId];
