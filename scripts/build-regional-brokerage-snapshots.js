@@ -849,17 +849,49 @@ async function main() {
   const explicitSocialPublicationInBuild = incomingSocialIntent.explicit === true;
   const mustMaterializeDistribution = explicitAdminPublicationInBuild || explicitSocialPublicationInBuild || productionDeployBuild();
   let explicitSocialPublication = null;
+  let preflightCommerceRegistrySync = null;
+  let durableCommercePublicationPending = false;
 
-  // A normal code deploy must carry the currently published scoped product
-  // artifacts into the fresh Netlify filesystem.  Publication changes are the
-  // only builds allowed to replace them from the administrator pipeline.
+  // Build-hook metadata is useful but it is not the publication authority.
+  // The durable Supabase assignment written by Front Match is. Netlify can
+  // occasionally start a production build without exposing/retaining the hook
+  // body to this script; treating that build as an ordinary code deploy would
+  // carry the old scoped Snapshot forward and silently ignore the administrator
+  // change. Probe the durable registry before taking the carry-forward exit.
   if (productionDeployBuild() && !explicitAdminPublicationInBuild && !explicitSocialPublicationInBuild) {
-    const carried = await carryForwardPublishedScopedOutputs();
-    if (carried.ok) {
-      writePreservedBuild("ordinary-production-live-scoped-output-carried-forward", carried);
-      return;
+    try {
+      preflightCommerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
+      const auth = preflightCommerceRegistrySync && preflightCommerceRegistrySync.releaseAuthorization || {};
+      durableCommercePublicationPending = !!(
+        preflightCommerceRegistrySync && preflightCommerceRegistrySync.ok === true &&
+        preflightCommerceRegistrySync.status === "synchronized" &&
+        preflightCommerceRegistrySync.authoritative === true &&
+        auth.authoritative === true &&
+        (auth.explicitAdminRequest === true || auth.explicitAdminWithdrawal === true)
+      );
+    } catch (error) {
+      preflightCommerceRegistrySync = { ok:false, status:"preflight_failed", error:String(error && error.message || error) };
+      durableCommercePublicationPending = false;
     }
-    process.stderr.write("Distribution live carry-forward unavailable; attempting authoritative rebuild: " + JSON.stringify(carried) + "\n");
+
+    if (!durableCommercePublicationPending) {
+      const carried = await carryForwardPublishedScopedOutputs();
+      if (carried.ok) {
+        writePreservedBuild("ordinary-production-live-scoped-output-carried-forward", carried);
+        return;
+      }
+      process.stderr.write("Distribution live carry-forward unavailable; attempting authoritative rebuild: " + JSON.stringify(carried) + "\n");
+    } else {
+      const preflightAuthorization = preflightCommerceRegistrySync && preflightCommerceRegistrySync.releaseAuthorization || {};
+      process.stdout.write(JSON.stringify({
+        commercePublicationRecovery: {
+          mode: "durable-front-match-registry",
+          reason: "supabase-publication-state-wins-over-missing-hook-body",
+          requestedCount: Number(preflightCommerceRegistrySync.requestedCount || preflightAuthorization.requestedCount || 0),
+          withdrawnCount: Number(preflightCommerceRegistrySync.withdrawnCount || preflightAuthorization.withdrawnCount || 0)
+        }
+      }, null, 2) + "\n");
+    }
   }
 
   function preserveOrFail(reason, details) {
@@ -999,7 +1031,9 @@ async function main() {
 
   // This sync only refreshes the private approved-candidate review queue. It
   // never writes a public Snapshot and cannot by itself publish front cards.
-  const commerceRegistrySync = await commerceRegistry.syncApprovedCandidates({ root });
+  const commerceRegistrySync = preflightCommerceRegistrySync && preflightCommerceRegistrySync.ok === true
+    ? preflightCommerceRegistrySync
+    : await commerceRegistry.syncApprovedCandidates({ root });
 
   // A generic zero-count queue is never authoritative. The sole exception is
   // an explicit durable unpublication marker produced by the administrator

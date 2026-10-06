@@ -266,7 +266,15 @@
     a.className='ad-box news-btn';
     var href=hrefOf(item,key,idx);
     a.href=href;
-    if(/^https?:\/\//i.test(href)){a.target='_top';a.rel='noopener';}
+    if(/^https?:\/\//i.test(href)){
+      a.target='_top';
+      a.rel='noopener';
+      // Match the primary Home AutoMap navigation contract. The shared capture
+      // handler then opens every right-panel real product in the top browsing
+      // context, while sample '#' slots remain inert.
+      a.setAttribute('data-igdc-external','top');
+      a.setAttribute('data-igdc-product-destination',href);
+    }
 
     a.style.display='grid';
     a.style.gridTemplateRows='minmax(0,1fr) 58px';
