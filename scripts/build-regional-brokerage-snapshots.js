@@ -1135,7 +1135,7 @@ async function main() {
           const request = entry && entry.publicationRequest || {};
           const assignment = entry && entry.assignment || {};
           const status = String(request.status || assignment.publicationStatus || "").toLowerCase();
-          return request.requested === true || status === "publish_requested" || ["ready","matched","published"].includes(status);
+          return request.requested === true || status === "publish_requested" || ["matched","published"].includes(status);
         })
         .map(entry => String(entry && entry.candidate && entry.candidate.id || entry && entry.candidateId || "").trim())
         .filter(Boolean)
