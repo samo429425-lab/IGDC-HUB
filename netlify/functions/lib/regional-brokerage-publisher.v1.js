@@ -47,6 +47,12 @@ function firstExisting(paths) { return paths.find((p) => { try { return fs.exist
 function unique(values) { const out = []; const seen = new Set(); for (const value of values || []) { const x = text(value); if (!x || seen.has(x)) continue; seen.add(x); out.push(x); } return out; }
 
 function lower(v) { return text(v).toLowerCase(); }
+function administratorFrontMatchPublished(item) {
+  const authority = item && item.administratorFrontMatchAuthority && typeof item.administratorFrontMatchAuthority === "object"
+    ? item.administratorFrontMatchAuthority
+    : {};
+  return authority.verified === true && lower(authority.publicationStatus) === "publish_requested";
+}
 function truthy(v) {
   if (v === true) return true;
   if (v === false || v == null) return false;
@@ -233,7 +239,9 @@ function sectionMap(sections) {
 }
 function sectionFor(item, sections) {
   const map = sectionMap(sections);
-  const raw = first(item && item.bind && item.bind.section, item && item.section, item && item.psom_key, item && item.slotKey).toLowerCase();
+  // Canonical/Admin placement is authoritative after Front Match. Prefer it
+  // over legacy aliases so the published card cannot drift to another section.
+  const raw = first(item && item.placement && item.placement.section, item && item.bind && item.bind.section, item && item.section, item && item.psom_key, item && item.slotKey).toLowerCase();
   const aliases = {
     "dist_1": "distribution-recommend", "distribution_1": "distribution-recommend",
     "dist_2": "distribution-sponsor", "distribution_2": "distribution-sponsor",
@@ -310,6 +318,19 @@ function scopes(root, items, policy) {
   const result = new Map();
   function ensure(market) { if (!result.has(market)) result.set(market, new Set()); return result.get(market); }
   for (const item of items) {
+    // Front Match is the publication authority. Once Canonical carries a
+    // verified publish_requested decision, Distribution must not re-audit the
+    // product through the regional research/policy gate. The administrator's
+    // country/region placement is sufficient to create the publication scope.
+    if (administratorFrontMatchPublished(item)) {
+      const placement = item && item.placement || {};
+      const market = Policy.normalizeCountry(placement.country);
+      if (!market || market === "GLOBAL") continue;
+      const regions = ensure(market);
+      const normalizedRegion = Policy.normalizeRegion(placement.region, market);
+      if (normalizedRegion && normalizedRegion !== "NATIONWIDE" && normalizedRegion !== "GLOBAL") regions.add(normalizedRegion);
+      continue;
+    }
     const prepared = policyCandidate(item);
     const dist = Policy.distributionMarketEvidence(prepared);
     const availability = Policy.availabilityEvidence(prepared);
@@ -460,9 +481,48 @@ function outputPath(root, market, region) {
   return path.join(root, "data", "auto", market, ...(region ? [region] : []), SNAPSHOT_FILE);
 }
 function publishScope(root, template, allItems, market, region, policy, registry) {
-  const selection = buildRegionalSelection(allItems, { targetMarket: market, targetRegion: region || "", hub: "distribution", policy });
+  // Administrator-confirmed Front Match rows bypass the regional research gate.
+  // Research/supplier responsibility checks belong upstream, before the admin
+  // placement decision. Here we only materialize the already-approved mapping.
+  const adminAccepted = [];
+  const automaticItems = [];
+  for (const item of allItems || []) {
+    if (!administratorFrontMatchPublished(item)) {
+      automaticItems.push(item);
+      continue;
+    }
+    const placement = item && item.placement || {};
+    const itemMarket = Policy.normalizeCountry(placement.country);
+    if (itemMarket !== market) continue;
+    const itemRegion = Policy.normalizeRegion(placement.region, market);
+    const nationwide = !itemRegion || itemRegion === "NATIONWIDE";
+    if (!region && !nationwide) continue;
+    if (region && !nationwide && itemRegion !== region) continue;
+    adminAccepted.push({
+      item,
+      decision: {
+        distributionMarketCountry: market,
+        distributionMarketRegion: region || null,
+        availabilityCountries: [market],
+        availabilityRegions: region ? [region] : [],
+        nationalAvailability: !region,
+        supplierVerified: true,
+        supplierTrustEvidence: ["administrator_front_match"],
+        localResponsibilityVerified: true,
+        supplyTier: "administrator_confirmed",
+        policyVersion: "front-match-authority"
+      }
+    });
+  }
+  const selection = buildRegionalSelection(automaticItems, { targetMarket: market, targetRegion: region || "", hub: "distribution", policy });
   const priority = priorityItems(root, market, region, policy);
-  const accepted = priority.concat(selection.accepted.filter((entry) => !priority.some((p) => p.id === entry.id)));
+  const accepted = adminAccepted.concat(
+    priority.filter((entry) => !adminAccepted.some((admin) => first(admin.item && admin.item.id, admin.item && admin.item.contentId, admin.item && admin.item.productId) === first(entry && entry.item && entry.item.id, entry && entry.item && entry.item.contentId, entry && entry.item && entry.item.productId)))
+  ).concat(selection.accepted.filter((entry) => {
+    const id = first(entry && entry.item && entry.item.id, entry && entry.item && entry.item.contentId, entry && entry.item && entry.item.productId);
+    return !adminAccepted.some((admin) => first(admin.item && admin.item.id, admin.item && admin.item.contentId, admin.item && admin.item.productId) === id) &&
+      !priority.some((p) => first(p && p.item && p.item.id, p && p.item && p.item.contentId, p && p.item && p.item.productId) === id);
+  }));
   if (!accepted.length) return { published: false, market, region: region || null, audit: selection.audit };
   const doc = distributionTemplateWithSamples(template);
   if (!doc) return { published: false, market, region: region || null, reason: "DISTRIBUTION_TEMPLATE_INVALID", audit: selection.audit };
