@@ -532,12 +532,21 @@ function canonicalPublicationExpectations() {
   return Array.from(expected.values());
 }
 
+function normalizePublicationRegion(value) {
+  const region = String(value || "").trim().toUpperCase();
+  return !region || region === "NATIONWIDE" ? "" : region;
+}
+
 function verifyCanonicalToIpOutputs(ipSlotReport) {
   const expected = canonicalPublicationExpectations();
   const outputs = Array.isArray(ipSlotReport && ipSlotReport.scopedOutputs) ? ipSlotReport.scopedOutputs : [];
   const problems = [];
   for (const target of expected) {
-    const found = outputs.find((row) => row && row.page === target.page && row.country === target.country && String(row.region || "") === String(target.region || ""));
+    const found = outputs.find((row) => row &&
+      String(row.page || "").trim() === String(target.page || "").trim() &&
+      String(row.country || "").trim().toUpperCase() === String(target.country || "").trim().toUpperCase() &&
+      normalizePublicationRegion(row.region) === normalizePublicationRegion(target.region)
+    );
     if (!found) {
       problems.push("CANONICAL_SCOPE_NOT_PUBLISHED:" + [target.page,target.country,target.region || "NATIONWIDE"].join(":"));
       continue;
