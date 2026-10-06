@@ -4819,8 +4819,12 @@ function frontSyncPublicReadiness(productInput, existingCandidate) {
   // second URL classifier here; that was the source of Admin-normal/Front-empty
   // divergence for food, appliances and other global suppliers.
   const productPageUrl=safeUrl(adminRecord.productUrl), imageUrl=safeUrl(adminRecord.imageUrl), supplierUrl=safeUrl(adminRecord.supplierUrl), supplierName=first(adminRecord.supplierName,product.supplierName,plain(product.supplier).name,adminRecord.title,"External seller");
+  const productTitle=first(adminRecord.title,product.productName,product.title,existingCandidate&&existingCandidate.title);
   if(!adminRecord.adminDisplayReady||!productPageUrl) reasons.push("administrator_product_url_missing");
-  if(!imageUrl) reasons.push("administrator_product_image_missing");
+  if(productPageUrl&&!ProductRanking.isSpecificProductUrl(productPageUrl)) reasons.push("administrator_specific_product_url_missing");
+  if(productPageUrl&&/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i.test(productPageUrl)) reasons.push("administrator_product_url_is_image_asset");
+  if(!imageUrl||!ProductRanking.safeProductImageUrl(imageUrl)) reasons.push("administrator_product_image_missing");
+  if(!productTitle||ProductRanking.isGenericProductName(productTitle)||/^(대표\s*이미지|상품\s*이미지|product\s*image|image|thumbnail)$/i.test(productTitle)) reasons.push("administrator_product_title_invalid");
   if(plain(existingPayload.queueControl).permanentExcluded===true) reasons.push("administrator_permanently_excluded");
   // Runtime/research signals are diagnostics only after an explicit Front Match.
   // They may warn the administrator, but they may not silently cancel or rewrite
@@ -4835,7 +4839,7 @@ function frontSyncPublicReadiness(productInput, existingCandidate) {
     reasons:Array.from(new Set(reasons.filter(Boolean))),
     warnings:Array.from(new Set(warnings.filter(Boolean))),
     approvalMode:"administrator_display_record_authority",
-    productPageUrl,imageUrl,supplierUrl:supplierUrl||productPageUrl,supplierName,
+    productTitle,productPageUrl,imageUrl,supplierUrl:supplierUrl||productPageUrl,supplierName,
     adminRecordSource:adminRecord.source,
     adminDisplayReady:adminRecord.adminDisplayReady===true
   };
