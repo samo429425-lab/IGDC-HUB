@@ -983,16 +983,37 @@ const sectionKey = HOME_SECTION_ALIAS[rawSectionKey] || rawSectionKey;
 
 if (existing.find(i => i.id === id || i.contentId === id)) continue;
 
+// home_right_top is an administrator-selected commercial slot. Preserve
+// the exact seller/product destination and exact administrator thumbnail even
+// when a valid Canonical/SearchBank row exposes them under product-specific
+// aliases instead of the legacy url/thumb pair. Other Home sections retain
+// their existing mapping behavior in this first scoped repair.
+const exactRightTopUrl = sectionKey === "home_right_top" ? (
+  item.affiliateOutboundUrl || item.externalOutboundUrl ||
+  item.externalProductUrl || item.officialProductUrl ||
+  item.productUrl || item.product_url || item.productPageUrl ||
+  item.detailUrl || item.checkoutUrl || item.purchaseUrl ||
+  item.orderUrl || item.productLink || item.displayUrl ||
+  item.url || item.href || item.link || "#"
+) : (item.url || item.link || "#");
+const exactRightTopImage = sectionKey === "home_right_top" ? (
+  item.imageUrl || item.image_url || item.imageOriginalUrl ||
+  item.thumbnailUrl || item.thumbnail_url || item.thumbnail ||
+  item.thumb || item.image || item.img || item.photo ||
+  "/assets/img/placeholder.png"
+) : (
+  item.thumbnail ||
+  item.thumb ||
+  item.image ||
+  "/assets/img/placeholder.png"
+);
+
 const card = enrichSnapshotCard({
   id,
   title: item.title || item.name || "Untitled",
   summary: item.summary || "",
-  url: item.url || item.link || "#",
-  thumb:
-    item.thumbnail ||
-    item.thumb ||
-    item.image ||
-    "/assets/img/placeholder.png",
+  url: exactRightTopUrl,
+  thumb: exactRightTopImage,
   ...buildTrackingMeta(item, {
     id,
     pageName: "home",
@@ -1000,7 +1021,17 @@ const card = enrichSnapshotCard({
   })
 }, item);
 
-pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "home", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] });
+// `home_right_top` starts with 100 replaceable sample slots. Canonical/Admin
+// commerce rows may legitimately carry only productUrl/imageUrl aliases, while
+// the generic "real incoming" detector still reads legacy url/thumb fields.
+// Supply alias-normalized evidence only for this scoped right-top replacement
+// decision so a valid administrator product can replace a sample slot without
+// changing the rules for any other Home section.
+const replacementEvidence = sectionKey === "home_right_top"
+  ? Object.assign({}, item, { url: exactRightTopUrl, thumbnail: exactRightTopImage })
+  : item;
+
+pushOrReplaceSnapshotSlot(existing, card, replacementEvidence, { pageName: "home", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] });
   }
 
   return frontSnap;

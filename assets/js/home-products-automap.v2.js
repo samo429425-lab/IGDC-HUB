@@ -521,7 +521,11 @@
     img.loading = eager ? 'eager' : 'lazy';
     img.decoding = 'async';
     if (eager) { try { img.fetchPriority = 'high'; } catch (_e) {} }
-    img.src = item.thumb || '';
+    // Keep the administrator-approved image URL unchanged, but suppress the
+    // IGDC Referer for supplier/CDN hosts that reject hotlinked thumbnails.
+    // This mirrors the main Home cards and prevents the right-top image from
+    // failing even when the SearchBank/Snapshot record itself is correct.
+    prepareRemoteImage(img, item.thumb || '');
     img.alt = '';
     img.style.width = '100%';
     img.style.height = '100%';
