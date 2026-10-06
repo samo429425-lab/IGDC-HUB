@@ -279,12 +279,69 @@ function sectionSlotLimit(pageName, sectionKey, fallback) {
 
 function urlOfSnapshotItem(item) {
   if (!item || typeof item !== "object") return "";
-  return String(item.url || item.link || item.href || item.video || item.videoUrl || "").trim();
+  return String(
+    item.affiliateOutboundUrl ||
+    item.externalOutboundUrl ||
+    item.externalProductUrl ||
+    item.officialProductUrl ||
+    item.productUrl ||
+    item.product_url ||
+    item.productPageUrl ||
+    item.detailUrl ||
+    item.checkoutUrl ||
+    item.purchaseUrl ||
+    item.orderUrl ||
+    item.productLink ||
+    item.displayUrl ||
+    item.sourceUrl ||
+    item.targetUrl ||
+    item.outboundUrl ||
+    item.url ||
+    item.href ||
+    item.link ||
+    item.video ||
+    item.videoUrl ||
+    ""
+  ).trim();
 }
 
 function imageOfSnapshotItem(item) {
   if (!item || typeof item !== "object") return "";
-  return String(item.thumbnail || item.thumb || item.image || item.poster || "").trim();
+  return String(
+    item.imageUrl ||
+    item.image_url ||
+    item.imageOriginalUrl ||
+    item.thumbnailUrl ||
+    item.thumbnail_url ||
+    item.thumbnail ||
+    item.thumb ||
+    item.image ||
+    item.img ||
+    item.photo ||
+    item.poster ||
+    ""
+  ).trim();
+}
+
+function explicitSectionOf(item) {
+  item = item || {};
+  return String(
+    item?.approvedPlacement?.sectionKey ||
+    item?.approvedPlacement?.section ||
+    item?.primaryPlacement?.sectionKey ||
+    item?.primaryPlacement?.section ||
+    item?.selectedPlacement?.sectionKey ||
+    item?.selectedPlacement?.section ||
+    item?.placement?.sectionKey ||
+    item?.placement?.section ||
+    item?.psom_key ||
+    item?.psomKey ||
+    item?.bind?.psom_key ||
+    item?.bind?.section ||
+    item?.section ||
+    item?.category ||
+    ""
+  ).trim();
 }
 
 function isPlaceholderUrlValue(url) {
@@ -400,10 +457,7 @@ function normalizeLimitCard(raw, context = {}) {
   const id = raw?.id || stableId(JSON.stringify(raw));
   const sectionKey = val(
     context.sectionKey,
-    raw?.psom_key,
-    raw?.bind?.section,
-    raw?.section,
-    raw?.category,
+    explicitSectionOf(raw),
     "unknown"
   );
 
@@ -411,12 +465,8 @@ function normalizeLimitCard(raw, context = {}) {
     id,
     title: raw.title || raw.name || "Untitled",
     summary: raw.summary || "",
-    url: raw.url || raw.link || "#",
-    thumb:
-      raw.thumbnail ||
-      raw.thumb ||
-      raw.image ||
-      "/assets/img/placeholder.png",
+    url: urlOfSnapshotItem(raw) || "#",
+    thumb: imageOfSnapshotItem(raw) || "/assets/img/placeholder.png",
     priority: raw.priority || raw.score || 0,
     ...buildTrackingMeta(raw, {
       ...context,
@@ -437,6 +487,8 @@ function resolveLimitSectionKey(pageName, raw, sections) {
     raw?.primaryPlacement?.section ||
     raw?.selectedPlacement?.sectionKey ||
     raw?.selectedPlacement?.section ||
+    raw?.placement?.sectionKey ||
+    raw?.placement?.section ||
     raw?.psom_key ||
     raw?.bind?.psom_key ||
     raw?.bind?.section ||
@@ -667,12 +719,7 @@ function buildTrackingMeta(raw, context) {
 
   const sectionKey = val(
     context.sectionKey,
-    raw.psom_key,
-    raw.psomKey,
-    raw?.bind?.psom_key,
-    raw?.bind?.section,
-    raw.section,
-    raw.category,
+    explicitSectionOf(raw),
     "unknown"
   );
 
@@ -883,12 +930,8 @@ function mergeItems(snapshot, sectionKey, items, slotLimit) {
       id,
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
-      url: item.url || item.link || "#",
-      thumb:
-        item.thumbnail ||
-        item.thumb ||
-        item.image ||
-        "/assets/img/placeholder.png",
+      url: urlOfSnapshotItem(item) || "#",
+      thumb: imageOfSnapshotItem(item) || "/assets/img/placeholder.png",
       priority: item.priority || item.score || 0,
       ...buildTrackingMeta(item, {
         id,
@@ -952,6 +995,8 @@ function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
   item?.primaryPlacement?.section ||
   item?.selectedPlacement?.sectionKey ||
   item?.selectedPlacement?.section ||
+  item?.placement?.sectionKey ||
+  item?.placement?.section ||
   item?.bind?.section ||
   item?.psom_key ||
   item?.section ||
@@ -999,58 +1044,15 @@ const sectionKey = HOME_SECTION_ALIAS[rawSectionKey] || rawSectionKey;
 
 if (existing.find(i => i.id === id || i.contentId === id)) continue;
 
-const homeRightTopUrl = sectionKey === "home_right_top"
-  ? (
-      item.affiliateOutboundUrl ||
-      item.externalOutboundUrl ||
-      item.externalProductUrl ||
-      item.officialProductUrl ||
-      item.productUrl ||
-      item.product_url ||
-      item.productPageUrl ||
-      item.detailUrl ||
-      item.checkoutUrl ||
-      item.purchaseUrl ||
-      item.orderUrl ||
-      item.productLink ||
-      item.displayUrl ||
-      item.sourceUrl ||
-      item.targetUrl ||
-      item.outboundUrl ||
-      item.url ||
-      item.href ||
-      item.link ||
-      "#"
-    )
-  : (item.url || item.link || "#");
-
-const homeRightTopImage = sectionKey === "home_right_top"
-  ? (
-      item.imageUrl ||
-      item.image_url ||
-      item.imageOriginalUrl ||
-      item.thumbnailUrl ||
-      item.thumbnail_url ||
-      item.thumbnail ||
-      item.thumb ||
-      item.image ||
-      item.img ||
-      item.photo ||
-      "/assets/img/placeholder.png"
-    )
-  : (
-      item.thumbnail ||
-      item.thumb ||
-      item.image ||
-      "/assets/img/placeholder.png"
-    );
+const resolvedProductUrl = urlOfSnapshotItem(item) || "#";
+const resolvedProductImage = imageOfSnapshotItem(item) || "/assets/img/placeholder.png";
 
 const card = enrichSnapshotCard({
   id,
   title: item.title || item.name || "Untitled",
   summary: item.summary || "",
-  url: homeRightTopUrl,
-  thumb: homeRightTopImage,
+  url: resolvedProductUrl,
+  thumb: resolvedProductImage,
   ...buildTrackingMeta(item, {
     id,
     pageName: "home",
@@ -1058,9 +1060,14 @@ const card = enrichSnapshotCard({
   })
 }, item);
 
-const replacementEvidence = sectionKey === "home_right_top"
-  ? Object.assign({}, item, { url: homeRightTopUrl, thumbnail: homeRightTopImage })
-  : item;
+// Use the same real-product evidence contract for every Home section.
+// This prevents TOP/MIDDLE/BOTTOM from classifying the same administrator
+// product differently only because one row carries productUrl/imageUrl while
+// another already carries url/thumbnail.
+const replacementEvidence = Object.assign({}, item, {
+  url: resolvedProductUrl,
+  thumbnail: resolvedProductImage
+});
 
 pushOrReplaceSnapshotSlot(existing, card, replacementEvidence, { pageName: "home", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] });
   }
@@ -1110,12 +1117,7 @@ function handleNetworkSnapshot(bank) {
 
     if (!pageMatches(item, "network")) continue;
 
-    const rawKey =
-      item?.psom_key ||
-      item?.bind?.section ||
-      item?.category ||
-      item?.section ||
-      "";
+    const rawKey = explicitSectionOf(item);
 
     if (rawKey !== "network-right") continue;
     if (!snapshotCandidateAllowed(item, { pageName: "network", sectionKey: "network-right" })) continue;
@@ -1193,19 +1195,15 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   function normalize(item) {
     if (!item || typeof item !== "object") return null;
 
-    const sectionKeyForContract = item.psom_key || item?.bind?.section || item?.section || item?.category || "distribution";
+    const sectionKeyForContract = explicitSectionOf(item) || "distribution";
     if (!snapshotCandidateAllowed(item, { pageName: "distribution", sectionKey: sectionKeyForContract })) return null;
 
     return enrichSnapshotCard({
       id: item.id || stableId(JSON.stringify(item)),
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
-      url: item.url || item.link || "#",
-      thumb:
-        item.thumbnail ||
-        item.thumb ||
-        item.image ||
-        "/assets/img/placeholder.png",
+      url: urlOfSnapshotItem(item) || "#",
+      thumb: imageOfSnapshotItem(item) || "/assets/img/placeholder.png",
       price: item.price || "",
       currency: item.currency || "USD",
       priority: item.priority || item.score || 0,
@@ -1219,12 +1217,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
       seller: item.seller || item.source || "",
       ...buildTrackingMeta(item, {
         pageName: "distribution",
-        sectionKey:
-          item.psom_key ||
-          item?.bind?.section ||
-          item?.section ||
-          item?.category ||
-          "distribution"
+        sectionKey: explicitSectionOf(item) || "distribution"
       })
     }, item);
   }
@@ -1267,13 +1260,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   }
 
   function distributionSectionOf(raw) {
-    const rawSectionKey =
-      raw?.psom_key ||
-      raw?.bind?.psom_key ||
-      raw?.bind?.section ||
-      raw?.section ||
-      raw?.category ||
-      null;
+    const rawSectionKey = explicitSectionOf(raw) || null;
     const MAP = {
       "dist_1": "distribution-recommend", "dist1": "distribution-recommend", "distribution_1": "distribution-recommend", "distribution1": "distribution-recommend", "distribution-recommend": "distribution-recommend",
       "dist_2": "distribution-sponsor", "dist2": "distribution-sponsor", "distribution_2": "distribution-sponsor", "distribution2": "distribution-sponsor", "distribution-new": "distribution-new",
@@ -1302,12 +1289,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
     if (!item) continue;
 
     // 1) PSOM / bind 우선
-    const rawSectionKey =
-      item.psom_key ||
-      raw?.bind?.psom_key ||
-      raw?.bind?.section ||
-      raw?.section ||
-      null;
+    const rawSectionKey = explicitSectionOf(raw) || item.psom_key || null;
 
    const MAP = {
 
@@ -1403,12 +1385,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
     const item = normalize(raw);
     if (!item) return false;
 
-    const rawSectionKey =
-      item.psom_key ||
-      raw?.bind?.psom_key ||
-      raw?.bind?.section ||
-      raw?.section ||
-      null;
+    const rawSectionKey = explicitSectionOf(raw) || item.psom_key || null;
 
     const MAP = {
       "dist_7": "distribution-right",
@@ -1489,10 +1466,7 @@ function handleSocialSnapshot(bank) {
 
     const supply = bankItems.filter(item => {
       if (!pageMatches(item, "social")) return false;
-      const sec =
-        item?.bind?.section ||
-        item?.psom_key ||
-        item?.category;
+      const sec = explicitSectionOf(item);
       return sec === sectionKey && snapshotCandidateAllowed(item, { pageName: "social", sectionKey });
     });
 
@@ -1751,10 +1725,7 @@ function isVideoLike(item) {
 
     if (!isVideoLike(raw)) continue;
 
-    const rawKey =
-      raw?.psom_key ||
-      raw?.bind?.section ||
-      raw?.category;
+    const rawKey = explicitSectionOf(raw);
 
     const sectionKey = resolveMediaKey(rawKey);
 
@@ -1823,12 +1794,7 @@ function handleTourSnapshot(bank) {
 
   /* ===== THUMB BUILDER ===== */
   function buildTourThumbnail(item){
-
-    if (item.image || item.thumb || item.thumbnail) {
-      return item.image || item.thumb || item.thumbnail;
-    }
-
-    return internalPlaceholderImage();
+    return imageOfSnapshotItem(item) || internalPlaceholderImage();
   }
 
   /* ===== 기존 ID 추출 ===== */
@@ -1841,7 +1807,7 @@ function handleTourSnapshot(bank) {
 
     if (!item) continue;
     if (!isTour(item)) continue;
-    if (!snapshotCandidateAllowed(item, { pageName: "tour", sectionKey: item.psom_key || item.section || item.category || "tour" })) continue;
+    if (!snapshotCandidateAllowed(item, { pageName: "tour", sectionKey: explicitSectionOf(item) || "tour" })) continue;
 
     const id = item.id || stableId(JSON.stringify(item));
     if (existingIds.has(id)) continue;
@@ -1850,14 +1816,14 @@ function handleTourSnapshot(bank) {
       id,
       title: item.title || item.name || "",
       thumb: buildTourThumbnail(item),
-      link: item.link || item.url || "#",
-      url: item.url || item.link || "#",
+      link: urlOfSnapshotItem(item) || "#",
+      url: urlOfSnapshotItem(item) || "#",
       priority: item.priority || item.score || 0,
       createdAt: item.createdAt || item.timestamp || 0,
       ...buildTrackingMeta(item, {
         id,
         pageName: "tour",
-        sectionKey: item.psom_key || item.section || item.category || "tour",
+        sectionKey: explicitSectionOf(item) || "tour",
         revenueLine: item.revenueLine || item.revenue_line || "tour_commission"
       })
     }, item);
