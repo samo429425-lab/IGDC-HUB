@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "start": "node scripts/build-regional-brokerage-snapshots.js && echo \"Netlify build OK\""
+    "start": "node scripts/build-regional-brokerage-snapshots.js && node scripts/verify-admin-searchbank-handoff.js && echo \"Netlify build OK\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0",
