@@ -30,7 +30,7 @@ const LIMIT_MAP = {
   media: 500,
   social: 1000,
   network: 100,
-  tour: 100,
+  tour: 200,
   default: 300
 };
 
@@ -38,6 +38,7 @@ const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.4-social-domain-isolati
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
+const TOUR_SECTION_SLOT_LIMIT = 200;
 const SOCIAL_MANAGED_MAIN_SECTIONS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
   "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter"
@@ -270,9 +271,10 @@ function internalPlaceholderImage() {
   return "/assets/img/placeholder.png";
 }
 
-function sectionSlotLimit(_pageName, _sectionKey, fallback) {
-  const n = Number(fallback || SECTION_SLOT_LIMIT);
-  return Number.isFinite(n) && n > 0 ? Math.min(SECTION_SLOT_LIMIT, Math.max(1, Math.trunc(n))) : SECTION_SLOT_LIMIT;
+function sectionSlotLimit(pageName, sectionKey, fallback) {
+  const hardLimit = pageName === 'tour' && sectionKey === 'tour' ? TOUR_SECTION_SLOT_LIMIT : SECTION_SLOT_LIMIT;
+  const n = Number(fallback || hardLimit);
+  return Number.isFinite(n) && n > 0 ? Math.min(hardLimit, Math.max(1, Math.trunc(n))) : hardLimit;
 }
 
 function urlOfSnapshotItem(item) {
@@ -981,16 +983,58 @@ const sectionKey = HOME_SECTION_ALIAS[rawSectionKey] || rawSectionKey;
 
 if (existing.find(i => i.id === id || i.contentId === id)) continue;
 
+const homeRightTopUrl = sectionKey === "home_right_top"
+  ? (
+      item.affiliateOutboundUrl ||
+      item.externalOutboundUrl ||
+      item.externalProductUrl ||
+      item.officialProductUrl ||
+      item.productUrl ||
+      item.product_url ||
+      item.productPageUrl ||
+      item.detailUrl ||
+      item.checkoutUrl ||
+      item.purchaseUrl ||
+      item.orderUrl ||
+      item.productLink ||
+      item.displayUrl ||
+      item.sourceUrl ||
+      item.targetUrl ||
+      item.outboundUrl ||
+      item.url ||
+      item.href ||
+      item.link ||
+      "#"
+    )
+  : (item.url || item.link || "#");
+
+const homeRightTopImage = sectionKey === "home_right_top"
+  ? (
+      item.imageUrl ||
+      item.image_url ||
+      item.imageOriginalUrl ||
+      item.thumbnailUrl ||
+      item.thumbnail_url ||
+      item.thumbnail ||
+      item.thumb ||
+      item.image ||
+      item.img ||
+      item.photo ||
+      "/assets/img/placeholder.png"
+    )
+  : (
+      item.thumbnail ||
+      item.thumb ||
+      item.image ||
+      "/assets/img/placeholder.png"
+    );
+
 const card = enrichSnapshotCard({
   id,
   title: item.title || item.name || "Untitled",
   summary: item.summary || "",
-  url: item.url || item.link || "#",
-  thumb:
-    item.thumbnail ||
-    item.thumb ||
-    item.image ||
-    "/assets/img/placeholder.png",
+  url: homeRightTopUrl,
+  thumb: homeRightTopImage,
   ...buildTrackingMeta(item, {
     id,
     pageName: "home",
@@ -998,7 +1042,11 @@ const card = enrichSnapshotCard({
   })
 }, item);
 
-pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "home", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] });
+const replacementEvidence = sectionKey === "home_right_top"
+  ? Object.assign({}, item, { url: homeRightTopUrl, thumbnail: homeRightTopImage })
+  : item;
+
+pushOrReplaceSnapshotSlot(existing, card, replacementEvidence, { pageName: "home", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] });
   }
 
   return frontSnap;
