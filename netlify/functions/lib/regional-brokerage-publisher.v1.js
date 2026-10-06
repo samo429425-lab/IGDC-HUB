@@ -474,7 +474,18 @@ function makeCard(item, decision, market, region, registry) {
     placement: item && item.placement ? clone(item.placement) : null,
     ipSlot: item && item.ipSlot ? clone(item.ipSlot) : null,
     marketScope: item && item.marketScope ? clone(item.marketScope) : null,
-    productMapping: item && item.productMapping ? clone(item.productMapping) : null
+    productMapping: item && item.productMapping ? clone(item.productMapping) : null,
+    // Preserve the administrator publication authority through the regional
+    // Distribution card transformation. The downstream IP-slot verifier uses
+    // this exact envelope to distinguish an already-approved Front Match row
+    // from an automatic research candidate. Dropping it here causes a second
+    // market-evidence review and can wrongly remove a valid nationwide scope.
+    administratorFrontMatchAuthority: item && item.administratorFrontMatchAuthority
+      ? clone(item.administratorFrontMatchAuthority)
+      : null,
+    commerceCandidatePublication: item && item.commerceCandidatePublication
+      ? clone(item.commerceCandidatePublication)
+      : null
   };
 }
 function outputPath(root, market, region) {
