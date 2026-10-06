@@ -170,6 +170,17 @@ function snapshotCandidateAllowed(raw, context) {
   raw = raw || {};
   const c = contractOf(raw);
   const d = raw.osaiDiscernment && typeof raw.osaiDiscernment === "object" ? raw.osaiDiscernment : {};
+  const authority = raw.administratorFrontMatchAuthority && typeof raw.administratorFrontMatchAuthority === "object"
+    ? raw.administratorFrontMatchAuthority : {};
+  const publicationReview = raw.commerceCandidatePublication && raw.commerceCandidatePublication.review && typeof raw.commerceCandidatePublication.review === "object"
+    ? raw.commerceCandidatePublication.review : {};
+  const explicitAdministratorPublication =
+    (authority.verified === true && ["publish_requested","published","matched"].includes(String(authority.publicationStatus || "").trim().toLowerCase())) ||
+    publicationReview.explicitPublicationRequested === true;
+  // Snapshot Engine is a transport/mapper after Canonical publication.  It must
+  // not rerun risk/market/revenue eligibility on an authenticated administrator
+  // Front Match that Canonical already admitted.
+  if (explicitAdministratorPublication) return true;
   const blockedReason = val(raw.blockedReason, c.blockedReason, d.blockedReason, raw?.sanmaruTrust?.blockedReason, "");
   const blocked = raw.blocked === true || c.blocked === true || d.blocked === true || raw?.sanmaruTrust?.blocked === true || !!blockedReason;
   if (blocked) return false;
