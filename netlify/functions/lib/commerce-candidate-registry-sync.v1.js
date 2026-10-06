@@ -8,7 +8,7 @@ const FRONT_SECTIONS=new Set([
 "distribution|distribution-recommend","distribution|distribution-sponsor","distribution|distribution-trending","distribution|distribution-new","distribution|distribution-special","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
 "network|network-right","social|rightPanel","tour|tour"
 ]);
-function requested(row){const r=o(row&&row.publicationRequest),s=l(o(row&&row.assignment).publicationStatus);return r.requested===true||l(r.status)==="publish_requested"||["ready","publish_requested","matched","published"].includes(s)}
+function requested(row){const r=o(row&&row.publicationRequest),s=l(o(row&&row.assignment).publicationStatus);return r.requested===true||l(r.status)==="publish_requested"||["publish_requested","matched","published"].includes(s)}
 function genericTitle(v){const x=t(v);return !x||ProductRanking.isGenericProductName(x)||/^(대표\s*이미지|상품\s*이미지|product\s*image|image|thumbnail)$/i.test(x)}
 function productAssetUrl(v){try{return /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i.test(new URL(t(v)).pathname)}catch(_e){return false}}
 function normalize(row){
