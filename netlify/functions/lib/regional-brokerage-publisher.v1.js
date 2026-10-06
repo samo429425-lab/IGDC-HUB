@@ -140,9 +140,47 @@ function marketplaceExceptionPolicy(policy, market) {
  * is allowed only after Canonical publication plus the payable-revenue gate,
  * operator approval, disclosure approval and a verified payout contract.
  */
+function explicitAdminCanonicalItem(item) {
+  const publication = item && item.canonicalPublication || {};
+  const commercePublication = item && item.commerceCandidatePublication || {};
+  const review = commercePublication && commercePublication.review || {};
+  return publication.status === "published" && !!publication.releaseId && review.explicitPublicationRequested === true;
+}
+function adminScopeMatches(item, context) {
+  if (!explicitAdminCanonicalItem(item)) return false;
+  const placement = item && item.placement || {};
+  const country = Policy.normalizeCountry(context && context.targetMarket);
+  const region = text(context && context.targetRegion).toUpperCase();
+  const itemCountry = Policy.normalizeCountry(placement.country);
+  const itemRegion = text(placement.region || "NATIONWIDE").toUpperCase();
+  if (!country || itemCountry !== country) return false;
+  return region ? (itemRegion === region || itemRegion === "NATIONWIDE") : itemRegion === "NATIONWIDE";
+}
+function adminTransportDecision(item, context) {
+  const placement = item && item.placement || {};
+  const marketScope = item && item.marketScope || {};
+  const evidence = marketScope && marketScope.marketEvidence || {};
+  return {
+    accepted:true,
+    reasons:[],
+    distributionMarketCountry:placement.country || marketScope.marketCountry || null,
+    distributionMarketRegion:String(placement.region || "").toUpperCase()==="NATIONWIDE" ? null : (placement.region || null),
+    availabilityCountries:placement.country ? [placement.country] : [],
+    availabilityRegions:String(placement.region || "").toUpperCase()==="NATIONWIDE" ? [] : [placement.region],
+    nationalAvailability:String(placement.region || "").toUpperCase()==="NATIONWIDE",
+    supplierVerified:true,
+    supplierTrustEvidence:[],
+    localResponsibilityVerified:!!(evidence && evidence.sellerResponsibility && evidence.sellerResponsibility.verified),
+    supplyTier:"administrator_front_match",
+    policyVersion:"administrator-final-board-transport"
+  };
+}
 function buildRegionalSelection(items, context) {
   const prepared = (items || []).map(policyCandidate);
-  const base = Gate.buildSelection(prepared, context || {});
+  const adminAccepted = prepared.filter(item => adminScopeMatches(item, context)).map(item => ({ item, decision:adminTransportDecision(item, context) }));
+  const adminIds = new Set(adminAccepted.map(entry => text(entry.item && (entry.item.id || entry.item.canonicalPublication && entry.item.canonicalPublication.candidateId))));
+  const policyInput = prepared.filter(item => !adminIds.has(text(item && (item.id || item.canonicalPublication && item.canonicalPublication.candidateId))));
+  const base = Gate.buildSelection(policyInput, context || {});
   const promoted = [];
   const held = [];
   for (const entry of base.held || []) {
@@ -158,7 +196,10 @@ function buildRegionalSelection(items, context) {
     if (relaxed.accepted && relaxed.accepted.length) promoted.push(relaxed.accepted[0]);
     else held.push(relaxed.held && relaxed.held[0] || entry);
   }
-  const accepted = (base.accepted || []).concat(promoted);
+  // Explicit administrator placements were fully judged before the final board.
+  // Regional publishing only carries those canonical rows into the selected IP
+  // scope; policy auto-selection remains active for every non-admin candidate.
+  const accepted = adminAccepted.concat(base.accepted || []).concat(promoted);
   const heldByReason = {};
   for (const entry of held) {
     const reasons = Array.isArray(entry.decision && entry.decision.reasons) && entry.decision.reasons.length ? entry.decision.reasons : ["COUNTRY_POLICY_HOLD"];
@@ -453,7 +494,9 @@ function makeCard(item, decision, market, region, registry) {
     placement: item && item.placement ? clone(item.placement) : null,
     ipSlot: item && item.ipSlot ? clone(item.ipSlot) : null,
     marketScope: item && item.marketScope ? clone(item.marketScope) : null,
-    productMapping: item && item.productMapping ? clone(item.productMapping) : null
+    productMapping: item && item.productMapping ? clone(item.productMapping) : null,
+    commerceCandidatePublication: item && item.commerceCandidatePublication ? clone(item.commerceCandidatePublication) : null,
+    administratorFrontMatchAuthority: item && item.administratorFrontMatchAuthority ? clone(item.administratorFrontMatchAuthority) : null
   };
 }
 function outputPath(root, market, region) {
