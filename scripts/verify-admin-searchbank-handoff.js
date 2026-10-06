@@ -14,9 +14,6 @@ const requested=a(queue.items).filter(x=>{
   return r.requested===true||l(r.status)==="publish_requested"||["ready","publish_requested","matched","published"].includes(s);
 });
 
-// Ordinary code deploys (including the restored 12:29 baseline) must not require
-// a newly materialized SearchBank publication. SearchBank handoff becomes a hard
-// build gate only after an explicit administrator Front Match exists.
 if(requested.length===0){
   console.log("IGDC SearchBank handoff gate skipped · no administrator Front Match in this build");
   process.exit(0);
