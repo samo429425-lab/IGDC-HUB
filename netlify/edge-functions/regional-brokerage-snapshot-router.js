@@ -292,9 +292,19 @@ async function documentMatchesPublishedScope(doc, selected, manifest) {
     if (!ipSlot || ipSlot.required !== true || ipSlot.marketCountry !== placement.country || ipSlot.marketRegion !== placement.region || !ipSlot.marketEvidenceDigest) return false;
     if (!scope || scope.marketCountry !== placement.country || scope.marketRegion !== placement.region || scope.key !== placement.country + "-" + placement.region) return false;
     const record = scope.marketEvidence;
-    if (!record || record.country !== placement.country || record.active !== true || !verificationIsFresh(record.verifiedAt, manifest.marketVerificationMaxAgeDays) || !serviceEvidence(record.shipping) || !serviceEvidence(record.returns) || !serviceEvidence(record.support)) return false;
-    const seller = record.sellerResponsibility;
-    if (!seller || seller.verified !== true || !seller.legalEntity || !seller.supportUrl) return false;
+    if (!record || record.country !== placement.country) return false;
+    const commercePublication = card && card.commerceCandidatePublication || {};
+    const review = commercePublication && commercePublication.review || {};
+    const explicitAdminPublication = review.explicitPublicationRequested === true;
+    // For an explicit administrator Front Match, all product/company/market
+    // eligibility was decided before the final board.  Edge routing verifies
+    // only exact scope + immutable evidence-envelope integrity; it must not
+    // rejudge shipping/returns/support policy and hide an already published card.
+    if (!explicitAdminPublication) {
+      if (record.active !== true || !verificationIsFresh(record.verifiedAt, manifest.marketVerificationMaxAgeDays) || !serviceEvidence(record.shipping) || !serviceEvidence(record.returns) || !serviceEvidence(record.support)) return false;
+      const seller = record.sellerResponsibility;
+      if (!seller || seller.verified !== true || !seller.legalEntity || !seller.supportUrl) return false;
+    }
     const digest = await evidenceDigest(record);
     if (record.evidenceDigest !== digest || scope.marketEvidenceDigest !== digest || ipSlot.marketEvidenceDigest !== digest) return false;
   }
