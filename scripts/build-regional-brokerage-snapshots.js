@@ -328,7 +328,7 @@ function validateExplicitCommerceSelection(upstream, intent) {
     missingCandidateIds,
     admittedCandidateIds:selectedIds.filter(id => authoritativeIds.has(id)),
     rejectedCandidateIds:missingCandidateIds,
-    buildBlocked:false
+    buildBlocked:missingCandidateIds.length>0
   };
 }
 
@@ -1019,6 +1019,37 @@ async function main() {
   // into an invalid partial replacement. Validate the delta and rebuild from
   // the full durable publication queue instead.
   const incomingCommerceSelection = validateExplicitCommerceSelection(upstream, incomingCommerceIntent);
+  if (incomingCommerceSelection.buildBlocked === true) {
+    const error = new Error(
+      "Administrator Front Match selection is not present in the authoritative publication queue: " +
+      JSON.stringify(incomingCommerceSelection.missingCandidateIds || [])
+    );
+    error.code = "ADMIN_FRONT_SELECTION_NOT_IN_AUTHORITATIVE_QUEUE";
+    error.details = incomingCommerceSelection;
+    throw error;
+  }
+
+  // Registry bridge performs the final board QA.  A Front Match with a broken
+  // title, non-product destination, missing image or invalid section must fail
+  // visibly; it must never silently publish a partial set or replace it with samples.
+  const bridgeStructuralErrors = Array.isArray(commerceRegistrySync && commerceRegistrySync.bridge && commerceRegistrySync.bridge.structuralErrors)
+    ? commerceRegistrySync.bridge.structuralErrors
+    : [];
+  if (incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish" && bridgeStructuralErrors.length) {
+    const selected = new Set(incomingCommerceSelection.selectedCandidateIds || []);
+    const relevantErrors = selected.size
+      ? bridgeStructuralErrors.filter(row => selected.has(String(row && row.candidateId || "").trim()))
+      : bridgeStructuralErrors;
+    if (relevantErrors.length) {
+      const error = new Error(
+        "Administrator Front Match final QA found structural/content errors: " +
+        JSON.stringify(relevantErrors.slice(0, 50))
+      );
+      error.code = "ADMIN_FRONT_STRUCTURAL_VALIDATION_FAILED";
+      error.details = { count: relevantErrors.length, errors: relevantErrors.slice(0, 100) };
+      throw error;
+    }
+  }
 
   // Build and persist the private candidate stage on every qualified build.
   // This makes the ordered research/revenue/assignment pipeline visible to the
@@ -1068,21 +1099,25 @@ async function main() {
   const releaseItems = Array.isArray(intake.releaseItems) ? intake.releaseItems : [];
   const administratorRequestedCount = Number(intake && intake.releaseGate && intake.releaseGate.requestedCount || commerceRegistrySync && commerceRegistrySync.requestedCount || 0);
   if (releaseItems.length === 0 && administratorRequestedCount > 0) {
-    const held = Array.isArray(intake && intake.stage && intake.stage.candidates) ? intake.stage.candidates.filter(row => row && row.releaseEligible !== true).slice(0,25).map(row => ({candidateId:row.candidateId,reasons:row.reasons,administratorFrontMatch:row.administratorFrontMatch||null})) : [];
-    if (!queueAuthoritative) {
-      preserveOrFail("administrator-publication-empty-without-authoritative-queue", {
-        commerceRegistrySync,
-        requestedCount: administratorRequestedCount,
-        intakeSummary: intake.summary || {},
-        heldSample: held
-      });
-      return;
-    }
-    // An authenticated Front Match is a replacement instruction, not an append.
-    // When every requested real product is blocked by a hard safety check, do
-    // not resurrect the previous live products. Continue with the authoritative
-    // empty release so Snapshot Engine restores sample slots instead.
-    process.stderr.write("Administrator Front Match produced zero safe real products; materializing authoritative sample fallback instead of carrying old Distribution cards.\n");
+    const held = Array.isArray(intake && intake.stage && intake.stage.candidates)
+      ? intake.stage.candidates.filter(row => row && row.releaseEligible !== true).slice(0,25).map(row => ({
+          candidateId:row.candidateId,
+          reasons:row.reasons,
+          administratorFrontMatch:row.administratorFrontMatch||null
+        }))
+      : [];
+    const error = new Error(
+      "Administrator Front Match requested " + administratorRequestedCount +
+      " product(s), but zero structurally valid products reached SearchBank. Existing production snapshots are preserved."
+    );
+    error.code = "ADMIN_FRONT_MATCH_ZERO_RELEASE";
+    error.details = {
+      requestedCount: administratorRequestedCount,
+      queueAuthoritative,
+      intakeSummary: intake.summary || {},
+      heldSample: held
+    };
+    throw error;
   }
   if (releaseItems.length === 0 && !queueAuthoritative) {
     preserveOrFail("no-release-ready-candidates", {
@@ -1091,6 +1126,42 @@ async function main() {
       intakeSummary: intake.summary || null
     });
     return;
+  }
+
+  if (administratorRequestedCount > 0 && queueAuthoritative) {
+    const requestedIds = new Set(
+      (Array.isArray(upstream && upstream.doc && upstream.doc.items) ? upstream.doc.items : [])
+        .filter(entry => {
+          const request = entry && entry.publicationRequest || {};
+          const assignment = entry && entry.assignment || {};
+          const status = String(request.status || assignment.publicationStatus || "").toLowerCase();
+          return request.requested === true || status === "publish_requested" || ["ready","matched","published"].includes(status);
+        })
+        .map(entry => String(entry && entry.candidate && entry.candidate.id || entry && entry.candidateId || "").trim())
+        .filter(Boolean)
+    );
+    const releasedIds = new Set(
+      releaseItems.map(item => String(
+        item && item.commerceCandidate && item.commerceCandidate.candidateId ||
+        item && item.id || ""
+      ).trim()).filter(Boolean)
+    );
+    const missingReleaseIds = Array.from(requestedIds).filter(id => !releasedIds.has(id));
+    if (missingReleaseIds.length) {
+      const error = new Error(
+        "Administrator Front Match lost " + missingReleaseIds.length +
+        " requested product(s) between the final board and SearchBank: " +
+        missingReleaseIds.slice(0, 30).join(", ")
+      );
+      error.code = "ADMIN_FRONT_MATCH_IDENTITY_LOSS";
+      error.details = {
+        requested: requestedIds.size,
+        released: releasedIds.size,
+        missingCandidateIds: missingReleaseIds.slice(0, 200),
+        intakeSummary: intake.summary || {}
+      };
+      throw error;
+    }
   }
 
   // Canonical publication must receive the actual post-intake release set.
