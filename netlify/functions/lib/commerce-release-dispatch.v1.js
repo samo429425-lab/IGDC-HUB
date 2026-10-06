@@ -6,7 +6,7 @@
  * snapshot itself and it never exposes the build hook URL.
  */
 
-const VERSION = "commerce-release-dispatch-v1.3.2-igdc-hook-fallback";
+const VERSION = "commerce-release-dispatch-v1.3.3-empty-refresh-noop";
 const HOOK_ENVS = Object.freeze([
   "COMMERCE_RELEASE_BUILD_HOOK_URL",
   "IGDC_NETLIFY_BUILD_HOOK_URL",
@@ -53,6 +53,31 @@ function safeReason(error) {
 }
 
 async function dispatch(input) {
+  input = input || {};
+  const candidateIds = Array.from(new Set((Array.isArray(input.candidateIds) ? input.candidateIds : []).map(text).filter(Boolean))).slice(0, 1800);
+  const primaryCandidate = text(input.candidateId) || candidateIds[0] || null;
+  const operation = lower(input.operation || "publish");
+
+  // A UI refresh with no actual matched candidate is a no-op. Previously this
+  // empty refresh still fired the Netlify publish hook. The fresh build then
+  // saw zero release items and replaced all live product snapshots with sample
+  // fallbacks. Never create a deployment from an empty refresh.
+  if (operation === "refresh" && !primaryCandidate && candidateIds.length === 0) {
+    const configured = configuredHook();
+    return {
+      ok: true,
+      queued: false,
+      version: VERSION,
+      reason: "empty_refresh_noop",
+      releaseGate: releaseArmed(input),
+      hookConfigured: !!configured.value,
+      hookSource: configured.value ? configured.name : null,
+      attempts: 0,
+      candidateCount: 0,
+      noMutation: true
+    };
+  }
+
   const release = releaseArmed(input);
   const configured = configuredHook();
   if (!release.armed) {
@@ -63,22 +88,20 @@ async function dispatch(input) {
     return { ok: true, queued: false, version: VERSION, reason: configured.value ? "build_hook_invalid" : "build_hook_not_configured", releaseGate: release, hookConfigured: false, hookSource: configured.value ? configured.name : null, attempts:0 };
   }
 
-  const fetchImpl = input && input.fetch || global.fetch;
+  const fetchImpl = input.fetch || global.fetch;
   if (typeof fetchImpl !== "function") {
     return { ok: false, queued: false, version: VERSION, reason: "fetch_unavailable", releaseGate: release, hookConfigured: true, hookSource: configured.name, attempts:0 };
   }
-  const candidateIds=Array.from(new Set((Array.isArray(input&&input.candidateIds)?input.candidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
-  const primaryCandidate=text(input&&input.candidateId)||candidateIds[0]||null;
   const payload = {
-    trigger: text(input && input.operation) === "unpublish" ? "approved-commerce-unpublication" : "approved-commerce-assignment",
+    trigger: operation === "unpublish" ? "approved-commerce-unpublication" : "approved-commerce-assignment",
     candidateId: primaryCandidate,
     candidateIds,
-    assignmentId: text(input && input.assignmentId) || null,
-    actorId: text(input && input.actorId) || null,
-    operation: text(input && input.operation) || "publish",
-    candidateCount: Math.max(1, Number(input && input.candidateCount) || candidateIds.length || 1),
+    assignmentId: text(input.assignmentId) || null,
+    actorId: text(input.actorId) || null,
+    operation: operation || "publish",
+    candidateCount: Math.max(1, Number(input.candidateCount) || candidateIds.length || 1),
     authorization: release.explicitAdminAuthorization ? "explicit_admin_confirmation" : "deployment_release_gate",
-    frontMatchBatch: candidateIds.length>0,
+    frontMatchBatch: candidateIds.length > 0,
     requestedAt: new Date().toISOString()
   };
   let lastReason="build_hook_request_failed",lastStatus=null,lastError=null;
