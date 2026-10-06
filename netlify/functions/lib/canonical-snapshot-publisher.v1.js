@@ -550,7 +550,10 @@ function validateCandidate(raw, index, context) {
     ]);
     for (let i=reasons.length-1;i>=0;i--) {
       const reason=reasons[i];
-      if (!structuralAdminReasons.has(reason) && !/^IP_/.test(reason)) reasons.splice(i,1);
+      // IP class/profile/market-evidence checks are upstream eligibility policy,
+      // not post-board publication checks.  The only IP reason retained here is
+      // IP_SLOT_GLOBAL_SCOPE_FORBIDDEN, which is already in structuralAdminReasons.
+      if (!structuralAdminReasons.has(reason)) reasons.splice(i,1);
     }
   }
 
