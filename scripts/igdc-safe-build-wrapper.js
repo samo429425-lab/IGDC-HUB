@@ -5,6 +5,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
+const GUARD_VERSION = "igdc-release-safety-guard-v1.1.0-zero-product-global";
 
 function text(v) { return v == null ? "" : String(v).trim(); }
 function readJson(file) {
@@ -65,27 +66,36 @@ if (child.stderr) process.stderr.write(child.stderr);
 if (child.error) fail("build process could not start", { error: String(child.error.message || child.error) });
 if (Number(child.status || 0) !== 0) process.exit(Number(child.status || 1));
 
+// Global production safety invariant:
+// no Git-triggered deploy, build-hook deploy, retry or manual production build
+// may replace the currently good public site with an empty/sample commerce set.
+// Netlify publishes only after the build exits successfully, so failing here
+// preserves the currently published immutable deploy (the restored 12:29 state).
+const canonicalFile = path.join(ROOT, "data", "search-bank.snapshot.json");
+const canonical = readJson(canonicalFile);
+const canonicalRows = rows(canonical);
+const canonicalRealRows = realRows(canonical);
+
+if (!canonical || !Array.isArray(canonical.items)) {
+  fail("build produced no valid Canonical SearchBank document; preserving current published deploy", {
+    version: GUARD_VERSION,
+    file: "data/search-bank.snapshot.json",
+    explicitFrontMatch: intent.explicitPublish
+  });
+}
+if (canonicalRows.length === 0 || canonicalRealRows.length === 0) {
+  fail("build produced zero real published products; refusing empty/sample deployment", {
+    version: GUARD_VERSION,
+    canonicalItemCount: canonicalRows.length,
+    realProductCount: canonicalRealRows.length,
+    explicitFrontMatch: intent.explicitPublish,
+    trigger: intent.body && intent.body.trigger,
+    operation: intent.body && intent.body.operation,
+    candidateCount: intent.body && intent.body.candidateCount
+  });
+}
+
 if (intent.explicitPublish) {
-  const canonicalFile = path.join(ROOT, "data", "search-bank.snapshot.json");
-  const canonical = readJson(canonicalFile);
-  const canonicalRows = rows(canonical);
-  const canonicalRealRows = realRows(canonical);
-
-  if (!canonical || !Array.isArray(canonical.items)) {
-    fail("explicit Front Match produced no valid Canonical SearchBank document; refusing deploy", {
-      file: "data/search-bank.snapshot.json"
-    });
-  }
-  if (canonicalRows.length === 0 || canonicalRealRows.length === 0) {
-    fail("explicit Front Match produced zero real published products; refusing sample-fallback deployment", {
-      canonicalItemCount: canonicalRows.length,
-      realProductCount: canonicalRealRows.length,
-      trigger: intent.body && intent.body.trigger,
-      operation: intent.body && intent.body.operation,
-      candidateCount: intent.body && intent.body.candidateCount
-    });
-  }
-
   const required = [
     "front.snapshot.json",
     "distribution.snapshot.json",
@@ -100,10 +110,11 @@ if (intent.explicitPublish) {
   const missing = snapshotChecks.filter((row) => !row.validJson);
   if (missing.length) {
     fail("explicit Front Match did not materialize every Distribution-owned snapshot; refusing deploy", {
+      version: GUARD_VERSION,
       missing: missing.map((row) => row.name)
     });
   }
 }
 
-process.stdout.write("IGDC release safety guard OK\n");
+process.stdout.write("IGDC release safety guard OK " + GUARD_VERSION + "\n");
 process.exit(0);
