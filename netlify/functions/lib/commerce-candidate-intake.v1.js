@@ -21,7 +21,7 @@ const AffiliateRegistry = require("./affiliate-program-registry.v1");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-intake-v1.8.1-admin-ready-publication-authority";
+const VERSION = "commerce-candidate-intake-v1.9.0-admin-final-structural-transport";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -500,8 +500,22 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   const effectivePublishMarkets=explicitAdministratorFrontMatch
     ? {ok:effectiveAdminMarkets.length>0,validRecords:effectiveAdminMarkets,blocked:[],allowedCountries:marketCountries(effectiveAdminMarkets)}
     : normalPublishMarkets;
-  const adminSoftReasons=new Set(["TITLE_MISSING","PRODUCT_TITLE_NOT_VERIFIED","SPECIFIC_PRODUCT_PAGE_NOT_VERIFIED","REVENUE_OPPORTUNITY_EVIDENCE_MISSING","PAYABLE_NON_PG_REVENUE_RIGHT_NOT_VERIFIED","REVENUE_ROUTE_HAS_NO_ALLOWED_VERIFIED_MARKET","MARKET_SALE_EVIDENCE_INCOMPLETE_OR_STALE","LIFE_ESSENTIAL_CATEGORY_NOT_CONFIRMED","SEARCHBANK_ELIGIBILITY_FLAGS_MISSING","TRUSTED_SELLER_OR_PRODUCER_EVIDENCE_MISSING"].concat(adminSafety.reasons||[]));
-  const effectiveReasons=explicitAdministratorFrontMatch?reasons.filter(reason=>!adminSoftReasons.has(reason)):reasons.slice();
+  // FINAL ADMIN BOARD IS THE PUBLICATION AUTHORITY.
+  // All company/product/risk/market/revenue eligibility decisions belong upstream,
+  // before an item reaches the administrator's 20-section placement board.
+  // After an authenticated Front Match, this intake is transport-only: keep only
+  // structural/content defects that the final QA window is supposed to catch.
+  const adminStructuralReasons=new Set([
+    "TITLE_MISSING",
+    "PRODUCT_TITLE_NOT_VERIFIED",
+    "DESTINATION_NOT_HTTPS",
+    "SPECIFIC_PRODUCT_PAGE_NOT_VERIFIED",
+    "IMAGE_NOT_HTTPS",
+    "PSOM_PLACEMENT_MISSING"
+  ]);
+  const effectiveReasons=explicitAdministratorFrontMatch
+    ? reasons.filter(reason=>adminStructuralReasons.has(reason))
+    : reasons.slice();
   const releaseEligible=effectiveReasons.length===0;
   const profitability=profitabilityAssessment(item,tier,effectiveRevenue);
   const rank=ranking(item,tier,essential,trust,effectiveRevenue,market,policy);
@@ -515,8 +529,10 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
     administratorFrontMatch:{
       explicit:explicitAdministratorFrontMatch, safety:adminSafety.ok, safetyReasons:adminSafety.reasons,
       authority:adminAuthority, trustedSeller:trust.ok===true, trustedForExplicitFront,
+      structuralOnly:explicitAdministratorFrontMatch, policyRejudgement:false,
+      postBoardDiagnostics:explicitAdministratorFrontMatch?unique(reasons.filter(reason=>!adminStructuralReasons.has(reason))):[],
       softRiskWarnings:adminSafety.softBlockers, nonPayableReferral:explicitAdministratorFrontMatch&&effectiveRevenue.payable!==true,
-      removedSoftRevenueReasons:explicitAdministratorFrontMatch?reasons.filter(reason=>adminSoftReasons.has(reason)):[]
+      removedPostBoardReasons:explicitAdministratorFrontMatch?reasons.filter(reason=>!adminStructuralReasons.has(reason)):[]
     },
     essentialClass:essential||null, placement:pos, market, publishMarkets:effectivePublishMarkets, marketCount:effectivePublishMarkets.validRecords.length,
     heldMarketCount:market.invalidRecords.length+effectivePublishMarkets.blocked.length,
