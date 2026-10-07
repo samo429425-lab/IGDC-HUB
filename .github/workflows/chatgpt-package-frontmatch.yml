@@ -1,0 +1,44 @@
+name: ChatGPT IGDC patch package
+
+on:
+  push:
+    branches:
+      - chatgpt-frontmatch-snapshot-fix-20261008
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+      - name: Build overwrite-ready ZIP
+        run: |
+          set -euo pipefail
+          mkdir -p package
+          files=(
+            "assets/js/admin-commerce-country-control.js"
+            "commerce-country-control.html"
+            "netlify/functions/lib/commerce-candidate-registry-sync.baseline-1229.v1.js"
+            "netlify/functions/lib/commerce-candidate-registry-sync.v1.js"
+            "netlify/functions/lib/commerce-country-automation.v1.js"
+            "netlify/functions/snapshot-engine.js"
+            "scripts/build-regional-brokerage-snapshots.js"
+          )
+          for f in "${files[@]}"; do
+            mkdir -p "package/$(dirname "$f")"
+            cp "$f" "package/$f"
+          done
+          (
+            cd package
+            zip -r "../IGDC-HUB_FRONTMATCH_PIPELINE_FINAL_20261008.zip" .
+          )
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: IGDC-HUB_FRONTMATCH_PIPELINE_FINAL_20261008
+          path: IGDC-HUB_FRONTMATCH_PIPELINE_FINAL_20261008.zip
+          if-no-files-found: error
+          retention-days: 1
