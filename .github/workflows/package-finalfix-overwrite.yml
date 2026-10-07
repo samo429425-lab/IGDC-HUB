@@ -1,0 +1,38 @@
+name: Package finalfix overwrite
+on:
+  push:
+    branches:
+      - pack/finalfix-overwrite-20261007
+    paths:
+      - .github/workflows/package-finalfix-overwrite.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build overwrite ZIP
+        shell: bash
+        run: |
+          mkdir -p artifact/netlify/edge-functions
+          mkdir -p artifact/netlify/functions/lib
+          mkdir -p artifact/netlify/functions
+          mkdir -p artifact/scripts
+          cp netlify/edge-functions/regional-brokerage-snapshot-router.js artifact/netlify/edge-functions/
+          cp netlify/functions/lib/canonical-snapshot-publisher.v1.js artifact/netlify/functions/lib/
+          cp netlify/functions/lib/commerce-candidate-intake.v1.js artifact/netlify/functions/lib/
+          cp netlify/functions/lib/commerce-candidate-registry-sync.v1.js artifact/netlify/functions/lib/
+          cp netlify/functions/lib/commerce-country-automation.v1.js artifact/netlify/functions/lib/
+          cp netlify/functions/lib/regional-brokerage-publisher.v1.js artifact/netlify/functions/lib/
+          cp netlify/functions/snapshot-engine.js artifact/netlify/functions/
+          cp scripts/build-regional-brokerage-snapshots.js artifact/scripts/
+          cd artifact
+          zip -r ../IGDC-admin-searchbank-finalfix-FILES-ONLY-20261007.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IGDC-admin-searchbank-finalfix-FILES-ONLY-20261007
+          path: IGDC-admin-searchbank-finalfix-FILES-ONLY-20261007.zip
+          if-no-files-found: error
