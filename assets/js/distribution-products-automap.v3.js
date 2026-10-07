@@ -28,7 +28,7 @@
   const REGIONAL_EMPTY_RECHECK_TTL=90*1000;
   const REGIONAL_FAILURE_RECHECK_TTL=45*1000;
   const REGIONAL_REFRESH_DELAY=1400;
-  const INITIAL_SEED_PER_SECTION=0;
+  const INITIAL_SEED_PER_SECTION=100;
   const STATIC_TIMEOUT=12000;
   const REGIONAL_TIMEOUT=8500;
   const CACHE_PREFIX='igdc:distribution:instant-render:v5:';
@@ -236,7 +236,8 @@
       root.addEventListener('click',open);
       root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
     }
-    if(track!==false) revenue(item,'trackImpression');
+    if(item&&item.__igdcSeed===true){root.classList.add('thumb-card--seed');root.setAttribute('aria-busy','true');}
+    if(track!==false&&!(item&&item.__igdcSeed===true)) revenue(item,'trackImpression');
     return root;
   }
   function addHash(hash,value){
@@ -331,7 +332,12 @@
     return card;
   }
   function seedInitialView(){
-    // Legacy no-op. IP-scoped surfaces must never synthesize placeholder cards.
+    SECTION_MAP.forEach(function(cfg){
+      const box=document.querySelector(cfg.selector); if(!box)return;
+      const fragment=document.createDocumentFragment();
+      for(let i=0;i<Math.min(cfg.limit,INITIAL_SEED_PER_SECTION);i++)fragment.appendChild(makeSeedCard(cfg,i));
+      replaceChildren(box,fragment);
+    });
   }
   function replaceChildren(box,fragment){
     if(typeof box.replaceChildren==='function'){box.replaceChildren(fragment);return;}
@@ -392,16 +398,9 @@
       const box=document.querySelector(cfg.selector);
       if(!box) return;
       const raw=sections[cfg.key]||sections[ALIAS[cfg.key]];
-      const list=normalizeList(raw).slice(0,cfg.limit);
-      // A canonical IP gate deliberately returns an empty scope when no exact
-      // same-country supply exists. Empty sections must therefore clear rather
-      // than preserve a previous-country cache or a local seed.
-      if(!list.length){
-        if(snapshot&&snapshot.meta&&snapshot.meta.geoResolutionRequired===true){
-          replaceChildren(box,document.createDocumentFragment());
-        }
-        return;
-      }
+      const real=normalizeList(raw).slice(0,cfg.limit);
+      const list=real.slice();
+      for(let i=list.length;i<cfg.limit;i++)list.push({id:'distribution-seed-'+cfg.key+'-'+(i+1),title:cfg.label+' '+(i+1),meta:'',section:cfg.key,url:'#',__igdcSeed:true});
       bindIncremental(box,list,generation);
     });
     return true;
@@ -466,7 +465,10 @@
       SECTION_MAP.forEach(function(cfg){
         const box=document.querySelector(cfg.selector),job=box&&incrementalJobs.get(box);
         if(!job)return;
-        job.list=normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]).slice(0,cfg.limit);
+        const real=normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]).slice(0,cfg.limit);
+        const list=real.slice();
+        for(let i=list.length;i<cfg.limit;i++)list.push({id:'distribution-seed-'+cfg.key+'-'+(i+1),title:cfg.label+' '+(i+1),meta:'',section:cfg.key,url:'#',__igdcSeed:true});
+        job.list=list;
       });
       activeFingerprint=fingerprint(mergedSnapshot(),'merged');
       activeStamp=snapshotStamp(compact);
@@ -501,6 +503,7 @@
   }
   function boot(){
     controlHosts();
+    seedInitialView();
     // Never restore session-cached product cards: an IP scope can change
     // between visits and a cached card has no request-time geo proof.
     baseSnapshot=null;

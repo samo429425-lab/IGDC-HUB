@@ -18,7 +18,7 @@
   const FEED_URL = ""; // No non-IP fallback for the tour offer rail.
 
   const RIGHT_PANEL_ID = "rightAutoPanel";
-  const RIGHT_SLOT_COUNT = 100;
+  const RIGHT_SLOT_COUNT = 200;
   const RENDER_BATCH = 12;
   const SOURCE_SCAN_LIMIT = RIGHT_SLOT_COUNT + 40;
 
@@ -476,8 +476,9 @@
     applyAnchor(a, item);
 
     const img = document.createElement("img");
-    img.src = item.thumb;
+    if(item && item.thumb) img.src = item.thumb;
     img.alt = item.title || "";
+    if(item && item.__igdcReserve===true){ box.classList.add('dummy-card'); box.setAttribute('data-dummy','1'); }
     img.loading = "lazy";
     img.decoding = "async";
     try { img.referrerPolicy = "no-referrer"; } catch (_e) {}
@@ -547,7 +548,9 @@
   function renderRightPanel(items) {
     const panel = byId(RIGHT_PANEL_ID);
     if (!panel) return;
-    renderRailBatch(panel, items, RIGHT_SLOT_COUNT, false);
+    const list=(items||[]).slice(0,RIGHT_SLOT_COUNT);
+    for(let i=list.length;i<RIGHT_SLOT_COUNT;i++)list.push({id:'tour-reserve-'+(i+1),title:'Loading '+(i+1),thumb:'',sourceUrl:'',__igdcReserve:true});
+    renderRailBatch(panel, list, RIGHT_SLOT_COUNT, false);
   }
 
   function renderMobileRail(items) {
@@ -567,11 +570,15 @@
     const snap = await fetchJson(SNAPSHOT_URL);
     let items = [];
 
-    // Match content-engine.js collection context exactly so a generated id in
-    // the card resolves to the same Tour snapshot item on /content.html.
-    const rawItems = snap && Array.isArray(snap.items) && snap.items.length ? snap.items : null;
-    const collection = rawItems ? "items" : "slots";
-    items = normalizeItems(rawItems || ((snap && snap.slots) || []), collection);
+    // Keep both halves of the Tour snapshot: primary items + reserve slots.
+    const primary = normalizeItems((snap && snap.items) || [], "items");
+    const reserve = normalizeItems((snap && snap.slots) || [], "slots");
+    const seen = new Set();
+    items = [];
+    primary.concat(reserve).forEach(function(item){
+      const key=String((item&&(item.id||item.contentId||item.sourceUrl||item.title))||'');
+      if(key&&seen.has(key))return; if(key)seen.add(key); items.push(item);
+    });
 
     // No generic feed fallback: only the Edge-routed canonical IP snapshot is
     // allowed to populate the tour right panel and mobile rail.

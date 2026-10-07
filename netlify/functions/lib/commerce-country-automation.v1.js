@@ -4821,13 +4821,10 @@ function frontSyncPublicReadiness(productInput, existingCandidate) {
   const productPageUrl=safeUrl(adminRecord.productUrl), imageUrl=safeUrl(adminRecord.imageUrl), supplierUrl=safeUrl(adminRecord.supplierUrl), supplierName=first(adminRecord.supplierName,product.supplierName,plain(product.supplier).name,adminRecord.title,"External seller");
   const productTitle=first(adminRecord.title,product.productName,product.title,existingCandidate&&existingCandidate.title);
   if(!adminRecord.adminDisplayReady||!productPageUrl) reasons.push("administrator_product_url_missing");
-  // After administrator placement, URL validation is structural only. A real
-  // HTTPS destination may use any seller-specific route shape; only an obvious
-  // image asset is not a product-detail destination.
   if(productPageUrl&&/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i.test(productPageUrl)) reasons.push("administrator_product_url_is_image_asset");
   if(!imageUrl) reasons.push("administrator_product_image_missing");
   if(!productTitle) reasons.push("administrator_product_title_missing");
-  if(plain(existingPayload.queueControl).permanentExcluded===true) warnings.push("legacy_permanent_excluded_flag_admin_record_preserved");
+  if(plain(existingPayload.queueControl).permanentExcluded===true) warnings.push("legacy_permanent_excluded_flag_ignored_after_admin_approval");
   // Runtime/research signals are diagnostics only after an explicit Front Match.
   // They may warn the administrator, but they may not silently cancel or rewrite
   // the administrator's currently normal product card.

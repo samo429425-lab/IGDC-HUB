@@ -1,7 +1,7 @@
 "use strict";
 
 const fs=require("fs"),crypto=require("crypto"),Base=require("./commerce-candidate-registry-sync.baseline-1229.v1"),Pipeline=require("./commerce-product-pipeline-state.v1"),ProductRanking=require("./commerce-product-ranking.v1");
-const VERSION="commerce-candidate-registry-sync-v1.17.0-admin-board-structural-only";
+const VERSION="commerce-candidate-registry-sync-v1.17.0-admin-board-direct-transport";
 function t(v){return v==null?"":String(v).trim()}function l(v){return t(v).toLowerCase()}function o(v){return v&&typeof v==="object"&&!Array.isArray(v)?v:{}}function a(v){return Array.isArray(v)?v:[]}function f(){for(const v of arguments){const x=t(v);if(x)return x}return""}function https(v){try{const u=new URL(t(v));return u.protocol==="https:"?u.toString():""}catch(_e){return""}}function now(){return new Date().toISOString()}function sha(v){return crypto.createHash("sha256").update(v).digest("hex")}
 const FRONT_SECTIONS=new Set([
 "home|home_1","home|home_2","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",

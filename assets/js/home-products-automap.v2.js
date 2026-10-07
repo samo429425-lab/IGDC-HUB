@@ -182,9 +182,6 @@
     // snapshot already carries the same product URL that works in Admin.
     const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.externalProductUrl || item.officialProductUrl || item.productUrl || item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl || item.orderUrl || item.productLink || item.displayUrl || item.sourceUrl || item.targetUrl || item.outboundUrl || item.url || item.href || item.link || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
-    // Home right-panel sample slots historically open the existing IGDC auxiliary
-    // content page. Preserve that reserve path while real products continue to
-    // use the exact administrator-approved seller URL above.
     if (item.__igdcFallbackSlot && item.__igdcRight && item.id) return contentHref(item.id);
     // Internal IGDC detail remains a fallback only when a real published id exists.
     if (item.id && item.__igdcExplicitId !== false) return contentHref(item.id);

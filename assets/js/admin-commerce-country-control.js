@@ -406,7 +406,7 @@
     }
     /* Compatibility fallback only. The ordinary screen no longer depends on the
        large commerce-candidate-review staging/diagnostic path. */
-    if(partialError){
+    if(partialError||!all.length){
       try{
         var snap=await api(REVIEW,'management_snapshot','GET',{country:requested.country,region:requested.region,compact:'1',limit:3000},null,30000);
         if(scopeKey()!==requestedKey)throw new Error('상품 후보 원장 호환 복구 중 선택 범위가 변경됐습니다.');
@@ -1432,12 +1432,8 @@
   }
   async function runProductFrontSync(operation,mode,sectionKey,productId,selection){
     if(!selectedCountry||productFrontSyncActive)return;
-    // The durable administrator management ledger is the publication authority.
-    // Every Front Match entry point must read it again before calculating its
-    // target/replacement set; a cached research report must never gate or define
-    // what the administrator has currently placed on the 20-section board.
     try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}
-    catch(error){show(conciseRequestError(error&&error.message,error&&error.status)||'현재 전체 상품 후보·배치 관리 원장을 읽지 못해 Front Match를 중단했습니다. 공개 원장은 변경하지 않았습니다.','fail');return;}
+    catch(error){show(conciseRequestError(error&&error.message,error&&error.status)||'현재 전체 상품 후보·배치 관리 원장을 읽지 못해 Front Match를 중단했습니다.','fail');return;}
     // Keep every administrator scope independent. A single section, selected
     // sections, selected products and all 20 sections resolve their own exact
     // target set here; only the final durable write/build machinery is shared.
@@ -1446,9 +1442,6 @@
     var unmatch=operation==='unmatch',sectionMode=mode==='section',sectionsMode=mode==='sections',candidateMode=mode==='candidate',candidatesMode=mode==='candidates',selectedSections=sectionsMode?(Array.isArray(selection)?selection:[]):[],selectedProducts=candidatesMode?(Array.isArray(selection)?selection:[]):[],selectedProduct=candidateMode?productById(productId):null,label=candidateMode?(text(selectedProduct&&selectedProduct.productName||selectedProduct&&selectedProduct.title||productId)+' · 상품 1건'):(candidatesMode?'선택 상품 '+selectedProducts.length+'건':(sectionsMode?(selectedSections.length===1?sectionLabel(selectedSections[0]):'선택 섹션 '+selectedSections.length+'개'):(sectionMode?sectionLabel(sectionKey):'20개 전체 섹션'))),confirmation=unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH';
     if(sectionsMode&&!selectedSections.length){show('매칭할 섹션을 먼저 선택해 주세요.','warn');return;}if(candidatesMode&&!selectedProducts.length){show('매칭할 상품을 먼저 선택해 주세요.','warn');return;}
     var replacementRun=!unmatch&&(mode==='all'||sectionMode||sectionsMode),pendingManagement=[],selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
-    // Freeze the successfully read administrator ledger for this command. Front
-    // publication writes below are one-way and cannot change this source ledger,
-    // so the same complete snapshot must define both targets and stale cleanup.
     var authoritativeBoardRows=productRows.slice();
     var targetRows=authoritativeBoardRows.filter(function(row){
       var key=assignedSectionKey(row),id=text(row&&row.id),placed=productDecision(row)==='slot_candidate'&&!!key;
@@ -1516,9 +1509,7 @@
       var workers=[];for(var w=0;w<Math.min(maxConcurrent,batches.length);w++)workers.push(worker());await Promise.all(workers);
 
       aggregate.persistedCandidateIds=Object.keys(publishPersistedMap);aggregate.changedCandidateIds=Array.from(new Set(Object.keys(changedMap).concat(managementCommit.changedCandidateIds||[])));
-      // Do not re-read the board here. A partial second read could turn a valid
-      // authoritative replacement into an accidental partial deletion. The
-      // complete ledger snapshot captured before batching is immutable input.
+      // Finalize uses the same complete administrator-board snapshot read at click time.
       var needsFinalize=aggregate.persistedCandidateIds.length>0||aggregate.changedCandidateIds.length>0||aggregate.withdrawn>0||Number(managementCommit.changedCount||0)>0||replacementRun;
       if(needsFinalize){
         try{
