@@ -1,0 +1,26 @@
+name: Build finalfix overwrite ZIP
+on:
+  push:
+    branches:
+      - artifact/finalfix-overwrite-zip-20261007
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload overwrite files
+        uses: actions/upload-artifact@v4
+        with:
+          name: IGDC-admin-searchbank-finalfix-OVERWRITE-20261007
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            netlify/edge-functions/regional-brokerage-snapshot-router.js
+            netlify/functions/lib/canonical-snapshot-publisher.v1.js
+            netlify/functions/lib/commerce-candidate-intake.v1.js
+            netlify/functions/lib/commerce-candidate-registry-sync.v1.js
+            netlify/functions/lib/commerce-country-automation.v1.js
+            netlify/functions/lib/regional-brokerage-publisher.v1.js
+            netlify/functions/snapshot-engine.js
+            scripts/build-regional-brokerage-snapshots.js
