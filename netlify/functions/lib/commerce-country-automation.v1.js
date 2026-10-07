@@ -4793,11 +4793,11 @@ async function verifyProductFrontPreparation(candidateIdsInput, scope, targetByI
       normalizeCountry(row && row.country_code) === scope.country && frontSyncExpectedRegion(row, scope.country) === scope.region &&
       ["active", "approved", "ready"].includes(lower(row && row.availability_state))
     );
-    if (!hasAvailability) reasons.push("active_availability_not_persisted");
+    if (!hasAvailability&&!authoritativeBoard) reasons.push("active_availability_not_persisted");
     const hasRevenue = candidateRevenues.some((row) => lower(row && row.revenue_type) === "external_referral" && lower(row && row.status) === "approved" && !!safeUrl(row && row.affiliate_url));
-    if (!hasRevenue) reasons.push("approved_referral_revenue_not_persisted");
+    if (!hasRevenue&&!authoritativeBoard) reasons.push("approved_referral_revenue_not_persisted");
     const hasEvidence = candidateEvidence.some((row) => row && row.verified === true && !!safeUrl(row.evidence_url));
-    if (!hasEvidence) reasons.push("verified_supplier_evidence_not_persisted");
+    if (!hasEvidence&&!authoritativeBoard) reasons.push("verified_supplier_evidence_not_persisted");
     let lifecycle = null;
     if (candidate) {
       lifecycle = ProductPipeline.registryState(candidate,{assignments:candidateAssignments,markets:candidateMarkets,revenues:candidateRevenues,evidence:candidateEvidence});
@@ -4838,7 +4838,7 @@ function frontSyncPublicReadiness(productInput, existingCandidate, targetInput) 
   const authoritativeBoard=target.administratorBoardAuthority===true;
   const productPageUrl=safeUrl(authoritativeBoard?first(target.administratorProductUrl,adminRecord.productUrl):adminRecord.productUrl), imageUrl=safeUrl(authoritativeBoard?first(target.administratorImageUrl,adminRecord.imageUrl):adminRecord.imageUrl), supplierUrl=safeUrl(adminRecord.supplierUrl), supplierName=first(adminRecord.supplierName,product.supplierName,plain(product.supplier).name,adminRecord.title,"External seller");
   const productTitle=first(authoritativeBoard&&target.administratorTitle,adminRecord.title,product.productName,product.title,existingCandidate&&existingCandidate.title);
-  if(!adminRecord.adminDisplayReady||!productPageUrl) reasons.push("administrator_product_url_missing");
+  if((!authoritativeBoard&&!adminRecord.adminDisplayReady)||!productPageUrl) reasons.push("administrator_product_url_missing");
   if(productPageUrl&&/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i.test(productPageUrl)) reasons.push("administrator_product_url_is_image_asset");
   if(!imageUrl) reasons.push("administrator_product_image_missing");
   if(!productTitle) reasons.push("administrator_product_title_missing");
@@ -4911,7 +4911,21 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
 
   const candidateById = new Map(array(candidateRows).map((row) => [text(row && row.id), row]));
   const productByCandidate = candidateLedgerMode
-    ? new Map(array(candidateRows).map((row) => [text(row && row.id), restoredProductFromCandidate(row, scope)]).filter((entry) => entry[1]))
+    ? new Map(array(candidateRows).map((row) => {
+        const id=text(row&&row.id),target=plain(targetById.get(id)),restored=restoredProductFromCandidate(row,scope);
+        if(restored)return[id,restored];
+        if(target.administratorBoardAuthority!==true)return[id,null];
+        const payload=plain(row&&row.source_payload),split=splitProductSectionKey(text(target.sectionKey));
+        const url=safeUrl(target.administratorProductUrl),image=safeUrl(target.administratorImageUrl);
+        if(!url||!image||!validProductSectionKey(text(target.sectionKey)))return[id,null];
+        return[id,Object.assign({},payload,{
+          candidateId:id,id,productName:first(target.administratorTitle,row&&row.title,"상품"),title:first(target.administratorTitle,row&&row.title,"상품"),
+          productUrl:url,url,imageUrl:image,imageOriginalUrl:image,slotDecision:"slot_candidate",
+          approvedPlacement:{page:split.page,section:split.sectionKey,sectionKey:split.sectionKey,country:scope.country,region:scope.region,administratorSelected:true,proposalOnly:false,publicPublication:false},
+          primaryPlacement:{page:split.page,section:split.sectionKey,sectionKey:split.sectionKey,country:scope.country,region:scope.region,administratorSelected:true,proposalOnly:false,publicPublication:false},
+          inspectionComplete:true,productPageLive:true,sameSupplierSite:true,publicPublication:false,automaticImport:false
+        })];
+      }).filter((entry)=>entry[1]))
     : new Map(array(job.products).map((row) => [productCandidateId(scope, row), row]));
   const assignmentsByCandidate = new Map(), availabilityByCandidate = new Map(), revenuesByCandidate = new Map(), evidenceByCandidate = new Map();
   function group(map, rows) { for (const row of array(rows)) { const id = text(row && row.candidate_id); if (!map.has(id)) map.set(id, []); map.get(id).push(row); } }

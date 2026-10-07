@@ -10,7 +10,7 @@ const SlotStore=require("./lib/global-slot-console-supabase");
 const MarketSaleScope=require("./lib/market-sale-scope.v1");
 const ProductPipeline=require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION="commerce-candidate-management-ledger-v1.1.0-management-ranking-projection";
+const VERSION="commerce-candidate-management-ledger-v1.2.0-live-assignment-publication-status";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const PRODUCT_SOURCE_REF=ProductPipeline.SOURCE_REF; // country-product-ranking-review
 function text(v){return v==null?"":String(v).trim();}
@@ -38,13 +38,18 @@ function scopeMatch(payload,countryInput,regionInput){
   if(requested==="NATIONWIDE")return scopes.some(s=>s.region==="NATIONWIDE");
   return scopes.some(s=>s.region===requested||s.region==="NATIONWIDE");
 }
-function compact(candidate){
-  const payload=plain(candidate&&candidate.source_payload),live=ProductPipeline.liveQueueRow(candidate,{assignments:[],markets:[],revenues:[],evidence:[]});
+function compact(candidate,assignmentRowsInput){
+  const payload=plain(candidate&&candidate.source_payload),assignmentRows=array(assignmentRowsInput),live=ProductPipeline.liveQueueRow(candidate,{assignments:assignmentRows,markets:[],revenues:[],evidence:[]});
   live.queueControl=plain(payload.queueControl);live.slotDecision=text(payload.slotDecision);live.managementControl=plain(payload.managementControl);live.decisionSource=text(payload.decisionSource);
   live.createdAt=text(candidate&&candidate.created_at);live.updatedAt=text(candidate&&candidate.updated_at);
   const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.placement),front=plain(payload.frontPublication||payload.publication||payload.frontSync);
   if(Object.keys(placement).length){live.placement=Object.assign({},plain(live.placement),placement,{page:text(placement.page),section:text(placement.section||placement.sectionKey),sectionKey:text(placement.sectionKey||placement.section),slot:text(placement.slot),country:text(placement.country||plain(payload.marketScope).marketCountry),region:text(placement.region||plain(payload.marketScope).marketRegion)});}
-  if(Object.keys(front).length){live.lifecycle=Object.assign({},plain(live.lifecycle),{assignment:{publicationStatus:text(front.status||front.publicationStatus||front.publication_status),hubKey:text(front.hubKey||front.hub_key),slotKey:text(front.slotKey||front.slot_key)}});}
+  // The durable slot-assignment relation is the publication authority.  Only
+  // use a legacy payload marker when no live assignment row exists at all.
+  const liveAssignment=plain(plain(live.lifecycle).assignment);
+  if(Object.keys(front).length&&!text(liveAssignment.publicationStatus)){
+    live.lifecycle=Object.assign({},plain(live.lifecycle),{assignment:{publicationStatus:text(front.status||front.publicationStatus||front.publication_status),hubKey:text(front.hubKey||front.hub_key),slotKey:text(front.slotKey||front.slot_key)}});
+  }
   live.managementProjection="direct_source_ref";return live;
 }
 async function selectPage(query){return SlotStore.request(SlotStore.rest("gslot_candidates",query),{method:"GET"});}
@@ -73,7 +78,23 @@ exports.handler=async function(event){
       }
       rows=found;
     }
-    const candidates=rows.map(compact),hasMore=mode==="marketScope"&&rows.length===limit;
-    return json(200,{ok:true,version:VERSION,sourceRef:PRODUCT_SOURCE_REF,scope:{country,region},candidates,pagination:{offset,limit,returned:candidates.length,hasMore,nextOffset:hasMore?offset+rows.length:null,mode},runtime:{totalMs:Date.now()-started},safety:{readOnly:true,mutatesDatabase:false}});
+    // Hydrate only the publication relation needed by the ordinary management
+    // screen.  This keeps the page lightweight while making match/unmatch state
+    // reflect gslot_slot_assignments.publication_status instead of stale payload
+    // annotations.
+    const ids=rows.map(row=>text(row&&row.id)).filter(Boolean),assignmentByCandidate=new Map();
+    if(ids.length){
+      for(let start=0;start<ids.length;start+=80){
+        const chunk=ids.slice(start,start+80),filter=chunk.map(id=>encodeURIComponent(id)).join(",");
+        const rel=array(await SlotStore.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at&candidate_id=in.("+filter+")&order=updated_at.desc&limit=5000"));
+        for(const row of rel){
+          const id=text(row&&row.candidate_id);if(!id)continue;
+          if(!assignmentByCandidate.has(id))assignmentByCandidate.set(id,[]);
+          assignmentByCandidate.get(id).push(row);
+        }
+      }
+    }
+    const candidates=rows.map(row=>compact(row,assignmentByCandidate.get(text(row&&row.id))||[])),hasMore=mode==="marketScope"&&rows.length===limit;
+    return json(200,{ok:true,version:VERSION,sourceRef:PRODUCT_SOURCE_REF,scope:{country,region},candidates,pagination:{offset,limit,returned:candidates.length,hasMore,nextOffset:hasMore?offset+rows.length:null,mode},runtime:{totalMs:Date.now()-started},publicationAuthority:"gslot_slot_assignments.publication_status",safety:{readOnly:true,mutatesDatabase:false}});
   }catch(error){return json(Number(error&&error.statusCode)||500,{ok:false,version:VERSION,error:text(error&&error.message||error),runtime:{totalMs:Date.now()-started}});}
 };

@@ -1446,7 +1446,7 @@
     authoritativeBoardRows.forEach(function(row){
       var id=text(row&&row.candidateId||row&&row.id),key=assignedSectionKey(row);
       if(!id||!PRODUCT_SECTION_MAP[key])return;
-      authoritativeBoardById[id]={schema:'igdc-admin-front-board-item.v1',candidateId:id,sectionKey:key,title:text(row&&row.productName||row&&row.title),productUrl:text(row&&row.productUrl||row&&row.url),imageUrl:text(row&&row.imageUrl||row&&row.imageOriginalUrl)};
+      authoritativeBoardById[id]={schema:'igdc-admin-front-board-item.v1',authoritative:true,candidateId:id,sectionKey:key,title:text(row&&row.productName||row&&row.title),productUrl:text(row&&row.productUrl||row&&row.url),imageUrl:text(row&&row.imageUrl||row&&row.imageOriginalUrl)};
     });
     var targetRows=authoritativeBoardRows.filter(function(row){
       var key=assignedSectionKey(row),id=text(row&&row.id),placed=productDecision(row)==='slot_candidate'&&!!key;

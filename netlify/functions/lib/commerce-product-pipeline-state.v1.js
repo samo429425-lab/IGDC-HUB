@@ -38,7 +38,7 @@ function first(){ for(const value of arguments){ const out=text(value); if(out) 
 function safeHttpsUrl(value){ try{ const url=new URL(text(value)); return url.protocol === "https:" && !url.username && !url.password && !!url.hostname ? url.toString() : ""; }catch(_error){ return ""; } }
 function bool(value){ return value === true || ["1","true","yes","on","approved","verified","active","enabled"].includes(lower(value)); }
 function unique(values){ return Array.from(new Set(array(values).map(text).filter(Boolean))); }
-function administratorPublicationState(value){ return ["ready","publish_requested","matched","published"].includes(lower(value)); }
+function administratorPublicationState(value){ return ["publish_requested","queued","matched","published","active"].includes(lower(value)); }
 
 function normalizedHttpsUrl(value){
   const url=safeHttpsUrl(value); if(!url) return "";

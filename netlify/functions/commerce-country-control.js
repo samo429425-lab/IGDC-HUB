@@ -277,7 +277,18 @@ exports.handler=async function(event){
       const effectiveOperation=requestedOperation==="unmatch"?"unmatch":(candidateIds.length?"match":"refresh");
       if(effectiveOperation==="match"&&candidateIds.length){
         const liveDoc={candidates:[]};
-        const finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:"SITE_PUBLISH",candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
+        let finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:"SITE_PUBLISH",candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
+        // A Front Match is also an explicit request to rebuild the public
+        // SearchBank/Snapshot projection.  If the publication batch persisted
+        // nothing new (for example every assignment was already publish_requested)
+        // it may legitimately skip ReleaseDispatch.  In that case dispatch one
+        // refresh hook here so the current durable assignment ledger is still
+        // materialized.  Never dispatch twice when requestPublicationBatch
+        // already queued the hook.
+        if(!(finalizeResult&&finalizeResult.release&&finalizeResult.release.queued===true)){
+          const refresh=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:"publish",confirmation:"SITE_PUBLISH",candidateId:candidateIds[0]||null,candidateIds,candidateCount:Math.max(1,candidateIds.length)},scope);
+          finalizeResult=Object.assign({},finalizeResult,{release:refresh.release||finalizeResult.release,refreshDispatch:refresh,queued:refresh&&refresh.release&&refresh.release.queued===true?Math.max(1,Number(finalizeResult&&finalizeResult.queued||0)):Number(finalizeResult&&finalizeResult.queued||0),pendingBuild:refresh&&refresh.release&&refresh.release.queued===true?0:Math.max(1,Number(finalizeResult&&finalizeResult.pendingBuild||0))});
+        }
         const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null);
         if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={publicationOnly:publicationReplacement,administratorPlacementReadOnly:true,plan:replacementPlan,unpublication:replacementUnpublish,desiredCandidateIds:requestedReplacementCandidateIds};
         const guardRestore={ok:true,restored:[],failures:[],skipped:true,reason:"front_candidate_ledger_read_only"};if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;

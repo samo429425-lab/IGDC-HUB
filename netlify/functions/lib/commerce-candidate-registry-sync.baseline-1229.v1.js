@@ -38,7 +38,7 @@ function safeUrl(v){ try { const u=new URL(text(v)); return u.protocol==="https:
 function requiredEnvPresent(){ return !!(text(process.env.GSLOT_SUPABASE_URL) && text(process.env.GSLOT_SUPABASE_SECRET_KEY||process.env.GSLOT_SUPABASE_SERVICE_ROLE_KEY||process.env.GSLOT_SUPABASE_SERVICE_KEY)); }
 function allowedCandidateStatus(v){ return ["revenue_ready","approval_pending","enrollable"].includes(lower(v)); }
 function allowedAssignmentState(v){ return ["approved","pinned"].includes(lower(v)); }
-function administratorPublicationState(v){ return ["ready","publish_requested","matched","published"].includes(lower(v)); }
+function administratorPublicationState(v){ return ["publish_requested","queued","matched","published","active"].includes(lower(v)); }
 function approvedRevenue(v){ return ["approved","active","verified","live","enabled"].includes(lower(v)); }
 function approvedAvailability(v){ return ["active","approved","ready"].includes(lower(v)); }
 function verifiedEvidenceRow(row){ return !!row && bool(row.verified) && !!safeUrl(row.evidence_url); }
@@ -147,12 +147,10 @@ function explicitHardRisk(payload){
 function frontPublicationMarker(candidate){
   const payload=sourcePayload(candidate), front=plain(payload.frontPublication), review=plain(payload.review), pipeline=plain(payload.pipeline);
   const status=lower(first(front.status,review.publicationStatus,review.publicationRequested===true?"publish_requested":"",pipeline.explicitPublicationRequested===true?"publish_requested":""));
-  // Admin UI persists `frontPublication.status=ready` after a successful
-  // administrator-selected placement. The release dispatcher also treats the
-  // assignment's `publication_status=ready` as deployable. Registry must honor
-  // the same state instead of waiting for a second, redundant state rewrite.
-  const persistedReady=status==="ready" && front.persisted===true;
-  if(!["queued","publish_requested","matched","published"].includes(status) && !persistedReady) return null;
+  // `ready`/`audit_ready` mean administrator placement is prepared but has not
+  // been Front Matched.  Only an explicit publication request (or a later live
+  // state) may enter the public registry.
+  if(!["queued","publish_requested","matched","published","active"].includes(status)) return null;
   const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.primaryPlacement||payload.placement);
   const page=first(placement.page,payload.page), section=first(placement.sectionKey,placement.section,payload.section,payload.psom_key);
   const country=MarketSaleScope.normalizeCountry(first(placement.country,front.country,payload.country,payload.targetCountry));
