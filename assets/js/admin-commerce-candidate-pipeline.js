@@ -243,7 +243,9 @@
     if(!window.confirm((row.productCard&&row.productCard.title||row.title||selectedCandidateId)+'\n\n'+label+'을 실행하시겠습니까?\n현재 PSOM 배정은 '+(match?'그대로 사용됩니다.':'삭제하지 않고 보존됩니다.')))return;
     var btn=$(match?'frontMatchBtn':'frontUnmatchBtn'),other=$(match?'frontUnmatchBtn':'frontMatchBtn');if(btn)btn.disabled=true;if(other)other.disabled=true;show(label+'을 처리하는 중입니다.','warn');
     try{
-      var result=await controlRequest(match?'product_front_match':'product_front_unmatch','POST',{ledgerMode:'candidate',mode:'candidates',candidateIds:[selectedCandidateId],confirmation:match?'SITE_PUBLISH':'SITE_UNPUBLISH',deferRelease:false,scopeRefresh:false,compactResponse:true,reuseFreshValidation:true,freshValidationMinutes:720});
+      var card=row.productCard||{},page=text(p.page),fullSectionKey=section.indexOf('|')>=0?section:(page?page+'|'+section:'');
+      var boardItem=fullSectionKey?{schema:'igdc-admin-front-board-item.v1',candidateId:selectedCandidateId,sectionKey:fullSectionKey,title:text(card.title||row.title),productUrl:text(card.checkoutUrl||card.productUrl||row.productUrl||row.url),imageUrl:text(card.imageUrl||card.image||card.thumbnailUrl||row.imageUrl||row.thumbnailUrl)}:null;
+      var result=await controlRequest(match?'product_front_match':'product_front_unmatch','POST',{ledgerMode:'candidate',mode:'candidates',candidateIds:[selectedCandidateId],confirmation:match?'SITE_PUBLISH':'SITE_UNPUBLISH',deferRelease:false,scopeRefresh:false,compactResponse:true,reuseFreshValidation:true,freshValidationMinutes:720,authoritativeBoardSnapshot:match,authoritativeBoardItems:match&&boardItem?[boardItem]:[]});
       var fs=result.frontSyncResult||result,requested=Number(fs.requested||0),persisted=Number(fs.persisted||0),queued=Number(fs.queued||0),blocked=Number(fs.blocked||0);
       if(!requested){show(label+' 대상이 0건입니다. 현재 PSOM 배정·보류/제외 상태를 20개 섹션 관리 화면에서 확인해 주세요.','warn');}
       else if(blocked&&!persisted&&!queued){show(label+'이 안전 게이트에서 차단되었습니다. 차단 사유를 점검해 주세요.','warn');}

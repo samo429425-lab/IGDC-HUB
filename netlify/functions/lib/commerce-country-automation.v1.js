@@ -4735,6 +4735,20 @@ async function frontSyncUpsert(table, rowsInput, conflictColumns) {
   }
   return output;
 }
+function frontSyncAuthoritativeBoardMap(input) {
+  const out=new Map();
+  for(const raw of array(input&&input.authoritativeBoardItems)){
+    const row=plain(raw),candidateId=text(row.candidateId||row.id),sectionKey=text(row.sectionKey);
+    if(!candidateId||!validProductSectionKey(sectionKey))continue;
+    out.set(candidateId,{
+      candidateId,sectionKey,authoritative:true,
+      title:text(row.title||row.productName),
+      productUrl:safeUrl(row.productUrl||row.url),
+      imageUrl:safeUrl(row.imageUrl||row.thumbnailUrl||row.thumbnail)
+    });
+  }
+  return out;
+}
 function frontSyncExpectedRegion(row, country) {
   return normalizeRegion(row && row.region_code || "NATIONWIDE", country) || "NATIONWIDE";
 }
@@ -4758,10 +4772,13 @@ async function verifyProductFrontPreparation(candidateIdsInput, scope, targetByI
   for (const candidateId of candidateIds) {
     const target = plain(targetById.get(candidateId)), split = splitProductSectionKey(target.sectionKey), reasons = [];
     const candidate = candidates.get(candidateId);
-    const candidatePayload = plain(candidate && candidate.source_payload);
-    const candidateDecision = lower(candidatePayload.slotDecision);
-    const candidatePlacementKey = productPlacementKey(candidatePayload.approvedPlacement || candidatePayload.selectedPlacement || candidatePayload.placement);
-    if (!candidate || candidateDecision !== "slot_candidate" || !validProductSectionKey(candidatePlacementKey)) reasons.push("administrator_candidate_placement_not_ready");
+    const authoritativeBoard = target.administratorBoardAuthority===true;
+    if(!candidate) reasons.push("administrator_candidate_missing");
+    if(!validProductSectionKey(text(target.sectionKey))) reasons.push("administrator_target_section_invalid");
+    if(candidate&&!authoritativeBoard){
+      const candidatePayload=plain(candidate.source_payload),candidateDecision=lower(candidatePayload.slotDecision),candidatePlacementKey=productPlacementKey(candidatePayload.approvedPlacement||candidatePayload.selectedPlacement||candidatePayload.placement);
+      if(candidateDecision!=="slot_candidate"||!validProductSectionKey(candidatePlacementKey))reasons.push("administrator_candidate_placement_not_ready");
+    }
     const candidateAssignments = array(assignments.get(candidateId));
     const candidateMarkets = array(availability.get(candidateId));
     const candidateRevenues = array(revenues.get(candidateId));
@@ -4811,15 +4828,16 @@ async function frontSyncWriteStage(trace, name, attempted, writer) {
     throw error;
   }
 }
-function frontSyncPublicReadiness(productInput, existingCandidate) {
-  const product=plain(productInput), existingPayload=plain(existingCandidate&&existingCandidate.source_payload), adminRecord=ProductPipeline.administratorProductRecord(existingCandidate), runtimeValidation=plain(existingPayload.runtimeValidation||product.runtimeValidation), risk=plain(product.riskAssessment), reasons=[], warnings=[];
+function frontSyncPublicReadiness(productInput, existingCandidate, targetInput) {
+  const product=plain(productInput), target=plain(targetInput), existingPayload=plain(existingCandidate&&existingCandidate.source_payload), adminRecord=ProductPipeline.administratorProductRecord(existingCandidate), runtimeValidation=plain(existingPayload.runtimeValidation||product.runtimeValidation), risk=plain(product.riskAssessment), reasons=[], warnings=[];
   // Publication is a projection of the administrator ledger.  Once the Admin
   // page has a real clickable product URL + thumbnail and the operator selected
   // the placement, Front must carry that exact record forward.  Do not run a
   // second URL classifier here; that was the source of Admin-normal/Front-empty
   // divergence for food, appliances and other global suppliers.
-  const productPageUrl=safeUrl(adminRecord.productUrl), imageUrl=safeUrl(adminRecord.imageUrl), supplierUrl=safeUrl(adminRecord.supplierUrl), supplierName=first(adminRecord.supplierName,product.supplierName,plain(product.supplier).name,adminRecord.title,"External seller");
-  const productTitle=first(adminRecord.title,product.productName,product.title,existingCandidate&&existingCandidate.title);
+  const authoritativeBoard=target.administratorBoardAuthority===true;
+  const productPageUrl=safeUrl(authoritativeBoard?first(target.administratorProductUrl,adminRecord.productUrl):adminRecord.productUrl), imageUrl=safeUrl(authoritativeBoard?first(target.administratorImageUrl,adminRecord.imageUrl):adminRecord.imageUrl), supplierUrl=safeUrl(adminRecord.supplierUrl), supplierName=first(adminRecord.supplierName,product.supplierName,plain(product.supplier).name,adminRecord.title,"External seller");
+  const productTitle=first(authoritativeBoard&&target.administratorTitle,adminRecord.title,product.productName,product.title,existingCandidate&&existingCandidate.title);
   if(!adminRecord.adminDisplayReady||!productPageUrl) reasons.push("administrator_product_url_missing");
   if(productPageUrl&&/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i.test(productPageUrl)) reasons.push("administrator_product_url_is_image_asset");
   if(!imageUrl) reasons.push("administrator_product_image_missing");
@@ -4906,7 +4924,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
     if (!Object.keys(product).length || !Object.keys(existing).length) { items.push({ candidateId, status:"blocked", queued:false, reason:"candidate_ledger_row_missing", assignmentId:null }); continue; }
     const sectionKey = text(target.sectionKey || productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement));
     if (!validProductSectionKey(sectionKey)) { items.push({ candidateId, status:"blocked", queued:false, reason:"invalid_product_section", assignmentId:null }); continue; }
-    const readiness = frontSyncPublicReadiness(product, existing);
+    const readiness = frontSyncPublicReadiness(product, existing, target);
     if (!readiness.eligible) { items.push({ candidateId, status:"blocked", queued:false, reason:readiness.reasons.join(","), reasons:readiness.reasons, assignmentId:null }); continue; }
     const split = splitProductSectionKey(sectionKey);
     const assignmentExisting = array(assignmentsByCandidate.get(candidateId)).find((row) =>
@@ -5121,27 +5139,30 @@ async function productFrontSyncTargets(input, jobInput) {
   const operation = lower(input && input.operation) === "unmatch" ? "unmatch" : "match";
   if (candidateLedgerMode) {
     const ids = mode === "candidate" ? [requestedCandidateId || requestedProductId].filter(Boolean) : requestedCandidateIds.length ? requestedCandidateIds : requestedProductIds;
+    const authoritativeBoardById=frontSyncAuthoritativeBoardMap(input);
     const [candidateRows, assignmentRows] = await Promise.all([frontSyncSelectCandidates(ids), frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", ids)]), targets = [];
     const assignmentsByCandidate = new Map();
     for (const assignment of array(assignmentRows)) { const id=text(assignment&&assignment.candidate_id); if(!assignmentsByCandidate.has(id))assignmentsByCandidate.set(id,[]); assignmentsByCandidate.get(id).push(assignment); }
     for (const candidate of candidateRows) {
       const product = candidateRuntimeProduct(candidate, scope); if (!product) continue;
-      const payload = plain(candidate && candidate.source_payload), queueControl = plain(payload.queueControl), candidateStatus = lower(candidate && candidate.status), sourceDecision = lower(payload.slotDecision || product.slotDecision || "undecided"), candidateId = text(candidate.id);
+      const payload = plain(candidate && candidate.source_payload), queueControl = plain(payload.queueControl), candidateStatus = lower(candidate && candidate.status), sourceDecision = lower(payload.slotDecision || product.slotDecision || "undecided"), candidateId = text(candidate.id), boardItem=plain(authoritativeBoardById.get(candidateId));
       const activeAssignment = array(assignmentsByCandidate.get(candidateId)).find((row)=>normalizeCountry(row&&row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region&&candidateRuntimePublishedStatus(row&&row.publication_status));
-      const payloadKey = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), activeKey = candidateRuntimeAssignmentKey(activeAssignment), key = validProductSectionKey(payloadKey) ? payloadKey : activeKey;
+      const boardKey=text(boardItem.sectionKey),payloadKey = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), activeKey = candidateRuntimeAssignmentKey(activeAssignment), key = validProductSectionKey(boardKey)?boardKey:(validProductSectionKey(payloadKey) ? payloadKey : activeKey);
       if (!validProductSectionKey(key)) continue;
+      const authoritativeBoard=boardItem.authoritative===true&&validProductSectionKey(boardKey);
       if (operation === "match") {
-        const blockedDecision = ["hold","reject","purge"].includes(sourceDecision);
-        // source_payload.slotDecision is the administrator's current board
-        // decision.  A legacy candidate.status="hold" left by an earlier
-        // research stage must not disconnect a later slot_candidate match.
-        // Permanent/rejected states still fail closed.
-        const blockedStatus = ["suppressed","rejected"].includes(candidateStatus) || (candidateStatus === "hold" && sourceDecision !== "slot_candidate");
-        const blocked = blockedDecision || blockedStatus || queueControl.permanentExcluded === true;
-        if (blocked && !activeAssignment) continue;
-        if (!blocked) { product.slotDecision = "slot_candidate"; if (!product.approvedPlacement) { const split=splitProductSectionKey(key); product.approvedPlacement = { page:split.page, sectionKey:split.sectionKey, section:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, proposalOnly:false, publicPublication:false }; } }
+        if(authoritativeBoard){
+          const split=splitProductSectionKey(key);product.slotDecision="slot_candidate";product.approvedPlacement={page:split.page,sectionKey:split.sectionKey,section:split.sectionKey,country:scope.country,region:scope.region,administratorSelected:true,proposalOnly:false,publicPublication:false};
+          if(boardItem.title){product.productName=boardItem.title;product.title=boardItem.title;}if(boardItem.productUrl){product.productUrl=boardItem.productUrl;product.url=boardItem.productUrl;}if(boardItem.imageUrl){product.imageUrl=boardItem.imageUrl;product.imageOriginalUrl=boardItem.imageUrl;}
+        }else{
+          const blockedDecision = ["hold","reject","purge"].includes(sourceDecision);
+          const blockedStatus = ["suppressed","rejected"].includes(candidateStatus) || (candidateStatus === "hold" && sourceDecision !== "slot_candidate");
+          const blocked = blockedDecision || blockedStatus || queueControl.permanentExcluded === true;
+          if (blocked && !activeAssignment) continue;
+          if (!blocked) { product.slotDecision = "slot_candidate"; if (!product.approvedPlacement) { const split=splitProductSectionKey(key); product.approvedPlacement = { page:split.page, sectionKey:split.sectionKey, section:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, proposalOnly:false, publicPublication:false }; } }
+        }
       }
-      targets.push({ productId:text(product.id)||candidateId, candidateId, title:first(product.productName,product.title,candidate.title), sectionKey:key, existingPublicationActive:!!activeAssignment, digest:sha256({id:candidateId,placement:key,updatedAt:candidate.updated_at||null}) });
+      targets.push({ productId:text(product.id)||candidateId, candidateId, title:first(boardItem.title,product.productName,product.title,candidate.title), sectionKey:key, administratorBoardAuthority:authoritativeBoard, administratorTitle:text(boardItem.title), administratorProductUrl:text(boardItem.productUrl), administratorImageUrl:text(boardItem.imageUrl), existingPublicationActive:!!activeAssignment, digest:sha256({id:candidateId,placement:key,updatedAt:candidate.updated_at||null,administratorBoardAuthority:authoritativeBoard}) });
     }
     return { ok:true, candidateLedger:true, scope, mode, sectionKey:targets[0]&&targets[0].sectionKey||null, sectionKeys:requestedSectionKeys, productId:requestedProductId||null, productIds:requestedProductIds, candidateId:requestedCandidateId||null, candidateIds:ids, operation, targets, productCount:candidateRows.length };
   }

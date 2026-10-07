@@ -485,7 +485,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   if(!trustedForExplicitFront) reasons.push("TRUSTED_SELLER_OR_PRODUCER_EVIDENCE_MISSING");
 
   const explicitAdministratorFrontMatch=(origin||"searchbank")==="admin_review_queue" && tier==="approved_commerce_member" &&
-    approval.ok===true && approval.explicitPublicationRequested===true && !!destination && !!image &&
+    approval.explicitPublicationRequested===true && !!destination && !!image &&
     !!pos.page && !!pos.section && adminAuthority.ok===true;
 
   // Revenue/affiliate readiness is a monetization concern, not a reason to
@@ -507,7 +507,9 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   // structural/content defects that the final QA window is supposed to catch.
   const adminStructuralReasons=new Set([
     "TITLE_MISSING",
+    "PRODUCT_TITLE_NOT_VERIFIED",
     "DESTINATION_NOT_HTTPS",
+    "SPECIFIC_PRODUCT_PAGE_NOT_VERIFIED",
     "IMAGE_NOT_HTTPS",
     "PSOM_PLACEMENT_MISSING"
   ]);
