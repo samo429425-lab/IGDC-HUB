@@ -1491,7 +1491,7 @@ function handleSocialSnapshot(bank) {
         })
       }, item);
 
-      if (pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "social", sectionKey, limit: sectionSlotLimit(pageName, sectionKey), idFields: ["id", "contentId"] })) {
+      if (pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "social", sectionKey, limit: sectionSlotLimit("social", sectionKey), idFields: ["id", "contentId"] })) {
         existingIds.add(id);
       }
     }
