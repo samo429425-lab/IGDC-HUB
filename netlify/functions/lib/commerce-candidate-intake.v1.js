@@ -507,9 +507,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   // structural/content defects that the final QA window is supposed to catch.
   const adminStructuralReasons=new Set([
     "TITLE_MISSING",
-    "PRODUCT_TITLE_NOT_VERIFIED",
     "DESTINATION_NOT_HTTPS",
-    "SPECIFIC_PRODUCT_PAGE_NOT_VERIFIED",
     "IMAGE_NOT_HTTPS",
     "PSOM_PLACEMENT_MISSING"
   ]);

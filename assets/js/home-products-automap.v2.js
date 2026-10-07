@@ -182,6 +182,10 @@
     // snapshot already carries the same product URL that works in Admin.
     const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.externalProductUrl || item.officialProductUrl || item.productUrl || item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl || item.orderUrl || item.productLink || item.displayUrl || item.sourceUrl || item.targetUrl || item.outboundUrl || item.url || item.href || item.link || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
+    // Home right-panel sample slots historically open the existing IGDC auxiliary
+    // content page. Preserve that reserve path while real products continue to
+    // use the exact administrator-approved seller URL above.
+    if (item.__igdcFallbackSlot && item.__igdcRight && item.id) return contentHref(item.id);
     // Internal IGDC detail remains a fallback only when a real published id exists.
     if (item.id && item.__igdcExplicitId !== false) return contentHref(item.id);
     return '';
@@ -235,10 +239,14 @@
     const order = safeNumber(src.order, safeNumber(fb.order, 0));
     const explicitId = pick(src, ['id', 'contentId', 'productId', 'itemId', 'sku', 'code', 'pid', 'candidateId', 'candidate_id']) || pick(fb, ['id', 'contentId', 'productId', 'itemId', 'sku', 'code', 'pid', 'candidateId', 'candidate_id']);
     const id = makeStableContentId(src, fb, page, section, sourceUrl, priority, order);
+    const rightSlot = String(section || '').indexOf('home_right_') === 0;
+    const fallbackSlot = src.__igdcFallbackSlot === true || src.placeholder === true || src.isPlaceholder === true || src.replaceableSlot === true || (!explicitId && (isBadUrl(sourceUrl) || isExampleUrl(sourceUrl)));
 
     return {
       id,
       __igdcExplicitId: !!explicitId,
+      __igdcFallbackSlot: fallbackSlot,
+      __igdcRight: rightSlot,
       title: resolveTitle(src, fb),
       thumb: pick(src, ['thumb', 'image', 'image_url', 'imageUrl', 'imageOriginalUrl', 'img', 'photo', 'thumbnail', 'thumbnail_url', 'thumbnailUrl', 'cover', 'coverUrl']),
       url: sourceUrl,
@@ -492,7 +500,8 @@
     applyAnchorDestination(a, item);
     if (item && item.__igdcFallbackSlot) {
       a.setAttribute('data-igdc-slot-placeholder', '1');
-      a.setAttribute('aria-hidden', 'true');
+      a.removeAttribute('aria-hidden');
+      a.setAttribute('aria-label', item.title || '준비 중');
     }
 
     a.style.display = 'grid';
