@@ -406,7 +406,7 @@
     }
     /* Compatibility fallback only. The ordinary screen no longer depends on the
        large commerce-candidate-review staging/diagnostic path. */
-    if(partialError||!all.length){
+    if(partialError){
       try{
         var snap=await api(REVIEW,'management_snapshot','GET',{country:requested.country,region:requested.region,compact:'1',limit:3000},null,30000);
         if(scopeKey()!==requestedKey)throw new Error('상품 후보 원장 호환 복구 중 선택 범위가 변경됐습니다.');
@@ -1432,7 +1432,12 @@
   }
   async function runProductFrontSync(operation,mode,sectionKey,productId,selection){
     if(!selectedCountry||productFrontSyncActive)return;
-    if(!lastProductJson){show('프론트에 매칭할 상품 조사 결과가 없습니다. 상품 조사를 먼저 실행해 주세요.','warn');return;}
+    // The durable administrator management ledger is the publication authority.
+    // Every Front Match entry point must read it again before calculating its
+    // target/replacement set; a cached research report must never gate or define
+    // what the administrator has currently placed on the 20-section board.
+    try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}
+    catch(error){show(conciseRequestError(error&&error.message,error&&error.status)||'현재 전체 상품 후보·배치 관리 원장을 읽지 못해 Front Match를 중단했습니다. 공개 원장은 변경하지 않았습니다.','fail');return;}
     // Keep every administrator scope independent. A single section, selected
     // sections, selected products and all 20 sections resolve their own exact
     // target set here; only the final durable write/build machinery is shared.
@@ -1441,7 +1446,11 @@
     var unmatch=operation==='unmatch',sectionMode=mode==='section',sectionsMode=mode==='sections',candidateMode=mode==='candidate',candidatesMode=mode==='candidates',selectedSections=sectionsMode?(Array.isArray(selection)?selection:[]):[],selectedProducts=candidatesMode?(Array.isArray(selection)?selection:[]):[],selectedProduct=candidateMode?productById(productId):null,label=candidateMode?(text(selectedProduct&&selectedProduct.productName||selectedProduct&&selectedProduct.title||productId)+' · 상품 1건'):(candidatesMode?'선택 상품 '+selectedProducts.length+'건':(sectionsMode?(selectedSections.length===1?sectionLabel(selectedSections[0]):'선택 섹션 '+selectedSections.length+'개'):(sectionMode?sectionLabel(sectionKey):'20개 전체 섹션'))),confirmation=unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH';
     if(sectionsMode&&!selectedSections.length){show('매칭할 섹션을 먼저 선택해 주세요.','warn');return;}if(candidatesMode&&!selectedProducts.length){show('매칭할 상품을 먼저 선택해 주세요.','warn');return;}
     var replacementRun=!unmatch&&(mode==='all'||sectionMode||sectionsMode),pendingManagement=[],selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
-    var targetRows=productRows.filter(function(row){
+    // Freeze the successfully read administrator ledger for this command. Front
+    // publication writes below are one-way and cannot change this source ledger,
+    // so the same complete snapshot must define both targets and stale cleanup.
+    var authoritativeBoardRows=productRows.slice();
+    var targetRows=authoritativeBoardRows.filter(function(row){
       var key=assignedSectionKey(row),id=text(row&&row.id),placed=productDecision(row)==='slot_candidate'&&!!key;
       // The 20-section board owns only rows that still have a valid placement.
       // Match and unmatch are publication controls, not assignment controls:
@@ -1507,24 +1516,19 @@
       var workers=[];for(var w=0;w<Math.min(maxConcurrent,batches.length);w++)workers.push(worker());await Promise.all(workers);
 
       aggregate.persistedCandidateIds=Object.keys(publishPersistedMap);aggregate.changedCandidateIds=Array.from(new Set(Object.keys(changedMap).concat(managementCommit.changedCandidateIds||[])));
-      // Front validation can quarantine a hard-invalid/non-product row.  Reload
-      // the durable administrator ledger before building an authoritative
-      // replacement list so the browser never sends the stale pre-validation
-      // 6/7-card board back to the server after the safety gate reduced it.
-      if(replacementRun){
-        try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}
-        catch(_replacementRefreshError){aggregate.batchErrors.push({offset:'replacement_refresh',candidateIds:aggregate.changedCandidateIds.slice(),message:'authoritative_board_refresh_failed'});}
-      }
+      // Do not re-read the board here. A partial second read could turn a valid
+      // authoritative replacement into an accidental partial deletion. The
+      // complete ledger snapshot captured before batching is immutable input.
       var needsFinalize=aggregate.persistedCandidateIds.length>0||aggregate.changedCandidateIds.length>0||aggregate.withdrawn>0||Number(managementCommit.changedCount||0)>0||replacementRun;
       if(needsFinalize){
         try{
           if(state){state.className='front-sync-state running';state.textContent=label+' · 원장 저장 완료 · 전체 변경분 스냅샷 갱신을 마지막에 1회 요청 중';}
           var finalizeOperation=unmatch?'unmatch':(aggregate.persistedCandidateIds.length?'match':'refresh'),finalizeIds=Array.from(new Set((aggregate.persistedCandidateIds.length?aggregate.persistedCandidateIds:aggregate.changedCandidateIds).concat(managementCommit.changedCandidateIds||[])));
           var replacementSectionKeys=replacementRun?(mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice())):[];
-          var replacementRows=replacementRun?capFrontReplacementRows(productRows.filter(function(row){var key=assignedSectionKey(row);return productDecision(row)==='slot_candidate'&&!!key&&(mode==='all'||replacementSectionKeys.indexOf(key)>=0);}),replacementSectionKeys):[];
+          var replacementRows=replacementRun?capFrontReplacementRows(authoritativeBoardRows.filter(function(row){var key=assignedSectionKey(row);return productDecision(row)==='slot_candidate'&&!!key&&(mode==='all'||replacementSectionKeys.indexOf(key)>=0);}),replacementSectionKeys):[];
           var replacementCandidateIds=replacementRows.map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean);
           replacementCandidateIds=Array.from(new Set(replacementCandidateIds));
-          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true,publicationReplacement:replacementRun,authoritativeReplacement:false,explicitReplacementCleanup:false,replacementSectionKeys:replacementSectionKeys,replacementCandidateIds:replacementCandidateIds},90000);
+          var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true,publicationReplacement:replacementRun,authoritativeReplacement:replacementRun,explicitReplacementCleanup:replacementRun,replacementSectionKeys:replacementSectionKeys,replacementCandidateIds:replacementCandidateIds},90000);
           var finalResult=finalized.frontSyncResult||{},finalRelease=finalResult.release||{};aggregate.finalize=finalResult;aggregate.release=finalRelease;if(finalRelease.queued===true){aggregate.queued=1;aggregate.pendingBuild=0;}else{aggregate.queued=0;aggregate.pendingBuild=Math.max(1,Number(finalResult.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1));}
         }catch(finalizeFailure){aggregate.queued=0;aggregate.pendingBuild=Math.max(1,aggregate.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1);aggregate.batchErrors.push({offset:'finalize',candidateIds:aggregate.changedCandidateIds.slice(),message:text(finalizeFailure&&finalizeFailure.message)||'finalize_failed'});}
       }
