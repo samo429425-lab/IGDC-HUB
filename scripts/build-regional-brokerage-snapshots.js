@@ -1163,6 +1163,61 @@ async function main() {
       };
       throw error;
     }
+
+    // V7 global contract: the administrator's exact publication record must
+    // survive candidate -> assignment -> registry -> SearchBank without field
+    // loss or section drift.  This is intentionally country/supplier agnostic.
+    // If even one requested row changes page/section/title/product URL/image,
+    // stop before Snapshot generation so a partial or misrouted global release
+    // can never look successful.
+    const requestedEntries = (Array.isArray(upstream && upstream.doc && upstream.doc.items) ? upstream.doc.items : [])
+      .filter(entry => requestedIds.has(String(entry && entry.candidate && entry.candidate.id || entry && entry.candidateId || "").trim()));
+    const releasedById = new Map(releaseItems.map(item => {
+      const id = String(item && item.commerceCandidate && item.commerceCandidate.candidateId || item && item.id || "").trim();
+      return [id, item];
+    }).filter(pair => pair[0]));
+    const cleanUrl = value => {
+      try { const u = new URL(String(value || "").trim()); u.hash = ""; return u.toString(); }
+      catch (_e) { return String(value || "").trim(); }
+    };
+    const cleanText = value => String(value == null ? "" : value).trim();
+    const recordDrift = [];
+    for (const entry of requestedEntries) {
+      const candidate = entry && entry.candidate || {};
+      const request = entry && entry.publicationRequest || {};
+      const id = cleanText(candidate.id || entry && entry.candidateId);
+      const released = releasedById.get(id);
+      if (!released) continue;
+      const auth = released.administratorFrontMatchAuthority || {};
+      const actual = {
+        page: cleanText(auth.page || released.page || released.channel),
+        section: cleanText(auth.section || released.section || released.psom_key),
+        country: cleanText(auth.country || released.targetCountry || released.country).toUpperCase(),
+        region: cleanText(auth.region || released.region || "NATIONWIDE").toUpperCase() || "NATIONWIDE",
+        title: cleanText(released.title || released.name),
+        productUrl: cleanUrl(released.productUrl || released.externalProductUrl || released.url || released.href || released.link),
+        imageUrl: cleanUrl(released.imageUrl || released.image || released.thumbnail || released.thumb)
+      };
+      const expected = {
+        page: cleanText(request.page || candidate.page || candidate.channel),
+        section: cleanText(request.section || candidate.section || candidate.psom_key),
+        country: cleanText(request.country || candidate.country || candidate.targetCountry).toUpperCase(),
+        region: cleanText(request.region || candidate.region || "NATIONWIDE").toUpperCase() || "NATIONWIDE",
+        title: cleanText(candidate.title || candidate.name),
+        productUrl: cleanUrl(candidate.productUrl || candidate.externalProductUrl || candidate.url || candidate.href || candidate.link),
+        imageUrl: cleanUrl(candidate.imageUrl || candidate.image || candidate.thumbnail || candidate.thumb)
+      };
+      const fields = Object.keys(expected).filter(key => expected[key] !== actual[key]);
+      if (fields.length) recordDrift.push({ candidateId:id, fields, expected, actual });
+    }
+    if (recordDrift.length) {
+      const error = new Error(
+        "Administrator Front Match record drift detected before SearchBank for " + recordDrift.length + " product(s)."
+      );
+      error.code = "ADMIN_FRONT_MATCH_RECORD_DRIFT";
+      error.details = { count:recordDrift.length, sample:recordDrift.slice(0,50) };
+      throw error;
+    }
   }
 
   // Canonical publication must receive the actual post-intake release set.

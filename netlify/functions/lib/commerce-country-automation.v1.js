@@ -4042,7 +4042,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
   if (!ids.length) return { ok:true, requested:0, revalidated:0, live:0, invalid:0, inconclusive:0, assigned:0, unassigned:0, held:0, preserved:0, lockedInvalid:0, changedSection:0, balanceCounts:workingCounts, tourDiningAutomaticCount, withdrawCandidateIds:[], withdrawAssignments:[], results:[] };
   const [rows, assignments] = await Promise.all([
     frontSyncSelectCandidates(ids),
-    frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", ids)
+    frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at", ids)
   ]);
   const rowById = new Map(array(rows).map((row) => [text(row && row.id), row])), assignmentByCandidate = new Map();
   for (const assignment of array(assignments)) { const id = text(assignment && assignment.candidate_id); if (!assignmentByCandidate.has(id)) assignmentByCandidate.set(id, []); assignmentByCandidate.get(id).push(assignment); }
@@ -4415,7 +4415,7 @@ async function syncPendingAiProductCandidates(actorId, scope, job, limitInput, r
   try{
     [candidateRows,assignmentRows]=await Promise.all([
       frontSyncSelectCandidates(candidateIds),
-      frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at",candidateIds)
+      frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at",candidateIds)
     ]);
   }catch(_frontProtectionReadError){
     candidateRows=[];assignmentRows=[];
@@ -4735,6 +4735,21 @@ async function frontSyncUpsert(table, rowsInput, conflictColumns) {
   }
   return output;
 }
+const FRONT_AUTHORITY_NOTE_PREFIX = "IGDC_FRONT_AUTHORITY_V1:";
+function frontAuthorityEnvelopeNote(candidateId,targetInput,scopeInput,splitInput,actor,stamp){
+  const target=plain(targetInput),scope=plain(scopeInput),split=plain(splitInput);
+  const envelope={
+    schema:"igdc-front-authority-envelope.v1",authoritative:true,candidateId:text(candidateId),
+    title:text(target.administratorTitle),productUrl:safeUrl(target.administratorProductUrl),imageUrl:safeUrl(target.administratorImageUrl),
+    supplierName:text(target.administratorSupplierName),supplierUrl:safeUrl(target.administratorSupplierUrl),
+    price:target.administratorPrice==null?null:target.administratorPrice,priceCurrency:text(target.administratorPriceCurrency),availability:target.administratorAvailability==null?null:target.administratorAvailability,
+    page:text(split.page),section:text(split.sectionKey),sectionKey:text(split.sectionKey),
+    country:normalizeCountry(scope.country),region:normalizeRegion(scope.region||"NATIONWIDE",scope.country)||"NATIONWIDE",
+    requestedAt:text(stamp)||iso(),requestedBy:text(actor)||"administrator"
+  };
+  envelope.digest=sha256([envelope.candidateId,envelope.title,envelope.productUrl,envelope.imageUrl,envelope.supplierName,envelope.supplierUrl,String(envelope.price==null?"":envelope.price),envelope.priceCurrency,String(envelope.availability==null?"":envelope.availability),envelope.page,envelope.sectionKey,envelope.country,envelope.region].join("|"));
+  return FRONT_AUTHORITY_NOTE_PREFIX+Buffer.from(JSON.stringify(envelope),"utf8").toString("base64").replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
+}
 function frontSyncAuthoritativeBoardMap(input) {
   const out=new Map();
   for(const raw of array(input&&input.authoritativeBoardItems)){
@@ -4744,7 +4759,9 @@ function frontSyncAuthoritativeBoardMap(input) {
       candidateId,sectionKey,authoritative:true,
       title:text(row.title||row.productName),
       productUrl:safeUrl(row.productUrl||row.url),
-      imageUrl:safeUrl(row.imageUrl||row.thumbnailUrl||row.thumbnail)
+      imageUrl:safeUrl(row.imageUrl||row.thumbnailUrl||row.thumbnail),
+      supplierName:text(row.supplierName),supplierUrl:safeUrl(row.supplierUrl||row.supplierSiteUrl),
+      price:row.price==null?null:row.price,priceCurrency:text(row.priceCurrency),availability:row.availability==null?null:row.availability
     });
   }
   return out;
@@ -4759,7 +4776,7 @@ async function verifyProductFrontPreparation(candidateIdsInput, scope, targetByI
   const candidateIds = array(candidateIdsInput).map(text).filter(Boolean);
   const [candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
     frontSyncSelectCandidates(candidateIds),
-    frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", candidateIds),
+    frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at", candidateIds),
     frontSyncSelectByCandidate("gslot_candidate_availability", "candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at", candidateIds),
     frontSyncSelectByCandidate("gslot_candidate_revenue", "id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at", candidateIds),
     frontSyncSelectByCandidate("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at", candidateIds)
@@ -4877,7 +4894,7 @@ async function prepareAuthoritativeAdminFrontTargets(actorId,input,targetsInput)
   try{
     [candidateRows,assignmentRows]=await Promise.all([
       frontSyncSelectCandidates(targetIds),
-      frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at",targetIds)
+      frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at",targetIds)
     ]);
     phase("preflight_read",{ok:true,candidates:array(candidateRows).length,assignments:array(assignmentRows).length});
   }catch(error){phase("preflight_read",{ok:false,error:text(error&&error.message||error)});throw error;}
@@ -4897,7 +4914,7 @@ async function prepareAuthoritativeAdminFrontTargets(actorId,input,targetsInput)
     const existing=rows.find(row=>text(row&&row.hub_key)===split.page&&text(row&&row.slot_key)===split.sectionKey&&normalizeCountry(row&&row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region);
     const assignmentId=text(existing&&existing.id)||frontSyncAssignmentId(candidateId,scope,sectionKey);
     for(const old of rows){const oldId=text(old&&old.id),sameScope=normalizeCountry(old&&old.country_code)===scope.country&&frontSyncExpectedRegion(old,scope.country)===scope.region,samePlacement=text(old&&old.hub_key)===split.page&&text(old&&old.slot_key)===split.sectionKey;if(oldId&&sameScope&&!samePlacement&&candidateRuntimePublishedStatus(old&&old.publication_status))staleIds.push(oldId);}
-    upserts.push({id:assignmentId,candidate_id:candidateId,hub_key:split.page,country_code:scope.country,region_code:scope.region||"NATIONWIDE",slot_key:split.sectionKey,priority:Math.max(0,Number(target.priority||0)),state:existing&&lower(existing.state)==="pinned"?"pinned":"approved",publication_status:"publish_requested",manual_pinned:existing&&existing.manual_pinned===true,decision_note:"Authenticated administrator Front Match. Current administrator board is the publication authority; downstream stages may perform structural transport validation only.",created_at:text(existing&&existing.created_at)||now,updated_at:now,updated_by:actor});
+    upserts.push({id:assignmentId,candidate_id:candidateId,hub_key:split.page,country_code:scope.country,region_code:scope.region||"NATIONWIDE",slot_key:split.sectionKey,priority:Math.max(0,Number(target.priority||0)),state:existing&&lower(existing.state)==="pinned"?"pinned":"approved",publication_status:"publish_requested",manual_pinned:existing&&existing.manual_pinned===true,decision_note:frontAuthorityEnvelopeNote(candidateId,target,scope,split,actor,now),created_at:text(existing&&existing.created_at)||now,updated_at:now,updated_by:actor});
     preparedCandidateIds.push(candidateId);items.push({candidateId,status:"publish_requested",queued:false,persisted:true,pendingBuild:true,reason:"administrator_board_assignment_prepared",assignmentId,sectionKey,title,productUrl,imageUrl});
   }
   try{
@@ -4905,7 +4922,7 @@ async function prepareAuthoritativeAdminFrontTargets(actorId,input,targetsInput)
     await frontSyncUpsert("gslot_slot_assignments",upserts,"id");
     phase("assignment_publish_requested",{ok:true,upserted:upserts.length,staleDemoted:Array.from(new Set(staleIds)).length});
   }catch(error){phase("assignment_publish_requested",{ok:false,error:text(error&&error.message||error)});throw error;}
-  const verifyRows=await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at",preparedCandidateIds),verified=[];
+  const verifyRows=await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at",preparedCandidateIds),verified=[];
   for(const candidateId of preparedCandidateIds){
     const target=plain(targetById.get(candidateId)),split=splitProductSectionKey(text(target.sectionKey));
     const row=array(verifyRows).find(r=>text(r&&r.candidate_id)===candidateId&&text(r&&r.hub_key)===split.page&&text(r&&r.slot_key)===split.sectionKey&&normalizeCountry(r&&r.country_code)===scope.country&&frontSyncExpectedRegion(r,scope.country)===scope.region&&["approved","pinned"].includes(lower(r&&r.state))&&lower(r&&r.publication_status)==="publish_requested");
@@ -4950,7 +4967,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   try {
     [candidateRows, assignmentRows, availabilityRows, revenueRows, evidenceRows] = await Promise.all([
       frontSyncSelectCandidates(targetIds),
-      frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", targetIds),
+      frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at", targetIds),
       frontSyncSelectByCandidate("gslot_candidate_availability", "candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at", targetIds),
       frontSyncSelectByCandidate("gslot_candidate_revenue", "id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at", targetIds),
       frontSyncSelectByCandidate("gslot_candidate_evidence", "id,candidate_id,evidence_type,evidence_url,note,verified,created_at", targetIds)
@@ -5128,7 +5145,7 @@ async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput
   // which is what triggers the single Netlify build hook call after batching.
   let finalAssignmentRows=[];
   try {
-    finalAssignmentRows = await frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", commitCandidateIds);
+    finalAssignmentRows = await frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at", commitCandidateIds);
   } catch (error) {
     phase("publication_readback", { ok:false, error:text(error && (error.code || error.message)) || "publication_readback_failed" });
     throw attachTrace(error, "publication_readback");
@@ -5206,7 +5223,7 @@ async function productFrontSyncTargets(input, jobInput) {
   if (candidateLedgerMode) {
     const ids = mode === "candidate" ? [requestedCandidateId || requestedProductId].filter(Boolean) : requestedCandidateIds.length ? requestedCandidateIds : requestedProductIds;
     const authoritativeBoardById=frontSyncAuthoritativeBoardMap(input);
-    const [candidateRows, assignmentRows] = await Promise.all([frontSyncSelectCandidates(ids), frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at", ids)]), targets = [];
+    const [candidateRows, assignmentRows] = await Promise.all([frontSyncSelectCandidates(ids), frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at", ids)]), targets = [];
     const assignmentsByCandidate = new Map();
     for (const assignment of array(assignmentRows)) { const id=text(assignment&&assignment.candidate_id); if(!assignmentsByCandidate.has(id))assignmentsByCandidate.set(id,[]); assignmentsByCandidate.get(id).push(assignment); }
     for (const candidate of candidateRows) {
@@ -5228,7 +5245,7 @@ async function productFrontSyncTargets(input, jobInput) {
           if (!blocked) { product.slotDecision = "slot_candidate"; if (!product.approvedPlacement) { const split=splitProductSectionKey(key); product.approvedPlacement = { page:split.page, sectionKey:split.sectionKey, section:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, proposalOnly:false, publicPublication:false }; } }
         }
       }
-      targets.push({ productId:text(product.id)||candidateId, candidateId, title:first(boardItem.title,product.productName,product.title,candidate.title), sectionKey:key, administratorBoardAuthority:authoritativeBoard, administratorTitle:text(boardItem.title), administratorProductUrl:text(boardItem.productUrl), administratorImageUrl:text(boardItem.imageUrl), existingPublicationActive:!!activeAssignment, digest:sha256({id:candidateId,placement:key,updatedAt:candidate.updated_at||null,administratorBoardAuthority:authoritativeBoard}) });
+      targets.push({ productId:text(product.id)||candidateId, candidateId, title:first(boardItem.title,product.productName,product.title,candidate.title), sectionKey:key, administratorBoardAuthority:authoritativeBoard, administratorTitle:text(boardItem.title), administratorProductUrl:text(boardItem.productUrl), administratorImageUrl:text(boardItem.imageUrl), administratorSupplierName:text(boardItem.supplierName), administratorSupplierUrl:text(boardItem.supplierUrl), administratorPrice:boardItem.price==null?null:boardItem.price, administratorPriceCurrency:text(boardItem.priceCurrency), administratorAvailability:boardItem.availability==null?null:boardItem.availability, existingPublicationActive:!!activeAssignment, digest:sha256({id:candidateId,placement:key,updatedAt:candidate.updated_at||null,administratorBoardAuthority:authoritativeBoard}) });
     }
     return { ok:true, candidateLedger:true, scope, mode, sectionKey:targets[0]&&targets[0].sectionKey||null, sectionKeys:requestedSectionKeys, productId:requestedProductId||null, productIds:requestedProductIds, candidateId:requestedCandidateId||null, candidateIds:ids, operation, targets, productCount:candidateRows.length };
   }

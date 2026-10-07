@@ -16,10 +16,11 @@ const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.14.0-admin-ready-publication-authority";
+const VERSION = "commerce-candidate-registry-sync-v1.15.0-durable-admin-front-envelope";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
+const FRONT_AUTHORITY_NOTE_PREFIX = "IGDC_FRONT_AUTHORITY_V1:";
 
 function text(v){ return v == null ? "" : String(v).trim(); }
 function lower(v){ return text(v).toLowerCase(); }
@@ -35,6 +36,30 @@ function ensureDir(dir){ fs.mkdirSync(dir,{recursive:true}); }
 function atomicWrite(file,doc){ ensureDir(path.dirname(file)); const out=JSON.stringify(doc,null,2)+"\n"; const temp=path.join(path.dirname(file),"."+path.basename(file)+"."+process.pid+"."+crypto.randomBytes(5).toString("hex")+".tmp"); fs.writeFileSync(temp,out,"utf8"); fs.renameSync(temp,file); return sha256(out); }
 function queuePath(root){ return path.join(root,"netlify","functions","data",QUEUE_FILE); }
 function safeUrl(v){ try { const u=new URL(text(v)); return u.protocol==="https:"?u.toString():""; } catch(_e){return "";} }
+function decodeFrontAuthorityNote(value){
+  const note=text(value);
+  if(!note.startsWith(FRONT_AUTHORITY_NOTE_PREFIX)) return null;
+  try{
+    let raw=note.slice(FRONT_AUTHORITY_NOTE_PREFIX.length).replace(/-/g,"+").replace(/_/g,"/");
+    while(raw.length%4) raw+="=";
+    const parsed=JSON.parse(Buffer.from(raw,"base64").toString("utf8"));
+    return isObject(parsed)?parsed:null;
+  }catch(_e){ return null; }
+}
+function assignmentFrontEnvelope(assignmentInput){
+  const assignment=plain(assignmentInput), envelope=decodeFrontAuthorityNote(assignment.decision_note);
+  if(!envelope||envelope.authoritative!==true||text(envelope.schema)!=="igdc-front-authority-envelope.v1") return null;
+  const candidateId=text(assignment.candidate_id),page=text(assignment.hub_key),section=text(assignment.slot_key);
+  const country=MarketSaleScope.normalizeCountry(assignment.country_code), region=MarketSaleScope.normalizeRegion(first(assignment.region_code,"NATIONWIDE"),country)||"NATIONWIDE";
+  const envelopeCountry=MarketSaleScope.normalizeCountry(envelope.country), envelopeRegion=MarketSaleScope.normalizeRegion(first(envelope.region,"NATIONWIDE"),envelopeCountry)||"NATIONWIDE";
+  const title=text(envelope.title),productUrl=safeUrl(envelope.productUrl),imageUrl=safeUrl(envelope.imageUrl);
+  if(!candidateId||text(envelope.candidateId)!==candidateId||text(envelope.page)!==page||text(envelope.sectionKey||envelope.section)!==section) return null;
+  if(!country||envelopeCountry!==country||envelopeRegion!==region) return null;
+  if(!title||genericProductTitle(title)||!productUrl||/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i.test(productUrl)||!imageUrl) return null;
+  const expected=sha256([candidateId,title,productUrl,imageUrl,text(envelope.supplierName),safeUrl(envelope.supplierUrl),String(envelope.price==null?"":envelope.price),text(envelope.priceCurrency),String(envelope.availability==null?"":envelope.availability),page,section,country,region].join("|"));
+  if(text(envelope.digest)&&text(envelope.digest)!==expected) return null;
+  return Object.assign({},envelope,{candidateId,title,productUrl,imageUrl,supplierName:text(envelope.supplierName),supplierUrl:safeUrl(envelope.supplierUrl),price:envelope.price==null?null:envelope.price,priceCurrency:text(envelope.priceCurrency),availability:envelope.availability==null?null:envelope.availability,page,section,sectionKey:section,country,region,digest:expected});
+}
 function requiredEnvPresent(){ return !!(text(process.env.GSLOT_SUPABASE_URL) && text(process.env.GSLOT_SUPABASE_SECRET_KEY||process.env.GSLOT_SUPABASE_SERVICE_ROLE_KEY||process.env.GSLOT_SUPABASE_SERVICE_KEY)); }
 function allowedCandidateStatus(v){ return ["revenue_ready","approval_pending","enrollable"].includes(lower(v)); }
 function allowedAssignmentState(v){ return ["approved","pinned"].includes(lower(v)); }
@@ -205,11 +230,16 @@ function publicationMarkerFromAssignment(candidate, assignment){
   const country=MarketSaleScope.normalizeCountry(assignment.country_code);
   const region=MarketSaleScope.normalizeRegion(first(assignment.region_code,"NATIONWIDE"),country)||"NATIONWIDE";
   if(!page||!section||!country) return null;
+  const envelope=assignmentFrontEnvelope(assignment);
   return {
     status:"publish_requested",
     candidateId:candidate.id,
     assignmentId:first(assignment.id,"assignment-"+candidate.id),
     page,section,country,region,
+    title:envelope&&envelope.title||null,
+    productUrl:envelope&&envelope.productUrl||null,
+    imageUrl:envelope&&envelope.imageUrl||null,
+    authorityEnvelopeDigest:envelope&&envelope.digest||null,
     requestedAt:first(assignment.updated_at,candidate.updated_at,now()),
     requestedBy:first(assignment.updated_by,"administrator"),
     priority:Number(assignment.priority||0)||0,
@@ -237,7 +267,7 @@ function availabilityMatchesAssignment(row,assignment){
 }
 function syntheticAvailabilityFromMarker(candidate, marker){
   if(!marker) return [];
-  const payload=sourcePayload(candidate), destination=exactProductDestination(candidate,payload);
+  const payload=sourcePayload(candidate), destination=safeUrl(marker&&marker.productUrl)||exactProductDestination(candidate,payload);
   return [{
     candidate_id:candidate.id,country_code:marker.country,region_code:marker.region||"NATIONWIDE",
     availability_state:"active",
@@ -248,7 +278,7 @@ function syntheticAvailabilityFromMarker(candidate, marker){
 }
 function syntheticEvidenceFromMarker(candidate, marker){
   if(!marker) return [];
-  const payload=sourcePayload(candidate), supplier=supplierIdentity(candidate,payload), url=first(supplier.url,exactProductDestination(candidate,payload));
+  const payload=sourcePayload(candidate), supplier=supplierIdentity(candidate,payload), url=first(safeUrl(marker&&marker.productUrl),supplier.url,exactProductDestination(candidate,payload));
   if(!url) return [];
   return [{
     id:"front-marker-evidence-"+candidate.id,candidate_id:candidate.id,evidence_type:"administrator_confirmed_official_supplier_product_reference",
@@ -258,19 +288,22 @@ function syntheticEvidenceFromMarker(candidate, marker){
 }
 function explicitAdminReferralReady(candidate,assignment,availabilityRows){
   if(!administratorPublicationState(assignment&&assignment.publication_status)) return false;
-  const adminRecord=ProductPipeline.administratorProductRecord(candidate);
-  if(!adminRecord||adminRecord.adminDisplayReady!==true||!safeUrl(adminRecord.productUrl)||!safeUrl(adminRecord.imageUrl)) return false;
+  const envelope=assignmentFrontEnvelope(assignment);
+  if(!envelope){
+    const adminRecord=ProductPipeline.administratorProductRecord(candidate);
+    if(!adminRecord||adminRecord.adminDisplayReady!==true||!safeUrl(adminRecord.productUrl)||!safeUrl(adminRecord.imageUrl)) return false;
+  }
   if(!array(availabilityRows).length) return false;
   return true;
 }
 function explicitReferralRevenueRow(candidate,assignment){
-  const payload=sourcePayload(candidate), supplier=supplierIdentity(candidate,payload);
+  const payload=sourcePayload(candidate), supplier=supplierIdentity(candidate,payload), envelope=assignmentFrontEnvelope(assignment);
   return {
     id:first(assignment&&assignment.id,"admin-referral-"+text(candidate&&candidate.id)),
     candidate_id:candidate&&candidate.id,
     revenue_type:"external_referral",
     status:"administrator_nonpayable_referral",
-    affiliate_url:exactProductDestination(candidate,payload),
+    affiliate_url:first(envelope&&envelope.productUrl,exactProductDestination(candidate,payload)),
     provider_name:supplier.name,
     currency:null,
     note:"Authenticated administrator publication request; non-payable external seller referral",
@@ -413,7 +446,7 @@ function runtimeTravelOperatorEvidence(candidate,payload,assignment){
 }
 function compactPayload(candidate, assignment, availabilityRows, revenueRows, evidenceRows, ipPolicy, options){
   const payload=sourcePayload(candidate), adminExternalSeller=plain(options).administratorExternalSeller===true, supplier=supplierIdentity(candidate,payload);
-  const assignmentInfo=assignment||{};
+  const assignmentInfo=assignment||{}, frontEnvelope=assignmentFrontEnvelope(assignmentInfo);
   const revenue=(revenueRows||[]).find(row=>approvedRevenue(row.status)) || (revenueRows||[]).find(row=>lower(row.status)==="administrator_nonpayable_referral") || {};
   const revenueType=lower(revenue.revenue_type);
   const trafficOnly=revenueType==="external_referral";
@@ -429,11 +462,11 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const settlementMode=directPayable?storedSettlementMode:(trafficOnly?"traffic_only":"provider_program");
   const markets=(availabilityRows||[]).map(row=>marketRecord(candidate,row,evidenceRows,{administratorExternalSeller:adminExternalSeller}));
   const pageMap={home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"};
-  const page=pageMap[text(assignmentInfo.hub_key)]||text(payload.page);
+  const page=pageMap[first(frontEnvelope&&frontEnvelope.page,assignmentInfo.hub_key)]||text(payload.page);
   // The selected Global Slot assignment is the authoritative publication
   // route. A stale candidate payload must never override the administrator's
   // current page/section decision.
-  const section=first(assignmentInfo.slot_key,payload.section);
+  const section=first(frontEnvelope&&frontEnvelope.sectionKey,assignmentInfo.slot_key,payload.section);
   const policyDoc=plain(ipPolicy&&ipPolicy.policy);
   const pageStrategies=plain(plain(policyDoc.slotStrategies)[page]);
   const slotStrategy=plain(pageStrategies[section]);
@@ -442,21 +475,21 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   // gslot_slot_assignments.priority is ranking priority, not a physical slot.
   // Only a manually pinned assignment may request a concrete slot number.
   const requestedSlot=authoritativeRequestedSlot(payload,assignmentInfo);
-  const destination=exactProductDestination(candidate,payload);
-  const image=exactProductImage(candidate,payload);
-  const rawTitle=exactProductTitle(candidate,payload);
+  const destination=first(frontEnvelope&&frontEnvelope.productUrl,exactProductDestination(candidate,payload));
+  const image=first(frontEnvelope&&frontEnvelope.imageUrl,exactProductImage(candidate,payload));
+  const rawTitle=first(frontEnvelope&&frontEnvelope.title,exactProductTitle(candidate,payload));
   const title=!genericProductTitle(rawTitle)?rawTitle:first(supplier.name,"Verified product");
   const runtimeState=lower(plain(payload.runtimeValidation).state);
-  const administratorValidatedOrderPath=!!destination && (runtimeState==="live" || (payload.productPageLive===true && payload.inspectionComplete===true));
+  const administratorValidatedOrderPath=!!destination && (!!frontEnvelope || runtimeState==="live" || (payload.productPageLive===true && payload.inspectionComplete===true));
   const firstVerifiedAt=productFirstVerifiedAt(candidate,payload);
   const card=productCardOf(payload);
-  const rawPrice=first(card.price,payload.price,payload.salePrice,payload.currentPrice);
-  const rawCurrency=first(card.priceCurrency,card.currency,payload.priceCurrency,payload.currency);
+  const rawPrice=first(frontEnvelope&&frontEnvelope.price,card.price,payload.price,payload.salePrice,payload.currentPrice);
+  const rawCurrency=first(frontEnvelope&&frontEnvelope.priceCurrency,card.priceCurrency,card.currency,payload.priceCurrency,payload.currency);
   const authorityCountry=MarketSaleScope.normalizeCountry(assignmentInfo.country_code), authorityRegion=MarketSaleScope.normalizeRegion(first(assignmentInfo.region_code,"NATIONWIDE"),authorityCountry)||"NATIONWIDE";
   const administratorFrontMatchAuthority=adminExternalSeller?{
     schema:"igdc-administrator-front-match-authority.v1",verified:true,assignmentId:text(assignmentInfo.id),publicationStatus:adminExternalSeller?"publish_requested":lower(assignmentInfo.publication_status),
     page,section,country:authorityCountry,region:authorityRegion,externalSeller:true,noIgdcCheckout:true,noIgdcPayment:true,
-    verifiedAt:first(assignmentInfo.updated_at,candidate.updated_at,now()),verificationSource:"canonical-global-slot-relations"
+    verifiedAt:first(frontEnvelope&&frontEnvelope.requestedAt,assignmentInfo.updated_at,candidate.updated_at,now()),verificationSource:frontEnvelope?"gslot-slot-assignment-front-authority-envelope":"canonical-global-slot-relations",authorityEnvelopeDigest:frontEnvelope&&frontEnvelope.digest||undefined
   }:undefined;
   const item=Object.assign({},payload,{
     id:first(payload.id,candidate.id),
@@ -488,11 +521,12 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     bind:Object.assign({},plain(payload.bind),{page,section,psom_key:section,slot:requestedSlot}),
     layerPointer:Object.assign({},plain(payload.layerPointer),{page,section,slot:requestedSlot}),
     placement:Object.assign({},plain(payload.placement),{page,section,slot:requestedSlot}),
-    source:{name:first(plain(payload.source).name,supplier.name,candidate.title,"Approved commerce member"),url:first(plain(payload.source).url,supplier.url,candidate.official_url)},
+    source:{name:first(frontEnvelope&&frontEnvelope.supplierName,plain(payload.source).name,supplier.name,candidate.title,"Approved commerce member"),url:first(frontEnvelope&&frontEnvelope.supplierUrl,plain(payload.source).url,supplier.url,candidate.official_url,destination)},
     orderReady:bool(first(payload.orderReady,administratorValidatedOrderPath)),
     searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,orderReady:bool(first(plain(payload.searchBankContract).orderReady,administratorValidatedOrderPath)),lastVerifiedAt:first(plain(payload.runtimeValidation).checkedAt,candidate.updated_at,plain(payload.searchBankContract).lastVerifiedAt),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:adminExternalSeller?true:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true)),marketAvailability:{markets}}),
     marketAvailability:{markets},
     administratorFrontMatchAuthority,
+    administratorFrontMatchRecord:frontEnvelope?{schema:frontEnvelope.schema,candidateId:frontEnvelope.candidateId,title:frontEnvelope.title,productUrl:frontEnvelope.productUrl,imageUrl:frontEnvelope.imageUrl,supplierName:frontEnvelope.supplierName||undefined,supplierUrl:frontEnvelope.supplierUrl||undefined,price:frontEnvelope.price==null?undefined:frontEnvelope.price,priceCurrency:frontEnvelope.priceCurrency||undefined,availability:frontEnvelope.availability==null?undefined:frontEnvelope.availability,page:frontEnvelope.page,section:frontEnvelope.sectionKey,country:frontEnvelope.country,region:frontEnvelope.region,digest:frontEnvelope.digest}:undefined,
     directCommerceListing:Object.assign({},plain(payload.directCommerceListing),{
       sourceTier:"approved_commerce_member",
       revenueType:first(plain(payload.directCommerceListing).revenueType,revenueType),
@@ -508,7 +542,7 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       expectedNetRevenuePerOrder:first(plain(payload.directCommerceListing).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
     }),
     commerceCandidate:Object.assign({},plain(payload.commerceCandidate),{sourceTier:"approved_commerce_member",origin:"global-slot-console",essentialClass:first(plain(payload.commerceCandidate).essentialClass,payload.essentialClass)}),
-    sellerResponsibility:Object.assign({},plain(payload.sellerResponsibility),{verified:true,legalEntity:first(plain(payload.sellerResponsibility).legalEntity,supplier.name,payload.sellerLegalEntity,payload.sellerName,candidate.title),supportUrl:first(plain(payload.sellerResponsibility).supportUrl,payload.supportUrl,supplier.url,candidate.official_url)}),
+    sellerResponsibility:Object.assign({},plain(payload.sellerResponsibility),{verified:true,legalEntity:first(frontEnvelope&&frontEnvelope.supplierName,plain(payload.sellerResponsibility).legalEntity,supplier.name,payload.sellerLegalEntity,payload.sellerName,candidate.title),supportUrl:first(frontEnvelope&&frontEnvelope.supplierUrl,plain(payload.sellerResponsibility).supportUrl,payload.supportUrl,supplier.url,candidate.official_url,destination)}),
     sponsorship:Object.assign({},plain(payload.sponsorship),
       revenueType==="sponsor" && directPayable ? {
         active:true, enabled:true, required:true, mode:"sponsored",
@@ -579,7 +613,7 @@ async function syncApprovedCandidates(input){
     if(!ipPolicy.ok) return {ok:false,status:"blocked",version:VERSION,wrote:false,file,reason:"ip-slot-policy-invalid",problems:ipPolicy.problems||[]};
     const [candidates,assignments,availability,revenue,evidence]=await Promise.all([
       selectAllRows(sb,"gslot_candidates","select=id,kind,title,official_url,status,source_ref,thumbnail_url,description,source_payload,updated_at,created_at","order=updated_at.desc",1000),
-      selectAllRows(sb,"gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,priority,state,publication_status,manual_pinned,updated_at,updated_by","order=updated_at.desc",1000),
+      selectAllRows(sb,"gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,priority,state,publication_status,manual_pinned,decision_note,updated_at,updated_by","order=updated_at.desc",1000),
       selectAllRows(sb,"gslot_candidate_availability","select=candidate_id,country_code,region_code,availability_state,legal_basis,delivery_or_access,updated_at,updated_by","order=updated_at.desc",1000),
       selectAllRows(sb,"gslot_candidate_revenue","select=id,candidate_id,revenue_type,status,affiliate_url,provider_name,currency,note,updated_at","order=updated_at.desc",1000),
       selectAllRows(sb,"gslot_candidate_evidence","select=id,candidate_id,evidence_type,evidence_url,note,verified,created_at","order=created_at.desc",1000)
@@ -718,4 +752,4 @@ async function syncApprovedCandidates(input){
   }
 }
 
-module.exports={VERSION,QUEUE_FILE,PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF,syncApprovedCandidates,approvedAvailability,verifiedEvidenceRow,publicationMarkerFromAssignment};
+module.exports={VERSION,QUEUE_FILE,PRODUCT_RESEARCH_SOURCE_REF,CANDIDATE_REVIEW_SOURCE_REF,syncApprovedCandidates,approvedAvailability,verifiedEvidenceRow,publicationMarkerFromAssignment,assignmentFrontEnvelope};
