@@ -1035,19 +1035,19 @@ async function main() {
   const bridgeStructuralErrors = Array.isArray(commerceRegistrySync && commerceRegistrySync.bridge && commerceRegistrySync.bridge.structuralErrors)
     ? commerceRegistrySync.bridge.structuralErrors
     : [];
+  let administratorStructuralHold = [];
   if (incomingCommerceIntent.explicit === true && incomingCommerceIntent.operation === "publish" && bridgeStructuralErrors.length) {
     const selected = new Set(incomingCommerceSelection.selectedCandidateIds || []);
-    const relevantErrors = selected.size
+    administratorStructuralHold = selected.size
       ? bridgeStructuralErrors.filter(row => selected.has(String(row && row.candidateId || "").trim()))
-      : bridgeStructuralErrors;
-    if (relevantErrors.length) {
-      const error = new Error(
-        "Administrator Front Match final QA found structural/content errors: " +
-        JSON.stringify(relevantErrors.slice(0, 50))
-      );
-      error.code = "ADMIN_FRONT_STRUCTURAL_VALIDATION_FAILED";
-      error.details = { count: relevantErrors.length, errors: relevantErrors.slice(0, 100) };
-      throw error;
+      : bridgeStructuralErrors.slice();
+    // Structural QA is per product, not all-or-nothing. Registry has already
+    // converted these rows to blocked_structural in the private review queue,
+    // so the valid administrator rows must continue to SearchBank in the same
+    // build. Keep the failures visible in diagnostics instead of rolling back
+    // the entire deployment because one card has a bad title/url/image.
+    if (administratorStructuralHold.length) {
+      console.warn("Administrator Front Match structural hold: " + administratorStructuralHold.length + " row(s): " + JSON.stringify(administratorStructuralHold.slice(0, 25)));
     }
   }
 
@@ -1115,7 +1115,8 @@ async function main() {
       requestedCount: administratorRequestedCount,
       queueAuthoritative,
       intakeSummary: intake.summary || {},
-      heldSample: held
+      heldSample: held,
+      administratorStructuralHold: administratorStructuralHold.slice(0, 100)
     };
     throw error;
   }

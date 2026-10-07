@@ -25,7 +25,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.7.1-admin-ready-publication-authority";
+const VERSION = "canonical-snapshot-publisher-v1.8.0-intake-release-passthrough";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
@@ -487,7 +487,7 @@ function validateCandidate(raw, index, context) {
   if (page && section && !(context.registry.pages.get(page) || new Set()).has(section)) reasons.push("SECTION_NOT_IN_PSOM_PAGE");
   if (page && section && productBearingRoute(page, section) && !specificProductUrl(destination)) reasons.push("PRODUCT_DETAIL_DESTINATION_REQUIRED");
   if (Number.isNaN(requested)) reasons.push("SLOT_MAPPING_CONFLICT");
-  if (requested != null && requested > context.policy.slotCapacityDefault) reasons.push("SLOT_OUT_OF_CAPACITY");
+  if (requested != null && requested > sectionSlotCapacity(context.policy,page,section)) reasons.push("SLOT_OUT_OF_CAPACITY");
 
   const country = normalizeCountry(geo.countryRaw, geo.globalExplicit);
   const region = normalizeRegion(geo.regionRaw, geo.globalExplicit, geo.nationalExplicit, country);
@@ -621,12 +621,18 @@ function getPriority(candidate) {
   // managedPriority=false must still keep its verified ranking score.
   return sourceBoost + managedBoost + numeric(selection.rankingScore) + numeric(raw.priority) + numeric(raw.score) + numeric(raw.compositeScore) + numeric(raw.qualityScore);
 }
+function sectionSlotCapacity(policy,page,section){
+  const base=Math.max(1,Number(policy&&policy.slotCapacityDefault)||100);
+  // Tour right panel was designed with 200 physical front slots.  All other
+  // commerce sections keep the standard 100-slot front contract.
+  if(page==="tour"&&section==="tour")return Math.max(base,200);
+  return base;
+}
+
 function assignSlots(candidates, ledger, policy) {
   const rejected = [];
   const assigned = [];
-  const capacity = Math.max(1, Number(policy.slotCapacityDefault) || 100);
   const groups = new Map();
-  const firstFree = used => { for (let i = 1; i <= capacity; i += 1) if (!used.has(i)) return i; return null; };
   for (const candidate of candidates) {
     const key = candidate.page + "|" + candidate.section + "|" + candidate.country + "|" + candidate.region;
     if (!groups.has(key)) groups.set(key, []);
@@ -634,6 +640,8 @@ function assignSlots(candidates, ledger, policy) {
   }
   for (const [, group] of groups.entries()) {
     const used = new Map();
+    const page=group[0]&&group[0].page,section=group[0]&&group[0].section,capacity=sectionSlotCapacity(policy,page,section);
+    const firstFree = usedSlots => { for (let i = 1; i <= capacity; i += 1) if (!usedSlots.has(i)) return i; return null; };
     const priorFor = candidate => {
       const prior = ledger.entries[candidate.candidateId];
       return prior && prior.fingerprint === candidate.fingerprint && prior.page === candidate.page && prior.section === candidate.section && prior.country === candidate.country && prior.region === candidate.region && Number(prior.slot) >= 1 && Number(prior.slot) <= capacity ? Number(prior.slot) : null;
@@ -883,10 +891,28 @@ function publish(input) {
 
   const trust = loadTrustResources(root);
   const context = { root, policy, registry, trust, ipPolicy };
-  // Build the private commerce staging queue first.  The intake owns category,
-  // non-PG revenue-right, direct-listing approval and release-key gating;
-  // Canonical remains the sole public publication boundary.
-  const commerceIntake = CommerceCandidateIntake.build({ root, items: Array.isArray(upstream.doc.items) ? upstream.doc.items : [], trigger: report.trigger });
+  // Build the private commerce staging queue only when Canonical is receiving raw
+  // discovery/SearchBank input.  The regional brokerage build already invokes
+  // CommerceCandidateIntake once and passes its exact release set using the
+  // search-bank.release-input.v1 / commerce-candidate-intake-release contract.
+  // Re-running Intake here would turn an administrator-approved release back
+  // into a raw searchbank candidate and can reduce a valid Front Match to zero.
+  const upstreamItems = Array.isArray(upstream.doc.items) ? upstream.doc.items : [];
+  const intakeReleaseInput = !!(input && input.bank &&
+    input.bank.schema === "search-bank.release-input.v1" &&
+    input.bank.source === "commerce-candidate-intake-release" &&
+    upstreamItems.every(item => item && item.candidateSelection && item.candidateSelection.releaseEligible === true &&
+      item.commerceCandidate && item.commerceCandidate.releaseEligible === true &&
+      str(item.candidateSelection.sourceTier) && str(item.candidateSelection.selectionDigest)));
+  const commerceIntake = intakeReleaseInput ? {
+    ok:true,
+    digest:sha256({source:"commerce-candidate-intake-release",items:upstreamItems.map(item=>({id:item&&item.id,selectionDigest:item&&item.candidateSelection&&item.candidateSelection.selectionDigest}))}),
+    releaseItems:upstreamItems,
+    releaseGate:{enabled:true,mode:"intake_release_passthrough",reason:"already-approved-by-commerce-candidate-intake",authoritativeAdminQueue:true},
+    summary:{considered:upstreamItems.length,eligibleForRelease:upstreamItems.length,releasedToCanonical:upstreamItems.length,held:0,passthrough:true},
+    queue:{digest:null,stale:false,passthrough:true},
+    problems:[]
+  } : CommerceCandidateIntake.build({ root, items: upstreamItems, trigger: report.trigger });
   report.commerceCandidateIntake = {
     version: CommerceCandidateIntake.VERSION,
     digest: commerceIntake.digest,

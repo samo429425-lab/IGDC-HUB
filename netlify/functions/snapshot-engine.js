@@ -30,11 +30,11 @@ const LIMIT_MAP = {
   media: 500,
   social: 1000,
   network: 100,
-  tour: 100,
+  tour: 200,
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.4-social-domain-isolation";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.5-tour-200-admin-authority";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -281,9 +281,12 @@ function internalPlaceholderImage() {
   return "/assets/img/placeholder.png";
 }
 
-function sectionSlotLimit(_pageName, _sectionKey, fallback) {
-  const n = Number(fallback || SECTION_SLOT_LIMIT);
-  return Number.isFinite(n) && n > 0 ? Math.min(SECTION_SLOT_LIMIT, Math.max(1, Math.trunc(n))) : SECTION_SLOT_LIMIT;
+function sectionSlotLimit(pageName, sectionKey, fallback) {
+  const page = String(pageName || "").trim().toLowerCase();
+  const section = String(sectionKey || "").trim().toLowerCase();
+  const hardLimit = page === "tour" && section === "tour" ? 200 : SECTION_SLOT_LIMIT;
+  const n = Number(fallback || hardLimit);
+  return Number.isFinite(n) && n > 0 ? Math.min(hardLimit, Math.max(1, Math.trunc(n))) : hardLimit;
 }
 
 function urlOfSnapshotItem(item) {
@@ -563,9 +566,9 @@ function enforceSnapshotFileLimit(pageName, bankItems) {
     const target = sections[sectionKey];
     const card = normalizeLimitCard(raw, { pageName, sectionKey });
     const changed = Array.isArray(target)
-      ? pushOrReplaceSnapshotSlot(target, card, raw, { pageName, sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] })
+      ? pushOrReplaceSnapshotSlot(target, card, raw, { pageName, sectionKey, limit: sectionSlotLimit(pageName, sectionKey), idFields: ["id", "contentId"] })
       : (target && Array.isArray(target.slots)
-          ? pushOrReplaceSnapshotSlot(target.slots, card, raw, { pageName, sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] })
+          ? pushOrReplaceSnapshotSlot(target.slots, card, raw, { pageName, sectionKey, limit: sectionSlotLimit(pageName, sectionKey), idFields: ["id", "contentId"] })
           : false);
     if (changed) usedIds.add(id);
   }
@@ -1009,7 +1012,7 @@ const card = enrichSnapshotCard({
   })
 }, item);
 
-pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "home", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] });
+pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "home", sectionKey, limit: sectionSlotLimit("home", sectionKey), idFields: ["id", "contentId"] });
   }
 
   return frontSnap;
@@ -1488,7 +1491,7 @@ function handleSocialSnapshot(bank) {
         })
       }, item);
 
-      if (pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "social", sectionKey, limit: SECTION_SLOT_LIMIT, idFields: ["id", "contentId"] })) {
+      if (pushOrReplaceSnapshotSlot(existing, card, item, { pageName: "social", sectionKey, limit: sectionSlotLimit(pageName, sectionKey), idFields: ["id", "contentId"] })) {
         existingIds.add(id);
       }
     }
@@ -1758,7 +1761,7 @@ function handleTourSnapshot(bank) {
 
   let items = sanitizeSnapshotArray(Array.isArray(snapshot.items) ? snapshot.items : [], "tour", "tour");
 
-  const TOUR_LIMIT = 100;
+  const TOUR_LIMIT = 200;
 
   /* ===== TOUR FILTER ===== */
   function isTour(item){

@@ -21,7 +21,7 @@ const AffiliateRegistry = require("./affiliate-program-registry.v1");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-candidate-intake-v1.9.0-admin-final-structural-transport";
+const VERSION = "commerce-candidate-intake-v1.10.0-authoritative-board-transport";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
 const REVIEW_QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const STAGING_FILE = "commerce-candidate-staging.snapshot.v1.json";
@@ -321,6 +321,31 @@ function administratorFrontSafety(item){
   return {ok:reasons.length===0,reasons:unique(reasons),softBlockers:blockers.filter(value=>!hardPattern.test(value))};
 }
 
+function administratorBridgeAuthority(item,pos,origin,tier,approval){
+  const bridge=plain(item&&item.frontBridgeValidation),review=plain(item&&item.commerceReview),request=plain(review.publicationRequest),scope=plain(plain(item&&item.commerceCandidate).publicationScope);
+  const country=normalizeCountry(first(scope.country,request.country)),region=normalizeRegion(first(scope.region,request.region,"NATIONWIDE"),country)||"NATIONWIDE";
+  const page=first(scope.page,request.page),section=first(scope.section,request.section);
+  const assignmentId=first(request.assignmentId,review.approvalId);
+  const placementMatches=!!page&&!!section&&page===text(pos&&pos.page)&&section===text(pos&&pos.section);
+  const publicationRequested=approval&&approval.explicitPublicationRequested===true&&lower(approval.publicationStatus)==="publish_requested";
+  const ok=(origin||"")==="admin_review_queue"&&tier==="approved_commerce_member"&&bridge.structuralOnly===true&&bridge.ok===true&&publicationRequested&&!!assignmentId&&!!country&&placementMatches&&!!productDestination(item)&&!!productImage(item);
+  return {ok,mode:ok?"administrator_board_bridge":null,assignmentId:assignmentId||null,country:country||null,region:region||null,page:page||null,section:section||null,placementMatches,scopeMatches:!!country,bridgeVersion:text(bridge.version)||null,structuralOnly:bridge.structuralOnly===true,bridgeErrors:array(bridge.errors)};
+}
+function administratorMarketRecord(item,countryInput,regionInput){
+  const country=normalizeCountry(countryInput),region=normalizeRegion(first(regionInput,"NATIONWIDE"),country)||"NATIONWIDE";
+  if(!country)return null;
+  const records=MarketSaleScope.recordsFor(item);
+  const existing=records.find(record=>{
+    if(normalizeCountry(record&&record.country)!==country)return false;
+    if(region==="NATIONWIDE")return record&&record.nationwide===true;
+    return array(record&&record.regions).map(value=>normalizeRegion(value,country)).includes(region);
+  });
+  if(existing)return Object.assign({},clone(existing),{country,active:true,nationwide:region==="NATIONWIDE",regions:region==="NATIONWIDE"?[]:[region],verifiedAt:first(existing.verifiedAt,plain(item&&item.administratorFrontMatchAuthority).verifiedAt,now())});
+  const destination=productDestination(item),seller=plain(item&&item.sellerResponsibility),proofUrl=safeHttpsUrl(first(sourceUrl(item),seller.supportUrl,destination));
+  const sellerName=first(seller.legalEntity,item&&item.supplierName,sourceName(item),"External seller");
+  const proof=(kind)=>({verified:true,evidenceUrl:proofUrl||destination,evidence:["Authenticated administrator Front Match confirms the external seller remains responsible for "+kind+"; IGDC is only the referral/discovery surface."]});
+  return {country,region,nationwide:region==="NATIONWIDE",regions:region==="NATIONWIDE"?[]:[region],active:true,verifiedAt:first(plain(item&&item.administratorFrontMatchAuthority).verifiedAt,now()),shipping:proof("delivery and fulfilment"),returns:proof("returns and refunds"),support:proof("customer support"),sellerResponsibility:{verified:true,legalEntity:sellerName,supportUrl:proofUrl||destination},source:{name:"administrator-20-section-master-board",url:proofUrl||destination},evidence:["Authenticated administrator Front Match publication scope"]};
+}
 function administratorFrontAuthority(item,pos,market,origin){
   const authority=plain(item&&item.administratorFrontMatchAuthority),review=plain(item&&item.commerceReview),publicationRequest=plain(review.publicationRequest),publicationScope=plain(plain(item&&item.commerceCandidate).publicationScope);
   const authorityCountry=normalizeCountry(authority.country),scopeCountry=normalizeCountry(first(publicationScope.country,publicationRequest.country));
@@ -481,19 +506,24 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
   const approval=reviewApproval(item,tier,policy); if(!approval.ok) reasons.push("DIRECT_LISTING_ADMIN_APPROVAL_OR_ASSIGNMENT_MISSING");
   const adminSafety=administratorFrontSafety(item);
   if(!adminSafety.ok) adminSafety.reasons.forEach(reason=>reasons.push(reason));
-  const adminAuthority=administratorFrontAuthority(item,pos,market,origin), trustedForExplicitFront=trust.ok===true||adminAuthority.ok===true;
+  const adminAuthority=administratorFrontAuthority(item,pos,market,origin),bridgeAuthority=administratorBridgeAuthority(item,pos,origin,tier,approval);
+  const effectiveAdminAuthority=bridgeAuthority.ok?bridgeAuthority:adminAuthority, trustedForExplicitFront=trust.ok===true||effectiveAdminAuthority.ok===true;
   if(!trustedForExplicitFront) reasons.push("TRUSTED_SELLER_OR_PRODUCER_EVIDENCE_MISSING");
 
-  const explicitAdministratorFrontMatch=(origin||"searchbank")==="admin_review_queue" && tier==="approved_commerce_member" &&
+  // The Registry bridge has already consumed the authenticated administrator
+  // board row and performed the final structural QA.  From this point forward
+  // the intake is transport only.  Do not make the same product pass a second
+  // market/revenue/risk/source-payload verdict after Front Match.
+  const explicitAdministratorFrontMatch=bridgeAuthority.ok===true || ((origin||"searchbank")==="admin_review_queue" && tier==="approved_commerce_member" &&
     approval.explicitPublicationRequested===true && !!destination && !!image &&
-    !!pos.page && !!pos.section && adminAuthority.ok===true;
+    !!pos.page && !!pos.section && adminAuthority.ok===true);
 
   // Revenue/affiliate readiness is a monetization concern, not a reason to
   // discard an administrator-approved, verified external seller card.  For the
   // explicit Front Match path only, convert the route to a non-payable external
   // referral while retaining every hard SearchBank/product/market gate above.
   const effectiveRevenue=explicitAdministratorFrontMatch?administratorReferralRevenue(item,revenue,market):revenue;
-  const authorityMarketRecord=explicitAdministratorFrontMatch&&adminAuthority.country?{country:adminAuthority.country,nationwide:adminAuthority.region==="NATIONWIDE",regions:adminAuthority.region&&adminAuthority.region!=="NATIONWIDE"?[adminAuthority.region]:[],verified:true,verifiedAt:new Date().toISOString()}:null;
+  const authorityMarketRecord=explicitAdministratorFrontMatch&&effectiveAdminAuthority.country?administratorMarketRecord(item,effectiveAdminAuthority.country,effectiveAdminAuthority.region):null;
   // Explicit Admin Front Match owns its exact country/region publication scope.
   // Do not let an unrelated valid market record suppress that requested scope.
   const effectiveAdminMarkets=authorityMarketRecord?[authorityMarketRecord]:market.validRecords.slice();
@@ -514,7 +544,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
     "PSOM_PLACEMENT_MISSING"
   ]);
   const effectiveReasons=explicitAdministratorFrontMatch
-    ? reasons.filter(reason=>adminStructuralReasons.has(reason))
+    ? (bridgeAuthority.ok===true?[]:reasons.filter(reason=>adminStructuralReasons.has(reason)))
     : reasons.slice();
   const releaseEligible=effectiveReasons.length===0;
   const profitability=profitabilityAssessment(item,tier,effectiveRevenue);
@@ -528,7 +558,7 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
     stageStatus:releaseEligible?"eligible_for_release":(effectiveRevenue.potential?"revenue_review_required":"hold"), reasons:effectiveReasons,
     administratorFrontMatch:{
       explicit:explicitAdministratorFrontMatch, safety:adminSafety.ok, safetyReasons:adminSafety.reasons,
-      authority:adminAuthority, trustedSeller:trust.ok===true, trustedForExplicitFront,
+      authority:effectiveAdminAuthority, bridgeAuthority:bridgeAuthority.ok===true, trustedSeller:trust.ok===true, trustedForExplicitFront,
       structuralOnly:explicitAdministratorFrontMatch, policyRejudgement:false,
       postBoardDiagnostics:explicitAdministratorFrontMatch?unique(reasons.filter(reason=>!adminStructuralReasons.has(reason))):[],
       softRiskWarnings:adminSafety.softBlockers, nonPayableReferral:explicitAdministratorFrontMatch&&effectiveRevenue.payable!==true,
