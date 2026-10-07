@@ -593,7 +593,7 @@ function envReady(){
 function releaseControl(input){
   const explicitAdminAuthorization=!!(input&&input.explicitAdminAuthorization===true);
   const release=ReleaseDispatch.releaseArmed({explicitAdminAuthorization});
-  const hook=ReleaseDispatch.validHook(process.env[ReleaseDispatch.HOOK_ENV]);
+  const configured=ReleaseDispatch.configuredHook(),hook=ReleaseDispatch.validHook(configured.value);
   return {
     version:ReleaseDispatch.VERSION,
     armed:release.armed===true,
@@ -601,7 +601,9 @@ function releaseControl(input){
     explicitAdminAuthorization:release.explicitAdminAuthorization===true,
     mode:release.mode||"",
     keyPresent:release.keyPresent===true,
-    hookConfigured:!!hook,
+    hookConfigured:!!configured.value,
+    hookValid:!!hook,
+    hookSource:configured.value?configured.name:null,
     actionAvailable:release.armed===true&&!!hook,
     explicitAdminConfirmationAvailable:!!hook,
     action:"request_publication",

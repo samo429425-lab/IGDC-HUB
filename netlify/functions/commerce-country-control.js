@@ -95,6 +95,15 @@ async function frontPublicationWithdrawAssignmentsOnly(assignments,actorId){
   return{ok:true,items:results,requested:rows.length,persisted:results.filter(r=>r.persisted===true).length,candidateLedgerReadOnly:true};
 }
 
+function requireQueuedFrontBuild(refreshResult,context){
+  const release=plain(refreshResult&&refreshResult.release);
+  if(release.queued===true)return release;
+  const reason=text(release.reason)||"build_hook_not_queued",status=Number(release.status||0)||null,attempts=Number(release.attempts||0)||0,source=text(release.hookSource)||null;
+  const error=new Error("Front Match 원장 저장은 완료됐지만 Netlify Build Hook을 시작하지 못했습니다: "+reason+(status?" · HTTP "+status:"")+(source?" · "+source:""));
+  error.statusCode=502;error.code="front_build_hook_not_queued";error.details={context:text(context)||"front_match",reason,status,attempts,hookConfigured:release.hookConfigured===true,hookSource:source};
+  throw error;
+}
+
 function frontBridgeFirst(){
   for(const value of arguments){const out=text(value);if(out)return out;}
   return "";
@@ -277,18 +286,14 @@ exports.handler=async function(event){
       const effectiveOperation=requestedOperation==="unmatch"?"unmatch":(candidateIds.length?"match":"refresh");
       if(effectiveOperation==="match"&&candidateIds.length){
         const liveDoc={candidates:[]};
-        let finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:"SITE_PUBLISH",candidateIds,preparedByFrontLifecycle:true},scope,liveDoc);
-        // A Front Match is also an explicit request to rebuild the public
-        // SearchBank/Snapshot projection.  If the publication batch persisted
-        // nothing new (for example every assignment was already publish_requested)
-        // it may legitimately skip ReleaseDispatch.  In that case dispatch one
-        // refresh hook here so the current durable assignment ledger is still
-        // materialized.  Never dispatch twice when requestPublicationBatch
-        // already queued the hook.
-        if(!(finalizeResult&&finalizeResult.release&&finalizeResult.release.queued===true)){
-          const refresh=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:"publish",confirmation:"SITE_PUBLISH",candidateId:candidateIds[0]||null,candidateIds,candidateCount:Math.max(1,candidateIds.length)},scope);
-          finalizeResult=Object.assign({},finalizeResult,{release:refresh.release||finalizeResult.release,refreshDispatch:refresh,queued:refresh&&refresh.release&&refresh.release.queued===true?Math.max(1,Number(finalizeResult&&finalizeResult.queued||0)):Number(finalizeResult&&finalizeResult.queued||0),pendingBuild:refresh&&refresh.release&&refresh.release.queued===true?0:Math.max(1,Number(finalizeResult&&finalizeResult.pendingBuild||0))});
-        }
+        // Finalize owns exactly one Build Hook dispatch.  First persist/confirm
+        // publish_requested without dispatching, then call the refresh bridge
+        // once.  This prevents the old branchy path where a no-op batch could
+        // return before Netlify was ever called.
+        let finalizeResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:"SITE_PUBLISH",candidateIds,preparedByFrontLifecycle:true,deferRelease:true},scope,liveDoc);
+        const refresh=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:"publish",confirmation:"SITE_PUBLISH",candidateId:candidateIds[0]||null,candidateIds,candidateCount:Math.max(1,candidateIds.length)},scope);
+        requireQueuedFrontBuild(refresh,"candidate_match");
+        finalizeResult=Object.assign({},finalizeResult,{release:refresh.release,refreshDispatch:refresh,queued:1,pendingBuild:0});
         const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:"match",mode:"candidates",candidateIds,ledgerMode:"candidate",compactResponse:true}),finalizeResult,null);
         if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={publicationOnly:publicationReplacement,administratorPlacementReadOnly:true,plan:replacementPlan,unpublication:replacementUnpublish,desiredCandidateIds:requestedReplacementCandidateIds};
         const guardRestore={ok:true,restored:[],failures:[],skipped:true,reason:"front_candidate_ledger_read_only"};if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
@@ -297,6 +302,7 @@ exports.handler=async function(event){
       const staleIds=Array.from(new Set((replacementPlan&&replacementPlan.staleCandidateIds||[]).map(text).filter(Boolean))),refreshIds=Array.from(new Set(candidateIds.concat(requestedCandidateIds,staleIds))).slice(0,1800);
       const refreshUnpublish=requestedOperation==="unmatch"||(publicationReplacement&&candidateIds.length===0&&staleIds.length>0);
       const refreshResult=await ProductGoLiveAudit.dispatchFrontRefresh(event,actor,{mode:"production",operation:refreshUnpublish?"unmatch":"refresh",confirmation:refreshUnpublish?"SITE_UNPUBLISH":"SITE_PUBLISH",candidateId:refreshIds[0]||null,candidateIds:refreshIds,candidateCount:Math.max(1,Number(body.changedCount)||refreshIds.length||1)},scope);
+      requireQueuedFrontBuild(refreshResult,refreshUnpublish?"section_unmatch_or_cleanup":"section_refresh");
       const recorded=await Automation.recordProductFrontSync(actorId,Object.assign({},body,{operation:requestedOperation==="unmatch"?"unmatch":"match",mode:"candidates",candidateIds:refreshIds,ledgerMode:"candidate",compactResponse:true}),refreshResult,null);
       if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.replacement={publicationOnly:publicationReplacement,administratorPlacementReadOnly:true,plan:replacementPlan,unpublication:replacementUnpublish,desiredCandidateIds:requestedReplacementCandidateIds};
       const guardRestore={ok:true,restored:[],failures:[],skipped:true,reason:"front_candidate_ledger_read_only"};if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
@@ -406,5 +412,5 @@ exports.handler=async function(event){
     if(action==="candidate_action")return json(200,await Automation.candidateAction(actorId,body));
     if(action==="research_candidate_action")return json(200,await Automation.researchCandidateAction(actorId,body));
     return json(404,{ok:false,error:"지원하지 않는 국가·지역 관제 요청입니다."});
-  }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null});}
+  }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null,details:error&&error.details&&typeof error.details==="object"?error.details:null});}
 };

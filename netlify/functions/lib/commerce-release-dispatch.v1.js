@@ -6,7 +6,7 @@
  * snapshot itself and it never exposes the build hook URL.
  */
 
-const VERSION = "commerce-release-dispatch-v1.3.2-igdc-hook-fallback";
+const VERSION = "commerce-release-dispatch-v1.4.0-frontmatch-explicit-build";
 const HOOK_ENVS = Object.freeze([
   "COMMERCE_RELEASE_BUILD_HOOK_URL",
   "IGDC_NETLIFY_BUILD_HOOK_URL",
@@ -20,9 +20,14 @@ const KEY_ENV = "COMMERCE_CANDIDATE_RELEASE_KEY";
 
 function text(value) { return value == null ? "" : String(value).trim(); }
 function lower(value) { return text(value).toLowerCase(); }
+function hookText(value) {
+  let out=text(value);
+  if(out.length>=2&&((out[0]==='"'&&out[out.length-1]==='"')||(out[0]==="'"&&out[out.length-1]==="'")))out=out.slice(1,-1).trim();
+  return out;
+}
 function configuredHook() {
   for (const name of HOOK_ENVS) {
-    const value = text(process.env[name]);
+    const value = hookText(process.env[name]);
     if (value) return { name, value };
   }
   return { name: HOOK_ENVS[0], value: "" };
@@ -42,7 +47,7 @@ function releaseArmed(input) {
 }
 function validHook(raw) {
   try {
-    const url = new URL(text(raw));
+    const url = new URL(hookText(raw));
     return url.protocol === "https:" && url.hostname === "api.netlify.com" && /^\/build_hooks\/[A-Za-z0-9_-]+\/?$/.test(url.pathname) ? url : null;
   } catch (_error) { return null; }
 }

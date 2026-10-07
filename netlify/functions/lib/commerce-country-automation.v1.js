@@ -4753,7 +4753,7 @@ function frontSyncExpectedRegion(row, country) {
   return normalizeRegion(row && row.region_code || "NATIONWIDE", country) || "NATIONWIDE";
 }
 function frontSyncAssignmentStatusReady(value) {
-  return ["audit_ready", "ready", "publish_requested", "published"].includes(lower(value));
+  return ["audit_ready", "ready", "publish_requested", "queued", "matched", "published", "active"].includes(lower(value));
 }
 async function verifyProductFrontPreparation(candidateIdsInput, scope, targetById) {
   const candidateIds = array(candidateIdsInput).map(text).filter(Boolean);
@@ -4866,8 +4866,60 @@ function frontSyncAssignmentId(candidateId, scope, sectionKey) {
 }
 function frontSyncRevenueId(candidateId) { return "front_referral_" + sha256(candidateId).slice(0, 24); }
 function frontSyncEvidenceId(candidateId) { return "front_evidence_" + sha256(candidateId).slice(0, 24); }
+
+async function prepareAuthoritativeAdminFrontTargets(actorId,input,targetsInput){
+  const scope=researchScope(input),targets=array(targetsInput),targetIds=Array.from(new Set(targets.map(row=>text(row&&row.candidateId)).filter(Boolean))),targetById=new Map(targets.map(row=>[text(row&&row.candidateId),row]));
+  const actor=text(actorId)||"administrator",now=iso(),items=[],preparedCandidateIds=[];
+  const writeTrace={schema:"igdc-product-front-authoritative-board-prepare.v1",version:VERSION,requested:targetIds.length,mode:"administrator-board-to-assignment-only",authoritativePublicationLedger:"gslot_slot_assignments.publication_status",phases:[]};
+  function phase(name,data){writeTrace.phases.push(Object.assign({name,at:iso()},plain(data)));}
+  if(!targetIds.length)return{ok:true,schema:"igdc-product-front-lifecycle-preparation.v5-authoritative",scope,requested:0,prepared:0,blocked:0,preparedCandidateIds:[],items,writeTrace};
+  let candidateRows,assignmentRows;
+  try{
+    [candidateRows,assignmentRows]=await Promise.all([
+      frontSyncSelectCandidates(targetIds),
+      frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at",targetIds)
+    ]);
+    phase("preflight_read",{ok:true,candidates:array(candidateRows).length,assignments:array(assignmentRows).length});
+  }catch(error){phase("preflight_read",{ok:false,error:text(error&&error.message||error)});throw error;}
+  const candidateById=new Map(array(candidateRows).map(row=>[text(row&&row.id),row])),assignmentByCandidate=new Map();
+  for(const row of array(assignmentRows)){const id=text(row&&row.candidate_id);if(!assignmentByCandidate.has(id))assignmentByCandidate.set(id,[]);assignmentByCandidate.get(id).push(row);}
+  const upserts=[],staleIds=[];
+  for(const candidateId of targetIds){
+    const target=plain(targetById.get(candidateId)),candidate=plain(candidateById.get(candidateId)),sectionKey=text(target.sectionKey),title=text(target.administratorTitle),productUrl=safeUrl(target.administratorProductUrl),imageUrl=safeUrl(target.administratorImageUrl),reasons=[];
+    if(!Object.keys(candidate).length)reasons.push("administrator_candidate_missing");
+    if(!validProductSectionKey(sectionKey))reasons.push("administrator_target_section_invalid");
+    if(!title||ProductRanking.isGenericProductName(title))reasons.push("administrator_product_title_invalid");
+    if(!productUrl)reasons.push("administrator_product_url_missing");
+    if(productUrl&&/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i.test(productUrl))reasons.push("administrator_product_url_is_image_asset");
+    if(!imageUrl)reasons.push("administrator_product_image_missing");
+    if(reasons.length){items.push({candidateId,status:"blocked",queued:false,persisted:false,reason:reasons.join(","),reasons,assignmentId:null,sectionKey});continue;}
+    const split=splitProductSectionKey(sectionKey),rows=array(assignmentByCandidate.get(candidateId));
+    const existing=rows.find(row=>text(row&&row.hub_key)===split.page&&text(row&&row.slot_key)===split.sectionKey&&normalizeCountry(row&&row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region);
+    const assignmentId=text(existing&&existing.id)||frontSyncAssignmentId(candidateId,scope,sectionKey);
+    for(const old of rows){const oldId=text(old&&old.id),sameScope=normalizeCountry(old&&old.country_code)===scope.country&&frontSyncExpectedRegion(old,scope.country)===scope.region,samePlacement=text(old&&old.hub_key)===split.page&&text(old&&old.slot_key)===split.sectionKey;if(oldId&&sameScope&&!samePlacement&&candidateRuntimePublishedStatus(old&&old.publication_status))staleIds.push(oldId);}
+    upserts.push({id:assignmentId,candidate_id:candidateId,hub_key:split.page,country_code:scope.country,region_code:scope.region||"NATIONWIDE",slot_key:split.sectionKey,priority:Math.max(0,Number(target.priority||0)),state:existing&&lower(existing.state)==="pinned"?"pinned":"approved",publication_status:"publish_requested",manual_pinned:existing&&existing.manual_pinned===true,decision_note:"Authenticated administrator Front Match. Current administrator board is the publication authority; downstream stages may perform structural transport validation only.",created_at:text(existing&&existing.created_at)||now,updated_at:now,updated_by:actor});
+    preparedCandidateIds.push(candidateId);items.push({candidateId,status:"publish_requested",queued:false,persisted:true,pendingBuild:true,reason:"administrator_board_assignment_prepared",assignmentId,sectionKey,title,productUrl,imageUrl});
+  }
+  try{
+    for(const ids of frontSyncChunk(Array.from(new Set(staleIds)),80))await SlotStore.update("gslot_slot_assignments","id=in."+frontSyncInFilter(ids),{publication_status:"not_ready",updated_at:iso(),updated_by:actor});
+    await frontSyncUpsert("gslot_slot_assignments",upserts,"id");
+    phase("assignment_publish_requested",{ok:true,upserted:upserts.length,staleDemoted:Array.from(new Set(staleIds)).length});
+  }catch(error){phase("assignment_publish_requested",{ok:false,error:text(error&&error.message||error)});throw error;}
+  const verifyRows=await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at",preparedCandidateIds),verified=[];
+  for(const candidateId of preparedCandidateIds){
+    const target=plain(targetById.get(candidateId)),split=splitProductSectionKey(text(target.sectionKey));
+    const row=array(verifyRows).find(r=>text(r&&r.candidate_id)===candidateId&&text(r&&r.hub_key)===split.page&&text(r&&r.slot_key)===split.sectionKey&&normalizeCountry(r&&r.country_code)===scope.country&&frontSyncExpectedRegion(r,scope.country)===scope.region&&["approved","pinned"].includes(lower(r&&r.state))&&lower(r&&r.publication_status)==="publish_requested");
+    if(row)verified.push(candidateId);
+  }
+  const missing=preparedCandidateIds.filter(id=>!verified.includes(id));
+  if(missing.length){const error=new Error("관리자 Front Match publish_requested 원장 저장 확인에 실패했습니다: "+missing.slice(0,20).join(","));error.statusCode=502;error.code="administrator_front_assignment_verify_failed";error.lifecycleTrace=writeTrace;throw error;}
+  phase("readback_verify",{ok:true,verified:verified.length});
+  return{ok:items.every(item=>item.status!=="blocked"),schema:"igdc-product-front-lifecycle-preparation.v5-authoritative",scope,requested:targetIds.length,prepared:verified.length,blocked:items.filter(item=>item.status==="blocked").length,preparedCandidateIds:verified,items,writeTrace,administratorBoardAuthority:true,structuralValidationOnly:true};
+}
 async function prepareProductFrontTargets(actorId, input, targetsInput, jobInput) {
-  const scope = researchScope(input), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:(candidateLedgerMode?null:await loadProductResearchJob(scope));
+  const scope = researchScope(input), candidateLedgerMode = lower(input && input.ledgerMode) === "candidate", targetList=array(targetsInput);
+  if(candidateLedgerMode&&targetList.length&&targetList.every(row=>row&&row.administratorBoardAuthority===true))return prepareAuthoritativeAdminFrontTargets(actorId,input,targetList);
+  const job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:(candidateLedgerMode?null:await loadProductResearchJob(scope));
   if (!candidateLedgerMode && (!job || job.schema !== PRODUCT_JOB_SCHEMA || !array(job.products).length)) { const error = new Error("프론트에 매칭할 상품 조사 결과가 없습니다."); error.statusCode = 409; throw error; }
   const targets = array(targetsInput), targetIds = Array.from(new Set(targets.map((row) => text(row && row.candidateId)).filter(Boolean))), targetById = new Map(targets.map((row) => [text(row && row.candidateId), row]));
   const actor = text(actorId) || "administrator", now = iso();
