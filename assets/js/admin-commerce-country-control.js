@@ -25,7 +25,7 @@
   var LATEST_MANUAL_ACTION_BATCH=10;
   var PRODUCT_PRIVATE_SECTION_CAPACITY=200;
   var PRODUCT_FRONT_SECTION_CAPACITY=100;
-  var FRONT_MATCH_CLIENT_VERSION='20261008-frontmatch-root-v7';
+  var FRONT_MATCH_CLIENT_VERSION='20261009-frontmatch-source-authority-v8';
 
   var PRODUCT_SECTIONS=Object.freeze([
     {key:'home|home_1',page:'home',section:'home_1',label:'홈 · home_1'},{key:'home|home_2',page:'home',section:'home_2',label:'홈 · home_2'},{key:'home|home_3',page:'home',section:'home_3',label:'홈 · home_3'},{key:'home|home_4',page:'home',section:'home_4',label:'홈 · home_4'},{key:'home|home_5',page:'home',section:'home_5',label:'홈 · home_5'},{key:'home|home_6',page:'home',section:'home_6',label:'홈 · Home 6 (웹툰·서적·전자책)'},{key:'home|home_right_top',page:'home',section:'home_right_top',label:'홈 · 우측 상단 (지식·건강·생활)'},{key:'home|home_right_middle',page:'home',section:'home_right_middle',label:'홈 · 우측 중단 (자동차·아웃도어)'},{key:'home|home_right_bottom',page:'home',section:'home_right_bottom',label:'홈 · 우측 하단 (리빙·책방·기타)'},
