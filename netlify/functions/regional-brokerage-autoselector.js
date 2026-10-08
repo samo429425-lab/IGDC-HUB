@@ -1118,9 +1118,23 @@ function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
     "요청하신 상품을 찾을 수 없습니다",
     "해당 상품은 판매하지 않습니다",
     "판매중지된 상품",
+    "페이지를 찾을 수 없습니다",
+    "요청하신 페이지를 찾을 수 없습니다",
+    "존재하지 않는 페이지",
+    "페이지가 존재하지 않습니다",
+    "해당 페이지가 존재하지 않습니다",
+    "상품이 존재하지 않습니다",
+    "해당 상품이 존재하지 않습니다",
+    "존재하지 않는 상품입니다",
+    "삭제된 상품입니다",
+    "현재 판매중인 상품이 아닙니다",
     "product not found",
     "this product is no longer available",
-    "item not found"
+    "item not found",
+    "page not found",
+    "404 not found",
+    "the page you requested could not be found",
+    "this page does not exist"
   ];
   const matched=explicitInvalid.find((phrase)=>body.includes(phrase));
   if(matched) return {invalid:true,reason:"product_page_explicit_invalid_message",detail:matched};
