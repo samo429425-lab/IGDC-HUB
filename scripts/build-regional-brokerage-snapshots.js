@@ -296,6 +296,51 @@ function incomingCommerceHookIntent() {
 // SearchBank document. Validate that every clicked candidate is present in the
 // authoritative publication queue, but keep the complete queue intact so the
 // canonical publisher can rebuild all unchanged sections alongside the delta.
+const ADMIN_SELECTION_NONPUBLIC_STATUSES = new Set([
+  "blocked_structural",
+  "deferred_duplicate_product",
+  "deferred_section_capacity"
+]);
+
+function queueCandidateId(entry) {
+  const candidate = entry && entry.candidate || {};
+  return String(candidate.id || entry && entry.candidateId || "").trim();
+}
+function queuePublicationStatus(entry) {
+  const request = entry && entry.publicationRequest || {};
+  const assignment = entry && entry.assignment || {};
+  return String(request.status || assignment.publicationStatus || "").trim().toLowerCase();
+}
+function compactCommerceSelection(selection) {
+  selection = selection && typeof selection === "object" ? selection : {};
+  const held = Array.isArray(selection.heldCandidates) ? selection.heldCandidates : [];
+  const statusCounts = {};
+  for (const row of held) {
+    const status = String(row && row.status || "unknown");
+    statusCounts[status] = Number(statusCounts[status] || 0) + 1;
+  }
+  return {
+    applied: selection.applied === true,
+    selectedCount: Number(selection.selectedCount || 0),
+    authoritativeCount: Number(selection.authoritativeCount || 0),
+    admittedCount: Array.isArray(selection.admittedCandidateIds) ? selection.admittedCandidateIds.length : 0,
+    heldCount: held.length,
+    heldStatusCounts: statusCounts,
+    heldSample: held.slice(0, 12),
+    hardMissingCount: Array.isArray(selection.missingCandidateIds) ? selection.missingCandidateIds.length : 0,
+    hardMissingSample: Array.isArray(selection.missingCandidateIds) ? selection.missingCandidateIds.slice(0, 12) : [],
+    fullQueuePreserved: selection.fullQueuePreserved === true,
+    buildBlocked: selection.buildBlocked === true
+  };
+}
+
+// A section/single-section Front Match is a delta request, not a replacement
+// SearchBank document.  Registry intentionally normalizes the publication set:
+// structurally broken rows are held, exact-product duplicates are represented by
+// one canonical candidate, and rows beyond a physical section capacity remain
+// private.  Those deliberate holds are NOT identity loss.  Only a clicked ID
+// that disappeared from the complete private queue (or has an unrecognized
+// non-publication status) is a hard deployment error.
 function validateExplicitCommerceSelection(upstream, intent) {
   const selectedIds = Array.from(new Set((Array.isArray(intent && intent.candidateIds) ? intent.candidateIds : []).map(value => String(value || "").trim()).filter(Boolean))).slice(0,1800);
   const applicable = !!(
@@ -304,31 +349,49 @@ function validateExplicitCommerceSelection(upstream, intent) {
     selectedIds.length
   );
   const authoritativeItems = Array.isArray(upstream && upstream.doc && upstream.doc.items) ? upstream.doc.items : [];
+  const allQueueItems = Array.isArray(upstream && upstream.allQueueItems) ? upstream.allQueueItems : authoritativeItems;
   if (!applicable) {
-    return { applied:false, selectedCandidateIds:selectedIds, selectedCount:selectedIds.length, authoritativeCount:authoritativeItems.length, fullQueuePreserved:true, missingCandidateIds:[] };
+    return { applied:false, selectedCandidateIds:selectedIds, selectedCount:selectedIds.length, authoritativeCount:authoritativeItems.length, fullQueuePreserved:true, missingCandidateIds:[], heldCandidateIds:[], heldCandidates:[], admittedCandidateIds:[], rejectedCandidateIds:[], buildBlocked:false };
   }
-  const authoritativeIds = new Set(authoritativeItems.map(entry => {
-    const candidate = entry && entry.candidate || {};
-    return String(candidate.id || entry && entry.candidateId || "").trim();
-  }).filter(Boolean));
-  const missingCandidateIds = selectedIds.filter(id => !authoritativeIds.has(id));
-  // Do not abort the entire Netlify deployment when a clicked candidate was
-  // rejected by the authoritative publication queue.  The Supabase-backed
-  // administrator master board remains the source of truth for placement, but
-  // only candidates that the registry sync actually admitted are materialized
-  // into SearchBank/Snapshots.  Missing IDs are reported for diagnostics and
-  // remain unpublished; they must never make the build roll back or rewrite the
-  // administrator ledger.
+  const authoritativeIds = new Set(authoritativeItems.map(queueCandidateId).filter(Boolean));
+  const allById = new Map(allQueueItems.map(entry => [queueCandidateId(entry), entry]).filter(pair => pair[0]));
+  const admittedCandidateIds = [];
+  const heldCandidates = [];
+  const hardMissingCandidateIds = [];
+  for (const id of selectedIds) {
+    if (authoritativeIds.has(id)) {
+      admittedCandidateIds.push(id);
+      continue;
+    }
+    const row = allById.get(id);
+    const status = row ? queuePublicationStatus(row) : "";
+    if (row && ADMIN_SELECTION_NONPUBLIC_STATUSES.has(status)) {
+      const candidate = row.candidate || {};
+      const deferred = candidate.publicationDeferred || {};
+      heldCandidates.push({
+        candidateId:id,
+        status,
+        reason:String(deferred.reason || (row.bridgeValidation && row.bridgeValidation.errors || []).join(",") || status),
+        keptCandidateId:String(deferred.keptCandidateId || "") || null,
+        capacity:Number(deferred.capacity || 0) || null,
+        rank:Number(deferred.rank || 0) || null
+      });
+      continue;
+    }
+    hardMissingCandidateIds.push(id);
+  }
   return {
     applied:true,
     selectedCandidateIds:selectedIds,
     selectedCount:selectedIds.length,
     authoritativeCount:authoritativeItems.length,
     fullQueuePreserved:true,
-    missingCandidateIds,
-    admittedCandidateIds:selectedIds.filter(id => authoritativeIds.has(id)),
-    rejectedCandidateIds:missingCandidateIds,
-    buildBlocked:missingCandidateIds.length>0
+    missingCandidateIds:hardMissingCandidateIds,
+    heldCandidateIds:heldCandidates.map(row => row.candidateId),
+    heldCandidates,
+    admittedCandidateIds,
+    rejectedCandidateIds:hardMissingCandidateIds,
+    buildBlocked:hardMissingCandidateIds.length>0
   };
 }
 
@@ -384,9 +447,8 @@ function loadConfirmedUpstream(commerceRegistrySync) {
     try {
       const queueFile = String(commerceRegistrySync.file || path.join(root, "netlify", "functions", "data", "commerce-candidate-review-queue.v1.json"));
       const queueDoc = readJson(queueFile);
-      const requestedItems = Array.isArray(queueDoc && queueDoc.items)
-        ? queueDoc.items.filter(item => item && item.publicationRequest && item.publicationRequest.requested === true)
-        : [];
+      const allQueueItems = Array.isArray(queueDoc && queueDoc.items) ? queueDoc.items : [];
+      const requestedItems = allQueueItems.filter(item => item && item.publicationRequest && item.publicationRequest.requested === true);
       if (requestedItems.length !== queueMeta.requestedCount) {
         return { ok: false, reason: "authoritative-admin-queue-count-mismatch", mirrors, queueAuthoritative };
       }
@@ -399,6 +461,7 @@ function loadConfirmedUpstream(commerceRegistrySync) {
         doc: Object.assign({}, queueDoc, { queue: queueMeta, items: requestedItems }),
         candidateCount: requestedItems.length,
         queueAuthoritative,
+        allQueueItems,
         authoritativeWithdrawal: requestedItems.length === 0 && explicitAdminWithdrawal,
         mirrors
       };
@@ -841,6 +904,36 @@ function compactProblems(list, limit) {
     truncated: source.length > max
   };
 }
+function compactRegionalReport(report) {
+  report = report && typeof report === "object" ? report : {};
+  const scopes = Array.isArray(report.scopes) ? report.scopes : [];
+  return {
+    version: report.version || null,
+    sourceBank: report.sourceBank || null,
+    canonicalPublicationVerified: report.canonicalPublicationVerified === true,
+    scopeCount: scopes.length,
+    publishedScopeCount: scopes.filter(row => row && row.published === true).length,
+    publishedSnapshotCount: Number(report.publishedSnapshotCount || 0),
+    removedStaleCount: Array.isArray(report.removedStaleSnapshots) ? report.removedStaleSnapshots.length : 0,
+    manifest: report.manifest || null,
+    scopeSample: scopes.slice(0, 10).map(row => ({market:row && row.market || null,region:row && row.region || null,published:row && row.published === true,written:Number(row && row.written || 0),output:row && row.output || null}))
+  };
+}
+function compactIpSlotReport(report) {
+  report = report && typeof report === "object" ? report : {};
+  const outputs = Array.isArray(report.scopedOutputs) ? report.scopedOutputs : [];
+  return {
+    version: report.version || null,
+    status: report.status || null,
+    releaseId: report.releaseId || null,
+    scopedOutputCount: outputs.length,
+    rootFallbackCount: Array.isArray(report.rootFallbacks) ? report.rootFallbacks.length : 0,
+    removedStaleCount: Array.isArray(report.removedStale) ? report.removedStale.length : 0,
+    errors: compactProblems(report.errors || [], 12),
+    manifest: report.manifest || null,
+    outputSample: outputs.slice(0, 12).map(row => ({page:row && row.page || null,country:row && row.country || null,region:row && row.region || null,cardCount:Number(row && row.cardCount || 0),path:row && row.path || null}))
+  };
+}
 
 async function main() {
   const incomingCommerceIntent = incomingCommerceHookIntent();
@@ -1021,12 +1114,19 @@ async function main() {
   const incomingCommerceSelection = validateExplicitCommerceSelection(upstream, incomingCommerceIntent);
   if (incomingCommerceSelection.buildBlocked === true) {
     const error = new Error(
-      "Administrator Front Match selection is not present in the authoritative publication queue: " +
+      "Administrator Front Match selection is not present in the complete authoritative/private queue: " +
       JSON.stringify(incomingCommerceSelection.missingCandidateIds || [])
     );
     error.code = "ADMIN_FRONT_SELECTION_NOT_IN_AUTHORITATIVE_QUEUE";
-    error.details = incomingCommerceSelection;
+    error.details = compactCommerceSelection(incomingCommerceSelection);
     throw error;
+  }
+  if (Array.isArray(incomingCommerceSelection.heldCandidates) && incomingCommerceSelection.heldCandidates.length) {
+    console.warn(
+      "Administrator Front Match normalized " + incomingCommerceSelection.heldCandidates.length +
+      " selected row(s) without aborting the release: " +
+      JSON.stringify(compactCommerceSelection(incomingCommerceSelection))
+    );
   }
 
   // Registry bridge performs the final board QA.  A Front Match with a broken
@@ -1369,7 +1469,7 @@ async function main() {
   process.stdout.write(JSON.stringify({
     commerceRegistrySync,
     incomingCommerceIntent,
-    incomingCommerceSelection,
+    incomingCommerceSelection: compactCommerceSelection(incomingCommerceSelection),
     upstream: { candidateCount: upstream.candidateCount, sourceMode: upstream.sourceMode || null, warning: upstream.warning || null, queueAuthoritative, mirrors: upstream.mirrors },
     intake: { releaseGate: intake.releaseGate, summary: intake.summary, releaseItemCount: releaseItems.length },
     publicationInput: { source: publicationBank.source, itemCount: publicationBank.items.length },
@@ -1387,8 +1487,8 @@ async function main() {
     donation: { mode: "independent-runtime-contract-not-touched" },
     snapshotEngine: snapshotEngineReport,
     canonicalToIpVerification,
-    regional: regionalReport,
-    ipSlots: ipSlotReport,
+    regional: compactRegionalReport(regionalReport),
+    ipSlots: compactIpSlotReport(ipSlotReport),
     ipSlotVerification,
     rootFallbackVerification
   }, null, 2) + "\n");

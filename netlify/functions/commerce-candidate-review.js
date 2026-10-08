@@ -20,8 +20,8 @@ const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_directo
 const APPROVE_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director"]);
 const SUBMIT_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager","commerce_member"]);
 const SLOT_KEYS = Object.freeze({
-  home:new Set(["home_1","home_2","home_3","home_4","home_5","home_right_top","home_right_middle","home_right_bottom"]),
-  distribution:new Set(["distribution-recommend","distribution-sponsor","distribution-trending","distribution-new","distribution-special","distribution-others","distribution-right"]),
+  home:new Set(["home_1","home_2","home_3","home_4","home_5","home_6","home_right_top","home_right_middle","home_right_bottom"]),
+  distribution:new Set(["distribution-recommend","distribution-sponsor","distribution-trending","distribution-new","distribution-special","distribution-others","distribution-extra","distribution-right"]),
   network:new Set(["network-right"]),
   social:new Set(["rightPanel"]),
   tour:new Set(["tour"])

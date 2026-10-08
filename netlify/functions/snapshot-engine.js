@@ -291,12 +291,50 @@ function sectionSlotLimit(pageName, sectionKey, fallback) {
 
 function urlOfSnapshotItem(item) {
   if (!item || typeof item !== "object") return "";
-  return String(item.url || item.link || item.href || item.video || item.videoUrl || "").trim();
+  return String(
+    item.affiliateOutboundUrl ||
+    item.affiliate_outbound_url ||
+    item.externalOutboundUrl ||
+    item.external_outbound_url ||
+    item.externalProductUrl ||
+    item.officialProductUrl ||
+    item.productUrl ||
+    item.product_url ||
+    item.productPageUrl ||
+    item.detailUrl ||
+    item.checkoutUrl ||
+    item.purchaseUrl ||
+    item.orderUrl ||
+    item.productLink ||
+    item.displayUrl ||
+    item.sourceUrl ||
+    item.source_url ||
+    item.targetUrl ||
+    item.target_url ||
+    item.outboundUrl ||
+    item.outbound_url ||
+    item.url ||
+    item.link ||
+    item.href ||
+    item.video ||
+    item.videoUrl ||
+    ""
+  ).trim();
 }
 
 function imageOfSnapshotItem(item) {
   if (!item || typeof item !== "object") return "";
-  return String(item.thumbnail || item.thumb || item.image || item.poster || "").trim();
+  return String(
+    item.imageUrl ||
+    item.imageOriginalUrl ||
+    item.thumbnailUrl ||
+    item.thumbnail_url ||
+    item.thumbnail ||
+    item.thumb ||
+    item.image ||
+    item.poster ||
+    ""
+  ).trim();
 }
 
 function isPlaceholderUrlValue(url) {
@@ -423,12 +461,8 @@ function normalizeLimitCard(raw, context = {}) {
     id,
     title: raw.title || raw.name || "Untitled",
     summary: raw.summary || "",
-    url: raw.url || raw.link || "#",
-    thumb:
-      raw.thumbnail ||
-      raw.thumb ||
-      raw.image ||
-      "/assets/img/placeholder.png",
+    url: urlOfSnapshotItem(raw) || "#",
+    thumb: imageOfSnapshotItem(raw) || "/assets/img/placeholder.png",
     priority: raw.priority || raw.score || 0,
     ...buildTrackingMeta(raw, {
       ...context,
@@ -886,12 +920,8 @@ function mergeItems(snapshot, sectionKey, items, slotLimit) {
       id,
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
-      url: item.url || item.link || "#",
-      thumb:
-        item.thumbnail ||
-        item.thumb ||
-        item.image ||
-        "/assets/img/placeholder.png",
+      url: urlOfSnapshotItem(item) || "#",
+      thumb: imageOfSnapshotItem(item) || "/assets/img/placeholder.png",
       priority: item.priority || item.score || 0,
       ...buildTrackingMeta(item, {
         id,
@@ -999,7 +1029,7 @@ const card = enrichSnapshotCard({
   id,
   title: item.title || item.name || "Untitled",
   summary: item.summary || "",
-  url: item.url || item.link || "#",
+  url: urlOfSnapshotItem(item) || "#",
   thumb:
     item.thumbnail ||
     item.thumb ||
@@ -1077,7 +1107,7 @@ function handleNetworkSnapshot(bank) {
       id,
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
-      url: item.url || item.link || "#",
+      url: urlOfSnapshotItem(item) || "#",
       thumb:
         item.thumb ||
         item.thumbnail ||
@@ -1150,12 +1180,8 @@ REQUIRED_SECTION_KEYS.forEach(key => {
       id: item.id || stableId(JSON.stringify(item)),
       title: item.title || item.name || "Untitled",
       summary: item.summary || "",
-      url: item.url || item.link || "#",
-      thumb:
-        item.thumbnail ||
-        item.thumb ||
-        item.image ||
-        "/assets/img/placeholder.png",
+      url: urlOfSnapshotItem(item) || "#",
+      thumb: imageOfSnapshotItem(item) || "/assets/img/placeholder.png",
       price: item.price || "",
       currency: item.currency || "USD",
       priority: item.priority || item.score || 0,
@@ -1231,6 +1257,11 @@ REQUIRED_SECTION_KEYS.forEach(key => {
       "dist_4": "distribution-new", "dist4": "distribution-new", "distribution_4": "distribution-new", "distribution4": "distribution-new", "distribution-special": "distribution-special",
       "dist_5": "distribution-special", "dist5": "distribution-special", "distribution_5": "distribution-special", "distribution5": "distribution-special", "distribution-sponsor": "distribution-sponsor",
       "dist_6": "distribution-others", "dist6": "distribution-others", "distribution_6": "distribution-others", "distribution6": "distribution-others", "distribution-others": "distribution-others",
+      "distribution-extra": "distribution-extra",
+      "dist_8": "distribution-extra",
+      "dist8": "distribution-extra",
+      "distribution_8": "distribution-extra",
+      "distribution8": "distribution-extra",
       "dist_7": "distribution-right", "dist7": "distribution-right", "distribution_7": "distribution-right", "distribution7": "distribution-right", "distribution-right": "distribution-right"
     };
     return MAP[rawSectionKey] || rawSectionKey;
@@ -1302,6 +1333,13 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   "distribution_6": "distribution-others",
   "distribution6": "distribution-others",
   "distribution-others": "distribution-others",
+
+  // ===== extra / outdoor / food =====
+  "distribution-extra": "distribution-extra",
+  "dist_8": "distribution-extra",
+  "dist8": "distribution-extra",
+  "distribution_8": "distribution-extra",
+  "distribution8": "distribution-extra",
 
   // ===== right =====
   "dist_7": "distribution-right",
@@ -1459,7 +1497,7 @@ function handleSocialSnapshot(bank) {
         title: item.title || item.name || "Untitled",
         description: item.description || item.summary || "",
         summary: item.summary || "",
-        url: item.url || item.link || "#",
+        url: urlOfSnapshotItem(item) || "#",
         link: item.link || item.url || "#",
         href: item.href || item.url || item.link || "#",
         thumb:
@@ -1801,7 +1839,7 @@ function handleTourSnapshot(bank) {
       title: item.title || item.name || "",
       thumb: buildTourThumbnail(item),
       link: item.link || item.url || "#",
-      url: item.url || item.link || "#",
+      url: urlOfSnapshotItem(item) || "#",
       priority: item.priority || item.score || 0,
       createdAt: item.createdAt || item.timestamp || 0,
       ...buildTrackingMeta(item, {
