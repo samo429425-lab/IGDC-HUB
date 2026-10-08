@@ -322,24 +322,34 @@ exports.handler=async function(event){
         batchResult={ok:true,status:"empty",action:operation==="match"?"request_publication_batch":"request_unpublication_batch",requested:0,queued:0,persisted:0,pendingBuild:0,blocked:0,items:[],release:{queued:false,reason:"no_selected_products"}};
       }else if(operation==="match"){
         // ADMIN -> FRONT ONE-WAY AUTHORITY.
-        // The administrator board is the publication source of truth.  If the
-        // Admin page already has a clickable product URL, thumbnail and placement,
-        // Front Match must publish that exact candidate record.  Do not re-scrape,
-        // re-classify, auto-withdraw or filter it with a second Front-only rule.
-        refresh={ok:true,status:"administrator_record_authoritative",requested:plan.targets.length,revalidated:0,remoteChecked:0,freshReused:0,invalid:0,inconclusive:0,withdrawn:0,administratorLedgerPreserved:true,frontRevalidationSkipped:true};
-        const preparation=await Automation.prepareProductFrontTargets(actorId,request,plan.targets,loadedJob);
+        // Placement/title/image/product URL still come only from the administrator
+        // board, but the exact seller detail URL must exist at publication time.
+        // Revalidate that exact URL without reclassifying or rewriting Admin.
+        // Only hard failures (404/410, explicit unavailable page, seller-home
+        // redirect, domain mismatch, etc.) are withheld; temporary 403/429/5xx
+        // remains inconclusive and does not destroy a valid administrator choice.
+        refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets,{includePublishedScope:false});
+        refresh=Object.assign({},refresh,{status:"administrator_exact_url_revalidated",administratorLedgerPreserved:true,frontRevalidationSkipped:false});
+        const runtimeInvalidRows=(Array.isArray(refresh&&refresh.results)?refresh.results:[]).filter((row)=>row&&row.invalid===true);
+        const runtimeInvalidIds=new Set(runtimeInvalidRows.map((row)=>text(row&&row.candidateId)).filter(Boolean));
+        const publishTargets=plan.targets.filter((row)=>!runtimeInvalidIds.has(text(row&&row.candidateId)));
+        if(Array.isArray(refresh&&refresh.withdrawAssignments)&&refresh.withdrawAssignments.length){
+          repairUnpublish=await frontPublicationWithdrawAssignmentsOnly(refresh.withdrawAssignments,actorId);
+        }
+        const preparation=await Automation.prepareProductFrontTargets(actorId,request,publishTargets,loadedJob);
+        const runtimeBlockedItems=runtimeInvalidRows.map((row)=>({candidateId:text(row&&row.candidateId),status:"blocked",queued:false,persisted:false,pendingBuild:false,reason:"runtime_product_unavailable",reasons:Array.isArray(row&&row.reasons)?row.reasons:[],administratorLedgerPreserved:true}));
         const preparedIds=Array.isArray(preparation&&preparation.preparedCandidateIds)?preparation.preparedCandidateIds.slice():[];
         const preparedSet=new Set(preparedIds.map(text).filter(Boolean));
         const preparationBlocked=(Array.isArray(preparation&&preparation.items)?preparation.items:[]).filter((item)=>item&&item.status==="blocked"&&!preparedSet.has(text(item.candidateId)));
         const repairItems=Array.isArray(repairUnpublish&&repairUnpublish.items)?repairUnpublish.items:[];
         if(!preparedIds.length){
-          const items=repairItems.concat(preparationBlocked);
+          const items=repairItems.concat(runtimeBlockedItems,preparationBlocked);
           const persisted=items.filter((item)=>item&&item.persisted===true).length;
           const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
           batchResult={ok:true,status:persisted?"pending_finalize":(blocked?"blocked":"empty"),action:"prepare_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild:persisted,blocked,items,release:{queued:false,reason:persisted?"deferred_single_build_finalize":"no_front_ready_products"},preparation,refresh,repairUnpublish};
         }else if(request.deferRelease===true){
           const preparedItems=Array.isArray(preparation&&preparation.items)?preparation.items:[];
-          const items=repairItems.concat(preparationBlocked,preparedItems.filter((item)=>item&&item.status!=="blocked"));
+          const items=repairItems.concat(runtimeBlockedItems,preparationBlocked,preparedItems.filter((item)=>item&&item.status!=="blocked"));
           const persisted=items.filter((item)=>item&&item.persisted===true).length;
           const blocked=items.filter((item)=>item&&(item.status==="blocked"||item.status==="unpublish_failed")).length;
           batchResult={ok:true,status:persisted?(blocked?"partial":"pending_finalize"):(blocked?"blocked":"empty"),action:"prepare_publication_batch",requested:plan.targets.length,queued:0,persisted,pendingBuild:persisted,blocked,items,preparation,refresh,repairUnpublish,release:{queued:false,reason:"deferred_single_build_finalize"},automaticPublication:false,publicSnapshotConfirmed:false,buildVerificationRequired:true};
@@ -347,7 +357,7 @@ exports.handler=async function(event){
           const liveDoc=await CandidateReview.stage(process.cwd());
           const publishResult=await ProductGoLiveAudit.requestPublicationBatch(event,actor,{mode:"production",confirmation:text(body.confirmation),candidateIds:preparedIds,preparedByFrontLifecycle:true},scope,liveDoc);
           const publishItems=Array.isArray(publishResult&&publishResult.items)?publishResult.items:[];
-          const items=repairItems.concat(preparationBlocked,publishItems);
+          const items=repairItems.concat(runtimeBlockedItems,preparationBlocked,publishItems);
           const queued=items.filter((item)=>item&&item.queued===true).length;
           const persisted=items.filter((item)=>item&&item.persisted===true).length;
           const pendingBuild=items.filter((item)=>item&&item.pendingBuild===true).length;

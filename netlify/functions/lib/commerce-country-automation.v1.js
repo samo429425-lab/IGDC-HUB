@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.31.0-admin-record-is-front-authority";
+const VERSION = "commerce-country-automation-v3.32.0-admin-exact-url-live-check";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -4033,8 +4033,19 @@ function candidateRuntimeCard(payloadInput, productInput) {
   const payload = plain(payloadInput), product = plain(productInput), prior = plain(payload.productCard), url = productUrl(product), image = productImageUrl(product), title = first(product.productName, product.title, prior.title), supplierUrl = safeUrl(first(product.supplierSiteUrl, prior.supplierUrl)), supplierName = first(product.supplierName, prior.supplierName);
   return Object.assign({}, prior, { title, sourceTitle:first(product.sourceTitle, prior.sourceTitle, title), checkoutUrl:url, productUrl:url, image, imageUrl:image, price:first(product.price, prior.price), priceCurrency:first(product.priceCurrency, prior.priceCurrency), availability:first(product.availability, prior.availability), supplierName, supplierUrl });
 }
+function authoritativeRuntimeProduct(productInput, targetInput) {
+  const product = Object.assign({}, plain(productInput)), target = plain(targetInput);
+  if (target.administratorBoardAuthority !== true) return product;
+  const title = text(target.administratorTitle), url = safeUrl(target.administratorProductUrl), image = safeUrl(target.administratorImageUrl);
+  if (title) { product.productName = title; product.title = title; product.sourceTitle = title; }
+  if (url) { product.productUrl = url; product.externalProductUrl = url; product.url = url; product.checkoutUrl = url; product.detailUrl = url; }
+  if (image) { product.imageUrl = image; product.imageOriginalUrl = image; product.image = image; product.thumb = image; product.thumbnail = image; }
+  product.administratorRuntimeAuthority = true;
+  return product;
+}
 async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, optionsInput) {
   const scope = researchScope(input), actor = text(actorId) || "administrator", options = plain(optionsInput), ids = Array.from(new Set(array(candidateIdsInput).map(text).filter(Boolean))).slice(0, 500);
+  const authoritativeTargets = new Map(array(options.authoritativeTargets).map((row)=>[text(row&&row.candidateId),plain(row)]).filter((pair)=>pair[0]));
   const validationOnly = options.reassign === false, forceSelectedAi = options.forceSelectedAi === true;
   const rebalance = options.rebalance === true, suppliedBalanceCounts = Object.keys(plain(options.balanceCounts)).length > 0;
   let workingCounts = normalizeProductSectionCounts(options.balanceCounts);
@@ -4058,11 +4069,12 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
   const inspectInputs = [], missingProducts = new Set(), reusedFreshById = new Map();
   const reuseFreshValidation = options.reuseFreshValidation === true, freshValidationMinutes = Math.max(5, Math.min(1440, Number(options.freshValidationMinutes) || 720));
   for (const id of ids) {
-    const row = rowById.get(id), product = candidateRuntimeProduct(row, scope);
+    const row = rowById.get(id), target = authoritativeTargets.get(id), baseProduct = candidateRuntimeProduct(row, scope), product = baseProduct ? authoritativeRuntimeProduct(baseProduct, target) : null;
     if (!row || !product) { missingProducts.add(id); continue; }
     product.candidateId = id; product.id = id;
     const fresh = reuseFreshValidation ? candidateRuntimeFreshValidation(plain(row.source_payload), product, freshValidationMinutes) : {ok:false};
-    if (fresh.ok) reusedFreshById.set(id, Object.assign({}, product, { candidateId:id, id:id, runtimeFreshReuse:true, runtimeFreshVerifiedAt:fresh.verifiedAt }));
+    const sameVerifiedProduct = target && target.administratorBoardAuthority === true ? candidateRuntimePriorLiveProof(plain(row.source_payload), product).ok : true;
+    if (fresh.ok && sameVerifiedProduct) reusedFreshById.set(id, Object.assign({}, product, { candidateId:id, id:id, runtimeFreshReuse:true, runtimeFreshVerifiedAt:fresh.verifiedAt }));
     else inspectInputs.push(product);
   }
   const inspectedById = new Map(reusedFreshById);
@@ -4074,7 +4086,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
   }
   const results = [], withdrawAssignments = [], withdrawCandidateIds = new Set();
   for (const id of ids) {
-    const row = plain(rowById.get(id)), existingPayload = Object.assign({}, plain(row.source_payload)), sourceProduct = candidateRuntimeProduct(row, scope), inspectedRaw = plain(inspectedById.get(id));
+    const row = plain(rowById.get(id)), existingPayload = Object.assign({}, plain(row.source_payload)), target = authoritativeTargets.get(id), baseSourceProduct = candidateRuntimeProduct(row, scope), sourceProduct = baseSourceProduct ? authoritativeRuntimeProduct(baseSourceProduct, target) : null, inspectedRaw = plain(inspectedById.get(id));
     const activeAssignments = array(assignmentByCandidate.get(id)).filter((assignment) => normalizeCountry(assignment && assignment.country_code) === scope.country && frontSyncExpectedRegion(assignment, scope.country) === scope.region && candidateRuntimePublishedStatus(assignment && assignment.publication_status));
     if (!Object.keys(row).length || !sourceProduct) {
       for (const assignment of activeAssignments) { withdrawAssignments.push({ candidateId:id, assignmentId:text(assignment.id), sectionKey:candidateRuntimeAssignmentKey(assignment), reason:"candidate_product_reference_missing" }); withdrawCandidateIds.add(id); }
@@ -4391,7 +4403,7 @@ async function revalidateProductFrontTargets(actorId, input, targetsInput, optio
   // exact 20-section assignment selected on the administrator screen; only a
   // hard runtime failure may hold/withdraw the product. AI reclassification is
   // reserved for the explicit AI placement controls.
-  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:false, reuseFreshValidation:input&&input.reuseFreshValidation===true, freshValidationMinutes:Number(input&&input.freshValidationMinutes)||720 });
+  const result = await revalidateCandidateLedgerRows(actorId, input, ids, { source:options.includePublishedScope === true ? "front_apply_scope_refresh" : "front_apply_final_check", reassign:false, reuseFreshValidation:input&&input.reuseFreshValidation===true, freshValidationMinutes:Number(input&&input.freshValidationMinutes)||720, authoritativeTargets:array(targetsInput) });
   return Object.assign({}, result, { selectedRequested:selectedIds.length, publishedScopeRequested:publishedIds.length, scopeRefresh:options.includePublishedScope === true });
 }
 const PRODUCT_AI_QUEUE_SYNC_BATCH = 10;
