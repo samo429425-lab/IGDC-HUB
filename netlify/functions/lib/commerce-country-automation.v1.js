@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.32.0-admin-exact-url-live-check";
+const VERSION = "commerce-country-automation-v3.33.0-admin-product-origin-authority";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -4033,12 +4033,37 @@ function candidateRuntimeCard(payloadInput, productInput) {
   const payload = plain(payloadInput), product = plain(productInput), prior = plain(payload.productCard), url = productUrl(product), image = productImageUrl(product), title = first(product.productName, product.title, prior.title), supplierUrl = safeUrl(first(product.supplierSiteUrl, prior.supplierUrl)), supplierName = first(product.supplierName, prior.supplierName);
   return Object.assign({}, prior, { title, sourceTitle:first(product.sourceTitle, prior.sourceTitle, title), checkoutUrl:url, productUrl:url, image, imageUrl:image, price:first(product.price, prior.price), priceCurrency:first(product.priceCurrency, prior.priceCurrency), availability:first(product.availability, prior.availability), supplierName, supplierUrl });
 }
+function runtimeProductOrigin(value) {
+  const url=safeUrl(value);if(!url)return"";
+  try{return new URL(url).origin+"/";}catch(_e){return"";}
+}
+function runtimeSameSellerSite(leftInput,rightInput){
+  const left=safeUrl(leftInput),right=safeUrl(rightInput);if(!left||!right)return false;
+  try{
+    const a=new URL(left).hostname.toLowerCase().replace(/^www\./,""),b=new URL(right).hostname.toLowerCase().replace(/^www\./,"");
+    return !!a&&!!b&&(a===b||a.endsWith("."+b)||b.endsWith("."+a));
+  }catch(_e){return false;}
+}
+function authoritativeRuntimeSupplierUrl(targetInput,productUrlInput,fallbackInput){
+  const target=plain(targetInput),productUrl=safeUrl(productUrlInput),adminSupplier=safeUrl(target.administratorSupplierUrl),fallback=safeUrl(fallbackInput);
+  if(!productUrl)return adminSupplier||fallback;
+  if(adminSupplier&&runtimeSameSellerSite(adminSupplier,productUrl))return adminSupplier;
+  if(fallback&&runtimeSameSellerSite(fallback,productUrl))return fallback;
+  return runtimeProductOrigin(productUrl);
+}
 function authoritativeRuntimeProduct(productInput, targetInput) {
   const product = Object.assign({}, plain(productInput)), target = plain(targetInput);
   if (target.administratorBoardAuthority !== true) return product;
   const title = text(target.administratorTitle), url = safeUrl(target.administratorProductUrl), image = safeUrl(target.administratorImageUrl);
   if (title) { product.productName = title; product.title = title; product.sourceTitle = title; }
-  if (url) { product.productUrl = url; product.externalProductUrl = url; product.url = url; product.checkoutUrl = url; product.detailUrl = url; }
+  if (url) {
+    product.productUrl = url; product.externalProductUrl = url; product.url = url; product.checkoutUrl = url; product.detailUrl = url;
+    // The current administrator product detail URL is publication authority.
+    // Historical discovery metadata may carry a stale/wrong supplierSiteUrl.
+    // Validate against the current product host, never against that stale host.
+    const supplierUrl=authoritativeRuntimeSupplierUrl(target,url,product.supplierSiteUrl);
+    if(supplierUrl){product.supplierSiteUrl=supplierUrl;product.supplierUrl=supplierUrl;}
+  }
   if (image) { product.imageUrl = image; product.imageOriginalUrl = image; product.image = image; product.thumb = image; product.thumbnail = image; }
   product.administratorRuntimeAuthority = true;
   return product;
@@ -4749,11 +4774,11 @@ async function frontSyncUpsert(table, rowsInput, conflictColumns) {
 }
 const FRONT_AUTHORITY_NOTE_PREFIX = "IGDC_FRONT_AUTHORITY_V1:";
 function frontAuthorityEnvelopeNote(candidateId,targetInput,scopeInput,splitInput,actor,stamp){
-  const target=plain(targetInput),scope=plain(scopeInput),split=plain(splitInput);
+  const target=plain(targetInput),scope=plain(scopeInput),split=plain(splitInput),productUrl=safeUrl(target.administratorProductUrl);
   const envelope={
     schema:"igdc-front-authority-envelope.v1",authoritative:true,candidateId:text(candidateId),
-    title:text(target.administratorTitle),productUrl:safeUrl(target.administratorProductUrl),imageUrl:safeUrl(target.administratorImageUrl),
-    supplierName:text(target.administratorSupplierName),supplierUrl:safeUrl(target.administratorSupplierUrl),
+    title:text(target.administratorTitle),productUrl:productUrl,imageUrl:safeUrl(target.administratorImageUrl),
+    supplierName:text(target.administratorSupplierName),supplierUrl:authoritativeRuntimeSupplierUrl(target,productUrl,target.administratorSupplierUrl),
     price:target.administratorPrice==null?null:target.administratorPrice,priceCurrency:text(target.administratorPriceCurrency),availability:target.administratorAvailability==null?null:target.administratorAvailability,
     page:text(split.page),section:text(split.sectionKey),sectionKey:text(split.sectionKey),
     country:normalizeCountry(scope.country),region:normalizeRegion(scope.region||"NATIONWIDE",scope.country)||"NATIONWIDE",
