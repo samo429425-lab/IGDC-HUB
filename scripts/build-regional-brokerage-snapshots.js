@@ -568,7 +568,12 @@ function verifyPublishedRootSampleFallbacks(ipSlotReport) {
   return { ok: problems.length === 0, summary, problems };
 }
 function cardDestination(card) {
-  return String(card && (card.affiliateOutboundUrl || card.externalOutboundUrl || card.externalProductUrl || card.officialProductUrl || card.productUrl || card.productPageUrl || card.detailUrl || card.checkoutUrl || card.purchaseUrl || card.orderUrl || card.productLink || card.displayUrl || card.sourceUrl || card.targetUrl || card.outboundUrl || card.url || card.href || card.link) || "").trim();
+  if (!card || typeof card !== "object") return "";
+  const authority=card.administratorFrontMatchAuthority&&typeof card.administratorFrontMatchAuthority==="object"?card.administratorFrontMatchAuthority:{};
+  const review=card.commerceCandidatePublication&&card.commerceCandidatePublication.review&&typeof card.commerceCandidatePublication.review==="object"?card.commerceCandidatePublication.review:{};
+  const direct=String(card.externalProductUrl||card.officialProductUrl||card.productUrl||card.productPageUrl||card.detailUrl||card.checkoutUrl||card.purchaseUrl||card.orderUrl||card.productLink||card.displayUrl||"").trim();
+  if((authority.verified===true||review.explicitPublicationRequested===true)&&direct)return direct;
+  return String(card.affiliateOutboundUrl||card.externalOutboundUrl||direct||card.sourceUrl||card.targetUrl||card.outboundUrl||card.url||card.href||card.link||"").trim();
 }
 function cardImage(card) {
   return String(card && (card.image || card.imageUrl || card.image_url || card.imageOriginalUrl || card.thumb || card.thumbnail || card.thumbnailUrl || card.thumbnail_url) || "").trim();
