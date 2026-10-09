@@ -22,7 +22,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const SlotOverlay = require("./sample-slot-overlay.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.4-admin-ready-identity-continuity";
+const VERSION = "canonical-ip-slot-snapshot-publisher-v1.5.5-admin-direct-product-route";
 const MANIFEST_FILE = "ip-slot-manifest.json";
 const AUTO_ROOT = ["data", "auto"];
 const ROUTES = Object.freeze({
@@ -151,16 +151,25 @@ function cloneCard(item) {
         productCard.image_url ||
         productCard.thumbnail_url),
   );
+  const adminAuthority = item && item.administratorFrontMatchAuthority && typeof item.administratorFrontMatchAuthority === "object"
+    ? item.administratorFrontMatchAuthority : {};
+  const adminReview = item && item.commerceCandidatePublication && item.commerceCandidatePublication.review && typeof item.commerceCandidatePublication.review === "object"
+    ? item.commerceCandidatePublication.review : {};
+  const explicitAdmin = adminAuthority.verified === true || adminReview.explicitPublicationRequested === true;
+  const directProductUrl = text(item && (
+    item.externalProductUrl || item.officialProductUrl || item.productUrl || item.product_url ||
+    item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl ||
+    item.orderUrl || item.productLink || item.displayUrl ||
+    productCard.checkoutUrl || productCard.purchaseUrl || productCard.orderUrl ||
+    productCard.externalProductUrl || productCard.officialProductUrl ||
+    productCard.productUrl || productCard.product_url || productCard.productPageUrl || productCard.detailUrl
+  ));
   const productUrl = text(
+    explicitAdmin && directProductUrl ? directProductUrl :
     item && (
-      item.affiliateOutboundUrl || item.externalOutboundUrl ||
-      item.externalProductUrl || item.officialProductUrl || item.productUrl || item.product_url ||
-      item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl ||
-      item.orderUrl || item.productLink || item.displayUrl || item.sourceUrl || item.source_url ||
-      item.targetUrl || item.target_url || item.outboundUrl || item.outbound_url || item.url || item.link ||
-      productCard.checkoutUrl || productCard.purchaseUrl || productCard.orderUrl ||
-      productCard.externalProductUrl || productCard.officialProductUrl ||
-      productCard.productUrl || productCard.product_url || productCard.productPageUrl || productCard.detailUrl ||
+      item.affiliateOutboundUrl || item.externalOutboundUrl || directProductUrl ||
+      item.sourceUrl || item.source_url || item.targetUrl || item.target_url ||
+      item.outboundUrl || item.outbound_url || item.url || item.link ||
       productCard.sourceUrl || productCard.source_url || productCard.targetUrl || productCard.target_url ||
       productCard.outboundUrl || productCard.outbound_url || productCard.url || productCard.link
     )
@@ -211,6 +220,7 @@ function cloneCard(item) {
     productMapping: clone(item.productMapping || null),
     searchBankContract: clone(item.searchBankContract || item.sanmaruSearchBankContract || item.searchBankUnifiedContract || null),
     commerceCandidatePublication: clone(item.commerceCandidatePublication || null),
+    administratorFrontMatchAuthority: clone(item.administratorFrontMatchAuthority || null),
     outboundRoute: clone(item.outboundRoute || null),
     affiliateOutboundUrl: text(item.affiliateOutboundUrl || "") || undefined,
     externalOutboundUrl: text(item.externalOutboundUrl || "") || undefined,
