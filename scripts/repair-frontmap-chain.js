@@ -163,9 +163,13 @@ function patchSnapshotEngine() {
     // product detail route before affiliate/tracking aliases and centralize
     // section lookup in canonicalSectionOf(). Do not force the legacy URL helper
     // back over that newer contract during every Netlify build.
-    if (patch.label === "canonical URL aliases" &&
-        source.includes("function canonicalSectionOf(item)") &&
-        source.includes("function explicitAdminFrontPublication(item)")) {
+    if (patch.label === "canonical URL aliases" && (
+        (source.includes("function canonicalSectionOf(item)") &&
+         source.includes("function explicitAdminFrontPublication(item)")) ||
+        (source.includes("function sectionOfSnapshotItem(item, fallback)") &&
+         source.includes("function urlOfSnapshotItem(item)") &&
+         source.includes("item.productUrl"))
+      )) {
       continue;
     }
     const result = patch.mode === "all"
@@ -176,7 +180,12 @@ function patchSnapshotEngine() {
   }
 
   mustContain(source, `item.productUrl`, "Snapshot Engine accepts productUrl");
-  mustContain(source, `function canonicalSectionOf(item)`, "Snapshot Engine reads canonical placement section");
+  if (
+    !source.includes("function canonicalSectionOf(item)") &&
+    !source.includes("function sectionOfSnapshotItem(item, fallback)")
+  ) {
+    throw new Error("frontmap invariant missing: Snapshot Engine reads canonical placement section");
+  }
   mustContain(source, `item.imageUrl`, "Snapshot Engine accepts imageUrl");
   mustContain(source, `"distribution-extra": "distribution-extra"`, "distribution-extra canonical map");
   mustContain(source, `"main3": "home_3"`, "home_3 canonical route");
