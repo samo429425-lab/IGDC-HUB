@@ -412,13 +412,14 @@ function makeCard(item, decision, market, region, registry) {
   const affiliate = NonPgRevenue.publicAffiliate(item);
   const outboundRoute = item && item.outboundRoute && typeof item.outboundRoute === "object" ? clone(item.outboundRoute) : null;
   const providerOutbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl) || "";
+  const authority = item && item.administratorFrontMatchAuthority && typeof item.administratorFrontMatchAuthority === "object" ? item.administratorFrontMatchAuthority : {};
+  const review = item && item.commerceCandidatePublication && item.commerceCandidatePublication.review && typeof item.commerceCandidatePublication.review === "object" ? item.commerceCandidatePublication.review : {};
+  const explicitAdmin = authority.verified === true || review.explicitPublicationRequested === true;
   const outboundTrackingUrl = "/.netlify/functions/regional-brokerage-outbound?id=" + encodeURIComponent(id);
-  // The primary navigation URL must remain the exact product/detail URL that
-  // passed administrator and canonical validation.  A generated redirect id is
-  // retained only as an optional tracking route; it must never be the only way
-  // to reach the seller page because a carried snapshot can outlive its old
-  // redirect registry entry.
-  const navigationUrl = providerOutbound || destination;
+  // Administrator Front Match owns the exact seller detail destination.
+  // Provider/affiliate URLs remain metadata/tracking routes and must not replace
+  // the verified product detail page on the public card.
+  const navigationUrl = explicitAdmin ? destination : (providerOutbound || destination);
   registry[id] = {
     id,
     targetUrl: destination,
