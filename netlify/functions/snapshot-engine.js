@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.5-tour-200-admin-authority";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.6-admin-routing-direct-product";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -289,13 +289,33 @@ function sectionSlotLimit(pageName, sectionKey, fallback) {
   return Number.isFinite(n) && n > 0 ? Math.min(hardLimit, Math.max(1, Math.trunc(n))) : hardLimit;
 }
 
+function explicitAdminFrontPublication(item) {
+  const authority = item && item.administratorFrontMatchAuthority && typeof item.administratorFrontMatchAuthority === "object"
+    ? item.administratorFrontMatchAuthority : {};
+  const review = item && item.commerceCandidatePublication && item.commerceCandidatePublication.review && typeof item.commerceCandidatePublication.review === "object"
+    ? item.commerceCandidatePublication.review : {};
+  return authority.verified === true || review.explicitPublicationRequested === true;
+}
+function canonicalSectionOf(item) {
+  item = item || {};
+  const authority = item.administratorFrontMatchAuthority && typeof item.administratorFrontMatchAuthority === "object"
+    ? item.administratorFrontMatchAuthority : {};
+  return String(
+    authority.section ||
+    item?.placement?.section ||
+    item?.placement?.sectionKey ||
+    item?.bind?.section ||
+    item?.bind?.psom_key ||
+    item.psom_key ||
+    item.section ||
+    item.slotKey ||
+    item.category ||
+    ""
+  ).trim();
+}
 function urlOfSnapshotItem(item) {
   if (!item || typeof item !== "object") return "";
-  return String(
-    item.affiliateOutboundUrl ||
-    item.affiliate_outbound_url ||
-    item.externalOutboundUrl ||
-    item.external_outbound_url ||
+  const directProduct = String(
     item.externalProductUrl ||
     item.officialProductUrl ||
     item.productUrl ||
@@ -307,6 +327,15 @@ function urlOfSnapshotItem(item) {
     item.orderUrl ||
     item.productLink ||
     item.displayUrl ||
+    ""
+  ).trim();
+  if (explicitAdminFrontPublication(item) && directProduct) return directProduct;
+  return String(
+    item.affiliateOutboundUrl ||
+    item.affiliate_outbound_url ||
+    item.externalOutboundUrl ||
+    item.external_outbound_url ||
+    directProduct ||
     item.sourceUrl ||
     item.source_url ||
     item.targetUrl ||
@@ -476,13 +505,7 @@ function resolveLimitSectionKey(pageName, raw, sections) {
   const sectionKeys = Object.keys(sections || {});
   if (!sectionKeys.length) return null;
 
-  const rawKey =
-    raw?.psom_key ||
-    raw?.bind?.psom_key ||
-    raw?.bind?.section ||
-    raw?.section ||
-    raw?.category ||
-    null;
+  const rawKey = canonicalSectionOf(raw) || null;
 
   if (!rawKey) return null;
 
@@ -707,6 +730,7 @@ function buildTrackingMeta(raw, context) {
 
   const sectionKey = val(
     context.sectionKey,
+    canonicalSectionOf(raw),
     raw.psom_key,
     raw.psomKey,
     raw?.bind?.psom_key,
@@ -978,10 +1002,7 @@ function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
 
     if (!pageMatches(item, "home")) continue;
 
- const rawSectionKey =
-  item?.bind?.section ||
-  item?.psom_key ||
-  item?.category;
+ const rawSectionKey = canonicalSectionOf(item);
 
 // 🔥 HOME 매핑 테이블
 const HOME_SECTION_ALIAS = {
@@ -1090,12 +1111,7 @@ function handleNetworkSnapshot(bank) {
 
     if (!pageMatches(item, "network")) continue;
 
-    const rawKey =
-      item?.psom_key ||
-      item?.bind?.section ||
-      item?.category ||
-      item?.section ||
-      "";
+    const rawKey = canonicalSectionOf(item);
 
     if (rawKey !== "network-right") continue;
     if (!snapshotCandidateAllowed(item, { pageName: "network", sectionKey: "network-right" })) continue;
@@ -1283,12 +1299,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
     if (!item) continue;
 
     // 1) PSOM / bind 우선
-    const rawSectionKey =
-      item.psom_key ||
-      raw?.bind?.psom_key ||
-      raw?.bind?.section ||
-      raw?.section ||
-      null;
+    const rawSectionKey = canonicalSectionOf(raw) || canonicalSectionOf(item);
 
    const MAP = {
 
@@ -1391,12 +1402,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
     const item = normalize(raw);
     if (!item) return false;
 
-    const rawSectionKey =
-      item.psom_key ||
-      raw?.bind?.psom_key ||
-      raw?.bind?.section ||
-      raw?.section ||
-      null;
+    const rawSectionKey = canonicalSectionOf(raw) || canonicalSectionOf(item);
 
     const MAP = {
       "dist_7": "distribution-right",
