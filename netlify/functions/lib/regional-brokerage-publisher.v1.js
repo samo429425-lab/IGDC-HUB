@@ -144,7 +144,10 @@ function explicitAdminCanonicalItem(item) {
   const publication = item && item.canonicalPublication || {};
   const commercePublication = item && item.commerceCandidatePublication || {};
   const review = commercePublication && commercePublication.review || {};
-  return publication.status === "published" && !!publication.releaseId && review.explicitPublicationRequested === true;
+  const authority = item && item.administratorFrontMatchAuthority || {};
+  const authorityStatus = text(authority.publicationStatus).toLowerCase();
+  const authorityOk = authority.verified === true && ["publish_requested","published","matched"].includes(authorityStatus);
+  return publication.status === "published" && !!publication.releaseId && (review.explicitPublicationRequested === true || authorityOk);
 }
 function adminScopeMatches(item, context) {
   if (!explicitAdminCanonicalItem(item)) return false;
@@ -351,6 +354,20 @@ function scopes(root, items, policy) {
   const result = new Map();
   function ensure(market) { if (!result.has(market)) result.set(market, new Set()); return result.get(market); }
   for (const item of items) {
+    // Canonical administrator publication is already the final placement
+    // authority. Scope discovery must not demand the older regional-policy
+    // evidence shape a second time; otherwise valid Admin rows can exist in
+    // SearchBank yet never create a distribution regional output.
+    if (explicitAdminCanonicalItem(item)) {
+      const placement = item && item.placement || {};
+      const market = Policy.normalizeCountry(placement.country);
+      const region = Policy.normalizeRegion(placement.region || "NATIONWIDE", market);
+      if (market && market !== "GLOBAL" && region && region !== "GLOBAL") {
+        const regions = ensure(market);
+        if (region !== "NATIONWIDE") regions.add(region);
+        continue;
+      }
+    }
     const prepared = policyCandidate(item);
     const dist = Policy.distributionMarketEvidence(prepared);
     const availability = Policy.availabilityEvidence(prepared);
@@ -412,14 +429,11 @@ function makeCard(item, decision, market, region, registry) {
   const affiliate = NonPgRevenue.publicAffiliate(item);
   const outboundRoute = item && item.outboundRoute && typeof item.outboundRoute === "object" ? clone(item.outboundRoute) : null;
   const providerOutbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl) || "";
-  const authority = item && item.administratorFrontMatchAuthority && typeof item.administratorFrontMatchAuthority === "object" ? item.administratorFrontMatchAuthority : {};
-  const review = item && item.commerceCandidatePublication && item.commerceCandidatePublication.review && typeof item.commerceCandidatePublication.review === "object" ? item.commerceCandidatePublication.review : {};
-  const explicitAdmin = authority.verified === true || review.explicitPublicationRequested === true;
   const outboundTrackingUrl = "/.netlify/functions/regional-brokerage-outbound?id=" + encodeURIComponent(id);
-  // Administrator Front Match owns the exact seller detail destination.
-  // Provider/affiliate URLs remain metadata/tracking routes and must not replace
-  // the verified product detail page on the public card.
-  const navigationUrl = explicitAdmin ? destination : (providerOutbound || destination);
+  // The verified seller detail URL is the navigation authority. Affiliate and
+  // brokerage routes remain tracking metadata; they must never replace it with
+  // a stale internal "page preparing" URL.
+  const navigationUrl = destination;
   registry[id] = {
     id,
     targetUrl: destination,

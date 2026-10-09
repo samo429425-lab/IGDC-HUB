@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.6-admin-routing-direct-product";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.6-canonical-section-direct-product";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -289,66 +289,25 @@ function sectionSlotLimit(pageName, sectionKey, fallback) {
   return Number.isFinite(n) && n > 0 ? Math.min(hardLimit, Math.max(1, Math.trunc(n))) : hardLimit;
 }
 
-function explicitAdminFrontPublication(item) {
-  const authority = item && item.administratorFrontMatchAuthority && typeof item.administratorFrontMatchAuthority === "object"
-    ? item.administratorFrontMatchAuthority : {};
-  const review = item && item.commerceCandidatePublication && item.commerceCandidatePublication.review && typeof item.commerceCandidatePublication.review === "object"
-    ? item.commerceCandidatePublication.review : {};
-  return authority.verified === true || review.explicitPublicationRequested === true;
-}
-function canonicalSectionOf(item) {
-  item = item || {};
-  const authority = item.administratorFrontMatchAuthority && typeof item.administratorFrontMatchAuthority === "object"
-    ? item.administratorFrontMatchAuthority : {};
-  return String(
-    authority.section ||
-    item?.placement?.section ||
-    item?.placement?.sectionKey ||
-    item?.bind?.section ||
-    item?.bind?.psom_key ||
-    item.psom_key ||
-    item.section ||
-    item.slotKey ||
-    item.category ||
-    ""
-  ).trim();
-}
 function urlOfSnapshotItem(item) {
   if (!item || typeof item !== "object") return "";
-  const directProduct = String(
-    item.externalProductUrl ||
-    item.officialProductUrl ||
-    item.productUrl ||
-    item.product_url ||
-    item.productPageUrl ||
-    item.detailUrl ||
-    item.checkoutUrl ||
-    item.purchaseUrl ||
-    item.orderUrl ||
-    item.productLink ||
-    item.displayUrl ||
-    ""
-  ).trim();
-  if (explicitAdminFrontPublication(item) && directProduct) return directProduct;
-  return String(
-    item.affiliateOutboundUrl ||
-    item.affiliate_outbound_url ||
-    item.externalOutboundUrl ||
-    item.external_outbound_url ||
-    directProduct ||
-    item.sourceUrl ||
-    item.source_url ||
-    item.targetUrl ||
-    item.target_url ||
-    item.outboundUrl ||
-    item.outbound_url ||
-    item.url ||
-    item.link ||
-    item.href ||
-    item.video ||
-    item.videoUrl ||
-    ""
-  ).trim();
+  // Front navigation follows the verified seller/product detail route. Tracking
+  // aliases are metadata only and must never replace a valid product URL with
+  // a stale internal /pages/coming-soon.html route.
+  const values = [
+    item.externalProductUrl, item.officialProductUrl, item.productUrl, item.product_url,
+    item.productPageUrl, item.detailUrl, item.checkoutUrl, item.purchaseUrl, item.orderUrl,
+    item.productLink, item.displayUrl, item.sourceUrl, item.source_url, item.targetUrl, item.target_url,
+    item.url, item.link, item.href,
+    item.affiliateOutboundUrl, item.affiliate_outbound_url, item.externalOutboundUrl, item.external_outbound_url,
+    item.outboundUrl, item.outbound_url, item.video, item.videoUrl
+  ];
+  for (const value of values) {
+    const url = String(value || "").trim();
+    if (!url || url === "#" || /^javascript:/i.test(url) || /\/pages\/coming-soon\.html(?:[?#]|$)/i.test(url)) continue;
+    return url;
+  }
+  return "";
 }
 
 function imageOfSnapshotItem(item) {
@@ -370,6 +329,7 @@ function isPlaceholderUrlValue(url) {
   const u = String(url || "").trim().toLowerCase();
   if (!u || u === "#" || u === "about:blank") return true;
   if (u.startsWith("javascript:")) return true;
+  if (/\/pages\/coming-soon\.html(?:[?#]|$)/i.test(u)) return true;
   try {
     const h = new URL(u).hostname.replace(/^www\./, "");
     return h === "example.com" || h === "example.edu" || h.endsWith(".example.com") || h.endsWith(".example.edu");
@@ -479,8 +439,10 @@ function normalizeLimitCard(raw, context = {}) {
   const id = raw?.id || stableId(JSON.stringify(raw));
   const sectionKey = val(
     context.sectionKey,
-    raw?.psom_key,
+    raw?.placement?.section,
     raw?.bind?.section,
+    raw?.bind?.psom_key,
+    raw?.psom_key,
     raw?.section,
     raw?.category,
     "unknown"
@@ -505,7 +467,7 @@ function resolveLimitSectionKey(pageName, raw, sections) {
   const sectionKeys = Object.keys(sections || {});
   if (!sectionKeys.length) return null;
 
-  const rawKey = canonicalSectionOf(raw) || null;
+  const rawKey = sectionOfSnapshotItem(raw, null);
 
   if (!rawKey) return null;
 
@@ -730,11 +692,11 @@ function buildTrackingMeta(raw, context) {
 
   const sectionKey = val(
     context.sectionKey,
-    canonicalSectionOf(raw),
+    raw?.placement?.section,
+    raw?.bind?.section,
+    raw?.bind?.psom_key,
     raw.psom_key,
     raw.psomKey,
-    raw?.bind?.psom_key,
-    raw?.bind?.section,
     raw.section,
     raw.category,
     "unknown"
@@ -878,10 +840,22 @@ function getDefaultSection(bank, page) {
   return bank?.meta?.policy?.routing?.page_default_section?.[page] || null;
 }
 
+function sectionOfSnapshotItem(item, fallback) {
+  item = item || {};
+  return val(
+    item?.placement?.section,
+    item?.bind?.section,
+    item?.bind?.psom_key,
+    item.psom_key,
+    item.psomKey,
+    item.section,
+    item.slotKey,
+    item.category,
+    fallback || ""
+  );
+}
 function resolveSection(item, defaultSection) {
-  if (item.psom_key) return item.psom_key;
-  if (item.category) return item.category;
-  return defaultSection;
+  return sectionOfSnapshotItem(item, defaultSection);
 }
 
 function explicitPageOf(item) {
@@ -1002,7 +976,7 @@ function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
 
     if (!pageMatches(item, "home")) continue;
 
- const rawSectionKey = canonicalSectionOf(item);
+ const rawSectionKey = sectionOfSnapshotItem(item, null);
 
 // 🔥 HOME 매핑 테이블
 const HOME_SECTION_ALIAS = {
@@ -1111,7 +1085,7 @@ function handleNetworkSnapshot(bank) {
 
     if (!pageMatches(item, "network")) continue;
 
-    const rawKey = canonicalSectionOf(item);
+    const rawKey = sectionOfSnapshotItem(item, "");
 
     if (rawKey !== "network-right") continue;
     if (!snapshotCandidateAllowed(item, { pageName: "network", sectionKey: "network-right" })) continue;
@@ -1189,7 +1163,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   function normalize(item) {
     if (!item || typeof item !== "object") return null;
 
-    const sectionKeyForContract = item.psom_key || item?.bind?.section || item?.section || item?.category || "distribution";
+    const sectionKeyForContract = sectionOfSnapshotItem(item, "distribution");
     if (!snapshotCandidateAllowed(item, { pageName: "distribution", sectionKey: sectionKeyForContract })) return null;
 
     return enrichSnapshotCard({
@@ -1206,17 +1180,12 @@ REQUIRED_SECTION_KEYS.forEach(key => {
       views: item.views || 0,
       sponsor: item.sponsor === true,
       tag: item.tag || "",
-      psom_key: item.psom_key || null,
+      psom_key: sectionKeyForContract || null,
       source: item.source || "",
       seller: item.seller || item.source || "",
       ...buildTrackingMeta(item, {
         pageName: "distribution",
-        sectionKey:
-          item.psom_key ||
-          item?.bind?.section ||
-          item?.section ||
-          item?.category ||
-          "distribution"
+        sectionKey: sectionKeyForContract
       })
     }, item);
   }
@@ -1259,13 +1228,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
   }
 
   function distributionSectionOf(raw) {
-    const rawSectionKey =
-      raw?.psom_key ||
-      raw?.bind?.psom_key ||
-      raw?.bind?.section ||
-      raw?.section ||
-      raw?.category ||
-      null;
+    const rawSectionKey = sectionOfSnapshotItem(raw, null);
     const MAP = {
       "dist_1": "distribution-recommend", "dist1": "distribution-recommend", "distribution_1": "distribution-recommend", "distribution1": "distribution-recommend", "distribution-recommend": "distribution-recommend",
       "dist_2": "distribution-sponsor", "dist2": "distribution-sponsor", "distribution_2": "distribution-sponsor", "distribution2": "distribution-sponsor", "distribution-new": "distribution-new",
@@ -1299,7 +1262,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
     if (!item) continue;
 
     // 1) PSOM / bind 우선
-    const rawSectionKey = canonicalSectionOf(raw) || canonicalSectionOf(item);
+    const rawSectionKey = sectionOfSnapshotItem(raw, item.psom_key || null);
 
    const MAP = {
 
@@ -1402,7 +1365,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
     const item = normalize(raw);
     if (!item) return false;
 
-    const rawSectionKey = canonicalSectionOf(raw) || canonicalSectionOf(item);
+    const rawSectionKey = sectionOfSnapshotItem(raw, item.psom_key || null);
 
     const MAP = {
       "dist_7": "distribution-right",

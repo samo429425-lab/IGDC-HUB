@@ -106,7 +106,7 @@
   }
 
   function pickId(it){ return pick(it, ['id','contentId','productId','itemId','sku','code','pid']); }
-  function pickLink(it){ return pick(it, ['externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','paymentUrl','purchaseUrl','orderUrl','productLink','displayUrl','affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','contentUrl','pageUrl','sourceUrl','url','href','link']) || '#'; }
+  function pickLink(it){ return pick(it, ['externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl','productLink','displayUrl','sourceUrl','source_url','targetUrl','target_url','url','link','href','affiliateOutboundUrl','affiliate_outbound_url','externalOutboundUrl','external_outbound_url','contentUrl','pageUrl']) || '#'; }
   function pickThumb(it){ return pick(it, ['thumb','image','imageUrl','imageOriginalUrl','thumbnail','thumbnail_url','img','photo','cover','coverUrl','thumbnailUrl']); }
   function pickTitle(it){ return pick(it, ['title','name','label','caption']); }
 
@@ -126,7 +126,7 @@
     // Front must use the same exact product/detail route that Admin verified.
     // An IGDC content id may be stale/missing from a public snapshot, so it is
     // only a fallback when no usable seller/detail route survived publication.
-    const outbound = item && (item.externalProductUrl || item.officialProductUrl || item.productUrl || item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl || item.orderUrl || item.affiliateOutboundUrl || item.externalOutboundUrl || item.sourceUrl || item.link || '');
+    const outbound = item && (item.sourceUrl || item.link || item.affiliateOutboundUrl || item.externalOutboundUrl || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     if (item && item.id) return contentHref(item.id);
     return '';
@@ -235,8 +235,6 @@
         thumb,
         link: pickLink(it),
         sourceUrl: pickLink(it),
-        productUrl: pick(it, ['externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl','checkoutUrl','purchaseUrl','orderUrl']),
-        externalProductUrl: pick(it, ['externalProductUrl','officialProductUrl','productUrl','product_url','productPageUrl','detailUrl']),
         affiliateOutboundUrl: pick(it, ['affiliateOutboundUrl','affiliate_outbound_url']),
         externalOutboundUrl: pick(it, ['externalOutboundUrl','external_outbound_url'])
       });

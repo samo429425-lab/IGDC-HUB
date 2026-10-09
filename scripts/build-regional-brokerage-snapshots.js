@@ -568,12 +568,7 @@ function verifyPublishedRootSampleFallbacks(ipSlotReport) {
   return { ok: problems.length === 0, summary, problems };
 }
 function cardDestination(card) {
-  if (!card || typeof card !== "object") return "";
-  const authority=card.administratorFrontMatchAuthority&&typeof card.administratorFrontMatchAuthority==="object"?card.administratorFrontMatchAuthority:{};
-  const review=card.commerceCandidatePublication&&card.commerceCandidatePublication.review&&typeof card.commerceCandidatePublication.review==="object"?card.commerceCandidatePublication.review:{};
-  const direct=String(card.externalProductUrl||card.officialProductUrl||card.productUrl||card.productPageUrl||card.detailUrl||card.checkoutUrl||card.purchaseUrl||card.orderUrl||card.productLink||card.displayUrl||"").trim();
-  if((authority.verified===true||review.explicitPublicationRequested===true)&&direct)return direct;
-  return String(card.affiliateOutboundUrl||card.externalOutboundUrl||direct||card.sourceUrl||card.targetUrl||card.outboundUrl||card.url||card.href||card.link||"").trim();
+  return String(card && (card.affiliateOutboundUrl || card.externalOutboundUrl || card.externalProductUrl || card.officialProductUrl || card.productUrl || card.productPageUrl || card.detailUrl || card.checkoutUrl || card.purchaseUrl || card.orderUrl || card.productLink || card.displayUrl || card.sourceUrl || card.targetUrl || card.outboundUrl || card.url || card.href || card.link) || "").trim();
 }
 function cardImage(card) {
   return String(card && (card.image || card.imageUrl || card.image_url || card.imageOriginalUrl || card.thumb || card.thumbnail || card.thumbnailUrl || card.thumbnail_url) || "").trim();
@@ -595,7 +590,7 @@ function canonicalPublicationExpectations() {
     if (!expected.has(key)) expected.set(key,{page,country,region,count:0,candidates:[]});
     const target=expected.get(key);
     target.count += 1;
-    target.candidates.push({candidateId,destination:cardDestination(item),image:cardImage(item)});
+    target.candidates.push({candidateId,section:String(placement.section||""),destination:cardDestination(item),image:cardImage(item)});
   }
   return Array.from(expected.values());
 }
@@ -627,7 +622,8 @@ function verifyCanonicalToIpOutputs(ipSlotReport) {
     for(const candidate of target.candidates){
       const card=byId.get(candidate.candidateId);
       if(!card){problems.push("CANONICAL_CANDIDATE_NOT_PUBLISHED:"+candidate.candidateId+":"+String(found.path||""));continue;}
-      const destination=cardDestination(card),image=cardImage(card);
+      const destination=cardDestination(card),image=cardImage(card),actualSection=String(card&&card.placement&&card.placement.section||card&&card.section||card&&card.psom_key||"");
+      if(candidate.section&&actualSection!==candidate.section) problems.push("CANONICAL_CANDIDATE_SECTION_CHANGED:"+candidate.candidateId+":"+candidate.section+"->"+actualSection);
       if(!destination) problems.push("CANONICAL_CANDIDATE_DESTINATION_LOST:"+candidate.candidateId);
       else if(candidate.destination&&destination!==candidate.destination) problems.push("CANONICAL_CANDIDATE_DESTINATION_CHANGED:"+candidate.candidateId);
       if(!image) problems.push("CANONICAL_CANDIDATE_IMAGE_LOST:"+candidate.candidateId);
