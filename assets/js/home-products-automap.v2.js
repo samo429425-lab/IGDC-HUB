@@ -180,7 +180,7 @@
     // Administrator-approved exact seller/product detail route is authoritative.
     // Do not detour a valid front card through /content.html when the published
     // snapshot already carries the same product URL that works in Admin.
-    const outbound = item && (item.affiliateOutboundUrl || item.externalOutboundUrl || item.externalProductUrl || item.officialProductUrl || item.productUrl || item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl || item.orderUrl || item.productLink || item.displayUrl || item.sourceUrl || item.targetUrl || item.outboundUrl || item.url || item.href || item.link || '');
+    const outbound = item && (item.externalProductUrl || item.officialProductUrl || item.productUrl || item.productPageUrl || item.detailUrl || item.checkoutUrl || item.purchaseUrl || item.orderUrl || item.productLink || item.displayUrl || item.affiliateOutboundUrl || item.externalOutboundUrl || item.sourceUrl || item.targetUrl || item.outboundUrl || item.url || item.href || item.link || '');
     if (outbound && !isBadUrl(outbound) && !isExampleUrl(outbound)) return outbound;
     if (item.__igdcFallbackSlot && item.__igdcRight && item.id) return contentHref(item.id);
     // Internal IGDC detail remains a fallback only when a real published id exists.
