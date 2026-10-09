@@ -159,6 +159,15 @@ function patchSnapshotEngine() {
   ];
 
   for (const patch of patches) {
+    // Newer Snapshot Engine versions deliberately use the administrator/canonical
+    // product detail route before affiliate/tracking aliases and centralize
+    // section lookup in canonicalSectionOf(). Do not force the legacy URL helper
+    // back over that newer contract during every Netlify build.
+    if (patch.label === "canonical URL aliases" &&
+        source.includes("function canonicalSectionOf(item)") &&
+        source.includes("function explicitAdminFrontPublication(item)")) {
+      continue;
+    }
     const result = patch.mode === "all"
       ? replaceAllOrAlready(source, patch.before, patch.after, patch.label)
       : replaceOnceOrAlready(source, patch.before, patch.after, patch.label);
@@ -167,6 +176,7 @@ function patchSnapshotEngine() {
   }
 
   mustContain(source, `item.productUrl`, "Snapshot Engine accepts productUrl");
+  mustContain(source, `function canonicalSectionOf(item)`, "Snapshot Engine reads canonical placement section");
   mustContain(source, `item.imageUrl`, "Snapshot Engine accepts imageUrl");
   mustContain(source, `"distribution-extra": "distribution-extra"`, "distribution-extra canonical map");
   mustContain(source, `"main3": "home_3"`, "home_3 canonical route");
