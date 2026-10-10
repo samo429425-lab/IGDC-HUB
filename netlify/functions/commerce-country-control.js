@@ -328,13 +328,30 @@ exports.handler=async function(event){
         // Only hard failures (404/410, explicit unavailable page, seller-home
         // redirect, domain mismatch, etc.) are withheld; temporary 403/429/5xx
         // remains inconclusive and does not destroy a valid administrator choice.
-        refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets,{includePublishedScope:false});
-        refresh=Object.assign({},refresh,{status:"administrator_exact_url_revalidated",administratorLedgerPreserved:true,frontRevalidationSkipped:false});
-        const runtimeInvalidRows=(Array.isArray(refresh&&refresh.results)?refresh.results:[]).filter((row)=>row&&row.invalid===true);
-        const runtimeInvalidIds=new Set(runtimeInvalidRows.map((row)=>text(row&&row.candidateId)).filter(Boolean));
-        const publishTargets=plan.targets.filter((row)=>!runtimeInvalidIds.has(text(row&&row.candidateId)));
-        if(Array.isArray(refresh&&refresh.withdrawAssignments)&&refresh.withdrawAssignments.length){
-          repairUnpublish=await frontPublicationWithdrawAssignmentsOnly(refresh.withdrawAssignments,actorId);
+        const authoritativeAdminTargets=Array.isArray(plan.targets)&&plan.targets.length>0&&plan.targets.every((row)=>row&&row.administratorBoardAuthority===true);
+        let runtimeInvalidRows=[],publishTargets=plan.targets;
+        if(authoritativeAdminTargets){
+          // The administrator master board is the final placement/publication
+          // authority. Front Match must not run a second remote/research verdict
+          // that can silently remove an otherwise complete administrator card.
+          // Structural validation (candidate/title/HTTPS URL/image/page/section/
+          // country/region) is enforced by prepareProductFrontTargets below.
+          refresh={
+            ok:true,status:"administrator_board_structural_only",
+            administratorLedgerPreserved:true,frontRevalidationSkipped:true,
+            requested:plan.targets.length,revalidated:0,remoteChecked:0,
+            freshReused:0,invalid:0,inconclusive:0,withdrawn:0,
+            withdrawCandidateIds:[],withdrawAssignments:[],results:[]
+          };
+        }else{
+          refresh=await Automation.revalidateProductFrontTargets(actorId,request,plan.targets,{includePublishedScope:false});
+          refresh=Object.assign({},refresh,{status:"legacy_exact_url_revalidated",administratorLedgerPreserved:true,frontRevalidationSkipped:false});
+          runtimeInvalidRows=(Array.isArray(refresh&&refresh.results)?refresh.results:[]).filter((row)=>row&&row.invalid===true);
+          const runtimeInvalidIds=new Set(runtimeInvalidRows.map((row)=>text(row&&row.candidateId)).filter(Boolean));
+          publishTargets=plan.targets.filter((row)=>!runtimeInvalidIds.has(text(row&&row.candidateId)));
+          if(Array.isArray(refresh&&refresh.withdrawAssignments)&&refresh.withdrawAssignments.length){
+            repairUnpublish=await frontPublicationWithdrawAssignmentsOnly(refresh.withdrawAssignments,actorId);
+          }
         }
         const preparation=await Automation.prepareProductFrontTargets(actorId,request,publishTargets,loadedJob);
         const runtimeBlockedItems=runtimeInvalidRows.map((row)=>({candidateId:text(row&&row.candidateId),status:"blocked",queued:false,persisted:false,pendingBuild:false,reason:"runtime_product_unavailable",reasons:Array.isArray(row&&row.reasons)?row.reasons:[],administratorLedgerPreserved:true}));
