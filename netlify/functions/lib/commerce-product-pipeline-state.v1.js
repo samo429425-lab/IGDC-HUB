@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.6.0-admin-ready-publication-authority";
+const VERSION = "commerce-product-pipeline-state-v1.6.1-admin-structural-integrity";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -68,6 +68,14 @@ function exactProductDestination(productInput,supplierUrlInput){
   return "";
 }
 
+function validAdministratorProductUrl(value){
+  const url=safeHttpsUrl(value);
+  if(!url)return "";
+  if(/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i.test(url))return "";
+  if(ProductRanking.isTemplateOrPlaceholderUrl(url)||!ProductRanking.isSpecificProductUrl(url))return "";
+  return url;
+}
+
 function priceDisplay(product){
   const row=plain(product), raw=text(row.price), currency=text(row.priceCurrency).toUpperCase();
   if(!raw) return "판매처에서 현재 가격 확인";
@@ -119,11 +127,13 @@ function administratorProductRecord(candidateInput){
   const persistedCard=plain(payload.productCard), readinessCard=plain(readiness.productCard);
   const fallbackCard=productCard(payload);
   const card=persistedCard.checkoutUrl ? persistedCard : (readinessCard.checkoutUrl ? readinessCard : fallbackCard);
-  const productUrl=safeHttpsUrl(first(
+  const productUrlCandidates=[
     card.checkoutUrl,card.productUrl,
     payload.externalProductUrl,payload.officialProductUrl,payload.productUrl,payload.productPageUrl,payload.detailUrl,payload.checkoutUrl,payload.purchaseUrl,payload.orderUrl,payload.productLink,
     payload.url,candidate.official_url
-  ));
+  ];
+  let productUrl="";
+  for(const value of productUrlCandidates){const valid=validAdministratorProductUrl(value);if(valid){productUrl=valid;break;}}
   const imageUrl=safeHttpsUrl(first(
     card.image,card.imageUrl,card.imageOriginalUrl,card.thumbnail,card.thumbnailUrl,card.thumb,
     payload.imageUrl,payload.imageOriginalUrl,payload.image,payload.thumbnail,payload.thumb,candidate.thumbnail_url
@@ -133,6 +143,11 @@ function administratorProductRecord(candidateInput){
   const supplierName=first(card.supplierName,payload.supplierName,supplier.name,seller.legalEntity,candidate.title);
   const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.primaryPlacement||payload.placement);
   const title=first(card.title,payload.productName,payload.productTitle,payload.title,candidate.title,"상품");
+  const structuralReasons=[];
+  if(!productUrl)structuralReasons.push("administrator_product_url_invalid");
+  if(!imageUrl)structuralReasons.push("administrator_product_image_missing");
+  if(ProductRanking.isGenericProductName(title))structuralReasons.push("administrator_product_title_invalid");
+  const structuralReady=structuralReasons.length===0;
   return {
     schema:"igdc-administrator-product-record.v1",
     candidateId:text(candidate.id),
@@ -143,7 +158,8 @@ function administratorProductRecord(candidateInput){
     supplierUrl:supplierUrl||"",
     placement,
     productCard:Object.assign({},card,{title,checkoutUrl:productUrl||null,productUrl:productUrl||null,image:imageUrl||null,imageUrl:imageUrl||null,supplierName:supplierName||null,supplierUrl:supplierUrl||null}),
-    adminDisplayReady:!!(productUrl&&imageUrl),
+    adminDisplayReady:structuralReady,
+    managementIntegrity:{schema:"igdc-admin-product-structural-integrity.v1",structuralReady,reasons:structuralReasons},
     source:"gslot_candidates.source_payload.productCard"
   };
 }
@@ -257,6 +273,7 @@ function liveQueueRow(candidateInput, relationsInput){
     image:adminRecord.imageUrl||card.image||safeHttpsUrl(candidate.thumbnail_url),
     imageUrl:adminRecord.imageUrl||card.image||safeHttpsUrl(candidate.thumbnail_url),
     productCard:card,
+    managementIntegrity:plain(adminRecord.managementIntegrity),
     supplier:plain(payload.supplier),
     sourceTier:first(plain(payload.commerceCandidate).sourceTier,"risk_ranked_official_supplier_product"),
     origin:first(plain(payload.commerceCandidate).origin,candidate.source_ref,SOURCE_REF),

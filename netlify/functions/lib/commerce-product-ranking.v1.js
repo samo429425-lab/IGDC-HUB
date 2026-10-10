@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.22.0-strict-merchandising-map";
+const VERSION = "commerce-product-ranking-v1.22.1-static-image-url-guard";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -328,7 +328,7 @@ function isStaticOrApiUrl(value) {
   if (!url) return true;
   try {
     const parsed = new URL(url), path = lower(parsed.pathname), query = lower(parsed.search);
-    if (/\.(?:css|js|json|xml|map|txt|pdf|hwp|hwpx|docx?|xlsx?|pptx?|zip|rar|7z)(?:$|[?#])/i.test(path + query)) return true;
+    if (/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp|css|js|json|xml|map|txt|pdf|hwp|hwpx|docx?|xlsx?|pptx?|zip|rar|7z)(?:$|[?#])/i.test(path + query)) return true;
     if (/(?:^|\/)(?:api|graphql|ajax|rest)(?:\/|$)/i.test(path)) return true;
     if (/\/(?:v\d+\/)?(?:item|product|goods|auto|recentseen|ship|exhibition)\/[^/?#]*api\/?$/i.test(path)) return true;
     return false;
