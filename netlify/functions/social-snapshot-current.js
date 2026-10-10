@@ -7,7 +7,7 @@
 const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-snapshot-current-v1.4.1-six-main-sections";
+const VERSION = "social-snapshot-current-v1.4.2-six-main-slot-invariant";
 
 function text(value) {
   return value == null ? "" : String(value).trim();
@@ -17,7 +17,35 @@ const FRONT_SECTION_KEYS = Object.freeze([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
   "social-douyin", "social-dailymotion",
 ]);
+const FRONT_SLOT_LIMIT = 100;
 let warmProjectionCache = null;
+
+function frontPlaceholder(sectionKey, index) {
+  return {
+    id: "ph_" + sectionKey + "_" + String(index + 1).padStart(3, "0"),
+    contentId: "ph_" + sectionKey + "_" + String(index + 1).padStart(3, "0"),
+    type: "placeholder",
+    title: "Loading…",
+    url: "#",
+    placeholder: true,
+    sample: true,
+    source: { platform: "placeholder", section_key: sectionKey },
+    social: {
+      platform: sectionKey.replace(/^social-/, ""),
+      sectionKey: sectionKey,
+    },
+  };
+}
+
+function frontSectionSlots(sections, sectionKey) {
+  const source = Array.isArray(sections && sections[sectionKey])
+    ? sections[sectionKey].slice(0, FRONT_SLOT_LIMIT)
+    : [];
+  while (source.length < FRONT_SLOT_LIMIT) {
+    source.push(frontPlaceholder(sectionKey, source.length));
+  }
+  return source;
+}
 
 function compactObject(source, keys) {
   const input = source && typeof source === "object" ? source : {};
@@ -58,7 +86,12 @@ function compactFrontSnapshot(snapshot) {
   const sections = snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections || {};
   const compactSections = {};
   FRONT_SECTION_KEYS.forEach((key) => {
-    compactSections[key] = (Array.isArray(sections[key]) ? sections[key] : [])
+    // Front layout owns six permanent 100-slot rows. A stored release may be
+    // older than the current Social schema, so never collapse a row merely
+    // because that release has no array for a newly introduced platform.
+    // The server readback pads only with replaceable SAMPLE slots; real content
+    // still comes exclusively from the stored Social release/publish pipeline.
+    compactSections[key] = frontSectionSlots(sections, key)
       .map(compactFrontSlot)
       .filter(Boolean);
   });

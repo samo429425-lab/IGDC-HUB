@@ -14,7 +14,7 @@ const ChannelLink = require("./social-channel-link.v1");
 const AIPolicy = require("./social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-store-v1.12.3-sparse-public-post-safe";
+  "social-candidate-store-v1.12.4-six-section-prune";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1652,6 +1652,17 @@ function isPublishedSocialCandidateSlot(slot) {
     text(plain(value.audit).origin) === "social_candidates"
   );
 }
+
+function pruneObsoleteSocialSections(sectionMap) {
+  const target = plain(sectionMap);
+  Object.keys(target).forEach((sectionKey) => {
+    if (sectionKey === "social-maru" || sectionKey === "rightPanel") return;
+    if (/^social-/i.test(sectionKey) && !ALLOWED_SECTIONS.has(sectionKey)) {
+      delete target[sectionKey];
+    }
+  });
+  return target;
+}
 function buildSnapshot(baseSnapshot, rows, options) {
   const opts = plain(options);
   const base = cloneJson(baseSnapshot || {});
@@ -1659,7 +1670,8 @@ function buildSnapshot(baseSnapshot, rows, options) {
   if (!base.pages) base.pages = {};
   if (!base.pages.social) base.pages.social = {};
   if (!base.pages.social.sections) base.pages.social.sections = {};
-  const sections = base.pages.social.sections;
+  const sections = pruneObsoleteSocialSections(base.pages.social.sections);
+  base.pages.social.sections = sections;
   const seedSections = plain(
     seed.pages && seed.pages.social && seed.pages.social.sections,
   );
@@ -1748,7 +1760,7 @@ function buildSnapshot(baseSnapshot, rows, options) {
     filled[sectionKey] = next.filter(isPublishedSocialCandidateSlot).length;
   });
 
-  const candidatePool = plain(base.pages.social.candidatePool);
+  const candidatePool = pruneObsoleteSocialSections(base.pages.social.candidatePool);
   const poolGroups = groupRowsBySection(approvedRows);
   targetSections.forEach((sectionKey) => {
     const incoming = poolGroups[sectionKey]
@@ -1856,7 +1868,8 @@ function unpublishSnapshot(currentSnapshot, seedSnapshot, candidateIds, options)
   if (!base.pages) base.pages = {};
   if (!base.pages.social) base.pages.social = {};
   if (!base.pages.social.sections) base.pages.social.sections = {};
-  const sections = base.pages.social.sections;
+  const sections = pruneObsoleteSocialSections(base.pages.social.sections);
+  base.pages.social.sections = sections;
   const seedSections = plain(
     seed.pages && seed.pages.social && seed.pages.social.sections,
   );
@@ -1889,7 +1902,7 @@ function unpublishSnapshot(currentSnapshot, seedSnapshot, candidateIds, options)
     removedBySection[sectionKey] = sectionRemoved;
   });
 
-  const candidatePool = plain(base.pages.social.candidatePool);
+  const candidatePool = pruneObsoleteSocialSections(base.pages.social.candidatePool);
   targetSections.forEach((sectionKey) => {
     candidatePool[sectionKey] = array(candidatePool[sectionKey]).filter(
       (slot) => !ids.has(slotCandidateId(slot)),

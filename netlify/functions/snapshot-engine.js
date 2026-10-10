@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.7-admin-authoritative-reconcile";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.8-social-six-slot-invariant";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -334,6 +334,52 @@ function sanitizeLimitSections(sections, pageName) {
 function internalPlaceholderImage() {
   return "/assets/img/placeholder.png";
 }
+
+function socialPlaceholderSlot(sectionKey, index) {
+  const n = Number(index) + 1;
+  return {
+    id: "ph_" + sectionKey + "_" + String(n).padStart(3, "0"),
+    contentId: "ph_" + sectionKey + "_" + String(n).padStart(3, "0"),
+    slotId: n,
+    type: "placeholder",
+    title: "Loading…",
+    url: "#",
+    thumb: internalPlaceholderImage(),
+    thumbnail: internalPlaceholderImage(),
+    placeholder: true,
+    sample: true,
+    replaceableSlot: true,
+    source: { platform: "placeholder", section_key: sectionKey },
+    social: { platform: String(sectionKey || "").replace(/^social-/, ""), sectionKey },
+    audit: { origin: "placeholder_seed" },
+  };
+}
+
+function enforceSocialMainSectionShape(sections) {
+  if (!sections || typeof sections !== "object") return sections;
+
+  // Removed Social platforms are deleted structurally, not hidden. This keeps
+  // their cards and their row scroll controls out of every downstream surface.
+  Object.keys(sections).forEach((sectionKey) => {
+    if (sectionKey === "social-maru" || sectionKey === "rightPanel") return;
+    if (/^social-/i.test(sectionKey) && !SOCIAL_MANAGED_MAIN_SECTIONS.has(sectionKey)) {
+      delete sections[sectionKey];
+    }
+  });
+
+  // The six active Social rows are permanent 100-slot surfaces. New/rebuilt
+  // sections therefore retain their row even before real content is published.
+  for (const sectionKey of SOCIAL_MANAGED_MAIN_SECTIONS) {
+    let list = Array.isArray(sections[sectionKey]) ? sections[sectionKey] : [];
+    list = list.slice(0, SECTION_SLOT_LIMIT);
+    while (list.length < SECTION_SLOT_LIMIT) {
+      list.push(socialPlaceholderSlot(sectionKey, list.length));
+    }
+    sections[sectionKey] = list;
+  }
+  return sections;
+}
+
 
 function sectionSlotLimit(pageName, sectionKey, fallback) {
   const page = String(pageName || "").trim().toLowerCase();
@@ -1497,6 +1543,7 @@ function handleSocialSnapshot(bank) {
       );
     }
   }
+  enforceSocialMainSectionShape(sections);
   const bankItems = bank.items || [];
   removeSnapshotIdsFromSections(sections, authoritativeSnapshotIds(bankItems, "social"));
 
