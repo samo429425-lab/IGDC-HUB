@@ -8,7 +8,7 @@
  * from SearchBank core engines: SearchBank remains a broad ledger, and this
  * policy is applied only when copying social candidates into social_candidates.
  */
-const VERSION = "social-candidate-policy-v1.3.0-six-main-sections";
+const VERSION = "social-candidate-policy-v1.4.0-six-main-video-platforms";
 const CountryContentPolicy = require("./social-country-content-policy.v1");
 
 const POOL_TARGET_PER_SECTION = 300;
@@ -27,8 +27,8 @@ const SECTION_KEYS = Object.freeze([
   "social-instagram",
   "social-tiktok",
   "social-facebook",
-  "social-wechat",
-  "social-weibo"
+  "social-douyin",
+  "social-dailymotion"
 ]);
 
 const ALLOWED_SECTIONS = new Set(SECTION_KEYS);
@@ -39,32 +39,26 @@ const PLATFORM_BY_SECTION = Object.freeze({
   "social-instagram": "instagram",
   "social-tiktok": "tiktok",
   "social-facebook": "facebook",
-  "social-wechat": "wechat",
-  "social-weibo": "weibo"
+  "social-douyin": "douyin",
+  "social-dailymotion": "dailymotion"
 });
 
 const SECTION_ALIASES = Object.freeze({
   "youtube": "social-youtube", "yt": "social-youtube", "social-youtube": "social-youtube",
-  "instagram": "social-instagram", "insta": "social-instagram", "ig": "social-instagram", "threads": "social-instagram", "social-instagram": "social-instagram",
+  "instagram": "social-instagram", "insta": "social-instagram", "ig": "social-instagram", "social-instagram": "social-instagram",
   "tiktok": "social-tiktok", "tik-tok": "social-tiktok", "social-tiktok": "social-tiktok",
   "facebook": "social-facebook", "fb": "social-facebook", "social-facebook": "social-facebook",
-  "wechat": "social-wechat", "weixin": "social-wechat", "social-wechat": "social-wechat",
-  "weibo": "social-weibo", "social-weibo": "social-weibo",
-  "pinterest": "social-pinterest", "pin": "social-pinterest", "social-pinterest": "social-pinterest",
-  "reddit": "social-reddit", "social-reddit": "social-reddit",
-  "twitter": "social-twitter", "x": "social-twitter", "x-twitter": "social-twitter", "social-twitter": "social-twitter"
+  "douyin": "social-douyin", "dy": "social-douyin", "抖音": "social-douyin", "social-douyin": "social-douyin",
+  "dailymotion": "social-dailymotion", "daily-motion": "social-dailymotion", "dm": "social-dailymotion", "social-dailymotion": "social-dailymotion"
 });
 
 const HOST_PLATFORM = Object.freeze({
   "youtube.com": "youtube", "m.youtube.com": "youtube", "youtu.be": "youtube", "youtube-nocookie.com": "youtube",
-  "instagram.com": "instagram", "threads.net": "instagram",
-  "tiktok.com": "tiktok", "vm.tiktok.com": "tiktok",
+  "instagram.com": "instagram",
+  "tiktok.com": "tiktok", "vm.tiktok.com": "tiktok", "vt.tiktok.com": "tiktok",
   "facebook.com": "facebook", "m.facebook.com": "facebook", "fb.watch": "facebook",
-  "wechat.com": "wechat", "weixin.qq.com": "wechat", "mp.weixin.qq.com": "wechat",
-  "weibo.com": "weibo", "m.weibo.cn": "weibo",
-  "pinterest.com": "pinterest", "pin.it": "pinterest",
-  "reddit.com": "reddit", "old.reddit.com": "reddit", "redd.it": "reddit",
-  "twitter.com": "twitter", "mobile.twitter.com": "twitter", "x.com": "twitter"
+  "douyin.com": "douyin", "www.douyin.com": "douyin", "v.douyin.com": "douyin", "iesdouyin.com": "douyin",
+  "dailymotion.com": "dailymotion", "www.dailymotion.com": "dailymotion", "dai.ly": "dailymotion"
 });
 
 const PLATFORM_POLICIES = Object.freeze({
@@ -129,59 +123,27 @@ const PLATFORM_POLICIES = Object.freeze({
       "facebook trending creator public video"
     ]
   },
-  wechat: {
-    sectionKey: "social-wechat",
-    defaultDisplayMode: "link_card",
-    publicPreference: "public_article_or_official_account",
-    categories: ["official_account", "article", "culture", "travel", "education", "brand", "creator"],
+  douyin: {
+    sectionKey: "social-douyin",
+    defaultDisplayMode: "link_card_or_contained_preview",
+    publicPreference: "public_video_or_note_card",
+    categories: ["music", "dance", "travel", "food", "culture", "lifestyle", "creator", "short_video", "education", "art"],
     collectionQueries: [
-      "wechat popular public article culture", "wechat official account travel tourism", "wechat public account education knowledge",
-      "wechat article art design", "wechat public account food culture", "wechat science technology article",
-      "wechat brand official account"
+      "douyin popular music performance creator", "douyin travel tourism creator", "douyin food culture creator",
+      "douyin healthy lifestyle creator", "douyin traditional culture heritage video", "douyin art design creator",
+      "douyin useful education tutorial video", "douyin science technology creator"
     ]
   },
-  weibo: {
-    sectionKey: "social-weibo",
-    defaultDisplayMode: "link_card",
-    publicPreference: "public_post_or_verified_account",
-    categories: ["celebrity", "culture", "art", "entertainment", "official", "creator", "travel"],
+  dailymotion: {
+    sectionKey: "social-dailymotion",
+    defaultDisplayMode: "link_card_or_official_embed",
+    publicPreference: "public_video_or_channel",
+    categories: ["music", "travel", "culture", "documentary", "education", "technology", "sports", "entertainment", "creator", "video"],
     collectionQueries: [
-      "weibo popular celebrity official", "weibo artist singer performance official", "weibo culture heritage account",
-      "weibo travel tourism creator", "weibo food lifestyle creator", "weibo education technology creator",
-      "weibo entertainment official account"
-    ]
-  },
-  pinterest: {
-    sectionKey: "social-pinterest",
-    defaultDisplayMode: "link_card",
-    publicPreference: "public_pin_or_board",
-    categories: ["design", "interior", "fashion", "food", "travel", "art", "product_inspiration", "craft"],
-    collectionQueries: [
-      "pinterest popular design inspiration pin", "pinterest interior architecture design pin", "pinterest travel tourism destination pin",
-      "pinterest food recipe culture pin", "pinterest fashion style board", "pinterest art craft museum pin",
-      "pinterest education infographic knowledge pin", "pinterest healthy lifestyle inspiration pin", "pinterest product inspiration pin"
-    ]
-  },
-  reddit: {
-    sectionKey: "social-reddit",
-    defaultDisplayMode: "link_card",
-    publicPreference: "public_thread",
-    categories: ["learning", "technology", "culture", "hobby", "community", "discussion", "travel", "books"],
-    collectionQueries: [
-      "reddit popular learning community useful discussion", "reddit science technology discussion", "reddit travel tourism guide thread",
-      "reddit culture history community", "reddit hobby healthy lifestyle community", "reddit books education discussion",
-      "reddit art design community", "reddit food local culture discussion"
-    ]
-  },
-  twitter: {
-    sectionKey: "social-twitter",
-    defaultDisplayMode: "link_card",
-    publicPreference: "public_post_or_profile_card",
-    categories: ["creator", "institution", "culture", "technology", "art", "travel", "brand", "official"],
-    collectionQueries: [
-      "x twitter popular creator culture", "x twitter science technology institution", "x twitter artist musician official",
-      "x twitter travel tourism creator", "twitter museum culture official", "twitter education knowledge creator",
-      "twitter healthy lifestyle creator", "twitter brand official"
+      "dailymotion popular music live performance", "dailymotion travel tourism culture video",
+      "dailymotion documentary education knowledge", "dailymotion science technology video",
+      "dailymotion art culture creator", "dailymotion sports lifestyle video",
+      "dailymotion entertainment performance", "dailymotion high quality creator channel"
     ]
   }
 });
@@ -235,10 +197,10 @@ function platformFromHost(url) {
 }
 function normalizePlatform(value, url) {
   const raw = lowerKey(value);
-  if (raw === "x" || raw === "twitter" || raw === "x-twitter") return "twitter";
   if (raw === "yt") return "youtube";
-  if (raw === "ig" || raw === "insta" || raw === "threads") return "instagram";
-  if (raw === "weixin") return "wechat";
+  if (raw === "ig" || raw === "insta") return "instagram";
+  if (raw === "dy" || raw === "抖音") return "douyin";
+  if (raw === "dm" || raw === "daily-motion") return "dailymotion";
   if (Object.prototype.hasOwnProperty.call(PLATFORM_POLICIES, raw)) return raw;
   return platformFromHost(url) || "";
 }
@@ -256,7 +218,7 @@ function isBadPlaceholderUrl(url) {
   const raw = lowerText(url);
   if (!raw || raw === "#" || /^javascript:/i.test(raw)) return true;
   if (/example\.com|placehold\.co|placeholder\.|transparent\.gif|coming-soon/i.test(raw)) return true;
-  if (/social(?:youtube|instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|twitter)\d{3}/i.test(raw)) return true;
+  if (/social(?:youtube|instagram|tiktok|facebook|douyin|dailymotion)\d{3}/i.test(raw)) return true;
   if (/watch\?v=xxxx/i.test(raw)) return true;
   return false;
 }

@@ -15,7 +15,7 @@ function text(value) {
 
 const FRONT_SECTION_KEYS = Object.freeze([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-wechat", "social-weibo",
+  "social-douyin", "social-dailymotion",
 ]);
 let warmProjectionCache = null;
 

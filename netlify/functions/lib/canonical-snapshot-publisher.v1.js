@@ -73,8 +73,8 @@ const SECTION_ALIASES = Object.freeze({
   },
   social: {
     maru: "social-maru", youtube: "social-youtube", instagram: "social-instagram", tiktok: "social-tiktok", facebook: "social-facebook",
-    wechat: "social-wechat", weibo: "social-weibo", pinterest: "social-pinterest", reddit: "social-reddit", twitter: "social-twitter",
-    x: "social-twitter", right_panel: "rightPanel", rightpanel: "rightPanel"
+    douyin: "social-douyin", dailymotion: "social-dailymotion",
+    right_panel: "rightPanel", rightpanel: "rightPanel"
   },
   media: {
     trending: "media-trending", movie: "media-movie", film: "media-movie", drama: "media-drama", thriller: "media-thriller",

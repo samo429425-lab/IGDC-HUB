@@ -235,14 +235,14 @@ const MOUNT_REGISTRY = {
   "social-public-web": {
     type: "public-social-discovery",
     permission: "public-search-or-platform-api-required",
-    role: "Public YouTube/Instagram/Facebook/TikTok/X/LinkedIn discovery without private scraping",
+    role: "Public YouTube/Instagram/Facebook/TikTok/Douyin/Dailymotion discovery without private scraping",
     enabled: true
   },
   "instagram": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"Instagram public discovery route through authorized search channels", enabled:true },
   "facebook": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"Facebook public page/post discovery route through authorized search channels", enabled:true },
   "tiktok": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"TikTok public video discovery route through authorized search channels", enabled:true },
-  "x-twitter": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"X/Twitter public discovery route through authorized search channels", enabled:true },
-  "threads": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"Threads public discovery route through authorized search channels", enabled:true },
+  "douyin": { type:"public-social-search-route", permission:"public-search", role:"Douyin public video discovery route through authorized search channels", enabled:true },
+  "dailymotion": { type:"public-social-search-route", permission:"public-search-or-platform-api-required", role:"Dailymotion public video discovery route through authorized search channels", enabled:true },
   "corporate-homepage": {
     type: "enterprise-public-web-discovery",
     permission: "public-search-or-contract-api-required",
@@ -355,7 +355,7 @@ const PROVIDER_CATEGORY_ALIASES = {
   bing:{ web:"web", news:"news", image:"image", video:"video", academic:"academic" },
   youtube:{ search:"youtube", video:"video", shorts:"video" },
   searchbank:{ memory:"internal_search_bank", snapshot:"internal_search_bank" },
-  social:{ instagram:"sns", facebook:"sns", tiktok:"sns", x:"sns", twitter:"sns", threads:"sns", linkedin:"sns" },
+  social:{ instagram:"sns", facebook:"sns", tiktok:"sns", douyin:"sns", dailymotion:"sns" },
   academic:{ paper:"research_paper", research:"research_paper", library:"university_library", journal:"academic", citation:"academic" }
 };
 
@@ -376,8 +376,8 @@ const PROVIDER_CAPABILITY_MAP = {
   instagram: ["sns","image","tourism"],
   facebook: ["sns","community","news"],
   tiktok: ["sns","video","youtube","tourism"],
-  "x-twitter": ["sns","news","community"],
-  threads: ["sns","community"],
+  douyin: ["sns","video","tourism"],
+  dailymotion: ["sns","video","youtube","tourism"],
   "corporate-homepage": ["site","web","official"],
   "blog-community": ["blog","cafe","community"],
   academic: ["academic","research_paper","university_library"],
@@ -761,7 +761,7 @@ function classifyQueryCategories(q, explicitType){
   if(/책|도서|출판|저자|book|author|isbn/.test(text)) cats.add("book"), cats.add("university_library");
   if(/사진|이미지|포토|갤러리|image|photo|picture|gallery/.test(text)) cats.add("image");
   if(/영상|동영상|유튜브|youtube|video|shorts|reels|vlog/.test(text)) cats.add("video"), cats.add("youtube");
-  if(/인스타|페이스북|틱톡|트위터|쓰레드|링크드인|sns|instagram|facebook|tiktok|twitter|x\.com|threads|linkedin/.test(text)) cats.add("sns");
+  if(/인스타|페이스북|틱톡|더우인|데일리모션|sns|instagram|facebook|tiktok|douyin|dailymotion/.test(text)) cats.add("sns");
   if(/블로그|후기|리뷰|blog|review/.test(text)) cats.add("blog");
   if(/카페|커뮤니티|게시판|forum|community|cafe/.test(text)) cats.add("cafe"), cats.add("community");
   if(/쇼핑|가격|구매|상품|제품|shopping|price|buy|product/.test(text)) cats.add("shopping");
@@ -1599,8 +1599,8 @@ function routeProviderSearchUrl(provider, q){
   if(p.includes("instagram")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:instagram.com");
   if(p.includes("facebook")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:facebook.com");
   if(p.includes("tiktok")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:tiktok.com");
-  if(p.includes("twitter") || p.includes("x-")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:x.com OR site:twitter.com");
-  if(p.includes("threads")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:threads.net");
+  if(p.includes("douyin")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:douyin.com/video");
+  if(p.includes("dailymotion")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:dailymotion.com/video");
   if(p.includes("official") || p.includes("government")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " official government");
   if(p.includes("wiki")) return "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " wikipedia encyclopedia");
   if(p.includes("academic") || p.includes("research")) return "https://scholar.google.com/scholar?q=" + enc;
@@ -1663,8 +1663,8 @@ function buildOpeningFallbackCards(q, opts){
     ["instagram", "Instagram public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:instagram.com"), "sns"],
     ["facebook", "Facebook public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:facebook.com"), "sns"],
     ["tiktok", "TikTok public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:tiktok.com"), "sns"],
-    ["x_twitter", "X/Twitter public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:x.com OR site:twitter.com"), "sns"],
-    ["threads", "Threads public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:threads.net"), "sns"],
+    ["douyin", "Douyin public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:douyin.com/video"), "sns"],
+    ["dailymotion", "Dailymotion public route", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " site:dailymotion.com/video"), "sns"],
     ["scholar", "Academic / research", "https://scholar.google.com/scholar?q=" + enc, "academic"],
     ["public_data", "Public data", "https://www.google.com/search?q=" + encodeURIComponent((q || "") + " public data government dataset"), "public_data"]
   ];
@@ -3300,7 +3300,7 @@ function sanmaruFrontPageCanonical(v){
   if(k === "index" || k === "main" || k === "front" || k === "web" || k === "home" || /^home(?:-|$)/.test(k)) return "home";
   if(k === "networkhub" || k === "network-hub" || /^network(?:-|$)/.test(k) || /market|rightpanel|right-panel/.test(k)) return "networkhub";
   if(k === "distributionhub" || k === "distribution-hub" || /^distribution(?:-|$)/.test(k) || /^dist[0-9]+$/.test(k) || /commerce|product|shopping|shop/.test(k)) return "distributionhub";
-  if(k === "socialnetwork" || k === "social-network" || /^social(?:-|$)/.test(k) || /sns|youtube|instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|twitter|x-com/.test(k)) return "socialnetwork";
+  if(k === "socialnetwork" || k === "social-network" || /^social(?:-|$)/.test(k) || /sns|youtube|instagram|tiktok|facebook|douyin|dailymotion/.test(k)) return "socialnetwork";
   if(k === "mediahub" || k === "media-hub" || /^media(?:-|$)/.test(k) || /movie|drama|thriller|romance|variety|documentary|animation|music|shorts|video/.test(k)) return "mediahub";
   if(k === "tour" || /^tour(?:-|$)/.test(k) || /travel|tourism|hotel|trip|local-tour/.test(k)) return "tour";
   if(k === "donation" || /^donation(?:-|$)/.test(k) || /ngo|mission|service|relief|education|environment/.test(k)) return "donation";
@@ -3326,9 +3326,8 @@ const SANMARU_FRONT_SECTION_ALIAS_PAIRS = [
   ["dist5", "distribution-special"], ["dist6", "distribution-others"], ["dist7", "distribution-right"],
   ["rightpanel", "rightPanel"], ["right-panel", "rightPanel"],
   ["maru-channel", "social-maru"], ["youtube", "social-youtube"], ["instagram", "social-instagram"],
-  ["tiktok", "social-tiktok"], ["facebook", "social-facebook"], ["wechat", "social-wechat"],
-  ["weibo", "social-weibo"], ["pinterest", "social-pinterest"], ["reddit", "social-reddit"],
-  ["twitter", "social-twitter"], ["x", "social-twitter"], ["movie", "media-movie"],
+  ["tiktok", "social-tiktok"], ["facebook", "social-facebook"], ["douyin", "social-douyin"],
+  ["dailymotion", "social-dailymotion"], ["movie", "media-movie"],
   ["drama", "media-drama"], ["thriller", "media-thriller"], ["romance", "media-romance"],
   ["variety", "media-variety"], ["documentary", "media-documentary"], ["animation", "media-animation"],
   ["music", "media-music"], ["shorts", "media-shorts"]
@@ -3578,7 +3577,8 @@ function sanmaruProviderPassthroughCards(q, opts){
     ["provider-youtube", "YouTube 영상", (page)=>"https://www.youtube.com/results?search_query=" + enc + "&maru_page=" + page, "youtube", "video", 0.987],
     ["provider-instagram", "Instagram 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("site:instagram.com " + query) + "&start=" + Math.max(0, (page - 1) * 10), "instagram", "sns", 0.968],
     ["provider-facebook", "Facebook 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("site:facebook.com " + query) + "&start=" + Math.max(0, (page - 1) * 10), "facebook", "sns", 0.966],
-    ["provider-x-twitter", "X/Twitter 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("(site:x.com OR site:twitter.com) " + query) + "&start=" + Math.max(0, (page - 1) * 10), "x-twitter", "sns", 0.965],
+    ["provider-douyin", "Douyin 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("site:douyin.com/video " + query) + "&start=" + Math.max(0, (page - 1) * 10), "douyin", "sns", 0.965],
+    ["provider-dailymotion", "Dailymotion 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("site:dailymotion.com/video " + query) + "&start=" + Math.max(0, (page - 1) * 10), "dailymotion", "sns", 0.9645],
     ["provider-tiktok", "TikTok 공개 검색", (page)=>"https://www.google.com/search?q=" + encodeURIComponent("site:tiktok.com " + query) + "&start=" + Math.max(0, (page - 1) * 10), "tiktok", "sns", 0.964],
     ["provider-public-data", "공공 데이터 / 공식 자료", (page)=>"https://www.google.com/search?q=" + encodeURIComponent(query + " public data government official dataset 공공데이터 공식") + "&start=" + Math.max(0, (page - 1) * 10), "public-data", "official", 0.980]
   ];

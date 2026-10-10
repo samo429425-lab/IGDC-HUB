@@ -16,8 +16,8 @@
     ["social-instagram", "Instagram", "instagram"],
     ["social-tiktok", "TikTok", "tiktok"],
     ["social-facebook", "Facebook", "facebook"],
-    ["social-wechat", "WeChat", "wechat"],
-    ["social-weibo", "Weibo", "weibo"],
+    ["social-douyin", "Douyin", "douyin"],
+    ["social-dailymotion", "Dailymotion", "dailymotion"],
   ];
   var order = SECTIONS.map(function (x) {
       return x[0];
@@ -1509,17 +1509,16 @@
       if (/\.(?:js|mjs|css|map|json|html?|xml)(?:$|[?#])/i.test(raw)) return true;
       if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(path)) return true;
       if (platform === "instagram" && (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host) || /\/rsrc\.php(?:$|[/?#])/i.test(u.pathname))) return true;
-      if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return true;
       if (platform === "facebook" && /(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path)) return true;
       return signedPreviewExpired(platform, raw);
     } catch (_e) { return false; }
   }
-  var PROFILE_FALLBACK_SECTIONS = new Set(["social-wechat","social-weibo","social-pinterest","social-reddit","social-twitter"]);
+  var PROFILE_FALLBACK_SECTIONS = new Set(["social-douyin","social-dailymotion"]);
   function realPreviewMissing(row) {
     if (!row) return false;
     var cls=assetClass(row);
     if (cls !== "latest_content" && !(cls === "influencer_registry" && PROFILE_FALLBACK_SECTIONS.has(row.sectionKey))) return false;
-    var platform = lower(row.platform).replace(/^social-/, "").replace(/^x$/, "twitter"),
+    var platform = lower(row.platform).replace(/^social-/, ""),
       title = lower(row.title),
       raw = row.raw || {},
       sourceUrl = text(row.sourceUrl || row.source_url || raw.latestContentUrl || raw.latest_content_url || raw.sourceUrl || raw.source_url),
@@ -1530,7 +1529,7 @@
       (sourceUrl && thumbUrl === sourceUrl) ||
       genericProviderPreviewThumb(platform, thumbUrl);
     if (platform === "facebook") return noThumb;
-    var genericTitle = !title || ["instagram","tiktok","wechat","weibo","pinterest","reddit","twitter","x"].indexOf(title) >= 0;
+    var genericTitle = !title || ["instagram","tiktok","douyin","dailymotion"].indexOf(title) >= 0;
     return noThumb || genericTitle;
   }
   function mergeHydratedRows(items) {
@@ -1805,8 +1804,8 @@
       limit: j.batchSize,
       batchSize: j.batchSize,
       queryPasses: j.qualitySweepActive
-        ? (/^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section) ? 3 : 2)
-        : (/^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section) ? 2 : 1),
+        ? (/^social-(?:douyin|dailymotion)$/.test(section) ? 3 : 2)
+        : (/^social-(?:douyin|dailymotion)$/.test(section) ? 2 : 1),
       queryCursor: j.queryCursor || 0,
       countryCode: j.countryCode || "",
       regionId: j.regionId || "",
@@ -1925,7 +1924,7 @@
       if (dryRun) break;
       if (!stopRequested && j.sectionCount < j.target) await wait(650);
     }
-    var sparseRescue = /^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section);
+    var sparseRescue = /^social-(?:douyin|dailymotion)$/.test(section);
     if (
       !dryRun &&
       !stopRequested &&
@@ -2004,7 +2003,7 @@
       registrySweepDone: false,
       registrySweepActive: false,
       qualitySweepBatches: 0,
-      qualitySweepTarget: /^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(section) ? 8 : 6,
+      qualitySweepTarget: /^social-(?:douyin|dailymotion)$/.test(section) ? 8 : 6,
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
@@ -2123,7 +2122,7 @@
           j.registrySweepDone = false;
           j.registrySweepActive = false;
           j.qualitySweepBatches = 0;
-          j.qualitySweepTarget = /^social-(?:wechat|weibo|pinterest|reddit|twitter)$/.test(j.section) ? 8 : 6;
+          j.qualitySweepTarget = /^social-(?:douyin|dailymotion)$/.test(j.section) ? 8 : 6;
           j.qualitySweepDone = false;
           j.qualitySweepActive = false;
         }
@@ -2629,7 +2628,7 @@
     var cls=assetClass(row), isProfileFallback=cls === "influencer_registry" && PROFILE_FALLBACK_SECTIONS.has(row.sectionKey);
     if (cls !== "latest_content" && !isProfileFallback) return false;
     var thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url || row.raw.channelThumbnailUrl)));
-    var hasRealThumb = /^https:\/\//i.test(thumbUrl) && !/placeholder|\/assets\/sample\//i.test(thumbUrl) && !genericProviderPreviewThumb(lower(row.platform).replace(/^social-/,"").replace(/^x$/,"twitter"),thumbUrl);
+    var hasRealThumb = /^https:\/\//i.test(thumbUrl) && !/placeholder|\/assets\/sample\//i.test(thumbUrl) && !genericProviderPreviewThumb(lower(row.platform).replace(/^social-/,""),thumbUrl);
     var baseOk = text(row.reviewStatus).toLowerCase() === "approved" &&
       /^(approved_for_snapshot|verified|approved)$/i.test(text(row.verificationStatus)) &&
       row.candidateOnly === false && row.seedContent !== true && row.publicAccess === true && row.loginRequired !== true;

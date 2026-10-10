@@ -321,7 +321,7 @@ exports.handler = async function (event) {
       const by = SocialStore.compact(actor.email || actor.memberId || "admin", 200);
       const now = SocialStore.nowIso();
       const updated = [];
-      const fallbackSections = new Set(["social-wechat","social-weibo","social-pinterest","social-reddit","social-twitter"]);
+      const fallbackSections = new Set(["social-douyin","social-dailymotion"]);
       const eligible = candidates.filter((row) => {
         const raw = rawObject(row && row.raw);
         const assetClass = SocialStore.text(row.asset_class || row.assetClass || raw.assetClass).toLowerCase();
@@ -336,7 +336,7 @@ exports.handler = async function (event) {
         const batch = eligible.slice(index, index + concurrency);
         const hydrated = await Promise.all(batch.map(async (row) => {
           const raw = rawObject(row.raw);
-          const platform = SocialStore.text(row.platform || raw.platform).toLowerCase().replace(/^social-/, "").replace(/^x$/, "twitter");
+          const platform = SocialStore.text(row.platform || raw.platform).toLowerCase().replace(/^social-/, "");
           const assetClass = SocialStore.text(row.asset_class || row.assetClass || raw.assetClass).toLowerCase();
           const influencerFallback = assetClass === "influencer_registry" || assetClass === "influencer-registry";
           const contentUrl = SocialStore.text(
@@ -359,7 +359,7 @@ exports.handler = async function (event) {
             : (/^https:\/\//i.test(thumb) && !/placeholder|\/assets\/sample\//i.test(thumb) ? thumb : "");
           if (!resolvedThumb && !resolvedTitle && !resolvedCreator && !currentThumb) return [];
           const currentTitle = SocialStore.text(row.title);
-          const genericTitle = !currentTitle || new RegExp("^(" + platform.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "|x|twitter|instagram|tiktok|wechat|weibo|pinterest|reddit)$", "i").test(currentTitle);
+          const genericTitle = !currentTitle || new RegExp("^(" + platform.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "|instagram|tiktok|douyin|dailymotion)$", "i").test(currentTitle);
           const currentCreator = SocialStore.text(row.creator_name || row.creatorName || row.creator_handle || row.creatorHandle).replace(/^(false|null|undefined)$/i, "");
           const nextRaw = Object.assign({}, raw, {
             previewHydratedAt: now,

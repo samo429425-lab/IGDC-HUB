@@ -1,18 +1,18 @@
 /*
  * IGDC Social Network main-card viewer bridge v3.1.0-social-oauth
- * Scope: social main 9 sections ONLY.
+ * Scope: social main 6 sections ONLY.
  * Non-goals: right panel, distribution, snapshot storage, candidate/admin, automap ownership.
  *
  * UX contract
  * 1) Main SNS card click -> IGDC in-page full-viewport player (browser chrome remains).
  * 2) Fullscreen button -> native browser fullscreen for the media stage.
  * 3) ESC from native fullscreen -> returns to the in-page full-viewport player.
- * 4) ESC again / top-left list button / browser Back -> returns to the 9-section list.
+ * 4) ESC again / top-left list button / browser Back -> returns to the 6-section list.
  * 5) Initial card click never navigates to youtube.com / instagram.com / etc.
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20260922-contained-fallback-v8'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20261011-six-sns-douyin-dailymotion-v1'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -25,11 +25,8 @@
     'social-instagram': 'instagram',
     'social-tiktok': 'tiktok',
     'social-facebook': 'facebook',
-    'social-wechat': 'wechat',
-    'social-weibo': 'weibo',
-    'social-pinterest': 'pinterest',
-    'social-reddit': 'reddit',
-    'social-twitter': 'twitter'
+    'social-douyin': 'douyin',
+    'social-dailymotion': 'dailymotion'
   };
 
   var state = {
@@ -94,9 +91,8 @@
     return !url || url === '#' || /^javascript:/i.test(url) ||
       /\/pages\/coming-soon\.html/i.test(url) ||
       /(?:^|\.)example\.com(?:[\/:?#]|$)/i.test(url) ||
-      /social[_-](?:youtube|instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|twitter)[_-]?\d+/i.test(url) ||
-      /tiktok\.com\/@seed\/video\//i.test(url) ||
-      /reddit\.com\/r\/seed\/comments\//i.test(url);
+      /social[_-](?:youtube|instagram|tiktok|facebook|douyin|dailymotion)[_-]?\d+/i.test(url) ||
+      /tiktok\.com\/@seed\/video\//i.test(url);
   }
 
   function placeholderCard(card) {
@@ -190,11 +186,6 @@
     return '';
   }
 
-  function statusId(url) {
-    var m = text(url).match(/\/status(?:es)?\/(\d+)/i);
-    return m ? m[1] : '';
-  }
-
   function tiktokVideoId(url) {
     var raw = text(url);
     var m = raw.match(/\/video\/(\d+)/i) || raw.match(/\/v\/(\d+)\.html(?:[?#]|$)/i);
@@ -205,16 +196,10 @@
     } catch (_) { return ''; }
   }
 
-  function pinterestPinId(url) {
-    var m = text(url).match(/\/pin\/(\d+)/i);
+  function dailymotionVideoId(url) {
+    var raw = text(url);
+    var m = raw.match(/dailymotion\.com\/video\/([A-Za-z0-9]+)/i) || raw.match(/dai\.ly\/([A-Za-z0-9]+)/i);
     return m ? m[1] : '';
-  }
-
-  function normalizeRedditPath(url) {
-    try {
-      var u = new URL(url, location.href);
-      return u.pathname + (u.search || '');
-    } catch (_) { return ''; }
   }
 
   function instagramEmbed(url) {
@@ -269,14 +254,8 @@
         var isVideo = /\/plugins\/video\.php$/i.test(path) || facebookIsVideo(contentUrl);
         return { mode: 'iframe', src: raw, aspect: isVideo ? '16/9' : 'auto', provider: isVideo ? 'facebook-video' : 'facebook-post' };
       }
-      if (platform === 'twitter' && host === 'platform.twitter.com' && /\/embed\/Tweet\.html$/i.test(path)) {
-        return { mode: 'iframe', src: raw, aspect: 'auto', provider: 'twitter-post' };
-      }
-      if (platform === 'pinterest' && host === 'assets.pinterest.com' && /\/ext\/embed\.html$/i.test(path)) {
-        return { mode: 'iframe', src: raw, aspect: 'auto', provider: 'pinterest-pin' };
-      }
-      if (platform === 'reddit' && /(?:^|\.)redditmedia\.com$/.test(host)) {
-        return { mode: 'iframe', src: raw, aspect: 'auto', provider: 'reddit-post' };
+      if (platform === 'dailymotion' && /(?:^|\.)dailymotion\.com$/.test(host) && /^\/embed\/video\//i.test(path)) {
+        return { mode: 'iframe', src: raw, aspect: '16/9', provider: 'dailymotion-video' };
       }
     } catch (_) {}
     return null;
@@ -344,71 +323,29 @@
       };
     }
 
-    if (platform === 'twitter') {
-      var xid = statusId(url);
-      if (xid) {
-        return {
-          mode: 'iframe',
-          src: 'https://platform.twitter.com/embed/Tweet.html?dnt=true&id=' + encodeURIComponent(xid),
-          aspect: 'auto'
-        };
-      }
-      var xPreview = previewUrlOf(card);
-      if (validPreviewImageSrc(xPreview)) {
-        return { mode: 'preview', src: xPreview, aspect: '16/9', provider: 'twitter-profile-preview', profileFallback: true };
-      }
-      return null;
+    if (platform === 'dailymotion') {
+      var did = dailymotionVideoId(url);
+      if (!did) return containedFallbackEmbed(platform, card, titleOf(card));
+      return {
+        mode: 'iframe',
+        src: 'https://www.dailymotion.com/embed/video/' + encodeURIComponent(did) + '?autoplay=1&queue-enable=false',
+        aspect: '16/9',
+        provider: 'dailymotion-video'
+      };
     }
 
-    if (platform === 'pinterest') {
-      var pid = pinterestPinId(url);
-      if (pid) {
-        return {
-          mode: 'iframe',
-          src: 'https://assets.pinterest.com/ext/embed.html?id=' + encodeURIComponent(pid),
-          aspect: 'auto'
-        };
-      }
-      var pinPreview = previewUrlOf(card);
-      if (validPreviewImageSrc(pinPreview)) {
-        return { mode: 'preview', src: pinPreview, aspect: '16/9', provider: 'pinterest-profile-preview', profileFallback: true };
-      }
-      return null;
-    }
-
-    if (platform === 'reddit') {
-      var path = normalizeRedditPath(url);
-      if (path && path.indexOf('/comments/') >= 0) {
-        return {
-          mode: 'iframe',
-          src: 'https://www.redditmedia.com' + path + (path.indexOf('?') >= 0 ? '&' : '?') + 'ref_source=embed&ref=share&embed=true',
-          aspect: 'auto'
-        };
-      }
-      var redditPreview = previewUrlOf(card);
-      if (validPreviewImageSrc(redditPreview)) {
-        return { mode: 'preview', src: redditPreview, aspect: '16/9', provider: 'reddit-profile-preview', profileFallback: true };
-      }
-      return null;
-    }
-
-    /* WeChat / Weibo do not expose a stable third-party embed/player endpoint.
-       Published rows already carry a verified public preview image. Prefer that
-       stored preview as the contained IGDC document instead of presenting a blank
-       "refused to connect" iframe. If an older row has no preview, keep the prior
-       restricted-frame attempt as a last resort. */
-    if ((platform === 'wechat' || platform === 'weibo') && validHttp(url)) {
-      var storedPreview = previewUrlOf(card);
-      if (validPreviewImageSrc(storedPreview)) {
+    if (platform === 'douyin' && validHttp(url)) {
+      var douyinPreview = previewUrlOf(card);
+      if (validPreviewImageSrc(douyinPreview)) {
         return {
           mode: 'preview',
-          src: storedPreview,
-          aspect: '16/9',
-          provider: platform + '-contained-preview',
+          src: douyinPreview,
+          aspect: '9/16',
+          provider: 'douyin-contained-preview',
           restrictedProvider: true
         };
       }
-      return { mode: 'iframe', src: url, aspect: 'auto', restrictedProvider: true };
+      return { mode: 'iframe', src: url, aspect: '9/16', provider: 'douyin-public-page', restrictedProvider: true };
     }
 
     return null;
@@ -1692,7 +1629,7 @@
       stage.appendChild(shell);
       bindViewerScrollHost(shell);
     } else {
-      /* All nine main SNS viewers share one scroll contract: the provider media
+      /* All six main SNS viewers share one scroll contract: the provider media
          sits in a full-width content document and a consistent 90px safe area remains
          below it. The browser only paints a vertical scrollbar when that document
          is taller than the available viewer stage (overflow:auto). */
@@ -1993,7 +1930,7 @@
     event.stopImmediatePropagation();
     /* Main SNS content never uses an external navigation fallback. Unsupported
        provider variants are rendered by openCard() as a contained preview/status
-       document so Back/ESC always returns to the 9-section list. */
+       document so Back/ESC always returns to the 6-section list. */
     openCard(card);
   }, true);
 })();

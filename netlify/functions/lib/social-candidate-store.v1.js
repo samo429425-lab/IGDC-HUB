@@ -127,11 +127,8 @@ function platformContentUrl(platform, value) {
   else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
   else if (p === "tiktok") ok = /\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path);
   else if (p === "facebook") ok = /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (path === "/watch/" && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
-  else if (p === "wechat") ok = /^\/s(?:\/|$)/i.test(path) || !!u.searchParams.get("__biz");
-  else if (p === "weibo") ok = /^\/(detail|status|tv\/show)\//i.test(path) || /^\/\d+\/[a-z0-9]+/i.test(path);
-  else if (p === "pinterest") ok = /^\/pin\/[^/]+/i.test(path) || host === "pin.it";
-  else if (p === "reddit") ok = /\/comments\/[^/]+/i.test(path) || host === "redd.it";
-  else if (p === "twitter" || p === "x") ok = /\/status\/[^/]+/i.test(path);
+  else if (p === "douyin") ok = host === "v.douyin.com" || /^\/(?:video|note)\/\d{8,}/i.test(path);
+  else if (p === "dailymotion") ok = host === "dai.ly" ? /^\/[A-Za-z0-9]+/i.test(path) : /^\/video\/[A-Za-z0-9]+/i.test(path);
   return ok ? url : "";
 }
 function socialEmbedUrl(platform, value) {
@@ -159,21 +156,14 @@ function socialEmbedUrl(platform, value) {
       ? "video.php" : "post.php";
     return "https://www.facebook.com/plugins/" + endpoint + "?href=" + encodeURIComponent(url) + (endpoint === "video.php" ? "&show_text=false&autoplay=true" : "&show_text=true");
   }
-  if (p === "pinterest") {
-    match = path.match(/\/pin\/(\d+)/i);
-    return match ? "https://assets.pinterest.com/ext/embed.html?id=" + encodeURIComponent(match[1]) : "";
+  if (p === "dailymotion") {
+    if (u.hostname.toLowerCase().replace(/^www\./, "") === "dai.ly") match = path.match(/^\/([A-Za-z0-9]+)/i);
+    else match = path.match(/^\/video\/([A-Za-z0-9]+)/i);
+    return match ? "https://www.dailymotion.com/embed/video/" + encodeURIComponent(match[1]) + "?autoplay=1" : "";
   }
-  if (p === "reddit") {
-    if (/\/comments\//i.test(path)) return "https://www.redditmedia.com" + path.replace(/\/?$/, "/") + "?ref_source=embed&ref=share&embed=true";
-    return "";
-  }
-  if (p === "twitter") {
-    match = path.match(/\/status\/(\d+)/i);
-    return match ? "https://platform.twitter.com/embed/Tweet.html?id=" + encodeURIComponent(match[1]) + "&dnt=true" : "";
-  }
-  // WeChat and Weibo commonly reject third-party iframe embedding. Their
-  // real content URL is retained and the IGDC internal viewer uses the stored
-  // preview instead of navigating the browser away from IGDC.
+  // Douyin does not expose a stable cross-origin player endpoint for all public
+  // posts. The public content URL and provider-owned preview stay in the IGDC
+  // contained viewer instead of navigating the browser away from the Hub.
   return "";
 }
 function thumbnailFromCandidate(row, normalized) {
@@ -1088,21 +1078,16 @@ function isApprovedInfluencer(row) {
     !!channelIdentity(r)
   );
 }
-const PROFILE_FALLBACK_SECTIONS = new Set([
-  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter",
-]);
+const PROFILE_FALLBACK_SECTIONS = new Set(["social-douyin", "social-dailymotion"]);
 function platformProfileUrl(platform, value) {
   const url = Policy.normalizeUrl(value);
   if (!url) return "";
   try {
-    const u = new URL(url), p = text(platform).replace(/^social-/, "").replace(/^x$/, "twitter").toLowerCase();
+    const u = new URL(url), p = text(platform).replace(/^social-/, "").toLowerCase();
     const host = u.hostname.toLowerCase().replace(/^www\./, ""), path = (u.pathname || "/").replace(/\/{2,}/g, "/");
     let ok = false;
-    if (p === "twitter") ok = /^(?:x|twitter)\.com$/i.test(host) && /^\/[A-Za-z0-9_]{1,30}\/?$/i.test(path);
-    else if (p === "pinterest") ok = /(^|\.)pinterest\./i.test(host) && !/^\/pin\//i.test(path) && path.split("/").filter(Boolean).length >= 1;
-    else if (p === "reddit") ok = /(^|\.)reddit\.com$/i.test(host) && /^\/(?:r|user|u)\/[^/]+\/?$/i.test(path);
-    else if (p === "weibo") ok = /(^|\.)weibo\.com$/i.test(host) && !/^\/(?:detail|status|tv\/show)\//i.test(path) && path !== "/";
-    else if (p === "wechat") ok = /(^|\.)weixin\.qq\.com$/i.test(host) || host === "open.weixin.qq.com";
+    if (p === "douyin") ok = /(^|\.)douyin\.com$/i.test(host) && /^\/user\/[^/]+\/?$/i.test(path);
+    else if (p === "dailymotion") ok = /(^|\.)dailymotion\.com$/i.test(host) && (/^\/user\/[^/]+\/?$/i.test(path) || /^\/(?!video(?:\/|$)|embed(?:\/|$)|playlist(?:\/|$))[^/]+\/?$/i.test(path));
     return ok ? url : "";
   } catch (_error) { return ""; }
 }
@@ -1126,8 +1111,7 @@ function generatedProfileCardThumbnail(row, platform) {
   }
   if (!creator) creator = "Creator";
   const labels = {
-    twitter: "X · Creator", reddit: "Reddit · Community", pinterest: "Pinterest · Creator",
-    wechat: "WeChat · Creator", weibo: "Weibo · Creator",
+    douyin: "Douyin · Creator", dailymotion: "Dailymotion · Channel",
   };
   const label = labels[platform] || "Social · Creator";
   const initial = Array.from(creator || label)[0] || "•";
@@ -1148,7 +1132,7 @@ function generatedProfileCardThumbnail(row, platform) {
 }
 function publishableProfileThumbnail(row) {
   const r = plain(row), raw = plain(r.raw);
-  const section = lowerKey(r.section_key || r.sectionKey), platform = text(r.platform || PLATFORM_BY_SECTION[section]).replace(/^x$/, "twitter");
+  const section = lowerKey(r.section_key || r.sectionKey), platform = text(r.platform || PLATFORM_BY_SECTION[section]);
   const profileUrl = platformProfileUrl(platform, raw.channelUrl || raw.channel_url || r.channel_url || r.channelUrl || r.source_url || r.sourceUrl);
   if (!profileUrl) return "";
   const thumb = thumbnailFromCandidate(
@@ -1180,8 +1164,6 @@ function isPublishEligibleInfluencerFallbackRow(row) {
   if (Number(r.safety_score || r.safetyScore || 0) < 65 || Number(r.trust_score || r.trustScore || 0) < 50) return false;
   const h = profileFallbackSafetyText(r);
   if (/(?:\bnsfw\b|onlyfans|porn(?:ography)?|sexual|sexiness|cameltoe|nude|nudity|adult\s+content|gambling|casino|betting|음란|성인물|도박|카지노)/i.test(h)) return false;
-  if (/^(?:social-wechat|social-weibo)$/.test(section) &&
-      /(?:communist\s+party|publicity\s+department|foreign\s+ministry|government\s+(?:agency|department)|embassy|consulate|political\s+propaganda|military\s+conflict|territorial\s+dispute|공산당|선전부|외교부|대사관|영사관|정치선전|군사분쟁|영토분쟁|政治宣传|政治宣傳|共产党|共產黨|宣传部|宣傳部|外交部|大使馆|大使館|领事馆|領事館|军事冲突|軍事衝突|领土争端|領土爭端)/i.test(h)) return false;
   if (!AIPolicy.evaluate(r, {}).ok) return false;
   return !!publishableProfileThumbnail(r);
 }
@@ -1199,7 +1181,6 @@ function providerBrandThumbnail(platform, value) {
       if (/\/rsrc\.php(?:$|[/?#])/i.test(url.pathname)) return true;
       if (/instagram[^/]*(?:logo|glyph)|(?:logo|glyph)[^/]*instagram/i.test(path)) return true;
     }
-    if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return true;
     if (platform === "facebook" && /(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path)) return true;
     return false;
   } catch (_error) { return true; }
@@ -1209,8 +1190,8 @@ function genericContentTitle(platform, value) {
   if (!title) return true;
   if (/^loading[.…]*$/i.test(title)) return true;
   if (/^(?:false|null|undefined)$/i.test(title)) return true;
-  if (/^(?:instagram|tiktok|wechat|weibo|pinterest|reddit|twitter|x|facebook|youtube)(?:\s+(?:post|reel|video|pin|content|item))?$/i.test(title)) return true;
-  const p = text(platform).replace(/^social-/, "").replace(/^x$/, "twitter");
+  if (/^(?:instagram|tiktok|facebook|youtube|douyin|dailymotion)(?:\s+(?:post|reel|video|content|item))?$/i.test(title)) return true;
+  const p = text(platform).replace(/^social-/, "");
   return !!p && title.toLowerCase() === p.toLowerCase();
 }
 function facebookSignedThumbnailExpiry(value) {
@@ -1289,26 +1270,9 @@ function publishableThumbnail(row) {
   if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
   return thumb;
 }
-const SAMPLE_SAFE_PREVIEW_PLATFORMS = new Set([
-  "instagram",
-  "tiktok",
-  "wechat",
-  "weibo",
-  "pinterest",
-  "reddit",
-  "twitter",
-]);
-// Pinterest/Reddit/X can expose a verified public post while withholding a
-// stable anonymous thumbnail. Do not throw away that real content row merely
-// because preview media is unavailable. The front renderer has an explicit
-// text-card fallback and does not navigate away from IGDC.
-const PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS = new Set([
-  "wechat",
-  "weibo",
-  "pinterest",
-  "reddit",
-  "twitter",
-]);
+// Public Social cards must carry a real provider-owned preview image. Keeping
+// this strict prevents blank or synthetic cards from consuming permanent slots.
+const PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS = new Set([]);
 function publishableIdentity(row) {
   const r = plain(row);
   const raw = plain(r.raw);
@@ -1329,7 +1293,7 @@ function publishableIdentity(row) {
     r.description,
     raw.description,
   ].map(text).filter(Boolean);
-  const generic = /^(?:instagram|tiktok|wechat|weibo|pinterest|reddit|twitter|x|social)(?:\s+(?:post|reel|video|pin|content|item))?$/i;
+  const generic = /^(?:instagram|tiktok|facebook|youtube|douyin|dailymotion|social)(?:\s+(?:post|reel|video|content|item))?$/i;
   return values.some((value) => {
     const clean = value.replace(/\s+/g, " ").trim();
     return clean.length >= 2 && !generic.test(clean) && !/^loading[.…]*$/i.test(clean);
@@ -1354,11 +1318,9 @@ function isPublishEligibleContentRow(row) {
   if (!contentUrl) return false;
   const thumbnail = publishableThumbnail(r);
   if (thumbnail) return true;
-  // Sparse public providers (notably Reddit/X and some localized Pinterest
-  // pages) can suppress OG/oEmbed images while the post URL and identity remain
-  // fully public. Keep only rows with a non-generic real identity/title; the
-  // front card then renders an honest provider text fallback instead of a fake
-  // or SAMPLE thumbnail.
+  // Providers can suppress preview media. A row without a real provider-owned
+  // preview does not consume a public slot; its SAMPLE remains until metadata
+  // recovery succeeds.
   if (PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS.has(platform)) {
     // These providers frequently suppress anonymous preview media or serve it
     // from anti-hotlink CDNs. At this point the row has already passed the
@@ -1564,8 +1526,8 @@ function publicSocialSlot(row, slotId, defaults) {
   const sourceUrl = latestContentUrl || text(r.source_url || r.sourceUrl);
   const publishThumb = publishableThumbnail(r);
   // Real Social content must never inherit the SAMPLE slot artwork. If an
-  // approved Pinterest/Reddit/X row has no stable preview image, keep thumb
-  // empty and let the front renderer show its provider-text fallback.
+  // approved row has no stable preview image, keep thumb empty so the SAMPLE
+  // remains until a real provider preview is available.
   const thumb = text(publishThumb || "");
   const section = text(r.section_key || r.sectionKey);
   const platform = platformHint;
@@ -1590,11 +1552,8 @@ function publicSocialSlot(row, slotId, defaults) {
     (platform === "instagram" ? "Instagram · Reel" :
       platform === "tiktok" ? "TikTok · Video" :
       platform === "facebook" ? "Facebook · Post" :
-      platform === "reddit" ? (profileFallback ? "Reddit · Community" : "Reddit · Post") :
-      platform === "pinterest" ? (profileFallback ? "Pinterest · Creator" : "Pinterest · Pin") :
-      platform === "twitter" ? (profileFallback ? "X · Creator" : "X · Post") :
-      platform === "wechat" ? (profileFallback ? "WeChat · Creator" : "WeChat · Post") :
-      platform === "weibo" ? (profileFallback ? "Weibo · Creator" : "Weibo · Post") :
+      platform === "douyin" ? (profileFallback ? "Douyin · Creator" : "Douyin · Video") :
+      platform === "dailymotion" ? (profileFallback ? "Dailymotion · Channel" : "Dailymotion · Video") :
       rawTitle);
   const displayTitle = genericContentTitle(platform, rawTitle) ? fallbackTitle : rawTitle;
   return Object.assign({}, base, {

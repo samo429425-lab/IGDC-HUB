@@ -36,8 +36,8 @@
       { "id": "sn-youtube-life",  "title": "유튜브 생활·핫이슈" },
       { "id": "sn-youtube-culture","title": "유튜브 문화·음악·힐링" },
       { "id": "sn-youtube-world", "title": "유튜브 세계정세·교양" },
-      { "id": "sn-shorts",        "title": "틱톡·쇼츠 바이럴" },
-      { "id": "sn-fb-twitter",    "title": "페이스북·트위터 교육·지식" }
+      { "id": "sn-shorts",        "title": "틱톡·더우인 쇼츠·바이럴" },
+      { "id": "sn-dailymotion",   "title": "데일리모션 영상·교양" }
     ]
   },
 

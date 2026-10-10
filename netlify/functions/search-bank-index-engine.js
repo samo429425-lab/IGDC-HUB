@@ -346,7 +346,7 @@ function frontPageCanonical(v){
   if(k === "index" || k === "main" || k === "front" || k === "web" || k === "home" || /^home(?:-|$)/.test(k)) return "home";
   if(k === "networkhub" || k === "network-hub" || /^network(?:-|$)/.test(k) || /market|rightpanel|right-panel/.test(k)) return "networkhub";
   if(k === "distributionhub" || k === "distribution-hub" || /^distribution(?:-|$)/.test(k) || /^dist[0-9]+$/.test(k) || /commerce|product|shopping|shop/.test(k)) return "distributionhub";
-  if(k === "socialnetwork" || k === "social-network" || /^social(?:-|$)/.test(k) || /sns|youtube|instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|twitter|x-com/.test(k)) return "socialnetwork";
+  if(k === "socialnetwork" || k === "social-network" || /^social(?:-|$)/.test(k) || /sns|youtube|instagram|tiktok|facebook|douyin|dailymotion/.test(k)) return "socialnetwork";
   if(k === "mediahub" || k === "media-hub" || /^media(?:-|$)/.test(k) || /movie|drama|thriller|romance|variety|documentary|animation|music|shorts|video/.test(k)) return "mediahub";
   if(k === "tour" || /^tour(?:-|$)/.test(k) || /travel|tourism|hotel|trip|local-tour/.test(k)) return "tour";
   if(k === "donation" || /^donation(?:-|$)/.test(k) || /ngo|mission|service|relief|education|environment/.test(k)) return "donation";
@@ -588,9 +588,8 @@ const SECTION_ALIAS_PAIRS = [
   ["dist5", "distribution-special"], ["dist6", "distribution-others"], ["dist7", "distribution-right"],
   ["rightpanel", "rightPanel"], ["right-panel", "rightPanel"],
   ["maru-channel", "social-maru"], ["youtube", "social-youtube"], ["instagram", "social-instagram"],
-  ["tiktok", "social-tiktok"], ["facebook", "social-facebook"], ["wechat", "social-wechat"],
-  ["weibo", "social-weibo"], ["pinterest", "social-pinterest"], ["reddit", "social-reddit"],
-  ["twitter", "social-twitter"], ["x", "social-twitter"], ["movie", "media-movie"],
+  ["tiktok", "social-tiktok"], ["facebook", "social-facebook"], ["douyin", "social-douyin"],
+  ["dailymotion", "social-dailymotion"], ["movie", "media-movie"],
   ["drama", "media-drama"], ["thriller", "media-thriller"], ["romance", "media-romance"],
   ["variety", "media-variety"], ["documentary", "media-documentary"], ["animation", "media-animation"],
   ["music", "media-music"], ["shorts", "media-shorts"]

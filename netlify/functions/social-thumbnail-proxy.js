@@ -16,7 +16,7 @@ const TIMEOUT_MS = 5500;
 
 function text(value) { return value == null ? "" : String(value).trim(); }
 function platformOf(value) {
-  const p = text(value).toLowerCase().replace(/^social-/, "").replace(/^x$/, "twitter");
+  const p = text(value).toLowerCase().replace(/^social-/, "");
   return SUPPORTED.has(p) ? p : "";
 }
 function json(statusCode, body) {

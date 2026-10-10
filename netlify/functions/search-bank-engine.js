@@ -898,7 +898,7 @@ const FRONT_SECTION_ALIAS_MAP = Object.freeze({
   dist6:"distribution-others", dist_6:"distribution-others", "dist-6":"distribution-others", distribution6:"distribution-others", distribution_6:"distribution-others", "distribution-6":"distribution-others",
   dist7:"distribution-right", dist_7:"distribution-right", "dist-7":"distribution-right", distribution7:"distribution-right", distribution_7:"distribution-right", "distribution-7":"distribution-right",
   dist8:"distribution-extra", dist_8:"distribution-extra", "dist-8":"distribution-extra", distribution8:"distribution-extra", distribution_8:"distribution-extra", "distribution-8":"distribution-extra", "distribution-extra":"distribution-extra",
-  youtube:"social-youtube", instagram:"social-instagram", tiktok:"social-tiktok", facebook:"social-facebook", wechat:"social-wechat", weibo:"social-weibo", pinterest:"social-pinterest", reddit:"social-reddit", twitter:"social-twitter", x:"social-twitter",
+  youtube:"social-youtube", instagram:"social-instagram", tiktok:"social-tiktok", facebook:"social-facebook", douyin:"social-douyin", dailymotion:"social-dailymotion",
   movie:"media-movie", movies:"media-movie", drama:"media-drama", thriller:"media-thriller", romance:"media-romance", variety:"media-variety", documentary:"media-documentary", animation:"media-animation", music:"media-music", shorts:"media-shorts"
 });
 

@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.29.0-sparse-five-provider-rescue";
+const VERSION = "sanmaru-social-live-collector-v1.30.0-six-video-platforms";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -39,11 +39,11 @@ const PROFILE_LATEST_TIMEOUT_MS = 2200;
 const CHANNEL_RESOLUTION_BUDGET_MS = 4200;
 const TIKTOK_CHANNEL_RESOLUTION_BUDGET_MS = 8500;
 const CHANNEL_RESOLUTION_CONCURRENCY = 4;
-// YouTube and Facebook already have stable, working publication paths. Restrict
-// the new preview recovery path to the seven sections that were still collapsing
-// before front publication.
+// Keep preview recovery inside the six active Social Hub platforms only.
+// YouTube already has a stable publication path; the other five can require
+// provider metadata recovery before a candidate is publishable.
 const PREVIEW_RECOVERY_PLATFORMS = new Set([
-  "instagram", "tiktok", "facebook", "wechat", "weibo", "pinterest", "reddit", "twitter"
+  "instagram", "tiktok", "facebook", "douyin", "dailymotion"
 ]);
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 const INTERNAL_SCHEDULE_EVENT = Symbol("igdc-social-scheduled-internal");
@@ -76,31 +76,6 @@ const PUBLIC_DIRECTORY = Object.freeze({
     property: "P2013",
     entityKind: "public_page",
     url: (value) => "https://www.facebook.com/" + encodeURIComponent(value)
-  },
-  wechat: {
-    property: "P7650",
-    entityKind: "official_account",
-    url: (value) => "https://open.weixin.qq.com/qr/code?username=" + encodeURIComponent(value)
-  },
-  weibo: {
-    property: "P3579",
-    entityKind: "profile",
-    url: (value) => "https://weibo.com/u/" + encodeURIComponent(value)
-  },
-  pinterest: {
-    property: "P3836",
-    entityKind: "profile",
-    url: (value) => "https://www.pinterest.com/" + encodeURIComponent(String(value).replace(/^@/, "")) + "/"
-  },
-  reddit: {
-    property: "P3984",
-    entityKind: "community",
-    url: (value) => "https://www.reddit.com/r/" + encodeURIComponent(String(value).replace(/^r\//i, "")) + "/"
-  },
-  twitter: {
-    property: "P2002",
-    entityKind: "profile",
-    url: (value) => "https://x.com/" + encodeURIComponent(String(value).replace(/^@/, ""))
   }
 });
 
@@ -109,11 +84,8 @@ const CONTENT_SITE_FILTERS = Object.freeze({
   instagram: "(site:instagram.com/p/ OR site:instagram.com/reel/)",
   tiktok: "site:tiktok.com/@ inurl:video",
   facebook: "(site:facebook.com/reel/ OR site:facebook.com/watch OR site:facebook.com/videos/ OR site:facebook.com/posts/)",
-  wechat: "site:mp.weixin.qq.com/s",
-  weibo: "(site:weibo.com/status/ OR site:m.weibo.cn/detail/)",
-  pinterest: "site:pinterest.com/pin/",
-  reddit: "site:reddit.com/r/ inurl:/comments/",
-  twitter: "(site:x.com/status/ OR site:twitter.com/status/)"
+  douyin: "(site:douyin.com/video/ OR site:douyin.com/note/ OR site:v.douyin.com)",
+  dailymotion: "(site:dailymotion.com/video/ OR site:dai.ly)"
 });
 
 // Simple public-search forms used only by the Social collector rescue path.
@@ -123,11 +95,8 @@ const PUBLIC_POST_SEARCH = Object.freeze({
   instagram: { host: "instagram.com", hint: "reel post" },
   tiktok: { host: "tiktok.com", hint: "video" },
   facebook: { host: "facebook.com", hint: "reel video posts" },
-  wechat: { host: "mp.weixin.qq.com", hint: "article" },
-  weibo: { host: "weibo.com", hint: "status" },
-  pinterest: { host: "pinterest.com", hint: "pin" },
-  reddit: { host: "reddit.com", hint: "comments" },
-  twitter: { host: "x.com", hint: "status" }
+  douyin: { host: "douyin.com", hint: "video note" },
+  dailymotion: { host: "dailymotion.com", hint: "video" }
 });
 
 const DISCOVERY_INTENT_TERMS = Object.freeze([
@@ -137,38 +106,22 @@ const DISCOVERY_INTENT_TERMS = Object.freeze([
   "popular culture travel education performance",
 ]);
 const SPARSE_PLATFORM_DISCOVERY_TERMS = Object.freeze({
-  wechat: [
+  douyin: [
     "travel tourism destination", "music live performance", "culture museum heritage",
-    "food restaurant local cuisine", "education science technology", "art design photography",
+    "food local cuisine", "education science technology", "art design photography",
     "nature outdoor wellness", "family entertainment lifestyle"
   ],
-  weibo: [
-    "travel tourism destination", "music singer live performance", "culture art museum",
-    "food local cuisine", "entertainment variety performance", "education science technology",
-    "sports outdoor", "nature photography lifestyle"
-  ],
-  pinterest: [
-    "travel ideas destination", "food recipes", "interior design", "fashion style",
-    "beauty wellness", "art illustration", "photography", "DIY crafts",
-    "architecture", "education ideas", "nature outdoors", "home lifestyle"
-  ],
-  reddit: [
-    "travel community", "music community", "technology discussion", "science learning",
-    "education", "food cooking", "photography", "culture", "Korea community",
-    "gaming", "sports", "movies books", "DIY", "nature outdoors"
-  ],
-  twitter: [
-    "music artist creator", "travel creator", "culture art", "science technology",
-    "education learning", "sports", "entertainment", "food", "photography",
-    "nature outdoors", "museum heritage", "lifestyle creator", "Korea creator"
+  dailymotion: [
+    "documentary culture", "music live performance", "travel destination",
+    "education science technology", "sports highlights", "entertainment",
+    "art film", "nature lifestyle"
   ]
 });
 const SPARSE_DISCOVERY_PLATFORMS = new Set(Object.keys(SPARSE_PLATFORM_DISCOVERY_TERMS));
 
 const REGISTRY_QUALITY_FOCUS = Object.freeze({
-  wechat: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education",
-  weibo: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education",
-  twitter: "travel music culture art science education nature museum tourism entertainment useful public creator"
+  douyin: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education",
+  dailymotion: "documentary travel music culture art science education nature entertainment sports useful public creator"
 });
 
 const REGISTRY_BLOCK_TERMS = Object.freeze([
@@ -362,11 +315,8 @@ function contentKind(platform, value) {
     if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
     if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^(?:vm|vt)\.tiktok\.com$/i.test(url.hostname))) return "latest_video";
     if (platform === "facebook" && (/^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (path === "/watch/" && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
-    if (platform === "wechat" && (/^\/s(?:\/|$)/i.test(path) || url.searchParams.get("__biz"))) return "latest_post";
-    if (platform === "weibo" && (/^\/(status|detail|tv\/show)\//i.test(path) || /^\/\d+\/[a-z0-9]+/i.test(path))) return "latest_post";
-    if (platform === "pinterest" && (/^\/pin\/[^/]+/i.test(path) || /pin\.it$/i.test(url.hostname))) return "latest_post";
-    if (platform === "reddit" && (/\/comments\/[^/]+/i.test(path) || /redd\.it$/i.test(url.hostname))) return "latest_post";
-    if (platform === "twitter" && /\/status\/[^/]+/i.test(path)) return "latest_post";
+    if (platform === "douyin" && (/^\/(video|note)\/\d+/i.test(path) || /^v\.douyin\.com$/i.test(url.hostname))) return /^\/note\//i.test(path) ? "latest_post" : "latest_video";
+    if (platform === "dailymotion" && (/^\/video\/[a-z0-9]+/i.test(path) || /^dai\.ly$/i.test(url.hostname))) return "latest_video";
   } catch (_error) {}
   return "";
 }
@@ -384,9 +334,9 @@ function channelIdFromItem(item) {
 function syntheticTitle(value, platform) {
   const title = SocialStore.text(value).replace(/\s+/g, " ").trim();
   if (!title || /^\[[^\]]+\].*(검색|공개 게시물|공개 글|공개 영상)/i.test(title) || /(검색 결과|search results?)$/i.test(title)) return true;
-  const generic = /^(?:instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|youtube|x|twitter)(?:\s+(?:post|reel|video|pin|content|item))?$/i;
+  const generic = /^(?:instagram|tiktok|facebook|douyin|dailymotion|youtube)(?:\s+(?:post|reel|video|note|content|item))?$/i;
   if (generic.test(title)) return true;
-  const p = SocialStore.text(platform).replace(/^social-/, "").replace(/^x$/, "twitter");
+  const p = SocialStore.text(platform).replace(/^social-/, "");
   return !!p && title.toLowerCase() === p.toLowerCase();
 }
 function sparseVerifiedContentTitle(platform, contentUrl, item) {
@@ -397,36 +347,20 @@ function sparseVerifiedContentTitle(platform, contentUrl, item) {
   try {
     const url = new URL(contentUrl);
     const parts = url.pathname.split("/").filter(Boolean);
-    if (platform === "twitter") {
-      const statusIndex = parts.findIndex((part) => part.toLowerCase() === "status");
-      const handle = statusIndex > 0 ? parts[statusIndex - 1] : "";
-      const id = statusIndex >= 0 ? parts[statusIndex + 1] || "" : "";
-      return ["X", handle ? "@" + handle.replace(/^@/, "") : "", id ? "Post " + id.slice(-10) : "Public post"].filter(Boolean).join(" · ");
+    if (platform === "douyin") {
+      const kindIndex = parts.findIndex((part) => /^(?:video|note)$/i.test(part));
+      const kind = kindIndex >= 0 ? parts[kindIndex].toLowerCase() : "video";
+      const id = kindIndex >= 0 ? parts[kindIndex + 1] || "" : "";
+      return "Douyin · " + (kind === "note" ? "Note" : "Video") + (id ? " " + id.slice(-12) : "");
     }
-    if (platform === "pinterest") {
-      const pinIndex = parts.findIndex((part) => part.toLowerCase() === "pin");
-      const id = pinIndex >= 0 ? parts[pinIndex + 1] || "" : "";
-      return "Pinterest · Pin" + (id ? " " + id.slice(-10) : "");
-    }
-    if (platform === "reddit") {
-      const rIndex = parts.findIndex((part) => part.toLowerCase() === "r");
-      const commentsIndex = parts.findIndex((part) => part.toLowerCase() === "comments");
-      const subreddit = rIndex >= 0 ? parts[rIndex + 1] || "" : "";
-      const id = commentsIndex >= 0 ? parts[commentsIndex + 1] || "" : "";
-      return ["Reddit", subreddit ? "r/" + subreddit : "", id ? "Post " + id : "Public post"].filter(Boolean).join(" · ");
-    }
-    if (platform === "weibo") {
-      const id = parts[parts.length - 1] || "";
-      return "Weibo · Public post" + (id ? " · " + id.slice(-10) : "");
-    }
-    if (platform === "wechat") {
-      const mid = url.searchParams.get("mid") || url.searchParams.get("__biz") || "";
-      return "WeChat · Public article" + (mid ? " · " + String(mid).slice(-10) : "");
+    if (platform === "dailymotion") {
+      const videoIndex = parts.findIndex((part) => part.toLowerCase() === "video");
+      const id = videoIndex >= 0 ? parts[videoIndex + 1] || "" : (url.hostname.toLowerCase() === "dai.ly" ? parts[0] || "" : "");
+      return "Dailymotion · Video" + (id ? " " + id.slice(-12) : "");
     }
   } catch (_error) {}
   return "";
 }
-
 function creatorNameFromSource(item, source) {
   const mode = SocialStore.text(source && source.mode).toLowerCase();
   const name = SocialStore.text(source && source.name);
@@ -550,7 +484,7 @@ function providerReadiness(configValue) {
       ready: !!(cfg.googleKey && cfg.googleCx),
       googleApiKeyConfigured: !!cfg.googleKey,
       cseIdConfigured: !!cfg.googleCx,
-      role: "Instagram·TikTok·Facebook·WeChat·Weibo·Pinterest·Reddit·X 공개 최신 게시물 검색"
+      role: "Instagram·TikTok·Facebook·Douyin·Dailymotion 공개 최신 영상·게시물 검색"
     },
     youtubeDataApi: {
       ready: !!cfg.youtubeKey,
@@ -703,21 +637,19 @@ function registryHandleFromUrl(value, platform) {
   try {
     const url = new URL(value);
     const parts = url.pathname.split("/").filter(Boolean);
-    if (platform === "reddit") {
-      const index = parts.findIndex((part) => String(part).toLowerCase() === "r");
-      if (index >= 0 && parts[index + 1]) return "r/" + parts[index + 1];
-    }
-    if (platform === "wechat") {
-      const username = text(url.searchParams.get("username"));
-      if (username) return username;
-    }
     if (platform === "youtube") {
       const token = parts.find((part) => /^@/.test(part));
       return token || "";
     }
-    const token = parts.find((part) =>
-      part && !/^(u|user|users|profile|people|channel|official)$/i.test(part)
-    );
+    if (platform === "douyin") {
+      const userIndex = parts.findIndex((part) => /^user$/i.test(part));
+      if (userIndex >= 0 && parts[userIndex + 1]) return decodeURIComponent(parts[userIndex + 1]);
+    }
+    if (platform === "dailymotion") {
+      const userIndex = parts.findIndex((part) => /^user$/i.test(part));
+      if (userIndex >= 0 && parts[userIndex + 1]) return decodeURIComponent(parts[userIndex + 1]);
+    }
+    const token = parts.find((part) => part && !/^(?:u|user|users|profile|people|channel|official|video|note|reel|watch)$/i.test(part));
     return token ? decodeURIComponent(token) : "";
   } catch (_error) { return ""; }
 }
@@ -754,9 +686,8 @@ function registrySeedBlocked(seed) {
   return REGISTRY_BLOCK_TERMS.some((term) => corpus.includes(String(term).toLowerCase()));
 }
 function registrySeedQualityScore(seed) {
-  /* Registry category values can be stale/bootstrap-derived (notably WeChat,
-     where many unrelated accounts were historically tagged as "music").
-     Rank by creator name + description instead of trusting that category. */
+  /* Registry category values can be stale/bootstrap-derived. Rank by creator
+     name + description instead of trusting a historical category alone. */
   const corpus = [
     seed && seed.title, seed && seed.handle, seed && seed.description
   ].map(SocialStore.text).join(" ").toLowerCase();
@@ -794,7 +725,7 @@ async function influencerRegistrySeeds(sectionKey, platform) {
         return !!(seed.url || seed.title || seed.handle);
       });
 
-    if (["wechat", "weibo", "twitter"].includes(platform)) {
+    if (["douyin", "dailymotion"].includes(platform)) {
       return seeds
         .map((seed, index) => ({ seed, index, score: registrySeedQualityScore(seed) }))
         .sort((a, b) => b.score - a.score || a.index - b.index)
@@ -1215,11 +1146,9 @@ function registrySearchNeedle(seed, platform) {
   try {
     const url = new URL(SocialStore.text(seed.url));
     const parts = url.pathname.split("/").filter(Boolean);
-    if (platform === "reddit") {
-      const r = parts.findIndex((part) => /^r$/i.test(part));
-      const u = parts.findIndex((part) => /^(?:u|user)$/i.test(part));
-      pathToken = r >= 0 && parts[r + 1] ? "r/" + parts[r + 1] :
-        (u >= 0 && parts[u + 1] ? "user/" + parts[u + 1] : "");
+    if (platform === "douyin" || platform === "dailymotion") {
+      const index = parts.findIndex((part) => /^user$/i.test(part));
+      pathToken = index >= 0 && parts[index + 1] ? parts[index + 1] : (parts[0] || "");
     } else {
       pathToken = parts[0] || "";
     }
@@ -1237,23 +1166,9 @@ function publicSearchQuery(plan, queryText, registrySeed) {
     .trim();
   const needle = registrySearchNeedle(registrySeed, platform);
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
-  if (platform === "twitter") {
-    return [base, exact, "(site:x.com OR site:twitter.com)", "status", "latest public post"].filter(Boolean).join(" ");
-  }
-  if (platform === "pinterest") {
-    return [base, exact, "site:pinterest.com/pin", "latest public pin"].filter(Boolean).join(" ");
-  }
-  if (platform === "reddit") {
-    return [base, exact, "site:reddit.com", "comments latest public post"].filter(Boolean).join(" ");
-  }
-  if (platform === "weibo") {
-    return [base, exact, "site:weibo.com", "latest public post"].filter(Boolean).join(" ");
-  }
-  if (platform === "wechat") {
-    return [base, exact, "site:mp.weixin.qq.com/s", "latest public article"].filter(Boolean).join(" ");
-  }
-  return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"]
-    .filter(Boolean).join(" ");
+  if (platform === "douyin") return [base, exact, "site:douyin.com", "video note latest public"].filter(Boolean).join(" ");
+  if (platform === "dailymotion") return [base, exact, "site:dailymotion.com/video", "latest public video"].filter(Boolean).join(" ");
+  return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"].filter(Boolean).join(" ");
 }
 function publicSearchTitle(platform, title, description) {
   const primary = stripHtml(decodeXml(title)).replace(/\s+/g, " ").trim();
@@ -1268,7 +1183,7 @@ function publicSearchTitle(platform, title, description) {
 function publicSearchCreator(platform, description) {
   const snippet = stripHtml(decodeXml(description)).replace(/\s+/g, " ").trim();
   if (!snippet) return "";
-  const platformName = platform === "twitter" ? "(?:X|Twitter)" : platform.charAt(0).toUpperCase() + platform.slice(1);
+  const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
   const re = new RegExp("(?:^|[-·|]\\s*)@?([A-Za-z0-9._]{2,40})\\s+on\\s+" + platformName + "(?:\\b|:)", "i");
   const match = snippet.match(re);
   return match && match[1] ? match[1] : "";
@@ -1340,101 +1255,12 @@ function sparseSearchTerms(queryText, platform) {
     .trim()
     .slice(0, 180);
 }
-function redditJsonThumbnail(row) {
-  const preview = row && row.preview && Array.isArray(row.preview.images) && row.preview.images[0] || {};
-  const source = preview && preview.source || {};
-  const candidates = [
-    source.url,
-    row && row.thumbnail,
-    row && row.url_overridden_by_dest,
-  ];
-  for (const value of candidates) {
-    const clean = decodeXml(SocialStore.text(value)).replace(/&amp;/gi, "&");
-    if (/^https:\/\//i.test(clean) && !/^(?:self|default|nsfw|spoiler)$/i.test(clean)) return clean;
-  }
-  return "";
-}
-async function redditPublicJsonSearch(plan, queryText, limit, qualitySweep) {
-  if (!plan || plan.platform !== "reddit") return { provider: "reddit-public-search-json", status: "not_needed", items: [] };
-  const wanted = Math.max(1, Math.min(30, Number(limit || 10) || 10));
-  const query = sparseSearchTerms(queryText, "reddit") || "popular useful community";
-  const params = new URLSearchParams({
-    q: query,
-    sort: qualitySweep ? "top" : "hot",
-    t: qualitySweep ? "month" : "week",
-    limit: String(wanted),
-    raw_json: "1",
-    type: "link"
-  });
-  try {
-    const data = await fetchJson(
-      "https://www.reddit.com/search.json?" + params.toString(),
-      { headers: { Accept: "application/json", "User-Agent": "IGDC-MARU-SocialHub/1.0" } },
-      REQUEST_TIMEOUT_MS
-    );
-    const children = data && data.data && Array.isArray(data.data.children) ? data.data.children : [];
-    const items = children.map((entry) => entry && entry.data || {}).map((row) => {
-      const permalink = row.permalink ? "https://www.reddit.com" + row.permalink : "";
-      if (!permalink || !contentKind("reddit", permalink)) return null;
-      return {
-        provider: "reddit-public-search-json",
-        platform: "reddit",
-        url: permalink,
-        sourceUrl: permalink,
-        latestContentUrl: permalink,
-        title: firstText([row.title, row.link_title]),
-        creatorName: firstText([row.author, row.subreddit_name_prefixed, row.subreddit]),
-        description: firstText([row.selftext, row.link_flair_text]).slice(0, 1200),
-        thumbnail: redditJsonThumbnail(row),
-        publishedAt: row.created_utc ? new Date(Number(row.created_utc) * 1000).toISOString() : "",
-        engagement: { likes: Number(row.ups || row.score || 0), comments: Number(row.num_comments || 0) },
-        entityKind: "latest_post",
-        source: { name: "reddit-public-search-json", platform: "reddit", mode: "public_post_search" }
-      };
-    }).filter(Boolean).slice(0, wanted);
-    return { provider: "reddit-public-search-json", status: items.length ? "ok" : "empty", items };
-  } catch (error) {
-    return { provider: "reddit-public-search-json", status: error && error.name === "AbortError" ? "timeout" : "error", error: error && error.message || "reddit_public_search_failed", items: [] };
-  }
-}
-async function pinterestPublicHtmlSearch(plan, queryText, limit) {
-  if (!plan || plan.platform !== "pinterest") return { provider: "pinterest-public-search-html", status: "not_needed", items: [] };
-  const wanted = Math.max(1, Math.min(24, Number(limit || 10) || 10));
-  const query = sparseSearchTerms(queryText, "pinterest") || "popular ideas";
-  const target = "https://www.pinterest.com/search/pins/?q=" + encodeURIComponent(query);
-  try {
-    const html = await fetchText(target, {
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.8"
-      }
-    }, REQUEST_TIMEOUT_MS);
-    const urls = providerRelativePostUrls("pinterest", html, "https://www.pinterest.com/", wanted);
-    const items = urls.map((url) => ({
-      provider: "pinterest-public-search-html",
-      platform: "pinterest",
-      url,
-      sourceUrl: url,
-      latestContentUrl: url,
-      title: "",
-      creatorName: "",
-      description: "",
-      entityKind: "latest_post",
-      source: { name: "pinterest-public-search-html", platform: "pinterest", mode: "public_post_search" }
-    }));
-    return { provider: "pinterest-public-search-html", status: items.length ? "ok" : "empty", items };
-  } catch (error) {
-    return { provider: "pinterest-public-search-html", status: error && error.name === "AbortError" ? "timeout" : "error", error: error && error.message || "pinterest_public_search_failed", items: [] };
-  }
-}
-async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
-  if (!plan) return [];
-  if (plan.platform === "reddit") return [await redditPublicJsonSearch(plan, queryText, limit, qualitySweep)];
-  if (plan.platform === "pinterest") return [await pinterestPublicHtmlSearch(plan, queryText, limit)];
+
+
+
+async function sparseNativePublicSearch(_plan, _queryText, _limit, _qualitySweep) {
   return [];
 }
-
 async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
   if (!plan || plan.platform === "youtube") {
     return { provider: "direct-public-post-search", status: "not_needed", items: [] };
@@ -1483,211 +1309,74 @@ async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
 
 
 function providerRelativePostUrls(platform, html, baseUrl, limit) {
-  const source = String(html || "");
+  const max = Math.max(1, Math.min(30, Number(limit || 10) || 10));
   const out = [];
   const seen = new Set();
-  const max = Math.max(1, Math.min(24, Number(limit || 10) || 10));
-
-  function accept(raw) {
-    if (out.length >= max) return;
-    let value = decodeXml(SocialStore.text(raw))
-      .replace(/\\u002f/gi, "/")
-      .replace(/\\\//g, "/")
-      .replace(/&amp;/gi, "&")
-      .trim();
-    if (!value) return;
+  const source = String(html || "").slice(0, 2000000)
+    .replace(/\\u002f/gi, "/")
+    .replace(/\\\//g, "/")
+    .replace(/&amp;/gi, "&");
+  const accept = (raw) => {
+    if (out.length >= max || !raw) return;
     try {
-      value = new URL(value, baseUrl).toString();
-    } catch (_error) {
-      return;
-    }
-    value = Policy.normalizeUrl(value);
-    if (!value || Policy.platformFromHost(value) !== platform || !contentKind(platform, value)) return;
-    const key = value.toLowerCase();
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(value);
-  }
-
-  const anchorRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi;
-  let match;
-  while ((match = anchorRe.exec(source))) accept(match[1]);
-
-  const absoluteRe = /https?(?:\\u002f|\\\/|\/)[^"'<>\s]{8,500}/gi;
-  (source.match(absoluteRe) || []).slice(0, 400).forEach(accept);
-
-  // Instagram profile HTML may expose shortcodes without a literal post URL.
-  if (platform === "instagram" && out.length < max) {
-    const shortcodeRe = /"shortcode"\s*:\s*"([A-Za-z0-9_-]{5,30})"/g;
-    while ((match = shortcodeRe.exec(source)) && out.length < max) {
-      accept("https://www.instagram.com/p/" + match[1] + "/");
-    }
-  }
-  // Dynamic X/Pinterest pages frequently keep post links only in escaped JSON.
-  // Recover those bounded identifiers, then let the strict contentKind gate
-  // validate the reconstructed provider URL.
-  if (platform === "twitter" && out.length < max) {
-    const statusRe = /(?:\\u002f|\\\/|\/)([A-Za-z0-9_]{1,30})(?:\\u002f|\\\/|\/)status(?:\\u002f|\\\/|\/)(\d{5,})/gi;
-    while ((match = statusRe.exec(source)) && out.length < max) {
-      accept("https://x.com/" + match[1] + "/status/" + match[2]);
-    }
-  }
-  if (platform === "pinterest" && out.length < max) {
-    const pinRe = /(?:\\u002f|\\\/|\/)pin(?:\\u002f|\\\/|\/)(\d{5,})/gi;
-    while ((match = pinRe.exec(source)) && out.length < max) {
-      accept("https://www.pinterest.com/pin/" + match[1] + "/");
-    }
-  }
-  return out;
-}
-
-async function registryNativeLatestSearch(plan, registrySeed, limit) {
-  const platform = plan && plan.platform;
-  const seedUrl = Policy.normalizeUrl(registrySeed && registrySeed.url);
-  const wanted = Math.max(1, Math.min(12, Number(limit || 10) || 10));
-  if (!platform || !seedUrl || Policy.platformFromHost(seedUrl) !== platform) {
-    return { provider: "registry-native-latest", status: "not_applicable", items: [] };
-  }
-
-  const headers = {
-    Accept: "text/html,application/json;q=0.9,*/*;q=0.5",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"
+      const absolute = new URL(decodeXml(raw), baseUrl).toString();
+      const normalized = Policy.normalizeUrl(absolute);
+      if (!normalized || Policy.platformFromHost(normalized) !== platform || !contentKind(platform, normalized)) return;
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(normalized);
+    } catch (_error) {}
   };
-
+  const hrefRe = /(?:href|data-href|content)=["']([^"']+)["']/gi;
+  let match;
+  while ((match = hrefRe.exec(source)) && out.length < max) accept(match[1]);
+  const absoluteRe = /https?:\/\/[^"'<>\s]+/gi;
+  while ((match = absoluteRe.exec(source)) && out.length < max) accept(match[0]);
+  if (platform === "douyin" && out.length < max) {
+    const rel = /(?:^|["'\s])\/(video|note)\/(\d{8,})(?=[?"'\s/]|$)/gi;
+    while ((match = rel.exec(source)) && out.length < max) accept("https://www.douyin.com/" + match[1].toLowerCase() + "/" + match[2]);
+  }
+  if (platform === "dailymotion" && out.length < max) {
+    const rel = /(?:^|["'\s])\/video\/([a-z0-9]+)(?=[?"'\s/]|$)/gi;
+    while ((match = rel.exec(source)) && out.length < max) accept("https://www.dailymotion.com/video/" + match[1]);
+  }
+  return out.slice(0, max);
+}
+async function registryNativeLatestSearch(plan, registrySeed, limit) {
+  if (!plan || !registrySeed) return { provider: "registry-native-latest", status: "not_needed", items: [] };
+  const platform = plan.platform;
+  const seedUrl = Policy.normalizeUrl(registrySeed.url);
+  const wanted = Math.max(1, Math.min(12, Number(limit || 5) || 5));
+  if (!seedUrl || Policy.platformFromHost(seedUrl) !== platform) return { provider: "registry-native-latest", status: "invalid_seed", items: [] };
   try {
-    if (platform === "reddit") {
-      const u = new URL(seedUrl);
-      const parts = u.pathname.split("/").filter(Boolean);
-      const r = parts.findIndex((part) => part.toLowerCase() === "r");
-      const user = parts.findIndex((part) => part.toLowerCase() === "user");
-      let feed = "";
-      if (r >= 0 && parts[r + 1]) feed = "https://www.reddit.com/r/" + encodeURIComponent(parts[r + 1]) + "/new.json?raw_json=1&limit=" + wanted;
-      else if (user >= 0 && parts[user + 1]) feed = "https://www.reddit.com/user/" + encodeURIComponent(parts[user + 1]) + "/submitted.json?raw_json=1&limit=" + wanted;
-      if (!feed) return { provider: "registry-native-latest", status: "unsupported_profile", items: [] };
-      const data = await fetchJson(feed, { headers: Object.assign({}, headers, { Accept: "application/json" }) }, PROFILE_LATEST_TIMEOUT_MS);
-      const children = data && data.data && Array.isArray(data.data.children) ? data.data.children : [];
-      const items = children.map((child) => child && child.data || {}).map((row) => {
-        const permalink = row.permalink ? "https://www.reddit.com" + row.permalink : "";
-        const preview = row.preview && row.preview.images && row.preview.images[0] && row.preview.images[0].source && row.preview.images[0].source.url;
-        const thumb = /^https:\/\//i.test(SocialStore.text(preview)) ? decodeXml(preview) :
-          (/^https:\/\//i.test(SocialStore.text(row.thumbnail)) ? row.thumbnail : "");
-        return {
-          provider: "reddit-public-new-json",
-          platform,
-          url: permalink,
-          sourceUrl: permalink,
-          latestContentUrl: permalink,
-          title: firstText([row.title, "Reddit post"]),
-          creatorName: firstText([row.author, registrySeed.title, registrySeed.handle]),
-          description: firstText([row.selftext]).slice(0, 1200),
-          thumbnail: thumb,
-          entityKind: "latest_post"
-        };
-      }).filter((row) => contentKind(platform, row.url));
-      return { provider: "registry-native-latest", status: items.length ? "ok" : "empty", items: items.slice(0, wanted), source: "reddit-public-json" };
-    }
-
-    if (platform === "weibo") {
-      const u = new URL(seedUrl);
-      const parts = u.pathname.split("/").filter(Boolean);
-      let uid = "";
-      if (parts[0] === "u" && /^\d+$/.test(parts[1] || "")) uid = parts[1];
-      else if (/^\d+$/.test(parts[0] || "")) uid = parts[0];
-
-      /* Many registry rows use a vanity Weibo path (for example /exok) rather
-         than /u/<numeric-id>. Resolve the public profile once and recover the
-         numeric uid so the stable m.weibo.cn feed can be used for latest posts. */
-      if (!uid) {
-        try {
-          const profileHtml = await fetchText(seedUrl, { headers }, PROFILE_LATEST_TIMEOUT_MS);
-          const normalized = String(profileHtml || "").replace(/\\u002f/gi, "/").replace(/\\\//g, "/");
-          const patterns = [
-            /["'](?:idstr|uid|user_id)["']\s*[:=]\s*["'](\d{5,})["']/i,
-            /\$CONFIG\[['"]oid['"]\]\s*=\s*['"](\d{5,})['"]/i,
-            /weibo\.com\/u\/(\d{5,})/i,
-            /m\.weibo\.cn\/u\/(\d{5,})/i
-          ];
-          for (const pattern of patterns) {
-            const match = normalized.match(pattern);
-            if (match && match[1]) { uid = match[1]; break; }
-          }
-        } catch (_profileError) {}
+    const html = await fetchText(seedUrl, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (compatible; IGDC-MARU-SocialHub/1.0)"
       }
-      if (!uid) return { provider: "registry-native-latest", status: "unsupported_profile", items: [] };
-      const endpoint = "https://m.weibo.cn/api/container/getIndex?" + new URLSearchParams({
-        type: "uid", value: uid, containerid: "107603" + uid, page: "1"
-      }).toString();
-      const data = await fetchJson(endpoint, { headers: Object.assign({}, headers, { Accept: "application/json" }) }, PROFILE_LATEST_TIMEOUT_MS);
-      const cards = data && data.data && Array.isArray(data.data.cards) ? data.data.cards : [];
-      const items = [];
-      cards.forEach((card) => {
-        const post = card && card.mblog;
-        if (!post || items.length >= wanted) return;
-        const bid = firstText([post.bid, post.idstr, post.id]);
-        const authorId = firstText([post.user && post.user.idstr, post.user && post.user.id, uid]);
-        const url = post.bid
-          ? "https://weibo.com/" + encodeURIComponent(authorId) + "/" + encodeURIComponent(post.bid)
-          : (bid ? "https://m.weibo.cn/detail/" + encodeURIComponent(bid) : "");
-        const pics = Array.isArray(post.pics) ? post.pics : [];
-        const thumb = firstText([
-          pics[0] && pics[0].large && pics[0].large.url,
-          pics[0] && pics[0].url,
-          post.page_info && post.page_info.page_pic && post.page_info.page_pic.url,
-          post.user && post.user.profile_image_url
-        ]);
-        if (!contentKind(platform, url)) return;
-        const cleanText = stripHtml(firstText([post.text]));
-        const nativeCorpus = [
-          cleanText, post.user && post.user.screen_name,
-          registrySeed && registrySeed.title, registrySeed && registrySeed.category
-        ].map(SocialStore.text).join(" ").toLowerCase();
-        if (REGISTRY_BLOCK_TERMS.some((term) => nativeCorpus.includes(String(term).toLowerCase()))) return;
-        items.push({
-          provider: "weibo-mobile-public-feed",
-          platform,
-          url,
-          sourceUrl: url,
-          latestContentUrl: url,
-          title: firstText([cleanText, "Weibo post"]).slice(0, 240),
-          creatorName: firstText([post.user && post.user.screen_name, registrySeed.title]),
-          description: cleanText.slice(0, 1200),
-          thumbnail: /^https:\/\//i.test(thumb) ? thumb : "",
-          entityKind: "latest_post"
-        });
-      });
-      return { provider: "registry-native-latest", status: items.length ? "ok" : "empty", items, source: "weibo-mobile-public-feed" };
-    }
-
-    if (platform === "wechat") {
-      // WeChat official-account identifiers do not expose a stable public feed.
-      // Keep using targeted public-web/SearchBank discovery for real article URLs.
-      return { provider: "registry-native-latest", status: "provider_feed_unavailable", items: [] };
-    }
-
-    const html = await fetchText(seedUrl, { headers }, PROFILE_LATEST_TIMEOUT_MS);
+    }, PROFILE_LATEST_TIMEOUT_MS);
     const urls = providerRelativePostUrls(platform, html, seedUrl, wanted);
-    const items = urls.map((url) => ({
-      provider: "registry-public-profile-html",
+    const items = urls.map((url, index) => ({
+      provider: "registry-native-latest",
       platform,
       url,
       sourceUrl: url,
       latestContentUrl: url,
-      title: firstText([registrySeed.title, registrySeed.handle, platform + " latest public content"]),
+      title: sparseVerifiedContentTitle(platform, url, registrySeed) || (platform + " public content"),
       creatorName: firstText([registrySeed.title, registrySeed.handle]),
-      thumbnail: firstText([registrySeed.thumbnail]),
-      entityKind: contentKind(platform, url)
+      channelUrl: seedUrl,
+      thumbnail: registrySeed.thumbnail || "",
+      description: registrySeed.description || "",
+      entityKind: contentKind(platform, url),
+      publishedAt: "",
+      source: { name: "registry-native-latest", platform, mode: "registry_latest", rank: index + 1 }
     }));
-    return { provider: "registry-native-latest", status: items.length ? "ok" : "empty", items, source: "public-profile-html" };
+    return { provider: "registry-native-latest", status: items.length ? "ok" : "empty", items };
   } catch (error) {
-    return {
-      provider: "registry-native-latest",
-      status: error && error.name === "AbortError" ? "timeout" : "error",
-      error: error && error.message || "profile_latest_failed",
-      items: []
-    };
+    return { provider: "registry-native-latest", status: error && error.name === "AbortError" ? "timeout" : "error", error: error && error.message || "registry_native_latest_failed", items: [] };
   }
 }
-
 async function maruSearchOne(event, plan, queryText, limit, language, start) {
   try {
     const result = await withDeadline(
@@ -1701,7 +1390,7 @@ async function maruSearchOne(event, plan, queryText, limit, language, start) {
       }, {
         q: queryText + " " + CONTENT_SITE_FILTERS[plan.platform],
         limit, lang: language || null, start: start || 1, deep: false, external: true,
-        // The shared Maru `sns` classifier does not cover all nine providers.
+        // The shared Maru `sns` classifier is broader than the six managed providers.
         // Read the broad pool for non-YouTube sections, then apply the strict
         // platform + real-post filter above inside this Social-only collector.
         type: plan.platform === "youtube" ? "video" : "all",
@@ -1744,7 +1433,7 @@ async function maruUnfilteredSearchOne(event, plan, queryText, limit, language, 
         }
       }, {
         // `all` is intentional. Maru's shared SNS category recognises only a
-        // subset of the nine platforms. The Social collector performs the
+        // subset of the six managed platforms. The Social collector performs the
         // strict host + post/video path filter after this broad rescue read.
         q: publicSearchQuery(plan, queryText),
         limit: Math.max(10, Number(limit || 10)),
@@ -1815,9 +1504,8 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     tasks.push(naverChannelSearch(plan, queryText, limit, start, route, cfg));
     if (plan.platform !== "youtube") {
       // Configured search APIs are optional. Keep the canonical Maru public
-      // search as a same-pass fallback so Instagram/TikTok/Facebook/WeChat/
-      // Weibo/Pinterest/Reddit/X do not collapse to zero when keys, quotas or
-      // provider metadata are unavailable.
+      // search as a same-pass fallback so active Social providers do not collapse
+      // to zero when keys, quotas or provider metadata are unavailable.
       tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
     }
   } else {
@@ -1834,16 +1522,7 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     };
   });
 
-  // Reddit has an anonymous public JSON search surface and Pinterest exposes a
-  // public pin-search page. Use them as Social-only, key-free discovery lanes.
-  // These run in addition to registered-influencer targeting, so the registry
-  // is a priority seed rather than a ceiling on what can be discovered.
-  if (plan.platform === "reddit" || plan.platform === "pinterest") {
-    const nativeSparse = await sparseNativePublicSearch(plan, queryText, limit, qualitySweep);
-    providers = providers.concat(nativeSparse);
-  }
-
-  // YouTube already owns a real-content RSS/Data-API path. For the other eight
+  // YouTube already owns a real-content RSS/Data-API path. For the other five
   // platforms, invoke the Social-only public-post fallback only when the normal
   // provider group did not return even one genuine post/video URL. This avoids
   // duplicate requests while preventing search-page passthroughs from collapsing
@@ -1975,28 +1654,17 @@ function htmlMetaValue(html, names) {
 async function publicOembed(platform, contentUrl) {
   const endpoints = {
     tiktok: "https://www.tiktok.com/oembed?url=",
-    twitter: "https://publish.twitter.com/oembed?omit_script=1&dnt=1&url=",
-    reddit: "https://www.reddit.com/oembed?url=",
-    pinterest: "https://www.pinterest.com/oembed.json?url="
+    dailymotion: "https://www.dailymotion.com/services/oembed?format=json&url="
   };
   const endpoint = endpoints[platform];
   if (!endpoint) return {};
   try {
-    const data = await fetchJson(
-      endpoint + encodeURIComponent(contentUrl),
-      { headers: { Accept: "application/json" } },
-      platform === "tiktok" ? TIKTOK_METADATA_TIMEOUT_MS : PUBLIC_METADATA_TIMEOUT_MS
-    );
+    const data = await fetchJson(endpoint + encodeURIComponent(contentUrl), { headers: { Accept: "application/json" } }, platform === "tiktok" ? TIKTOK_METADATA_TIMEOUT_MS : PUBLIC_METADATA_TIMEOUT_MS);
     return {
       title: firstText([data.title]),
       creatorName: firstText([data.author_name]),
       channelUrl: Policy.normalizeUrl(data.author_url),
-      thumbnail: firstText([
-        data.thumbnail_url,
-        data.thumbnailUrl,
-        data.image,
-        data.image_url
-      ])
+      thumbnail: firstText([data.thumbnail_url, data.thumbnailUrl, data.image, data.image_url])
     };
   } catch (_error) { return {}; }
 }
@@ -2004,23 +1672,22 @@ function providerEmbedMetadataUrl(platform, contentUrl) {
   try {
     const url = new URL(contentUrl);
     if (platform === "facebook") {
-      const isVideo = /\/(?:reel|watch|videos?)\//i.test(contentUrl) ||
-        /[?&](?:v|video_id)=\d+/i.test(contentUrl) || /fb\.watch/i.test(contentUrl);
-      const base = isVideo
-        ? "https://www.facebook.com/plugins/video.php"
-        : "https://www.facebook.com/plugins/post.php";
-      return base + "?" + new URLSearchParams({
-        href: contentUrl,
-        show_text: isVideo ? "false" : "true",
-        autoplay: "false",
-        width: "750"
-      }).toString();
+      const isVideo = /\/(?:reel|watch|videos?)\//i.test(contentUrl) || /[?&](?:v|video_id)=\d+/i.test(contentUrl) || /fb\.watch/i.test(contentUrl);
+      const base = isVideo ? "https://www.facebook.com/plugins/video.php" : "https://www.facebook.com/plugins/post.php";
+      return base + "?" + new URLSearchParams({ href: contentUrl, show_text: isVideo ? "false" : "true", autoplay: "false", width: "750" }).toString();
     }
     if (platform === "instagram") {
       const match = url.pathname.match(/^\/(p|reel|reels|tv)\/([^/?#]+)/i);
       if (!match) return "";
       const kind = match[1].toLowerCase() === "reels" ? "reel" : match[1].toLowerCase();
       return "https://www.instagram.com/" + kind + "/" + match[2] + "/embed/";
+    }
+    if (platform === "dailymotion") {
+      let id = "";
+      const match = url.pathname.match(/^\/video\/([a-z0-9]+)/i);
+      if (match) id = match[1];
+      else if (/^dai\.ly$/i.test(url.hostname)) id = url.pathname.split("/").filter(Boolean)[0] || "";
+      return id ? "https://www.dailymotion.com/embed/video/" + id : "";
     }
   } catch (_error) {}
   return "";
@@ -2137,7 +1804,6 @@ function genericProviderThumbnail(value, platform) {
       if (/\/rsrc\.php(?:$|[/?#])/i.test(url.pathname)) return true;
       if (/instagram[^/]*(?:logo|glyph)|(?:logo|glyph)[^/]*instagram/i.test(path)) return true;
     }
-    if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return true;
     if (platform === "facebook" && /(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path)) return true;
     return false;
   } catch (_error) { return true; }
@@ -2154,11 +1820,8 @@ function usableThumbnail(value, contentUrl, platform) {
       facebook: /(^|\.)facebook\.com$/i,
       instagram: /(^|\.)instagram\.com$/i,
       tiktok: /(^|\.)tiktok\.com$/i,
-      twitter: /(^|\.)(x|twitter)\.com$/i,
-      reddit: /(^|\.)reddit\.com$/i,
-      pinterest: /(^|\.)pinterest\.com$/i,
-      weibo: /(^|\.)weibo\.(com|cn)$/i,
-      wechat: /(^|\.)mp\.weixin\.qq\.com$/i,
+      douyin: /(^|\.)douyin\.com$/i,
+      dailymotion: /(^|\.)dailymotion\.com$|^dai\.ly$/i,
     };
     const pageHost = platformHosts[platform];
     const imagePath = /\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(url.pathname + url.search);
@@ -3079,9 +2742,6 @@ exports.__test = {
   registrySeedQualityScore,
   registrySweepWindow,
   sparseSearchTerms,
-  redditJsonThumbnail,
-  redditPublicJsonSearch,
-  pinterestPublicHtmlSearch,
   sparseNativePublicSearch,
   resolveSearchCandidates,
   decodeSearchRedirectTarget,

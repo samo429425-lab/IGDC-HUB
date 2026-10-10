@@ -27,8 +27,8 @@
     "social-instagram",
     "social-tiktok",
     "social-facebook",
-    "social-wechat",
-    "social-weibo",
+    "social-douyin",
+    "social-dailymotion",
   ]);
   const mainRenderTokens = new WeakMap();
   const rightRenderTokens = new WeakMap();
@@ -467,8 +467,8 @@
       "social-instagram": "Instagram",
       "social-tiktok": "TikTok",
       "social-facebook": "Facebook",
-      "social-wechat": "WeChat",
-      "social-weibo": "Weibo",
+      "social-douyin": "Douyin",
+      "social-dailymotion": "Dailymotion",
     };
     return labels[safeText(key)] || "SNS";
   }
@@ -532,7 +532,7 @@
 
   function thumbnailRenderUrl(platform, contentUrl, thumb) {
     if (!thumb) return "";
-    if (["instagram", "tiktok", "facebook"].indexOf(platform) < 0) return thumb;
+    if (["instagram", "tiktok", "facebook", "douyin", "dailymotion"].indexOf(platform) < 0) return thumb;
     var q = new URLSearchParams({ platform: platform, url: contentUrl || "", thumb: thumb });
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }

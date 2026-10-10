@@ -7,7 +7,7 @@
 const VERSION = "social-ai-policy-runtime-v1.3.1-six-main-sections";
 const SECTION_KEYS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-wechat", "social-weibo",
+  "social-douyin", "social-dailymotion",
 ]);
 
 const DEFAULT_PREFERRED_TOPICS = Object.freeze([

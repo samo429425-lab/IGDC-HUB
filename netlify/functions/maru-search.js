@@ -1209,7 +1209,7 @@ function normalizeSearchUiPageCards(items, searchType){
           videoUrl:watchUrl, embedUrl:copy.embedUrl, pageUrl:watchUrl, sourcePageUrl:watchUrl, contextLink:watchUrl
         })
       });
-    }else if(/facebook\.com|instagram\.com|threads\.net|weixin\.qq\.com|wechat\.com/.test(host + ' ' + source)){
+    }else if(/facebook\.com|instagram\.com|tiktok\.com|douyin\.com|dailymotion\.com|dai\.ly/.test(host + ' ' + source)){
       copy.searchCategory = 'sns';
       copy.displayGroup = copy.displayGroup || 'social';
     }
@@ -1330,7 +1330,7 @@ function isSyntheticSearchSummaryText(v){
   if(!t) return false;
   return /검색 결과입니다|공개 웹 결과입니다|관련 검색 결과입니다|검색 결과 경로|공개 정보 경로|공개 검색 경로|통합 공개 검색 경로|검색 결과 경로$/i.test(t) ||
     /관련\s+.*검색(\s*결과|\s*경로)?$/i.test(t) ||
-    /(Google|Naver|네이버|구글|YouTube|유튜브|Instagram|Facebook|TikTok|Threads|Twitter|X\/Twitter|위키백과|나무위키|지식백과).*검색$/i.test(t);
+    /(Google|Naver|네이버|구글|YouTube|유튜브|Instagram|Facebook|TikTok|Douyin|Dailymotion|위키백과|나무위키|지식백과).*검색$/i.test(t);
 }
 
 function resultSummaryText(it){
@@ -1650,7 +1650,7 @@ function sectionIdForItem(it){
   if(category === 'webtoon' || /웹툰|만화|코믹|망가|webtoon|comic|manga/.test(text)) return 'webtoon';
   if(category === 'official' || host.includes('.go.kr') || host.endsWith('.gov') || host.includes('.gov.') || host.includes('korea.kr') || /공식|관공서|시청|구청|정부|공공기관|official|government office/.test(text)) return 'official_authority';
   if(category === 'map' || category === 'tour' || mediaType === 'map' || type === 'map' || /지도|주소|위치|길찾기|관광|여행|맛집|명소|랜드마크|박물관|미술관|축제|교통|지하철|map|nearby|travel|tour|restaurant|landmark|attraction/.test(text)) return 'map_local_tour';
-  if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || source.includes('youtube') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('twitter') || host.includes('x.com') || host.includes('threads.net') || host.includes('youtube.com') || host.includes('youtu.be') || /카페|커뮤니티|인스타|페이스북|틱톡|트위터|유튜브|sns|community|forum|instagram|facebook|tiktok|youtube/.test(text)) return 'community_sns';
+  if(category === 'cafe' || category === 'sns' || type === 'sns' || mediaType === 'sns' || source.includes('cafe') || source.includes('sns') || source.includes('social') || source.includes('youtube') || host.includes('instagram') || host.includes('facebook') || host.includes('tiktok') || host.includes('douyin') || host.includes('dailymotion') || host.includes('dai.ly') || host.includes('youtube.com') || host.includes('youtu.be') || /카페|커뮤니티|인스타|페이스북|틱톡|더우인|데일리모션|유튜브|sns|community|forum|instagram|facebook|tiktok|douyin|dailymotion|youtube/.test(text)) return 'community_sns';
   if(category === 'knowledge' || host.includes('wikipedia') || host.includes('wikidata') || host.includes('britannica') || host.includes('namu.wiki') || /위키|백과|지식|encyclopedia|knowledge/.test(text)) return 'knowledge_wiki';
   if(category === 'news' || source.includes('news') || /뉴스|속보|보도|신문|latest|breaking|press/.test(text)) return 'news';
   if(category === 'video' || mediaType === 'video' || type === 'video' || source.includes('youtube') || host.includes('youtube') || host.includes('youtu.be') || /동영상|영상|유튜브|브이로그|쇼츠|릴스|vlog|video|shorts|reels/.test(text)) return 'video_vlog';
@@ -2510,8 +2510,8 @@ function buildSanmaruProviderLaneExpansionCards(q, raw, ctx, requestedLimit, exi
     { id:'instagram', label:'Instagram Public', type:'sns', source:'instagram_passthrough', url:(p)=>googleUrl('site:instagram.com ' + q,p), max:25, score:0.875 },
     { id:'facebook', label:'Facebook Public', type:'sns', source:'facebook_passthrough', url:(p)=>googleUrl('site:facebook.com ' + q,p), max:25, score:0.872 },
     { id:'tiktok', label:'TikTok Public', type:'sns', source:'tiktok_passthrough', url:(p)=>googleUrl('site:tiktok.com ' + q,p), max:25, score:0.870 },
-    { id:'x-twitter', label:'X / Twitter Public', type:'sns', source:'x_twitter_passthrough', url:(p)=>googleUrl('(site:x.com OR site:twitter.com) ' + q,p), max:25, score:0.868 },
-    { id:'threads', label:'Threads Public', type:'sns', source:'threads_passthrough', url:(p)=>googleUrl('site:threads.net ' + q,p), max:20, score:0.865 },
+    { id:'douyin', label:'Douyin Public', type:'sns', source:'douyin_passthrough', url:(p)=>googleUrl('site:douyin.com/video ' + q,p), max:25, score:0.868 },
+    { id:'dailymotion', label:'Dailymotion Public', type:'sns', source:'dailymotion_passthrough', url:(p)=>googleUrl('site:dailymotion.com/video ' + q,p), max:25, score:0.867 },
 
     { id:'duckduckgo', label:'DuckDuckGo', type:'web', source:'duckduckgo_passthrough', url:(p)=>ddgUrl(q,p), max:25, score:0.850 },
     { id:'yahoo', label:'Yahoo', type:'web', source:'yahoo_passthrough', url:(p)=>yahooUrl(q,p), max:25, score:0.848 },
@@ -2831,8 +2831,8 @@ function sanmaruEmergencyDiscoveryCards(q){
     ['instagram','Instagram public search','https://www.google.com/search?q=' + encodeURIComponent(q + ' site:instagram.com'),'sns'],
     ['facebook','Facebook public search','https://www.google.com/search?q=' + encodeURIComponent(q + ' site:facebook.com'),'sns'],
     ['tiktok','TikTok public search','https://www.google.com/search?q=' + encodeURIComponent(q + ' site:tiktok.com'),'sns'],
-    ['x_twitter','X / Twitter public search','https://www.google.com/search?q=' + encodeURIComponent(q + ' site:x.com OR site:twitter.com'),'sns'],
-    ['threads','Threads public search','https://www.google.com/search?q=' + encodeURIComponent(q + ' site:threads.net'),'sns'],
+    ['douyin','Douyin public search','https://www.google.com/search?q=' + encodeURIComponent(q + ' site:douyin.com/video'),'sns'],
+    ['dailymotion','Dailymotion public search','https://www.google.com/search?q=' + encodeURIComponent(q + ' site:dailymotion.com/video'),'sns'],
     ['wikipedia','Wikipedia / encyclopedia','https://www.google.com/search?q=' + encodeURIComponent(q + ' wikipedia encyclopedia'),'knowledge'],
     ['namu_wiki','Namu Wiki / Korean knowledge','https://www.google.com/search?q=' + encodeURIComponent(q + ' 나무위키 백과'),'knowledge'],
     ['official','Official site / homepage','https://www.google.com/search?q=' + encodeURIComponent(q + ' official site homepage 공식 홈페이지'),'official'],
@@ -2956,7 +2956,8 @@ function openDiscoverySurfaceCards(q){
     { title: '[SNS] ' + q + ' - Instagram', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:instagram.com'), source: 'instagram_discovery', mediaType: 'article', type: 'sns', summary: '', score: 0.58 },
     { title: '[SNS] ' + q + ' - Facebook', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:facebook.com'), source: 'facebook_discovery', mediaType: 'article', type: 'sns', summary: '', score: 0.57 },
     { title: '[SNS] ' + q + ' - TikTok', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:tiktok.com'), source: 'tiktok_discovery', mediaType: 'video', type: 'sns', summary: '', score: 0.57 },
-    { title: '[SNS] ' + q + ' - X / Twitter', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:x.com OR site:twitter.com'), source: 'x_twitter_discovery', mediaType: 'article', type: 'sns', summary: '', score: 0.56 },
+    { title: '[SNS] ' + q + ' - Douyin', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:douyin.com/video'), source: 'douyin_discovery', mediaType: 'video', type: 'sns', summary: '', score: 0.56 },
+    { title: '[SNS] ' + q + ' - Dailymotion', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:dailymotion.com/video'), source: 'dailymotion_discovery', mediaType: 'video', type: 'sns', summary: '', score: 0.559 },
     { title: '[Company] ' + q + ' 공식 홈페이지 / 기업 사이트', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' 공식 홈페이지 회사 기업 official site'), source: 'company_official_discovery', mediaType: 'article', type: 'web', summary: '', score: 0.60 },
     { title: '[Official] ' + q + ' 정부 / 공공 / 기관', url: 'https://www.google.com/search?q=' + encodeURIComponent(q + ' site:go.kr OR site:gov official'), source: 'official_gov_discovery', mediaType: 'article', type: 'web', summary: '', score: 0.60 },
     { title: '[Blog] ' + q + ' - Naver Blog', url: 'https://search.naver.com/search.naver?where=blog&query=' + enc, source: 'naver_blog_discovery', mediaType: 'article', type: 'blog', summary: '', score: 0.59 },
@@ -2976,8 +2977,8 @@ function publicPlatformResultCards(q){
     { title: '[Instagram] ' + q + ' 공개 게시물', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:instagram.com ' + q), source: 'google_sns_instagram_public', mediaType: 'article', type: 'sns', summary: '', score: 0.612 },
     { title: '[Facebook] ' + q + ' 공개 페이지/게시물', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:facebook.com ' + q), source: 'google_sns_facebook_public', mediaType: 'article', type: 'sns', summary: '', score: 0.611 },
     { title: '[TikTok] ' + q + ' 공개 영상', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:tiktok.com ' + q), source: 'google_sns_tiktok_public', mediaType: 'video', type: 'sns', summary: '', score: 0.610 },
-    { title: '[X / Twitter] ' + q + ' 공개 글', url: 'https://www.google.com/search?q=' + encodeURIComponent('(site:x.com OR site:twitter.com) ' + q), source: 'google_sns_x_twitter_public', mediaType: 'article', type: 'sns', summary: '', score: 0.609 },
-    { title: '[Threads] ' + q + ' 공개 글', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:threads.net ' + q), source: 'google_sns_threads_public', mediaType: 'article', type: 'sns', summary: '', score: 0.608 },
+    { title: '[Douyin] ' + q + ' 공개 영상', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:douyin.com/video ' + q), source: 'google_sns_douyin_public', mediaType: 'video', type: 'sns', summary: '', score: 0.609 },
+    { title: '[Dailymotion] ' + q + ' 공개 영상', url: 'https://www.google.com/search?q=' + encodeURIComponent('site:dailymotion.com/video ' + q), source: 'google_sns_dailymotion_public', mediaType: 'video', type: 'sns', summary: '', score: 0.608 },
     { title: '[Google] ' + q + ' 통합 검색', url: 'https://www.google.com/search?q=' + enc, source: 'google_public_search', mediaType: 'article', type: 'web', summary: '', score: 0.607 },
     { title: '[Naver] ' + q + ' 통합 검색', url: 'https://search.naver.com/search.naver?query=' + enc, source: 'naver_public_search', mediaType: 'article', type: 'web', summary: '', score: 0.606 }
   ];
@@ -3906,7 +3907,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     const publicProviderCards = contentFirstSearchUi ? [] : publicPlatformResultCards(q);
     if(publicProviderCards.length){
       collected.push.apply(collected, publicProviderCards);
-      record('public-provider-roads', 'ok', publicProviderCards.length, { includes:['google','naver','youtube','instagram','facebook','tiktok','x-twitter','threads'], role:'category-and-provider-road-preservation-not-result-suppression' });
+      record('public-provider-roads', 'ok', publicProviderCards.length, { includes:['google','naver','youtube','instagram','facebook','tiktok','douyin','dailymotion'], role:'category-and-provider-road-preservation-not-result-suppression' });
     }else if(contentFirstSearchUi){
       record('public-provider-roads', 'skipped-search-ui-content-first', 0, { reason:'do-not-fill-search-cards-with-route-only-provider-roads' });
     }
@@ -3931,7 +3932,7 @@ async function orchestrateSearch({ event, q, limit, start, lang, deep, externalO
     if(discoveryCards.length){
       collected.push.apply(collected, discoveryCards);
       record('open-discovery-surfaces', 'ok', discoveryCards.length, {
-        includes: ['news','youtube','vlog','instagram','facebook','tiktok','x-twitter','company-official','blog','cafe','community','knowledge']
+        includes: ['news','youtube','vlog','instagram','facebook','tiktok','douyin','dailymotion','company-official','blog','cafe','community','knowledge']
       });
     }else if(contentFirstSearchUi){
       record('open-discovery-surfaces', 'skipped-search-ui-content-first', 0, { reason:'do-not-fill-search-cards-with-route-only-discovery-roads' });
@@ -4929,7 +4930,7 @@ async function googleCseRequest(q, limit, start, opts){
     if(host.includes('youtube.com') || host.includes('youtu.be')){
       resultType = 'video';
       resultMediaType = 'video';
-    }else if(/facebook\.com|instagram\.com|threads\.net|weixin\.qq\.com|wechat\.com/.test(host)){
+    }else if(/facebook\.com|instagram\.com|tiktok\.com|douyin\.com|dailymotion\.com|dai\.ly/.test(host)){
       resultType = 'sns';
       resultMediaType = 'article';
     }
@@ -4995,8 +4996,8 @@ async function googleSnsSearch(q, limit, start){
     { name:'instagram', query:'site:instagram.com ' + q, source:'google_sns_instagram', type:'sns', mediaType:'article' },
     { name:'facebook', query:'site:facebook.com ' + q, source:'google_sns_facebook', type:'sns', mediaType:'article' },
     { name:'tiktok', query:'site:tiktok.com ' + q, source:'google_sns_tiktok', type:'sns', mediaType:'video' },
-    { name:'x_twitter', query:'(site:x.com OR site:twitter.com) ' + q, source:'google_sns_x_twitter', type:'sns', mediaType:'article' },
-    { name:'threads', query:'site:threads.net ' + q, source:'google_sns_threads', type:'sns', mediaType:'article' }
+    { name:'douyin', query:'site:douyin.com/video ' + q, source:'google_sns_douyin', type:'sns', mediaType:'video' },
+    { name:'dailymotion', query:'site:dailymotion.com/video ' + q, source:'google_sns_dailymotion', type:'sns', mediaType:'video' }
   ];
 
   const perRoute = Math.max(1, Math.min(4, Math.ceil(Math.min(limit || 20, 20) / 5)));
@@ -5137,7 +5138,7 @@ function classifySearchCategory(it){
   if(text.includes('법원') || text.includes('구청') || text.includes('시청') || text.includes('관공서') || text.includes('court') || text.includes('city hall') || text.includes('district office') || text.includes('government office')) return 'map';
   if(text.includes('지하철') || text.includes('지하철역') || text.includes('버스') || text.includes('교통') || text.includes('metro') || text.includes('subway') || text.includes('station') || text.includes('bus route')) return 'map';
 
-  if(text.includes('인스타') || text.includes('instagram') || text.includes('facebook') || text.includes('페이스북') || text.includes('tiktok') || text.includes('틱톡') || text.includes('threads') || text.includes('twitter') || text.includes('트위터') || text.includes('x / twitter') || text.includes('youtube') || text.includes('유튜브') || host.includes('instagram.') || host.includes('threads.net') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('x.com') || host.includes('twitter.') || host.includes('youtube.com') || host.includes('youtu.be') || source.includes('sns') || source.includes('social') || source.includes('youtube')) return 'sns';
+  if(text.includes('인스타') || text.includes('instagram') || text.includes('facebook') || text.includes('페이스북') || text.includes('tiktok') || text.includes('틱톡') || text.includes('douyin') || text.includes('더우인') || text.includes('dailymotion') || text.includes('데일리모션') || text.includes('youtube') || text.includes('유튜브') || host.includes('instagram.') || host.includes('tiktok.') || host.includes('facebook.') || host.includes('douyin.') || host.includes('dailymotion.') || host.includes('dai.ly') || host.includes('youtube.com') || host.includes('youtu.be') || source.includes('sns') || source.includes('social') || source.includes('youtube')) return 'sns';
   if(mediaType === 'video' || type === 'video' || source.includes('video')) return 'video';
   if(text.includes('쇼핑') || text.includes('가격') || text.includes('구매') || text.includes('shopping') || text.includes('price') || text.includes('product') || type === 'product' || mediaType === 'product') return 'shopping';
   if(text.includes('스포츠') || text.includes('축구') || text.includes('야구') || text.includes('농구') || text.includes('sports')) return 'sports';
@@ -5240,7 +5241,7 @@ function matchesSearchType(it, searchType, q){
 
   if(t === 'sns') {
     return ['sns','video','blog','cafe','image','news'].includes(cat) ||
-      hasAnyLooseTerm(text, ['유튜브','youtube','인스타','instagram','threads','틱톡','tiktok','facebook','x.com','twitter','sns','소셜','쇼츠','릴스','social','shorts','reels']);
+      hasAnyLooseTerm(text, ['유튜브','youtube','인스타','instagram','틱톡','tiktok','facebook','douyin','더우인','dailymotion','데일리모션','sns','소셜','쇼츠','릴스','social','shorts','reels']);
   }
 
   if(t === 'book') return ['book','knowledge','webtoon','blog','image','shopping','web'].includes(cat) || hasAnyLooseTerm(text, ['책','도서','서점','출판','저자','웹소설','전자책','book','author','ebook','publishing']);
@@ -5354,7 +5355,7 @@ function promoteProviderAndCategoryRoads(items, q){
   function url(it){ return safeString(firstNonEmpty(it && it.url, it && it.link)).toLowerCase(); }
   take(it => src(it).includes('google') && !src(it).includes('sns'), 3);
   take(it => src(it).includes('naver'), 3);
-  take(it => classifySearchCategory(it) === 'sns' || src(it).includes('sns') || /instagram|facebook|tiktok|threads|twitter|x\.com/.test(url(it) + ' ' + src(it)), 4);
+  take(it => classifySearchCategory(it) === 'sns' || src(it).includes('sns') || /instagram|facebook|tiktok|douyin|dailymotion|dai\.ly/.test(url(it) + ' ' + src(it)), 4);
   take(it => classifySearchCategory(it) === 'video' || src(it).includes('youtube') || /youtube\.com|youtu\.be/.test(url(it)), 3);
   take(it => classifySearchCategory(it) === 'news', 4);
   take(it => classifySearchCategory(it) === 'map' || classifySearchCategory(it) === 'tour', 3);

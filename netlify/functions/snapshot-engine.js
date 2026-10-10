@@ -40,7 +40,7 @@ const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
 const SOCIAL_MANAGED_MAIN_SECTIONS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter"
+  "social-douyin", "social-dailymotion"
 ]);
 
 function uniq(arr) {
@@ -1478,7 +1478,7 @@ function handleSocialSnapshot(bank) {
   if (!snapshot.pages.social.sections) snapshot.pages.social.sections = {};
 
   // Social target execution must not normalize Distribution-owned rightPanel
-  // or the reserved social-maru section. Sanitize only the nine managed SNS
+  // or the reserved social-maru section. Sanitize only the six managed SNS
   // sections so those foreign/reserved sections remain byte-equivalent as data.
   const sections = snapshot.pages.social.sections;
   for (const managedKey of SOCIAL_MANAGED_MAIN_SECTIONS) {
@@ -1504,7 +1504,7 @@ function handleSocialSnapshot(bank) {
 
   for (const sectionKey of sectionKeys) {
 
-    // The nine managed SNS sections are authoritative release surfaces: remove
+    // The six managed SNS sections are authoritative release surfaces: remove
     // only rows previously published by the Social candidate pipeline, while
     // preserving structural/sample/manual rows. rightPanel and social-maru are
     // never in SOCIAL_MANAGED_MAIN_SECTIONS and are therefore untouched.

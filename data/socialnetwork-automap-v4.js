@@ -1,8 +1,8 @@
 // socialnetwork-automap-v4.js
 // 목적:
-// 1) social.snapshot.json의 pages.social.sections 기준으로 메인 9섹션 + 우측 패널 렌더
+// 1) social.snapshot.json의 pages.social.sections 기준으로 메인 6섹션 + 우측 패널 렌더
 // 2) HTML의 data-psom-key를 기준으로 메인 키를 읽는다
-// 3) social-maru는 메인 9섹션 렌더 대상에서 제외한다
+// 3) social-maru는 메인 6섹션 렌더 대상에서 제외한다
 // 4) 데이터가 없으면 기존 HTML/더미를 유지한다
 // 5) rightPanel key alias를 최대한 흡수한다
 // 6) 런타임 에러를 window.__SOCIALNETWORK_AUTOMAP_V4_STATE__에 남긴다

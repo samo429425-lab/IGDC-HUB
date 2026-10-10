@@ -423,7 +423,7 @@ a[id*="qna"]{
 </style>
 <style id="igdc-social-landscape-right-only-sensitivity-v2">
 /* SOCIAL: MOBILE LANDSCAPE RIGHT POPULAR-ITEM RAIL ONLY.
-   Main 9 social sections and portrait right rail are untouched.
+   Main 6 social sections and portrait right rail are untouched.
    Slightly firmer snap than proximity to reduce over-sensitive fling,
    while scroll-snap-stop:normal still allows multi-card movement. */
 @media (max-width:1023px) and (orientation:landscape) and (pointer:coarse){
@@ -470,8 +470,8 @@ a[id*="qna"]{
 <div class="row-viewport" data-row="2"><div class="row-scroller" id="rowScroller2"><div class="row-grid" id="rowGrid2"><div class="thumb-grid thumb-scroller" data-psom-key="social-instagram"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft2">‹</button><button class="rscroll right" id="rsRight2">›</button></div>
 <div class="row-viewport" data-row="3"><div class="row-scroller" id="rowScroller3"><div class="row-grid" id="rowGrid3"><div class="thumb-grid thumb-scroller" data-psom-key="social-tiktok"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft3">‹</button><button class="rscroll right" id="rsRight3">›</button></div>
 <div class="row-viewport" data-row="4"><div class="row-scroller" id="rowScroller4"><div class="row-grid" id="rowGrid4"><div class="thumb-grid thumb-scroller" data-psom-key="social-facebook"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft4">‹</button><button class="rscroll right" id="rsRight4">›</button></div>
-<div class="row-viewport" data-row="5"><div class="row-scroller" id="rowScroller5"><div class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-wechat"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft5">‹</button><button class="rscroll right" id="rsRight5">›</button></div>
-<div class="row-viewport" data-row="6"><div class="row-scroller" id="rowScroller6"><div class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-weibo"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft6">‹</button><button class="rscroll right" id="rsRight6">›</button></div>
+<div class="row-viewport" data-row="5"><div class="row-scroller" id="rowScroller5"><div class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-douyin"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft5">‹</button><button class="rscroll right" id="rsRight5">›</button></div>
+<div class="row-viewport" data-row="6"><div class="row-scroller" id="rowScroller6"><div class="row-grid" id="rowGrid6"><div class="thumb-grid thumb-scroller" data-psom-key="social-dailymotion"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft6">‹</button><button class="rscroll right" id="rsRight6">›</button></div>
 <section id="rpMobileBox">
 <h3 class="ad-headline">💎 Itens populares 💎</h3>
 <div id="rpMobileScroller">
@@ -662,8 +662,8 @@ a[id*="qna"]{
         'social-instagram': { icon:'📷', title:'Instagram', row:'Row 2 · 미리보기' },
         'social-tiktok': { icon:'🎵', title:'TikTok', row:'Row 3 · 미리보기' },
         'social-facebook': { icon:'📘', title:'Facebook', row:'Row 4 · 미리보기' },
-        'social-wechat': { icon:'💬', title:'WeChat', row:'Row 5 · 미리보기' },
-        'social-weibo': { icon:'🌐', title:'Weibo', row:'Row 6 · 미리보기' }
+        'social-douyin': { icon:'🎵', title:'Douyin / 抖音', row:'Row 5 · 미리보기' },
+        'social-dailymotion': { icon:'▶️', title:'Dailymotion', row:'Row 6 · 미리보기' }
       };
       function makeCard(meta){
         var a = document.createElement('a'); a.className='card'; a.href='#';
@@ -1360,7 +1360,7 @@ window.addEventListener('resize', function(){
   }, { passive:true });
 })();
 </script>
-<script src="/assets/js/igdc-social-sns-viewer-bridge.js?v=20260912-seven-sns-safe-sample-v3"></script>
+<script src="/assets/js/igdc-social-sns-viewer-bridge.js?v=20261011-six-sns-douyin-dailymotion-v1"></script>
 <script id="social-main-fullscreen-viewer-v1">
 (function(){
   if(window.__SOCIAL_MAIN_FULLSCREEN_READY__) return;
@@ -1535,7 +1535,7 @@ window.addEventListener('resize', function(){
   }catch(_){ }
 })();
 </script>
-<script defer="" src="/assets/js/socialnetwork-automap-v3.js?v=20260912-seven-sns-safe-sample-v3"></script>
+<script defer="" src="/assets/js/socialnetwork-automap-v3.js?v=20261011-six-sns-douyin-dailymotion-v1"></script>
 <script id="igtc-checkout-trigger-v1">
 (function(){
   if (window.__IGTC_CHECKOUT_READY__) return;

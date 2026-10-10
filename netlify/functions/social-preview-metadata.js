@@ -2,14 +2,14 @@
 
 /*
  * IGDC Social main-card public preview resolver v1.0.0
- * Scope: Social main 9 sections only. This function never reads/writes rightPanel,
+ * Scope: Social main 6 sections only. This function never reads/writes rightPanel,
  * Distribution, snapshots, releases, candidate state, or deployment state.
  *
  * Purpose: recover public title/thumbnail metadata for already-published SNS content
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.8.0-reddit-community-media";
+const VERSION = "social-preview-metadata-v1.9.0-douyin-dailymotion";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -18,11 +18,8 @@ const PLATFORM_HOSTS = Object.freeze({
   instagram: [/(^|\.)instagram\.com$/i],
   tiktok: [/(^|\.)tiktok\.com$/i],
   facebook: [/(^|\.)facebook\.com$/i, /^fb\.watch$/i],
-  wechat: [/^mp\.weixin\.qq\.com$/i],
-  weibo: [/(^|\.)weibo\.com$/i, /^m\.weibo\.cn$/i],
-  pinterest: [/(^|\.)pinterest\.(?:com|ca|co\.uk|co\.kr|de|fr|es|it|jp|com\.au|com\.mx|cl|ph|nz|pt|ie|ch|at|se|dk|no|fi|nl|be|cz|pl)$/i, /^pin\.it$/i],
-  reddit: [/(^|\.)reddit\.com$/i, /^redd\.it$/i],
-  twitter: [/(^|\.)x\.com$/i, /(^|\.)twitter\.com$/i]
+  douyin: [/(^|\.)douyin\.com$/i, /(^|\.)iesdouyin\.com$/i],
+  dailymotion: [/(^|\.)dailymotion\.com$/i, /^dai\.ly$/i]
 });
 
 function json(statusCode, body, cacheable) {
@@ -43,7 +40,6 @@ function text(value) { return value == null ? "" : String(value); }
 
 function normalizePlatform(value) {
   const raw = text(value).trim().toLowerCase();
-  if (raw === "x") return "twitter";
   return Object.prototype.hasOwnProperty.call(PLATFORM_HOSTS, raw) ? raw : "";
 }
 
@@ -120,7 +116,6 @@ function previewImageUrl(platform, value) {
     const expiry = signedPreviewExpiry(platform, url.toString());
     if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
 
-    if (platform === "weibo" && /(?:passport|login)\.sinaimg\.(?:cn|com)$/i.test(host)) return "";
     return url.toString();
   } catch (_error) {
     return "";
@@ -254,7 +249,7 @@ function htmlImage(html, platform) {
   const raw = text(html);
   const patterns = [
     /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/ig,
-    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"<>]*)"/ig,
+    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|douyincdn[^/]*\.com|douyinpic\.com|byteimg\.com|pstatp\.com|dmcdn\.net)[^"<>]*)"/ig,
     /(?:poster|data-poster|data-thumb|data-thumbnail)=["'](https:\/\/[^"'<>]+)["']/ig,
     /background-image\s*:\s*url\(["']?(https:\/\/[^"')<>]+)["']?\)/ig
   ];
@@ -266,10 +261,9 @@ function htmlImage(html, platform) {
     }
   }
 
-  // Last-resort CDN scan: keep walking after a bad provider UI asset. The old
-  // first-match behavior is what allowed Instagram rsrc/.js and Weibo login
-  // bundles to win before the actual media URL later in the document.
-  const genericRe = /https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|pinimg\.com|twimg\.com|redditmedia\.com|redd\.it|qpic\.cn|qlogo\.cn|sinaimg\.(?:cn|com))[^"'<>\s]*/ig;
+  // Last-resort CDN scan: keep walking after a bad provider UI asset so a
+  // provider script or logo cannot win before the actual media URL.
+  const genericRe = /https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|douyincdn[^/]*\.com|douyinpic\.com|byteimg\.com|pstatp\.com|dmcdn\.net)[^"'<>\s]*/ig;
   let generic;
   while ((generic = genericRe.exec(raw))) {
     const image = previewImageUrl(platform, generic[0]);
@@ -281,7 +275,7 @@ function htmlImage(html, platform) {
 function htmlCreator(platform, html) {
   const meta = metaMap(html);
   const metaAuthor = firstMeta(meta, ["author", "article:author", "twitter:creator"]);
-  if (metaAuthor && !/^(instagram|tiktok|facebook|wechat|weibo|pinterest|reddit|x|twitter)$/i.test(metaAuthor)) {
+  if (metaAuthor && !/^(instagram|tiktok|facebook|douyin|dailymotion)$/i.test(metaAuthor)) {
     return stripTags(metaAuthor).replace(/^@/, "").trim();
   }
   const raw = text(html);
@@ -289,20 +283,17 @@ function htmlCreator(platform, html) {
     ? [/"username"\s*:\s*"([^"<>]{1,100})"/i, /"owner"\s*:\s*\{[^{}]{0,400}"username"\s*:\s*"([^"<>]{1,100})"/i]
     : platform === "tiktok"
       ? [/"uniqueId"\s*:\s*"([^"<>]{1,100})"/i, /"authorName"\s*:\s*"([^"<>]{1,120})"/i]
-      : platform === "twitter"
-        ? [/"screen_name"\s*:\s*"([^"<>]{1,100})"/i, /"username"\s*:\s*"([^"<>]{1,100})"/i]
-        : platform === "weibo"
-          ? [/"screen_name"\s*:\s*"([^"<>]{1,100})"/i]
-          : platform === "wechat"
-            ? [/"nickname"\s*:\s*"([^"<>]{1,120})"/i, /var\s+nickname\s*=\s*["']([^"'<>]{1,120})["']/i]
-            : [/"author_name"\s*:\s*"([^"<>]{1,120})"/i];
+      : platform === "douyin"
+        ? [/"nickname"\s*:\s*"([^"<>]{1,120})"/i, /"unique_id"\s*:\s*"([^"<>]{1,120})"/i, /"uniqueId"\s*:\s*"([^"<>]{1,120})"/i]
+        : platform === "dailymotion"
+          ? [/"owner(?:screenname|Screenname|_screenname)"\s*:\s*"([^"<>]{1,120})"/i, /"author_name"\s*:\s*"([^"<>]{1,120})"/i]
+          : [/"author_name"\s*:\s*"([^"<>]{1,120})"/i];
   for (const pattern of patterns) {
     const match = raw.match(pattern);
     if (match && match[1]) return decodeHtml(match[1]).replace(/^@/, "").trim();
   }
   return "";
 }
-
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs || TIMEOUT_MS);
@@ -362,94 +353,26 @@ async function fetchJson(url) {
   }
 }
 
-async function redditCommunityImage(subreddit) {
-  const name = text(subreddit).replace(/^r\//i, "").replace(/[^A-Za-z0-9_]/g, "");
-  if (!name) return "";
-  try {
-    const payload = await fetchJson("https://www.reddit.com/r/" + encodeURIComponent(name) + "/about.json?raw_json=1");
-    const data = payload && payload.data || {};
-    const candidates = [
-      data.community_icon,
-      data.icon_img,
-      data.banner_background_image,
-      data.banner_img,
-      data.mobile_banner_image,
-    ];
-    for (const value of candidates) {
-      const clean = decodeHtml(value || "").replace(/&amp;/gi, "&");
-      const image = previewImageUrl("reddit", clean);
-      if (image) return image;
-    }
-  } catch (_error) {}
-  return "";
-}
-
-async function redditPublicPreview(contentUrl) {
-  try {
-    const safe = safeProviderUrl("reddit", contentUrl);
-    if (!safe) return null;
-    const parsed = new URL(safe);
-    if (!/\/comments\/[^/]+/i.test(parsed.pathname)) return null;
-    parsed.search = "";
-    parsed.hash = "";
-    const endpoint = parsed.toString().replace(/\/$/, "") + ".json?raw_json=1";
-    const payload = await fetchJson(endpoint);
-    const listing = Array.isArray(payload) ? payload[0] : payload;
-    const row = listing && listing.data && Array.isArray(listing.data.children) && listing.data.children[0] && listing.data.children[0].data;
-    if (!row) return null;
-    const preview = row.preview && row.preview.images && row.preview.images[0] && row.preview.images[0].source && row.preview.images[0].source.url;
-    const candidates = [
-      preview,
-      row.thumbnail,
-      row.url_overridden_by_dest,
-      row.url,
-    ];
-    let thumbnailUrl = "";
-    for (const value of candidates) {
-      const decoded = decodeHtml(value || "");
-      const image = previewImageUrl("reddit", decoded);
-      if (image) { thumbnailUrl = image; break; }
-    }
-    // Text-only Reddit posts are valid content but frequently have no post
-    // artwork. Use the real subreddit/community icon or banner, never a
-    // synthetic IGDC letter-card, so the front still receives an honest
-    // provider-owned thumbnail linked to the actual post.
-    if (!thumbnailUrl) thumbnailUrl = await redditCommunityImage(row.subreddit || row.subreddit_name_prefixed || "");
-    return {
-      title: stripTags(row.title || ""),
-      creatorName: stripTags(row.author || ""),
-      thumbnailUrl,
-      source: thumbnailUrl ? "reddit-public-json" : "reddit-public-json-no-image",
-    };
-  } catch (_error) {
-    return null;
-  }
-}
-
 async function oembed(platform, contentUrl) {
   let endpoint = "";
   if (platform === "tiktok") endpoint = "https://www.tiktok.com/oembed?url=" + encodeURIComponent(contentUrl);
-  else if (platform === "twitter") endpoint = "https://publish.twitter.com/oembed?omit_script=true&dnt=true&url=" + encodeURIComponent(contentUrl);
-  else if (platform === "reddit") endpoint = "https://www.reddit.com/oembed?url=" + encodeURIComponent(contentUrl);
-  else if (platform === "pinterest") endpoint = "https://www.pinterest.com/oembed.json?url=" + encodeURIComponent(contentUrl);
+  else if (platform === "dailymotion") endpoint = "https://www.dailymotion.com/services/oembed?url=" + encodeURIComponent(contentUrl) + "&format=json";
   else return null;
   return fetchJson(endpoint);
 }
-
 
 function shortProviderUrl(platform, value) {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
     if (platform === "tiktok") return host === "vm.tiktok.com" || host === "vt.tiktok.com";
-    if (platform === "pinterest") return host === "pin.it";
-    if (platform === "reddit") return host === "redd.it";
+    if (platform === "douyin") return host === "v.douyin.com";
+    if (platform === "dailymotion") return host === "dai.ly";
     return false;
   } catch (_error) {
     return false;
   }
 }
-
 function youtubeThumbnail(url) {
   try {
     const parsed = new URL(url);
@@ -489,6 +412,13 @@ function providerEmbedPreviewUrl(platform, contentUrl) {
       if (!match) return "";
       const kind = match[1].toLowerCase() === "reels" ? "reel" : match[1].toLowerCase();
       return "https://www.instagram.com/" + kind + "/" + match[2] + "/embed/";
+    }
+    if (platform === "dailymotion") {
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+      const match = host === "dai.ly"
+        ? parsed.pathname.match(/^\/([A-Za-z0-9]+)/i)
+        : parsed.pathname.match(/^\/video\/([A-Za-z0-9]+)/i);
+      return match ? "https://www.dailymotion.com/embed/video/" + encodeURIComponent(match[1]) : "";
     }
   } catch (_error) {}
   return "";
@@ -546,17 +476,6 @@ async function resolvePreview(platform, contentUrl) {
     } catch (_error) {}
   }
 
-  const redditPreview = platform === "reddit" ? await redditPublicPreview(workingUrl) : null;
-  if (redditPreview && redditPreview.thumbnailUrl) {
-    return {
-      resolvedUrl: workingUrl,
-      title: redditPreview.title || "",
-      thumbnailUrl: redditPreview.thumbnailUrl,
-      creatorName: redditPreview.creatorName || "",
-      channelUrl: "",
-      source: redditPreview.source || "reddit-public-json"
-    };
-  }
 
   const oe = await oembed(platform, workingUrl);
   const oeTitle = stripTags(oe && (oe.title || oe.author_name || ""));
@@ -591,8 +510,8 @@ async function resolvePreview(platform, contentUrl) {
   if (!prefetchedPage) {
     try { page = await fetchProviderHtml(platform, workingUrl); } catch (_error) {}
   }
-  const title = htmlTitle(page.html) || embed.title || oeTitle || (redditPreview && redditPreview.title) || "";
-  const creatorName = htmlCreator(platform, page.html) || embed.creatorName || oeCreator || (redditPreview && redditPreview.creatorName) || "";
+  const title = htmlTitle(page.html) || embed.title || oeTitle || "";
+  const creatorName = htmlCreator(platform, page.html) || embed.creatorName || oeCreator || "";
   const resolvedUrl = safeProviderUrl(platform, page.url) || workingUrl;
   let thumbnailUrl = htmlImage(page.html, platform) || previewImageUrl(platform, embed.thumbnailUrl) || previewImageUrl(platform, oeThumb);
   if (!thumbnailUrl && platform === "instagram") thumbnailUrl = await resolveInstagramMedia(resolvedUrl);

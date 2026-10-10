@@ -561,7 +561,7 @@ function mergeIntoSearchBankSnapshot(input) {
     meta: Object.assign({}, converted.bank && converted.bank.meta || {}, {
       schema: "search-bank.social-release.snapshot.v2",
       adapterVersion: VERSION,
-      ownership: "social-main-nine-only",
+      ownership: "social-main-six-only",
       canonicalCommerceSearchBankMutation: false,
       rightPanelOwnedBy: "distribution",
       operation: operation || "publish",

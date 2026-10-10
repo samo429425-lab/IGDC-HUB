@@ -162,7 +162,7 @@ const REGION_OVERRIDES = Object.freeze({
   }
 });
 
-const NONPOLITICAL_SOCIAL_QUERY_PLATFORMS = new Set(["wechat", "weibo"]);
+const NONPOLITICAL_SOCIAL_QUERY_PLATFORMS = new Set(["douyin"]);
 const NONPOLITICAL_QUERY_BLOCK = /(?:politic|election|partisan|propaganda|territorial|military|world\s+news|international\s+affairs|global\s+issue|정치|선거|정당|선전|영토|군사|세계\s*뉴스|국제\s*주요\s*이슈|政治|选举|選舉|政党|政黨|宣传|宣傳|军事|軍事|领土|領土|国际\s*新闻|國際\s*新聞)/i;
 
 const PLATFORM_TOPIC_BIAS = Object.freeze({
@@ -170,11 +170,8 @@ const PLATFORM_TOPIC_BIAS = Object.freeze({
   instagram: ["design", "wellness", "travel", "music", "culture", "food", "entertainment", "sports"],
   tiktok: ["music", "entertainment", "travel", "design", "food", "wellness", "culture", "sports"],
   facebook: ["travel", "culture", "music", "entertainment", "food", "education", "sports", "world"],
-  wechat: ["travel", "culture", "education", "food", "technology", "wellness", "music", "entertainment"],
-  weibo: ["music", "culture", "travel", "entertainment", "food", "sports", "design", "technology"],
-  pinterest: ["design", "food", "travel", "wellness", "culture", "education", "nature", "technology"],
-  reddit: ["technology", "education", "travel", "music", "sports", "culture", "food", "entertainment", "world"],
-  twitter: ["music", "travel", "culture", "technology", "education", "sports", "entertainment", "food", "world"]
+  douyin: ["music", "entertainment", "travel", "food", "culture", "design", "wellness", "education"],
+  dailymotion: ["music", "travel", "culture", "education", "technology", "sports", "entertainment", "world"]
 });
 
 function text(v) { return v == null ? "" : String(v).trim(); }

@@ -61,11 +61,8 @@ function realThumbnail(row) {
       facebook: /(^|\.)facebook\.com$/i,
       instagram: /(^|\.)instagram\.com$/i,
       tiktok: /(^|\.)tiktok\.com$/i,
-      twitter: /(^|\.)(x|twitter)\.com$/i,
-      reddit: /(^|\.)reddit\.com$/i,
-      pinterest: /(^|\.)pinterest\.com$/i,
-      weibo: /(^|\.)weibo\.(com|cn)$/i,
-      wechat: /(^|\.)mp\.weixin\.qq\.com$/i,
+      douyin: /(^|\.)douyin\.com$/i,
+      dailymotion: /(^|\.)dailymotion\.com$/i,
     };
     const imagePath = /\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(url.pathname + url.search);
     if (pageHosts[platform] && pageHosts[platform].test(host) && !imagePath) return false;

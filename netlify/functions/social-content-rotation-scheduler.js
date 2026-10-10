@@ -13,7 +13,7 @@ const Publisher = require("./social-snapshot-publish");
 const VERSION = "social-content-rotation-scheduler-v1.0.0";
 const SECTIONS = [
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-wechat", "social-weibo", "social-pinterest", "social-reddit", "social-twitter"
+  "social-douyin", "social-dailymotion"
 ];
 
 function bodyOf(response) {

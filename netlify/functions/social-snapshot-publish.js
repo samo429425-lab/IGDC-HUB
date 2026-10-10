@@ -99,7 +99,7 @@ function fullStructuralBase(storedSnapshot) {
   const storedSocial = stored.pages && stored.pages.social || {};
   const storedSections = storedSocial.sections || {};
 
-  // Only the nine managed SNS sections may be inherited from a stored release.
+  // Only the six managed SNS sections may be inherited from a stored release.
   // Reserved structural sections (social-maru, rightPanel) always stay exactly
   // as deployed in the static Social snapshot so a partial release can never
   // erase the right-side product cards or the MARU reserved section.
