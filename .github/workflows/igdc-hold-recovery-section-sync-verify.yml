@@ -31,3 +31,13 @@ jobs:
       - name: Front-map compatibility
         run: |
           node scripts/repair-frontmap-chain.js
+      - name: Upload overwrite-ready fix files
+        uses: actions/upload-artifact@v4
+        with:
+          name: IGDC_HOLD_RECOVERY_SECTION_SYNC_FINAL
+          path: |
+            assets/js/admin-commerce-country-control.js
+            netlify/functions/lib/commerce-country-automation.v1.js
+            netlify/functions/regional-brokerage-autoselector.js
+          if-no-files-found: error
+          retention-days: 1
