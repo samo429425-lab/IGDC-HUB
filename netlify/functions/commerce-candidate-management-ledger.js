@@ -10,7 +10,7 @@ const SlotStore=require("./lib/global-slot-console-supabase");
 const MarketSaleScope=require("./lib/market-sale-scope.v1");
 const ProductPipeline=require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION="commerce-candidate-management-ledger-v1.3.0-mixed-scope-ledger-union";
+const VERSION="commerce-candidate-management-ledger-v1.2.0-live-assignment-publication-status";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 const PRODUCT_SOURCE_REF=ProductPipeline.SOURCE_REF; // country-product-ranking-review
 function text(v){return v==null?"":String(v).trim();}
@@ -63,40 +63,21 @@ exports.handler=async function(event){
     if(!country||country==="GLOBAL")return json(200,{ok:true,version:VERSION,scope:{country:country||null,region},candidates:[],pagination:{returned:0,hasMore:false,nextOffset:null}});
     const limit=Math.max(25,Math.min(125,Number(q.limit||q.pageSize)||75)),offset=Math.max(0,Number(q.offset)||0);
     const fields="id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at";
-    // The candidate ledger has evolved through several compatible payload shapes.
-    // Never let one current-shape row hide older rows from the same country/region.
-    // Query every durable scope path, merge by candidate id, then apply one common
-    // scope matcher and pagination. This keeps the administrator master ledger
-    // authoritative even while old and new candidate records coexist.
-    const wanted=Math.min(6000,Math.max(offset+limit+250,limit*4)),scopePaths=[
-      ["->marketScope->>marketCountry","->marketScope->>marketRegion"],
-      ["->countrySupply->>country","->countrySupply->>region"],
-      ["->approvedPlacement->>country","->approvedPlacement->>region"],
-      ["->selectedPlacement->>country","->selectedPlacement->>region"],
-      ["->placement->>country","->placement->>region"],
-      ["->>targetCountry","->>targetRegion"]
-    ],regionValues=region==="NATIONWIDE"?["NATIONWIDE"]:[region,"NATIONWIDE"],merged=new Map();
-    for(const pair of scopePaths){
-      for(const scopedRegion of regionValues){
-        const query="select="+fields+"&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&source_payload"+pair[0]+"=eq."+encodeURIComponent(country)+"&source_payload"+pair[1]+"=eq."+encodeURIComponent(scopedRegion)+"&order=updated_at.desc,id.asc&limit="+wanted;
-        try{for(const row of array(await selectPage(query))){const id=text(row&&row.id);if(id&&!merged.has(id)&&scopeMatch(plain(row.source_payload),country,region))merged.set(id,row);}}catch(_error){}
-      }
-    }
-    let mode="scope_union",allRows=Array.from(merged.values());
-    // Very old marketKeys-only rows have no queryable JSON scope path. Supplement
-    // the union with one bounded canonical scan only when needed; do not replace
-    // the already-found current rows.
-    if(allRows.length<offset+limit){
-      mode="scope_union_plus_legacy";let scanOffset=0,rawDone=false;
-      while(allRows.length<offset+limit&&!rawDone&&scanOffset<6000){
+    // First use the canonical current payload path. This is the normal fast path.
+    const direct="select="+fields+"&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&source_payload->marketScope->>marketCountry=eq."+encodeURIComponent(country)+"&source_payload->marketScope->>marketRegion=eq."+encodeURIComponent(region)+"&order=updated_at.desc,id.asc&limit="+limit+"&offset="+offset;
+    let rows=await selectPage(direct),mode="marketScope";
+    rows=array(rows);
+    // Legacy fallback: only when the first direct page is empty. Scan the canonical
+    // product source in bounded chunks and apply the old/new scope shapes in JS.
+    if(offset===0&&!rows.length){
+      mode="bounded_legacy_scan";const found=[];let scanOffset=0,rawDone=false;
+      while(found.length<limit&&!rawDone&&scanOffset<6000){
         const batch=150,query="select="+fields+"&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&order=updated_at.desc,id.asc&limit="+batch+"&offset="+scanOffset;
-        const raw=array(await selectPage(query));
-        for(const row of raw){const id=text(row&&row.id);if(id&&!merged.has(id)&&scopeMatch(plain(row.source_payload),country,region)){merged.set(id,row);allRows.push(row);}}
+        const raw=array(await selectPage(query));for(const row of raw){if(scopeMatch(plain(row.source_payload),country,region))found.push(row);if(found.length>=limit)break;}
         scanOffset+=raw.length;rawDone=raw.length<batch;
       }
+      rows=found;
     }
-    allRows=Array.from(merged.values()).sort((a,b)=>Date.parse(text(b&&b.updated_at)||0)-Date.parse(text(a&&a.updated_at)||0)||text(a&&a.id).localeCompare(text(b&&b.id)));
-    const totalKnown=allRows.length,rows=allRows.slice(offset,offset+limit);
     // Hydrate only the publication relation needed by the ordinary management
     // screen.  This keeps the page lightweight while making match/unmatch state
     // reflect gslot_slot_assignments.publication_status instead of stale payload
@@ -113,7 +94,7 @@ exports.handler=async function(event){
         }
       }
     }
-    const candidates=rows.map(row=>compact(row,assignmentByCandidate.get(text(row&&row.id))||[])),hasMore=offset+rows.length<totalKnown;
-    return json(200,{ok:true,version:VERSION,sourceRef:PRODUCT_SOURCE_REF,scope:{country,region},candidates,pagination:{offset,limit,returned:candidates.length,totalKnown,hasMore,nextOffset:hasMore?offset+rows.length:null,mode},runtime:{totalMs:Date.now()-started},publicationAuthority:"gslot_slot_assignments.publication_status",safety:{readOnly:true,mutatesDatabase:false}});
+    const candidates=rows.map(row=>compact(row,assignmentByCandidate.get(text(row&&row.id))||[])),hasMore=mode==="marketScope"&&rows.length===limit;
+    return json(200,{ok:true,version:VERSION,sourceRef:PRODUCT_SOURCE_REF,scope:{country,region},candidates,pagination:{offset,limit,returned:candidates.length,hasMore,nextOffset:hasMore?offset+rows.length:null,mode},runtime:{totalMs:Date.now()-started},publicationAuthority:"gslot_slot_assignments.publication_status",safety:{readOnly:true,mutatesDatabase:false}});
   }catch(error){return json(Number(error&&error.statusCode)||500,{ok:false,version:VERSION,error:text(error&&error.message||error),runtime:{totalMs:Date.now()-started}});}
 };
