@@ -34,7 +34,7 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.6-canonical-section-direct-product";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.7-admin-authoritative-reconcile";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
@@ -198,6 +198,60 @@ function snapshotCandidateAllowed(raw, context) {
   if ([unsafe, illegal, harmful].some(v => ["critical", "blocked", "illegal", "unsafe"].includes(v))) return false;
 
   return true;
+}
+
+function explicitAdministratorSnapshotItem(raw) {
+  raw = raw || {};
+  const authority = raw.administratorFrontMatchAuthority && typeof raw.administratorFrontMatchAuthority === "object"
+    ? raw.administratorFrontMatchAuthority : {};
+  const publicationReview = raw.commerceCandidatePublication && raw.commerceCandidatePublication.review && typeof raw.commerceCandidatePublication.review === "object"
+    ? raw.commerceCandidatePublication.review : {};
+  return (authority.verified === true &&
+    ["publish_requested","published","matched","active","queued"].includes(String(authority.publicationStatus || "").trim().toLowerCase())) ||
+    publicationReview.explicitPublicationRequested === true;
+}
+
+function snapshotCandidateIdentity(raw) {
+  raw = raw || {};
+  return String(val(
+    raw?.canonicalPublication?.candidateId,
+    raw?.administratorFrontMatchAuthority?.candidateId,
+    raw?.commerceCandidate?.candidateId,
+    raw.candidateId,
+    raw.candidate_id,
+    raw.id,
+    raw.contentId,
+    raw.content_id,
+    ""
+  ) || "").trim();
+}
+
+function authoritativeSnapshotIds(items, pageName) {
+  const ids = new Set();
+  for (const raw of Array.isArray(items) ? items : []) {
+    if (!raw || !pageMatches(raw, pageName) || !explicitAdministratorSnapshotItem(raw)) continue;
+    const id = snapshotCandidateIdentity(raw);
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
+function removeSnapshotIdsFromArray(items, ids) {
+  if (!Array.isArray(items) || !ids || !ids.size) return Array.isArray(items) ? items : [];
+  return items.filter(item => !ids.has(snapshotCandidateIdentity(item)));
+}
+
+function removeSnapshotIdsFromSections(sections, ids) {
+  if (!sections || typeof sections !== "object" || !ids || !ids.size) return sections;
+  for (const key of Object.keys(sections)) {
+    const value = sections[key];
+    if (Array.isArray(value)) {
+      sections[key] = removeSnapshotIdsFromArray(value, ids);
+    } else if (value && typeof value === "object" && Array.isArray(value.slots)) {
+      value.slots = removeSnapshotIdsFromArray(value.slots, ids);
+    }
+  }
+  return sections;
 }
 
 function enrichSnapshotCard(card, raw) {
@@ -793,6 +847,18 @@ function buildTrackingMeta(raw, context) {
   meta.pgExecution = pg.pgExecution;
   meta.pgStatus = pg.pgStatus;
   meta.pgPolicy = pg.policy;
+  meta.candidateId = val(
+    raw.candidateId,
+    raw.candidate_id,
+    raw?.canonicalPublication?.candidateId,
+    raw?.administratorFrontMatchAuthority?.candidateId,
+    raw?.commerceCandidate?.candidateId,
+    id
+  );
+  if (safeObj(raw.administratorFrontMatchAuthority)) meta.administratorFrontMatchAuthority = Object.assign({}, raw.administratorFrontMatchAuthority);
+  if (safeObj(raw.commerceCandidatePublication)) meta.commerceCandidatePublication = Object.assign({}, raw.commerceCandidatePublication);
+  if (safeObj(raw.canonicalPublication)) meta.canonicalPublication = Object.assign({}, raw.canonicalPublication);
+  if (safeObj(raw.commerceCandidate)) meta.commerceCandidate = Object.assign({}, raw.commerceCandidate);
 
   if (safeObj(raw.monetization)) meta.monetization = raw.monetization;
   if (safeObj(raw.linkRevenue)) meta.linkRevenue = raw.linkRevenue;
@@ -971,6 +1037,7 @@ function mergeFrontFromSearchBank(frontSnap, searchbankSnap) {
 
   const homeSections = sanitizeSectionCollection(frontSnap.pages.home.sections, "home");
   const items = Array.isArray(searchbankSnap?.items) ? searchbankSnap.items : [];
+  removeSnapshotIdsFromSections(homeSections, authoritativeSnapshotIds(items, "home"));
 
   for (const item of items) {
 
@@ -1068,6 +1135,7 @@ function handleNetworkSnapshot(bank) {
 
   if (!Array.isArray(snapshot.items)) snapshot.items = [];
   snapshot.items = sanitizeSnapshotArray(snapshot.items, "network", "network-right");
+  snapshot.items = removeSnapshotIdsFromArray(snapshot.items, authoritativeSnapshotIds(bankItems, "network"));
 
   const NETWORK_LIMIT = 100;
 
@@ -1143,6 +1211,7 @@ function handleDistributionSnapshot(bank) {
 
 const sections = sanitizeSectionCollection(snapshot.pages.distribution.sections, "distribution");
 snapshot.pages.distribution.sections = sections;
+removeSnapshotIdsFromSections(sections, authoritativeSnapshotIds(bankItems, "distribution"));
 
 const REQUIRED_SECTION_KEYS = [
   "distribution-recommend",
@@ -1429,6 +1498,7 @@ function handleSocialSnapshot(bank) {
     }
   }
   const bankItems = bank.items || [];
+  removeSnapshotIdsFromSections(sections, authoritativeSnapshotIds(bankItems, "social"));
 
   const sectionKeys = Object.keys(sections);
 
@@ -1767,6 +1837,7 @@ function handleTourSnapshot(bank) {
   const bankItems = Array.isArray(bank?.items) ? bank.items : [];
 
   let items = sanitizeSnapshotArray(Array.isArray(snapshot.items) ? snapshot.items : [], "tour", "tour");
+  items = removeSnapshotIdsFromArray(items, authoritativeSnapshotIds(bankItems, "tour"));
 
   const TOUR_LIMIT = 200;
 
