@@ -233,6 +233,78 @@
     return isExternalUrl(url) || isInternalUrl(url);
   }
 
+  // Social right is a commerce surface. A provider homepage, category, search
+  // or generic travel portal must never win over the actual product/detail URL.
+  const RIGHT_PRODUCT_ID_QUERY_KEYS = new Set([
+    "goodsno","goods_no","goodsid","goods_id","product_no","productno","productid","product_id",
+    "itemid","item_id","itemno","item_no","prdno","prd_no","sku","uid","pid","productcode","product_code",
+    "hotelid","hotel_id","roomid","room_id","activityid","activity_id","attractionid","attraction_id",
+    "tourid","tour_id","ticketid","ticket_id","packageid","package_id","bookingid","booking_id"
+  ]);
+
+  function isSpecificRightProductUrl(value) {
+    const raw = safeText(value).trim();
+    if (!isExternalUrl(raw) || isBadPlaceholderUrl(raw)) return false;
+    try {
+      const url = new URL(raw);
+      const path = decodeURIComponent(url.pathname || "/").replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
+      const low = path.toLowerCase();
+      const hasProductId = Array.from(url.searchParams.entries()).some(function(pair){
+        return RIGHT_PRODUCT_ID_QUERY_KEYS.has(String(pair[0] || "").toLowerCase()) && String(pair[1] || "").trim();
+      });
+      if (hasProductId) return true;
+      if (path === "/") return false;
+      if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|brand|brands|best|event|events|home|main|travel|shop|store|list|destinations?|things-to-do)(?:\/|$)/i.test(low)) return false;
+      if (/(?:^|[?&])(?:category|cate|search|keyword|destination|city|region|sort|page)=/i.test(url.search)) return false;
+
+      // Retail product detail shapes.
+      if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|detail\/[^/?#]{2,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,})/i.test(low)) return true;
+      if (/(?:goods_view|product_view|item_view|prd_view|goods_detail|product_detail|item_detail|shopdetail)\.(?:php|html?|aspx?|jsp)$/i.test(low)) return true;
+
+      // Travel inventory must identify an actual property/activity/ticket, not
+      // merely a tour operator or destination landing page.
+      const travel = low.match(/\/(hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|restaurants?|dining|reservation)\/(.+)$/i);
+      if (travel && travel[2]) {
+        const tail = travel[2].replace(/\/+$/, "");
+        const last = tail.split("/").filter(Boolean).pop() || "";
+        if (/^(?:search|list|all|home|main|index|destination|destinations|city|cities|region|regions|country|countries|offers?|deals?|popular|best)$/i.test(last)) return false;
+        if (/\d{2,}/.test(last) || /\.(?:html?|php|aspx?|jsp)$/i.test(last) || tail.split("/").filter(Boolean).length >= 2 || last.length >= 12) return true;
+      }
+      if (/\/(?:hotel-detail|hotel-information|property-detail|activity-detail|attraction-detail|tour-detail|ticket-detail|booking-detail|restaurant-detail|dining-detail)\/[^/?#]{2,}/i.test(low)) return true;
+      return false;
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  function firstSpecificRightProductUrl(it) {
+    if (!it || typeof it !== "object") return "";
+    const rr = it.researchReadiness && typeof it.researchReadiness === "object" ? it.researchReadiness : null;
+    const nested = [it.productCard, rr && rr.productCard, it.directCommerceListing, it.brokerageContract];
+    const directKeys = [
+      "externalProductUrl","officialProductUrl","productUrl","product_url","productPageUrl","detailUrl","productLink","displayUrl",
+      "checkoutUrl","paymentUrl","purchaseUrl","orderUrl"
+    ];
+    for (const key of directKeys) {
+      const value = safeText(it[key]).trim();
+      if (isSpecificRightProductUrl(value)) return value;
+    }
+    for (const source of nested) {
+      if (!source || typeof source !== "object") continue;
+      for (const key of ["externalProductUrl","officialProductUrl","productUrl","productPageUrl","detailUrl","destinationUrl","checkoutUrl","paymentUrl","purchaseUrl","orderUrl","url","href","link"]) {
+        const value = safeText(source[key]).trim();
+        if (isSpecificRightProductUrl(value)) return value;
+      }
+    }
+    // Affiliate/tracking aliases are last-resort only and must themselves be
+    // a specific product/detail destination. Generic affiliate homepages stay out.
+    for (const key of ["affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url","sourceUrl","source_url","url","href","link"]) {
+      const value = safeText(it[key]).trim();
+      if (isSpecificRightProductUrl(value)) return value;
+    }
+    return "";
+  }
+
   function isPlaceholderItem(it) {
     if (!it) return true;
 
@@ -294,19 +366,9 @@
 
   function resolveRightItemUrl(it) {
     if (!it || isPlaceholderItem(it)) return "";
-    // Commercial right rail follows the administrator-verified product URL,
-    // not a synthetic /content.html id that may not exist in the public snapshot.
-    const direct = safeText(it && (
-      it.affiliateOutboundUrl || it.affiliate_outbound_url ||
-      it.externalOutboundUrl || it.external_outbound_url ||
-      it.externalProductUrl || it.officialProductUrl || it.productUrl ||
-      it.productPageUrl || it.detailUrl || it.checkoutUrl ||
-      it.purchaseUrl || it.orderUrl || it.productLink || it.displayUrl ||
-      it.sourceUrl || it.url || it.href || it.link || ""
-    )).trim();
-    if (isValidSecondUrl(direct)) return direct;
-    const id = pickProductId(it);
-    return id && !/^ph_/i.test(id) ? "/content.html?id=" + encodeURIComponent(id) : "";
+    // Right-panel publication is detail-only. Prefer the actual product field
+    // over affiliate/provider aliases and never fall back to a generic portal.
+    return firstSpecificRightProductUrl(it);
   }
 
   function isRealItem(it) {
