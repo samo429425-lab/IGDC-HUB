@@ -22,7 +22,7 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-country-automation-v3.33.0-admin-product-origin-authority";
+const VERSION = "commerce-country-automation-v3.34.0-hold-live-product-recovery";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -4378,6 +4378,28 @@ async function productCandidateAiRecover(actorId, input) {
   });
   return Object.assign({ candidateLedger:true }, result);
 }
+function heldCandidateRecoverySource(candidateInput){
+  const candidate=plain(candidateInput),payload=plain(candidate.source_payload),supplier=plain(payload.supplier),card=plain(payload.productCard),readiness=plain(payload.researchReadiness),readinessCard=plain(readiness.productCard);
+  const supplierSiteUrl=safeUrl(first(supplier.officialUrl,supplier.url,payload.supplierSiteUrl,card.supplierUrl,readinessCard.supplierUrl));
+  if(!supplierSiteUrl)return null;
+  return{url:supplierSiteUrl,supplierSiteUrl,supplierId:first(supplier.id,payload.supplierId),supplierName:first(supplier.name,payload.supplierName,card.supplierName,readinessCard.supplierName,candidate.title),title:first(supplier.name,payload.supplierName,candidate.title),name:first(supplier.name,payload.supplierName,candidate.title),supplierType:first(supplier.type,payload.supplierType),trustScore:Number(first(supplier.trustScore,payload.supplierTrustScore))||0,supplierDecision:first(supplier.decision,payload.supplierDecision),approvalReady:supplier.approvalReady===true||payload.supplierApprovalReady===true,evidenceReady:supplier.evidenceReady===true||payload.supplierEvidenceReady===true,supplyLane:payload.supplyLane,discoverySource:payload.discoverySource,officialDirectoryUrl:payload.officialDirectoryUrl};
+}
+async function recoverHeldCandidateProduct(candidateInput,scope){
+  const candidate=plain(candidateInput),source=heldCandidateRecoverySource(candidate);if(!source)return{ok:false,reason:"supplier_site_missing"};
+  const payload=plain(candidate.source_payload),currentUrl=ProductRanking.canonicalProductUrl(first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url));
+  let discovery=null;try{discovery=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:28,timeoutMs:5500});}catch(_e){discovery=null;}
+  let rows=array(discovery&&discovery.items);
+  if(!rows.length){try{const fallback=await fallbackDiscoverSupplierProducts(source,scope);rows=array(fallback&&fallback.items);}catch(_e){rows=[];}}
+  const pool=RegionalSelector.prepareProductInspectionPool(rows,{limit:28}).filter(row=>ProductRanking.canonicalProductUrl(row&&row.productUrl)!==currentUrl).slice(0,8);
+  if(!pool.length)return{ok:false,reason:"replacement_product_not_found"};
+  for(let offset=0;offset<pool.length;offset+=4){
+    let checked=null;try{checked=await RegionalSelector.inspectProductResearchStep(pool.slice(offset,offset+4),{country:scope.country,region:scope.region,timeoutMs:4500,allowSupplierRecovery:false});}catch(_e){checked=null;}
+    const live=array(checked&&checked.items).find(item=>item&&item.productPageLive===true&&item.inspectionComplete===true&&item.sameSupplierSite!==false&&ProductRanking.isSpecificProductUrl(productUrl(item))&&!!productImageUrl(item)&&!ProductRanking.isGenericProductName(first(item.productName,item.title)));
+    if(live)return{ok:true,product:live,source,currentUrl,recoveredUrl:productUrl(live)};
+  }
+  return{ok:false,reason:"replacement_product_validation_failed"};
+}
+
 async function productCandidateHoldVerify(actorId, input) {
   const scope=researchScope(input),actor=text(actorId)||"administrator",ids=Array.from(new Set(array(input&&input.candidateIds).map(text).filter(Boolean))).slice(0,100);
   if(!ids.length){const error=new Error("AI 검증할 보류 상품을 선택하세요.");error.statusCode=400;throw error;}
@@ -4396,8 +4418,21 @@ async function productCandidateHoldVerify(actorId, input) {
         payload.slotDecision="undecided";payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"restored_after_hold_ai_verify",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor});payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_verify",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:actor};payload.review=Object.assign({},plain(payload.review),{state:"undecided",decidedAt:now,decidedBy:actor,holdAiVerified:true});
         await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"research_pending",source_payload:payload,updated_at:now});await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");restored+=1;results.push({candidateId:id,action:"restored",reasons:array(v.reasons)});
       }else if(v.invalid===true){
-        payload.slotDecision="reject";payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"reject",hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:actor,reason:"hold_ai_verified_unusable"});payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_verify",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:actor};payload.review=Object.assign({},plain(payload.review),{state:"reject",decidedAt:now,decidedBy:actor,holdAiVerified:true});
-        await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"rejected",source_payload:payload,updated_at:now});await syncCandidateManagementResearchVisibility(actorId,scope,id,"reject");rejected+=1;results.push({candidateId:id,action:"reject",reasons:array(v.reasons)});
+        const recovery=await recoverHeldCandidateProduct(row,scope);
+        if(recovery.ok===true){
+          const recovered=plain(recovery.product),recoveredUrl=productUrl(recovered),recoveredImage=productImageUrl(recovered),recoveredTitle=first(recovered.productName,recovered.title),recoveredIdentity=ProductRanking.productIdentity(recovered);
+          payload.title=recoveredTitle;payload.productName=recoveredTitle;payload.sourceTitle=first(recovered.sourceTitle,recoveredTitle);payload.url=recoveredUrl;payload.externalProductUrl=recoveredUrl;payload.productUrl=recoveredUrl;payload.image=recoveredImage;payload.thumb=recoveredImage;payload.imageUrl=recoveredImage;payload.price=first(recovered.price,payload.price);payload.priceCurrency=first(recovered.priceCurrency,payload.priceCurrency);payload.availability=first(recovered.availability,payload.availability);payload.productIdentity=recoveredIdentity||payload.productIdentity;payload.productCard=candidateRuntimeCard(payload,recovered);payload.productPageLive=true;payload.sameSupplierSite=true;payload.inspectionComplete=true;payload.researchStatus=first(recovered.researchStatus,"ready_for_admin_review");
+          payload.slotDecision="undecided";delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
+          payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"restored_after_hold_supplier_recovery",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor,reason:"live_replacement_product_found"});
+          payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_supplier_recovery",administratorLocked:false,aiReclassificationAllowed:true,decidedAt:now,decidedBy:actor};
+          payload.review=Object.assign({},plain(payload.review),{state:"undecided",decidedAt:now,decidedBy:actor,holdAiVerified:true,liveReplacementRecovered:true,previousProductUrl:recovery.currentUrl||null,recoveredProductUrl:recoveredUrl});
+          payload.runtimeValidation={schema:"igdc-product-runtime-validation.v3",source:"hold_ai_supplier_recovery",checkedAt:now,checkedBy:actor,state:"live",live:true,dead:false,inconclusive:false,reasons:["live_replacement_product_found"],exactProductUrl:recoveredUrl,imageUrl:recoveredImage,administratorLedgerPreserved:true};
+          payload.productMapping=Object.assign({},plain(payload.productMapping),{productIdentity:recoveredIdentity||plain(payload.productMapping).productIdentity,firstVerifiedAt:now});
+          await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{title:recoveredTitle,official_url:recoveredUrl,thumbnail_url:recoveredImage,status:"research_pending",source_payload:payload,updated_at:now});await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");restored+=1;repaired+=1;results.push({candidateId:id,action:"recovered_replacement",previousProductUrl:recovery.currentUrl||null,productUrl:recoveredUrl,reasons:["live_replacement_product_found"]});
+        }else{
+          payload.slotDecision="reject";payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"reject",hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:actor,reason:"hold_ai_verified_unusable",recoveryReason:recovery.reason||null});payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_verify",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:actor};payload.review=Object.assign({},plain(payload.review),{state:"reject",decidedAt:now,decidedBy:actor,holdAiVerified:true,recoveryAttempted:true,recoveryReason:recovery.reason||null});
+          await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"rejected",source_payload:payload,updated_at:now});await syncCandidateManagementResearchVisibility(actorId,scope,id,"reject");rejected+=1;results.push({candidateId:id,action:"reject",reasons:array(v.reasons).concat([recovery.reason||"replacement_product_not_found"])});
+        }
       }else{
         payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"hold",hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:actor,reason:"hold_ai_verify_inconclusive"});payload.review=Object.assign({},plain(payload.review),{state:"hold",decidedAt:now,decidedBy:actor,holdAiVerified:true});
         await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"hold",source_payload:payload,updated_at:now});keptHold+=1;results.push({candidateId:id,action:"hold",reasons:array(v.reasons)});
