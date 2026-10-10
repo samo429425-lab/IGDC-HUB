@@ -1150,12 +1150,48 @@ function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
   return {invalid:false,reason:"",detail:""};
 }
 
+function productRecoveryRotation(value,length){
+  if(!length)return 0;let total=0;for(const ch of String(value||""))total=(total*33+ch.charCodeAt(0))>>>0;return total%length;
+}
+function recoveredProductUsable(row){
+  row=plain(row);const url=ProductRanking.canonicalProductUrl(row.productUrl||row.url),image=first(row.imageUrl,row.imageOriginalUrl),title=first(row.productName,row.title);
+  return !!(row.productPageLive===true&&row.inspectionComplete===true&&row.sameSupplierSite!==false&&ProductRanking.isSpecificProductUrl(url)&&isProductImageUrl(image)&&title&&!ProductRanking.isGenericProductName(title));
+}
+async function recoverInvalidProductReference(rowInput,invalidUrl,supplierSiteUrl,invalidState,params){
+  const row=plain(rowInput);if(!supplierSiteUrl||plain(params).allowSupplierRecovery===false)return null;
+  const source={url:supplierSiteUrl,supplierSiteUrl,supplierId:row.supplierId,supplierName:row.supplierName,title:row.supplierName,name:row.supplierName,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady===true,evidenceReady:row.supplierEvidenceReady===true,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
+  let discovery=null;try{discovery=await discoverSupplierProductsStep(source,{limit:28,timeoutMs:5500});}catch(_e){discovery=null;}
+  const candidates=array(discovery&&discovery.items);if(!candidates.length)return null;
+  const invalidCanonical=ProductRanking.canonicalProductUrl(invalidUrl),pool=prepareProductInspectionPool(candidates,{limit:28}).filter(candidate=>ProductRanking.canonicalProductUrl(candidate&&candidate.productUrl)!==invalidCanonical);
+  if(!pool.length)return null;
+  const start=productRecoveryRotation(invalidCanonical||first(row.productName,row.title),pool.length),ordered=pool.slice(start).concat(pool.slice(0,start)).slice(0,4);
+  for(const candidate of ordered){
+    let checked=null;try{checked=await inspectProductCandidate(candidate,{timeoutMs:3500,allowSupplierRecovery:false});}catch(_e){checked=null;}
+    if(!recoveredProductUsable(checked))continue;
+    return Object.assign({},checked,{
+      recoveredProductReference:true,
+      recoveredFromProductUrl:invalidCanonical||invalidUrl||null,
+      recoveryReason:text(invalidState&&invalidState.reason)||"invalid_product_reference",
+      recoveryDetail:text(invalidState&&invalidState.detail)||null,
+      recoverySupplierUrl:supplierSiteUrl,
+      recoveredAt:new Date().toISOString(),
+      publicPublication:false,
+      automaticImport:false
+    });
+  }
+  return null;
+}
+
 async function inspectProductCandidate(item,params){
   const row=plain(item),productUrl=ProductRanking.canonicalProductUrl(absoluteHttpUrl(row.productUrl,row.productUrl)),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
   const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,6000,3500,8000),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
     const page=await fetchProductHtml(productUrl,controller);if(!page.ok){const retryable=retryableProviderStatus(page.status);return Object.assign({},row,{researchStatus:retryable?"inspection_deferred":page.status,productPageLive:false,inspectionComplete:!retryable,inspectionDeferred:retryable,inspectedAt:new Date().toISOString(),inspectionError:retryable?{code:text(page.status)||"TRANSIENT_FETCH",message:page.detail||"temporary product-page fetch failure"}:row.inspectionError});}
     const invalidPage=productPageInvalidState(page.html,productUrl,page.url,supplierSiteUrl);
-    if(invalidPage.invalid)return Object.assign({},row,{researchStatus:invalidPage.reason,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString(),inspectionError:{code:"PRODUCT_PAGE_INVALID",message:invalidPage.detail||invalidPage.reason},publicPublication:false,automaticImport:false});
+    if(invalidPage.invalid){
+      const recovered=await recoverInvalidProductReference(row,productUrl,supplierSiteUrl,invalidPage,params);
+      if(recovered)return recovered;
+      return Object.assign({},row,{researchStatus:invalidPage.reason,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString(),inspectionError:{code:"PRODUCT_PAGE_INVALID",message:invalidPage.detail||invalidPage.reason},publicPublication:false,automaticImport:false});
+    }
     const supplierMeta={supplierId:row.supplierId,supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady,evidenceReady:row.supplierEvidenceReady,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
     const parsed=productRowsFromHtml(page.html,page.url,supplierMeta,20),canonical=ProductRanking.canonicalProductUrl(canonicalPageUrl(page.html,page.url))||productUrl,exact=parsed.find(x=>ProductRanking.canonicalProductUrl(x.productUrl)===canonical)||parsed[0]||{},pageVideo=videoInfoFromHtml(page.html,page.url);
     const pageTitle=meaningfulProductName(metaContent(page.html,["og:title","twitter:title"])||stripHtml((String(page.html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1])),candidateNames=[exact.productName!=="상품명 확인 중"?exact.productName:"",pageTitle,row.productName].map(meaningfulProductName).filter(name=>name&&!ProductRanking.isGenericProductName(name)),resolvedName=candidateNames[0]||"",name=resolvedName||"상품명 확인 중",image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,pagePrice=priceInfoFromHtml(page.html),pageAvailability=availabilityFromHtml(page.html),price=first(exact.price,pagePrice.price,row.price),priceCurrency=first(exact.priceCurrency,pagePrice.priceCurrency,row.priceCurrency),availability=first(exact.availability,pageAvailability,row.availability),ready=!!resolvedName&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical);
@@ -1164,7 +1200,7 @@ async function inspectProductCandidate(item,params){
 }
 
 async function inspectProductResearchStep(rawItems,params){
-  const options=plain(params),timeoutMs=boundedResearchTimeout(options.timeoutMs,6000,3500,8000),items=array(rawItems).slice(0,4),results=await Promise.allSettled(items.map((item)=>withTimeout(inspectProductCandidate(item,{timeoutMs}),timeoutMs+900)));
+  const options=plain(params),timeoutMs=boundedResearchTimeout(options.timeoutMs,6000,3500,8000),allowSupplierRecovery=options.allowSupplierRecovery!==false,items=array(rawItems).slice(0,4),perItemTimeout=allowSupplierRecovery?timeoutMs+7500:timeoutMs+900,results=await Promise.allSettled(items.map((item)=>withTimeout(inspectProductCandidate(item,{timeoutMs,allowSupplierRecovery}),perItemTimeout)));
   const inspected=results.map((result,index)=>{
     if(result.status==="fulfilled")return result.value;
     const row=plain(items[index]),error=result.reason,status=providerErrorCode(error),retryable=retryableProviderStatus(status);
