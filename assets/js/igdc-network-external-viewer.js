@@ -1,4 +1,4 @@
-/* IGDC Network external viewer v10 adaptive-compatibility
+/* IGDC Network external viewer v11 product-history-stable
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *
@@ -14,17 +14,17 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_NETWORK_EXTERNAL_VIEWER_V10__) return;
-  global.__IGDC_NETWORK_EXTERNAL_VIEWER_V10__ = true;
+  if (global.__IGDC_NETWORK_EXTERNAL_VIEWER_V11__) return;
+  global.__IGDC_NETWORK_EXTERNAL_VIEWER_V11__ = true;
 
-  var VIEWER_VERSION = 10;
+  var VIEWER_VERSION = 11;
 
   var PROXY_PATH = '/.netlify/functions/network-page-proxy';
   var ROOT_ID = 'igdc-network-external-viewer';
   var STYLE_ID = 'igdc-network-external-viewer-style';
   var HISTORY_KEY = '__igdcNetworkViewer';
   var HISTORY_TOKEN_KEY = '__igdcNetworkViewerToken';
-  var POLICY_CACHE_KEY = '__igdcNetworkFramePolicyV10';
+  var POLICY_CACHE_KEY = '__igdcNetworkFramePolicyV11';
   var POLICY_TTL_MS = 30 * 60 * 1000;
   var POLICY_TIMEOUT_MS = 3600;
 
@@ -73,6 +73,10 @@
   function originOf(raw) {
     try { return new URL(raw).origin; }
     catch (e) { return ''; }
+  }
+
+  function isProductKind(kind) {
+    return /^(?:commerce-product|product|tour-product)$/i.test(String(kind || '').trim());
   }
 
   function textOf(el) {
@@ -376,6 +380,25 @@
     frame.src = proxyUrl(target, state.proxyId, mode);
   }
 
+
+  function setFrameProxyFresh(target, mode) {
+    mode = mode || 'static';
+    var oldFrame = state.frame;
+    if (!oldFrame || !oldFrame.parentNode) { setFrameProxy(target, mode); return; }
+    var frame = document.createElement('iframe');
+    frame.className = 'igdc-contained-frame';
+    frame.title = '외부 사이트 내부 보기';
+    frame.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-downloads allow-presentation');
+    frame.setAttribute('allow', 'clipboard-write; fullscreen');
+    state.viewerMode = mode + '-proxy';
+    frame.dataset.viewerMode = state.viewerMode;
+    frame.addEventListener('load', function () { hideLoadingSoon(70); });
+    frame.src = proxyUrl(target, state.proxyId, mode);
+    oldFrame.parentNode.replaceChild(frame, oldFrame);
+    state.frame = frame;
+  }
+
   function updateBar(target, label) {
     var host = hostOf(target);
     if (state.host) state.host.textContent = host;
@@ -393,6 +416,13 @@
     var seq = state.activeLoadSeq;
     updateBar(target, options.label || state.label);
     showLoading('사이트를 불러오는 중입니다…');
+
+    /* Right-panel product detail is a contained subview of the Network list.
+     * Keep remote redirects out of the browser Back stack. */
+    if (isProductKind(state.kind)) {
+      setFrameProxyFresh(target, 'static');
+      return;
+    }
 
 
     var compat = compatibilityMode(target, state.kind);
@@ -573,13 +603,17 @@
     state.open = false;
     state.activeLoadSeq += 1;
     state.pendingPolicyTarget = '';
-    if (state.root) {
-      state.root.setAttribute('data-open', '0');
-      state.root.setAttribute('aria-hidden', 'true');
+    var oldRoot = state.root;
+    if (oldRoot) {
+      oldRoot.setAttribute('data-open', '0');
+      oldRoot.setAttribute('aria-hidden', 'true');
+      try { if (oldRoot.parentNode) oldRoot.parentNode.removeChild(oldRoot); } catch (e) {}
     }
-    if (state.frame) {
-      try { state.frame.src = 'about:blank'; } catch (e) {}
-    }
+    state.root = null;
+    state.frame = null;
+    state.loading = null;
+    state.host = null;
+    state.title = null;
     unlockPage();
     try { global.scrollTo(0, state.scrollY || 0); } catch (e) {}
     try {
@@ -693,9 +727,10 @@
     state.activeLoadSeq += 1;
     updateBar(next, hostOf(next));
     showLoading('사이트를 불러오는 중입니다…');
-    /* Once a source required proxy containment, keep subsequent navigation in
-     * the same contained proxy instead of trying to promote it to top-level. */
-    setFrameProxy(next, state.viewerMode === 'live-proxy' ? 'live' : 'live');
+    /* Product navigation replaces the nested context so browser Back remains
+     * reserved for returning to the IGDC Network list page. */
+    if (isProductKind(state.kind)) setFrameProxyFresh(next, 'static');
+    else setFrameProxy(next, state.viewerMode === 'live-proxy' ? 'live' : 'live');
   });
 
   global.addEventListener('popstate', function (ev) {

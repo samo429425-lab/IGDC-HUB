@@ -23,3 +23,12 @@
 
 /assets/js/tour-automap.js
   Cache-Control: no-cache, must-revalidate
+
+/assets/js/home6-automap-extension.js
+  Cache-Control: no-cache, must-revalidate
+
+/assets/js/igdc-contained-external-viewer.js
+  Cache-Control: no-cache, must-revalidate
+
+/assets/js/igdc-network-external-viewer.js
+  Cache-Control: no-cache, must-revalidate

@@ -28,7 +28,7 @@
 
   const MOBILE_CSS_ID = "tour-mobile-rail-cap-v2";
 
-  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260914-network-tour-stable-v8';
+  const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20261011-commerce-contained-v2';
   const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-contained-viewer-loader-network-tour-v8';
   const CONTAINED_THEME_ID = 'igdc-contained-toolbar-network-tour-theme-v6';
 
@@ -66,7 +66,7 @@
 
   function ensureContainedViewer(){
     ensureContainedToolbarTheme();
-    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 8 && typeof window.IGDCContainedViewer.open === 'function') {
+    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 10 && typeof window.IGDCContainedViewer.open === 'function') {
       return Promise.resolve(window.IGDCContainedViewer);
     }
     if (window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__) return window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__;
@@ -74,7 +74,7 @@
     window.__IGDC_NETWORK_TOUR_VIEWER_V8_PROMISE__ = new Promise(function(resolve, reject){
       let script = document.getElementById(CONTAINED_VIEWER_SCRIPT_ID);
       const finish = function(){
-        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 8 && typeof window.IGDCContainedViewer.open === 'function') {
+        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 10 && typeof window.IGDCContainedViewer.open === 'function') {
           ensureContainedToolbarTheme();
           resolve(window.IGDCContainedViewer);
         } else {
@@ -404,7 +404,7 @@
     ensureContainedViewer().then(function(viewer){
       // The contained viewer owns X-Frame/CSP handling and proxy fallback.
       // A blocked third-party frame must never replace the IGDC top-level page.
-      return viewer.open(sourceUrl, { label:item.title || '', kind:'commerce-product', pushHistory:false });
+      return viewer.open(sourceUrl, { label:item.title || '', kind:'commerce-product', pushHistory:true });
     }).catch(function(err){
       try{console.warn('[IGDC][Tour] product viewer unavailable:',err&&err.message?err.message:err);}catch(_e){}
     });

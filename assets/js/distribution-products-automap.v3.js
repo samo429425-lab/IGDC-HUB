@@ -76,15 +76,15 @@
   function escUrl(v){try{return String(v||'').replace(/'/g,'%27');}catch(_e){return '';}}
   function hasUsableDestination(value){const url=text(value).trim();return !!url&&url!=='#'&&!/^javascript:/i.test(url)&&!/\/pages\/coming-soon\.html/i.test(url)&&!/(?:^|\.)example\.com(?:[/:?#]|$)/i.test(url);}
 
-  const COMMERCE_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20261011-commerce-contained-v1';
+  const COMMERCE_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20261011-commerce-contained-v2';
   const COMMERCE_VIEWER_SCRIPT_ID = 'igdc-commerce-contained-viewer-loader-v1';
   function ensureCommerceContainedViewer(){
-    if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 9 && typeof window.IGDCContainedViewer.open === 'function') return Promise.resolve(window.IGDCContainedViewer);
+    if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 10 && typeof window.IGDCContainedViewer.open === 'function') return Promise.resolve(window.IGDCContainedViewer);
     if(window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__) return window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__;
     window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__ = new Promise(function(resolve,reject){
       var script=document.getElementById(COMMERCE_VIEWER_SCRIPT_ID);
       function finish(){
-        if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 9 && typeof window.IGDCContainedViewer.open === 'function') resolve(window.IGDCContainedViewer);
+        if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 10 && typeof window.IGDCContainedViewer.open === 'function') resolve(window.IGDCContainedViewer);
         else reject(new Error('IGDC contained viewer unavailable'));
       }
       if(script){
@@ -103,7 +103,7 @@
   }
   function openCommerceContained(url,label){
     return ensureCommerceContainedViewer().then(function(viewer){
-      return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product',pushHistory:false});
+      return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product',pushHistory:true});
     }).catch(function(error){
       try{console.warn('[IGDC][Commerce] contained viewer unavailable:',error&&error.message?error.message:error);}catch(_e){}
       return false;

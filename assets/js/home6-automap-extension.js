@@ -21,6 +21,50 @@
   var LIMIT=100;
   var HOME6_BATCH=6;
   var RIGHT_BATCH=4;
+  var COMMERCE_VIEWER_SRC='/assets/js/igdc-contained-external-viewer.js?v=20261011-commerce-contained-v2';
+  var COMMERCE_VIEWER_SCRIPT_ID='igdc-commerce-contained-viewer-loader-v2';
+
+  function ensureCommerceContainedViewer(){
+    if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version||0)>=10 && typeof window.IGDCContainedViewer.open==='function') return Promise.resolve(window.IGDCContainedViewer);
+    if(window.__IGDC_COMMERCE_CONTAINED_VIEWER_V2_PROMISE__) return window.__IGDC_COMMERCE_CONTAINED_VIEWER_V2_PROMISE__;
+    window.__IGDC_COMMERCE_CONTAINED_VIEWER_V2_PROMISE__=new Promise(function(resolve,reject){
+      var script=document.getElementById(COMMERCE_VIEWER_SCRIPT_ID);
+      function finish(){
+        if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version||0)>=10 && typeof window.IGDCContainedViewer.open==='function') resolve(window.IGDCContainedViewer);
+        else reject(new Error('IGDC contained viewer unavailable'));
+      }
+      if(script){
+        if(script.dataset.loaded==='1'){finish();return;}
+        script.addEventListener('load',finish,{once:true});
+        script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
+        return;
+      }
+      script=document.createElement('script');
+      script.id=COMMERCE_VIEWER_SCRIPT_ID;
+      script.src=COMMERCE_VIEWER_SRC;
+      script.async=true;
+      script.addEventListener('load',function(){script.dataset.loaded='1';finish();},{once:true});
+      script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
+      (document.head||document.documentElement).appendChild(script);
+    }).catch(function(error){window.__IGDC_COMMERCE_CONTAINED_VIEWER_V2_PROMISE__=null;throw error;});
+    return window.__IGDC_COMMERCE_CONTAINED_VIEWER_V2_PROMISE__;
+  }
+
+  function bindCommerceDestination(a,href,label){
+    if(!a || !/^https?:\/\//i.test(String(href||''))) return;
+    a.removeAttribute('target');
+    a.rel='noopener';
+    a.setAttribute('data-igdc-contained-product','1');
+    a.addEventListener('click',function(ev){
+      if(ev.defaultPrevented || ev.button!==0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+      ev.preventDefault();
+      ensureCommerceContainedViewer().then(function(viewer){
+        return viewer.open(href,{label:String(label||'').trim(),kind:'commerce-product',pushHistory:true});
+      }).catch(function(error){
+        try{console.warn('[IGDC][HomeRight] contained viewer unavailable:',error&&error.message?error.message:error);}catch(_e){}
+      });
+    },{passive:false});
+  }
 
   function arr(v){ return Array.isArray(v) ? v : []; }
   function pick(o,keys){
@@ -125,7 +169,7 @@
     }else{
       var h=hrefOf(it,key,idx);
       a.href=h;
-      if(/^https?:\/\//i.test(h)){a.target='_top';a.rel='noopener';}
+      if(/^https?:\/\//i.test(h)){bindCommerceDestination(a,h,resolveTitle(it));}
     }
 
     a.style.display='grid';
@@ -266,7 +310,7 @@
     a.className='ad-box news-btn';
     var href=hrefOf(item,key,idx);
     a.href=href;
-    if(/^https?:\/\//i.test(href)){a.target='_top';a.rel='noopener';}
+    if(/^https?:\/\//i.test(href)){bindCommerceDestination(a,href,resolveTitle(item));}
 
     a.style.display='grid';
     a.style.gridTemplateRows='minmax(0,1fr) 58px';

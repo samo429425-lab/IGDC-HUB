@@ -1,4 +1,4 @@
-/* IGDC contained external viewer v9 donation-history-speed
+/* IGDC contained external viewer v10 product-history-stable
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
@@ -17,10 +17,10 @@
 (function (global) {
   'use strict';
 
-  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V9__) return;
-  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V9__ = true;
+  if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V10__) return;
+  global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V10__ = true;
 
-  var VIEWER_VERSION = 9;
+  var VIEWER_VERSION = 10;
 
   var PROXY_PATH = '/.netlify/functions/search-page-proxy';
   var ROOT_ID = 'igdc-contained-external-viewer';
@@ -76,6 +76,10 @@
   function originOf(raw) {
     try { return new URL(raw).origin; }
     catch (e) { return ''; }
+  }
+
+  function isProductKind(kind) {
+    return /^(?:commerce-product|product|tour-product)$/i.test(String(kind || '').trim());
   }
 
   function textOf(el) {
@@ -370,7 +374,7 @@
     frame.src = proxyUrl(target, state.proxyId, mode);
   }
 
-  function setDonationProxyFresh(target, mode) {
+  function setFrameProxyFresh(target, mode) {
     mode = mode || 'static';
     var oldFrame = state.frame;
     if (!oldFrame || !oldFrame.parentNode) { setFrameProxy(target, mode); return; }
@@ -383,11 +387,15 @@
     state.viewerMode = mode + '-proxy';
     frame.dataset.viewerMode = state.viewerMode;
     frame.addEventListener('load', function () { hideLoadingSoon(70); });
-    /* Set src before insertion so this browsing context starts on the proxy page
-     * instead of creating an extra about:blank entry in the joint history. */
+    /* Set src before insertion. Replacing the browsing context keeps product
+     * redirects and proxy navigation out of the top-level Back history. */
     frame.src = proxyUrl(target, state.proxyId, mode);
     oldFrame.parentNode.replaceChild(frame, oldFrame);
     state.frame = frame;
+  }
+
+  function setDonationProxyFresh(target, mode) {
+    setFrameProxyFresh(target, mode || 'static');
   }
 
   function updateBar(target, label) {
@@ -407,6 +415,14 @@
     var seq = state.activeLoadSeq;
     updateBar(target, options.label || state.label);
     showLoading('사이트를 불러오는 중입니다…');
+
+    /* Product detail views must preserve exactly one parent history step.
+     * Use the contained static relay in a fresh iframe context so redirects and
+     * in-page navigation never sit between the user and the IGDC list page. */
+    if (isProductKind(state.kind)) {
+      setFrameProxyFresh(target, 'static');
+      return;
+    }
 
     /* Network/Tour compatibility path.
      * Most large commerce/travel sites reject third-party iframe embedding even
@@ -594,13 +610,19 @@
     state.open = false;
     state.activeLoadSeq += 1;
     state.pendingPolicyTarget = '';
-    if (state.root) {
-      state.root.setAttribute('data-open', '0');
-      state.root.setAttribute('aria-hidden', 'true');
+    var oldRoot = state.root;
+    if (oldRoot) {
+      oldRoot.setAttribute('data-open', '0');
+      oldRoot.setAttribute('aria-hidden', 'true');
+      try { if (oldRoot.parentNode) oldRoot.parentNode.removeChild(oldRoot); } catch (e) {}
     }
-    if (state.frame) {
-      try { state.frame.src = 'about:blank'; } catch (e) {}
-    }
+    state.root = null;
+    state.frame = null;
+    state.loading = null;
+    state.host = null;
+    state.title = null;
+    /* Never navigate the child frame to about:blank during close. That creates
+     * an extra joint-history entry and is what made Back occasionally stall. */
     unlockPage();
     try { global.scrollTo(0, state.scrollY || 0); } catch (e) {}
     try {
@@ -718,7 +740,8 @@
      * in-view navigation. This keeps Chrome/Edge's native Back button attached
      * to the IGDC viewer history marker instead of walking an iframe history
      * entry that can surface an upstream "invalid access" page. */
-    if (/^donation(?:-|$)/i.test(state.kind || '')) setDonationProxyFresh(next, 'static');
+    if (isProductKind(state.kind)) setFrameProxyFresh(next, 'static');
+    else if (/^donation(?:-|$)/i.test(state.kind || '')) setDonationProxyFresh(next, 'static');
     else setFrameProxy(next, 'static');
   });
 
