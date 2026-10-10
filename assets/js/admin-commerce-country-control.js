@@ -25,7 +25,7 @@
   var LATEST_MANUAL_ACTION_BATCH=10;
   var PRODUCT_PRIVATE_SECTION_CAPACITY=200;
   var PRODUCT_FRONT_SECTION_CAPACITY=100;
-  var FRONT_MATCH_CLIENT_VERSION='20261010-frontmatch-structural-integrity-v9';
+  var FRONT_MATCH_CLIENT_VERSION='20261010-frontmatch-unique-product-v10';
 
   var PRODUCT_SECTIONS=Object.freeze([
     {key:'home|home_1',page:'home',section:'home_1',label:'홈 · home_1'},{key:'home|home_2',page:'home',section:'home_2',label:'홈 · home_2'},{key:'home|home_3',page:'home',section:'home_3',label:'홈 · home_3'},{key:'home|home_4',page:'home',section:'home_4',label:'홈 · home_4'},{key:'home|home_5',page:'home',section:'home_5',label:'홈 · home_5'},{key:'home|home_6',page:'home',section:'home_6',label:'홈 · Home 6 (웹툰·서적·전자책)'},{key:'home|home_right_top',page:'home',section:'home_right_top',label:'홈 · 우측 상단 (지식·건강·생활)'},{key:'home|home_right_middle',page:'home',section:'home_right_middle',label:'홈 · 우측 중단 (자동차·아웃도어)'},{key:'home|home_right_bottom',page:'home',section:'home_right_bottom',label:'홈 · 우측 하단 (리빙·책방·기타)'},
@@ -217,7 +217,28 @@
   function candidatePlacementKey(row){var list=(row&&row.sectionAssignments||[]).filter(function(item){return item&&(item.approvalEligible===true||item.reviewEligible===true);});return sectionKeyOf(row&&row.primaryPlacement)||sectionKeyOf(list[0])||'unassigned';}
   function eligiblePlacements(row){return (Array.isArray(row&&row.sectionAssignments)?row.sectionAssignments:[]).filter(function(item){return item&&item.approvalEligible===true&&PRODUCT_SECTION_MAP[sectionKeyOf(item)];});}
   function productById(id){id=text(id);return productRows.filter(function(row){return text(row&&row.id)===id;})[0]||null;}
-  function productSectionCounts(){var counts={};PRODUCT_SECTIONS.forEach(function(row){counts[row.key]=0;});productRows.filter(function(row){return productDecision(row)==='slot_candidate';}).forEach(function(row){var key=productPlacementKey(row);if(Object.prototype.hasOwnProperty.call(counts,key))counts[key]+=1;});return counts;}
+  function frontProductDestinationKey(row){
+    var raw=safeExternalUrl(row&&row.productUrl||row&&row.url),id=text(row&&row.candidateId||row&&row.id);
+    if(!raw)return'id:'+id;
+    try{var u=new URL(raw);u.hash='';u.hostname=u.hostname.toLowerCase();if((u.protocol==='https:'&&u.port==='443')||(u.protocol==='http:'&&u.port==='80'))u.port='';u.pathname=(u.pathname||'/').replace(/\/{2,}/g,'/');if(u.pathname.length>1)u.pathname=u.pathname.replace(/\/+$/,'');return u.toString();}catch(_e){return raw.toLowerCase();}
+  }
+  function compareFrontDuplicateRows(a,b){
+    var al=productManagementLocked(a)?1:0,bl=productManagementLocked(b)?1:0;if(al!==bl)return bl-al;
+    var aa=frontPublicationActive(a)?1:0,ba=frontPublicationActive(b)?1:0;if(aa!==ba)return ba-aa;
+    return compareSectionRankRows(a,b);
+  }
+  function dedupePlacedSectionRows(rows){
+    var loose=[],groups={};
+    (Array.isArray(rows)?rows:[]).forEach(function(row){
+      var key=assignedSectionKey(row),placed=productDecision(row)==='slot_candidate'&&!!key;
+      if(!placed){loose.push(row);return;}
+      var identity=key+'|'+frontProductDestinationKey(row);
+      (groups[identity]||(groups[identity]=[])).push(row);
+    });
+    Object.keys(groups).sort().forEach(function(identity){var group=groups[identity].slice().sort(compareFrontDuplicateRows);if(group.length)loose.push(group[0]);});
+    return loose;
+  }
+  function productSectionCounts(){var counts={};PRODUCT_SECTIONS.forEach(function(row){counts[row.key]=0;});dedupePlacedSectionRows(productRows).filter(function(row){return productDecision(row)==='slot_candidate';}).forEach(function(row){var key=assignedSectionKey(row);if(Object.prototype.hasOwnProperty.call(counts,key))counts[key]+=1;});return counts;}
   function snapshotSectionList(snapshot,page,section){
     var root=snapshot&&snapshot.pages&&snapshot.pages[page]&&snapshot.pages[page].sections||snapshot&&snapshot.sections||{},raw=root&&root[section];
     if(Array.isArray(raw))return raw;
@@ -706,7 +727,7 @@
   function hasFrontMatchablePlacement(){return productRows.some(function(row){return productDecision(row)==='slot_candidate'&&!!assignedSectionKey(row);});}
   function selectedSectionKeys(){return PRODUCT_SECTIONS.map(function(row){return row.key;}).filter(function(key){return frontSelectedSections[key]===true;});}
   function selectedProductIds(sectionKey){return productRows.filter(function(row){return frontSelectedProducts[text(row&&row.id)]===true&&(!sectionKey||assignedSectionKey(row)===sectionKey);}).map(function(row){return text(row.id);}).filter(Boolean);}
-  function sectionRows(sectionKey){return productRows.filter(function(row){return productDecision(row)==='slot_candidate'&&assignedSectionKey(row)===sectionKey;});}
+  function sectionRows(sectionKey){return dedupePlacedSectionRows(productRows).filter(function(row){return productDecision(row)==='slot_candidate'&&assignedSectionKey(row)===sectionKey;});}
   function sectionRankScore(row){var ranking=row&&row.ranking||{},value=row&&row.valueAssessment||{},score=Number(row&&row.rankingScore||ranking.finalScore||ranking.score||value.portfolioPriorityScore||0);return Number.isFinite(score)?score:0;}
   function sectionRankTimestamp(row){var stamp=Date.parse(text(row&&row.updatedAt||row&&row.decisionAt||row&&row.createdAt));return Number.isFinite(stamp)?stamp:0;}
   function compareSectionRankRows(a,b){var al=productManagementLocked(a)?1:0,bl=productManagementLocked(b)?1:0;if(al!==bl)return bl-al;var score=sectionRankScore(b)-sectionRankScore(a);if(score)return score;var trust=Number(b&&b.supplierTrustScore||0)-Number(a&&a.supplierTrustScore||0);if(trust)return trust;var stamp=sectionRankTimestamp(b)-sectionRankTimestamp(a);if(stamp)return stamp;return text(a&&a.id).localeCompare(text(b&&b.id));}
@@ -1456,7 +1477,10 @@
     var unmatch=operation==='unmatch',sectionMode=mode==='section',sectionsMode=mode==='sections',candidateMode=mode==='candidate',candidatesMode=mode==='candidates',selectedSections=sectionsMode?(Array.isArray(selection)?selection:[]):[],selectedProducts=candidatesMode?(Array.isArray(selection)?selection:[]):[],selectedProduct=candidateMode?productById(productId):null,label=candidateMode?(text(selectedProduct&&selectedProduct.productName||selectedProduct&&selectedProduct.title||productId)+' · 상품 1건'):(candidatesMode?'선택 상품 '+selectedProducts.length+'건':(sectionsMode?(selectedSections.length===1?sectionLabel(selectedSections[0]):'선택 섹션 '+selectedSections.length+'개'):(sectionMode?sectionLabel(sectionKey):'20개 전체 섹션'))),confirmation=unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH';
     if(sectionsMode&&!selectedSections.length){show('매칭할 섹션을 먼저 선택해 주세요.','warn');return;}if(candidatesMode&&!selectedProducts.length){show('매칭할 상품을 먼저 선택해 주세요.','warn');return;}
     var replacementRun=!unmatch&&(mode==='all'||sectionMode||sectionsMode),pendingManagement=[],selectedProductMap={};selectedProducts.forEach(function(id){selectedProductMap[text(id)]=true;});
-    var authoritativeBoardRows=productRows.slice(),authoritativeBoardById={};
+    // Canonical publication is destination-unique inside one market section.
+    // Use the same deterministic view for Front Match so duplicate candidate IDs
+    // for one seller product can never inflate the admin count or be published twice.
+    var authoritativeBoardRows=dedupePlacedSectionRows(productRows.slice()),authoritativeBoardById={};
     authoritativeBoardRows.forEach(function(row){
       var id=text(row&&row.candidateId||row&&row.id),key=assignedSectionKey(row);
       if(!id||!PRODUCT_SECTION_MAP[key])return;
