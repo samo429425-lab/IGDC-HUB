@@ -103,7 +103,7 @@
   }
   function openCommerceContained(url,label){
     return ensureCommerceContainedViewer().then(function(viewer){
-      return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product'});
+      return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product',pushHistory:false});
     }).catch(function(error){
       try{console.warn('[IGDC][Commerce] contained viewer unavailable:',error&&error.message?error.message:error);}catch(_e){}
       return false;

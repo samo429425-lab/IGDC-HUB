@@ -160,7 +160,7 @@
         if(ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
         ev.preventDefault();
         ensureContainedViewer().then(function(viewer){
-          return viewer.open(href,{label:(item && item.title) || '',kind:'product'});
+          return viewer.open(href,{label:(item && item.title) || '',kind:'product',pushHistory:false});
         }).catch(function(err){
           try{console.warn('[IGDC][Network] product viewer unavailable:',err&&err.message?err.message:err);}catch(_e){}
         });

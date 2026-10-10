@@ -404,7 +404,7 @@
     ensureContainedViewer().then(function(viewer){
       // The contained viewer owns X-Frame/CSP handling and proxy fallback.
       // A blocked third-party frame must never replace the IGDC top-level page.
-      return viewer.open(sourceUrl, { label:item.title || '', kind:'commerce-product' });
+      return viewer.open(sourceUrl, { label:item.title || '', kind:'commerce-product', pushHistory:false });
     }).catch(function(err){
       try{console.warn('[IGDC][Tour] product viewer unavailable:',err&&err.message?err.message:err);}catch(_e){}
     });

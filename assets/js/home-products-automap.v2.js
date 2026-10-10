@@ -155,7 +155,7 @@
   }
   function openCommerceContained(url,label){
     return ensureCommerceContainedViewer().then(function(viewer){
-      return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product'});
+      return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product',pushHistory:false});
     }).catch(function(error){
       try{console.warn('[IGDC][Commerce] contained viewer unavailable:',error&&error.message?error.message:error);}catch(_e){}
       return false;
@@ -864,6 +864,10 @@ function bindIncremental(target, items) {
       const target = ev.target;
       const a = target && target.closest && target.closest('.news-section a.news-btn[href^="http"], a.news-btn[data-igdc-external="top"][href^="http"]');
       if (!a) return;
+      // Commerce cards (including Home right top/middle/bottom) own their click
+      // through the IGDC contained viewer.  Do not let the legacy news capture
+      // handler promote those cards to top-level navigation.
+      if (a.hasAttribute('data-igdc-contained-product')) return;
       const href = a.href;
       if (!href) return;
       ev.preventDefault();
