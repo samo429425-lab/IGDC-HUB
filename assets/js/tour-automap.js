@@ -175,18 +175,33 @@
     try {
       const url = new URL(raw, window.location.origin);
       if (!/^https?:$/i.test(url.protocol) || !url.hostname) return false;
-      const path = decodeURIComponent(url.pathname || "/").replace(/\/+$/, "") || "/";
+      const path = decodeURIComponent(url.pathname || "/").replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
       const lowPath = path.toLowerCase();
       const queryHasProductId = Array.from(url.searchParams.entries()).some(function(pair){
         return PRODUCT_ID_QUERY_KEYS.has(String(pair[0] || "").toLowerCase()) && String(pair[1] || "").trim();
       });
       if (queryHasProductId) return true;
       if (path === "/") return false;
-      if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|best|event|events|home|main|travel|shop|store|list)(?:\/|$)/i.test(lowPath)) return false;
-      if (/\/(?:products?|items?|goods|detail|offers?|activities|activity|attractions?|experiences?|tours?|tickets?|hotels?|resorts?|rooms?|stays?|cruises?|packages?|properties?|restaurants?|dining|reservation|car-rental|cars)\/[^/?#]{2,}/i.test(lowPath)) return true;
-      if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|hotel-detail|hotel-information)\/[^/?#]{1,}/i.test(lowPath)) return true;
-      const last = path.split("/").filter(Boolean).pop() || "";
-      return /\d{3,}/.test(last);
+      if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|best|event|events|home|main|travel|shop|store|list|destinations?|things-to-do)(?:\/|$)/i.test(lowPath)) return false;
+      if (/(?:^|[?&])(?:category|cate|search|keyword|destination|city|region|sort|page)=/i.test(url.search)) return false;
+
+      // Physical recreation products are valid Tour inventory only when they
+      // are genuine item/product detail pages.
+      if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,})/i.test(lowPath)) return true;
+      if (/(?:goods_view|product_view|item_view|prd_view|goods_detail|product_detail|item_detail|shopdetail)\.(?:php|html?|aspx?|jsp)$/i.test(lowPath)) return true;
+
+      // Travel services must resolve to a concrete property/activity/ticket.
+      // A numeric year or campaign number on an operator page is not enough.
+      const travel = lowPath.match(/\/(hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting|restaurants?|dining|reservation)\/(.+)$/i);
+      if (travel && travel[2]) {
+        const tail = travel[2].replace(/\/+$/, "");
+        const parts = tail.split("/").filter(Boolean);
+        const last = parts[parts.length - 1] || "";
+        if (/^(?:search|list|all|home|main|index|destination|destinations|city|cities|region|regions|country|countries|offers?|deals?|popular|best)$/i.test(last)) return false;
+        if (/\d{2,}/.test(last) || /\.(?:html?|php|aspx?|jsp)$/i.test(last) || parts.length >= 2 || last.length >= 12) return true;
+      }
+      if (/\/(?:hotel-detail|hotel-information|property-detail|activity-detail|attraction-detail|tour-detail|ticket-detail|booking-detail|restaurant-detail|dining-detail)\/[^/?#]{2,}/i.test(lowPath)) return true;
+      return false;
     } catch(e) { return false; }
   }
 
@@ -209,8 +224,9 @@
   function pickProductDestination(it){
     if (!it || typeof it !== "object") return "";
     const directKeys = [
-      "checkoutUrl","paymentUrl","purchaseUrl","orderUrl",
+      // Exact detail fields always win over provider/affiliate aliases.
       "externalProductUrl","officialProductUrl","productUrl","product_url","productPageUrl","detailUrl","productLink","displayUrl",
+      "checkoutUrl","paymentUrl","purchaseUrl","orderUrl",
       "affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url"
     ];
     for (const key of directKeys) {
