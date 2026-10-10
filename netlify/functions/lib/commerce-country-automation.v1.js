@@ -23,7 +23,7 @@ const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 
-const VERSION = "commerce-country-automation-v3.36.0-global-product-maintenance-v2";
+const VERSION = "commerce-country-automation-v3.37.0-global-product-detail-recovery-v3";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -4389,13 +4389,15 @@ async function productCandidateAiRecover(actorId, input) {
   return Object.assign({ candidateLedger:true }, result);
 }
 function heldCandidateRecoverySource(candidateInput){
-  const candidate=plain(candidateInput),payload=plain(candidate.source_payload),supplier=plain(payload.supplier),card=plain(payload.productCard),readiness=plain(payload.researchReadiness),readinessCard=plain(readiness.productCard),mapping=plain(payload.productMapping);
-  const supplierSiteUrl=safeUrl(first(supplier.officialUrl,supplier.url,payload.supplierSiteUrl,card.supplierUrl,readinessCard.supplierUrl));
+  const candidate=plain(candidateInput),payload=plain(candidate.source_payload),supplier=plain(payload.supplier),card=plain(payload.productCard),readiness=plain(payload.researchReadiness),readinessCard=plain(readiness.productCard),mapping=plain(payload.productMapping),current=ProductRanking.canonicalProductUrl(first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url));
+  let supplierSiteUrl=safeUrl(first(supplier.officialUrl,supplier.url,payload.supplierSiteUrl,card.supplierUrl,readinessCard.supplierUrl));
+  if(supplierSiteUrl&&ProductRanking.isSpecificProductUrl(supplierSiteUrl))supplierSiteUrl=runtimeProductOrigin(supplierSiteUrl);
+  if(!supplierSiteUrl&&current)supplierSiteUrl=runtimeProductOrigin(current);
   if(!supplierSiteUrl)return null;
-  const sourcePages=[],current=ProductRanking.canonicalProductUrl(first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url)),addSourcePage=(value)=>{const url=safeUrl(value);if(!url||!sameSupplierSite(supplierSiteUrl,url)||ProductRanking.canonicalProductUrl(url)===current)return;if(!sourcePages.includes(url))sourcePages.push(url);};
+  const sourcePages=[],addSourcePage=(value)=>{const url=safeUrl(value);if(!url||!sameSupplierSite(supplierSiteUrl,url)||ProductRanking.canonicalProductUrl(url)===current)return;if(!sourcePages.includes(url))sourcePages.push(url);};
   [payload.sourcePageUrl,payload.discoverySourcePageUrl,payload.categoryPageUrl,payload.catalogPageUrl,payload.productListUrl,mapping.sourcePageUrl,card.sourcePageUrl,readinessCard.sourcePageUrl].forEach(addSourcePage);
   for(const value of array(payload.sourcePageUrls))addSourcePage(value);
-  return{url:supplierSiteUrl,supplierSiteUrl,supplierId:first(supplier.id,payload.supplierId),supplierName:first(supplier.name,payload.supplierName,card.supplierName,readinessCard.supplierName,candidate.title),title:first(supplier.name,payload.supplierName,candidate.title),name:first(supplier.name,payload.supplierName,candidate.title),supplierType:first(supplier.type,payload.supplierType),trustScore:Number(first(supplier.trustScore,payload.supplierTrustScore))||0,supplierDecision:first(supplier.decision,payload.supplierDecision),approvalReady:supplier.approvalReady===true||payload.supplierApprovalReady===true,evidenceReady:supplier.evidenceReady===true||payload.supplierEvidenceReady===true,supplyLane:payload.supplyLane,discoverySource:payload.discoverySource,officialDirectoryUrl:payload.officialDirectoryUrl,sourcePageUrl:sourcePages[0]||"",sourcePageUrls};
+  return{url:supplierSiteUrl,supplierSiteUrl,supplierId:first(supplier.id,payload.supplierId),supplierName:first(supplier.name,payload.supplierName,card.supplierName,readinessCard.supplierName,candidate.title),title:first(supplier.name,payload.supplierName,candidate.title),name:first(supplier.name,payload.supplierName,candidate.title),supplierType:first(supplier.type,payload.supplierType),trustScore:Number(first(supplier.trustScore,payload.supplierTrustScore))||0,supplierDecision:first(supplier.decision,payload.supplierDecision),approvalReady:supplier.approvalReady===true||payload.supplierApprovalReady===true,evidenceReady:supplier.evidenceReady===true||payload.supplierEvidenceReady===true,supplyLane:payload.supplyLane,discoverySource:payload.discoverySource,officialDirectoryUrl:payload.officialDirectoryUrl,sourcePageUrl:sourcePages[0]||"",sourcePageUrls,referenceProductUrl:current||""};
 }
 async function replacementProductExclusions(scope,candidateIdInput){
   const candidateId=text(candidateIdInput),urls=new Set(),identities=new Set();
@@ -4421,7 +4423,7 @@ async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
   const options=plain(optionsInput),payload=plain(candidate.source_payload),currentUrl=ProductRanking.canonicalProductUrl(first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url)),exclusions=await replacementProductExclusions(scope,text(candidate.id));
   if(currentUrl)exclusions.urls.add(currentUrl);if(text(payload.productIdentity))exclusions.identities.add(text(payload.productIdentity));
   for(const value of array(options.excludedCanonicalUrls)){const url=ProductRanking.canonicalProductUrl(value);if(url)exclusions.urls.add(url);}for(const value of array(options.excludedProductIdentities))if(text(value))exclusions.identities.add(text(value));
-  let discovery=null;try{discovery=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:40,timeoutMs:6500});}catch(_e){discovery=null;}
+  let discovery=null;try{discovery=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:40,timeoutMs:8000,recoveryMode:true});}catch(_e){discovery=null;}
   let rows=array(discovery&&discovery.items);
   if(!rows.length){try{const fallback=await fallbackDiscoverSupplierProducts(source,scope);rows=array(fallback&&fallback.items);}catch(_e){rows=[];}}
   const pool=RegionalSelector.prepareProductInspectionPool(rows,{limit:40}).filter(row=>{const url=ProductRanking.canonicalProductUrl(row&&row.productUrl),identity=ProductRanking.productIdentity(row);return !!url&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));}).slice(0,24);

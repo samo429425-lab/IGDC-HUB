@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.9.0-global-product-liveness-policy";
+const VERSION="regional-brokerage-autoselector-v2.10.0-global-product-detail-recovery";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -949,26 +949,55 @@ function embeddedProductUrls(html,pageUrl,max){
   for(const rx of patterns){let m;while((m=rx.exec(source))){const raw=decodeEmbeddedUrl(m[1]),url=absoluteHttpUrl(pageUrl,raw);if(!url||!sameSite(pageUrl,url)||!isProductDetailUrl(url))continue;const key=lower(url);if(seen.has(key))continue;seen.add(key);out.push({url,index:m.index,end:rx.lastIndex});if(out.length>=Math.max(10,Math.min(120,Number(max)||60)))return out;}}
   return out;
 }
-function dynamicProductRowsFromHtml(html,pageUrl,max){
+function referenceProductUrlTemplates(value){
+  const url=ProductRanking.canonicalProductUrl(value);if(!url)return[];
+  try{
+    const parsed=new URL(url),ranked=[];
+    for(const [key,valuePart] of parsed.searchParams.entries()){
+      if(!text(valuePart))continue;
+      const low=lower(key);let score=0;
+      if(/(?:goods|product|item|prd|sku)/i.test(low))score+=12;
+      if(/(?:code|cd|no|id|seq|uid)$/i.test(low))score+=7;
+      if(/^(?:no|id|idx|uid|pid|sku)$/i.test(low))score+=3;
+      if(!score)continue;ranked.push({key,score});
+    }
+    ranked.sort((a,b)=>b.score-a.score||a.key.localeCompare(b.key));
+    return ranked.slice(0,3).map(row=>{const next=new URL(parsed.toString());next.searchParams.set(row.key,"__IGDC_PRODUCT_ID__");return next.toString();});
+  }catch(_e){return[];}
+}
+function dynamicProductIdFromTag(tagInput){
+  const tag=String(tagInput||""),candidates=[];
+  function add(value,score){const id=text(value);if(!id||id.length>160||/^(?:true|false|null|undefined|javascript|detail|view|product|goods|item)$/i.test(id))return;if(/^https?:/i.test(id)||/[\s<>]/.test(id))return;candidates.push({id,score});}
+  const attrRx=/\b(data-[A-Za-z0-9_:-]+)\s*=\s*["']([^"']+)["']/gi;let a;
+  while((a=attrRx.exec(tag))){const name=lower(a[1]);let score=0;if(/(?:goods|product|item|prd|sku)/i.test(name))score+=10;if(/(?:code|cd|no|id|seq|uid|sku)/i.test(name))score+=7;if(score)add(a[2],score);}
+  const jsMatch=tag.match(/(?:onclick|onmousedown|data-click|data-action|href)\s*=\s*(["'])([\s\S]*?)\1/i),js=jsMatch&&jsMatch[2]||"";
+  const callRx=/\b[A-Za-z_$][\w$]*(?:goods|product|item|prd|view|detail|shop|go)[\w$]*\s*\(\s*["']([^"']{1,160})["']/gi;let c;
+  while((c=callRx.exec(js)))add(c[1],12);
+  const quotedRx=/["']([A-Za-z0-9._~-]{3,160})["']/g;let q;
+  while((q=quotedRx.exec(js)))add(q[1],4);
+  candidates.sort((x,y)=>y.score-x.score||y.id.length-x.id.length);return candidates.length?candidates[0].id:"";
+}
+function dynamicProductRowsFromHtml(html,pageUrl,max,referenceProductUrl){
   const source=String(html||""),out=[],seen=new Set(),templates=[];
   // Some storefronts render a real product card but keep the destination in a
-  // JavaScript click handler such as goodsView("123") while a function builds
-  // /goods/goods_view.php?goodsNo=123. Recover that mapping generically rather
-  // than hard-coding any seller/domain.
+  // JavaScript click handler. Learn the destination both from page scripts and
+  // from the already-known product-detail URL shape. This remains seller-agnostic.
   const templateRx=/["']([^"']{0,360}(?:goods[_-]?(?:view|detail)|product[_-]?(?:view|detail)|item[_-]?(?:view|detail)|prd[_-]?(?:view|detail)|shopdetail)\.(?:php|html?|aspx?|jsp)[^"']{0,240}?(?:goods(?:no|_no|id|_id)|product(?:no|_no|id|_id)|item(?:no|_no|id|_id)|prd(?:no|_no)|sku|idx|no|id)=)["']/gi;
   let tm;while((tm=templateRx.exec(source))){
     const prefix=decodeEmbeddedUrl(tm[1]);if(!prefix)continue;
     const key=lower(prefix);if(!templates.some(row=>lower(row)===key))templates.push(prefix);
     if(templates.length>=4)break;
   }
-  if(!templates.length)return out;
-  const tagRx=/<(?:a|button|div|li|article)\b[^>]*(?:onclick|data-(?:goods|product|item|prd)-(?:no|id)|href\s*=\s*["']javascript:)[^>]*>/gi;let m;
+  const referenceTemplates=referenceProductUrlTemplates(referenceProductUrl),builders=[];
+  for(const prefix of templates)builders.push(id=>prefix+encodeURIComponent(id));
+  for(const template of referenceTemplates)builders.push(id=>template.replace("__IGDC_PRODUCT_ID__",encodeURIComponent(id)));
+  if(!builders.length)return out;
+  const tagRx=/<(?:a|button|div|li|article)\b[^>]*(?:onclick|onmousedown|data-[A-Za-z0-9_:-]*(?:goods|product|item|prd|sku|code|cd|no|id|seq)|href\s*=\s*["']javascript:)[^>]*>/gi;let m;
   while((m=tagRx.exec(source))&&out.length<Math.max(10,Math.min(120,Number(max)||60))){
-    const tag=m[0],idAttr=tag.match(/data-(?:goods|product|item|prd)-(?:no|id)\s*=\s*["']?([A-Za-z0-9._~-]{1,120})/i),call=tag.match(/(?:goods|product|item|prd)[A-Za-z0-9_$]*(?:view|detail)?[A-Za-z0-9_$]*\s*\(\s*["']?([A-Za-z0-9._~-]{1,120})/i),id=text(first(idAttr&&idAttr[1],call&&call[1]));
-    if(!id)continue;
+    const tag=m[0],id=dynamicProductIdFromTag(tag);if(!id)continue;
     const context=productBlockContext(source,m.index,tagRx.lastIndex),label=nearbyProductName(context,"")||"상품명 확인 중",imageUrl=imageAttrFromHtml(context,pageUrl);
-    for(const prefix of templates){
-      const raw=prefix+encodeURIComponent(id),url=absoluteHttpUrl(pageUrl,raw);if(!url||!sameSite(pageUrl,url)||!isProductDetailUrl(url))continue;
+    for(const build of builders){
+      const raw=build(id),url=absoluteHttpUrl(pageUrl,raw);if(!url||!sameSite(pageUrl,url)||!isProductDetailUrl(url))continue;
       const key=lower(url);if(seen.has(key))continue;seen.add(key);
       out.push({productName:label,title:label,productUrl:url,url,imageUrl,imageOriginalUrl:imageUrl,imageSource:imageUrl?"dynamic_product_card_context":"",sourcePageUrl:pageUrl,provisionalName:label==="상품명 확인 중",dynamicCardResolved:true});
       break;
@@ -1048,7 +1077,7 @@ function productOffer(node){
 }
 function productIdSeed(url,name){let h=0;const value=String(url||"")+"|"+String(name||"");for(let i=0;i<value.length;i++)h=((h<<5)-h+value.charCodeAt(i))|0;return"product_ref_"+Math.abs(h).toString(36)+"_"+value.length.toString(36);}
 function productRowsFromHtml(html,pageUrl,supplier,max){
-  const out=[],seen=new Set(),supplierSiteUrl=absoluteHttpUrl(pageUrl,first(supplier&&supplier.supplierSiteUrl,supplier&&supplier.url,pageUrl)),supplierName=first(supplier&&supplier.supplierName,supplier&&supplier.title,supplier&&supplier.name);
+  const out=[],seen=new Set(),supplierSiteUrl=absoluteHttpUrl(pageUrl,first(supplier&&supplier.supplierSiteUrl,supplier&&supplier.url,pageUrl)),supplierName=first(supplier&&supplier.supplierName,supplier&&supplier.title,supplier&&supplier.name),referenceProductUrl=first(supplier&&supplier.referenceProductUrl,supplier&&supplier.currentProductUrl,supplier&&supplier.invalidProductUrl);
   const supplierMeta={
     supplierId:text(supplier&&supplier.supplierId),
     supplierName,
@@ -1060,7 +1089,8 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
     supplierEvidenceReady:supplier&&supplier.evidenceReady===true,
     supplyLane:text(supplier&&supplier.supplyLane)||"general",
     discoverySource:text(supplier&&supplier.discoverySource)||"official_public_page",
-    officialDirectoryUrl:text(supplier&&supplier.officialDirectoryUrl)
+    officialDirectoryUrl:text(supplier&&supplier.officialDirectoryUrl),
+    referenceProductUrl
   };
   const add=(row)=>{
     const resolved=absoluteHttpUrl(pageUrl,row&&row.productUrl),productUrl=ProductRanking.canonicalProductUrl(resolved),rawName=stripHtml(first(row&&row.productName,row&&row.title));
@@ -1090,7 +1120,7 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
     if(out.length>=(max||60))break;const context=productBlockContext(sourceHtml,found.index,found.end),label=nearbyProductName(context,"")||"상품명 확인 중",imageUrl=imageAttrFromHtml(context,found.url),priority=productPriorityInfo(label+" "+supplierName+" "+found.url);
     add({productName:label,productUrl:found.url,imageUrl,imageSource:imageUrl?"embedded_product_context":"",jsonLdProduct:false,offerPresent:false,priorityScore:priority.score,priorityLabel:priority.label,provisionalName:label==="상품명 확인 중"});
   }
-  for(const dynamic of dynamicProductRowsFromHtml(sourceHtml,pageUrl,Math.max(20,(max||60)*2))){
+  for(const dynamic of dynamicProductRowsFromHtml(sourceHtml,pageUrl,Math.max(20,(max||60)*2),referenceProductUrl)){
     if(out.length>=(max||60))break;const priority=productPriorityInfo(first(dynamic.productName,dynamic.title)+" "+supplierName+" "+dynamic.productUrl);
     add(Object.assign({},dynamic,{jsonLdProduct:false,offerPresent:false,priorityScore:priority.score,priorityLabel:priority.label}));
   }
@@ -1131,24 +1161,25 @@ async function fetchProductHtml(url,controller){
 }
 async function discoverSupplierProductsStep(supplier,params){
   const source=plain(supplier),supplierSiteUrl=absoluteHttpUrl(first(source.url,source.supplierSiteUrl),first(source.url,source.supplierSiteUrl));if(!supplierSiteUrl)return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:"supplier_url_missing",count:0}};
-  const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,7000,3500,9000),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
+  const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,7000,3500,9000),recoveryMode=plain(params).recoveryMode===true,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
     const initialUrls=[],initialSeen=new Set(),addSeed=(value)=>{const url=absoluteHttpUrl(supplierSiteUrl,value);if(!url||!sameSite(supplierSiteUrl,url))return;const key=lower(url);if(initialSeen.has(key))return;initialSeen.add(key);initialUrls.push(url);};
     addSeed(supplierSiteUrl);addSeed(source.sourceCandidateUrl);addSeed(source.productPageUrl);addSeed(source.sourcePageUrl);addSeed(source.categoryPageUrl);addSeed(source.catalogPageUrl);addSeed(source.productListUrl);for(const value of array(source.sourcePageUrls))addSeed(value);
     const boundedInitial=initialUrls.slice(0,8),initialPages=await Promise.all(boundedInitial.map(url=>fetchProductHtml(url,controller))),validInitial=initialPages.filter(page=>page.ok);if(!validInitial.length){const firstFailure=initialPages[0]||{},status=firstFailure.status||"unavailable",retryable=retryableProviderStatus(status);return{ok:true,items:[],retryable,trace:{source:"supplier-product-discovery",status,detail:firstFailure.detail||null,supplierSiteUrl,count:0,retryable,timeoutMs}};}
-    const supplierInfo={supplierId:text(source.supplierId),supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),trustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),approvalReady:source.approvalReady===true,evidenceReady:source.evidenceReady===true,supplyLane:text(source.supplyLane)||"general",discoverySource:text(source.discoverySource)||"official_public_page",officialDirectoryUrl:text(source.officialDirectoryUrl)};
+    const supplierInfo={supplierId:text(source.supplierId),supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),trustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),approvalReady:source.approvalReady===true,evidenceReady:source.evidenceReady===true,supplyLane:text(source.supplyLane)||"general",discoverySource:text(source.discoverySource)||"official_public_page",officialDirectoryUrl:text(source.officialDirectoryUrl),referenceProductUrl:first(source.referenceProductUrl,source.currentProductUrl,source.invalidProductUrl)};
+    const crawlLimit=recoveryMode?10:24,targetImageProducts=recoveryMode?4:20,waveLimit=recoveryMode?4:6;
     let items=[],catalogPagesChecked=0;const crawlQueue=[],crawlSeen=new Set(boundedInitial.map(lower)),enqueueCatalog=(url,depth)=>{if(!url||depth>2)return;const key=lower(url);if(crawlSeen.has(key)||!sameSite(supplierSiteUrl,url))return;crawlSeen.add(key);crawlQueue.push({url,depth});};
     for(const page of validInitial){items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,60));for(const url of catalogPageUrls(page.html,page.url,28))enqueueCatalog(url,1);}
     // Bounded breadth-first traversal reaches multilingual category/list pages
     // without binding the engine to any country, seller platform or URL scheme.
-    while(crawlQueue.length&&catalogPagesChecked<24){
-      const wave=crawlQueue.splice(0,Math.min(6,24-catalogPagesChecked)),pages=await Promise.all(wave.map(row=>fetchProductHtml(row.url,controller)));catalogPagesChecked+=wave.length;
+    while(crawlQueue.length&&catalogPagesChecked<crawlLimit&&items.filter(row=>isProductDetailUrl(row&&row.productUrl)&&row&&row.imageUrl).length<targetImageProducts){
+      const wave=crawlQueue.splice(0,Math.min(waveLimit,crawlLimit-catalogPagesChecked)),pages=await Promise.all(wave.map(row=>fetchProductHtml(row.url,controller)));catalogPagesChecked+=wave.length;
       for(let i=0;i<pages.length;i++){
         const page=pages[i],meta=wave[i];if(!page.ok)continue;
         items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,60));
         const specificCount=items.filter(row=>isProductDetailUrl(row&&row.productUrl)).length;
         if(meta.depth<2&&specificCount<12)for(const url of catalogPageUrls(page.html,page.url,24))enqueueCatalog(url,meta.depth+1);
       }
-      if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)&&row&&row.imageUrl).length>=20)break;
+      if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)&&row&&row.imageUrl).length>=targetImageProducts)break;
     }
     let sitemapCount=0;if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)).length<5){const sitemapUrls=await fetchProductSitemapUrls(supplierSiteUrl,controller,80);sitemapCount=sitemapUrls.length;for(const url of sitemapUrls){const priority=productPriorityInfo(supplierInfo.supplierName+" "+url);items.push({id:productIdSeed(url,"상품명 확인 중"),entityKind:"product_reference",productName:"상품명 확인 중",title:"상품명 확인 중",productUrl:url,url,imageUrl:"",imageOriginalUrl:"",imageSource:"sitemap_pending_inspection",videoUrl:"",videoContentUrl:"",videoEmbedUrl:"",videoThumbnailUrl:"",videoSource:"unresolved",supplierId:supplierInfo.supplierId,supplierName:supplierInfo.supplierName,supplierSiteUrl,supplierType:supplierInfo.supplierType,supplierTrustScore:supplierInfo.trustScore,supplierDecision:supplierInfo.supplierDecision,supplierApprovalReady:supplierInfo.approvalReady===true,supplierEvidenceReady:supplierInfo.evidenceReady===true,sourcePageUrl:supplierSiteUrl,jsonLdProduct:false,offerPresent:false,provisionalName:true,priorityScore:priority.score,priorityLabel:priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});}}
     const dedup=[],seen=new Set();for(const row of items){const key=ProductRanking.productIdentity(row);if(!key||seen.has(key)||!isProductDetailUrl(row.productUrl))continue;seen.add(key);dedup.push(row);if(dedup.length>=Math.max(10,Math.min(120,Number(params&&params.limit)||80)))break;}
@@ -1168,17 +1199,30 @@ function decodePageTextEscapes(value){
 }
 function productPageVisibleText(html){
   const decoded=decodePageTextEscapes(String(html||""));
-  // Product liveness must be decided from user-visible page text. Translation
-  // dictionaries, hidden templates, analytics payloads and script bundles often
-  // contain words such as "page not found" even on a perfectly valid product.
-  // Removing non-visible blocks avoids turning those implementation strings into
-  // a global false-positive deletion signal.
+  // Product liveness is primarily decided from user-visible page text. Generic
+  // translation dictionaries and bundled scripts must not create false deaths.
   const visible=decoded
     .replace(/<script\b[\s\S]*?<\/script>/gi," ")
     .replace(/<style\b[\s\S]*?<\/style>/gi," ")
     .replace(/<noscript\b[\s\S]*?<\/noscript>/gi," ")
     .replace(/<!--[\s\S]*?-->/g," ");
   return stripHtml(visible).toLowerCase().replace(/\s+/g," ").trim().slice(0,300000);
+}
+function productPageExecutableInvalidSignal(html,phrases){
+  const source=decodePageTextEscapes(String(html||"")),scripts=[],scriptRx=/<script\b[^>]*>([\s\S]*?)<\/script>/gi;let m;
+  while((m=scriptRx.exec(source))){const value=String(m[1]||"");if(value)scripts.push(value.slice(0,260000));if(scripts.length>=80)break;}
+  const actionCallRx=/(?:\b(?:alert|confirm|swal|sweetalert|layer\.alert)|\b[A-Za-z_$][\w$]*(?:alert|modal|popup|notice|message|error))\s*\(\s*(["'`])([\s\S]{0,1400}?)\1/gi;
+  const navRx=/(?:window\.)?location(?:\.href)?\s*=|(?:window\.)?location\.(?:replace|assign)\s*\(|history\.(?:back|go)\s*\(|\b(?:redirect|go|move|return)[A-Za-z0-9_$]*(?:home|main|list|back)\s*\(/i;
+  for(const script of scripts){
+    let call;actionCallRx.lastIndex=0;
+    while((call=actionCallRx.exec(script))){const arg=lower(decodePageTextEscapes(call[2]));const phrase=array(phrases).find(value=>arg.includes(lower(value)));if(phrase)return{matched:phrase,mode:"script_dialog_guard"};}
+    const low=lower(script);
+    for(const phrase of array(phrases)){
+      const needle=lower(phrase);let at=low.indexOf(needle);
+      while(at>=0){const near=script.slice(Math.max(0,at-800),Math.min(script.length,at+needle.length+1000));if(navRx.test(near)&&/(?:if\s*\(|return\b|error|invalid|unavailable|not\s*found|sold\s*out|purchase|buy|상품|구매|판매|접근|존재|redirect)/i.test(near))return{matched:phrase,mode:"script_redirect_guard"};at=low.indexOf(needle,at+needle.length);}
+    }
+  }
+  return null;
 }
 function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
   const body=productPageVisibleText(html);
@@ -1262,6 +1306,8 @@ function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
   ];
   const matched=explicitInvalid.find((phrase)=>body.includes(phrase));
   if(matched) return {invalid:true,reason:"product_page_explicit_invalid_message",detail:matched};
+  const executable=productPageExecutableInvalidSignal(html,explicitInvalid);
+  if(executable) return {invalid:true,reason:"product_page_explicit_invalid_message",detail:executable.mode+":"+executable.matched};
   try{
     const requested=new URL(String(requestedUrl||""));
     const final=new URL(String(finalUrl||requestedUrl||""));
@@ -1284,11 +1330,11 @@ function recoveredProductUsable(row){
 async function recoverInvalidProductReference(rowInput,invalidUrl,supplierSiteUrl,invalidState,params){
   const row=plain(rowInput);if(!supplierSiteUrl||plain(params).allowSupplierRecovery===false)return null;
   const sourcePages=[row.sourcePageUrl,row.discoverySourcePageUrl,row.categoryPageUrl,row.catalogPageUrl,row.productListUrl].map(value=>absoluteHttpUrl(supplierSiteUrl,value)).filter(value=>value&&sameSite(supplierSiteUrl,value));
-  const source={url:supplierSiteUrl,supplierSiteUrl,supplierId:row.supplierId,supplierName:row.supplierName,title:row.supplierName,name:row.supplierName,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady===true,evidenceReady:row.supplierEvidenceReady===true,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl,sourcePageUrl:sourcePages[0]||"",sourcePageUrls:Array.from(new Set(sourcePages))};
-  let discovery=null;try{discovery=await discoverSupplierProductsStep(source,{limit:40,timeoutMs:6500});}catch(_e){discovery=null;}
+  const invalidCanonical=ProductRanking.canonicalProductUrl(invalidUrl),source={url:supplierSiteUrl,supplierSiteUrl,supplierId:row.supplierId,supplierName:row.supplierName,title:row.supplierName,name:row.supplierName,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady===true,evidenceReady:row.supplierEvidenceReady===true,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl,sourcePageUrl:sourcePages[0]||"",sourcePageUrls:Array.from(new Set(sourcePages)),referenceProductUrl:invalidCanonical||invalidUrl||""};
+  let discovery=null;try{discovery=await discoverSupplierProductsStep(source,{limit:40,timeoutMs:8000,recoveryMode:true});}catch(_e){discovery=null;}
   const candidates=array(discovery&&discovery.items);if(!candidates.length)return null;
   const options=plain(params),excludedUrls=new Set(array(options.excludedCanonicalUrls).map(value=>ProductRanking.canonicalProductUrl(value)).filter(Boolean)),excludedIdentities=new Set(array(options.excludedProductIdentities).map(text).filter(Boolean));
-  const invalidCanonical=ProductRanking.canonicalProductUrl(invalidUrl);if(invalidCanonical)excludedUrls.add(invalidCanonical);
+  if(invalidCanonical)excludedUrls.add(invalidCanonical);
   const pool=prepareProductInspectionPool(candidates,{limit:40}).filter(candidate=>{
     const url=ProductRanking.canonicalProductUrl(candidate&&candidate.productUrl),identity=ProductRanking.productIdentity(candidate);
     return !!url&&!excludedUrls.has(url)&&(!identity||!excludedIdentities.has(identity));
