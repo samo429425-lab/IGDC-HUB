@@ -1,0 +1,18 @@
+name: ChatGPT Snapshot Engine Package
+on:
+  push:
+    branches:
+      - temp/package-current-main-20261010
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-engine-js
+          path: netlify/functions/snapshot-engine.js
+          if-no-files-found: error
+          retention-days: 1
