@@ -1,4 +1,4 @@
-/* IGDC contained external viewer v10 product-history-stable
+/* IGDC contained external viewer v10.1 adaptive-product-history
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
@@ -20,7 +20,7 @@
   if (global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V10__) return;
   global.__IGDC_CONTAINED_EXTERNAL_VIEWER_V10__ = true;
 
-  var VIEWER_VERSION = 10;
+  var VIEWER_VERSION = 10.1;
 
   var PROXY_PATH = '/.netlify/functions/search-page-proxy';
   var ROOT_ID = 'igdc-contained-external-viewer';
@@ -374,6 +374,25 @@
     frame.src = proxyUrl(target, state.proxyId, mode);
   }
 
+  function setFrameDirectFresh(target) {
+    var oldFrame = state.frame;
+    if (!oldFrame || !oldFrame.parentNode) { setFrameDirect(target); return; }
+    var frame = document.createElement('iframe');
+    frame.className = 'igdc-contained-frame';
+    frame.title = '외부 사이트 내부 보기';
+    frame.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads allow-presentation');
+    frame.setAttribute('allow', 'clipboard-read; clipboard-write; payment; fullscreen');
+    state.viewerMode = 'direct';
+    frame.dataset.viewerMode = 'direct';
+    frame.addEventListener('load', function () { hideLoadingSoon(60); });
+    /* Set the product URL before insertion so the new child browsing context
+     * starts on the seller page instead of adding an about:blank history step. */
+    frame.src = target;
+    oldFrame.parentNode.replaceChild(frame, oldFrame);
+    state.frame = frame;
+  }
+
   function setFrameProxyFresh(target, mode) {
     mode = mode || 'static';
     var oldFrame = state.frame;
@@ -416,11 +435,33 @@
     updateBar(target, options.label || state.label);
     showLoading('사이트를 불러오는 중입니다…');
 
-    /* Product detail views must preserve exactly one parent history step.
-     * Use the contained static relay in a fresh iframe context so redirects and
-     * in-page navigation never sit between the user and the IGDC list page. */
+    /* Product detail keeps one IGDC parent-history step, but it must not be
+     * forced through the script-stripping static relay.  Start in a fresh direct
+     * browsing context; only a confirmed frame-policy denial falls back to the
+     * live relay.  This preserves dynamic commerce pages while keeping the
+     * browser Back button attached to the IGDC list page. */
     if (isProductKind(state.kind)) {
-      setFrameProxyFresh(target, 'static');
+      if (options.forceProxy || preferProxy(target)) {
+        setFrameProxyFresh(target, options.proxyMode || 'live');
+        return;
+      }
+      var productCached = getCachedPolicy(target);
+      if (productCached) {
+        if (productCached.directAllowed) setFrameDirectFresh(target);
+        else setFrameProxyFresh(target, 'live');
+        return;
+      }
+      setFrameDirectFresh(target);
+      state.pendingPolicyTarget = target;
+      framePolicy(target).then(function (policy) {
+        if (!state.open || seq !== state.activeLoadSeq || state.target !== target) return;
+        state.pendingPolicyTarget = '';
+        /* Probe timeout/error is inconclusive: keep the already running direct
+         * page.  Switch only when X-Frame/CSP denial was actually confirmed. */
+        if (!policy || policy.ok === false || policy.directAllowed) return;
+        showLoading('사이트 호환 모드로 전환하는 중입니다…');
+        setFrameProxyFresh(target, 'live');
+      });
       return;
     }
 
@@ -740,7 +781,7 @@
      * in-view navigation. This keeps Chrome/Edge's native Back button attached
      * to the IGDC viewer history marker instead of walking an iframe history
      * entry that can surface an upstream "invalid access" page. */
-    if (isProductKind(state.kind)) setFrameProxyFresh(next, 'static');
+    if (isProductKind(state.kind)) setFrameProxyFresh(next, 'live');
     else if (/^donation(?:-|$)/i.test(state.kind || '')) setDonationProxyFresh(next, 'static');
     else setFrameProxy(next, 'static');
   });

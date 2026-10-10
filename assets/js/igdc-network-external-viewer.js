@@ -1,4 +1,4 @@
-/* IGDC Network external viewer v11 product-history-stable
+/* IGDC Network external viewer v11.1 adaptive-product-history
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *
@@ -17,7 +17,7 @@
   if (global.__IGDC_NETWORK_EXTERNAL_VIEWER_V11__) return;
   global.__IGDC_NETWORK_EXTERNAL_VIEWER_V11__ = true;
 
-  var VIEWER_VERSION = 11;
+  var VIEWER_VERSION = 11.1;
 
   var PROXY_PATH = '/.netlify/functions/network-page-proxy';
   var ROOT_ID = 'igdc-network-external-viewer';
@@ -381,6 +381,23 @@
   }
 
 
+  function setFrameDirectFresh(target) {
+    var oldFrame = state.frame;
+    if (!oldFrame || !oldFrame.parentNode) { setFrameDirect(target); return; }
+    var frame = document.createElement('iframe');
+    frame.className = 'igdc-contained-frame';
+    frame.title = '외부 사이트 내부 보기';
+    frame.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals allow-downloads allow-presentation');
+    frame.setAttribute('allow', 'clipboard-read; clipboard-write; payment; fullscreen');
+    state.viewerMode = 'direct';
+    frame.dataset.viewerMode = 'direct';
+    frame.addEventListener('load', function () { hideLoadingSoon(60); });
+    frame.src = target;
+    oldFrame.parentNode.replaceChild(frame, oldFrame);
+    state.frame = frame;
+  }
+
   function setFrameProxyFresh(target, mode) {
     mode = mode || 'static';
     var oldFrame = state.frame;
@@ -417,10 +434,38 @@
     updateBar(target, options.label || state.label);
     showLoading('사이트를 불러오는 중입니다…');
 
-    /* Right-panel product detail is a contained subview of the Network list.
-     * Keep remote redirects out of the browser Back stack. */
+    /* Network right-panel products use the same adaptive loading policy as the
+     * previously stable viewer.  Fresh browsing contexts protect browser Back,
+     * while direct/live rendering keeps JavaScript commerce pages functional. */
     if (isProductKind(state.kind)) {
-      setFrameProxyFresh(target, 'static');
+      var productCompat = compatibilityMode(target, state.kind);
+      if (options.forceProxy || preferProxy(target)) {
+        setFrameProxyFresh(target, options.proxyMode || 'live');
+        return;
+      }
+      if (productCompat === 'live') {
+        setFrameProxyFresh(target, 'live');
+        return;
+      }
+      if (productCompat === 'direct') {
+        setFrameDirectFresh(target);
+        return;
+      }
+      var productCached = getCachedPolicy(target);
+      if (productCached) {
+        if (productCached.directAllowed) setFrameDirectFresh(target);
+        else setFrameProxyFresh(target, 'live');
+        return;
+      }
+      setFrameDirectFresh(target);
+      state.pendingPolicyTarget = target;
+      framePolicy(target).then(function (policy) {
+        if (!state.open || seq !== state.activeLoadSeq || state.target !== target) return;
+        state.pendingPolicyTarget = '';
+        if (!policy || policy.ok === false || policy.directAllowed) return;
+        showLoading('사이트 호환 모드로 전환하는 중입니다…');
+        setFrameProxyFresh(target, 'live');
+      });
       return;
     }
 
@@ -729,7 +774,7 @@
     showLoading('사이트를 불러오는 중입니다…');
     /* Product navigation replaces the nested context so browser Back remains
      * reserved for returning to the IGDC Network list page. */
-    if (isProductKind(state.kind)) setFrameProxyFresh(next, 'static');
+    if (isProductKind(state.kind)) setFrameProxyFresh(next, 'live');
     else setFrameProxy(next, state.viewerMode === 'live-proxy' ? 'live' : 'live');
   });
 
