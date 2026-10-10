@@ -1,0 +1,48 @@
+name: IGDC Final Front Fix Package
+
+on:
+  push:
+    branches:
+      - temp/final-front-fix-package-20261010
+
+permissions:
+  contents: read
+
+jobs:
+  verify-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact fix commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Syntax check modified JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check assets/js/admin-commerce-country-control.js
+          node --check netlify/functions/lib/commerce-product-pipeline-state.v1.js
+          node --check netlify/functions/lib/commerce-product-ranking.v1.js
+
+      - name: Verify required fix signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "frontmatch-structural-integrity-v9" assets/js/admin-commerce-country-control.js
+          grep -q "assignmentRepairRequired" assets/js/admin-commerce-country-control.js
+          grep -q "session-refresh" assets/js/admin-commerce-country-control.js
+          grep -q "admin-structural-integrity" netlify/functions/lib/commerce-product-pipeline-state.v1.js
+          grep -q "validAdministratorProductUrl" netlify/functions/lib/commerce-product-pipeline-state.v1.js
+          grep -q "static-image-url-guard" netlify/functions/lib/commerce-product-ranking.v1.js
+
+      - name: Upload overwrite-ready fix files
+        uses: actions/upload-artifact@v4
+        with:
+          name: IGDC_FRONT_FIX_ec7546f8
+          path: |
+            assets/js/admin-commerce-country-control.js
+            netlify/functions/lib/commerce-product-pipeline-state.v1.js
+            netlify/functions/lib/commerce-product-ranking.v1.js
+          if-no-files-found: error
+          retention-days: 1
