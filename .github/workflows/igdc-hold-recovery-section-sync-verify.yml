@@ -1,0 +1,23 @@
+name: IGDC Hold Recovery Section Sync Verify
+on:
+  push:
+    branches:
+      - work/fix-hold-recovery-section-sync-20261010
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax
+        run: |
+          node --check assets/js/admin-commerce-country-control.js
+          node --check netlify/functions/lib/commerce-country-automation.v1.js
+          node --check netlify/functions/regional-brokerage-autoselector.js
+      - name: Targeted routing tests
+        run: |
+          node scripts/test-commerce-latest-transfer-routing.js
+      - name: Front-map compatibility
+        run: |
+          node scripts/repair-frontmap-chain.js
