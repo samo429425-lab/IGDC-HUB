@@ -173,6 +173,40 @@
     return /^https?:\/\//i.test(safeText(url).trim());
   }
 
+  const COMMERCE_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20261011-commerce-contained-v1';
+  const COMMERCE_VIEWER_SCRIPT_ID = 'igdc-commerce-contained-viewer-loader-v1';
+  function ensureCommerceContainedViewer(){
+    if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 9 && typeof window.IGDCContainedViewer.open === 'function') return Promise.resolve(window.IGDCContainedViewer);
+    if(window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__) return window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__;
+    window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__ = new Promise(function(resolve,reject){
+      var script=document.getElementById(COMMERCE_VIEWER_SCRIPT_ID);
+      function finish(){
+        if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 9 && typeof window.IGDCContainedViewer.open === 'function') resolve(window.IGDCContainedViewer);
+        else reject(new Error('IGDC contained viewer unavailable'));
+      }
+      if(script){
+        if(script.dataset.loaded==='1'){finish();return;}
+        script.addEventListener('load',finish,{once:true});
+        script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
+        return;
+      }
+      script=document.createElement('script');
+      script.id=COMMERCE_VIEWER_SCRIPT_ID;script.src=COMMERCE_VIEWER_SRC;script.async=true;
+      script.addEventListener('load',function(){script.dataset.loaded='1';finish();},{once:true});
+      script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
+      (document.head||document.documentElement).appendChild(script);
+    }).catch(function(error){window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__=null;throw error;});
+    return window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__;
+  }
+  function openCommerceContained(url,label){
+    return ensureCommerceContainedViewer().then(function(viewer){
+      return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product'});
+    }).catch(function(error){
+      try{console.warn('[IGDC][Commerce] contained viewer unavailable:',error&&error.message?error.message:error);}catch(_e){}
+      return false;
+    });
+  }
+
   function isInternalUrl(url) {
     url = safeText(url).trim();
     return (
@@ -776,10 +810,17 @@
     }
     a.textContent = "";
     a.href = url;
-    a.target = isExternalUrl(url) ? "_top" : "_self";
+    a.removeAttribute("target");
     a.rel = "noopener";
-    if (isExternalUrl(url)) a.setAttribute("data-igdc-external", "top");
-    else a.removeAttribute("data-igdc-external");
+    a.removeAttribute("data-igdc-external");
+    if (isExternalUrl(url)) {
+      a.setAttribute("data-igdc-contained-product", "1");
+      a.addEventListener("click", function(ev){
+        if(ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+        ev.preventDefault();
+        openCommerceContained(url,title);
+      }, { passive:false });
+    }
     a.dataset.productId = productId;
     a.dataset.productTitle = title;
     a.dataset.productLink = url;

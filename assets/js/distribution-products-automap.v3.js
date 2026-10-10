@@ -75,6 +75,40 @@
   function pick(item,names){for(const name of names){const value=item&&item[name];if(value!==undefined&&value!==null&&value!=='')return value;}return '';}
   function escUrl(v){try{return String(v||'').replace(/'/g,'%27');}catch(_e){return '';}}
   function hasUsableDestination(value){const url=text(value).trim();return !!url&&url!=='#'&&!/^javascript:/i.test(url)&&!/\/pages\/coming-soon\.html/i.test(url)&&!/(?:^|\.)example\.com(?:[/:?#]|$)/i.test(url);}
+
+  const COMMERCE_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20261011-commerce-contained-v1';
+  const COMMERCE_VIEWER_SCRIPT_ID = 'igdc-commerce-contained-viewer-loader-v1';
+  function ensureCommerceContainedViewer(){
+    if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 9 && typeof window.IGDCContainedViewer.open === 'function') return Promise.resolve(window.IGDCContainedViewer);
+    if(window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__) return window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__;
+    window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__ = new Promise(function(resolve,reject){
+      var script=document.getElementById(COMMERCE_VIEWER_SCRIPT_ID);
+      function finish(){
+        if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 9 && typeof window.IGDCContainedViewer.open === 'function') resolve(window.IGDCContainedViewer);
+        else reject(new Error('IGDC contained viewer unavailable'));
+      }
+      if(script){
+        if(script.dataset.loaded==='1'){finish();return;}
+        script.addEventListener('load',finish,{once:true});
+        script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
+        return;
+      }
+      script=document.createElement('script');
+      script.id=COMMERCE_VIEWER_SCRIPT_ID;script.src=COMMERCE_VIEWER_SRC;script.async=true;
+      script.addEventListener('load',function(){script.dataset.loaded='1';finish();},{once:true});
+      script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
+      (document.head||document.documentElement).appendChild(script);
+    }).catch(function(error){window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__=null;throw error;});
+    return window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__;
+  }
+  function openCommerceContained(url,label){
+    return ensureCommerceContainedViewer().then(function(viewer){
+      return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product'});
+    }).catch(function(error){
+      try{console.warn('[IGDC][Commerce] contained viewer unavailable:',error&&error.message?error.message:error);}catch(_e){}
+      return false;
+    });
+  }
   function revenue(item,kind){
     try{
       if(window.MaruRevenueTracker&&typeof window.MaruRevenueTracker[kind]==='function'){
@@ -226,12 +260,11 @@
       root.style.cursor='pointer'; root.setAttribute('role','link'); root.tabIndex=0;
       const open=function(){
         revenue(item,'trackClick');
-        try {
-          if(/^https?:\/\//i.test(href)) (window.top||window).location.assign(href);
-          else window.location.assign(href);
-        } catch(_e) {
-          window.location.assign(href);
+        if(/^https?:\/\//i.test(href)){
+          openCommerceContained(href,pick(item,['title','name','text']));
+          return;
         }
+        window.location.assign(href);
       };
       root.addEventListener('click',open);
       root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});

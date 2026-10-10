@@ -153,9 +153,18 @@
     if (isExternal(href)){
       if (item && item.affiliateOutboundUrl) a.setAttribute('data-affiliate-outbound','1');
       if (item && item.externalOutboundUrl) a.setAttribute('data-external-outbound','1');
-      a.target = '_top';
+      a.removeAttribute('target');
       a.rel = 'noopener';
-      a.setAttribute('data-igdc-external','top');
+      a.setAttribute('data-igdc-contained-product','1');
+      a.addEventListener('click', function(ev){
+        if(ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+        ev.preventDefault();
+        ensureContainedViewer().then(function(viewer){
+          return viewer.open(href,{label:(item && item.title) || '',kind:'product'});
+        }).catch(function(err){
+          try{console.warn('[IGDC][Network] product viewer unavailable:',err&&err.message?err.message:err);}catch(_e){}
+        });
+      }, { passive:false });
     }
   }
 

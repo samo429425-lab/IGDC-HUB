@@ -401,16 +401,13 @@
     const sourceUrl = item && item.sourceUrl;
     if (!sourceUrl || !isExternal(sourceUrl)) return;
     ev.preventDefault();
-    frameAllowedInsideIgdc(sourceUrl).then(function(allowed){
-      if (allowed) {
-        return ensureContainedViewer().then(function(viewer){
-          return viewer.open(sourceUrl, { label:item.title || '', kind:'tour-product' });
-        }).catch(function(){ (window.top || window).location.assign(sourceUrl); });
-      }
-      // X-Frame/CSP is a remote-site policy, not a broken product. Open the same
-      // exact detail page normally rather than deleting the card or showing a blank frame.
-      (window.top || window).location.assign(sourceUrl);
-    }).catch(function(){ (window.top || window).location.assign(sourceUrl); });
+    ensureContainedViewer().then(function(viewer){
+      // The contained viewer owns X-Frame/CSP handling and proxy fallback.
+      // A blocked third-party frame must never replace the IGDC top-level page.
+      return viewer.open(sourceUrl, { label:item.title || '', kind:'commerce-product' });
+    }).catch(function(err){
+      try{console.warn('[IGDC][Tour] product viewer unavailable:',err&&err.message?err.message:err);}catch(_e){}
+    });
   }
 
   function ensureMobileCss() {
