@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.7.0-paged-supplier-discovery";
+const VERSION="regional-brokerage-autoselector-v2.8.0-global-product-liveness-recovery";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -1117,6 +1117,9 @@ function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
     "상품을 찾을 수 없습니다",
     "요청하신 상품을 찾을 수 없습니다",
     "해당 상품은 판매하지 않습니다",
+    "해당 상품은 현재 구매하실 수 없습니다",
+    "현재 구매하실 수 없는 상품입니다",
+    "구매하실 수 없는 상품입니다",
     "판매중지된 상품",
     "페이지를 찾을 수 없습니다",
     "요청하신 페이지를 찾을 수 없습니다",
@@ -1130,7 +1133,27 @@ function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
     "현재 판매중인 상품이 아닙니다",
     "product not found",
     "this product is no longer available",
+    "this product is currently unavailable for purchase",
+    "this item is currently unavailable for purchase",
+    "this product is unavailable for purchase",
+    "this item is no longer available",
     "item not found",
+    "dieses produkt ist nicht mehr verfügbar",
+    "dieser artikel ist nicht mehr verfügbar",
+    "ce produit n’est plus disponible",
+    "ce produit n'est plus disponible",
+    "cet article n’est plus disponible",
+    "cet article n'est plus disponible",
+    "este producto ya no está disponible",
+    "este artículo ya no está disponible",
+    "este produto não está mais disponível",
+    "este item não está mais disponível",
+    "この商品は現在購入できません",
+    "この商品は販売を終了しました",
+    "該商品目前無法購買",
+    "该商品目前无法购买",
+    "商品已下架",
+    "商品已停售",
     "page not found",
     "404 not found",
     "the page you requested could not be found",
@@ -1160,14 +1183,21 @@ function recoveredProductUsable(row){
 async function recoverInvalidProductReference(rowInput,invalidUrl,supplierSiteUrl,invalidState,params){
   const row=plain(rowInput);if(!supplierSiteUrl||plain(params).allowSupplierRecovery===false)return null;
   const source={url:supplierSiteUrl,supplierSiteUrl,supplierId:row.supplierId,supplierName:row.supplierName,title:row.supplierName,name:row.supplierName,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady===true,evidenceReady:row.supplierEvidenceReady===true,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
-  let discovery=null;try{discovery=await discoverSupplierProductsStep(source,{limit:28,timeoutMs:5500});}catch(_e){discovery=null;}
+  let discovery=null;try{discovery=await discoverSupplierProductsStep(source,{limit:40,timeoutMs:6500});}catch(_e){discovery=null;}
   const candidates=array(discovery&&discovery.items);if(!candidates.length)return null;
-  const invalidCanonical=ProductRanking.canonicalProductUrl(invalidUrl),pool=prepareProductInspectionPool(candidates,{limit:28}).filter(candidate=>ProductRanking.canonicalProductUrl(candidate&&candidate.productUrl)!==invalidCanonical);
+  const options=plain(params),excludedUrls=new Set(array(options.excludedCanonicalUrls).map(value=>ProductRanking.canonicalProductUrl(value)).filter(Boolean)),excludedIdentities=new Set(array(options.excludedProductIdentities).map(text).filter(Boolean));
+  const invalidCanonical=ProductRanking.canonicalProductUrl(invalidUrl);if(invalidCanonical)excludedUrls.add(invalidCanonical);
+  const pool=prepareProductInspectionPool(candidates,{limit:40}).filter(candidate=>{
+    const url=ProductRanking.canonicalProductUrl(candidate&&candidate.productUrl),identity=ProductRanking.productIdentity(candidate);
+    return !!url&&!excludedUrls.has(url)&&(!identity||!excludedIdentities.has(identity));
+  });
   if(!pool.length)return null;
-  const start=productRecoveryRotation(invalidCanonical||first(row.productName,row.title),pool.length),ordered=pool.slice(start).concat(pool.slice(0,start)).slice(0,4);
+  const start=productRecoveryRotation(invalidCanonical||first(row.productName,row.title),pool.length),ordered=pool.slice(start).concat(pool.slice(0,start)).slice(0,16);
   for(const candidate of ordered){
-    let checked=null;try{checked=await inspectProductCandidate(candidate,{timeoutMs:3500,allowSupplierRecovery:false});}catch(_e){checked=null;}
+    let checked=null;try{checked=await inspectProductCandidate(candidate,{timeoutMs:4500,allowSupplierRecovery:false});}catch(_e){checked=null;}
     if(!recoveredProductUsable(checked))continue;
+    const checkedUrl=ProductRanking.canonicalProductUrl(checked&&checked.productUrl||checked&&checked.url),checkedIdentity=ProductRanking.productIdentity(checked);
+    if(!checkedUrl||excludedUrls.has(checkedUrl)||(checkedIdentity&&excludedIdentities.has(checkedIdentity)))continue;
     return Object.assign({},checked,{
       recoveredProductReference:true,
       recoveredFromProductUrl:invalidCanonical||invalidUrl||null,

@@ -6,7 +6,7 @@
  * snapshot itself and it never exposes the build hook URL.
  */
 
-const VERSION = "commerce-release-dispatch-v1.4.0-frontmatch-explicit-build";
+const VERSION = "commerce-release-dispatch-v1.5.0-scheduled-maintenance-build";
 const HOOK_ENVS = Object.freeze([
   "COMMERCE_RELEASE_BUILD_HOOK_URL",
   "IGDC_NETLIFY_BUILD_HOOK_URL",
@@ -37,12 +37,14 @@ function releaseArmed(input) {
   const key = text(process.env[KEY_ENV]);
   const environmentArmed = mode === "enabled" && key.length >= 32;
   const explicitAdminAuthorization = !!(input && input.explicitAdminAuthorization === true);
+  const scheduledMaintenanceAuthorization = !!(input && input.scheduledMaintenanceAuthorization === true);
   return {
-    armed: environmentArmed || explicitAdminAuthorization,
-    mode: environmentArmed ? mode : (explicitAdminAuthorization ? "explicit_admin_confirmation" : mode),
+    armed: environmentArmed || explicitAdminAuthorization || scheduledMaintenanceAuthorization,
+    mode: explicitAdminAuthorization ? "explicit_admin_confirmation" : (scheduledMaintenanceAuthorization ? "scheduled_maintenance_authorization" : mode),
     keyPresent: key.length >= 32,
     environmentArmed,
-    explicitAdminAuthorization
+    explicitAdminAuthorization,
+    scheduledMaintenanceAuthorization
   };
 }
 function validHook(raw) {
@@ -75,14 +77,14 @@ async function dispatch(input) {
   const candidateIds=Array.from(new Set((Array.isArray(input&&input.candidateIds)?input.candidateIds:[]).map(text).filter(Boolean))).slice(0,1800);
   const primaryCandidate=text(input&&input.candidateId)||candidateIds[0]||null;
   const payload = {
-    trigger: text(input && input.operation) === "unpublish" ? "approved-commerce-unpublication" : "approved-commerce-assignment",
+    trigger: release.scheduledMaintenanceAuthorization ? "scheduled-commerce-maintenance" : (text(input && input.operation) === "unpublish" ? "approved-commerce-unpublication" : "approved-commerce-assignment"),
     candidateId: primaryCandidate,
     candidateIds,
     assignmentId: text(input && input.assignmentId) || null,
     actorId: text(input && input.actorId) || null,
     operation: text(input && input.operation) || "publish",
     candidateCount: Math.max(1, Number(input && input.candidateCount) || candidateIds.length || 1),
-    authorization: release.explicitAdminAuthorization ? "explicit_admin_confirmation" : "deployment_release_gate",
+    authorization: release.explicitAdminAuthorization ? "explicit_admin_confirmation" : (release.scheduledMaintenanceAuthorization ? "scheduled_maintenance_authorization" : "deployment_release_gate"),
     frontMatchBatch: candidateIds.length>0,
     requestedAt: new Date().toISOString()
   };

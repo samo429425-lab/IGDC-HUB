@@ -220,7 +220,11 @@
   function frontProductDestinationKey(row){
     var raw=safeExternalUrl(row&&row.productUrl||row&&row.url),id=text(row&&row.candidateId||row&&row.id);
     if(!raw)return'id:'+id;
-    try{var u=new URL(raw);u.hash='';u.hostname=u.hostname.toLowerCase();if((u.protocol==='https:'&&u.port==='443')||(u.protocol==='http:'&&u.port==='80'))u.port='';u.pathname=(u.pathname||'/').replace(/\/{2,}/g,'/');if(u.pathname.length>1)u.pathname=u.pathname.replace(/\/+$/,'');return u.toString();}catch(_e){return raw.toLowerCase();}
+    try{
+      var u=new URL(raw),drop={utm_source:1,utm_medium:1,utm_campaign:1,utm_term:1,utm_content:1,utm_id:1,utm_name:1,fbclid:1,gclid:1,dclid:1,yclid:1,msclkid:1,mc_cid:1,mc_eid:1,ref:1,referrer:1,referer:1,source:1,src:1,campaign:1,campaignid:1,affiliate:1,aff:1,affid:1,aff_id:1,session:1,sid:1,timestamp:1,ts:1,mtn:1,mtnidx:1,mtn_idx:1,track:1,tracking:1,from:1,fromurl:1};
+      u.hash='';u.hostname=u.hostname.toLowerCase().replace(/^www\./,'');if((u.protocol==='https:'&&u.port==='443')||(u.protocol==='http:'&&u.port==='80'))u.port='';u.pathname=(u.pathname||'/').replace(/\/{2,}/g,'/');if(u.pathname.length>1)u.pathname=u.pathname.replace(/\/+$/,'');
+      var keep=[];u.searchParams.forEach(function(value,key){var k=text(key).toLowerCase();if(!k||drop[k]||k.indexOf('utm_')===0)return;if(!text(value)&&!/(?:product|goods|item|prd|sku|pid|id|no|code)/.test(k))return;keep.push([k,text(value)]);});keep.sort(function(a,b){return a[0]===b[0]?a[1].localeCompare(b[1]):a[0].localeCompare(b[0]);});u.search='';keep.forEach(function(pair){u.searchParams.append(pair[0],pair[1]);});return u.toString();
+    }catch(_e){return raw.toLowerCase();}
   }
   function compareFrontDuplicateRows(a,b){
     var al=productManagementLocked(a)?1:0,bl=productManagementLocked(b)?1:0;if(al!==bl)return bl-al;

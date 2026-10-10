@@ -285,8 +285,10 @@ function incomingCommerceHookIntent() {
     const trigger = String(body && body.trigger || "").toLowerCase();
     const authorization = String(body && body.authorization || "").toLowerCase();
     const ids = Array.from(new Set((Array.isArray(body && body.candidateIds) ? body.candidateIds : [body && body.candidateId]).map(value => String(value || "").trim()).filter(Boolean))).slice(0,1800);
-    const explicit = authorization === "explicit_admin_confirmation" && ["publish","unpublish"].includes(operation) && ["approved-commerce-assignment","approved-commerce-unpublication"].includes(trigger);
-    return { explicit, operation: operation || null, candidateIds: ids, candidateCount: Math.max(ids.length, Number(body && body.candidateCount || 0)), rawAvailable:true };
+    const explicitAdmin = authorization === "explicit_admin_confirmation" && ["publish","unpublish"].includes(operation) && ["approved-commerce-assignment","approved-commerce-unpublication"].includes(trigger);
+    const scheduledMaintenance = authorization === "scheduled_maintenance_authorization" && operation === "publish" && trigger === "scheduled-commerce-maintenance";
+    const explicit = explicitAdmin || scheduledMaintenance;
+    return { explicit, authorizationKind: explicitAdmin ? "admin" : (scheduledMaintenance ? "scheduled_maintenance" : null), operation: operation || null, candidateIds: ids, candidateCount: Math.max(ids.length, Number(body && body.candidateCount || 0)), rawAvailable:true };
   } catch (error) {
     return { explicit:false, operation:null, candidateIds:[], candidateCount:0, rawAvailable:true, parseError:String(error && error.message || error) };
   }
