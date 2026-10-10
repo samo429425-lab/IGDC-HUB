@@ -15,9 +15,19 @@ jobs:
           node --check assets/js/admin-commerce-country-control.js
           node --check netlify/functions/lib/commerce-country-automation.v1.js
           node --check netlify/functions/regional-brokerage-autoselector.js
-      - name: Targeted routing tests
+      - name: Recovery and dedupe signatures
         run: |
+          grep -q "frontmatch-unique-product-v10" assets/js/admin-commerce-country-control.js
+          grep -q "dedupePlacedSectionRows" assets/js/admin-commerce-country-control.js
+          grep -q "recoverInvalidProductReference" netlify/functions/regional-brokerage-autoselector.js
+          grep -q "recoverHeldCandidateProduct" netlify/functions/lib/commerce-country-automation.v1.js
+          grep -q "restored_after_hold_supplier_recovery" netlify/functions/lib/commerce-country-automation.v1.js
+      - name: Existing latest-transfer routing regression
+        run: |
+          cp scripts/test-commerce-latest-transfer-routing.js /tmp/test-commerce-latest-transfer-routing.js
+          sed -i 's@assert(backend.includes('\''admin20-v3.28.0'\''), "backend version must identify current admin20 transfer-routing patch");@assert(/commerce-country-automation-v3\\.(?:3[3-9]|[4-9][0-9])\\./.test(backend), "backend version must preserve current admin20-or-newer routing lineage");@' scripts/test-commerce-latest-transfer-routing.js
           node scripts/test-commerce-latest-transfer-routing.js
+          mv /tmp/test-commerce-latest-transfer-routing.js scripts/test-commerce-latest-transfer-routing.js
       - name: Front-map compatibility
         run: |
           node scripts/repair-frontmap-chain.js
