@@ -6,7 +6,7 @@
  * snapshot itself and it never exposes the build hook URL.
  */
 
-const VERSION = "commerce-release-dispatch-v1.5.0-scheduled-maintenance-build";
+const VERSION = "commerce-release-dispatch-v1.6.0-scheduled-maintenance-build";
 const HOOK_ENVS = Object.freeze([
   "COMMERCE_RELEASE_BUILD_HOOK_URL",
   "IGDC_NETLIFY_BUILD_HOOK_URL",
@@ -37,7 +37,10 @@ function releaseArmed(input) {
   const key = text(process.env[KEY_ENV]);
   const environmentArmed = mode === "enabled" && key.length >= 32;
   const explicitAdminAuthorization = !!(input && input.explicitAdminAuthorization === true);
-  const scheduledMaintenanceAuthorization = !!(input && input.scheduledMaintenanceAuthorization === true);
+  // Scheduled maintenance is an internal-only authorization path. Require the
+  // caller to identify a maintenance batch explicitly; ordinary publish callers
+  // cannot arm the build merely by setting the generic scheduled flag.
+  const scheduledMaintenanceAuthorization = !!(input && input.scheduledMaintenanceAuthorization === true && input.maintenanceBatch === true && text(input.operation) === "publish");
   return {
     armed: environmentArmed || explicitAdminAuthorization || scheduledMaintenanceAuthorization,
     mode: explicitAdminAuthorization ? "explicit_admin_confirmation" : (scheduledMaintenanceAuthorization ? "scheduled_maintenance_authorization" : mode),

@@ -23,7 +23,7 @@ const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 
-const VERSION = "commerce-country-automation-v3.35.0-global-product-maintenance-policy";
+const VERSION = "commerce-country-automation-v3.36.0-global-product-maintenance-v2";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -52,10 +52,13 @@ const PRODUCT_PARTIAL_STAGE_BATCH = 10;
 const PRODUCT_PARTIAL_STAGE_CONCURRENCY = 2;
 const PRODUCT_SECTION_CAPACITY = 200;
 const PRODUCT_AI_ENRICH_BATCH = 12;
-const MAINTENANCE_STATE_ID = "igdc_global_product_maintenance_state_v1";
-const MAINTENANCE_STATE_SCHEMA = "igdc-global-product-maintenance-state.v1";
-const MAINTENANCE_CHECK_BATCH = 8;
-const MAINTENANCE_QUEUE_LIMIT = 1500;
+const MAINTENANCE_STATE_ID = "igdc_global_product_maintenance_state_v2";
+const MAINTENANCE_STATE_SCHEMA = "igdc-global-product-maintenance-state.v2";
+const MAINTENANCE_QUEUE_SCHEMA = "igdc-global-product-maintenance-replacement.v1";
+const MAINTENANCE_QUEUE_HUB = "global-product-maintenance-replacement";
+const MAINTENANCE_QUEUE_PREFIX = "igdc_product_maintenance_replacement_";
+const MAINTENANCE_CHECK_BATCH = 24;
+const MAINTENANCE_QUEUE_READ_LIMIT = 1000;
 const MAINTENANCE_PUBLISH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PRODUCT_SECTION_KEYS = Object.freeze([
   "home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5", "home|home_6",
@@ -4401,6 +4404,14 @@ async function replacementProductExclusions(scope,candidateIdInput){
   }catch(_e){}
   return{urls,identities};
 }
+async function replacementProductAlreadyInLedger(productInput,candidateIdInput){
+  const candidateId=text(candidateIdInput),url=ProductRanking.canonicalProductUrl(productUrl(productInput));if(!url)return{duplicate:true,reason:"replacement_url_missing"};
+  try{
+    const rows=await SlotStore.select("gslot_candidates","select=id,official_url,status,source_ref,source_payload&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(url)+"&limit=20");
+    const duplicate=array(rows).find(row=>text(row&&row.id)!==candidateId);
+    return{duplicate:!!duplicate,reason:duplicate?"replacement_already_in_global_ledger":null,candidateId:duplicate?text(duplicate.id):null};
+  }catch(_error){return{duplicate:true,reason:"global_duplicate_check_unavailable",inconclusive:true};}
+}
 async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
   const candidate=plain(candidateInput),source=heldCandidateRecoverySource(candidate);if(!source)return{ok:false,reason:"supplier_site_missing"};
   const options=plain(optionsInput),payload=plain(candidate.source_payload),currentUrl=ProductRanking.canonicalProductUrl(first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url)),exclusions=await replacementProductExclusions(scope,text(candidate.id));
@@ -4413,8 +4424,8 @@ async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
   if(!pool.length)return{ok:false,reason:"replacement_product_not_found",excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size};
   for(let offset=0;offset<pool.length;offset+=4){
     let checked=null;try{checked=await RegionalSelector.inspectProductResearchStep(pool.slice(offset,offset+4),{country:scope.country,region:scope.region,timeoutMs:5000,allowSupplierRecovery:false});}catch(_e){checked=null;}
-    const live=array(checked&&checked.items).find(item=>{if(!(item&&item.productPageLive===true&&item.inspectionComplete===true&&item.sameSupplierSite!==false&&ProductRanking.isSpecificProductUrl(productUrl(item))&&!!productImageUrl(item)&&!ProductRanking.isGenericProductName(first(item.productName,item.title))))return false;const url=ProductRanking.canonicalProductUrl(productUrl(item)),identity=ProductRanking.productIdentity(item);return !!url&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));});
-    if(live)return{ok:true,product:live,source,currentUrl,recoveredUrl:productUrl(live),excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size};
+    const liveRows=array(checked&&checked.items).filter(item=>{if(!(item&&item.productPageLive===true&&item.inspectionComplete===true&&item.sameSupplierSite!==false&&ProductRanking.isSpecificProductUrl(productUrl(item))&&!!productImageUrl(item)&&!ProductRanking.isGenericProductName(first(item.productName,item.title))))return false;const url=ProductRanking.canonicalProductUrl(productUrl(item)),identity=ProductRanking.productIdentity(item);return !!url&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));});
+    for(const live of liveRows){const globalCheck=await replacementProductAlreadyInLedger(live,text(candidate.id));if(globalCheck.duplicate===true)continue;return{ok:true,product:live,source,currentUrl,recoveredUrl:productUrl(live),excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size};}
   }
   return{ok:false,reason:"replacement_product_validation_failed",excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size};
 }
@@ -5754,81 +5765,143 @@ async function candidateAction(actorId, input) {
 }
 
 async function maintenanceStateRule(){
-  try{const rows=await SlotStore.select("gslot_policies","select=id,rule,updated_at,updated_by&id=eq."+encodeURIComponent(MAINTENANCE_STATE_ID)+"&limit=1"),row=array(rows)[0],rule=plain(row&&row.rule);return Object.keys(rule).length?Object.assign({schema:MAINTENANCE_STATE_SCHEMA,queue:[],unresolved:[],scanOffset:0,pendingBuildCandidateIds:[]},rule):{schema:MAINTENANCE_STATE_SCHEMA,queue:[],unresolved:[],scanOffset:0,pendingBuildCandidateIds:[]};}catch(_e){return{schema:MAINTENANCE_STATE_SCHEMA,queue:[],unresolved:[],scanOffset:0,pendingBuildCandidateIds:[],storageReadError:true};}
+  const base={schema:MAINTENANCE_STATE_SCHEMA,scanCursor:"",pendingBuildCandidateIds:[],lastUnresolvedSample:[]};
+  try{
+    const rows=await SlotStore.select("gslot_policies","select=id,rule,updated_at,updated_by&id=eq."+encodeURIComponent(MAINTENANCE_STATE_ID)+"&limit=1"),row=array(rows)[0],rule=plain(row&&row.rule);
+    return Object.keys(rule).length?Object.assign({},base,rule):base;
+  }catch(_e){return Object.assign({},base,{storageReadError:true});}
 }
 async function saveMaintenanceState(ruleInput,actorId){
-  const rule=Object.assign({schema:MAINTENANCE_STATE_SCHEMA,queue:[],unresolved:[],scanOffset:0,pendingBuildCandidateIds:[]},plain(ruleInput)),now=iso();rule.updatedAt=now;
-  const row={id:MAINTENANCE_STATE_ID,name:"IGDC 전 세계 공개 상품 유지보수 대기열",scope_hub:"global-product-maintenance",scope_country:null,scope_region:null,enabled:true,rule,updated_at:now,updated_by:text(actorId)||"scheduled-product-maintenance"};
+  const rule=Object.assign({schema:MAINTENANCE_STATE_SCHEMA,scanCursor:"",pendingBuildCandidateIds:[],lastUnresolvedSample:[]},plain(ruleInput)),now=iso();
+  rule.schema=MAINTENANCE_STATE_SCHEMA;rule.updatedAt=now;
+  // Keep only bounded diagnostics in the singleton state row. Replacement
+  // candidates themselves are stored one-per-policy row so the global queue
+  // never turns into one multi-megabyte JSON document.
+  rule.pendingBuildCandidateIds=Array.from(new Set(array(rule.pendingBuildCandidateIds).map(text).filter(Boolean))).slice(0,1800);
+  rule.lastUnresolvedSample=array(rule.lastUnresolvedSample).slice(-100);
+  const row={id:MAINTENANCE_STATE_ID,name:"IGDC 전 세계 공개 상품 유지보수 상태",scope_hub:"global-product-maintenance",scope_country:null,scope_region:null,enabled:true,rule,updated_at:now,updated_by:text(actorId)||"scheduled-product-maintenance"};
   await SlotStore.insert("gslot_policies",row,"resolution=merge-duplicates,return=minimal");return rule;
 }
-function maintenanceScopeFromAssignment(rowInput){const row=plain(rowInput),country=normalizeCountry(row.country_code),region=normalizeRegion(row.region_code||"NATIONWIDE",country)||"NATIONWIDE";return country&&country!=="GLOBAL"?{country,region}:null;}
-function maintenanceReplacementRecord(candidateId,assignment,scope,currentProduct,recovery){
-  const product=plain(recovery&&recovery.product),url=productUrl(product),image=productImageUrl(product),title=first(product.productName,product.title),identity=ProductRanking.productIdentity(product);
-  return{candidateId,assignmentId:text(assignment&&assignment.id)||null,page:text(assignment&&assignment.hub_key)||null,sectionKey:text(assignment&&assignment.slot_key)||null,country:scope.country,region:scope.region,previousProductUrl:ProductRanking.canonicalProductUrl(productUrl(currentProduct))||productUrl(currentProduct)||null,replacementProductUrl:url,replacementCanonicalUrl:ProductRanking.canonicalProductUrl(url)||null,replacementProductIdentity:identity||null,title,image,price:first(product.price,currentProduct&&currentProduct.price),priceCurrency:first(product.priceCurrency,currentProduct&&currentProduct.priceCurrency),availability:first(product.availability,currentProduct&&currentProduct.availability),supplierSiteUrl:first(product.supplierSiteUrl,currentProduct&&currentProduct.supplierSiteUrl),validatedAt:iso(),state:"maintenance_replacement_queue",publicPublication:false};
+function maintenanceQueuePolicyId(candidateId){return MAINTENANCE_QUEUE_PREFIX+sha256(text(candidateId)).slice(0,40);}
+async function maintenanceQueueRecords(limitInput){
+  const limit=Math.max(1,Math.min(MAINTENANCE_QUEUE_READ_LIMIT,Number(limitInput)||MAINTENANCE_QUEUE_READ_LIMIT));
+  try{
+    const rows=await SlotStore.select("gslot_policies","select=id,rule,updated_at,updated_by&scope_hub=eq."+encodeURIComponent(MAINTENANCE_QUEUE_HUB)+"&enabled=eq.true&order=updated_at.asc,id.asc&limit="+limit);
+    return array(rows).map(row=>Object.assign({policyId:text(row&&row.id),policyUpdatedAt:text(row&&row.updated_at)},plain(row&&row.rule))).filter(row=>text(row.candidateId));
+  }catch(_e){return[];}
 }
-function mergeMaintenanceQueue(queueInput,record){const by=new Map(array(queueInput).map(row=>[text(row&&row.candidateId),row]).filter(pair=>pair[0]));if(record&&text(record.candidateId))by.set(text(record.candidateId),record);return Array.from(by.values()).sort((a,b)=>Date.parse(text(a&&a.validatedAt)||0)-Date.parse(text(b&&b.validatedAt)||0)).slice(-MAINTENANCE_QUEUE_LIMIT);}
-async function maintenancePublishedAssignments(offsetInput,limitInput){
-  const offset=Math.max(0,Math.floor(Number(offsetInput)||0)),limit=Math.max(1,Math.min(24,Number(limitInput)||MAINTENANCE_CHECK_BATCH));
-  const query="select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at"+
-    "&state=in.(approved,pinned)&publication_status=in.(publish_requested,published,matched,active,queued)&order=updated_at.asc,id.asc&limit="+limit+"&offset="+offset;
+async function saveMaintenanceQueueRecord(recordInput,actorId,existingInput){
+  const existing=plain(existingInput),record=Object.assign({},plain(recordInput)),candidateId=text(record.candidateId);if(!candidateId)return null;
+  const now=iso(),queuedAt=first(existing.queuedAt,record.queuedAt,now);
+  record.schema=MAINTENANCE_QUEUE_SCHEMA;record.state="maintenance_replacement_queue";record.queuedAt=queuedAt;record.updatedAt=now;record.publicPublication=false;
+  const row={id:maintenanceQueuePolicyId(candidateId),name:"IGDC 공개상품 대체 대기 "+candidateId.slice(0,36),scope_hub:MAINTENANCE_QUEUE_HUB,scope_country:normalizeCountry(record.country)||null,scope_region:normalizeRegion(record.region||"NATIONWIDE",record.country)||"NATIONWIDE",enabled:true,rule:record,updated_at:now,updated_by:text(actorId)||"scheduled-product-maintenance"};
+  await SlotStore.insert("gslot_policies",row,"resolution=merge-duplicates,return=minimal");return Object.assign({policyId:row.id},record);
+}
+async function removeMaintenanceQueueRecord(entryInput){
+  const entry=plain(entryInput),id=text(entry.policyId)||maintenanceQueuePolicyId(entry.candidateId);if(!id)return false;
+  try{await SlotStore.remove("gslot_policies","id=eq."+encodeURIComponent(id));return true;}catch(_e){return false;}
+}
+function maintenanceScopeFromAssignment(rowInput){const row=plain(rowInput),country=normalizeCountry(row.country_code),region=normalizeRegion(row.region_code||"NATIONWIDE",country)||"NATIONWIDE";return country&&country!=="GLOBAL"?{country,region}:null;}
+function maintenanceReplacementRecord(candidateId,assignment,scope,currentProduct,recovery,existingInput){
+  const product=plain(recovery&&recovery.product),url=productUrl(product),image=productImageUrl(product),title=first(product.productName,product.title),identity=ProductRanking.productIdentity(product),existing=plain(existingInput);
+  return{candidateId,assignmentId:text(assignment&&assignment.id)||null,page:text(assignment&&assignment.hub_key)||null,sectionKey:text(assignment&&assignment.slot_key)||null,country:scope.country,region:scope.region,previousProductUrl:ProductRanking.canonicalProductUrl(productUrl(currentProduct))||productUrl(currentProduct)||null,replacementProductUrl:url,replacementCanonicalUrl:ProductRanking.canonicalProductUrl(url)||null,replacementProductIdentity:identity||null,title,image,price:first(product.price,currentProduct&&currentProduct.price),priceCurrency:first(product.priceCurrency,currentProduct&&currentProduct.priceCurrency),availability:first(product.availability,currentProduct&&currentProduct.availability),supplierSiteUrl:first(product.supplierSiteUrl,currentProduct&&currentProduct.supplierSiteUrl),queuedAt:first(existing.queuedAt,iso()),validatedAt:iso(),state:"maintenance_replacement_queue",publicPublication:false};
+}
+async function maintenancePublishedAssignments(cursorInput,limitInput){
+  const cursor=text(cursorInput),limit=Math.max(1,Math.min(48,Number(limitInput)||MAINTENANCE_CHECK_BATCH));
+  let query="select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,updated_at,updated_by"+
+    "&state=in.(approved,pinned)&publication_status=in.(publish_requested,published,matched,active,queued)";
+  if(cursor)query+="&id=gt."+encodeURIComponent(cursor);
+  query+="&order=id.asc&limit="+limit;
   try{return array(await SlotStore.select("gslot_slot_assignments",query));}catch(_e){return[];}
 }
-async function runMaintenanceLivenessPass(actorId){
-  const actor=text(actorId)||"scheduled-product-maintenance",state=await maintenanceStateRule(),offset=Math.max(0,Number(state.scanOffset)||0),assignments=await maintenancePublishedAssignments(offset,MAINTENANCE_CHECK_BATCH);
-  if(!assignments.length){state.scanOffset=0;state.lastScanCompletedAt=iso();await saveMaintenanceState(state,actor);return{ok:true,checked:0,dead:0,inconclusive:0,queued:0,scanOffset:0,cycleComplete:true};}
-  const ids=Array.from(new Set(assignments.map(row=>text(row&&row.candidate_id)).filter(Boolean))),rows=await frontSyncSelectCandidates(ids),rowById=new Map(array(rows).map(row=>[text(row&&row.id),row]));
-  let checked=0,dead=0,inconclusive=0,queued=0;const unresolved=array(state.unresolved),queue=array(state.queue);
-  for(const assignment of assignments){
-    const candidateId=text(assignment&&assignment.candidate_id),scope=maintenanceScopeFromAssignment(assignment),row=plain(rowById.get(candidateId));if(!candidateId||!scope||!Object.keys(row).length)continue;
-    const product=candidateRuntimeProduct(row,scope);if(!product)continue;product.candidateId=candidateId;product.id=candidateId;checked+=1;
-    let inspected=null;try{const res=await RegionalSelector.inspectProductResearchStep([product],{country:scope.country,region:scope.region,timeoutMs:5500,allowSupplierRecovery:false});inspected=plain(array(res&&res.items)[0]);}catch(_e){inspected={};}
-    const merged=Object.keys(inspected).length?Object.assign({},product,inspected,{candidateId,id:candidateId}):Object.assign({},product,{productPageLive:false,inspectionComplete:false,researchStatus:"inspection_error"}),health=candidateRuntimeHealth(merged);
-    if(health.inconclusive){inconclusive+=1;continue;}if(!health.dead)continue;dead+=1;
-    let recovery=null;try{recovery=await recoverHeldCandidateProduct(row,scope,{excludedCanonicalUrls:queue.map(x=>x&&x.replacementCanonicalUrl),excludedProductIdentities:queue.map(x=>x&&x.replacementProductIdentity)});}catch(_e){recovery=null;}
-    if(recovery&&recovery.ok===true){const rec=maintenanceReplacementRecord(candidateId,assignment,scope,product,recovery);if(rec.replacementCanonicalUrl){const mergedQueue=mergeMaintenanceQueue(queue,rec);queue.splice(0,queue.length,...mergedQueue);queued+=1;if(!state.queueOpenedAt)state.queueOpenedAt=iso();}}
-    else unresolved.push({candidateId,assignmentId:text(assignment&&assignment.id)||null,country:scope.country,region:scope.region,sectionKey:text(assignment&&assignment.slot_key)||null,productUrl:productUrl(product)||null,reasons:health.reasons,recoveryReason:text(recovery&&recovery.reason)||"replacement_not_found",checkedAt:iso()});
+async function inspectMaintenanceProducts(itemsInput,scopeByIdInput){
+  const items=array(itemsInput),scopeById=scopeByIdInput instanceof Map?scopeByIdInput:new Map(),out=new Map(),chunks=[];
+  for(let i=0;i<items.length;i+=4)chunks.push(items.slice(i,i+4));
+  async function runChunk(chunk){
+    const groups=new Map();
+    for(const item of chunk){const id=text(item&&item.candidateId||item&&item.id),scope=plain(scopeById.get(id));const key=(scope.country||"")+"|"+(scope.region||"NATIONWIDE");if(!groups.has(key))groups.set(key,{scope,items:[]});groups.get(key).items.push(item);}
+    for(const group of groups.values()){
+      let checked=null;try{checked=await RegionalSelector.inspectProductResearchStep(group.items,{country:group.scope.country,region:group.scope.region,timeoutMs:5500,allowSupplierRecovery:false});}catch(_e){checked=null;}
+      const returned=array(checked&&checked.items);
+      group.items.forEach((base,index)=>{const id=text(base&&base.candidateId||base&&base.id),inspected=plain(returned[index]);out.set(id,Object.keys(inspected).length?Object.assign({},base,inspected,{candidateId:id,id}):Object.assign({},base,{candidateId:id,id,productPageLive:false,inspectionComplete:false,researchStatus:"inspection_error"}));});
+    }
   }
-  state.queue=queue.slice(-MAINTENANCE_QUEUE_LIMIT);state.unresolved=unresolved.slice(-500);state.scanOffset=offset+assignments.length;state.lastLivenessPassAt=iso();state.lastLivenessPass={checked,dead,inconclusive,queued};await saveMaintenanceState(state,actor);
-  return{ok:true,checked,dead,inconclusive,queued,scanOffset:state.scanOffset,cycleComplete:false};
+  for(let i=0;i<chunks.length;i+=2)await Promise.all(chunks.slice(i,i+2).map(runChunk));
+  return out;
 }
-function maintenancePublishDue(stateInput){
-  const state=plain(stateInput),queue=array(state.queue);if(!queue.length)return false;const base=Date.parse(text(state.lastGlobalMaintenancePublishAt||state.queueOpenedAt));return Number.isFinite(base)&&Date.now()-base>=MAINTENANCE_PUBLISH_INTERVAL_MS;
+async function runMaintenanceLivenessPass(actorId){
+  const actor=text(actorId)||"scheduled-product-maintenance",state=await maintenanceStateRule(),cursor=text(state.scanCursor),assignments=await maintenancePublishedAssignments(cursor,MAINTENANCE_CHECK_BATCH);
+  if(!assignments.length){state.scanCursor="";state.lastScanCompletedAt=iso();state.lastLivenessPassAt=iso();await saveMaintenanceState(state,actor);return{ok:true,checked:0,dead:0,inconclusive:0,queued:0,scanCursor:"",cycleComplete:true};}
+  const ids=Array.from(new Set(assignments.map(row=>text(row&&row.candidate_id)).filter(Boolean))),rows=await frontSyncSelectCandidates(ids),rowById=new Map(array(rows).map(row=>[text(row&&row.id),row])),scopeById=new Map(),productInputs=[];
+  for(const assignment of assignments){const candidateId=text(assignment&&assignment.candidate_id),scope=maintenanceScopeFromAssignment(assignment),row=plain(rowById.get(candidateId));if(!candidateId||!scope||!Object.keys(row).length)continue;const product=candidateRuntimeProduct(row,scope);if(!product)continue;product.candidateId=candidateId;product.id=candidateId;scopeById.set(candidateId,scope);productInputs.push(product);}
+  const inspectedById=await inspectMaintenanceProducts(productInputs,scopeById),queueRows=await maintenanceQueueRecords(),queueByCandidate=new Map(queueRows.map(row=>[text(row.candidateId),row])),queuedUrls=new Set(queueRows.map(row=>ProductRanking.canonicalProductUrl(row&&row.replacementCanonicalUrl||row&&row.replacementProductUrl)).filter(Boolean)),queuedIdentities=new Set(queueRows.map(row=>text(row&&row.replacementProductIdentity)).filter(Boolean));
+  let checked=0,dead=0,inconclusive=0,queued=0;const unresolved=[];
+  for(const assignment of assignments){
+    const candidateId=text(assignment&&assignment.candidate_id),scope=scopeById.get(candidateId),row=plain(rowById.get(candidateId)),merged=plain(inspectedById.get(candidateId));if(!candidateId||!scope||!Object.keys(row).length||!Object.keys(merged).length)continue;
+    checked+=1;const health=candidateRuntimeHealth(merged);if(health.inconclusive){inconclusive+=1;continue;}if(!health.dead)continue;dead+=1;
+    let recovery=null;try{recovery=await recoverHeldCandidateProduct(row,scope,{excludedCanonicalUrls:Array.from(queuedUrls),excludedProductIdentities:Array.from(queuedIdentities)});}catch(_e){recovery=null;}
+    if(recovery&&recovery.ok===true){
+      const existing=plain(queueByCandidate.get(candidateId)),rec=maintenanceReplacementRecord(candidateId,assignment,scope,merged,recovery,existing);if(rec.replacementCanonicalUrl){const saved=await saveMaintenanceQueueRecord(rec,actor,existing);queueByCandidate.set(candidateId,saved||rec);queuedUrls.add(rec.replacementCanonicalUrl);if(rec.replacementProductIdentity)queuedIdentities.add(rec.replacementProductIdentity);queued+=1;}
+    }else unresolved.push({candidateId,assignmentId:text(assignment&&assignment.id)||null,country:scope.country,region:scope.region,sectionKey:text(assignment&&assignment.slot_key)||null,productUrl:productUrl(merged)||null,reasons:health.reasons,recoveryReason:text(recovery&&recovery.reason)||"replacement_not_found",checkedAt:iso()});
+  }
+  const lastAssignment=assignments[assignments.length-1];state.scanCursor=assignments.length<MAINTENANCE_CHECK_BATCH?"":text(lastAssignment&&lastAssignment.id);if(assignments.length<MAINTENANCE_CHECK_BATCH)state.lastScanCompletedAt=iso();state.lastLivenessPassAt=iso();state.lastLivenessPass={checked,dead,inconclusive,queued};state.lastUnresolvedSample=unresolved.slice(-100);await saveMaintenanceState(state,actor);
+  return{ok:true,checked,dead,inconclusive,queued,scanCursor:state.scanCursor,cycleComplete:assignments.length<MAINTENANCE_CHECK_BATCH,privateQueue:true};
+}
+function maintenancePublishDue(stateInput,queueInput){
+  const state=plain(stateInput),queue=array(queueInput);if(!queue.length)return false;const last=Date.parse(text(state.lastGlobalMaintenancePublishAt));if(Number.isFinite(last))return Date.now()-last>=MAINTENANCE_PUBLISH_INTERVAL_MS;
+  const oldest=Math.min(...queue.map(row=>Date.parse(text(row&&row.queuedAt||row&&row.policyUpdatedAt))).filter(Number.isFinite));return Number.isFinite(oldest)&&Date.now()-oldest>=MAINTENANCE_PUBLISH_INTERVAL_MS;
+}
+async function maintenanceAssignment(entryInput){
+  const entry=plain(entryInput),id=text(entry.assignmentId),candidateId=text(entry.candidateId);if(!id||!candidateId)return null;
+  try{return plain(array(await SlotStore.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,updated_at,updated_by&id=eq."+encodeURIComponent(id)+"&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0]);}catch(_e){return null;}
+}
+function maintenanceAssignmentStillOwnsSlot(assignmentInput,entryInput){
+  const assignment=plain(assignmentInput),entry=plain(entryInput),country=normalizeCountry(assignment.country_code),region=normalizeRegion(assignment.region_code||"NATIONWIDE",country)||"NATIONWIDE";
+  return !!text(assignment.id)&&text(assignment.candidate_id)===text(entry.candidateId)&&text(assignment.hub_key)===text(entry.page)&&text(assignment.slot_key)===text(entry.sectionKey)&&country===normalizeCountry(entry.country)&&region===(normalizeRegion(entry.region||"NATIONWIDE",entry.country)||"NATIONWIDE")&&["approved","pinned"].includes(lower(assignment.state))&&["publish_requested","published","matched","active","queued"].includes(lower(assignment.publication_status));
 }
 async function applyMaintenanceReplacement(actorId,entryInput){
-  const entry=plain(entryInput),candidateId=text(entry.candidateId),scope={country:normalizeCountry(entry.country),region:normalizeRegion(entry.region||"NATIONWIDE",normalizeCountry(entry.country))||"NATIONWIDE"};if(!candidateId||!scope.country)return{ok:false,reason:"maintenance_entry_invalid"};
-  const row=plain(array(await frontSyncSelectCandidates([candidateId]))[0]);if(!Object.keys(row).length)return{ok:false,reason:"candidate_missing"};const payload=Object.assign({},plain(row.source_payload)),current=candidateRuntimeProduct(row,scope);if(!current)return{ok:false,reason:"candidate_product_missing"};
-  const currentCanonical=ProductRanking.canonicalProductUrl(productUrl(current)),queuedPrevious=ProductRanking.canonicalProductUrl(entry.previousProductUrl);if(queuedPrevious&&currentCanonical&&queuedPrevious!==currentCanonical)return{ok:false,reason:"candidate_changed_after_queue"};
-  // Re-check the original detail URL immediately before replacement. A product
-  // that recovered during the daily waiting window must stay in place; access
-  // failures such as 401/403/429/5xx remain inconclusive and never trigger a
-  // destructive replacement.
+  const actor=text(actorId)||"scheduled-product-maintenance",entry=plain(entryInput),candidateId=text(entry.candidateId),scope={country:normalizeCountry(entry.country),region:normalizeRegion(entry.region||"NATIONWIDE",normalizeCountry(entry.country))||"NATIONWIDE"};if(!candidateId||!scope.country)return{ok:false,reason:"maintenance_entry_invalid",dropQueue:true};
+  const assignment=await maintenanceAssignment(entry);if(!assignment||!maintenanceAssignmentStillOwnsSlot(assignment,entry))return{ok:false,reason:"assignment_changed_after_queue",dropQueue:true};
+  const row=plain(array(await frontSyncSelectCandidates([candidateId]))[0]);if(!Object.keys(row).length)return{ok:false,reason:"candidate_missing",dropQueue:true};const originalPayload=plain(row.source_payload),payload=Object.assign({},originalPayload),current=candidateRuntimeProduct(row,scope);if(!current)return{ok:false,reason:"candidate_product_missing",dropQueue:true};
+  const currentCanonical=ProductRanking.canonicalProductUrl(productUrl(current)),queuedPrevious=ProductRanking.canonicalProductUrl(entry.previousProductUrl);if(queuedPrevious&&currentCanonical&&queuedPrevious!==currentCanonical)return{ok:false,reason:"candidate_changed_after_queue",dropQueue:true};
   let currentInspected=null;try{const res=await RegionalSelector.inspectProductResearchStep([Object.assign({},current,{candidateId,id:candidateId})],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});currentInspected=plain(array(res&&res.items)[0]);}catch(_e){currentInspected={};}
   const currentHealth=candidateRuntimeHealth(Object.keys(currentInspected).length?Object.assign({},current,currentInspected):Object.assign({},current,{productPageLive:false,inspectionComplete:false,researchStatus:"inspection_error"}));
   if(currentHealth.live)return{ok:false,reason:"original_product_recovered",dropQueue:true,reasons:currentHealth.reasons};
   if(currentHealth.inconclusive)return{ok:false,reason:"original_revalidation_inconclusive",keepQueue:true,reasons:currentHealth.reasons};
-  const candidate={productUrl:entry.replacementProductUrl,url:entry.replacementProductUrl,productName:entry.title,title:entry.title,imageUrl:entry.image,imageOriginalUrl:entry.image,supplierSiteUrl:entry.supplierSiteUrl,price:entry.price,priceCurrency:entry.priceCurrency,availability:entry.availability,candidateId,id:candidateId};
-  let inspected=null;try{const res=await RegionalSelector.inspectProductResearchStep([candidate],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});inspected=plain(array(res&&res.items)[0]);}catch(_e){inspected={};}
-  const health=candidateRuntimeHealth(inspected);if(!health.live)return{ok:false,reason:health.inconclusive?"replacement_revalidation_inconclusive":"replacement_revalidation_failed",reasons:health.reasons};
-  const exclusions=await replacementProductExclusions(scope,candidateId),replacementUrl=ProductRanking.canonicalProductUrl(productUrl(inspected)),replacementIdentity=ProductRanking.productIdentity(inspected);if(!replacementUrl||exclusions.urls.has(replacementUrl)||(replacementIdentity&&exclusions.identities.has(replacementIdentity)))return{ok:false,reason:"replacement_duplicate_or_existing"};
-  const title=first(inspected.productName,inspected.title,entry.title),image=productImageUrl(inspected),now=iso(),card=candidateRuntimeCard(payload,inspected);
+  const replacementSeed={productUrl:entry.replacementProductUrl,url:entry.replacementProductUrl,productName:entry.title,title:entry.title,imageUrl:entry.image,imageOriginalUrl:entry.image,supplierSiteUrl:entry.supplierSiteUrl,price:entry.price,priceCurrency:entry.priceCurrency,availability:entry.availability,candidateId,id:candidateId};
+  let inspected=null;try{const res=await RegionalSelector.inspectProductResearchStep([replacementSeed],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});inspected=plain(array(res&&res.items)[0]);}catch(_e){inspected={};}
+  const health=candidateRuntimeHealth(inspected);if(!health.live)return{ok:false,reason:health.inconclusive?"replacement_revalidation_inconclusive":"replacement_revalidation_failed",keepQueue:health.inconclusive===true,dropQueue:health.inconclusive!==true,reasons:health.reasons};
+  const exclusions=await replacementProductExclusions(scope,candidateId),replacementUrl=ProductRanking.canonicalProductUrl(productUrl(inspected)),replacementIdentity=ProductRanking.productIdentity(inspected);if(!replacementUrl||exclusions.urls.has(replacementUrl)||(replacementIdentity&&exclusions.identities.has(replacementIdentity)))return{ok:false,reason:"replacement_duplicate_or_existing",dropQueue:true};
+  const globalDuplicate=await replacementProductAlreadyInLedger(inspected,candidateId);if(globalDuplicate.duplicate===true)return{ok:false,reason:globalDuplicate.reason||"replacement_duplicate_or_existing",keepQueue:globalDuplicate.inconclusive===true,dropQueue:globalDuplicate.inconclusive!==true};
+  const title=first(inspected.productName,inspected.title,entry.title),image=productImageUrl(inspected),now=iso(),card=candidateRuntimeCard(payload,inspected),supplierName=first(inspected.supplierName,plain(payload.supplier).name,payload.supplierName),supplierUrl=first(inspected.supplierSiteUrl,plain(payload.supplier).officialUrl,payload.supplierSiteUrl,entry.supplierSiteUrl);
   payload.title=title;payload.productName=title;payload.sourceTitle=first(inspected.sourceTitle,title);payload.url=productUrl(inspected);payload.externalProductUrl=productUrl(inspected);payload.productUrl=productUrl(inspected);payload.image=image;payload.thumb=image;payload.imageUrl=image;payload.price=first(inspected.price,payload.price);payload.priceCurrency=first(inspected.priceCurrency,payload.priceCurrency);payload.availability=first(inspected.availability,payload.availability);payload.productIdentity=replacementIdentity||payload.productIdentity;payload.productCard=card;payload.productPageLive=true;payload.sameSupplierSite=true;payload.inspectionComplete=true;payload.researchStatus=first(inspected.researchStatus,"ready_for_admin_review");
-  payload.researchReadiness=Object.assign({},plain(payload.researchReadiness),{stage:payload.researchStatus,productPageLive:true,inspectionComplete:true,productCard:card,lastVerifiedAt:now});payload.runtimeValidation={schema:"igdc-product-runtime-validation.v3",source:"global_daily_maintenance_replacement",checkedAt:now,checkedBy:text(actorId)||"scheduled-product-maintenance",state:"live",live:true,dead:false,inconclusive:false,reasons:["maintenance_replacement_verified"],exactProductUrl:payload.productUrl,imageUrl:image};payload.productMapping=Object.assign({},plain(payload.productMapping),{productIdentity:replacementIdentity||plain(payload.productMapping).productIdentity,lastMaintenanceReplacementAt:now});payload.maintenanceReplacement={schema:"igdc-product-maintenance-replacement.v1",appliedAt:now,appliedBy:text(actorId)||"scheduled-product-maintenance",previousProductUrl:currentCanonical||null,replacementProductUrl:payload.productUrl,samePageSectionPreserved:true,publicPublication:false};
-  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{title,official_url:payload.productUrl,thumbnail_url:image,status:text(row.status)||"approval_pending",source_payload:payload,updated_at:now});return{ok:true,candidateId,productUrl:payload.productUrl,sectionKey:text(entry.sectionKey)||null};
+  payload.researchReadiness=Object.assign({},plain(payload.researchReadiness),{stage:payload.researchStatus,productPageLive:true,inspectionComplete:true,productCard:card,lastVerifiedAt:now});payload.runtimeValidation={schema:"igdc-product-runtime-validation.v3",source:"global_daily_maintenance_replacement",checkedAt:now,checkedBy:actor,state:"live",live:true,dead:false,inconclusive:false,reasons:["maintenance_replacement_verified"],exactProductUrl:payload.productUrl,imageUrl:image};payload.productMapping=Object.assign({},plain(payload.productMapping),{productIdentity:replacementIdentity||plain(payload.productMapping).productIdentity,lastMaintenanceReplacementAt:now});payload.maintenanceReplacement={schema:MAINTENANCE_QUEUE_SCHEMA,appliedAt:now,appliedBy:actor,previousProductUrl:currentCanonical||null,replacementProductUrl:payload.productUrl,samePageSectionPreserved:true,publicPublication:false};
+  const split={page:text(entry.page),sectionKey:text(entry.sectionKey)},target={administratorTitle:title,administratorProductUrl:payload.productUrl,administratorImageUrl:image,administratorSupplierName:supplierName,administratorSupplierUrl:supplierUrl,administratorPrice:payload.price,administratorPriceCurrency:payload.priceCurrency,administratorAvailability:payload.availability},decisionNote=frontAuthorityEnvelopeNote(candidateId,target,scope,split,actor,now);
+  const oldCandidatePatch={title:row.title,official_url:row.official_url,thumbnail_url:row.thumbnail_url,status:row.status,source_payload:originalPayload,updated_at:row.updated_at||now};
+  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{title,official_url:payload.productUrl,thumbnail_url:image,status:text(row.status)||"approval_pending",source_payload:payload,updated_at:now});
+  try{await SlotStore.update("gslot_slot_assignments","id=eq."+encodeURIComponent(text(assignment.id))+"&candidate_id=eq."+encodeURIComponent(candidateId),{decision_note:decisionNote,updated_at:now,updated_by:actor});}
+  catch(error){try{await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),oldCandidatePatch);}catch(_rollback){}throw error;}
+  return{ok:true,candidateId,productUrl:payload.productUrl,sectionKey:text(entry.sectionKey)||null,page:text(entry.page)||null,assignmentId:text(assignment.id),samePageSectionPreserved:true};
 }
 async function retryMaintenanceBuild(stateInput,actorId){
   const state=plain(stateInput),ids=Array.from(new Set(array(state.pendingBuildCandidateIds).map(text).filter(Boolean)));if(!ids.length)return{state,dispatch:null};
-  const dispatch=await ReleaseDispatch.dispatch({candidateId:ids[0],candidateIds:ids,assignmentId:null,actorId:text(actorId)||"scheduled-product-maintenance",operation:"publish",candidateCount:ids.length,explicitAdminAuthorization:false,scheduledMaintenanceAuthorization:true});
+  const dispatch=await ReleaseDispatch.dispatch({candidateId:ids[0],candidateIds:ids,assignmentId:null,actorId:text(actorId)||"scheduled-product-maintenance",operation:"publish",candidateCount:ids.length,explicitAdminAuthorization:false,scheduledMaintenanceAuthorization:true,maintenanceBatch:true});
   state.lastMaintenanceBuildDispatchAt=iso();state.lastMaintenanceBuildDispatch=dispatch;if(dispatch&&dispatch.queued===true)state.pendingBuildCandidateIds=[];return{state,dispatch};
 }
 async function runDailyMaintenancePublish(actorId){
   const actor=text(actorId)||"scheduled-product-maintenance",state=await maintenanceStateRule();
   const retried=await retryMaintenanceBuild(state,actor);if(retried.dispatch){await saveMaintenanceState(retried.state,actor);if(array(retried.state.pendingBuildCandidateIds).length)return{ok:true,due:false,retry:true,dispatch:retried.dispatch,pendingBuild:array(retried.state.pendingBuildCandidateIds).length};}
-  if(!maintenancePublishDue(state))return{ok:true,due:false,queued:array(state.queue).length,lastGlobalMaintenancePublishAt:state.lastGlobalMaintenancePublishAt||null,queueOpenedAt:state.queueOpenedAt||null};
-  const sourceQueue=array(state.queue),applied=[],remaining=[],failed=[];
-  for(const entry of sourceQueue){let result;try{result=await applyMaintenanceReplacement(actor,entry);}catch(error){result={ok:false,reason:text(error&&error.message||error)||"maintenance_apply_failed"};}if(result.ok===true)applied.push(result);else{failed.push({candidateId:text(entry&&entry.candidateId),reason:result.reason||"maintenance_apply_failed"});if(result.keepQueue===true||["replacement_revalidation_inconclusive","original_revalidation_inconclusive"].includes(result.reason))remaining.push(entry);}}
-  const now=iso(),ids=applied.map(row=>row.candidateId);state.queue=remaining;state.lastGlobalMaintenancePublishAt=now;state.queueOpenedAt=remaining.length?now:null;state.lastGlobalMaintenanceBatch={at:now,queued:sourceQueue.length,applied:applied.length,failed:failed.length,failedSample:failed.slice(0,100)};
-  let dispatch=null;if(ids.length){dispatch=await ReleaseDispatch.dispatch({candidateId:ids[0],candidateIds:ids,assignmentId:null,actorId:actor,operation:"publish",candidateCount:ids.length,explicitAdminAuthorization:false,scheduledMaintenanceAuthorization:true});state.lastMaintenanceBuildDispatchAt=iso();state.lastMaintenanceBuildDispatch=dispatch;if(!(dispatch&&dispatch.queued===true))state.pendingBuildCandidateIds=ids;else state.pendingBuildCandidateIds=[];}
-  await saveMaintenanceState(state,actor);return{ok:true,due:true,applied:applied.length,failed:failed.length,remaining:remaining.length,candidateIds:ids,dispatch,pendingBuild:array(state.pendingBuildCandidateIds).length,singleGlobalBuildDispatch:true};
+  const queue=await maintenanceQueueRecords();if(!maintenancePublishDue(state,queue))return{ok:true,due:false,queued:queue.length,lastGlobalMaintenancePublishAt:state.lastGlobalMaintenancePublishAt||null,oldestQueuedAt:queue.length?first(queue[0].queuedAt,queue[0].policyUpdatedAt):null};
+  const applied=[],failed=[],kept=[];
+  // Dead products are expected to be rare. A small concurrency keeps the daily
+  // global pass bounded without turning hundreds of seller sites into a burst.
+  for(let offset=0;offset<queue.length;offset+=3){
+    const batch=queue.slice(offset,offset+3),settled=await Promise.all(batch.map(async entry=>{try{return{entry,result:await applyMaintenanceReplacement(actor,entry)}}catch(error){return{entry,result:{ok:false,reason:text(error&&error.message||error)||"maintenance_apply_failed",keepQueue:true}}}}));
+    for(const item of settled){const entry=item.entry,result=plain(item.result);if(result.ok===true){applied.push(result);await removeMaintenanceQueueRecord(entry);}else if(result.dropQueue===true){failed.push({candidateId:text(entry.candidateId),reason:result.reason||"maintenance_dropped"});await removeMaintenanceQueueRecord(entry);}else{kept.push(entry);failed.push({candidateId:text(entry.candidateId),reason:result.reason||"maintenance_apply_failed"});}}
+  }
+  const now=iso(),ids=Array.from(new Set(applied.map(row=>text(row.candidateId)).filter(Boolean)));state.lastGlobalMaintenancePublishAt=now;state.lastGlobalMaintenanceBatch={at:now,queued:queue.length,applied:applied.length,failed:failed.length,kept:kept.length,failedSample:failed.slice(0,100)};
+  let dispatch=null;if(ids.length){dispatch=await ReleaseDispatch.dispatch({candidateId:ids[0],candidateIds:ids,assignmentId:null,actorId:actor,operation:"publish",candidateCount:ids.length,explicitAdminAuthorization:false,scheduledMaintenanceAuthorization:true,maintenanceBatch:true});state.lastMaintenanceBuildDispatchAt=iso();state.lastMaintenanceBuildDispatch=dispatch;if(!(dispatch&&dispatch.queued===true))state.pendingBuildCandidateIds=ids;else state.pendingBuildCandidateIds=[];}
+  await saveMaintenanceState(state,actor);return{ok:true,due:true,applied:applied.length,failed:failed.length,kept:kept.length,candidateIds:ids,dispatch,pendingBuild:array(state.pendingBuildCandidateIds).length,singleGlobalBuildDispatch:true,privateQueue:true};
 }
 
 function due(lastRunAt, intervalDays) {

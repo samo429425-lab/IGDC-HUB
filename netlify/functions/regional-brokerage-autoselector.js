@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.8.0-global-product-liveness-recovery";
+const VERSION="regional-brokerage-autoselector-v2.9.0-global-product-liveness-policy";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -337,14 +337,14 @@ function providerErrorCode(error){
 function providerErrorDetail(error){return text(error&&error.detail||error&&error.message).slice(0,240)||null;}
 function retryableProviderStatus(value){
   const code=lower(value||"");
-  return /^(?:timeout|network_error|fetch_failed|unavailable)$/.test(code)||/^http_(?:408|409|425|429|5\d\d)$/.test(code)||/(?:econnreset|etimedout|eai_again|socket|network|fetch)/.test(code);
+  return /^(?:timeout|network_error|fetch_failed|unavailable)$/.test(code)||/^http_(?:401|403|408|409|425|429|5\d\d)$/.test(code)||/(?:econnreset|etimedout|eai_again|socket|network|fetch)/.test(code);
 }
 function boundedResearchTimeout(value,fallback,min,max){
   const n=Number(value);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;
 }
 function retryableProviderError(error){
   const code=lower(error&&error.code||error&&error.name||error&&error.message||"");
-  return /abort|timeout|http[_-]?(408|409|425|429|5\d\d)/.test(code);
+  return /abort|timeout|http[_-]?(401|403|408|409|425|429|5\d\d)/.test(code);
 }
 function delay(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 async function fetchJson(url,options,timeoutMs){
@@ -1103,9 +1103,22 @@ function decodePageTextEscapes(value){
     .replace(/\\x([0-9a-f]{2})/gi,function(_m,hex){try{return String.fromCharCode(parseInt(hex,16));}catch(_e){return _m;}})
     .replace(/&(?:#x([0-9a-f]+)|#(\d+));/gi,function(_m,hex,dec){try{return String.fromCodePoint(parseInt(hex||dec,hex?16:10));}catch(_e){return _m;}});
 }
+function productPageVisibleText(html){
+  const decoded=decodePageTextEscapes(String(html||""));
+  // Product liveness must be decided from user-visible page text. Translation
+  // dictionaries, hidden templates, analytics payloads and script bundles often
+  // contain words such as "page not found" even on a perfectly valid product.
+  // Removing non-visible blocks avoids turning those implementation strings into
+  // a global false-positive deletion signal.
+  const visible=decoded
+    .replace(/<script\b[\s\S]*?<\/script>/gi," ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi," ")
+    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi," ")
+    .replace(/<!--[\s\S]*?-->/g," ");
+  return stripHtml(visible).toLowerCase().replace(/\s+/g," ").trim().slice(0,300000);
+}
 function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
-  const raw=String(html||"");
-  const body=stripHtml(raw+" "+decodePageTextEscapes(raw)).toLowerCase().slice(0,300000);
+  const body=productPageVisibleText(html);
   const explicitInvalid=[
     "잘못된 접근입니다",
     "상품이 존재하지 않습니다",
@@ -1154,6 +1167,31 @@ function productPageInvalidState(html,requestedUrl,finalUrl,supplierSiteUrl){
     "该商品目前无法购买",
     "商品已下架",
     "商品已停售",
+    "商品不存在",
+    "找不到该商品",
+    "找不到該商品",
+    "questo prodotto non è più disponibile",
+    "questo articolo non è più disponibile",
+    "dit product is niet meer beschikbaar",
+    "dit artikel is niet meer beschikbaar",
+    "товар больше недоступен",
+    "товар не найден",
+    "المنتج غير موجود",
+    "هذا المنتج لم يعد متاحاً",
+    "هذا المنتج لم يعد متاحًا",
+    "ürün artık mevcut değil",
+    "ürün bulunamadı",
+    "sản phẩm không tồn tại",
+    "sản phẩm không còn được bán",
+    "ไม่พบสินค้า",
+    "สินค้านี้ไม่มีจำหน่ายแล้ว",
+    "produk tidak ditemukan",
+    "produk ini tidak lagi tersedia",
+    "produk ini sudah tidak tersedia",
+    "यह उत्पाद अब उपलब्ध नहीं है",
+    "उत्पाद नहीं मिला",
+    "পণ্যটি আর পাওয়া যাচ্ছে না",
+    "পণ্য পাওয়া যায়নি",
     "page not found",
     "404 not found",
     "the page you requested could not be found",
