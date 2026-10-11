@@ -256,13 +256,8 @@
       if (path === "/") return false;
       if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|brand|brands|best|event|events|home|main|travel|shop|store|list|destinations?|things-to-do)(?:\/|$)/i.test(low)) return false;
       if (/(?:^|[?&])(?:category|cate|search|keyword|destination|city|region|sort|page)=/i.test(url.search)) return false;
-
-      // Retail product detail shapes.
       if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|detail\/[^/?#]{2,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,})/i.test(low)) return true;
       if (/(?:goods_view|product_view|item_view|prd_view|goods_detail|product_detail|item_detail|shopdetail)\.(?:php|html?|aspx?|jsp)$/i.test(low)) return true;
-
-      // Travel inventory must identify an actual property/activity/ticket, not
-      // merely a tour operator or destination landing page.
       const travel = low.match(/\/(hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|restaurants?|dining|reservation)\/(.+)$/i);
       if (travel && travel[2]) {
         const tail = travel[2].replace(/\/+$/, "");
@@ -272,9 +267,7 @@
       }
       if (/\/(?:hotel-detail|hotel-information|property-detail|activity-detail|attraction-detail|tour-detail|ticket-detail|booking-detail|restaurant-detail|dining-detail)\/[^/?#]{2,}/i.test(low)) return true;
       return false;
-    } catch (_e) {
-      return false;
-    }
+    } catch (_e) { return false; }
   }
 
   function firstSpecificRightProductUrl(it) {
@@ -296,8 +289,6 @@
         if (isSpecificRightProductUrl(value)) return value;
       }
     }
-    // Affiliate/tracking aliases are last-resort only and must themselves be
-    // a specific product/detail destination. Generic affiliate homepages stay out.
     for (const key of ["affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url","sourceUrl","source_url","url","href","link"]) {
       const value = safeText(it[key]).trim();
       if (isSpecificRightProductUrl(value)) return value;

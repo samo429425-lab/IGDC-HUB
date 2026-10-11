@@ -184,14 +184,8 @@
       if (path === "/") return false;
       if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|best|event|events|home|main|travel|shop|store|list|destinations?|things-to-do)(?:\/|$)/i.test(lowPath)) return false;
       if (/(?:^|[?&])(?:category|cate|search|keyword|destination|city|region|sort|page)=/i.test(url.search)) return false;
-
-      // Physical recreation products are valid Tour inventory only when they
-      // are genuine item/product detail pages.
       if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,})/i.test(lowPath)) return true;
       if (/(?:goods_view|product_view|item_view|prd_view|goods_detail|product_detail|item_detail|shopdetail)\.(?:php|html?|aspx?|jsp)$/i.test(lowPath)) return true;
-
-      // Travel services must resolve to a concrete property/activity/ticket.
-      // A numeric year or campaign number on an operator page is not enough.
       const travel = lowPath.match(/\/(hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting|restaurants?|dining|reservation)\/(.+)$/i);
       if (travel && travel[2]) {
         const tail = travel[2].replace(/\/+$/, "");
