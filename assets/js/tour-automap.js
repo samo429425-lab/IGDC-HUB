@@ -169,6 +169,18 @@
     catch(e){ return /example\.(com|org|net)/i.test(u); }
   }
 
+  function isSpecificTravelInventoryTail(value){
+    const tail = String(value || "").replace(/\/+$/, "").replace(/\.(?:html?|php|aspx?|jsp)$/i, "").toLowerCase();
+    if (!tail) return false;
+    const flat = tail.replace(/\//g, "-");
+    const parts = tail.split("/").filter(Boolean);
+    if (/^(?:about(?:-us)?|company|operator|agency|provider|partner|partners|contact|support|help|faq|home|main|index|overview|information|info)(?:-|$)/i.test(flat)) return false;
+    if (/(?:^|-)(?:blog|news|article|guide|guides|destination|destinations|collection|collections|category|categories|search|listing|list|directory|deals?|offers?|promotions?|promo|campaigns?)(?:-|$)/i.test(flat)) return false;
+    if (/^(?:spring|summer|autumn|fall|winter|season|seasonal)[-_]?(?:19|20)\d{2}$/i.test(flat) || /^(?:page|p)[-_]?\d+$/i.test(flat) || /^\d+$/.test(flat)) return false;
+    const meaningful = parts.filter(function(part){ return !/^[a-z]{2}(?:-[a-z]{2})?$/i.test(part) && !/^(?:all|best|popular|featured|special|new|top)$/i.test(part); });
+    return meaningful.length > 0;
+  }
+
   function isSpecificTourDestination(value){
     const raw = String(value || "").trim();
     if (isBadUrl(raw) || isExampleUrl(raw)) return false;
@@ -187,14 +199,9 @@
       if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,})/i.test(lowPath)) return true;
       if (/(?:goods_view|product_view|item_view|prd_view|goods_detail|product_detail|item_detail|shopdetail)\.(?:php|html?|aspx?|jsp)$/i.test(lowPath)) return true;
       const travel = lowPath.match(/\/(hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting|restaurants?|dining|reservation)\/(.+)$/i);
-      if (travel && travel[2]) {
-        const tail = travel[2].replace(/\/+$/, "");
-        const parts = tail.split("/").filter(Boolean);
-        const last = parts[parts.length - 1] || "";
-        if (/^(?:search|list|all|home|main|index|destination|destinations|city|cities|region|regions|country|countries|offers?|deals?|popular|best)$/i.test(last)) return false;
-        if (/\d{2,}/.test(last) || /\.(?:html?|php|aspx?|jsp)$/i.test(last) || parts.length >= 2 || last.length >= 12) return true;
-      }
-      if (/\/(?:hotel-detail|hotel-information|property-detail|activity-detail|attraction-detail|tour-detail|ticket-detail|booking-detail|restaurant-detail|dining-detail)\/[^/?#]{2,}/i.test(lowPath)) return true;
+      if (travel && isSpecificTravelInventoryTail(travel[2])) return true;
+      const explicitTravelDetail = lowPath.match(/\/(?:hotel-detail|hotel-information|property-detail|activity-detail|attraction-detail|tour-detail|ticket-detail|booking-detail|restaurant-detail|dining-detail)\/(.+)$/i);
+      if (explicitTravelDetail && isSpecificTravelInventoryTail(explicitTravelDetail[1])) return true;
       return false;
     } catch(e) { return false; }
   }

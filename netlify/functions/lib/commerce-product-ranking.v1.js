@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.22.1-static-image-url-guard";
+const VERSION = "commerce-product-ranking-v1.22.2-travel-detail-url-guard";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -352,21 +352,39 @@ function isListOrCampaignUrl(value) {
   } catch (_error) { return true; }
 }
 
+function travelInventoryTailIsSpecific(value) {
+  const raw = lower(value).replace(/\.(?:html?|php|aspx?|jsp)$/i, "").replace(/^\/+|\/+$/g, "");
+  if (!raw) return false;
+  const segments = raw.split("/").filter(Boolean);
+  if (!segments.length) return false;
+  const tail = segments.join("-");
+
+  // A travel provider/about page, destination guide or campaign landing page is
+  // not inventory.  Do not infer a product merely from a long slug or a number.
+  if (/^(?:about(?:-us)?|company|operator|agency|provider|partner|partners|contact|support|help|faq|home|main|index|overview|information|info)(?:-|$)/i.test(tail)) return false;
+  if (/(?:^|-)(?:blog|news|article|guide|guides|destination|destinations|collection|collections|category|categories|search|listing|list|directory|deals?|offers?|promotions?|promo|campaigns?)(?:-|$)/i.test(tail)) return false;
+  if (/^(?:spring|summer|autumn|fall|winter|season|seasonal)[-_]?(?:19|20)\d{2}$/i.test(tail)) return false;
+  if (/^(?:page|p)[-_]?\d+$/i.test(tail) || /^\d+$/.test(tail)) return false;
+
+  // Locale folders do not count as product evidence. At least one remaining
+  // segment must carry an inventory/property/activity-specific slug.
+  const meaningful = segments.filter((segment) => !/^[a-z]{2}(?:-[a-z]{2})?$/i.test(segment));
+  return meaningful.length > 0 && meaningful.some((segment) => !/^(?:all|best|popular|featured|special|new|top)$/i.test(segment));
+}
+
 function isSpecificProductUrl(value) {
   const url = canonicalProductUrl(value);
   if (!url || isTemplateOrPlaceholderUrl(url) || isStaticOrApiUrl(url) || isListOrCampaignUrl(url)) return false;
   if (productIdFromUrl(url)) return true;
   try {
     const path = lower(new URL(url).pathname);
-    // Travel inventory uses detail URL shapes that are different from retail
-    // goods pages (for example /hotel/kr/name.html or /activity/123-name).
-    // Treat only paths with an actual detail segment after the service family
-    // as specific; generic /hotel, /tour, /activity list pages stay excluded.
-    const travelDetail = /\/(?:hotels?|resorts?|rooms?|stays?|cruises?|packages?)\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?[^/?#]{2,}(?:\.html?)?$/i.test(path) ||
-      /\/(?:activity|activities|attraction|attractions|experience|experiences|tour|tours|ticket|tickets|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting)\/[^/?#]{2,}(?:\/[^/?#]{1,})?/i.test(path) ||
-      /\/(?:restaurants?|dining|cafes?|bistro|menu|reservation)\/[^/?#]{2,}(?:\/[^/?#]{1,})?/i.test(path) ||
-      /\/(?:hotel-detail|hotel-information|property|properties|restaurant-detail|dining-detail)\/[^/?#]{2,}/i.test(path);
-    if (travelDetail) return true;
+    // Travel inventory uses detail URL shapes that differ from retail goods.
+    // The service-family path is necessary but not sufficient: generic provider,
+    // guide, search, campaign, deal and year/page routes are explicitly rejected.
+    const travel = path.match(/\/(?:hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activity|activities|attraction|attractions|experience|experiences|tour|tours|ticket|tickets|cruises?|packages?|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting|restaurants?|dining|cafes?|bistro|menu|reservation)\/(.+)$/i);
+    if (travel && travelInventoryTailIsSpecific(travel[1])) return true;
+    const explicitTravelDetail = path.match(/\/(?:hotel-detail|hotel-information|property-detail|activity-detail|attraction-detail|tour-detail|ticket-detail|booking-detail|restaurant-detail|dining-detail)\/(.+)$/i);
+    if (explicitTravelDetail && travelInventoryTailIsSpecific(explicitTravelDetail[1])) return true;
     if (/\.(?:php|html?|aspx?|jsp)$/i.test(path) && !/(?:goods_view|product_view|item_view|product_detail|goods_detail|shopdetail)/i.test(path)) return false;
     return /\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{1,}|items?\/[^/?#]{1,}|detail\/[^/?#]{1,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,})/i.test(path);
   } catch (_error) { return false; }
