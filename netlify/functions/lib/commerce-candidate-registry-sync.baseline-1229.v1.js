@@ -16,7 +16,7 @@ const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.15.1-tour-same-card-publication";
+const VERSION = "commerce-candidate-registry-sync-v1.15.2-admin-publication-envelope";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -519,6 +519,10 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     page,section,country:authorityCountry,region:authorityRegion,externalSeller:true,noIgdcCheckout:true,noIgdcPayment:true,
     verifiedAt:first(frontEnvelope&&frontEnvelope.requestedAt,assignmentInfo.updated_at,candidate.updated_at,now()),verificationSource:frontEnvelope?"gslot-slot-assignment-front-authority-envelope":"canonical-global-slot-relations",authorityEnvelopeDigest:frontEnvelope&&frontEnvelope.digest||undefined
   }:undefined;
+  const administratorSelectionDigest=adminExternalSeller?sha256([
+    text(candidate&&candidate.id),text(assignmentInfo.id),page,section,authorityCountry,authorityRegion,
+    destination,image,title,first(frontEnvelope&&frontEnvelope.digest,"")
+  ].join("|")):"";
   const item=Object.assign({},payload,{
     id:first(payload.id,candidate.id),
     title,
@@ -569,7 +573,21 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
       destinationUrl:first(revenueUrl,destination,plain(payload.directCommerceListing).destinationUrl),
       expectedNetRevenuePerOrder:first(plain(payload.directCommerceListing).expectedNetRevenuePerOrder,payload.expectedNetRevenuePerOrder)
     }),
-    commerceCandidate:Object.assign({},plain(payload.commerceCandidate),{sourceTier:"approved_commerce_member",origin:"global-slot-console",essentialClass:first(plain(payload.commerceCandidate).essentialClass,payload.essentialClass)}),
+    candidateSelection:Object.assign({},plain(payload.candidateSelection),adminExternalSeller?{
+      releaseEligible:true,
+      sourceTier:"approved_commerce_member",
+      selectionDigest:administratorSelectionDigest,
+      selectionSource:"administrator_front_match",
+      assignmentId:text(assignmentInfo.id),
+      page,section,country:authorityCountry,region:authorityRegion
+    }:{}),
+    commerceCandidate:Object.assign({},plain(payload.commerceCandidate),{
+      sourceTier:"approved_commerce_member",
+      origin:"global-slot-console",
+      essentialClass:first(plain(payload.commerceCandidate).essentialClass,payload.essentialClass),
+      releaseEligible:adminExternalSeller?true:plain(payload.commerceCandidate).releaseEligible,
+      selectionDigest:adminExternalSeller?administratorSelectionDigest:plain(payload.commerceCandidate).selectionDigest
+    }),
     sellerResponsibility:Object.assign({},plain(payload.sellerResponsibility),{verified:true,legalEntity:first(frontEnvelope&&frontEnvelope.supplierName,plain(payload.sellerResponsibility).legalEntity,supplier.name,payload.sellerLegalEntity,payload.sellerName,candidate.title),supportUrl:first(frontEnvelope&&frontEnvelope.supplierUrl,plain(payload.sellerResponsibility).supportUrl,payload.supportUrl,supplier.url,candidate.official_url,destination)}),
     sponsorship:Object.assign({},plain(payload.sponsorship),
       revenueType==="sponsor" && directPayable ? {
@@ -710,7 +728,11 @@ async function syncApprovedCandidates(input){
       if(!verifiedEvidence.length&&explicitAdminReferral&&publicationMarker) verifiedEvidence=syntheticEvidenceFromMarker(candidate,publicationMarker);
       if(!verifiedEvidence.length&&!explicitAdminReferral) continue;
       const publicationRevenue=hasApprovedRevenue?candidateRevenue:[explicitReferralRevenueRow(candidate,assignment)];
-      if(lower(assignment.hub_key)==="tour"&&!tourSameCardPresentation(candidate,sourcePayload(candidate),assignment)) continue;
+      // Same-card travel research remains a discovery/placement gate. Once the
+      // administrator has issued a durable publication request, Registry must
+      // project that exact approved record instead of re-running the discovery
+      // classifier and silently shrinking the Tour front.
+      if(lower(assignment.hub_key)==="tour"&&!publicationRequested&&!tourSameCardPresentation(candidate,sourcePayload(candidate),assignment)) continue;
       const compact=compactPayload(candidate,assignment,avail,publicationRevenue,verifiedEvidence,ipPolicy,{administratorExternalSeller:explicitAdminReferral});
       const row=publicationRevenue.find(entry=>approvedRevenue(entry.status))||publicationRevenue[0]||{};
       const type=lower(row.revenue_type)||"external_referral";

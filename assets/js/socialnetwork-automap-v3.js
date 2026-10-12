@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20260923-six-main-sections-v1
+// build: 20261012-rightpanel-canonical-product-authority-v2
 // 목적:
 // 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -260,18 +260,43 @@
       if (/(?:goods_view|product_view|item_view|prd_view|goods_detail|product_detail|item_detail|shopdetail)\.(?:php|html?|aspx?|jsp)$/i.test(low)) return true;
       const travel = low.match(/\/(hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|restaurants?|dining|reservation)\/(.+)$/i);
       if (travel && travel[2]) {
-        const tail = travel[2].replace(/\/+$/, "");
-        const last = tail.split("/").filter(Boolean).pop() || "";
-        if (/^(?:search|list|all|home|main|index|destination|destinations|city|cities|region|regions|country|countries|offers?|deals?|popular|best)$/i.test(last)) return false;
-        if (/\d{2,}/.test(last) || /\.(?:html?|php|aspx?|jsp)$/i.test(last) || tail.split("/").filter(Boolean).length >= 2 || last.length >= 12) return true;
+        const tail = travel[2].replace(/\/+$/, "").replace(/\.(?:html?|php|aspx?|jsp)$/i, "").toLowerCase();
+        const flat = tail.replace(/\//g, "-");
+        if (/^(?:about(?:-us)?|company|operator|agency|provider|partner|partners|contact|support|help|faq|home|main|index|overview|information|info)(?:-|$)/i.test(flat)) return false;
+        if (/(?:^|-)(?:blog|news|article|guide|guides|destination|destinations|collection|collections|category|categories|search|listing|list|directory|deals?|offers?|promotions?|promo|campaigns?)(?:-|$)/i.test(flat)) return false;
+        if (/^(?:spring|summer|autumn|fall|winter|season|seasonal)[-_]?(?:19|20)\d{2}$/i.test(flat)) return false;
+        const parts = tail.split("/").filter(Boolean);
+        if (parts.some(function(part){ return !/^[a-z]{2}(?:-[a-z]{2})?$/i.test(part) && !/^(?:all|best|popular|featured|special|new|top)$/i.test(part); })) return true;
       }
       if (/\/(?:hotel-detail|hotel-information|property-detail|activity-detail|attraction-detail|tour-detail|ticket-detail|booking-detail|restaurant-detail|dining-detail)\/[^/?#]{2,}/i.test(low)) return true;
       return false;
     } catch (_e) { return false; }
   }
 
+  function canonicalPublishedRightProductUrl(it) {
+    if (!it || typeof it !== "object") return "";
+    const publication = it.canonicalPublication && typeof it.canonicalPublication === "object" ? it.canonicalPublication : null;
+    if (!publication || String(publication.status || "").toLowerCase() !== "published" || !String(publication.candidateId || "").trim()) return "";
+    const directKeys = [
+      "externalProductUrl","officialProductUrl","productUrl","product_url","productPageUrl","detailUrl",
+      "checkoutUrl","paymentUrl","purchaseUrl","orderUrl","productLink","displayUrl","sourceUrl","source_url","url","href","link"
+    ];
+    for (const key of directKeys) {
+      const value = safeText(it[key]).trim();
+      if (!isExternalUrl(value) || isBadPlaceholderUrl(value)) continue;
+      try {
+        const parsed = new URL(value);
+        if ((parsed.pathname || "/").replace(/\/+$/, "") === "") continue;
+      } catch (_e) { continue; }
+      return value;
+    }
+    return "";
+  }
+
   function firstSpecificRightProductUrl(it) {
     if (!it || typeof it !== "object") return "";
+    const canonical = canonicalPublishedRightProductUrl(it);
+    if (canonical) return canonical;
     const rr = it.researchReadiness && typeof it.researchReadiness === "object" ? it.researchReadiness : null;
     const nested = [it.productCard, rr && rr.productCard, it.directCommerceListing, it.brokerageContract];
     const directKeys = [

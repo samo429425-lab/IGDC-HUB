@@ -1,4 +1,4 @@
-// tour-automap.js (PRODUCTION v7.2 - Home-pattern exact product routing + frame-safe right rail)
+// tour-automap.js (PRODUCTION v7.3 - Canonical product authority + legacy detail fallback)
 // - Right panel/mobile rail cards use the same internal /content.html?id=... route as Home cards
 // - Only actual product/booking-detail destinations are eligible for the Tour right rail
 // - Live Tour cards without an explicit id receive the exact same deterministic id as content-engine.js
@@ -10,8 +10,8 @@
 (function () {
   "use strict";
 
-  if (window.__TOUR_RIGHTPANEL_AUTOMAP_V72__) return;
-  window.__TOUR_RIGHTPANEL_AUTOMAP_V72__ = true;
+  if (window.__TOUR_RIGHTPANEL_AUTOMAP_V73__) return;
+  window.__TOUR_RIGHTPANEL_AUTOMAP_V73__ = true;
 
   const HUB = "tour";
   const SNAPSHOT_URL = "/data/tour-snapshot.json";
@@ -196,7 +196,7 @@
       if (path === "/") return false;
       if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|best|event|events|home|main|travel|shop|store|list|destinations?|things-to-do)(?:\/|$)/i.test(lowPath)) return false;
       if (/(?:^|[?&])(?:category|cate|search|keyword|destination|city|region|sort|page)=/i.test(url.search)) return false;
-      if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,})/i.test(lowPath)) return true;
+      if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,}|(?:pck|package|packages?|booking|reservation)\/detail\/[^/?#]{1,}|detail\/[^/?#]{2,})/i.test(lowPath)) return true;
       if (/(?:goods_view|product_view|item_view|prd_view|goods_detail|product_detail|item_detail|shopdetail)\.(?:php|html?|aspx?|jsp)$/i.test(lowPath)) return true;
       const travel = lowPath.match(/\/(hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting|restaurants?|dining|reservation)\/(.+)$/i);
       if (travel && isSpecificTravelInventoryTail(travel[2])) return true;
@@ -222,10 +222,32 @@
     return "";
   }
 
+  function canonicalPublishedProductDestination(it){
+    if (!it || typeof it !== "object") return "";
+    const publication = it.canonicalPublication && typeof it.canonicalPublication === "object" ? it.canonicalPublication : null;
+    if (!publication || String(publication.status || "").toLowerCase() !== "published" || !String(publication.candidateId || "").trim()) return "";
+    const directKeys = [
+      "externalProductUrl","officialProductUrl","productUrl","product_url","productPageUrl","detailUrl","productLink","displayUrl",
+      "checkoutUrl","paymentUrl","purchaseUrl","orderUrl","sourceUrl","source_url","url","href","link"
+    ];
+    for (const key of directKeys) {
+      const value = pick(it,[key]);
+      if (!isExternal(value) || isBadUrl(value) || isExampleUrl(value)) continue;
+      try {
+        const parsed = new URL(value, window.location.origin);
+        if ((parsed.pathname || "/").replace(/\/+$/, "") === "") continue;
+      } catch(e) { continue; }
+      return value;
+    }
+    return "";
+  }
+
   function pickProductDestination(it){
     if (!it || typeof it !== "object") return "";
+    const canonical = canonicalPublishedProductDestination(it);
+    if (canonical) return canonical;
     const directKeys = [
-      // Exact detail fields always win over provider/affiliate aliases.
+      // Legacy/non-canonical fallback keeps the strict route classifier.
       "externalProductUrl","officialProductUrl","productUrl","product_url","productPageUrl","detailUrl","productLink","displayUrl",
       "checkoutUrl","paymentUrl","purchaseUrl","orderUrl",
       "affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url"
