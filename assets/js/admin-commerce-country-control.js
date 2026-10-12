@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.22.0-masterboard-front-authority
+/* IGDC Global/Region/Country Commerce Control v3.22.1-candidate-ledger-frontmatch
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -25,7 +25,7 @@
   var LATEST_MANUAL_ACTION_BATCH=10;
   var PRODUCT_PRIVATE_SECTION_CAPACITY=200;
   var PRODUCT_FRONT_SECTION_CAPACITY=100;
-  var FRONT_MATCH_CLIENT_VERSION='20261010-frontmatch-unique-product-v10';
+  var FRONT_MATCH_CLIENT_VERSION='20261012-candidate-ledger-id-v11';
 
   var PRODUCT_SECTIONS=Object.freeze([
     {key:'home|home_1',page:'home',section:'home_1',label:'홈 · home_1'},{key:'home|home_2',page:'home',section:'home_2',label:'홈 · home_2'},{key:'home|home_3',page:'home',section:'home_3',label:'홈 · home_3'},{key:'home|home_4',page:'home',section:'home_4',label:'홈 · home_4'},{key:'home|home_5',page:'home',section:'home_5',label:'홈 · home_5'},{key:'home|home_6',page:'home',section:'home_6',label:'홈 · Home 6 (웹툰·서적·전자책)'},{key:'home|home_right_top',page:'home',section:'home_right_top',label:'홈 · 우측 상단 (지식·건강·생활)'},{key:'home|home_right_middle',page:'home',section:'home_right_middle',label:'홈 · 우측 중단 (자동차·아웃도어)'},{key:'home|home_right_bottom',page:'home',section:'home_right_bottom',label:'홈 · 우측 하단 (리빙·책방·기타)'},
@@ -217,6 +217,10 @@
   function candidatePlacementKey(row){var list=(row&&row.sectionAssignments||[]).filter(function(item){return item&&(item.approvalEligible===true||item.reviewEligible===true);});return sectionKeyOf(row&&row.primaryPlacement)||sectionKeyOf(list[0])||'unassigned';}
   function eligiblePlacements(row){return (Array.isArray(row&&row.sectionAssignments)?row.sectionAssignments:[]).filter(function(item){return item&&item.approvalEligible===true&&PRODUCT_SECTION_MAP[sectionKeyOf(item)];});}
   function productById(id){id=text(id);return productRows.filter(function(row){return text(row&&row.id)===id;})[0]||null;}
+  // A research product can keep its original product id while the durable
+  // administrator ledger uses gslot_candidates.id. Front Match must always
+  // address the durable candidate id; the original id is UI/research identity only.
+  function frontCandidateLedgerId(row){return text(row&&row.candidateId||row&&row.id);}
   function frontProductDestinationKey(row){
     var raw=safeExternalUrl(row&&row.productUrl||row&&row.url),id=text(row&&row.candidateId||row&&row.id);
     if(!raw)return'id:'+id;
@@ -1486,7 +1490,7 @@
     // for one seller product can never inflate the admin count or be published twice.
     var authoritativeBoardRows=dedupePlacedSectionRows(productRows.slice()),authoritativeBoardById={};
     authoritativeBoardRows.forEach(function(row){
-      var id=text(row&&row.candidateId||row&&row.id),key=assignedSectionKey(row);
+      var id=frontCandidateLedgerId(row),key=assignedSectionKey(row);
       if(!id||!PRODUCT_SECTION_MAP[key])return;
       authoritativeBoardById[id]={schema:'igdc-admin-front-board-item.v2',authoritative:true,candidateId:id,sectionKey:key,title:text(row&&row.productName||row&&row.title),productUrl:text(row&&row.productUrl||row&&row.url),imageUrl:text(row&&row.imageUrl||row&&row.imageOriginalUrl),supplierName:text(row&&row.supplierName),supplierUrl:text(row&&row.supplierSiteUrl),price:row&&row.price!=null?row.price:null,priceCurrency:text(row&&row.priceCurrency),availability:row&&row.availability!=null?row.availability:null};
     });
@@ -1509,7 +1513,9 @@
       return true;
     });
     if(replacementRun&&!unmatch){var replacementScopeKeys=mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice());targetRows=capFrontReplacementRows(targetRows,replacementScopeKeys);}
-    var targetIds=targetRows.map(function(row){return text(row.id);}).filter(Boolean);
+    // Server relations (candidate, assignment, publication, SearchBank/Snapshot)
+    // are keyed by gslot candidate id, not by the research/original product id.
+    var targetIds=Array.from(new Set(targetRows.map(frontCandidateLedgerId).filter(Boolean)));
     if(!targetIds.length&&!replacementRun){show(unmatch?'선택 범위에 매칭 해제할 상품이 없습니다.':'선택 범위에 최종 재검증·프론트 적용할 상품이 없습니다.','warn');return;}
     var explanation=unmatch?label+'의 기존 프론트 매칭 해제를 요청합니다.':label+'을 현재 전체 상품 후보·배치 관리 목록의 상태로 치환합니다. 선택 범위의 기존 프론트 공개 원장은 현재 관리자 배치 목록과 비교해 오래된 항목을 공개 해제하고, 현재 배치된 상품만 공개 대상으로 다시 확정합니다. 관리자 후보·배치 원장 자체는 절대 수정하지 않으며 빈 슬롯은 기존 샘플 fallback 정책을 유지합니다.';
     if(!window.confirm(explanation+'\n\n'+(unmatch?'프론트에서 해당 매칭을 해제하시겠습니까?\n변경은 소량 묶음으로 저장한 뒤 마지막에 스냅샷 빌드를 1회만 실행합니다.':'현재 관리자 배치 목록으로 프론트 공개 원장을 치환하시겠습니까?\nSupabase 공개 배정 상태를 현재 목록과 맞춘 뒤 SearchBank/Snapshot 빌드를 마지막에 1회 실행합니다.')))return;
@@ -1564,7 +1570,7 @@
           var finalizeOperation=unmatch?'unmatch':(aggregate.persistedCandidateIds.length?'match':'refresh'),finalizeIds=Array.from(new Set((aggregate.persistedCandidateIds.length?aggregate.persistedCandidateIds:aggregate.changedCandidateIds).concat(managementCommit.changedCandidateIds||[])));
           var replacementSectionKeys=replacementRun?(mode==='all'?PRODUCT_SECTIONS.map(function(section){return section.key;}):(sectionMode?[sectionKey]:selectedSections.slice())):[];
           var replacementRows=replacementRun?capFrontReplacementRows(authoritativeBoardRows.filter(function(row){var key=assignedSectionKey(row);return productDecision(row)==='slot_candidate'&&!!key&&(mode==='all'||replacementSectionKeys.indexOf(key)>=0);}),replacementSectionKeys):[];
-          var replacementCandidateIds=replacementRows.map(function(row){return text(row&&row.candidateId||row&&row.id);}).filter(Boolean);
+          var replacementCandidateIds=replacementRows.map(frontCandidateLedgerId).filter(Boolean);
           replacementCandidateIds=Array.from(new Set(replacementCandidateIds));
           var finalized=await api(CONTROL,'product_front_finalize','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',operation:finalizeOperation,confirmation:unmatch?'SITE_UNPUBLISH':'SITE_PUBLISH',candidateIds:finalizeIds,changedCount:Math.max(aggregate.changedCandidateIds.length,aggregate.withdrawn,aggregate.persistedCandidateIds.length),ledgerMode:'candidate',compactResponse:true,publicationReplacement:replacementRun,authoritativeReplacement:replacementRun,explicitReplacementCleanup:replacementRun,replacementSectionKeys:replacementSectionKeys,replacementCandidateIds:replacementCandidateIds},90000);
           var finalResult=finalized.frontSyncResult||{},finalRelease=finalResult.release||{};aggregate.finalize=finalResult;aggregate.release=finalRelease;if(finalRelease.queued===true){aggregate.queued=1;aggregate.pendingBuild=0;}else{aggregate.queued=0;aggregate.pendingBuild=Math.max(1,Number(finalResult.pendingBuild||aggregate.changedCandidateIds.length||aggregate.persistedCandidateIds.length||1));}
