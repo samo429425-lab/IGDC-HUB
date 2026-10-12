@@ -23,7 +23,7 @@ const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 
-const VERSION = "commerce-country-automation-v3.37.1-psom-group-preserving-placement";
+const VERSION = "commerce-country-automation-v3.37.2-admin-psom-group-authority";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -4349,12 +4349,22 @@ async function productCandidatePsomPlace(actorId, input) {
       let picked = null;
       if (preferredSectionKey) {
         picked = array(plan.options).find((option) => productPlacementKey(option) === preferredSectionKey) || null;
-        // Never silently send a candidate from one visible PSOM group to another
-        // section. If the current semantic classifier no longer supports the
-        // group's section, keep it visible for review instead of rebalancing it.
         if (!picked) {
-          results.push({candidateId:id,assigned:false,error:"preferred_psom_section_not_compatible",requestedSectionKey:preferredSectionKey,category:plan.category.primary});
-          continue;
+          const preferred = splitProductSectionKey(preferredSectionKey);
+          // The administrator clicked the placement control inside this exact
+          // visible PSOM group. That explicit choice is stronger than a later
+          // category reclassification pass. Preserve the group unless the key
+          // itself is structurally invalid or the section is full.
+          picked = preferred ? {
+            page:preferred.page,
+            section:preferred.sectionKey,
+            sectionKey:preferred.sectionKey,
+            score:Number(product && product.rankingScore || 0),
+            reason:"administrator_psom_group_selected",
+            approvalEligible:true,
+            reviewEligible:true,
+            administratorSelected:true
+          } : null;
         }
       } else {
         picked = automaticBalancedPlacement(product, plan.options, counts);

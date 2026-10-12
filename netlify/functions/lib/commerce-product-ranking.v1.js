@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.22.2-travel-detail-url-guard";
+const VERSION = "commerce-product-ranking-v1.22.3-url-authoritative-dedup";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -97,7 +97,7 @@ const CATEGORY_VALUE_PRIORS = Object.freeze({
 const POLICY = Object.freeze({
   schema: "igdc-private-product-ranking-policy.v1",
   principle: "risk_gate_before_revenue_ranking",
-  hardDuplicateRule: "same_supplier_and_same_product_id_or_canonical_url_or_title_image_fingerprint",
+  hardDuplicateRule: "same_supplier_and_same_product_id_or_canonical_url",
   sameTitleDifferentSupplierRule: "preserve_as_competing_offer",
   titleOnlyRule: "never_hard_merge",
   sponsorRule: "explicit_approved_sponsor_contract_only",
@@ -446,8 +446,8 @@ function productIdentity(rowInput) {
   const title = normalizeTitle(first(row.productName, row.title)), image = imageFingerprint(first(row.imageUrl, row.imageOriginalUrl));
   if (supplier && explicit) return supplier + "|id:explicit:" + lower(explicit);
   if (supplier && urlId) return supplier + "|id:" + urlId;
-  if (supplier && title && image) return supplier + "|fingerprint:" + sha256(title + "|" + image).slice(0, 28);
   if (supplier && url) return supplier + "|url:" + url;
+  if (supplier && title && image) return supplier + "|fingerprint:" + sha256(title + "|" + image).slice(0, 28);
   return supplier + "|unresolved:" + sha256(JSON.stringify([title, image, url])).slice(0, 28);
 }
 
@@ -1491,7 +1491,7 @@ function mergeProductRows(existingInput, incomingInput, optionsInput) {
     if (index.has(identity)) {
       const at = index.get(identity);
       const priorUrl = canonicalProductUrl(first(out[at].productUrl, out[at].url));
-      const reason = productIdFromUrl(url) ? "same_supplier_product_id" : (priorUrl === url ? "same_supplier_canonical_url" : "same_supplier_title_image_fingerprint");
+      const reason = productIdFromUrl(url) ? "same_supplier_product_id" : (priorUrl === url ? "same_supplier_canonical_url" : "same_supplier_unresolved_identity");
       out[at] = mergePair(out[at], normalized, reason);
     } else {
       index.set(identity, out.length);
