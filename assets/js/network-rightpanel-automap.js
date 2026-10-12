@@ -22,6 +22,11 @@
   const CONTAINED_VIEWER_SCRIPT_ID = 'igdc-network-viewer-loader-v11';
   const CONTAINED_THEME_ID = 'igdc-network-toolbar-theme-v11';
 
+  // Product cards share the exact same contained commerce viewer as Distribution Hub.
+  // Keep the Network-specific viewer only for the marketplace/platform buttons above.
+  const COMMERCE_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20261011-commerce-contained-v2';
+  const COMMERCE_VIEWER_SCRIPT_ID = 'igdc-network-commerce-contained-viewer-loader-v1';
+
   function ensureContainedToolbarTheme(){
     if (document.getElementById(CONTAINED_THEME_ID)) return;
     const style = document.createElement('style');
@@ -94,6 +99,41 @@
   }
 
 
+  function ensureCommerceContainedViewer(){
+    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 10 && typeof window.IGDCContainedViewer.open === 'function') {
+      return Promise.resolve(window.IGDCContainedViewer);
+    }
+    if (window.__IGDC_NETWORK_COMMERCE_VIEWER_PROMISE__) return window.__IGDC_NETWORK_COMMERCE_VIEWER_PROMISE__;
+
+    window.__IGDC_NETWORK_COMMERCE_VIEWER_PROMISE__ = new Promise(function(resolve, reject){
+      let script = document.getElementById(COMMERCE_VIEWER_SCRIPT_ID);
+      const finish = function(){
+        if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 10 && typeof window.IGDCContainedViewer.open === 'function') {
+          resolve(window.IGDCContainedViewer);
+        } else {
+          reject(new Error('IGDC commerce contained viewer unavailable'));
+        }
+      };
+      if (script) {
+        if (script.dataset.loaded === '1') { finish(); return; }
+        script.addEventListener('load', finish, { once:true });
+        script.addEventListener('error', function(){ reject(new Error('IGDC commerce contained viewer load failed')); }, { once:true });
+        return;
+      }
+      script = document.createElement('script');
+      script.id = COMMERCE_VIEWER_SCRIPT_ID;
+      script.src = COMMERCE_VIEWER_SRC;
+      script.async = true;
+      script.addEventListener('load', function(){ script.dataset.loaded = '1'; finish(); }, { once:true });
+      script.addEventListener('error', function(){ reject(new Error('IGDC commerce contained viewer load failed')); }, { once:true });
+      (document.head || document.documentElement).appendChild(script);
+    }).catch(function(err){
+      window.__IGDC_NETWORK_COMMERCE_VIEWER_PROMISE__ = null;
+      throw err;
+    });
+    return window.__IGDC_NETWORK_COMMERCE_VIEWER_PROMISE__;
+  }
+
   function $(id){ return document.getElementById(id); }
 
   function pick(it, keys){
@@ -159,10 +199,12 @@
       a.addEventListener('click', function(ev){
         if(ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
         ev.preventDefault();
-        ensureContainedViewer().then(function(viewer){
-          return viewer.open(href,{label:(item && item.title) || '',kind:'product',pushHistory:true});
+        // Use the same product-detail viewer path as Distribution Hub so an
+        // identical seller item behaves identically in both right rails.
+        ensureCommerceContainedViewer().then(function(viewer){
+          return viewer.open(href,{label:(item && item.title) || '',kind:'commerce-product',pushHistory:true});
         }).catch(function(err){
-          try{console.warn('[IGDC][Network] product viewer unavailable:',err&&err.message?err.message:err);}catch(_e){}
+          try{console.warn('[IGDC][Network] commerce product viewer unavailable:',err&&err.message?err.message:err);}catch(_e){}
         });
       }, { passive:false });
     }

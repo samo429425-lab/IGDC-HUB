@@ -14,7 +14,7 @@ const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.10.0-global-product-detail-recovery";
+const VERSION="regional-brokerage-autoselector-v2.10.1-travel-inventory-card-coupling";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -912,6 +912,41 @@ function meaningfulProductName(value){
   if(/^(?:new|best|sale|event|기획전|이벤트|추천상품)$/i.test(name))return"";
   return name;
 }
+function normalizedPresentationTitle(value){return lower(stripHtml(value)).replace(/[^0-9a-z가-힣]+/g,"").slice(0,220);}
+function providerEquivalentTitle(value,supplierName){
+  const titleKey=normalizedPresentationTitle(value),supplierKey=normalizedPresentationTitle(supplierName);
+  if(!titleKey)return true;
+  if(supplierKey&&titleKey===supplierKey)return true;
+  return /^(?:officialsite|officialwebsite|homepage|home|website|travelagency|travelcompany|touroperator|bookingservice|공식홈페이지|공식사이트|홈페이지|여행사|관광회사|관광업체|투어운영사)$/.test(titleKey);
+}
+function travelInventoryUrl(value){
+  try{
+    const path=lower(new URL(value).pathname);
+    return /\/(?:hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting|restaurants?|dining|reservation|booking)(?:\/|$)/i.test(path);
+  }catch(_e){return false;}
+}
+function travelInventoryNodeType(node){
+  return /\b(?:Product|Hotel|HotelRoom|Room|LodgingBusiness|Resort|Hostel|Accommodation|VacationRental|Campground|TouristAttraction|TouristTrip|Trip|Event|Service)\b/i.test(nodeType(node));
+}
+function travelDetailEvidence(html,pageUrl,exact){
+  const source=String(html||""),canonical=ProductRanking.canonicalProductUrl(pageUrl),nodes=jsonLdNodesDeep(source);
+  let structured=false;
+  for(const node of nodes){
+    if(!travelInventoryNodeType(node))continue;
+    const name=meaningfulProductName(first(node&&node.name,node&&node.headline));
+    if(!name)continue;
+    const explicit=first(node&&node.url,node&&node["@id"],plain(node&&node.mainEntityOfPage)["@id"]),resolved=ProductRanking.canonicalProductUrl(absoluteHttpUrl(pageUrl,explicit)||canonical);
+    if(resolved&&canonical&&resolved!==canonical)continue;
+    const offer=productOffer(node),image=imageFromValue(node&&node.image,pageUrl);
+    if(image||node&&node.offers||offer.price){structured=true;break;}
+  }
+  const visible=stripHtml(source.slice(0,700000));
+  const bookingAction=/(?:book\s*now|reserve\s*now|check\s*availability|select\s*(?:a\s*)?room|choose\s*(?:a\s*)?room|buy\s*(?:a\s*)?ticket|tickets?\s*(?:from|available)|예약하기|예약\s*가능|객실\s*선택|객실\s*예약|예매하기|티켓\s*구매|입장권\s*구매)/i.test(visible);
+  // A title/image pair on the current URL is not enough for travel. Provider,
+  // destination and category pages also have OG titles/images. Require structured
+  // inventory or an actual reservation/ticket action on the same detail page.
+  return {verified:structured||bookingAction,source:structured?"structured_inventory":(bookingAction?"booking_action":"unverified")};
+}
 function nearbyProductName(fragment,inner){
   const direct=meaningfulProductName(inner);if(direct)return direct;
   const source=String(fragment||""),imgAlt=source.match(/<img\b[^>]*(?:alt|title)\s*=\s*["']([^"']+)["'][^>]*>/i);
@@ -1012,7 +1047,7 @@ async function fetchProductSitemapUrls(siteUrl,controller,max){
   const root=new URL(siteUrl);root.pathname="/sitemap.xml";root.search="";root.hash="";const headers={"user-agent":"IGDC-MARU-ProductReferenceResearch/1.0 (+https://igdcglobal.com)",accept:"application/xml,text/xml,text/plain;q=0.9,*/*;q=0.1"};
   async function read(url){try{const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers});if(!response.ok)return{ok:false,url,body:""};const length=Number(response.headers.get("content-length")||0);if(length>1800000)return{ok:false,url,body:""};return{ok:true,url:response.url||url,body:(await response.text()).slice(0,1600000)};}catch(_e){return{ok:false,url,body:""};}}
   const firstDoc=await read(root.toString());if(!firstDoc.ok)return[];let locations=sitemapLocations(firstDoc.body,firstDoc.url,500),productUrls=locations.filter(isProductDetailUrl);
-  if(productUrls.length<Math.max(5,Math.min(20,Number(max)||20))){const childMaps=locations.filter(url=>/sitemap/i.test(url)&&/(product|goods|item|shop|store|catalog)/i.test(url)).slice(0,2);for(const child of childMaps){const doc=await read(child);if(!doc.ok)continue;productUrls=productUrls.concat(sitemapLocations(doc.body,doc.url,500).filter(isProductDetailUrl));}}
+  if(productUrls.length<Math.max(5,Math.min(20,Number(max)||20))){const childMaps=locations.filter(url=>/sitemap/i.test(url)&&/(product|goods|item|shop|store|catalog|hotel|room|stay|property|activity|attraction|experience|tour|ticket|package|booking|reservation)/i.test(url)).slice(0,3);for(const child of childMaps){const doc=await read(child);if(!doc.ok)continue;productUrls=productUrls.concat(sitemapLocations(doc.body,doc.url,500).filter(isProductDetailUrl));}}
   const out=[],seen=new Set();for(const url of productUrls){const key=lower(url);if(seen.has(key))continue;seen.add(key);out.push(url);if(out.length>=Math.max(10,Math.min(80,Number(max)||40)))break;}return out;
 }
 function productPriorityInfo(value){
@@ -1103,7 +1138,7 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
   };
   const nodes=jsonLdNodesDeep(html);
   for(const node of nodes){
-    if(!/\bProduct\b/i.test(nodeType(node)))continue;
+    if(!/\bProduct\b/i.test(nodeType(node))&&!travelInventoryNodeType(node))continue;
     const explicit=first(node.url,node["@id"],plain(node.mainEntityOfPage)["@id"]),resolved=absoluteHttpUrl(pageUrl,explicit),productUrl=resolved||(isProductDetailUrl(pageUrl)?canonicalPageUrl(html,pageUrl):"");
     if(!productUrl)continue;
     const offer=productOffer(node),imageUrl=imageFromValue(node.image,productUrl||pageUrl),video=videoInfoFromValue(node.video,productUrl||pageUrl),priority=productPriorityInfo(first(node.name,node.headline)+" "+supplierName);
@@ -1130,15 +1165,19 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
 }
 
 function isCatalogTraversalUrl(url,label){
-  if(!url||isProductDetailUrl(url))return false;
+  if(!url)return false;
   try{
     const u=new URL(url),path=lower(u.pathname),hay=lower(text(label)+" "+url);
+    const travelListing=/(?:hotels?|accommodations?|lodging|rooms?|stays?|properties|activities|attractions|experiences|tours?|tickets?|packages|things\s*to\s*do|destinations?|booking|reservations?|숙박|호텔|객실|투어|관광|체험|액티비티|티켓|입장권|패키지|예약)/i.test(hay) &&
+      (/(?:list|search|category|catalog|collection|destinations?|things-to-do|hotels?|activities|attractions|experiences|tours?|tickets?|packages)(?:[._/\-]|$)/i.test(path) || /(?:전체|목록|검색|지역|도시|국가|추천|인기|상품|예약)/i.test(text(label)));
+    if(travelListing)return true;
+    if(isProductDetailUrl(url))return false;
     if(/(?:goods|product|item|prd)[_-]?(?:list|category|catalog)(?:[._/\-]|$)|(?:category|categories|catalog|collection|collections|shop|store)(?:[._/\-]|$)/i.test(path))return true;
     for(const [rawKey,rawValue] of u.searchParams.entries()){
       const key=lower(rawKey),value=text(rawValue);if(!value)continue;
       if(/^(?:catecd|cate_cd|cateno|cate_no|cate|cat|category|categoryid|category_id|categoryno|category_no|categorycode|category_code|collection|collectionid|collection_id|displaygroup|display_group|groupno|group_no)$/.test(key))return true;
     }
-    return /(?:상품|제품|쇼핑|스토어|공식몰|카탈로그|카테고리|분류|농산물|축산물|수산물|임산물|버섯|식품|생필품|생활용품|뷰티|화장품|전자제품|소형가전|가구|침구|패션|product|products|shop|store|catalog|category|collection|beauty|cosmetic|electronics|appliance|furniture|bedding|fashion)/i.test(hay);
+    return /(?:상품|제품|쇼핑|스토어|공식몰|카탈로그|카테고리|분류|농산물|축산물|수산물|임산물|버섯|식품|생필품|생활용품|뷰티|화장품|전자제품|소형가전|가구|침구|패션|숙박|호텔|객실|리조트|투어|관광|체험|액티비티|티켓|입장권|패키지|예약|product|products|shop|store|catalog|category|collection|beauty|cosmetic|electronics|appliance|furniture|bedding|fashion|hotel|room|resort|stay|property|activity|attraction|experience|tour|ticket|package|booking|reservation)/i.test(hay);
   }catch(_e){return false;}
 }
 function catalogPageUrls(html,baseUrl,maxInput){
@@ -1182,7 +1221,7 @@ async function discoverSupplierProductsStep(supplier,params){
       if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)&&row&&row.imageUrl).length>=targetImageProducts)break;
     }
     let sitemapCount=0;if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)).length<5){const sitemapUrls=await fetchProductSitemapUrls(supplierSiteUrl,controller,80);sitemapCount=sitemapUrls.length;for(const url of sitemapUrls){const priority=productPriorityInfo(supplierInfo.supplierName+" "+url);items.push({id:productIdSeed(url,"상품명 확인 중"),entityKind:"product_reference",productName:"상품명 확인 중",title:"상품명 확인 중",productUrl:url,url,imageUrl:"",imageOriginalUrl:"",imageSource:"sitemap_pending_inspection",videoUrl:"",videoContentUrl:"",videoEmbedUrl:"",videoThumbnailUrl:"",videoSource:"unresolved",supplierId:supplierInfo.supplierId,supplierName:supplierInfo.supplierName,supplierSiteUrl,supplierType:supplierInfo.supplierType,supplierTrustScore:supplierInfo.trustScore,supplierDecision:supplierInfo.supplierDecision,supplierApprovalReady:supplierInfo.approvalReady===true,supplierEvidenceReady:supplierInfo.evidenceReady===true,sourcePageUrl:supplierSiteUrl,jsonLdProduct:false,offerPresent:false,provisionalName:true,priorityScore:priority.score,priorityLabel:priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});}}
-    const dedup=[],seen=new Set();for(const row of items){const key=ProductRanking.productIdentity(row);if(!key||seen.has(key)||!isProductDetailUrl(row.productUrl))continue;seen.add(key);dedup.push(row);if(dedup.length>=Math.max(10,Math.min(120,Number(params&&params.limit)||80)))break;}
+    const dedup=[],seen=new Set();for(const row of items){const canonicalUrl=ProductRanking.canonicalProductUrl(row&&row.productUrl),identity=ProductRanking.productIdentity(row),key=canonicalUrl||identity;if(!key||seen.has(key)||!isProductDetailUrl(row.productUrl))continue;seen.add(key);dedup.push(row);if(dedup.length>=Math.max(10,Math.min(120,Number(params&&params.limit)||80)))break;}
     return{ok:true,items:dedup,retryable:false,trace:{source:"supplier-product-discovery",status:"ok",supplierName:supplierInfo.supplierName,supplierSiteUrl,seedPagesChecked:validInitial.length,sourceCandidateChecked:boundedInitial.length>1,catalogPagesChecked:validInitial.length+catalogPagesChecked,sitemapProductUrls:sitemapCount,count:dedup.length,retryable:false,timeoutMs}};
   }finally{clearTimeout(timer);}
 }
@@ -1371,9 +1410,9 @@ async function inspectProductCandidate(item,params){
       return Object.assign({},row,{researchStatus:invalidPage.reason,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString(),inspectionError:{code:"PRODUCT_PAGE_INVALID",message:invalidPage.detail||invalidPage.reason},publicPublication:false,automaticImport:false});
     }
     const supplierMeta={supplierId:row.supplierId,supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady,evidenceReady:row.supplierEvidenceReady,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
-    const parsed=productRowsFromHtml(page.html,page.url,supplierMeta,20),canonical=ProductRanking.canonicalProductUrl(canonicalPageUrl(page.html,page.url))||productUrl,exact=parsed.find(x=>ProductRanking.canonicalProductUrl(x.productUrl)===canonical)||parsed[0]||{},pageVideo=videoInfoFromHtml(page.html,page.url);
-    const pageTitle=meaningfulProductName(metaContent(page.html,["og:title","twitter:title"])||stripHtml((String(page.html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1])),candidateNames=[exact.productName!=="상품명 확인 중"?exact.productName:"",pageTitle,row.productName].map(meaningfulProductName).filter(name=>name&&!ProductRanking.isGenericProductName(name)),resolvedName=candidateNames[0]||"",name=resolvedName||"상품명 확인 중",image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,pagePrice=priceInfoFromHtml(page.html),pageAvailability=availabilityFromHtml(page.html),price=first(exact.price,pagePrice.price,row.price),priceCurrency=first(exact.priceCurrency,pagePrice.priceCurrency,row.priceCurrency),availability=first(exact.availability,pageAvailability,row.availability),ready=!!resolvedName&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical);
-    return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(canonical,name),productName:name,title:name,provisionalName:!resolvedName,productUrl:canonical,url:canonical,imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",price,priceCurrency,availability,offerPresent:exact.offerPresent===true||!!price,videoUrl:first(exact.videoUrl,pageVideo.videoUrl,row.videoUrl),videoContentUrl:first(exact.videoContentUrl,pageVideo.videoContentUrl,row.videoContentUrl),videoEmbedUrl:first(exact.videoEmbedUrl,pageVideo.videoEmbedUrl,row.videoEmbedUrl),videoThumbnailUrl:first(exact.videoThumbnailUrl,pageVideo.videoThumbnailUrl,row.videoThumbnailUrl),videoSource:first(exact.videoSource,pageVideo.videoSource,row.videoSource),supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,supplierId:first(row.supplierId,exact.supplierId),supplierType:first(row.supplierType,exact.supplierType),supplierTrustScore:Math.max(Number(row.supplierTrustScore)||0,Number(exact.supplierTrustScore)||0),supplierEvidenceReady:row.supplierEvidenceReady===true||exact.supplierEvidenceReady===true,supplierApprovalReady:row.supplierApprovalReady===true||exact.supplierApprovalReady===true,sourcePageUrl:first(row.sourcePageUrl,exact.sourcePageUrl,page.url),verifiedDetailPageUrl:page.url,productPageLive:true,sameSupplierSite:same,inspectionComplete:true,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});
+    const parsed=productRowsFromHtml(page.html,page.url,supplierMeta,20),canonical=ProductRanking.canonicalProductUrl(canonicalPageUrl(page.html,page.url))||productUrl,exact=parsed.find(x=>ProductRanking.canonicalProductUrl(x.productUrl)===canonical)||{},pageVideo=videoInfoFromHtml(page.html,page.url);
+    const pageTitleRaw=meaningfulProductName(metaContent(page.html,["og:title","twitter:title"])||stripHtml((String(page.html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1])),pageTitle=providerEquivalentTitle(pageTitleRaw,row.supplierName)?"":pageTitleRaw,candidateNames=[exact.productName!=="상품명 확인 중"?exact.productName:"",row.productName,pageTitle].map(meaningfulProductName).filter(name=>name&&!ProductRanking.isGenericProductName(name)&&!providerEquivalentTitle(name,row.supplierName)),resolvedName=candidateNames[0]||"",name=resolvedName||"상품명 확인 중",image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,pagePrice=priceInfoFromHtml(page.html),pageAvailability=availabilityFromHtml(page.html),price=first(exact.price,pagePrice.price,row.price),priceCurrency=first(exact.priceCurrency,pagePrice.priceCurrency,row.priceCurrency),availability=first(exact.availability,pageAvailability,row.availability),travelLike=travelInventoryUrl(canonical)||ProductRanking.tourRightProfile({productName:name,title:name,productUrl:canonical,url:canonical}).service===true,travelEvidence=travelLike?travelDetailEvidence(page.html,canonical,exact):{verified:true,source:"not_travel"},ready=!!resolvedName&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical)&&travelEvidence.verified===true;
+    return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(canonical,name),productName:name,title:name,provisionalName:!resolvedName,productUrl:canonical,url:canonical,imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",price,priceCurrency,availability,offerPresent:exact.offerPresent===true||!!price,travelInventoryVerified:travelLike?travelEvidence.verified:undefined,travelInventoryEvidenceSource:travelLike?travelEvidence.source:undefined,videoUrl:first(exact.videoUrl,pageVideo.videoUrl,row.videoUrl),videoContentUrl:first(exact.videoContentUrl,pageVideo.videoContentUrl,row.videoContentUrl),videoEmbedUrl:first(exact.videoEmbedUrl,pageVideo.videoEmbedUrl,row.videoEmbedUrl),videoThumbnailUrl:first(exact.videoThumbnailUrl,pageVideo.videoThumbnailUrl,row.videoThumbnailUrl),videoSource:first(exact.videoSource,pageVideo.videoSource,row.videoSource),supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,supplierId:first(row.supplierId,exact.supplierId),supplierType:first(row.supplierType,exact.supplierType),supplierTrustScore:Math.max(Number(row.supplierTrustScore)||0,Number(exact.supplierTrustScore)||0),supplierEvidenceReady:row.supplierEvidenceReady===true||exact.supplierEvidenceReady===true,supplierApprovalReady:row.supplierApprovalReady===true||exact.supplierApprovalReady===true,sourcePageUrl:first(row.sourcePageUrl,exact.sourcePageUrl,page.url),verifiedDetailPageUrl:page.url,productPageLive:true,sameSupplierSite:same,inspectionComplete:true,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});
   }finally{clearTimeout(timer);}
 }
 

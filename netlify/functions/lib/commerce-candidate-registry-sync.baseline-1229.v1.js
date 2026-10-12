@@ -16,7 +16,7 @@ const IpSlotPolicy = require("./ip-slot-policy.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 
-const VERSION = "commerce-candidate-registry-sync-v1.15.0-durable-admin-front-envelope";
+const VERSION = "commerce-candidate-registry-sync-v1.15.1-tour-same-card-publication";
 const QUEUE_FILE = "commerce-candidate-review-queue.v1.json";
 const PRODUCT_RESEARCH_SOURCE_REF = "country-product-ranking-review";
 const CANDIDATE_REVIEW_SOURCE_REF = "commerce-candidate-review-api";
@@ -90,6 +90,33 @@ function exactProductTitle(candidate,payload){
   ];
   for(const value of candidates){ if(value&&!genericProductTitle(value)) return text(value); }
   return first.apply(null,candidates);
+}
+function normalizedPresentationTitle(value){return lower(value).replace(/&[a-z0-9#]+;/g," ").replace(/[^0-9a-z가-힣]+/g,"").slice(0,220);}
+function tourSameCardPresentation(candidate,payloadInput,assignmentInput){
+  const payload=plain(payloadInput),assignment=plain(assignmentInput),envelope=assignmentFrontEnvelope(assignment);
+  const readiness=plain(payload.researchReadiness),cards=[plain(payload.productCard),plain(readiness.productCard)];
+  const supplier=supplierIdentity(candidate,payload),supplierKey=normalizedPresentationTitle(supplier.name);
+  const rows=[];
+  if(envelope)rows.push({title:envelope.title,productUrl:envelope.productUrl,imageUrl:envelope.imageUrl,source:"front_authority_envelope"});
+  for(const card of cards){
+    rows.push({
+      title:first(card.title,card.productName,card.name,card.itemName,card.displayName,card.sourceTitle),
+      productUrl:safeUrl(first(card.checkoutUrl,card.productUrl,card.externalProductUrl,card.officialProductUrl,card.productPageUrl,card.detailUrl)),
+      imageUrl:safeUrl(first(card.image,card.imageUrl,card.imageOriginalUrl,card.thumbnail,card.thumbnailUrl,card.thumb)),
+      source:"persisted_product_card"
+    });
+  }
+  for(const row of rows){
+    const title=text(row.title),url=safeUrl(row.productUrl),image=safeUrl(row.imageUrl),titleKey=normalizedPresentationTitle(title);
+    if(!title||genericProductTitle(title)||!url||!image)continue;
+    // An independent hotel/property can legitimately have the same display name
+    // as its operating company. Allow that only after the travel inspector has
+    // positively verified an inventory/booking detail page; otherwise a provider
+    // homepage must not become a Tour product card.
+    if(supplierKey&&titleKey===supplierKey&&payload.travelInventoryVerified!==true)continue;
+    return Object.assign({},row,{title,productUrl:url,imageUrl:image});
+  }
+  return null;
 }
 function exactProductImage(candidate,payload){
   const adminRecord=ProductPipeline.administratorProductRecord(candidate); if(adminRecord&&adminRecord.imageUrl)return safeUrl(adminRecord.imageUrl);
@@ -475,10 +502,11 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   // gslot_slot_assignments.priority is ranking priority, not a physical slot.
   // Only a manually pinned assignment may request a concrete slot number.
   const requestedSlot=authoritativeRequestedSlot(payload,assignmentInfo);
-  const destination=first(frontEnvelope&&frontEnvelope.productUrl,exactProductDestination(candidate,payload));
-  const image=first(frontEnvelope&&frontEnvelope.imageUrl,exactProductImage(candidate,payload));
-  const rawTitle=first(frontEnvelope&&frontEnvelope.title,exactProductTitle(candidate,payload));
-  const title=!genericProductTitle(rawTitle)?rawTitle:first(supplier.name,"Verified product");
+  const tourPresentation=page==="tour"?tourSameCardPresentation(candidate,payload,assignmentInfo):null;
+  const destination=first(tourPresentation&&tourPresentation.productUrl,frontEnvelope&&frontEnvelope.productUrl,exactProductDestination(candidate,payload));
+  const image=first(tourPresentation&&tourPresentation.imageUrl,frontEnvelope&&frontEnvelope.imageUrl,exactProductImage(candidate,payload));
+  const rawTitle=first(tourPresentation&&tourPresentation.title,frontEnvelope&&frontEnvelope.title,exactProductTitle(candidate,payload));
+  const title=!genericProductTitle(rawTitle)?rawTitle:(page==="tour"?"":first(supplier.name,"Verified product"));
   const runtimeState=lower(plain(payload.runtimeValidation).state);
   const administratorValidatedOrderPath=!!destination && (!!frontEnvelope || runtimeState==="live" || (payload.productPageLive===true && payload.inspectionComplete===true));
   const firstVerifiedAt=productFirstVerifiedAt(candidate,payload);
@@ -682,6 +710,7 @@ async function syncApprovedCandidates(input){
       if(!verifiedEvidence.length&&explicitAdminReferral&&publicationMarker) verifiedEvidence=syntheticEvidenceFromMarker(candidate,publicationMarker);
       if(!verifiedEvidence.length&&!explicitAdminReferral) continue;
       const publicationRevenue=hasApprovedRevenue?candidateRevenue:[explicitReferralRevenueRow(candidate,assignment)];
+      if(lower(assignment.hub_key)==="tour"&&!tourSameCardPresentation(candidate,sourcePayload(candidate),assignment)) continue;
       const compact=compactPayload(candidate,assignment,avail,publicationRevenue,verifiedEvidence,ipPolicy,{administratorExternalSeller:explicitAdminReferral});
       const row=publicationRevenue.find(entry=>approvedRevenue(entry.status))||publicationRevenue[0]||{};
       const type=lower(row.revenue_type)||"external_referral";

@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.6.2-admin-ledger-url-authority";
+const VERSION = "commerce-product-pipeline-state-v1.6.3-travel-inventory-detail-evidence";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -186,6 +186,10 @@ function researchReadiness(productInput){
   if(ProductRanking.isTemplateOrPlaceholderUrl(card.checkoutUrl)) hardBlockers.push("template_or_placeholder_url");
   if(product.productPageLive === false) hardBlockers.push("product_page_unavailable");
   if(!card.supplierName && !card.supplierUrl) hardBlockers.push("supplier_identity_missing");
+  const placement=plain(product.approvedPlacement||product.selectedPlacement||product.placement),administratorPlaced=placement.administratorSelected===true;
+  const tourProfile=ProductRanking.tourRightProfile({productName:card.title,title:card.title,productUrl:card.checkoutUrl,url:card.checkoutUrl,summary:product.summary,description:product.description});
+  const travelUrl=/\/(?:hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|golf-course|tee-time|ski-resort|spa|wellness|marina|boat-tour|yacht-charter|diving|surfing|rafting|restaurants?|dining|reservation|booking)(?:\/|$)/i.test(card.checkoutUrl||"");
+  if((tourProfile.service===true||travelUrl)&&!administratorPlaced&&product.travelInventoryVerified!==true) hardBlockers.push("travel_inventory_detail_unverified");
 
   if(ProductRanking.isGenericProductName(card.title)) reviewGaps.push("product_title_missing_or_generic");
   if(!card.image) reviewGaps.push("product_image_missing");
