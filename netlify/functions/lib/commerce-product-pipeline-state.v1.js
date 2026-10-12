@@ -10,7 +10,7 @@
 
 const ProductRanking = require("./commerce-product-ranking.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.6.1-admin-structural-integrity";
+const VERSION = "commerce-product-pipeline-state-v1.6.2-admin-ledger-url-authority";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -72,7 +72,16 @@ function validAdministratorProductUrl(value){
   const url=safeHttpsUrl(value);
   if(!url)return "";
   if(/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i.test(url))return "";
-  if(ProductRanking.isTemplateOrPlaceholderUrl(url)||!ProductRanking.isSpecificProductUrl(url))return "";
+  try{
+    const host=new URL(url).hostname.toLowerCase().replace(/^www\./,"");
+    if(host==="example.com"||host==="example.org"||host==="example.net"||host.endsWith(".example.com")||host.endsWith(".example.org")||host.endsWith(".example.net"))return "";
+  }catch(_error){return "";}
+  // The administrator ledger is the Source of Truth after the product has been
+  // read, reviewed and placed. Do not re-run the discovery-time
+  // isSpecificProductUrl() heuristic here: valid seller product pages can use
+  // query-based or vendor-specific URL shapes that the heuristic does not know.
+  // Keep only structural guards that prevent non-pages/placeholders/list roots.
+  if(ProductRanking.isTemplateOrPlaceholderUrl(url)||isRootOrGenericListingUrl(url))return "";
   return url;
 }
 

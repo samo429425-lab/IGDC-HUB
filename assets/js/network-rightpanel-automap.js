@@ -231,22 +231,10 @@
     }
   }
 
-  function isNonRealProductSlot(it){
-    if (!it || typeof it !== 'object') return true;
-    const type = String(it.type || '').trim().toLowerCase();
-    if (it.sample === true || it.placeholder === true || it.isSample === true || it.realProduct === false || type === 'sample' || type === 'placeholder') return true;
-    const href = pickLink(it);
-    if (isBadUrl(href) || isExampleUrl(href)) return true;
-    const image = pickThumb(it).toLowerCase();
-    if (!image || /(?:\/assets\/sample\/|\/assets\/img\/placeholder|placeholder\.(?:png|jpe?g|gif|webp))(?:[?#]|$)/i.test(image)) return true;
-    return false;
-  }
-
   function normalizeItems(raw){
     const arr = Array.isArray(raw) ? raw : [];
     const out = [];
     for (const it of arr){
-      if (isNonRealProductSlot(it)) continue;
       const thumb = pickThumb(it);
       const title = pickTitle(it);
       if (!thumb || !title) continue;
