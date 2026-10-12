@@ -1,4 +1,4 @@
-/* IGDC Global/Region/Country Commerce Control v3.22.2-hold-live-recovery-and-20section-uniform-frontmatch
+/* IGDC Global/Region/Country Commerce Control v3.22.3-psom-group-preserving-placement
  * Region -> country -> large-country subdivision controller.
  * Shared administrator session only. AI automation writes only to the private
  * candidate queue. Explicit administrator front matching is routed through the
@@ -25,7 +25,7 @@
   var LATEST_MANUAL_ACTION_BATCH=10;
   var PRODUCT_PRIVATE_SECTION_CAPACITY=200;
   var PRODUCT_FRONT_SECTION_CAPACITY=100;
-  var FRONT_MATCH_CLIENT_VERSION='20261012-uniform-20section-frontmatch-v12';
+  var FRONT_MATCH_CLIENT_VERSION='20261012-psom-group-preserving-v13';
 
   var PRODUCT_SECTIONS=Object.freeze([
     {key:'home|home_1',page:'home',section:'home_1',label:'홈 · home_1'},{key:'home|home_2',page:'home',section:'home_2',label:'홈 · home_2'},{key:'home|home_3',page:'home',section:'home_3',label:'홈 · home_3'},{key:'home|home_4',page:'home',section:'home_4',label:'홈 · home_4'},{key:'home|home_5',page:'home',section:'home_5',label:'홈 · home_5'},{key:'home|home_6',page:'home',section:'home_6',label:'홈 · Home 6 (웹툰·서적·전자책)'},{key:'home|home_right_top',page:'home',section:'home_right_top',label:'홈 · 우측 상단 (지식·건강·생활)'},{key:'home|home_right_middle',page:'home',section:'home_right_middle',label:'홈 · 우측 중단 (자동차·아웃도어)'},{key:'home|home_right_bottom',page:'home',section:'home_right_bottom',label:'홈 · 우측 하단 (리빙·책방·기타)'},
@@ -867,11 +867,12 @@
   }
   async function aiPlaceCandidateIds(candidateIds,options){
     options=options||{};candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
+    var preferredSectionKey=PRODUCT_SECTION_MAP[text(options.preferredSectionKey)]?text(options.preferredSectionKey):'';
     var requested=candidateIds.length,chunkSize=Math.max(1,Math.min(10,Number(options.chunkSize||8))),processed=0,failed=0,results=[],processedIds=[],counts=productSectionCounts();
     for(var offset=0;offset<candidateIds.length;offset+=chunkSize){
       var chunk=candidateIds.slice(offset,offset+chunkSize),data=null,lastError=null;
       for(var attempt=0;attempt<3&&!data;attempt++){
-        try{data=await api(CONTROL,'product_candidate_psom_place','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:chunk,balanceCounts:counts},45000);}
+        try{data=await api(CONTROL,'product_candidate_psom_place','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:chunk,balanceCounts:counts,preferredSectionKey:preferredSectionKey||null},45000);}
         catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
       }
       if(data){
@@ -946,7 +947,13 @@
         show('선택 후보 '+ids.length+'건 AI 배치 요청 · 배치 '+succeeded+'건 · 실패 '+failed+'건',failed?'warn':'ok');return;
       }
       if(action==='place'&&!placement){
-        var psomResult=await aiPlaceCandidateIds(ids,{onProgress:function(stage,done,total,failCount){setCandidateBulkState(groupKey,'PSOM 정책 배치 · '+done+'/'+total+'건'+(failCount?' · 확인 필요 '+failCount+'건':''),failCount?'warn':'working');}});
+        // A candidate group already represents the PSOM primary destination.
+        // Preserve that destination when the administrator clicks the group's
+        // PSOM placement button. Rebalancing may only be used from unassigned/
+        // repair pools; otherwise multi-fit outdoor/food rows silently drifted
+        // from distribution-extra into Home/right-rail sections.
+        var psomPreferred=PRODUCT_SECTION_MAP[groupKey]?groupKey:'';
+        var psomResult=await aiPlaceCandidateIds(ids,{preferredSectionKey:psomPreferred,onProgress:function(stage,done,total,failCount){setCandidateBulkState(groupKey,'PSOM 정책 배치 · '+done+'/'+total+'건'+(failCount?' · 확인 필요 '+failCount+'건':''),failCount?'warn':'working');}});
         succeeded=Number(psomResult&&psomResult.processed||0);failed=Number(psomResult&&psomResult.failed||0);
         var psomDone={};(psomResult&&psomResult.processedIds||[]).forEach(function(id){psomDone[text(id)]=true;});ids.forEach(function(id){if(psomDone[id])delete candidateSelectedProducts[id];});saveReviewSnapshot();
         var psomText='PSOM 기준 20개 섹션 배치 예정 이동 · 성공 '+succeeded+'건 · 추가 확인 '+failed+'건';setCandidateBulkState(groupKey,psomText,failed?'warn':'ok');show(psomText+'. 프론트 공개는 실행하지 않았으며 실제 프론트 매칭 단계에서 상품 페이지를 다시 검증합니다.',failed?'warn':'ok');return;

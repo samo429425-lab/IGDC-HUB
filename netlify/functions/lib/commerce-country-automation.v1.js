@@ -23,7 +23,7 @@ const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 
-const VERSION = "commerce-country-automation-v3.37.0-global-product-detail-recovery-v3";
+const VERSION = "commerce-country-automation-v3.37.1-psom-group-preserving-placement";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -4314,6 +4314,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
 }
 async function productCandidatePsomPlace(actorId, input) {
   const scope = researchScope(input), actor = text(actorId) || "administrator";
+  const preferredSectionKey = validProductSectionKey(input && input.preferredSectionKey) ? text(input.preferredSectionKey) : "";
   const ids = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 12);
   if (!ids.length) { const error = new Error("PSOM 기준으로 배치할 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
   const rows = await frontSyncSelectCandidates(ids), rowById = new Map(array(rows).map((row) => [text(row && row.id), row]));
@@ -4344,7 +4345,20 @@ async function productCandidatePsomPlace(actorId, input) {
       const product = candidateRuntimeProduct(row, scope);
       if (!product) { results.push({candidateId:id,assigned:false,error:"candidate_product_payload_missing"}); continue; }
       product.candidateId = id; product.id = id;
-      const plan = candidateRuntimePlacementOptions(product, payload), picked = automaticBalancedPlacement(product, plan.options, counts);
+      const plan = candidateRuntimePlacementOptions(product, payload);
+      let picked = null;
+      if (preferredSectionKey) {
+        picked = array(plan.options).find((option) => productPlacementKey(option) === preferredSectionKey) || null;
+        // Never silently send a candidate from one visible PSOM group to another
+        // section. If the current semantic classifier no longer supports the
+        // group's section, keep it visible for review instead of rebalancing it.
+        if (!picked) {
+          results.push({candidateId:id,assigned:false,error:"preferred_psom_section_not_compatible",requestedSectionKey:preferredSectionKey,category:plan.category.primary});
+          continue;
+        }
+      } else {
+        picked = automaticBalancedPlacement(product, plan.options, counts);
+      }
       if (!picked) { results.push({candidateId:id,assigned:false,error:"no_compatible_psom_section"}); continue; }
       const placement = candidateLedgerPlacementRecord(scope, picked, actor, "ai_psom_bulk"), key = productPlacementKey(placement);
       if (!placement || !validProductSectionKey(key)) { results.push({candidateId:id,assigned:false,error:"invalid_psom_section"}); continue; }
@@ -4358,7 +4372,7 @@ async function productCandidatePsomPlace(actorId, input) {
       payload.review = Object.assign({}, plain(payload.review), {state:"pending",nextGate:"administrator_front_match",psomPlacementAt:now,psomPlacementBy:actor});
       await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), {status:"approval_pending",source_payload:payload,updated_at:now});
       counts[key] = Number(counts[key] || 0) + 1;
-      results.push({candidateId:id,assigned:true,sectionKey:key,category:plan.category.primary,score:Number(picked.score||0),source:"psom_saved_research"});
+      results.push({candidateId:id,assigned:true,sectionKey:key,category:plan.category.primary,score:Number(picked.score||0),source:preferredSectionKey?"psom_group_preserved":"psom_saved_research",requestedSectionKey:preferredSectionKey||null});
     } catch (error) {
       // One damaged/slow row must never invalidate already-durable placements in
       // the same Netlify invocation. Return the exact failed candidate so the
