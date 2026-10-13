@@ -294,6 +294,13 @@ function liveQueueRow(candidateInput, relationsInput){
     releaseEligible:false,
     reasons:unique(array(lifecycle.reasons).concat(qualityReasons)),
     researchReadiness:readiness,
+    // Preserve the latest runtime product-page verdict for the administrator UI.
+    // A dead URL remains directly reviewable, but the screen must not relabel it
+    // as live merely because the original URL string still exists.
+    runtimeValidation:plain(payload.runtimeValidation),
+    researchStatus:first(payload.researchStatus,readiness.stage),
+    productPageLive:payload.productPageLive !== false && lower(plain(payload.runtimeValidation).state) !== "dead",
+    inspectionComplete:payload.inspectionComplete === true,
     proposedPlacements:array(payload.proposedPlacements),
     essentialClass:first(ranking.category,payload.productCategory),
     placement:{page:first(placement.page,payload.page),section:first(placement.section,payload.section),slot:first(placement.slot,payload.slot),country:first(placement.country,plain(payload.marketScope).marketCountry),region:first(placement.region,plain(payload.marketScope).marketRegion)},
