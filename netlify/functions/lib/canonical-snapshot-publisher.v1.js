@@ -507,7 +507,7 @@ function validateCandidate(raw, index, context) {
   if (region === "GLOBAL" && !geo.globalExplicit) reasons.push("GLOBAL_REGION_NOT_EXPLICIT");
   const adminAuthority = isObject(item.administratorFrontMatchAuthority) ? item.administratorFrontMatchAuthority : {};
   const explicitAdminPublication = adminAuthority.verified === true &&
-    lower(adminAuthority.publicationStatus) === "publish_requested" &&
+    ["publish_requested","queued","matched","published","active"].includes(lower(adminAuthority.publicationStatus)) &&
     str(adminAuthority.assignmentId) &&
     str(adminAuthority.page) === page && str(adminAuthority.section) === section &&
     normalizeCountry(adminAuthority.country, false) === country &&
