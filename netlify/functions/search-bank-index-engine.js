@@ -586,6 +586,8 @@ const SECTION_ALIAS_PAIRS = [
   ["dist1", "distribution-recommend"], ["dist2", "distribution-sponsor"],
   ["dist3", "distribution-trending"], ["dist4", "distribution-new"],
   ["dist5", "distribution-special"], ["dist6", "distribution-others"], ["dist7", "distribution-right"],
+  // Keep Distribution Extra in the same exact-section alias graph as the other seven rails.
+  ["dist8", "distribution-extra"], ["dist-8", "distribution-extra"], ["distribution8", "distribution-extra"], ["distribution-8", "distribution-extra"],
   ["rightpanel", "rightPanel"], ["right-panel", "rightPanel"],
   ["maru-channel", "social-maru"], ["youtube", "social-youtube"], ["instagram", "social-instagram"],
   ["tiktok", "social-tiktok"], ["facebook", "social-facebook"], ["douyin", "social-douyin"],
