@@ -175,7 +175,7 @@ function snapshotCandidateAllowed(raw, context) {
   const publicationReview = raw.commerceCandidatePublication && raw.commerceCandidatePublication.review && typeof raw.commerceCandidatePublication.review === "object"
     ? raw.commerceCandidatePublication.review : {};
   const explicitAdministratorPublication =
-    (authority.verified === true && ["publish_requested","published","matched"].includes(String(authority.publicationStatus || "").trim().toLowerCase())) ||
+    (authority.verified === true && ["publish_requested","queued","matched","published","active"].includes(String(authority.publicationStatus || "").trim().toLowerCase())) ||
     publicationReview.explicitPublicationRequested === true;
   // Snapshot Engine is a transport/mapper after Canonical publication.  It must
   // not rerun risk/market/revenue eligibility on an authenticated administrator
