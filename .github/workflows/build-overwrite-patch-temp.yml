@@ -1,0 +1,51 @@
+name: Build IGDC overwrite patch
+
+on:
+  push:
+    branches:
+      - artifact/igdc-patch-zip-20261013-19f219
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build overwrite-ready ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf patch
+          mkdir -p patch
+          files=(
+            "assets/js/admin-commerce-country-control.js"
+            "assets/js/socialnetwork-automap-v3.js"
+            "assets/js/tour-automap.js"
+            "commerce-country-control.html"
+            "netlify/functions/lib/canonical-snapshot-publisher.v1.js"
+            "netlify/functions/lib/commerce-candidate-intake.v1.js"
+            "netlify/functions/lib/commerce-country-automation.v1.js"
+            "netlify/functions/lib/commerce-product-pipeline-state.v1.js"
+            "netlify/functions/lib/regional-brokerage-publisher.v1.js"
+            "netlify/functions/sanmaru_engine_v2.js"
+            "netlify/functions/search-bank-engine.js"
+            "netlify/functions/search-bank-index-engine.js"
+            "netlify/functions/snapshot-engine.js"
+          )
+          for f in "${files[@]}"; do
+            mkdir -p "patch/$(dirname "$f")"
+            cp "$f" "patch/$f"
+          done
+          (
+            cd patch
+            zip -r ../IGDC_distribution_hold_pipeline_patch_19f219ff.zip .
+          )
+          unzip -l IGDC_distribution_hold_pipeline_patch_19f219ff.zip
+      - name: Upload patch ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: IGDC_distribution_hold_pipeline_patch_19f219ff
+          path: IGDC_distribution_hold_pipeline_patch_19f219ff.zip
+          if-no-files-found: error
+          retention-days: 1
