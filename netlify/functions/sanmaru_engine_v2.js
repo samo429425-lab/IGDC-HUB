@@ -3324,6 +3324,8 @@ const SANMARU_FRONT_SECTION_ALIAS_PAIRS = [
   ["dist1", "distribution-recommend"], ["dist2", "distribution-sponsor"],
   ["dist3", "distribution-trending"], ["dist4", "distribution-new"],
   ["dist5", "distribution-special"], ["dist6", "distribution-others"], ["dist7", "distribution-right"],
+  // Distribution Extra was the only distribution rail missing from the Sanmaru front alias graph.
+  ["dist8", "distribution-extra"], ["dist-8", "distribution-extra"], ["distribution8", "distribution-extra"], ["distribution-8", "distribution-extra"],
   ["rightpanel", "rightPanel"], ["right-panel", "rightPanel"],
   ["maru-channel", "social-maru"], ["youtube", "social-youtube"], ["instagram", "social-instagram"],
   ["tiktok", "social-tiktok"], ["facebook", "social-facebook"], ["douyin", "social-douyin"],
