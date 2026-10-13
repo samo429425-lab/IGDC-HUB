@@ -232,11 +232,10 @@
     ];
     for (const key of directKeys) {
       const value = pick(it,[key]);
-      if (!isExternal(value) || isBadUrl(value) || isExampleUrl(value)) continue;
-      try {
-        const parsed = new URL(value, window.location.origin);
-        if ((parsed.pathname || "/").replace(/\/+$/, "") === "") continue;
-      } catch(e) { continue; }
+      // A published candidate still needs an inventory/detail destination on
+      // the Tour rail. Provider home/category pages stay out of the slot so a
+      // later research pass can supply the actual hotel/ticket/tour product.
+      if (!isSpecificTourDestination(value)) continue;
       return value;
     }
     return "";
