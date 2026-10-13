@@ -283,11 +283,11 @@
     ];
     for (const key of directKeys) {
       const value = safeText(it[key]).trim();
-      if (!isExternalUrl(value) || isBadPlaceholderUrl(value)) continue;
-      try {
-        const parsed = new URL(value);
-        if ((parsed.pathname || "/").replace(/\/+$/, "") === "") continue;
-      } catch (_e) { continue; }
+      // Canonical publication proves which candidate Admin approved; it does
+      // not turn a provider/category portal into an individual product page.
+      // Keep the exact approved detail URL when it is detail-bearing and let
+      // the research pipeline continue looking for inventory when it is not.
+      if (!isSpecificRightProductUrl(value)) continue;
       return value;
     }
     return "";
