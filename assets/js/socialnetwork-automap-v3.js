@@ -252,6 +252,10 @@
       const hasProductId = Array.from(url.searchParams.entries()).some(function(pair){
         return RIGHT_PRODUCT_ID_QUERY_KEYS.has(String(pair[0] || "").toLowerCase()) && String(pair[1] || "").trim();
       });
+      // Social right is also a commerce surface. A provider/host/agency profile
+      // must not qualify only because it happens to carry goodsid/productid in
+      // its query string.
+      if (/(?:^|\/)(?:hosts?|providers?|operators?|agencies?|partners?|company|about)(?:\/|$)/i.test(low)) return false;
       if (hasProductId) return true;
       if (path === "/") return false;
       if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|brand|brands|best|event|events|home|main|travel|shop|store|list|destinations?|things-to-do)(?:\/|$)/i.test(low)) return false;
