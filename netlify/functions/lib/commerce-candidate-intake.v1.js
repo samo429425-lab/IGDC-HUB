@@ -34,6 +34,7 @@ function clone(v){ return JSON.parse(JSON.stringify(v == null ? null : v)); }
 function bool(v){ return v === true || ["1","true","yes","on","approved","verified","active","enabled"].includes(lower(v)); }
 function array(v){ return Array.isArray(v) ? v : (v == null || v === "" ? [] : [v]); }
 function unique(values){ return Array.from(new Set((values || []).map(text).filter(Boolean))); }
+function administratorPublicationState(value){ return ["publish_requested","queued","matched","published","active"].includes(lower(value)); }
 function first(){ for(const value of arguments){ const out=text(value); if(out) return out; } return ""; }
 function now(){ return new Date().toISOString(); }
 function stable(v){
@@ -186,7 +187,7 @@ function revenueRight(item, tier, policy, affiliateRegistry, candidateCountries)
   const payable=permittedType && (affiliateApproved||directApproved||sponsorApproved);
   const allowTrafficOnlyPublic=revenuePolicy.allowTrafficOnlyPublicRelease===true;
   const review=plain(item&&item.commerceReview);
-  const explicitAdminPublication=bool(first(source.explicitPublicationRequested,review.explicitPublicationRequested,review.publicationRequested)) || lower(review.publicationStatus)==="publish_requested";
+  const explicitAdminPublication=bool(first(source.explicitPublicationRequested,review.explicitPublicationRequested,review.publicationRequested)) || administratorPublicationState(review.publicationStatus);
   const searchContract=plain(item&&item.searchBankContract);
   const sellerResponsibility=plain(item&&item.sellerResponsibility);
   const officialSellerVerified=bool(first(item&&item.officialSource,item&&item.producerVerified,searchContract.officialSource,searchContract.producerVerified,sellerResponsibility.verified));
@@ -282,13 +283,13 @@ function reviewApproval(item, tier, policy){
   const id=first(review.approvalId,listing.approvalId,approval.approvalId,approval.id);
   const at=first(review.approvedAt,listing.approvedAt,approval.approvedAt,approval.updatedAt);
   const publicationStatus=lower(first(review.publicationStatus,listing.publicationStatus,approval.publicationStatus));
-  const explicitPublicationRequested=bool(first(review.explicitPublicationRequested,review.publicationRequested,listing.publicationRequested,approval.publicationRequested)) || publicationStatus==="publish_requested";
+  const explicitPublicationRequested=bool(first(review.explicitPublicationRequested,review.publicationRequested,listing.publicationRequested,approval.publicationRequested)) || administratorPublicationState(publicationStatus);
   if(tier!=="approved_commerce_member" && tier!=="managed_sponsor"){
     return {ok:true,state:"not-required",assignment:assignment||null,approvalId:id||null,approvedAt:at||null,publicationStatus:publicationStatus||null,explicitPublicationRequested};
   }
   const desired=lower(policy.reviewQueue&&policy.reviewQueue.directMemberRequiresApprovalState||"approved");
   const allowed=array(policy.reviewQueue&&policy.reviewQueue.directMemberRequiresAssignmentState||["approved","pinned"]).map(lower);
-  const authoritativePublication=publicationStatus==="publish_requested"&&explicitPublicationRequested===true&&!!id&&!!at;
+  const authoritativePublication=administratorPublicationState(publicationStatus)&&explicitPublicationRequested===true&&!!id&&!!at;
   return {ok:authoritativePublication||(state===desired && allowed.includes(assignment) && !!id && !!at),state,assignment,approvalId:id||null,approvedAt:at||null,publicationStatus:publicationStatus||null,explicitPublicationRequested,publicationAuthority:authoritativePublication?"gslot_slot_assignments.publication_status":null};
 }
 function marketReady(item, policy){
@@ -327,7 +328,7 @@ function administratorBridgeAuthority(item,pos,origin,tier,approval){
   const page=first(scope.page,request.page),section=first(scope.section,request.section);
   const assignmentId=first(request.assignmentId,review.approvalId);
   const placementMatches=!!page&&!!section&&page===text(pos&&pos.page)&&section===text(pos&&pos.section);
-  const publicationRequested=approval&&approval.explicitPublicationRequested===true&&lower(approval.publicationStatus)==="publish_requested";
+  const publicationRequested=approval&&approval.explicitPublicationRequested===true&&administratorPublicationState(approval.publicationStatus);
   const ok=(origin||"")==="admin_review_queue"&&tier==="approved_commerce_member"&&bridge.structuralOnly===true&&bridge.ok===true&&publicationRequested&&!!assignmentId&&!!country&&placementMatches&&!!productDestination(item)&&!!productImage(item);
   return {ok,mode:ok?"administrator_board_bridge":null,assignmentId:assignmentId||null,country:country||null,region:region||null,page:page||null,section:section||null,placementMatches,scopeMatches:!!country,bridgeVersion:text(bridge.version)||null,structuralOnly:bridge.structuralOnly===true,bridgeErrors:array(bridge.errors)};
 }
@@ -356,8 +357,8 @@ function administratorFrontAuthority(item,pos,market,origin){
   const strictScopeMatches=!!authorityCountry&&authorityCountry===scopeCountry&&authorityRegion===scopeRegion;
   const queueScopeMatches=!!scopeCountry&&country===scopeCountry&&scopeRegion===(normalizeRegion(first(publicationRequest.region,publicationScope.region,"NATIONWIDE"),scopeCountry)||"NATIONWIDE");
   const marketMatches=array(market&&market.validRecords).some((record)=>{if(normalizeCountry(record&&record.country)!==country)return false;if(scopeRegion==="NATIONWIDE")return record&&record.nationwide===true;return array(record&&record.regions).map((value)=>normalizeRegion(value,country)).includes(scopeRegion);});
-  const strictOk=authority.verified===true&&!!text(authority.assignmentId)&&lower(authority.publicationStatus)==="publish_requested"&&authority.externalSeller===true&&authority.noIgdcCheckout===true&&authority.noIgdcPayment===true&&strictPlacementMatches&&strictScopeMatches;
-  const queueFallbackOk=(origin||"")==="admin_review_queue"&&review.explicitPublicationRequested===true&&!!text(review.approvalId)&&lower(review.publicationStatus)==="publish_requested"&&queuePlacementMatches&&queueScopeMatches&&!!safeHttpsUrl(productDestination(item));
+  const strictOk=authority.verified===true&&!!text(authority.assignmentId)&&administratorPublicationState(authority.publicationStatus)&&authority.externalSeller===true&&authority.noIgdcCheckout===true&&authority.noIgdcPayment===true&&strictPlacementMatches&&strictScopeMatches;
+  const queueFallbackOk=(origin||"")==="admin_review_queue"&&review.explicitPublicationRequested===true&&!!text(review.approvalId)&&administratorPublicationState(review.publicationStatus)&&queuePlacementMatches&&queueScopeMatches&&!!safeHttpsUrl(productDestination(item));
   return {ok:strictOk||queueFallbackOk,mode:strictOk?"explicit_authority_marker":(queueFallbackOk?"authoritative_admin_review_queue":null),assignmentId:text(authority.assignmentId||review.approvalId)||null,country:country||null,region:scopeRegion||null,placementMatches:strictOk?strictPlacementMatches:queuePlacementMatches,scopeMatches:strictOk?strictScopeMatches:queueScopeMatches,marketMatches};
 }
 
@@ -467,7 +468,7 @@ function queueRecordToItem(entry){
   candidate.directCommerceListing=Object.assign({},plain(candidate.directCommerceListing),plain(entry.directCommerceListing),{sourceTier:queueTier,contractApproved:bool(first(entry.contractApproved,plain(entry.directCommerceListing).contractApproved)),contractStatus:first(entry.contractStatus,plain(entry.directCommerceListing).contractStatus),contractId:first(entry.contractId,plain(entry.directCommerceListing).contractId),expectedNetRevenuePerOrder:first(entry.expectedNetRevenuePerOrder,plain(entry.directCommerceListing).expectedNetRevenuePerOrder)});
   const publicationRequest=plain(entry&&entry.publicationRequest);
   const publicationStatus=lower(first(publicationRequest.status,assignment.publicationStatus));
-  const explicitPublicationRequested=publicationRequest.requested===true || publicationStatus==="publish_requested";
+  const explicitPublicationRequested=publicationRequest.requested===true || administratorPublicationState(publicationStatus);
   candidate.commerceReview=Object.assign({},plain(candidate.commerceReview),review,{assignmentState:first(review.assignmentState,assignment.state),approvalId:first(review.approvalId,assignment.id),approvedAt:first(review.approvedAt,assignment.updatedAt),publicationStatus:publicationStatus||null,explicitPublicationRequested,publicationRequest:clone(publicationRequest)});
   candidate.commerceCandidate=Object.assign({},plain(candidate.commerceCandidate),{sourceTier:queueTier,explicitPublicationRequested,publicationScope:{country:first(publicationRequest.country,assignment.country),region:first(publicationRequest.region,assignment.region,"NATIONWIDE"),page:first(publicationRequest.page,assignment.page),section:first(publicationRequest.section,assignment.section),crossCountryFallback:false}});
   candidate.brokerageContract=Object.assign({},plain(candidate.brokerageContract),revenue,{approved:bool(first(revenue.approved,entry.contractApproved)),status:first(revenue.status,entry.contractStatus),id:first(revenue.contractId,entry.contractId),expectedNetRevenuePerOrder:first(revenue.expectedNetRevenuePerOrder,entry.expectedNetRevenuePerOrder)});
