@@ -146,7 +146,7 @@ function explicitAdminCanonicalItem(item) {
   const review = commercePublication && commercePublication.review || {};
   const authority = item && item.administratorFrontMatchAuthority || {};
   const authorityStatus = text(authority.publicationStatus).toLowerCase();
-  const authorityOk = authority.verified === true && ["publish_requested","published","matched"].includes(authorityStatus);
+  const authorityOk = authority.verified === true && ["publish_requested","queued","matched","published","active"].includes(authorityStatus);
   return publication.status === "published" && !!publication.releaseId && (review.explicitPublicationRequested === true || authorityOk);
 }
 function adminScopeMatches(item, context) {
