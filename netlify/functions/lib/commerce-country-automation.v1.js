@@ -4447,11 +4447,20 @@ async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
   const options=plain(optionsInput),payload=plain(candidate.source_payload),currentUrl=ProductRanking.canonicalProductUrl(first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url)),exclusions=await replacementProductExclusions(scope,text(candidate.id));
   if(currentUrl)exclusions.urls.add(currentUrl);if(text(payload.productIdentity))exclusions.identities.add(text(payload.productIdentity));
   for(const value of array(options.excludedCanonicalUrls)){const url=ProductRanking.canonicalProductUrl(value);if(url)exclusions.urls.add(url);}for(const value of array(options.excludedProductIdentities))if(text(value))exclusions.identities.add(text(value));
-  let discovery=null;try{discovery=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:40,timeoutMs:8000,recoveryMode:true});}catch(_e){discovery=null;}
+  let discovery=null;try{discovery=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:64,timeoutMs:8500,recoveryMode:true});}catch(_e){discovery=null;}
   let rows=array(discovery&&discovery.items);
-  if(!rows.length){try{const fallback=await fallbackDiscoverSupplierProducts(source,scope);rows=array(fallback&&fallback.items);}catch(_e){rows=[];}}
-  const pool=RegionalSelector.prepareProductInspectionPool(rows,{limit:40}).filter(row=>{const url=ProductRanking.canonicalProductUrl(row&&row.productUrl),identity=ProductRanking.productIdentity(row);return !!url&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));}).slice(0,24);
+  // A dead legacy detail page is a recovery problem, not a reason to narrow the
+  // supplier search. Merge the generic same-site fallback whenever the primary
+  // crawl is thin so old TONYMOLY/Englander-style references do not keep seeing
+  // the same small candidate prefix on every revalidation pass.
+  if(rows.length<32){try{const fallback=await fallbackDiscoverSupplierProducts(source,scope),seen=new Set(rows.map(row=>ProductRanking.canonicalProductUrl(productUrl(row))).filter(Boolean));for(const item of array(fallback&&fallback.items)){const url=ProductRanking.canonicalProductUrl(productUrl(item));if(url&&!seen.has(url)){seen.add(url);rows.push(item);}}}catch(_e){}}
+  let pool=RegionalSelector.prepareProductInspectionPool(rows,{limit:64}).filter(row=>{const url=ProductRanking.canonicalProductUrl(row&&row.productUrl),identity=ProductRanking.productIdentity(row);return !!url&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));});
   if(!pool.length)return{ok:false,reason:"replacement_product_not_found",excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size};
+  // Rotate the bounded validation window per held candidate. This keeps network
+  // work finite while allowing repeated held rows from one supplier to explore
+  // different verified products instead of all competing for the first 24.
+  const rotation=parseInt(sha256(text(candidate.id)+"|"+currentUrl).slice(0,8),16)%pool.length;
+  pool=pool.slice(rotation).concat(pool.slice(0,rotation)).slice(0,32);
   for(let offset=0;offset<pool.length;offset+=4){
     let checked=null;try{checked=await RegionalSelector.inspectProductResearchStep(pool.slice(offset,offset+4),{country:scope.country,region:scope.region,timeoutMs:5000,allowSupplierRecovery:false});}catch(_e){checked=null;}
     const liveRows=array(checked&&checked.items).filter(item=>{if(!(item&&item.productPageLive===true&&item.inspectionComplete===true&&item.sameSupplierSite!==false&&ProductRanking.isSpecificProductUrl(productUrl(item))&&!!productImageUrl(item)&&!ProductRanking.isGenericProductName(first(item.productName,item.title))))return false;const url=ProductRanking.canonicalProductUrl(productUrl(item)),identity=ProductRanking.productIdentity(item);return !!url&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));});
