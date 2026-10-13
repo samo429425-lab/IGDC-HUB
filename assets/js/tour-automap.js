@@ -192,6 +192,11 @@
       const queryHasProductId = Array.from(url.searchParams.entries()).some(function(pair){
         return PRODUCT_ID_QUERY_KEYS.has(String(pair[0] || "").toLowerCase()) && String(pair[1] || "").trim();
       });
+      // A product-looking query parameter is not sufficient on a provider,
+      // host, agency or operator profile page (for example /hosts/123?goodsid=).
+      // Keep query-based legacy retail detail pages valid, but never promote a
+      // travel-company/profile route as inventory.
+      if (/(?:^|\/)(?:hosts?|providers?|operators?|agencies?|partners?|company|about)(?:\/|$)/i.test(lowPath)) return false;
       if (queryHasProductId) return true;
       if (path === "/") return false;
       if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|best|event|events|home|main|travel|shop|store|list|destinations?|things-to-do)(?:\/|$)/i.test(lowPath)) return false;
@@ -280,9 +285,11 @@
       const thumb = pick(it, ["thumb", "image", "imageUrl", "imageOriginalUrl", "thumbnail", "thumbnail_url", "img", "photo", "cover", "coverUrl", "thumbnailUrl"]);
       const sourceUrl = pickProductDestination(it);
       const id = stableTourContentId(it, collection, index);
-      // The Tour rail is a transaction/detail surface.  Do not publish a card
-      // whose only destination is a provider homepage, search page or category.
-      if (!title || !thumb || !sourceUrl || !id) continue;
+      const genericTitle = /^(?:본문\s*바로가기|바로가기|홈|메인|여행\s*홈|여행,?\s*액티비티,?\s*투어,?\s*렌트카\s*예약|more|view|home|main|travel)$/i.test(String(title || "").replace(/\s+/g," ").trim());
+      // The Tour rail is a transaction/detail surface. Do not publish a card
+      // whose only destination is a provider/profile/listing route or whose
+      // scraped title is site chrome rather than the actual inventory title.
+      if (!title || genericTitle || !thumb || !sourceUrl || !id) continue;
       out.push({
         id, title, thumb, link: contentHref(id), sourceUrl,
         affiliateOutboundUrl: pick(it, ["affiliateOutboundUrl","affiliate_outbound_url"]),
