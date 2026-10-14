@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.22.3-url-authoritative-dedup";
+const VERSION = "commerce-product-ranking-v1.22.4-preserve-case-sensitive-query-keys";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -273,9 +273,12 @@ function canonicalProductUrl(value) {
       if (!key || TRACKING_QUERY_KEYS.has(key) || key.startsWith("utm_")) continue;
       const valuePart = text(rawValue);
       if (!valuePart && !PRODUCT_ID_QUERY_KEYS.has(key)) continue;
-      params.push([key, valuePart]);
+      // Query parameter names can be case-sensitive on the seller's server.
+      // Normalize the key for filtering/identity, NOT for the real checkout URL
+      // (e.g. goodsNo=5976 must not silently become goodsno=5976).
+      params.push([rawKey, valuePart]);
     }
-    params.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+    params.sort((a, b) => lower(a[0]).localeCompare(lower(b[0])) || a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]));
     url.search = "";
     for (const [key, valuePart] of params) url.searchParams.append(key, valuePart);
     return url.toString();

@@ -1,0 +1,23 @@
+"use strict";
+const assert=require("node:assert/strict");
+const ProductRanking=require("../netlify/functions/lib/commerce-product-ranking.v1.js");
+const Selector=require("../netlify/functions/regional-brokerage-autoselector.js");
+const original="https://englander.co.kr/goods/goods_view.php?goodsno=5976";
+const corrected="https://englander.co.kr/goods/goods_view.php?goodsNo=5976";
+assert.equal(ProductRanking.canonicalProductUrl(corrected),corrected,"preserve exact query key casing for seller navigation");
+assert.equal(ProductRanking.canonicalProductUrl(original),original);
+assert.equal(ProductRanking.productIdFromUrl(corrected),ProductRanking.productIdFromUrl(original),"dedup keeps stable product identifier");
+assert(ProductRanking.isSpecificProductUrl(corrected));
+const tonymoly="https://tonymoly.com/set/products/premium-rx-swallow-set.do?i_sproductcd=TM20240829000149680";
+assert.equal(ProductRanking.canonicalProductUrl(tonymoly),tonymoly);
+const soldOut=Selector.productPageInvalidState('<html><body><div>해당 상품은 현재 구매하실 수 없습니다. 홈으로 이동합니다.</div></body></html>',tonymoly,tonymoly,"https://tonymoly.com/");
+assert.equal(soldOut.invalid,true,"seller unavailable message must be detected");
+const wrong=Selector.productPageInvalidState('<html><script>alert("잘못된 접근입니다.");location.href="/";</script></html>',original,original,"https://englander.co.kr/");
+assert.equal(wrong.invalid,true,"script-guarded invalid product must be detected");
+// A click on the held thumbnail is an independent direct link, never routed to the recovery action.
+const fs=require('node:fs'),path=require('node:path');
+const client=fs.readFileSync(path.join(__dirname,'../assets/js/admin-commerce-country-control.js'),'utf8');
+assert(client.includes("url||image")&&client.includes("data-review-link=\"1\""));
+assert(client.includes('data-hold-verify-one'));
+assert(client.includes('recoverySuggestions'));
+console.log('PASS: query case preserved; product identity stable; Tonymoly sold-out; Englander invalid script; original click and separate verification UI (7 checks)');

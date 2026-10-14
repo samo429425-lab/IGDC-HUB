@@ -165,6 +165,12 @@ function clamp(value, min, max, fallback) {
 }
 function iso() { return new Date().toISOString(); }
 function sha256(value) { return crypto.createHash("sha256").update(String(value || "")).digest("hex"); }
+// Local deterministic country/region research rotation. This controller must
+// not reference the selector's private (non-exported) stableOffset helper.
+function stableOffset(value,size) {
+  let hash=0; for(const ch of String(value||""))hash=((hash<<5)-hash+ch.charCodeAt(0))|0;
+  return size?Math.abs(hash)%size:0;
+}
 function normalizeCountry(value) { return MarketSaleScope.normalizeCountry(value); }
 function normalizeRegion(value, country) { return MarketSaleScope.normalizeRegion(value, country); }
 function safeUrl(value) {
@@ -317,7 +323,9 @@ function sanitizeSetting(input) {
     mode: settingMode, enabled: settingMode !== "off",
     intervalDays: Math.round(clamp(raw.intervalDays, 1, 30, DEFAULT_INTERVAL_DAYS)),
     expandSubdivisions: raw.expandSubdivisions === true,
-    maxCandidates: Math.round(clamp(raw.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES))
+    maxCandidates: Math.round(clamp(raw.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES)),
+    // The operator directive is a search hint, not a trust/safety override.
+    researchDirective: ["country", "subdivision"].includes(scopeType) ? text(raw.researchDirective).slice(0, 1200) : ""
   };
 }
 function rowToSetting(row) {
@@ -329,6 +337,7 @@ function rowToSetting(row) {
     mode: mode(rule.mode, row && row.enabled === false ? "off" : "inherit"), enabled: row && row.enabled !== false,
     intervalDays: Math.round(clamp(rule.intervalDays, 1, 30, DEFAULT_INTERVAL_DAYS)),
     expandSubdivisions: rule.expandSubdivisions === true, maxCandidates: Math.round(clamp(rule.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES)),
+    researchDirective: ["country", "subdivision"].includes(lower(rule.scopeType)) ? text(rule.researchDirective).slice(0, 1200) : "",
     lastRunAt: text(rule.lastRunAt) || null, lastRunSummary: plain(rule.lastRunSummary), updatedAt: text(row && row.updated_at) || null
   };
 }
@@ -362,10 +371,13 @@ function effectiveSetting(state, countryCode, subdivisionCode) {
   const activeChain = chain.filter((item) => item && item.mode && item.mode !== "inherit");
   const intervalSource = activeChain.find((item) => item && item.intervalDays) || state.master;
   const candidateSource = activeChain.find((item) => item && item.maxCandidates) || state.master;
+  // Research directives follow the selected geographic scope, even if its mode is "inherit".
+  const directiveSource = chain.find((item) => item && ["country", "subdivision"].includes(item.scopeType) && text(item.researchDirective));
   return {
     mode: selected.mode || "off", enabled: selected.mode === "auto", sourceId: selected.id,
     intervalDays: intervalSource.intervalDays || DEFAULT_INTERVAL_DAYS,
     maxCandidates: candidateSource.maxCandidates || DEFAULT_MAX_CANDIDATES,
+    researchDirective: directiveSource ? text(directiveSource.researchDirective).slice(0, 1200) : "",
     expandSubdivisions: !!(countrySetting && countrySetting.expandSubdivisions),
     lastRunAt: (subdivision || countrySetting || {}).lastRunAt || null,
     lastRunSummary: (subdivision || countrySetting || {}).lastRunSummary || {},
@@ -1257,7 +1269,7 @@ function mergeCandidateItems(primary, secondary, limit) {
 
 async function updateRunState(scope, currentSetting, report, actorId) {
   const scopeType = scope.region && scope.region !== "NATIONWIDE" ? "subdivision" : "country";
-  const input = { scopeType, countryCode: scope.country, subdivisionCode: scope.region, mode: currentSetting && currentSetting.mode || "inherit", intervalDays: currentSetting && currentSetting.intervalDays || DEFAULT_INTERVAL_DAYS, maxCandidates: currentSetting && currentSetting.maxCandidates || DEFAULT_MAX_CANDIDATES, expandSubdivisions: currentSetting && currentSetting.expandSubdivisions === true };
+  const input = { scopeType, countryCode: scope.country, subdivisionCode: scope.region, mode: currentSetting && currentSetting.mode || "inherit", intervalDays: currentSetting && currentSetting.intervalDays || DEFAULT_INTERVAL_DAYS, maxCandidates: currentSetting && currentSetting.maxCandidates || DEFAULT_MAX_CANDIDATES, expandSubdivisions: currentSetting && currentSetting.expandSubdivisions === true, researchDirective: text(currentSetting && currentSetting.researchDirective) };
   const sanitized = sanitizeSetting(input); const id = settingId(scopeType, sanitized);
   const existingRows = await policyRows(); const existing = existingRows.find((row) => text(row.id) === id);
   const oldRule = plain(existing && existing.rule);
@@ -1521,7 +1533,13 @@ function augmentTourRightResearchPlan(planInput, scopeInput, policyInput) {
   plan.rows=rows;plan.tasks=tasks;plan.diagnostics=Object.assign({},plain(plan.diagnostics),{tourRightCommercialPolicy:true,tourRightQueriesAdded:added,tourRightLocale:locale,tourRightOutdoorAlways:true,tourRightTravelServiceThrottled:!explicitTour,tourRightDiningAuxiliary:explicitDining});return plan;
 }
 function administratorPriorityResearchPhrases(policyInput){
-  const policy=plain(policyInput),out=[],seen=new Set(),values=array(policy.manualPriorityTargets).concat(array(policy.priorityDirections));
+  const policy=plain(policyInput),out=[],seen=new Set(),values=[];
+  // Country/region operator search instructions have priority within the bounded
+  // discovery plan. They cannot change verification gates or publication state.
+  if(text(policy.researchDirective)){
+    values.push(...text(policy.researchDirective).slice(0,1200).split(/[\n;；。]+|(?<=[.!?])\s+/).map((part)=>part.trim()).filter(Boolean));
+  }
+  values.push(...array(policy.manualPriorityTargets),...array(policy.priorityDirections));
   if(text(policy.finalDecision))values.push(policy.finalDecision);
   for(const raw of values){
     let phrase=text(raw).replace(/https?:\/\/\S+/gi," ").replace(/\s+/g," ").trim();
@@ -1590,7 +1608,7 @@ async function beginResearchJob(actorId, input, event) {
   // inspected again merely to fill a larger operator quota.
   const researchSignature=sha256(JSON.stringify({
     scope:{country:scope.country,region:scope.region},
-    effective:{mode:effective.mode,enabled:effective.enabled===true,intervalDays:Number(effective.intervalDays||0),maxCandidates:Number(effective.maxCandidates||DEFAULT_MAX_CANDIDATES),expandSubdivisions:effective.expandSubdivisions===true,researchRounds},
+    effective:{mode:effective.mode,enabled:effective.enabled===true,intervalDays:Number(effective.intervalDays||0),maxCandidates:Number(effective.maxCandidates||DEFAULT_MAX_CANDIDATES),expandSubdivisions:effective.expandSubdivisions===true,researchDirective:text(effective.researchDirective),researchRounds},
     categoryWeights:plain(context.effectiveCategoryWeights),
     policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},
     marketSignal:{active:context.marketSignalPlan&&context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan&&context.marketSignalPlan.categoryWeights)}
@@ -1615,7 +1633,7 @@ async function beginResearchJob(actorId, input, event) {
   const newCandidateTarget=perRunCandidateLimit*researchRounds;
   const targetTotal=preservedCandidates.length+newCandidateTarget;
 
-  const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,scopeAuthority:"administrator-selected",ignoreRequestGeo:true,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},basePlan=augmentAdministratorPriorityResearchPlan(augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope,context.policyControl),scope,context.policyControl),plan=expandSupplierResearchRounds(basePlan,scope,researchRounds),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
+  const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,scopeAuthority:"administrator-selected",ignoreRequestGeo:true,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},basePlan=augmentAdministratorPriorityResearchPlan(augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope,context.policyControl),scope,Object.assign({},context.policyControl,{researchDirective:text(effective.researchDirective)})),plan=expandSupplierResearchRounds(basePlan,scope,researchRounds),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
   const novelSeeds=filterKnownSupplierItems(manualSeeds.concat(array(plan.seeds)),knownSupplierKeys);
   const initialStatus=newCandidateTarget<=0?"complete":(array(plan.tasks).length?"searching":"inspecting");
   const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
@@ -2627,7 +2645,7 @@ async function fallbackDiscoverSupplierProducts(sourceInput, scopeInput) {
         let raw=fallbackDecodeHtml(m[1]).replace(/\\u002f/gi,'/').replace(/\\\//g,'/');let absolute='';try{absolute=new URL(raw,base).toString();}catch(_e){continue;}
         if(!fallbackLikelyProductUrl(absolute,supplierSiteUrl))continue;let key='';try{const u=new URL(absolute);u.hash='';key=lower(u.toString());}catch(_e){continue;}if(seen.has(key))continue;seen.add(key);
         const left=Math.max(0,m.index-900),right=Math.min(html.length,rx.lastIndex+1400),context=html.slice(left,right),nameMatch=context.match(/(?:data-(?:goods|product)-name|title|alt)\s*=\s*["']([^"']{2,220})["']/i),tagMatch=context.match(/<(?:strong|em|span|p|div|a)\b[^>]*>([^<>]{2,220})<\/(?:strong|em|span|p|div|a)>/i),name=fallbackDecodeHtml(first(nameMatch&&nameMatch[1],tagMatch&&tagMatch[1],'상품명 확인 중')).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,220)||'상품명 확인 중',imgMatch=context.match(/<img\b[^>]*(?:data-original|data-lazy-src|data-src|src)\s*=\s*["']([^"']+)["']/i);let image='';if(imgMatch){try{image=new URL(fallbackDecodeHtml(imgMatch[1]),base).toString();}catch(_e){image='';}}
-        found.push({id:'product_ref_fallback_'+sha256(key).slice(0,20),entityKind:'product_reference',productName:name,title:name,productUrl:absolute,url:absolute,imageUrl:image,imageOriginalUrl:image,imageSource:image?'fallback_product_context':'',supplierId:text(source.supplierId),supplierName:text(source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),supplierTrustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),supplierApprovalReady:source.approvalReady===true,supplierEvidenceReady:source.evidenceReady===true,sourcePageUrl:base,jsonLdProduct:false,offerPresent:false,provisionalName:name==='상품명 확인 중',productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:'discovered_fallback',slotDecision:'undecided',publicPublication:false,automaticImport:false});
+        found.push({id:'product_ref_fallback_'+sha256(key).slice(0,20),entityKind:'product_reference',productName:name,title:name,productUrl:absolute,url:absolute,imageUrl:image,imageOriginalUrl:image,imageSource:image?'fallback_product_context':'',supplierId:text(source.supplierId),supplierName:text(source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),supplierTrustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),supplierApprovalReady:source.approvalReady===true,supplierEvidenceReady:source.evidenceReady===true,sourcePageUrl:base,jsonLdProduct:false,offerPresent:false,provisionalName:name==='상품명 확인 중',productPageLive:null,sameSupplierSite:true,inspectionComplete:false,researchStatus:'discovered_fallback',slotDecision:'undecided',publicPublication:false,automaticImport:false});
         if(found.length>=80)break;
       }
       if(found.length>=80)break;
@@ -4416,12 +4434,15 @@ function heldCandidateRecoverySource(candidateInput){
   const candidate=plain(candidateInput),payload=plain(candidate.source_payload),supplier=plain(payload.supplier),card=plain(payload.productCard),readiness=plain(payload.researchReadiness),readinessCard=plain(readiness.productCard),mapping=plain(payload.productMapping),current=ProductRanking.canonicalProductUrl(first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url));
   let supplierSiteUrl=safeUrl(first(supplier.officialUrl,supplier.url,payload.supplierSiteUrl,card.supplierUrl,readinessCard.supplierUrl));
   if(supplierSiteUrl&&ProductRanking.isSpecificProductUrl(supplierSiteUrl))supplierSiteUrl=runtimeProductOrigin(supplierSiteUrl);
+  // Previous supplier metadata may refer to a stale or unrelated website.
+  // The existing held product host is the only safe same-seller recovery scope.
+  if(current&&supplierSiteUrl&&!sameSupplierSite(current,supplierSiteUrl))supplierSiteUrl=runtimeProductOrigin(current);
   if(!supplierSiteUrl&&current)supplierSiteUrl=runtimeProductOrigin(current);
   if(!supplierSiteUrl)return null;
   const sourcePages=[],addSourcePage=(value)=>{const url=safeUrl(value);if(!url||!sameSupplierSite(supplierSiteUrl,url)||ProductRanking.canonicalProductUrl(url)===current)return;if(!sourcePages.includes(url))sourcePages.push(url);};
   [payload.sourcePageUrl,payload.discoverySourcePageUrl,payload.categoryPageUrl,payload.catalogPageUrl,payload.productListUrl,mapping.sourcePageUrl,card.sourcePageUrl,readinessCard.sourcePageUrl].forEach(addSourcePage);
   for(const value of array(payload.sourcePageUrls))addSourcePage(value);
-  return{url:supplierSiteUrl,supplierSiteUrl,supplierId:first(supplier.id,payload.supplierId),supplierName:first(supplier.name,payload.supplierName,card.supplierName,readinessCard.supplierName,candidate.title),title:first(supplier.name,payload.supplierName,candidate.title),name:first(supplier.name,payload.supplierName,candidate.title),supplierType:first(supplier.type,payload.supplierType),trustScore:Number(first(supplier.trustScore,payload.supplierTrustScore))||0,supplierDecision:first(supplier.decision,payload.supplierDecision),approvalReady:supplier.approvalReady===true||payload.supplierApprovalReady===true,evidenceReady:supplier.evidenceReady===true||payload.supplierEvidenceReady===true,supplyLane:payload.supplyLane,discoverySource:payload.discoverySource,officialDirectoryUrl:payload.officialDirectoryUrl,sourcePageUrl:sourcePages[0]||"",sourcePageUrls,referenceProductUrl:current||""};
+  return{url:supplierSiteUrl,supplierSiteUrl,supplierId:first(supplier.id,payload.supplierId),supplierName:first(supplier.name,payload.supplierName,card.supplierName,readinessCard.supplierName,candidate.title),title:first(supplier.name,payload.supplierName,candidate.title),name:first(supplier.name,payload.supplierName,candidate.title),supplierType:first(supplier.type,payload.supplierType),trustScore:Number(first(supplier.trustScore,payload.supplierTrustScore))||0,supplierDecision:first(supplier.decision,payload.supplierDecision),approvalReady:supplier.approvalReady===true||payload.supplierApprovalReady===true,evidenceReady:supplier.evidenceReady===true||payload.supplierEvidenceReady===true,supplyLane:payload.supplyLane,discoverySource:payload.discoverySource,officialDirectoryUrl:payload.officialDirectoryUrl,sourcePageUrl:sourcePages[0]||"",sourcePageUrls:sourcePages,referenceProductUrl:current||""};
 }
 async function replacementProductExclusions(scope,candidateIdInput){
   const candidateId=text(candidateIdInput),urls=new Set(),identities=new Set();
@@ -4442,31 +4463,104 @@ async function replacementProductAlreadyInLedger(productInput,candidateIdInput){
     return{duplicate:!!duplicate,reason:duplicate?"replacement_already_in_global_ledger":null,candidateId:duplicate?text(duplicate.id):null};
   }catch(_error){return{duplicate:true,reason:"global_duplicate_check_unavailable",inconclusive:true};}
 }
+// A valid supplier catalogue does not prove that an arbitrary replacement is the
+// ORIGINAL held product. Only an immutable product reference may auto-repair the
+// existing candidate; another real product is a separate, review-only suggestion.
+function heldProductReference(urlInput){
+  const url=safeUrl(urlInput);if(!url)return"";
+  try{
+    const u=new URL(url),keys=new Set(["goodsno","goodsid","productno","productid","productcode","prdno","itemno","itemid","sku","isproductcd"]);
+    for(const [key,value] of u.searchParams.entries()){
+      const normalized=lower(key).replace(/[_-]/g,"");
+      if(keys.has(normalized)&&text(value))return normalized+":"+lower(value);
+    }
+    return"";
+  }catch(_error){return"";}
+}
+function heldDetailCaseVariants(urlInput){
+  const original=safeUrl(urlInput);if(!original)return[];
+  const variants=[],known={goodsno:"goodsNo",goodsid:"goodsId",productno:"productNo",productid:"productId",productcode:"productCode",prdno:"prdNo",itemno:"itemNo",itemid:"itemId"};
+  try{
+    const url=new URL(original);
+    for(const [key,value] of url.searchParams.entries()){
+      const canonical=known[lower(key).replace(/[_-]/g,"")];
+      if(!canonical||key===canonical||!text(value))continue;
+      const alternate=new URL(original);const entries=Array.from(alternate.searchParams.entries());alternate.search="";
+      for(const [name,part] of entries)alternate.searchParams.append(name===key?canonical:name,part);
+      const candidate=safeUrl(alternate.toString());if(candidate&&candidate!==original&&!variants.includes(candidate))variants.push(candidate);
+    }
+  }catch(_error){}
+  return variants.slice(0,3);
+}
+function heldRecoveryReferenceMatches(originalInput,recoveredInput){
+  const original=safeUrl(originalInput),recovered=safeUrl(recoveredInput),reference=heldProductReference(original);
+  return !!(reference&&recovered&&sameSupplierSite(original,recovered)&&heldProductReference(recovered)===reference);
+}
+function heldReplacementSuggestion(rowInput,sourceInput){
+  const row=plain(rowInput),source=plain(sourceInput),url=productUrl(row),image=productImageUrl(row),title=first(row.productName,row.title);
+  if(!url||!title||!image||!sameSupplierSite(source.supplierSiteUrl,url))return null;
+  return{productName:title,productUrl:url,imageUrl:image,supplierName:first(source.supplierName,row.supplierName),status:"page_checked_alternative_requires_administrator_approval"};
+}
 async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
-  const candidate=plain(candidateInput),source=heldCandidateRecoverySource(candidate);if(!source)return{ok:false,reason:"supplier_site_missing"};
+  const candidate=plain(candidateInput),source=heldCandidateRecoverySource(candidate);if(!source)return{ok:false,reason:"supplier_site_missing",suggestions:[]};
   const options=plain(optionsInput),payload=plain(candidate.source_payload),currentUrl=ProductRanking.canonicalProductUrl(first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url)),exclusions=await replacementProductExclusions(scope,text(candidate.id));
-  if(currentUrl)exclusions.urls.add(currentUrl);if(text(payload.productIdentity))exclusions.identities.add(text(payload.productIdentity));
-  for(const value of array(options.excludedCanonicalUrls)){const url=ProductRanking.canonicalProductUrl(value);if(url)exclusions.urls.add(url);}for(const value of array(options.excludedProductIdentities))if(text(value))exclusions.identities.add(text(value));
-  let discovery=null;try{discovery=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:64,timeoutMs:8500,recoveryMode:true});}catch(_e){discovery=null;}
-  let rows=array(discovery&&discovery.items);
-  // A dead legacy detail page is a recovery problem, not a reason to narrow the
-  // supplier search. Merge the generic same-site fallback whenever the primary
-  // crawl is thin so old TONYMOLY/Englander-style references do not keep seeing
-  // the same small candidate prefix on every revalidation pass.
-  if(rows.length<32){try{const fallback=await fallbackDiscoverSupplierProducts(source,scope),seen=new Set(rows.map(row=>ProductRanking.canonicalProductUrl(productUrl(row))).filter(Boolean));for(const item of array(fallback&&fallback.items)){const url=ProductRanking.canonicalProductUrl(productUrl(item));if(url&&!seen.has(url)){seen.add(url);rows.push(item);}}}catch(_e){}}
-  let pool=RegionalSelector.prepareProductInspectionPool(rows,{limit:64}).filter(row=>{const url=ProductRanking.canonicalProductUrl(row&&row.productUrl),identity=ProductRanking.productIdentity(row);return !!url&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));});
-  if(!pool.length)return{ok:false,reason:"replacement_product_not_found",excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size};
-  // Rotate the bounded validation window per held candidate. This keeps network
-  // work finite while allowing repeated held rows from one supplier to explore
-  // different verified products instead of all competing for the first 24.
-  const rotation=parseInt(sha256(text(candidate.id)+"|"+currentUrl).slice(0,8),16)%pool.length;
-  pool=pool.slice(rotation).concat(pool.slice(0,rotation)).slice(0,32);
-  for(let offset=0;offset<pool.length;offset+=4){
-    let checked=null;try{checked=await RegionalSelector.inspectProductResearchStep(pool.slice(offset,offset+4),{country:scope.country,region:scope.region,timeoutMs:5000,allowSupplierRecovery:false});}catch(_e){checked=null;}
-    const liveRows=array(checked&&checked.items).filter(item=>{if(!(item&&item.productPageLive===true&&item.inspectionComplete===true&&item.sameSupplierSite!==false&&ProductRanking.isSpecificProductUrl(productUrl(item))&&!!productImageUrl(item)&&!ProductRanking.isGenericProductName(first(item.productName,item.title))))return false;const url=ProductRanking.canonicalProductUrl(productUrl(item)),identity=ProductRanking.productIdentity(item);return !!url&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));});
-    for(const live of liveRows){const globalCheck=await replacementProductAlreadyInLedger(live,text(candidate.id));if(globalCheck.duplicate===true)continue;return{ok:true,product:live,source,currentUrl,recoveredUrl:productUrl(live),excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size};}
+  if(currentUrl)exclusions.urls.add(currentUrl);
+  if(text(payload.productIdentity))exclusions.identities.add(text(payload.productIdentity));
+  for(const value of array(options.excludedCanonicalUrls)){const url=ProductRanking.canonicalProductUrl(value);if(url)exclusions.urls.add(url);}
+  for(const value of array(options.excludedProductIdentities))if(text(value))exclusions.identities.add(text(value));
+  // Some legacy PHP storefronts use case-sensitive query keys (goodsno vs
+  // goodsNo). Preserve the exact immutable product number while probing a
+  // bounded corrected URL; never assume a functioning homepage is a product.
+  const variants=heldDetailCaseVariants(currentUrl);
+  for(const variant of variants){
+    const seed={productUrl:variant,url:variant,productName:"",title:"",sourceTitle:"",imageUrl:"",imageOriginalUrl:"",supplierId:source.supplierId,supplierName:source.supplierName,supplierSiteUrl:source.supplierSiteUrl};
+    let verified=null;
+    try{const response=await RegionalSelector.inspectProductResearchStep([seed],{country:scope.country,region:scope.region,timeoutMs:5500,allowSupplierRecovery:false});verified=plain(array(response&&response.items)[0]);}catch(_error){verified=null;}
+    const resolved=ProductRanking.canonicalProductUrl(productUrl(verified)),finalUrl=safeUrl(first(verified&&verified.verifiedDetailPageUrl,resolved));
+    if(!verified||!candidateRuntimeHealth(verified).live||verified.inspectionComplete!==true||verified.sameSupplierSite===false||!productImageUrl(verified)||!ProductRanking.isSpecificProductUrl(resolved))continue;
+    if(!heldRecoveryReferenceMatches(currentUrl,resolved)||!heldRecoveryReferenceMatches(currentUrl,finalUrl))continue;
+    const globalCheck=await replacementProductAlreadyInLedger(verified,text(candidate.id));if(globalCheck.duplicate===true)continue;
+    return{ok:true,kind:"same_product_url_repair",product:verified,source,currentUrl,recoveredUrl:resolved,verifiedDetailPageUrl:finalUrl,suggestions:[],checkedVariants:variants.length};
   }
-  return{ok:false,reason:"replacement_product_validation_failed",excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size};
+  // Supplier discovery is intentionally independent of regional brand names.
+  // Search official catalogues using the original source-page hints, then
+  // inspect real detail pages. A different product ID must NOT overwrite the
+  // original candidate, even if its title or photograph looks similar.
+  let discovery=null;try{discovery=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:120,timeoutMs:8500,recoveryMode:false});}catch(_error){discovery=null;}
+  let rows=array(discovery&&discovery.items);
+  if(rows.length<48){
+    try{const fallback=await fallbackDiscoverSupplierProducts(source,scope),seen=new Set(rows.map(row=>ProductRanking.canonicalProductUrl(productUrl(row))).filter(Boolean));for(const item of array(fallback&&fallback.items)){const url=ProductRanking.canonicalProductUrl(productUrl(item));if(url&&!seen.has(url)){seen.add(url);rows.push(item);}}}catch(_error){}
+  }
+  let pool=RegionalSelector.prepareProductInspectionPool(rows,{limit:120}).filter(row=>{
+    const url=ProductRanking.canonicalProductUrl(row&&row.productUrl),identity=ProductRanking.productIdentity(row);
+    return !!url&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity))&&sameSupplierSite(source.supplierSiteUrl,url);
+  });
+  if(!pool.length)return{ok:false,reason:"replacement_product_not_found",suggestions:[],excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size};
+  // First validate exact product-number matches; the remaining catalogue is
+  // sampled only to propose alternatives for administrator review.
+  const originalRef=heldProductReference(currentUrl),exact=originalRef?pool.filter(row=>heldProductReference(productUrl(row))===originalRef):[];
+  const others=pool.filter(row=>!exact.includes(row));
+  const rotation=(parseInt(sha256(text(candidate.id)+"|"+currentUrl).slice(0,8),16)+Math.max(0,Number(options.pass)||0)*24)%Math.max(others.length,1);
+  pool=exact.concat(others.slice(rotation).concat(others.slice(0,rotation))).slice(0,24);
+  const suggestions=[];
+  for(let offset=0;offset<pool.length;offset+=4){
+    let checked=null;try{checked=await RegionalSelector.inspectProductResearchStep(pool.slice(offset,offset+4),{country:scope.country,region:scope.region,timeoutMs:5000,allowSupplierRecovery:false});}catch(_error){checked=null;}
+    const liveRows=array(checked&&checked.items).filter(item=>{
+      if(!candidateRuntimeHealth(item).live||item.inspectionComplete!==true||item.sameSupplierSite===false||!ProductRanking.isSpecificProductUrl(productUrl(item)))return false;
+      const url=ProductRanking.canonicalProductUrl(productUrl(item)),identity=ProductRanking.productIdentity(item);
+      return !!url&&sameSupplierSite(source.supplierSiteUrl,url)&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));
+    });
+    for(const live of liveRows){
+      const globalCheck=await replacementProductAlreadyInLedger(live,text(candidate.id));if(globalCheck.duplicate===true)continue;
+      const resolved=ProductRanking.canonicalProductUrl(productUrl(live)),finalUrl=safeUrl(first(live.verifiedDetailPageUrl,resolved));
+      if(heldRecoveryReferenceMatches(currentUrl,resolved)&&heldRecoveryReferenceMatches(currentUrl,finalUrl)){
+        return{ok:true,kind:"same_product_reference_recovered",product:live,source,currentUrl,recoveredUrl:resolved,suggestions,checkedVariants:variants.length};
+      }
+      const suggestion=heldReplacementSuggestion(live,source);
+      if(suggestion&&suggestions.length<5&&!suggestions.some(row=>row.productUrl===suggestion.productUrl))suggestions.push(suggestion);
+    }
+  }
+  return{ok:false,reason:suggestions.length?"alternative_products_require_administrator_review":"same_product_not_verified",suggestions,excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size,checkedVariants:variants.length};
 }
 
 async function productCandidateHoldVerify(actorId, input) {
@@ -4487,24 +4581,24 @@ async function productCandidateHoldVerify(actorId, input) {
         payload.slotDecision="undecided";payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"restored_after_hold_ai_verify",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor});payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_verify",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:actor};payload.review=Object.assign({},plain(payload.review),{state:"undecided",decidedAt:now,decidedBy:actor,holdAiVerified:true});
         await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"research_pending",source_payload:payload,updated_at:now});await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");restored+=1;results.push({candidateId:id,action:"restored",reasons:array(v.reasons)});
       }else if(v.invalid===true){
-        const recovery=await recoverHeldCandidateProduct(row,scope);
-        if(recovery.ok===true){
+        const recovery=await recoverHeldCandidateProduct(row,scope,{pass:Number(plain(payload.review).recoveryAttemptCount)||0});
+        if(recovery.ok===true&&["same_product_url_repair","same_product_reference_recovered"].includes(recovery.kind)&&heldRecoveryReferenceMatches(recovery.currentUrl,recovery.recoveredUrl)){
           const recovered=plain(recovery.product),recoveredUrl=productUrl(recovered),recoveredImage=productImageUrl(recovered),recoveredTitle=first(recovered.productName,recovered.title),recoveredIdentity=ProductRanking.productIdentity(recovered);
           payload.title=recoveredTitle;payload.productName=recoveredTitle;payload.sourceTitle=first(recovered.sourceTitle,recoveredTitle);payload.url=recoveredUrl;payload.externalProductUrl=recoveredUrl;payload.productUrl=recoveredUrl;payload.sourcePageUrl=safeUrl(first(recovered.sourcePageUrl,payload.sourcePageUrl))||payload.sourcePageUrl||null;payload.verifiedDetailPageUrl=safeUrl(first(recovered.verifiedDetailPageUrl,recoveredUrl))||recoveredUrl;payload.image=recoveredImage;payload.thumb=recoveredImage;payload.imageUrl=recoveredImage;payload.price=first(recovered.price,payload.price);payload.priceCurrency=first(recovered.priceCurrency,payload.priceCurrency);payload.availability=first(recovered.availability,payload.availability);payload.productIdentity=recoveredIdentity||payload.productIdentity;payload.productCard=candidateRuntimeCard(payload,recovered);payload.productPageLive=true;payload.sameSupplierSite=true;payload.inspectionComplete=true;payload.researchStatus=first(recovered.researchStatus,"ready_for_admin_review");
           payload.slotDecision="undecided";delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
-          payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"restored_after_hold_supplier_recovery",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor,reason:"live_replacement_product_found"});
+          payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"restored_after_hold_supplier_recovery",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor,reason:"verified_same_product_url_repaired"});
           payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_supplier_recovery",administratorLocked:false,aiReclassificationAllowed:true,decidedAt:now,decidedBy:actor};
-          payload.review=Object.assign({},plain(payload.review),{state:"undecided",decidedAt:now,decidedBy:actor,holdAiVerified:true,liveReplacementRecovered:true,previousProductUrl:recovery.currentUrl||null,recoveredProductUrl:recoveredUrl});
-          payload.runtimeValidation={schema:"igdc-product-runtime-validation.v3",source:"hold_ai_supplier_recovery",checkedAt:now,checkedBy:actor,state:"live",live:true,dead:false,inconclusive:false,reasons:["live_replacement_product_found"],exactProductUrl:recoveredUrl,imageUrl:recoveredImage,administratorLedgerPreserved:true};
+          payload.review=Object.assign({},plain(payload.review),{state:"undecided",decidedAt:now,decidedBy:actor,holdAiVerified:true,sameProductUrlRepaired:true,recoveryKind:recovery.kind,previousProductUrl:recovery.currentUrl||null,recoveredProductUrl:recoveredUrl});
+          payload.runtimeValidation={schema:"igdc-product-runtime-validation.v3",source:"hold_ai_supplier_recovery",checkedAt:now,checkedBy:actor,state:"live",live:true,dead:false,inconclusive:false,reasons:["verified_same_product_url_repaired"],exactProductUrl:recoveredUrl,imageUrl:recoveredImage,administratorLedgerPreserved:true};
           payload.productMapping=Object.assign({},plain(payload.productMapping),{productIdentity:recoveredIdentity||plain(payload.productMapping).productIdentity,firstVerifiedAt:now});
-          await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{title:recoveredTitle,official_url:recoveredUrl,thumbnail_url:recoveredImage,status:"research_pending",source_payload:payload,updated_at:now});await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");restored+=1;repaired+=1;results.push({candidateId:id,action:"recovered_replacement",previousProductUrl:recovery.currentUrl||null,productUrl:recoveredUrl,reasons:["live_replacement_product_found"]});
+          await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{title:recoveredTitle,official_url:recoveredUrl,thumbnail_url:recoveredImage,status:"research_pending",source_payload:payload,updated_at:now});await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");restored+=1;repaired+=1;results.push({candidateId:id,action:"repaired_same_product",previousProductUrl:recovery.currentUrl||null,productUrl:recoveredUrl,reasons:["verified_same_product_url_repaired"]});
         }else{
           // A dead detail URL is not evidence that the supplier itself is dead.
           // Keep the row in a private maintenance/research hold when a verified
           // replacement was not found in this bounded pass. A later research pass
           // may discover a newly listed product on the same official seller site.
-          payload.slotDecision="hold";payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"maintenance_replacement_pending",hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:actor,reason:"dead_product_reference_replacement_pending",recoveryReason:recovery.reason||null});payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_verify",administratorLocked:false,aiReclassificationAllowed:true,decidedAt:now,decidedBy:actor};payload.review=Object.assign({},plain(payload.review),{state:"hold",decidedAt:now,decidedBy:actor,holdAiVerified:true,recoveryAttempted:true,recoveryReason:recovery.reason||null,maintenanceReplacementPending:true});
-          await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"hold",source_payload:payload,updated_at:now});keptHold+=1;results.push({candidateId:id,action:"hold_replacement_pending",reasons:array(v.reasons).concat([recovery.reason||"replacement_product_not_found"])});
+          payload.slotDecision="hold";payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"maintenance_replacement_pending",hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:actor,reason:"dead_product_reference_replacement_pending",recoveryReason:recovery.reason||null,recoverySuggestionCount:array(recovery.suggestions).length});payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_verify",administratorLocked:false,aiReclassificationAllowed:true,decidedAt:now,decidedBy:actor};payload.review=Object.assign({},plain(payload.review),{state:"hold",decidedAt:now,decidedBy:actor,holdAiVerified:true,recoveryAttempted:true,recoveryReason:recovery.reason||null,maintenanceReplacementPending:true,recoverySuggestions:array(recovery.suggestions).slice(0,5),lastRecoveryCheckedAt:now,recoveryAttemptCount:Math.max(0,Number(plain(payload.review).recoveryAttemptCount)||0)+1});
+          await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"hold",source_payload:payload,updated_at:now});keptHold+=1;results.push({candidateId:id,action:"hold_replacement_pending",suggestions:array(recovery.suggestions),reasons:array(v.reasons).concat([recovery.reason||"replacement_product_not_found"])});
         }
       }else{
         payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"hold",hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:actor,reason:"hold_ai_verify_inconclusive"});payload.review=Object.assign({},plain(payload.review),{state:"hold",decidedAt:now,decidedBy:actor,holdAiVerified:true});

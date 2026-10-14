@@ -5,7 +5,7 @@
  * recommends first during discovery. This is Social-candidate-only code and
  * does not mutate SearchBank, snapshots, releases, rightPanel, or Distribution.
  */
-const VERSION = "social-channel-link-v1.3.0-six-video-platforms";
+const VERSION = "social-channel-link-v1.3.1-content-shortlink-fix";
 
 const PLATFORM_HOSTS = Object.freeze({
   youtube: ["youtube.com", "youtu.be"],
@@ -108,18 +108,26 @@ function resolve(value, options){
       if (handle) { targetUrl = canonical(platform, "/" + handle + "/"); entityKind = "profile"; }
     }
   } else if (platform === "tiktok") {
-    if (p[0] && /^@/.test(p[0]) && handleAllowed(platform, p[0])) { targetUrl = canonical(platform, "/" + p[0]); entityKind = "profile"; }
+    const host = hostOf(evidence.toString());
+    if (host === "vm.tiktok.com" || host === "vt.tiktok.com" || /^\/t\//i.test(path)) { needsEnrichment = "tiktok_public_meta_author"; entityKind = "profile"; }
+    else if (p[0] && /^@/.test(p[0]) && handleAllowed(platform, p[0])) { targetUrl = canonical(platform, "/" + p[0]); entityKind = "profile"; }
   } else if (platform === "facebook") {
-    if (p[0] === "groups" && p[1]) { targetUrl = canonical(platform, "/groups/" + encodeURIComponent(p[1])); entityKind = "public_group"; }
+    const host = hostOf(evidence.toString());
+    if (host === "fb.watch") { needsEnrichment = "facebook_public_meta_author"; entityKind = "public_page"; }
+    else if (p[0] === "groups" && p[1]) { targetUrl = canonical(platform, "/groups/" + encodeURIComponent(p[1])); entityKind = "public_group"; }
     else if (path === "/profile.php" && evidence.searchParams.get("id")) { targetUrl = canonical(platform, "/profile.php?id=" + encodeURIComponent(evidence.searchParams.get("id"))); entityKind = "public_page"; }
+    else if (/^\/(?:reel|watch|videos|posts|photos|photo|share)(?:\/|$)/i.test(path) || /^\/(?:permalink|story)\.php$/i.test(path) || evidence.searchParams.get("story_fbid")) { needsEnrichment = "facebook_public_meta_author"; entityKind = "public_page"; }
     else if (p[0] && handleAllowed(platform, p[0])) { targetUrl = canonical(platform, "/" + p[0]); entityKind = "public_page"; }
   } else if (platform === "douyin") {
     if (p[0] === "user" && p[1]) { targetUrl = canonical(platform, "/user/" + encodeURIComponent(p[1])); entityKind = "profile"; }
-    else if (/^\/(video|note)\//i.test(path) || hostOf(evidence.toString()) === "v.douyin.com") { needsEnrichment = "douyin_public_meta_author"; entityKind = "profile"; }
+    else if (/^\/(?:share\/)?(?:video|note)\//i.test(path) || hostOf(evidence.toString()) === "v.douyin.com") { needsEnrichment = "douyin_public_meta_author"; entityKind = "profile"; }
   } else if (platform === "dailymotion") {
-    if (p[0] === "user" && p[1]) { targetUrl = canonical(platform, "/user/" + encodeURIComponent(p[1])); entityKind = "channel"; }
+    const host = hostOf(evidence.toString());
+    // dai.ly/<video-id> is content, never a creator/channel handle. Handle it
+    // before the one-segment channel rule to avoid registering a fake channel.
+    if (host === "dai.ly" || /^\/video\//i.test(path)) { needsEnrichment = "dailymotion_oembed_author"; entityKind = "channel"; }
+    else if (p[0] === "user" && p[1]) { targetUrl = canonical(platform, "/user/" + encodeURIComponent(p[1])); entityKind = "channel"; }
     else if (p.length === 1 && p[0] !== "video" && handleAllowed(platform, p[0])) { targetUrl = canonical(platform, "/" + p[0]); entityKind = "channel"; }
-    else if (/^\/video\//i.test(path) || hostOf(evidence.toString()) === "dai.ly") { needsEnrichment = "dailymotion_oembed_author"; entityKind = "channel"; }
   }
 
   if (!targetUrl && !needsEnrichment) return { ok:false, reason:"channel_target_not_resolved", platform, evidenceUrl:evidence.toString() };

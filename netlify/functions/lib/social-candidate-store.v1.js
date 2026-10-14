@@ -14,7 +14,7 @@ const ChannelLink = require("./social-channel-link.v1");
 const AIPolicy = require("./social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-store-v1.12.4-six-section-prune";
+  "social-candidate-store-v1.12.5-content-url-parity";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -125,9 +125,9 @@ function platformContentUrl(platform, value) {
   let ok = false;
   if (p === "youtube") ok = host === "youtu.be" || (path === "/watch" && !!u.searchParams.get("v")) || /^\/(shorts|live|embed)\//i.test(path);
   else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
-  else if (p === "tiktok") ok = /\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path);
-  else if (p === "facebook") ok = /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (path === "/watch/" && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
-  else if (p === "douyin") ok = host === "v.douyin.com" || /^\/(?:video|note)\/\d{8,}/i.test(path);
+  else if (p === "tiktok") ok = /\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[A-Za-z0-9_-]+/i.test(path) || host === "vm.tiktok.com" || host === "vt.tiktok.com";
+  else if (p === "facebook") ok = host === "fb.watch" || /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (/^\/watch\/?$/i.test(path) && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
+  else if (p === "douyin") ok = host === "v.douyin.com" || /^\/(?:share\/)?(?:video|note)\/\d{8,}/i.test(path);
   else if (p === "dailymotion") ok = host === "dai.ly" ? /^\/[A-Za-z0-9]+/i.test(path) : /^\/video\/[A-Za-z0-9]+/i.test(path);
   return ok ? url : "";
 }

@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.31.0-six-section-progression";
+const VERSION = "sanmaru-social-live-collector-v1.34.0-social-pipeline-depth-fix";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -106,10 +106,23 @@ const DISCOVERY_INTENT_TERMS = Object.freeze([
   "popular culture travel education performance",
 ]);
 const SPARSE_PLATFORM_DISCOVERY_TERMS = Object.freeze({
-  douyin: [
-    "travel tourism destination", "music live performance", "culture museum heritage",
-    "food local cuisine", "education science technology", "art design photography",
+  // These four providers are materially less reliable through generic search
+  // indexes than YouTube/Instagram. Give each one an independent rotating
+  // discovery vocabulary so a single provider/index never starves its section.
+  tiktok: [
+    "music performance viral creator", "travel destination creator", "food culture creator",
+    "education tutorial howto", "science technology creator", "art design creator",
     "nature outdoor wellness", "family entertainment lifestyle"
+  ],
+  facebook: [
+    "creator reel public video", "artist musician public reel", "travel food culture creator",
+    "education science public video", "art museum culture reel", "sports lifestyle creator",
+    "nature travel public reel", "family entertainment creator"
+  ],
+  douyin: [
+    "旅游 旅行 景点 目的地", "音乐 演出 现场", "文化 博物馆 非遗",
+    "美食 地方菜", "教育 科普 科技", "艺术 设计 摄影",
+    "自然 户外 健康", "娱乐 生活方式"
   ],
   dailymotion: [
     "documentary culture", "music live performance", "travel destination",
@@ -120,6 +133,8 @@ const SPARSE_PLATFORM_DISCOVERY_TERMS = Object.freeze({
 const SPARSE_DISCOVERY_PLATFORMS = new Set(Object.keys(SPARSE_PLATFORM_DISCOVERY_TERMS));
 
 const REGISTRY_QUALITY_FOCUS = Object.freeze({
+  tiktok: "music travel food culture education art nature lifestyle entertainment useful public creator",
+  facebook: "creator reel public video music travel food culture education art nature lifestyle",
   douyin: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education",
   dailymotion: "documentary travel music culture art science education nature entertainment sports useful public creator"
 });
@@ -313,9 +328,9 @@ function contentKind(platform, value) {
       if (/^\/(shorts|live|embed)\/[^/]+/i.test(path)) return "latest_video";
     }
     if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
-    if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^(?:vm|vt)\.tiktok\.com$/i.test(url.hostname))) return "latest_video";
-    if (platform === "facebook" && (/^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (path === "/watch/" && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
-    if (platform === "douyin" && (/^\/(video|note)\/\d+/i.test(path) || /^v\.douyin\.com$/i.test(url.hostname))) return /^\/note\//i.test(path) ? "latest_post" : "latest_video";
+    if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[a-z0-9_-]+/i.test(path) || /^(?:vm|vt)\.tiktok\.com$/i.test(url.hostname))) return "latest_video";
+    if (platform === "facebook" && (/^fb\.watch$/i.test(url.hostname) || /^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (/^\/watch\/?$/i.test(path) && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
+    if (platform === "douyin" && (/^\/(?:share\/)?(video|note)\/\d+/i.test(path) || /^v\.douyin\.com$/i.test(url.hostname))) return /\/note\//i.test(path) ? "latest_post" : "latest_video";
     if (platform === "dailymotion" && (/^\/video\/[a-z0-9]+/i.test(path) || /^dai\.ly$/i.test(url.hostname))) return "latest_video";
   } catch (_error) {}
   return "";
@@ -347,6 +362,19 @@ function sparseVerifiedContentTitle(platform, contentUrl, item) {
   try {
     const url = new URL(contentUrl);
     const parts = url.pathname.split("/").filter(Boolean);
+    if (platform === "tiktok") {
+      const videoIndex = parts.findIndex((part) => /^video$/i.test(part));
+      const id = videoIndex >= 0 ? parts[videoIndex + 1] || "" : "";
+      const handle = videoIndex > 0 ? parts[videoIndex - 1].replace(/^@/, "") : "";
+      return "TikTok · " + (handle ? "@" + handle + " · " : "") + "Video" + (id ? " " + id.slice(-12) : "");
+    }
+    if (platform === "facebook") {
+      const reelIndex = parts.findIndex((part) => /^reel$/i.test(part));
+      const videoIndex = parts.findIndex((part) => /^(?:videos?|posts?)$/i.test(part));
+      const id = reelIndex >= 0 ? parts[reelIndex + 1] || "" : (videoIndex >= 0 ? parts[videoIndex + 1] || "" : (url.searchParams.get("v") || url.searchParams.get("story_fbid") || ""));
+      const kind = reelIndex >= 0 ? "Reel" : "Video/Post";
+      return "Facebook · " + kind + (id ? " " + id.slice(-16) : "");
+    }
     if (platform === "douyin") {
       const kindIndex = parts.findIndex((part) => /^(?:video|note)$/i.test(part));
       const kind = kindIndex >= 0 ? parts[kindIndex].toLowerCase() : "video";
@@ -602,7 +630,7 @@ function scopedQueries(plan, cursor, passes, route) {
   const count = Math.max(1, Math.min(MAX_QUERY_PASSES, Number(passes || DEFAULT_QUERY_PASSES) || DEFAULT_QUERY_PASSES));
   const queries = [];
   for (let index = 0; index < count; index += 1) {
-    const absoluteIndex = offset + index;
+    const absoluteIndex = (offset * count) + index;
     const baseQuery = base[absoluteIndex % base.length] || (plan.platform + " useful creator");
     // Generic discovery must continuously escape stale creator registries and
     // low-value seed results. Rotate a broad popularity/quality intent instead
@@ -761,7 +789,7 @@ function scopedQueriesWithRegistry(plan, cursor, passes, route, registrySeeds) {
   const seedByQuery = {};
   let selectedSeed = null;
   for (let index = 0; index < count; index += 1) {
-    const seed = seeds[(offset + index) % seeds.length];
+    const seed = seeds[((offset * count) + index) % seeds.length];
     if (!selectedSeed) selectedSeed = seed;
     const q = registryLatestQuery(seed, route, plan.platform);
     if (q) {
@@ -1166,7 +1194,9 @@ function publicSearchQuery(plan, queryText, registrySeed) {
     .trim();
   const needle = registrySearchNeedle(registrySeed, platform);
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
-  if (platform === "douyin") return [base, exact, "site:douyin.com", "video note latest public"].filter(Boolean).join(" ");
+  if (platform === "tiktok") return [base, exact, "site:tiktok.com", "video creator latest public"].filter(Boolean).join(" ");
+  if (platform === "facebook") return [base, exact, "site:facebook.com", "reel video creator public"].filter(Boolean).join(" ");
+  if (platform === "douyin") return [base, exact, "site:douyin.com", "抖音 视频 最新 公开", "video note"].filter(Boolean).join(" ");
   if (platform === "dailymotion") return [base, exact, "site:dailymotion.com/video", "latest public video"].filter(Boolean).join(" ");
   return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"].filter(Boolean).join(" ");
 }
@@ -1258,8 +1288,240 @@ function sparseSearchTerms(queryText, platform) {
 
 
 
-async function sparseNativePublicSearch(_plan, _queryText, _limit, _qualitySweep) {
-  return [];
+function dailymotionSearchText(queryText) {
+  return SocialStore.text(queryText)
+    .replace(/\b(?:site|inurl|intitle):\S+/gi, " ")
+    .replace(/[()\[\]{}"']/g, " ")
+    .replace(/\bdailymotion\b/gi, " ")
+    .replace(/\b(?:latest|recent|public|video|videos|post|posts|creator|channel|popular|high\s+quality|worldwide|global)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+function dailymotionOwnerValue(row) {
+  const owner = row && row.owner;
+  if (owner && typeof owner === "object") {
+    return firstText([owner.username, owner.screenname, owner.screen_name, owner.id]);
+  }
+  return firstText([
+    row && row["owner.username"],
+    row && row["owner.screenname"],
+    row && row.owner_username,
+    row && row.owner_screenname,
+    typeof owner === "string" ? owner : ""
+  ]);
+}
+function dailymotionApiItem(row, provider, index) {
+  const id = firstText([row && row.id]).replace(/[^a-z0-9]/gi, "");
+  if (!id) return null;
+  const contentUrl = "https://www.dailymotion.com/video/" + id;
+  const owner = dailymotionOwnerValue(row);
+  let channelUrl = "";
+  if (owner && !/^x[0-9a-z]+$/i.test(owner)) {
+    channelUrl = "https://www.dailymotion.com/" + encodeURIComponent(owner.replace(/^@/, ""));
+  }
+  const created = Number(row && row.created_time || row && row.createdAt || 0);
+  const publishedAt = created > 0 ? new Date(created * 1000).toISOString() : firstText([row && row.created_time, row && row.createdAt]);
+  return {
+    provider,
+    platform: "dailymotion",
+    url: contentUrl,
+    sourceUrl: contentUrl,
+    latestContentUrl: contentUrl,
+    title: firstText([row && row.title, "Dailymotion · Video " + id]),
+    creatorName: firstText([
+      row && row["owner.screenname"], row && row.owner_screenname,
+      row && row["owner.username"], row && row.owner_username,
+      owner
+    ]),
+    channelUrl,
+    thumbnail: firstText([
+      row && row.thumbnail_1080_url, row && row.thumbnail_720_url,
+      row && row.thumbnail_480_url, row && row.thumbnail_360_url,
+      row && row.thumbnail_url
+    ]),
+    description: firstText([row && row.description]),
+    publishedAt,
+    entityKind: "latest_video",
+    source: { name: provider, platform: "dailymotion", mode: "dailymotion_native_public", rank: Number(index || 0) + 1 }
+  };
+}
+async function dailymotionPublicApiSearch(queryText, limit, qualitySweep) {
+  const wanted = Math.max(4, Math.min(50, Number(limit || 10) * (qualitySweep ? 3 : 2)));
+  const fields = [
+    "id", "title", "description", "created_time", "url",
+    "thumbnail_1080_url", "thumbnail_720_url", "thumbnail_480_url", "thumbnail_360_url",
+    "owner", "owner.username", "owner.screenname"
+  ].join(",");
+  const clean = dailymotionSearchText(queryText);
+  const baseParams = { fields, limit: String(wanted), family_filter: "1" };
+  const makeUrl = (extra) => {
+    const params = new URLSearchParams(Object.assign({}, baseParams, extra || {}));
+    return "https://api.dailymotion.com/videos?" + params.toString();
+  };
+  const requests = [];
+  if (clean) requests.push({ name: "dailymotion-public-api-search", url: makeUrl({ search: clean, sort: "relevance" }) });
+  // Do not let a narrow/translated query collapse the section. A bounded recent
+  // lane supplies globally fresh public videos; later IGDC policy/ranking still
+  // decides what may enter the candidate pool and front release.
+  requests.push({ name: "dailymotion-public-api-recent", url: makeUrl({ sort: "recent" }) });
+  const settled = await Promise.all(requests.map(async (request) => {
+    try {
+      const data = await fetchJson(request.url, { headers: { Accept: "application/json" } }, REQUEST_TIMEOUT_MS);
+      const list = Array.isArray(data && data.list) ? data.list : Array.isArray(data && data.items) ? data.items : [];
+      return { provider: request.name, status: list.length ? "ok" : "empty", rows: list };
+    } catch (error) {
+      return {
+        provider: request.name,
+        status: error && (error.statusCode === 401 || error.statusCode === 403) ? "credential_or_api_restricted" : (error && error.name === "AbortError" ? "timeout" : "error"),
+        error: error && error.message || "dailymotion_api_failed",
+        rows: []
+      };
+    }
+  }));
+  const seen = new Set();
+  const items = [];
+  settled.forEach((result) => {
+    (result.rows || []).forEach((row, index) => {
+      const item = dailymotionApiItem(row, result.provider, index);
+      const key = item && SocialStore.text(item.latestContentUrl).toLowerCase();
+      if (!item || !key || seen.has(key)) return;
+      seen.add(key);
+      items.push(item);
+    });
+  });
+  return {
+    provider: "dailymotion-native-api",
+    status: items.length ? "ok" : (settled.some((row) => row.status === "error" || row.status === "credential_or_api_restricted") ? "degraded" : "empty"),
+    items: items.slice(0, wanted),
+    trace: settled.map((row) => ({ name: row.provider, status: row.status, count: (row.rows || []).length, error: row.error || null }))
+  };
+}
+async function dailymotionNativeHtmlSearch(queryText, limit) {
+  const wanted = Math.max(4, Math.min(30, Number(limit || 10) * 2));
+  const clean = dailymotionSearchText(queryText) || "documentary music travel culture education";
+  const url = "https://www.dailymotion.com/search/" + encodeURIComponent(clean) + "/videos";
+  try {
+    const html = await fetchText(url, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.8"
+      }
+    }, REQUEST_TIMEOUT_MS);
+    const urls = providerRelativePostUrls("dailymotion", html, "https://www.dailymotion.com/", wanted);
+    const items = urls.map((contentUrl, index) => ({
+      provider: "dailymotion-native-html",
+      platform: "dailymotion",
+      url: contentUrl,
+      sourceUrl: contentUrl,
+      latestContentUrl: contentUrl,
+      title: sparseVerifiedContentTitle("dailymotion", contentUrl, {}) || "Dailymotion public video",
+      entityKind: "latest_video",
+      source: { name: "dailymotion-native-html", platform: "dailymotion", mode: "dailymotion_native_html", rank: index + 1 }
+    }));
+    return { provider: "dailymotion-native-html", status: items.length ? "ok" : "empty", items };
+  } catch (error) {
+    return { provider: "dailymotion-native-html", status: error && error.name === "AbortError" ? "timeout" : "error", error: error && error.message || "dailymotion_html_failed", items: [] };
+  }
+}
+function nativeDiscoveryItem(platform, provider, contentUrl, index) {
+  return {
+    provider,
+    platform,
+    url: contentUrl,
+    sourceUrl: contentUrl,
+    latestContentUrl: contentUrl,
+    title: sparseVerifiedContentTitle(platform, contentUrl, {}) || (platform + " public content"),
+    entityKind: contentKind(platform, contentUrl),
+    source: { name: provider, platform, mode: "platform_native_public", rank: Number(index || 0) + 1 }
+  };
+}
+async function nativeHtmlDiscoveryPage(platform, provider, url, baseUrl, limit, acceptLanguage) {
+  const wanted = Math.max(4, Math.min(30, Number(limit || 10) * 2));
+  try {
+    const html = await fetchText(url, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+        "Accept-Language": acceptLanguage || "en-US,en;q=0.8"
+      }
+    }, REQUEST_TIMEOUT_MS);
+    const urls = providerRelativePostUrls(platform, html, baseUrl, wanted);
+    const items = urls.map((contentUrl, index) => nativeDiscoveryItem(platform, provider, contentUrl, index));
+    return { provider, status: items.length ? "ok" : "empty", items };
+  } catch (error) {
+    return { provider, status: error && error.name === "AbortError" ? "timeout" : "error", error: error && error.message || (provider + "_failed"), items: [] };
+  }
+}
+async function genericNativeHtmlSearch(platform, queryText, limit) {
+  const clean = sparseSearchTerms(queryText, platform) || {
+    tiktok: "music travel culture food education creator",
+    facebook: "creator reel music travel culture education",
+    douyin: "旅游 音乐 文化 美食 教育 艺术",
+  }[platform] || "popular public creator";
+  const specs = platform === "tiktok"
+    ? [
+        ["tiktok-native-search", "https://www.tiktok.com/search/video?q=" + encodeURIComponent(clean), "https://www.tiktok.com/", "en-US,en;q=0.8"],
+        ["tiktok-native-search-fallback", "https://www.tiktok.com/search?q=" + encodeURIComponent(clean), "https://www.tiktok.com/", "en-US,en;q=0.8"]
+      ]
+    : platform === "facebook"
+      ? [
+          ["facebook-native-watch-search", "https://www.facebook.com/watch/search/?q=" + encodeURIComponent(clean), "https://www.facebook.com/", "en-US,en;q=0.8"],
+          ["facebook-native-video-search", "https://www.facebook.com/search/videos/?q=" + encodeURIComponent(clean), "https://www.facebook.com/", "en-US,en;q=0.8"]
+        ]
+      : platform === "douyin"
+        ? [
+            ["douyin-native-search", "https://www.douyin.com/search/" + encodeURIComponent(clean) + "?type=video", "https://www.douyin.com/", "zh-CN,zh;q=0.9,en;q=0.5"],
+            ["douyin-native-search-fallback", "https://www.douyin.com/search/" + encodeURIComponent(clean), "https://www.douyin.com/", "zh-CN,zh;q=0.9,en;q=0.5"]
+          ]
+        : [];
+  if (!specs.length) return { provider: platform + "-native-search", status: "not_needed", items: [] };
+  const first = await nativeHtmlDiscoveryPage(platform, specs[0][0], specs[0][1], specs[0][2], limit, specs[0][3]);
+  if ((first.items || []).length >= Math.min(4, Math.max(2, Number(limit || 0) || 2))) return first;
+  const second = await nativeHtmlDiscoveryPage(platform, specs[1][0], specs[1][1], specs[1][2], limit, specs[1][3]);
+  const seen = new Set();
+  const items = [];
+  [first, second].forEach((result) => (result.items || []).forEach((item) => {
+    const key = SocialStore.text(item && (item.latestContentUrl || item.url)).toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    items.push(item);
+  }));
+  return {
+    provider: platform + "-native-search",
+    status: items.length ? "ok" : (first.status === "error" || second.status === "error" ? "degraded" : "empty"),
+    items,
+    trace: [first, second].map((row) => ({ name: row.provider, status: row.status, count: (row.items || []).length, error: row.error || null }))
+  };
+}
+async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
+  if (!plan || !SPARSE_DISCOVERY_PLATFORMS.has(plan.platform)) {
+    return { provider: "sparse-native-public-search", status: "not_needed", items: [] };
+  }
+  if (plan.platform !== "dailymotion") {
+    return genericNativeHtmlSearch(plan.platform, queryText, limit);
+  }
+  const api = await dailymotionPublicApiSearch(queryText, limit, qualitySweep);
+  const floor = Math.min(Math.max(3, Number(limit || 0) || 3), 8);
+  if ((api.items || []).length >= floor) return api;
+  const html = await dailymotionNativeHtmlSearch(queryText, limit);
+  const seen = new Set();
+  const items = [];
+  [api, html].forEach((result) => {
+    (result.items || []).forEach((item) => {
+      const key = SocialStore.text(item && (item.latestContentUrl || item.url)).toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      items.push(item);
+    });
+  });
+  return {
+    provider: "dailymotion-native-search",
+    status: items.length ? "ok" : (api.status === "degraded" || html.status === "error" ? "degraded" : "empty"),
+    items,
+    trace: [].concat(api.trace || [], [{ name: html.provider, status: html.status, count: (html.items || []).length, error: html.error || null }])
+  };
 }
 async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
   if (!plan || plan.platform === "youtube") {
@@ -1286,8 +1548,29 @@ async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
       fetchText("https://lite.duckduckgo.com/lite/?q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
       REQUEST_TIMEOUT_MS,
       ""
-    ).then((html) => ({ provider: "duckduckgo-lite-social", items: htmlPublicPostItems(html, plan, "duckduckgo-lite-social") })).catch((error) => ({ provider: "duckduckgo-lite-social", items: [], error: error && error.message }))
+    ).then((html) => ({ provider: "duckduckgo-lite-social", items: htmlPublicPostItems(html, plan, "duckduckgo-lite-social") })).catch((error) => ({ provider: "duckduckgo-lite-social", items: [], error: error && error.message })),
+    withDeadline(
+      fetchText("https://search.yahoo.com/search?p=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
+      REQUEST_TIMEOUT_MS,
+      ""
+    ).then((html) => ({ provider: "yahoo-html-social", items: htmlPublicPostItems(html, plan, "yahoo-html-social") })).catch((error) => ({ provider: "yahoo-html-social", items: [], error: error && error.message }))
   ];
+  if (plan.platform === "douyin") {
+    // China-facing public indexes are supplemental only. Douyin's own public
+    // search remains primary; these lanes prevent a Google-centric blind spot.
+    jobs.push(
+      withDeadline(
+        fetchText("https://www.baidu.com/s?wd=" + encodeURIComponent(q), { headers: Object.assign({}, headers, { "Accept-Language": "zh-CN,zh;q=0.9" }) }, REQUEST_TIMEOUT_MS),
+        REQUEST_TIMEOUT_MS,
+        ""
+      ).then((html) => ({ provider: "baidu-html-douyin", items: htmlPublicPostItems(html, plan, "baidu-html-douyin") })).catch((error) => ({ provider: "baidu-html-douyin", items: [], error: error && error.message })),
+      withDeadline(
+        fetchText("https://www.sogou.com/web?query=" + encodeURIComponent(q), { headers: Object.assign({}, headers, { "Accept-Language": "zh-CN,zh;q=0.9" }) }, REQUEST_TIMEOUT_MS),
+        REQUEST_TIMEOUT_MS,
+        ""
+      ).then((html) => ({ provider: "sogou-html-douyin", items: htmlPublicPostItems(html, plan, "sogou-html-douyin") })).catch((error) => ({ provider: "sogou-html-douyin", items: [], error: error && error.message }))
+    );
+  }
   const settled = await Promise.all(jobs);
   const items = [];
   const seen = new Set();
@@ -1333,8 +1616,18 @@ function providerRelativePostUrls(platform, html, baseUrl, limit) {
   while ((match = hrefRe.exec(source)) && out.length < max) accept(match[1]);
   const absoluteRe = /https?:\/\/[^"'<>\s]+/gi;
   while ((match = absoluteRe.exec(source)) && out.length < max) accept(match[0]);
+  if (platform === "tiktok" && out.length < max) {
+    const rel = /(?:^|["'\s])\/@([a-z0-9._-]{2,})\/video\/(\d{10,})(?=[?"'\s/]|$)/gi;
+    while ((match = rel.exec(source)) && out.length < max) accept("https://www.tiktok.com/@" + match[1] + "/video/" + match[2]);
+  }
+  if (platform === "facebook" && out.length < max) {
+    const reel = /(?:^|["'\s])\/reel\/(\d{5,})(?=[?"'\s/]|$)/gi;
+    while ((match = reel.exec(source)) && out.length < max) accept("https://www.facebook.com/reel/" + match[1]);
+    const video = /(?:^|["'\s])\/([a-z0-9._-]{2,})\/videos\/(\d{5,})(?=[?"'\s/]|$)/gi;
+    while ((match = video.exec(source)) && out.length < max) accept("https://www.facebook.com/" + match[1] + "/videos/" + match[2]);
+  }
   if (platform === "douyin" && out.length < max) {
-    const rel = /(?:^|["'\s])\/(video|note)\/(\d{8,})(?=[?"'\s/]|$)/gi;
+    const rel = /(?:^|["'\s])\/(?:share\/)?(video|note)\/(\d{8,})(?=[?"'\s/]|$)/gi;
     while ((match = rel.exec(source)) && out.length < max) accept("https://www.douyin.com/" + match[1].toLowerCase() + "/" + match[2]);
   }
   if (platform === "dailymotion" && out.length < max) {
@@ -1473,12 +1766,18 @@ async function maruUnfilteredSearchOne(event, plan, queryText, limit, language, 
 
 async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup, registryTargeted, registrySeed) {
   let tasks = [];
-  if (registrySeed && plan.platform !== "youtube" && plan.platform !== "facebook") {
+  if (registrySeed && plan.platform !== "youtube") {
     // Query the already-registered creator itself in parallel with web search.
     // This is best-effort and bounded; it never runs on the front/card render path.
     tasks.push(registryNativeLatestSearch(plan, registrySeed, limit));
   }
   if (providerGroup === 0) {
+    if (SPARSE_DISCOVERY_PLATFORMS.has(plan.platform)) {
+      // TikTok, Facebook, Douyin and Dailymotion are all under-indexed or
+      // dynamically rendered in generic web search. Give them a native/public
+      // discovery lane first; generic engines remain supplemental.
+      tasks.push(sparseNativePublicSearch(plan, queryText, limit, qualitySweep));
+    }
     tasks.push(publicDirectorySearch(plan, route, limit, directoryOffset));
     // A public-directory row is a creator profile, not a post. When a known
     // registry identity is being targeted, also ask the existing Maru/SearchBank
@@ -1540,6 +1839,10 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     // were found, run the independent public-post search as a diversity lane too.
     const sparseUnderfilled = SPARSE_DISCOVERY_PLATFORMS.has(plan.platform) &&
       actualPostCount < Math.min(Math.max(2, Number(limit || 0) || 2), 4);
+    if (providerGroup !== 0 && sparseUnderfilled && (qualitySweep || registryTargeted)) {
+      const nativeRescue = await sparseNativePublicSearch(plan, queryText, limit, qualitySweep);
+      providers = providers.concat([nativeRescue]);
+    }
     // Search APIs can return only already-known posts. A provider-level "hit"
     // must therefore not suppress discovery diversity. When a registry creator
     // is targeted, during a quality sweep, or a sparse provider is underfilled,
@@ -1975,7 +2278,7 @@ async function resolveChannelAsset(item, platform, registrySeed) {
   return { ok: false, reason: hasPlatformUrl ? "channel_target_not_resolved" : "platform_host_mismatch" };
 }
 function registryOnlyFromItem(item, sectionKey, platform, queryText, route) {
-  if (!item || platform === "youtube" || platform === "facebook") return null;
+  if (!item || platform === "youtube") return null;
   const urls = candidateUrls(item);
   const originalTitle = firstText([item.title, item.name, item.label, item.creatorName]);
   let channel = null;
@@ -1999,6 +2302,9 @@ function registryOnlyFromItem(item, sectionKey, platform, queryText, route) {
     item.creatorName, item.channelName, item.publisher, originalTitle, channel.suggestedTitle
   ]).replace(/^(false|null|undefined)$/i, "");
   if (!creatorName) return null;
+  if (platform === "facebook" && facebookPressPublisher([
+    creatorName, item && item.publisher, channel.channelUrl
+  ].filter(Boolean).join(" "))) return null;
   const category = firstText([item.category, categoryFromQuery(platform, queryText)]);
   const thumbnail = firstText([
     item.channelThumbnail, item.channelThumbnailUrl, item.thumbnail, item.thumb,
@@ -2556,11 +2862,21 @@ exports.handler = async function(event) {
     const catalogSize = registrySweepMode
       ? Math.max(1, registryWindow.totalBatches)
       : normalCatalogSize;
-    const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || (Math.floor(researchCursor / Math.max(1, catalogSize)) * perQueryLimit + 1)) || 1));
+    // Search-result pagination belongs to the generic discovery query cycle,
+    // not to the size of the influencer registry. A large registry previously
+    // kept searchStart pinned to page 1 for dozens/hundreds of batches.
+    const discoveryBatchCycle = Math.max(1, Math.ceil(baseCatalogSize / Math.max(1, passes)));
+    const derivedSearchStart = registrySweepMode
+      ? 1
+      : (Math.floor(researchCursor / discoveryBatchCycle) * perQueryLimit + 1);
+    const searchStart = Math.max(1, Math.min(91, Number(body.searchStart || body.search_start || derivedSearchStart) || 1));
 
     const language = body.language || body.lang || route.languages[0];
+    const directoryStride = Math.max(1, queries.length);
     const searchResults = await Promise.all(queries.map(async (queryText, queryIndex) => {
-      const directoryOffset = Math.max(0, (researchCursor + queryIndex) * perQueryLimit);
+      // Advance every public-directory query by a full request batch so the
+      // next research cursor does not re-read the previous cursor's rows.
+      const directoryOffset = Math.max(0, ((researchCursor * directoryStride) + queryIndex) * perQueryLimit);
       const searchResult = await searchOne(
         event, plan, queryText, perQueryLimit,
         language,
@@ -2648,6 +2964,8 @@ exports.handler = async function(event) {
       providerGroupName: PROVIDER_GROUP_NAMES[providerGroup],
       providerGroupCount: PROVIDER_GROUP_COUNT,
       searchStart,
+      discoveryBatchCycle,
+      directoryStride,
       qualitySweep,
       broadDiscovery: SPARSE_DISCOVERY_PLATFORMS.has(plan.platform),
       broadDiscoveryTermCount: (SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || []).length,
@@ -2749,6 +3067,8 @@ exports.__test = {
   registrySweepWindow,
   sparseSearchTerms,
   sparseNativePublicSearch,
+  genericNativeHtmlSearch,
+  nativeDiscoveryItem,
   resolveSearchCandidates,
   decodeSearchRedirectTarget,
   decodeXml
