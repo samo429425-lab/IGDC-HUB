@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.8.2 - six active main sections */
+/* IGDC Social Hub Content Operations v3.9.0 - six-section collector progression fix */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -19,6 +19,10 @@
     ["social-douyin", "Douyin", "douyin"],
     ["social-dailymotion", "Dailymotion", "dailymotion"],
   ];
+  var COLLECTOR_JOB_VERSION = 3,
+    STANDARD_EMPTY_BATCH_LIMIT = 12,
+    SPARSE_EMPTY_BATCH_LIMIT = 18,
+    REGISTRY_SWEEP_SAFETY_LIMIT = 80;
   var order = SECTIONS.map(function (x) {
       return x[0];
     }),
@@ -1589,11 +1593,14 @@
     }
   }
   function jobKey() {
-    return "igdc.socialCollector.job.v2";
+    return "igdc.socialCollector.job.v3.six-sections";
   }
   function loadJob() {
     try {
-      return JSON.parse(localStorage.getItem(jobKey()) || "null");
+      var job = JSON.parse(localStorage.getItem(jobKey()) || "null");
+      if (!job || Number(job.schemaVersion) !== COLLECTOR_JOB_VERSION) return null;
+      if (order.indexOf(text(job.section)) < 0) return null;
+      return job;
     } catch (_e) {
       return null;
     }
@@ -1612,6 +1619,23 @@
     return new Promise(function (resolve) {
       setTimeout(resolve, ms);
     });
+  }
+  function sectionEmptyBatchLimit(section, j) {
+    var cap = /^social-(?:douyin|dailymotion)$/.test(section)
+        ? SPARSE_EMPTY_BATCH_LIMIT
+        : STANDARD_EMPTY_BATCH_LIMIT,
+      reported = Number(j && (j.discoveryCatalogSize || j.catalogSize) || 0);
+    // The old collector used queryCatalogSize directly. With a large creator
+    // registry that value can grow into the hundreds and keep YouTube running
+    // indefinitely before the loop ever advances to Instagram. The registry
+    // already has its own mandatory sweep; generic no-result retries therefore
+    // need a small, bounded discovery budget.
+    return Math.max(6, Math.min(cap, reported > 0 ? reported : cap));
+  }
+  function fatalCollectionError(error) {
+    var status = Number(error && error.status), message = text(error && error.message);
+    return status === 401 || status === 403 ||
+      /(로그인|인증|세션|token|issuer|audience|forbidden|unauthor)/i.test(message);
   }
   function configured(v) {
     return v && v.ready ? "설정됨" : "미설정";
@@ -1799,7 +1823,7 @@
       qualitySweep: !!j.qualitySweepActive,
       registryOnly: !!j.registrySweepActive,
       registryCursor: Number(j.registryCursor || 0),
-      registryBatchSize: 4,
+      registryBatchSize: j.batchSize,
       sectionKey: section,
       limit: j.batchSize,
       batchSize: j.batchSize,
@@ -1846,6 +1870,9 @@
         : live.nextQueryCursor,
     );
     j.catalogSize = Number(live.queryCatalogSize || j.catalogSize || 5);
+    j.discoveryCatalogSize = Number(
+      live.discoveryCatalogSize || j.discoveryCatalogSize || j.catalogSize || 5,
+    );
     j.providerGroup = Number(live.providerGroup || 0);
     j.providerGroupName =
       {
@@ -1888,7 +1915,7 @@
     if (!dryRun && !j.registrySweepDone) {
       j.registrySweepActive = true;
       var registrySafety = 0;
-      while (!stopRequested && !j.registrySweepDone && registrySafety < 500) {
+      while (!stopRequested && !j.registrySweepDone && registrySafety < REGISTRY_SWEEP_SAFETY_LIMIT) {
         registrySafety += 1;
         j.batch += 1;
         progress(j);
@@ -1901,9 +1928,12 @@
         if (!j.registrySweepDone && !stopRequested) await wait(450);
       }
       j.registrySweepActive = false;
+      if (!j.registrySweepDone && registrySafety >= REGISTRY_SWEEP_SAFETY_LIMIT) {
+        j.lastReason = "registry_sweep_safety_limit";
+      }
       saveJob(j);
     }
-    var maxEmpty = Math.max(6, Number(j.catalogSize || 15));
+    var maxEmpty = sectionEmptyBatchLimit(section, j);
     while (
       !stopRequested &&
       j.sectionCount < j.target &&
@@ -1913,7 +1943,7 @@
       j.batch += 1;
       progress(j);
       var d = await collectOne(section, dryRun, j);
-      maxEmpty = Math.max(maxEmpty, Number(j.catalogSize || 15));
+      maxEmpty = sectionEmptyBatchLimit(section, j);
       var newly = newIds(d, known);
       j.newlyFound += newly;
       j.sectionCount += newly;
@@ -1948,7 +1978,7 @@
         progress(j);
         var q = await collectOne(section, false, j),
           qualityNew = newIds(q, known);
-        maxEmpty = Math.max(maxEmpty, Number(j.catalogSize || 15));
+        maxEmpty = sectionEmptyBatchLimit(section, j);
         j.newlyFound += qualityNew;
         j.sectionCount += qualityNew;
         if (qualityNew) j.emptyBatches = 0;
@@ -1970,12 +2000,14 @@
     $("collectDryRunBtn").disabled = locked;
     $("collectorStopBtn").disabled = !locked;
   }
-  function newJob(section, index, total) {
+  function newJob(section, index, total, runMode) {
     var batchSize = Math.max(
       8,
       Math.min(12, Number($("collectorBatchSize").value) || 10),
     );
     return {
+      schemaVersion: COLLECTOR_JOB_VERSION,
+      runMode: runMode || "section",
       index: index || 0,
       total: total || 1,
       section: section,
@@ -1988,6 +2020,7 @@
       batch: 0,
       queryCursor: 0,
       catalogSize: 15,
+      discoveryCatalogSize: 12,
       sectionCount: sectionCount(section),
       searched: 0,
       direct: 0,
@@ -2007,15 +2040,17 @@
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
+      sectionFailures: [],
       paused: false,
     };
   }
   async function collectSelected(dry) {
     hide();
     stopRequested = false;
+    liveReports = [];
     lockCollection(true);
     var key = $("collectorSection").value,
-      j = newJob(key, 0, 1);
+      j = newJob(key, 0, 1, "section");
     var failed = false;
     try {
       await collectSection(key, dry, j);
@@ -2079,23 +2114,30 @@
       !skipConfirm && !confirm(
         "각 SNS 섹션을 " +
           $("collectorBatchSize").value +
-          "개 단위로 등록 인플루언서 전원을 먼저 조사하고, 120개(공개 100 + 예비 20) 운영 풀을 채운 뒤 인기·품질 보강 검색을 추가 실행하고 상위 100개를 다시 정리해 다음 섹션으로 진행할까요?",
+          "개 단위로 등록 인플루언서를 우선 조사하고, 섹션별 탐색 한도 안에서 120개(공개 100 + 예비 20) 운영 풀을 채운 뒤 다음 SNS로 자동 진행할까요? 한 SNS의 일반 검색 오류는 기록하고 다음 SNS를 계속 조사합니다.",
       )
     )
       return;
     hide();
     stopRequested = false;
+    liveReports = [];
     lockCollection(true);
     var j = loadJob(),
-      resume = !!(j && j.paused);
-    if (!j || !j.paused) {
-      j = newJob(order[0], 0, order.length);
+      resume = !!(
+        j && j.paused && j.runMode === "all" &&
+        Number(j.schemaVersion) === COLLECTOR_JOB_VERSION &&
+        order.indexOf(text(j.section)) >= 0 &&
+        Number(j.index) >= 0 && Number(j.index) < order.length
+      );
+    if (!resume) {
+      j = newJob(order[0], 0, order.length, "all");
     } else {
       j.paused = false;
       j.total = order.length;
       j.target = 120;
+      j.sectionFailures = Array.isArray(j.sectionFailures) ? j.sectionFailures : [];
     }
-    var failed = false;
+    var failed = false, completedWithErrors = false;
     try {
       for (; j.index < order.length && !stopRequested; j.index++) {
         var continuing = resume && j.section === order[j.index];
@@ -2113,6 +2155,8 @@
           j.sectionCount = sectionCount(j.section);
           j.batch = 0;
           j.queryCursor = 0;
+          j.catalogSize = 15;
+          j.discoveryCatalogSize = 12;
           j.emptyBatches = 0;
           j.newlyFound = 0;
           j.registryCursor = 0;
@@ -2125,8 +2169,26 @@
           j.qualitySweepTarget = /^social-(?:douyin|dailymotion)$/.test(j.section) ? 8 : 6;
           j.qualitySweepDone = false;
           j.qualitySweepActive = false;
+          j.lastReason = "";
         }
-        await collectSection(j.section, false, j);
+        $("collectorState").textContent =
+          "전체 " + (j.index + 1) + "/" + order.length + " · " + label(j.section) + " 검색 중";
+        try {
+          await collectSection(j.section, false, j);
+        } catch (sectionError) {
+          if (fatalCollectionError(sectionError)) throw sectionError;
+          completedWithErrors = true;
+          j.sectionFailures.push({
+            sectionKey: j.section,
+            platform: label(j.section),
+            message: text(sectionError && sectionError.message) || "section_collection_failed",
+            status: Number(sectionError && sectionError.status) || null,
+            at: new Date().toISOString(),
+          });
+          // One provider/platform must not block the remaining Social sections.
+          // Save the failure, advance the loop, and continue with the next SNS.
+          j.lastReason = "section_error_continue_next";
+        }
         j.done = j.index + 1;
         resume = false;
         saveJob(j);
@@ -2148,21 +2210,23 @@
           reportType: "igdc-social-batch-collection-report",
           generatedAt: new Date().toISOString(),
           summary: j,
+          sectionFailures: j.sectionFailures || [],
           sections: liveReports.map(function (x) {
             return x.liveCollection || x;
           }),
         });
         show(
-          "전체 6개 섹션 수집·품질 보강 완료: 검색 " +
+          "전체 6개 섹션 순차 수집 완료: 검색 " +
             j.searched +
             "건, 최신 콘텐츠 후보 " +
             j.direct +
-            "건, 신규 " +
-            j.newlyFound +
             "건, 저장 응답 " +
             j.saved +
-            "건.",
-          "ok",
+            "건" +
+            (j.sectionFailures && j.sectionFailures.length
+              ? ". 섹션 오류 " + j.sectionFailures.length + "건은 기록하고 다음 SNS까지 계속 진행했습니다."
+              : "."),
+          completedWithErrors ? "warn" : "ok",
         );
       }
     } catch (e) {
@@ -2171,7 +2235,7 @@
       saveJob(j);
       $("collectorState").textContent = collectionErrorState(e);
       show(
-        (e.message || "수집 오류") + " · 현재 지점은 저장되었습니다.",
+        (e.message || "수집 오류") + " · 관리자 인증/공통 경로 오류이므로 현재 지점을 저장하고 중단했습니다.",
         "warn",
       );
     } finally {
@@ -3326,16 +3390,29 @@
   async function aiCycleSections(keys, skipConfirm) {
     keys = Array.from(new Set((keys || []).filter(function (key) { return order.indexOf(key) >= 0; })));
     if (!keys.length) return show("AI 자동화할 SNS 섹션을 선택해 주세요.", "warn");
-    if (!skipConfirm && !confirm(keys.map(label).join(", ") + " 섹션의 최신 콘텐츠 수집 → AI 평가 → 공개/예비 후보 재정리를 실행할까요?")) return false;
-    var statusEl = $("aiAutomationState"), oldCollector = $("collectorSection").value;
+    if (!skipConfirm && !confirm(keys.map(label).join(", ") + " 섹션의 최신 콘텐츠 수집 → AI 평가 → 공개/예비 후보 재정리를 실행할까요? 한 SNS 검색 오류는 기록하고 다음 SNS를 계속 진행합니다.")) return false;
+    var statusEl = $("aiAutomationState"), oldCollector = $("collectorSection").value,
+      collectionFailures = [], curatedKeys = [], curateFailures = [];
+    liveReports = [];
     try {
       stopRequested = false;
       lockCollection(true);
-      for (var i = 0; i < keys.length; i++) {
-        var key = keys[i], j = newJob(key, i, keys.length);
+      for (var i = 0; i < keys.length && !stopRequested; i++) {
+        var key = keys[i], j = newJob(key, i, keys.length, "ai");
         if (statusEl) statusEl.textContent = "수집 " + (i + 1) + "/" + keys.length + " · " + label(key);
-        await collectSection(key, false, j);
+        try {
+          await collectSection(key, false, j);
+        } catch (sectionError) {
+          if (fatalCollectionError(sectionError)) throw sectionError;
+          collectionFailures.push({
+            sectionKey: key,
+            platform: label(key),
+            message: text(sectionError && sectionError.message) || "section_collection_failed",
+          });
+          if (statusEl) statusEl.textContent = "검색 오류 기록 · 다음 SNS 진행 · " + label(key);
+        }
         j.done = i + 1;
+        j.sectionFailures = collectionFailures.slice();
         saveJob(j);
       }
     } catch (e) {
@@ -3350,29 +3427,44 @@
     try {
       for (var n = 0; n < keys.length; n++) {
         if (statusEl) statusEl.textContent = "AI 정리 " + (n + 1) + "/" + keys.length + " · " + label(keys[n]);
-        var curated = await autoCurate(keys[n], true);
-        if (!curated) throw new Error(label(keys[n]) + " AI 후보 정리를 완료하지 못했습니다.");
+        try {
+          var curated = await autoCurate(keys[n], true);
+          if (!curated) throw new Error(label(keys[n]) + " AI 후보 정리를 완료하지 못했습니다.");
+          curatedKeys.push(keys[n]);
+        } catch (curateError) {
+          curateFailures.push({ sectionKey: keys[n], platform: label(keys[n]), message: text(curateError && curateError.message) || "ai_curate_failed" });
+          if (fatalCollectionError(curateError)) throw curateError;
+        }
       }
       waitingViewMode = "all";
       openDetailQueue = "content";
-      openDetailSection = keys[0];
+      openDetailSection = (curatedKeys[0] || keys[0] || "");
       await refresh();
-      if ($("aiAutomationApply") && $("aiAutomationApply").checked) {
+      if ($("aiAutomationApply") && $("aiAutomationApply").checked && curatedKeys.length) {
         if (statusEl) statusEl.textContent = "프론트 실제 적용 중 · 단일 배포";
         var applyIds = [];
-        keys.forEach(function (key) { applyIds = applyIds.concat(registeredContentIds(key)); });
+        curatedKeys.forEach(function (key) { applyIds = applyIds.concat(registeredContentIds(key)); });
         applyIds = Array.from(new Set(applyIds.map(text).filter(Boolean)));
-        if (!applyIds.length) throw new Error("프론트 등록 가능한 콘텐츠가 없습니다.");
-        var autoMode = keys.length === order.length
-          ? "social_full_run"
-          : keys.length === 1
-            ? "single_section_front_publish"
-            : "selected_sections_front_publish";
-        var applied = await actualApply(keys.length === 1 ? keys[0] : "", true, null, autoMode, keys);
-        if (!applied) throw new Error("AI 자동 운영 프론트 실제 적용을 완료하지 못했습니다.");
+        if (applyIds.length) {
+          var autoMode = curatedKeys.length === order.length
+            ? "social_full_run"
+            : curatedKeys.length === 1
+              ? "single_section_front_publish"
+              : "selected_sections_front_publish";
+          var applied = await actualApply(curatedKeys.length === 1 ? curatedKeys[0] : "", true, null, autoMode, curatedKeys);
+          if (!applied) throw new Error("AI 자동 운영 프론트 실제 적용을 완료하지 못했습니다.");
+        }
       }
-      if (statusEl) statusEl.textContent = "완료 · " + keys.length + "개 SNS";
-      show(keys.map(label).join(", ") + " AI 자동 운영을 완료했습니다.", "ok");
+      clearJob();
+      var issueCount = collectionFailures.length + curateFailures.length;
+      if (statusEl) statusEl.textContent = issueCount
+        ? "완료 · " + keys.length + "개 SNS · 오류 기록 " + issueCount + "건"
+        : "완료 · " + keys.length + "개 SNS";
+      show(
+        keys.map(label).join(", ") + " AI 자동 운영을 끝까지 진행했습니다." +
+          (issueCount ? " 개별 SNS 오류 " + issueCount + "건은 건너뛰고 다음 SNS를 계속 처리했습니다." : ""),
+        issueCount ? "warn" : "ok",
+      );
       return true;
     } catch (e) {
       if (statusEl) statusEl.textContent = "자동 운영 중단 · " + (e.message || "오류");

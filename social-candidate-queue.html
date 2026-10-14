@@ -450,7 +450,7 @@
     <main>
       <h1>소셜 네트워크 콘텐츠 운영</h1>
       <p class="lead">
-        이 화면의 주 관리 대상은 <strong>콘텐츠</strong>입니다. 9개 SNS별 최신 콘텐츠를 수집하고,
+        이 화면의 주 관리 대상은 <strong>콘텐츠</strong>입니다. 6개 SNS별 최신 콘텐츠를 수집하고,
         현재 후보·새 수집·프론트 적용 예정·예비 교체·보류·차단 상태를 분리해서 관리합니다.
         인플루언서 등록부는 콘텐츠 수집을 돕는 보조 관리 영역으로 화면 하단에 분리합니다.
         <strong>프론트 실제 적용</strong> 버튼을 누르기 전에는 기존 프론트 슬롯을 바꾸지 않습니다.
@@ -528,7 +528,7 @@
         <div id="aiSectionSelector" class="reviewbar" style="margin-top:12px"></div>
         <div class="collect-controls">
           <button id="aiSelectedSectionsBtn" type="button">선택 SNS AI 자동 수집·교체</button>
-          <button id="aiFullCycleBtn" class="publish" type="button">전체 9개 SNS AI 자동 운영 시작</button>
+          <button id="aiFullCycleBtn" class="publish" type="button">전체 6개 SNS AI 자동 운영 시작</button>
           <button id="aiFullStopBtn" class="secondary" type="button">AI 자동 운영 중단</button>
           <label class="small"><input id="aiAutomationApply" type="checkbox" checked /> AI 작업 완료 후 프론트 실제 적용까지 실행</label>
           <span id="aiAutomationState" class="state">대기</span>
@@ -566,7 +566,7 @@
             선택 섹션 1묶음 점검</button
           ><button id="collectSectionBtn">선택 섹션 120개 후보 수집</button
           ><button id="collectAllBtn" class="publish">
-            전체 9개 섹션 순차 수집</button
+            전체 6개 섹션 순차 수집</button
           ><button id="collectorStopBtn" class="secondary" disabled>
             일시정지</button
           ><button id="collectorProgressJsonBtn" class="secondary">
@@ -695,7 +695,7 @@
         <div class="modal-head">
           <div>
             <h2 style="margin: 0">
-              콘텐츠 카드 목록 · 9개 SNS
+              콘텐츠 카드 목록 · 6개 SNS
             </h2>
             <div class="small">
               위 상태별 관리에서 선택한 콘텐츠만 표시합니다. 섹션당 후보 풀은 최대 120개(공개 100 + 예비 20)로 유지합니다.
@@ -714,16 +714,16 @@
           ><button id="waitingDemoteBtn" class="secondary">선택 후보 등록 해제</button
           ><button id="publishSelectedSectionsBtn" class="publish">선택 콘텐츠 SNS 프론트 등록</button
           ><button id="unpublishAllBtn" class="danger">선택 콘텐츠 프론트 등록 해제</button
-          ><span class="state" id="frontSectionSelectionState">프론트 섹션 선택 0/9</span
-          ><button id="selectAllFrontSectionsBtn" class="secondary" type="button">9개 프론트 섹션 전체 선택</button
+          ><span class="state" id="frontSectionSelectionState">프론트 섹션 선택 0/6</span
+          ><button id="selectAllFrontSectionsBtn" class="secondary" type="button">6개 프론트 섹션 전체 선택</button
           ><button id="clearFrontSectionsBtn" class="secondary" type="button">프론트 섹션 선택 해제</button
           ><button id="publishSelectedFrontSectionsBtn" class="publish" type="button">선택 섹션 프론트 등록</button
           ><button id="unpublishSelectedFrontSectionsBtn" class="danger" type="button">선택 섹션 프론트 등록 해제</button
           ><button id="waitingDeleteBtn" class="danger">선택 리스트 삭제</button
           ><button id="waitingBlockBtn" class="danger">선택 영구 차단</button
           ><span style="flex:1"></span
-          ><button id="publishAllBtn" class="publish" type="button">전체 9개 SNS 프론트 등록</button
-          ><button id="unpublishAllScopeBtn" class="danger">전체 9개 SNS 프론트 등록 해제</button
+          ><button id="publishAllBtn" class="publish" type="button">전체 6개 SNS 프론트 등록</button
+          ><button id="unpublishAllScopeBtn" class="danger">전체 6개 SNS 프론트 등록 해제</button
           ><span id="frontApplyState" class="state">프론트 등록 전</span>
         </div>
         <div id="waitingAccordion" class="section-accordion"></div>
@@ -731,7 +731,7 @@
       <section id="holdPanel" class="panel hidden">
         <div class="modal-head">
           <div>
-            <h2 style="margin: 0">콘텐츠 보류 대기 · 9개 SNS 섹션</h2>
+            <h2 style="margin: 0">콘텐츠 보류 대기 · 6개 SNS 섹션</h2>
             <div class="small">
               실제 공개·적용 목록에서 내린 콘텐츠는 바로 삭제하지 않고 먼저 이곳에 보관합니다.
               보류 수량은 섹션별 120개 제한과 별도로 유지할 수 있으며, 필요하면 다시 후보 리스트로 복구할 수 있습니다.
@@ -807,7 +807,7 @@
       </section>
       <p class="foot">
         후보 수집·검토만으로 프런트 공개 목록은 바뀌지 않습니다. 검증 완료
-        후보만 <strong>전체 9개 섹션 실제 적용</strong> 또는
+        후보만 <strong>전체 6개 섹션 실제 적용</strong> 또는
         <strong>이 섹션 실제 적용</strong> 버튼으로 소셜 네트워크 화면에
         반영됩니다. 적용 취소한 콘텐츠는 삭제하지 않고 교체 후보 대기열로
         복귀하며, 해당 프론트 슬롯은 기존 샘플 또는 준비 중 슬롯으로
@@ -853,7 +853,7 @@
       </section>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=38"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=39"></script>
     <script src="/assets/js/admin-social-ai-dialog.js?v=2"></script>
   <script src="/assets/js/admin-checkbox-accessibility.js?v=20260925-1" defer></script>
 </body>

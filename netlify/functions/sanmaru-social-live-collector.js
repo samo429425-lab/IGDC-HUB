@@ -19,12 +19,12 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.30.0-six-video-platforms";
+const VERSION = "sanmaru-social-live-collector-v1.31.0-six-section-progression";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
 const MAX_BATCH_SIZE = 12;
-const REGISTRY_SWEEP_BATCH_SIZE = 6;
+const REGISTRY_SWEEP_BATCH_SIZE = 12;
 const REQUEST_TIMEOUT_MS = 3800;
 const PROVIDER_GROUP_COUNT = 3;
 const PROVIDER_GROUP_NAMES = Object.freeze([
@@ -2635,7 +2635,13 @@ exports.handler = async function(event) {
       target,
       batchSize,
       queryPasses: queries.length,
+      // queryCatalogSize is diagnostic breadth and may include a large creator
+      // registry. discoveryCatalogSize is the bounded generic provider cycle
+      // used by the administrator runner to decide when to advance to the next
+      // SNS instead of retrying one section hundreds of times.
       queryCatalogSize: catalogSize * PROVIDER_GROUP_COUNT,
+      discoveryCatalogSize: Math.max(6, baseCatalogSize * PROVIDER_GROUP_COUNT),
+      registryCatalogSize: registrySeeds.length,
       queryCursor,
       researchCursor,
       providerGroup,
