@@ -13,7 +13,8 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const Policy = require("./lib/social-candidate-policy.v1");
 const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 
-const VERSION = "sanmaru-social-candidate-gateway-v1.2.0-registry-review-preserve";
+const VERSION = "sanmaru-social-candidate-gateway-v1.3.0-trusted-scheduler-entry";
+const INTERNAL_GATEWAY_EVENT = Symbol("igdc-social-candidate-gateway-internal");
 
 function internalAuthorized(event) {
   const expected = SocialStore.text(process.env.SOCIAL_CANDIDATE_SYNC_SECRET || process.env.SANMARU_INTERNAL_TOKEN || process.env.IGDC_INTERNAL_TOKEN);
@@ -23,6 +24,7 @@ function internalAuthorized(event) {
   return !!(got && got === expected);
 }
 async function actorFor(event) {
+  if (event && event[INTERNAL_GATEWAY_EVENT]) return { memberId: "social-scheduler", email: "social-scheduler", roles: ["social_manager"], mode: "scheduled_internal" };
   if (internalAuthorized(event)) return { memberId: "sanmaru-internal", email: "sanmaru-internal", roles: ["social_manager"], mode: "internal" };
   const actor = await AdminAuth.authenticateCommerceAdmin(event);
   SocialStore.requireRole(actor, "write");
@@ -219,3 +221,20 @@ exports.handler = async function(event) {
     return SocialStore.response(error.statusCode || 500, { ok: false, version: VERSION, error: error.code || "sanmaru_social_candidate_gateway_failed", message: error.message || String(error) });
   }
 };
+
+/**
+ * Trusted in-process entry for scheduled Social collection.
+ * The marker is a module-local Symbol, so an external HTTP request cannot spoof it.
+ */
+exports.storeInternal = async function(body) {
+  const event = {
+    httpMethod: "POST",
+    headers: {},
+    queryStringParameters: {},
+    path: "/.netlify/functions/sanmaru-social-candidate-gateway",
+    body: JSON.stringify(body || {})
+  };
+  event[INTERNAL_GATEWAY_EVENT] = true;
+  return exports.handler(event);
+};
+

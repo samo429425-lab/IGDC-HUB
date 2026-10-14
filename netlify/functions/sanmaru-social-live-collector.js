@@ -19,7 +19,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.34.0-social-pipeline-depth-fix";
+const VERSION = "sanmaru-social-live-collector-v1.35.0-bounded-parallel-research";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -537,10 +537,10 @@ function providerReadiness(configValue) {
     channelPromotion: { ready: true, role: "운영 채널은 내부 식별자로 보존하고 최신 영상·게시물을 표시·클릭 대상으로 유지" },
     collectionCanRun: true,
     keyFreeAutomaticDiscovery: true,
-    directPublicPostFallback: { ready: true, providers: ["Sanmaru all-rescue", "Bing RSS/HTML", "DuckDuckGo Lite"], role: "비YouTube 8개 SNS의 실제 공개 게시물 URL 직접 발견" },
+    directPublicPostFallback: { ready: true, providers: ["Sanmaru/SearchBank", "Bing RSS/HTML", "DuckDuckGo Lite", "Yahoo", "Baidu/Sogou(Douyin)", "platform-native"], role: "활성 비YouTube 5개 SNS의 실제 공개 게시물·영상 URL 직접 발견" },
     requirements: [
-      { key: "필수 키 없음", neededFor: "YouTube RSS + 비YouTube 8개 SNS 공개 웹 검색 fallback", cost: "무료 공개 데이터; 공개 검색 제공자 응답 가능 범위" },
-      { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "8개 비YouTube 플랫폼의 최신 공개 게시물 발견", cost: "Google 무료 할당량 및 서비스 약관 범위" },
+      { key: "필수 키 없음", neededFor: "YouTube RSS + 활성 비YouTube 5개 SNS 공개 웹 검색 fallback", cost: "무료 공개 데이터; 공개 검색 제공자 응답 가능 범위" },
+      { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "활성 비YouTube 5개 플랫폼의 최신 공개 게시물 발견", cost: "Google 무료 할당량 및 서비스 약관 범위" },
       { key: "YOUTUBE_API_KEY", neededFor: "국가·언어별 YouTube 크리에이터 직접 검색", cost: "Google Cloud에서 YouTube Data API v3 활성화" },
       { key: "NAVER_CLIENT_ID + NAVER_CLIENT_SECRET", neededFor: "한국어 최신 공개 영상·게시물 검색 보조", cost: "Naver Developers 애플리케이션 등록" },
       { key: "공개 최신 콘텐츠 URL 직접 반입", neededFor: "키가 없거나 검색 API가 제한된 플랫폼의 후보 확보", cost: "무료; 관리자 공개성·안전성 검토 필요" }
@@ -1477,12 +1477,18 @@ async function genericNativeHtmlSearch(platform, queryText, limit) {
           ]
         : [];
   if (!specs.length) return { provider: platform + "-native-search", status: "not_needed", items: [] };
-  const first = await nativeHtmlDiscoveryPage(platform, specs[0][0], specs[0][1], specs[0][2], limit, specs[0][3]);
-  if ((first.items || []).length >= Math.min(4, Math.max(2, Number(limit || 0) || 2))) return first;
-  const second = await nativeHtmlDiscoveryPage(platform, specs[1][0], specs[1][1], specs[1][2], limit, specs[1][3]);
+
+  // Both public-search pages are best-effort mirrors of the same discovery lane.
+  // Running them serially doubled the wall-clock time of a single Netlify call;
+  // on protected providers that was enough for the function to time out before
+  // the candidate gateway could save anything. Run both bounded requests in
+  // parallel and merge only genuine content URLs afterwards.
+  const results = await Promise.all(specs.map((spec) =>
+    nativeHtmlDiscoveryPage(platform, spec[0], spec[1], spec[2], limit, spec[3])
+  ));
   const seen = new Set();
   const items = [];
-  [first, second].forEach((result) => (result.items || []).forEach((item) => {
+  results.forEach((result) => (result.items || []).forEach((item) => {
     const key = SocialStore.text(item && (item.latestContentUrl || item.url)).toLowerCase();
     if (!key || seen.has(key)) return;
     seen.add(key);
@@ -1490,9 +1496,9 @@ async function genericNativeHtmlSearch(platform, queryText, limit) {
   }));
   return {
     provider: platform + "-native-search",
-    status: items.length ? "ok" : (first.status === "error" || second.status === "error" ? "degraded" : "empty"),
+    status: items.length ? "ok" : (results.some((row) => row.status === "error" || row.status === "timeout") ? "degraded" : "empty"),
     items,
-    trace: [first, second].map((row) => ({ name: row.provider, status: row.status, count: (row.items || []).length, error: row.error || null }))
+    trace: results.map((row) => ({ name: row.provider, status: row.status, count: (row.items || []).length, error: row.error || null }))
   };
 }
 async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
@@ -1502,10 +1508,15 @@ async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
   if (plan.platform !== "dailymotion") {
     return genericNativeHtmlSearch(plan.platform, queryText, limit);
   }
-  const api = await dailymotionPublicApiSearch(queryText, limit, qualitySweep);
-  const floor = Math.min(Math.max(3, Number(limit || 0) || 3), 8);
-  if ((api.items || []).length >= floor) return api;
-  const html = await dailymotionNativeHtmlSearch(queryText, limit);
+
+  // Dailymotion API and public HTML are independent discovery lanes. The old
+  // serial fallback could consume two full provider timeouts before candidate
+  // conversion started. Launch both together so one slow/restricted endpoint
+  // cannot prevent the other from reaching the store in the same invocation.
+  const [api, html] = await Promise.all([
+    dailymotionPublicApiSearch(queryText, limit, qualitySweep),
+    dailymotionNativeHtmlSearch(queryText, limit)
+  ]);
   const seen = new Set();
   const items = [];
   [api, html].forEach((result) => {
@@ -1518,7 +1529,7 @@ async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
   });
   return {
     provider: "dailymotion-native-search",
-    status: items.length ? "ok" : (api.status === "degraded" || html.status === "error" ? "degraded" : "empty"),
+    status: items.length ? "ok" : (api.status === "degraded" || html.status === "error" || html.status === "timeout" ? "degraded" : "empty"),
     items,
     trace: [].concat(api.trace || [], [{ name: html.provider, status: html.status, count: (html.items || []).length, error: html.error || null }])
   };
@@ -1765,51 +1776,42 @@ async function maruUnfilteredSearchOne(event, plan, queryText, limit, language, 
 }
 
 async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup, registryTargeted, registrySeed) {
-  let tasks = [];
+  const tasks = [];
+  const sparse = SPARSE_DISCOVERY_PLATFORMS.has(plan.platform);
+
   if (registrySeed && plan.platform !== "youtube") {
-    // Query the already-registered creator itself in parallel with web search.
-    // This is best-effort and bounded; it never runs on the front/card render path.
     tasks.push(registryNativeLatestSearch(plan, registrySeed, limit));
   }
+
+  // Sparse providers must complete discovery before the serverless request
+  // deadline. Native/public-post lanes are therefore started immediately and
+  // in parallel with the selected provider group, not as a second serial rescue
+  // wave after the first providers have already consumed their timeout budget.
+  if (sparse) {
+    tasks.push(sparseNativePublicSearch(plan, queryText, limit, qualitySweep));
+    tasks.push(directPublicPostSearch(plan, queryText, limit, registrySeed));
+  }
+
   if (providerGroup === 0) {
-    if (SPARSE_DISCOVERY_PLATFORMS.has(plan.platform)) {
-      // TikTok, Facebook, Douyin and Dailymotion are all under-indexed or
-      // dynamically rendered in generic web search. Give them a native/public
-      // discovery lane first; generic engines remain supplemental.
-      tasks.push(sparseNativePublicSearch(plan, queryText, limit, qualitySweep));
-    }
     tasks.push(publicDirectorySearch(plan, route, limit, directoryOffset));
-    // A public-directory row is a creator profile, not a post. When a known
-    // registry identity is being targeted, also ask the existing Maru/SearchBank
-    // public search in the same pass so keyless deployments can still discover
-    // a real latest post/video URL instead of repeatedly rejecting profiles.
     if (registryTargeted || plan.platform !== "youtube") {
-      // Non-YouTube sections must never depend on a directory/profile result
-      // becoming a post by itself. Always pair the directory pass with the
-      // existing public Maru/SearchBank path so a real latest content URL can
-      // reach the candidate gateway even when external API keys are absent.
       tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
     }
   } else if (providerGroup === 1) {
     if (plan.platform === "youtube") {
-      // Generic discovery must search real videos, not channels. The previous
-      // channel search could match a creator and then publish that creator's
-      // unrelated latest upload. Pair query relevance with the regional
-      // most-popular chart so current high-interest videos enter the candidate pool.
       tasks.push(youtubeVideoSearch(queryText, limit, cfg, qualitySweep, route));
       tasks.push(youtubePopularChart(queryText, limit, cfg, route));
     }
     tasks.push(googleChannelSearch(plan, queryText, limit, start, cfg));
     tasks.push(naverChannelSearch(plan, queryText, limit, start, route, cfg));
     if (plan.platform !== "youtube") {
-      // Configured search APIs are optional. Keep the canonical Maru public
-      // search as a same-pass fallback so active Social providers do not collapse
-      // to zero when keys, quotas or provider metadata are unavailable.
       tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
     }
   } else {
     tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
+    if (sparse) tasks.push(maruUnfilteredSearchOne(event, plan, queryText, limit, language, start));
   }
+
   const settled = await Promise.allSettled(tasks);
   let providers = settled.map((entry, index) => {
     if (entry.status === "fulfilled") return entry.value;
@@ -1821,60 +1823,22 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     };
   });
 
-  // YouTube already owns a real-content RSS/Data-API path. For the other five
-  // platforms, invoke the Social-only public-post fallback only when the normal
-  // provider group did not return even one genuine post/video URL. This avoids
-  // duplicate requests while preventing search-page passthroughs from collapsing
-  // the entire SNS section to zero.
-  if (plan.platform !== "youtube") {
+  // Instagram is not in the sparse fast-path above. Preserve its existing
+  // fallback behaviour, but do not add a second network wave for the four
+  // low-yield providers because their independent lanes already ran in parallel.
+  if (plan.platform === "instagram") {
     const hasActualPost = (list) => (list || []).some((result) => (result.items || []).some((item) =>
       candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
     ));
-    const hadActualPost = hasActualPost(providers);
-    const actualPostCount = (providers || []).reduce((count, result) => count + (result.items || []).filter((item) =>
-      candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
-    ).length, 0);
-    // Sparse providers need more than one lucky search hit. Registered creators
-    // remain the priority seed, but when fewer than a small floor of real posts
-    // were found, run the independent public-post search as a diversity lane too.
-    const sparseUnderfilled = SPARSE_DISCOVERY_PLATFORMS.has(plan.platform) &&
-      actualPostCount < Math.min(Math.max(2, Number(limit || 0) || 2), 4);
-    if (providerGroup !== 0 && sparseUnderfilled && (qualitySweep || registryTargeted)) {
-      const nativeRescue = await sparseNativePublicSearch(plan, queryText, limit, qualitySweep);
-      providers = providers.concat([nativeRescue]);
-    }
-    // Search APIs can return only already-known posts. A provider-level "hit"
-    // must therefore not suppress discovery diversity. When a registry creator
-    // is targeted, during a quality sweep, or a sparse provider is underfilled,
-    // run the independent public-post search as well.
-    const diversityRescue = !!(qualitySweep || registryTargeted || sparseUnderfilled);
-    if (!hadActualPost || diversityRescue) {
-      if (plan.platform === "facebook") {
-        // Preserve Facebook's stable path. Use the broad Maru read only when the
-        // normal providers found no post; otherwise one independent public-post
-        // pass is enough to add diversity without multiplying requests.
-        if (!hadActualPost) {
-          const broad = await maruUnfilteredSearchOne(
-            event, plan, queryText, limit, language, start
-          );
-          providers = providers.concat([broad]);
-        }
-        if (!hasActualPost(providers) || diversityRescue) {
-          const rescue = await directPublicPostSearch(plan, queryText, limit, registrySeed);
-          providers = providers.concat([rescue]);
-        }
-      } else if (!hadActualPost) {
-        const rescuePair = await Promise.all([
-          maruUnfilteredSearchOne(event, plan, queryText, limit, language, start),
-          directPublicPostSearch(plan, queryText, limit, registrySeed)
-        ]);
-        providers = providers.concat(rescuePair);
-      } else {
-        const rescue = await directPublicPostSearch(plan, queryText, limit, registrySeed);
-        providers = providers.concat([rescue]);
-      }
+    if (!hasActualPost(providers)) {
+      const rescuePair = await Promise.all([
+        maruUnfilteredSearchOne(event, plan, queryText, limit, language, start),
+        directPublicPostSearch(plan, queryText, limit, registrySeed)
+      ]);
+      providers = providers.concat(rescuePair);
     }
   }
+
   return {
     query: queryText,
     items: providers.flatMap((result) => result.items || []),
@@ -2401,11 +2365,25 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     registrySeed && registrySeed.thumbnail,
     deepThumbnail(item)
   ]);
-  const thumbnailResolution = await stablePublicThumbnail(
-    platform,
-    resolved.latestContentUrl,
-    suppliedThumbnail,
-  );
+  // Candidate persistence must not wait for protected-provider page metadata.
+  // TikTok/Facebook/Douyin/Dailymotion commonly throttle anonymous preview
+  // requests even when the public content URL itself is valid. The previous
+  // synchronous preview hydration delayed saving until the serverless request
+  // timed out. Keep verified content immediately, using any provider-supplied
+  // image now; the existing Social preview hydrator can enrich missing artwork
+  // later without blocking research.
+  const fastSparseCandidate = SPARSE_DISCOVERY_PLATFORMS.has(platform);
+  const thumbnailResolution = fastSparseCandidate
+    ? {
+        thumbnail: usableThumbnail(suppliedThumbnail, resolved.latestContentUrl, platform),
+        metadata: {},
+        resolvedUrl: resolved.latestContentUrl,
+      }
+    : await stablePublicThumbnail(
+        platform,
+        resolved.latestContentUrl,
+        suppliedThumbnail,
+      );
   const publicMetadata = thumbnailResolution.metadata || {};
   const recoveredContentUrl = Policy.normalizeUrl(thumbnailResolution.resolvedUrl);
   if (
@@ -2768,14 +2746,23 @@ exports.handler = async function(event) {
         if (intake.influencers[index]) submitted.push(intake.influencers[index]);
         submitted.push(candidate);
       });
-      const gatewayResponse = await CandidateGateway.handler(gatewayEvent(
-        event,
-        submitted,
+      const intakeGatewayBody = {
+        candidates: submitted,
         sectionKey,
         dryRun,
-        submitted.length || 1,
-        "admin-public-influencer-and-latest-content-intake"
-      ));
+        limit: submitted.length || 1,
+        source: "admin-public-influencer-and-latest-content-intake"
+      };
+      const gatewayResponse = actor.mode === "scheduled_internal" && typeof CandidateGateway.storeInternal === "function"
+        ? await CandidateGateway.storeInternal(intakeGatewayBody)
+        : await CandidateGateway.handler(gatewayEvent(
+            event,
+            submitted,
+            sectionKey,
+            dryRun,
+            submitted.length || 1,
+            "admin-public-influencer-and-latest-content-intake"
+          ));
       const payload = jsonBody(gatewayResponse);
       payload.itemsPreview = previewItems(payload);
       delete payload.items;
@@ -2803,6 +2790,7 @@ exports.handler = async function(event) {
     const queryCursor = Math.max(0, Number(body.queryCursor || body.cursor || 0) || 0);
     const qualitySweep = flag(body.qualitySweep || body.quality_sweep);
     const registrySweepMode = flag(body.registryOnly || body.registry_only || body.registrySweep || body.registry_sweep);
+    const registrySweepComplete = flag(body.registrySweepDone || body.registry_sweep_done);
     const registrySeeds = await influencerRegistrySeeds(sectionKey, plan.platform);
     const registryWindow = registrySweepWindow(
       registrySeeds,
@@ -2837,7 +2825,13 @@ exports.handler = async function(event) {
         return value;
       }).filter(Boolean);
     } else {
-      scoped = scopedQueriesWithRegistry(plan, researchCursor, passes, route, registrySeeds);
+      // The administrator runner performs a complete registry-first sweep before
+      // generic discovery. Once that sweep is complete, do not keep spending one
+      // query lane on already-known creators in every subsequent batch; use the
+      // discovery budget to find new creators/content instead.
+      scoped = registrySweepComplete
+        ? { queries: scopedQueries(plan, researchCursor, passes, route), targeted: false, seed: null, seedByQuery: {} }
+        : scopedQueriesWithRegistry(plan, researchCursor, passes, route, registrySeeds);
       queries = scoped.queries.map((query) => {
         let value = qualitySweep ? query + " popular high quality active official" : query;
         value = aiQuerySuffix ? value + " " + aiQuerySuffix : value;
@@ -2934,9 +2928,23 @@ exports.handler = async function(event) {
       }
       submitted.push(pair.candidate);
     });
-    const gatewayResponse = await CandidateGateway.handler(
-      gatewayEvent(event, submitted, sectionKey, dryRun, submitted.length || 1)
-    );
+    const gatewayBody = {
+      candidates: submitted,
+      sectionKey,
+      dryRun,
+      limit: submitted.length || 1,
+      source: "social-hub-channel-discovery"
+    };
+    // collectInternal() is an in-process scheduled call. Previously it reached
+    // the gateway without a bearer/internal header and the gateway returned 401,
+    // so automatic research could discover rows but never save them. Use the
+    // gateway's unspoofable module-local internal entry only for that scheduler
+    // actor; browser/admin requests keep the existing authorization path.
+    const gatewayResponse = actor.mode === "scheduled_internal" && typeof CandidateGateway.storeInternal === "function"
+      ? await CandidateGateway.storeInternal(gatewayBody)
+      : await CandidateGateway.handler(
+          gatewayEvent(event, submitted, sectionKey, dryRun, submitted.length || 1)
+        );
     const payload = jsonBody(gatewayResponse);
     payload.itemsPreview = previewItems(payload);
     delete payload.items;
@@ -2972,6 +2980,7 @@ exports.handler = async function(event) {
       registryTargeted: registrySweepMode ? true : scoped.targeted,
       registryOnly: registrySweepMode,
       registrySeedCount: registrySeeds.length,
+      registrySweepComplete,
       registrySweep: registrySweepMode ? {
         cursor: registryWindow.batchIndex,
         batchSize: registryWindow.batchSize,

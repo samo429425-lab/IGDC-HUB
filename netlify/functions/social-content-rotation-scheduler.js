@@ -10,7 +10,7 @@
 const Collector = require("./sanmaru-social-live-collector");
 const Publisher = require("./social-snapshot-publish");
 
-const VERSION = "social-content-rotation-scheduler-v1.0.0";
+const VERSION = "social-content-rotation-scheduler-v1.2.0-bounded-provider-research";
 const SECTIONS = [
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
   "social-douyin", "social-dailymotion"
@@ -21,7 +21,12 @@ function bodyOf(response) {
 }
 function cursorFor(sectionIndex, now) {
   const day = Math.floor(now.getTime() / 86400000);
-  return (day * 3 + sectionIndex * 7) % 240;
+  // providerGroup = queryCursor % 3. The old day*3 term locked each SNS to
+  // the same provider group forever (for example Dailymotion stayed on group 2
+  // and never reached native group 0). Let the day itself participate so every
+  // scheduled run rotates public-directory/native -> configured APIs ->
+  // Sanmaru/SearchBank over time.
+  return (day + sectionIndex * 7) % 240;
 }
 
 exports.handler = async function() {
@@ -34,7 +39,10 @@ exports.handler = async function() {
       sectionKey,
       batchSize: 10,
       limit: 10,
-      queryPasses: 3,
+      // Each sparse-platform collector call now opens independent native,
+      // public-search and SearchBank lanes in parallel. One rotating query is
+      // enough per scheduled invocation and avoids rate-limit/timeout bursts.
+      queryPasses: 1,
       queryCursor: cursorFor(i, startedAt),
       qualitySweep: true,
       scopeMode: "global",

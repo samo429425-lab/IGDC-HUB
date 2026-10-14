@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v3.9.0 - six-section collector progression fix */
+/* IGDC Social Hub Content Operations v4.1.0 - bounded parallel Social research */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -19,9 +19,9 @@
     ["social-douyin", "Douyin", "douyin"],
     ["social-dailymotion", "Dailymotion", "dailymotion"],
   ];
-  var COLLECTOR_JOB_VERSION = 3,
+  var COLLECTOR_JOB_VERSION = 5,
     STANDARD_EMPTY_BATCH_LIMIT = 12,
-    SPARSE_EMPTY_BATCH_LIMIT = 18,
+    LOW_YIELD_EMPTY_BATCH_LIMIT = 18,
     REGISTRY_SWEEP_SAFETY_LIMIT = 80;
   var order = SECTIONS.map(function (x) {
       return x[0];
@@ -1593,7 +1593,7 @@
     }
   }
   function jobKey() {
-    return "igdc.socialCollector.job.v3.six-sections";
+    return "igdc.socialCollector.job.v4.bounded-parallel-six-sections";
   }
   function loadJob() {
     try {
@@ -1621,8 +1621,8 @@
     });
   }
   function sectionEmptyBatchLimit(section, j) {
-    var cap = /^social-(?:douyin|dailymotion)$/.test(section)
-        ? SPARSE_EMPTY_BATCH_LIMIT
+    var cap = /^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(section)
+        ? LOW_YIELD_EMPTY_BATCH_LIMIT
         : STANDARD_EMPTY_BATCH_LIMIT,
       reported = Number(j && (j.discoveryCatalogSize || j.catalogSize) || 0);
     // The old collector used queryCatalogSize directly. With a large creator
@@ -1648,6 +1648,19 @@
         "google-cse-channel": "Google CSE",
         "naver-web-channel": "Naver 검색",
         "sanmaru-public-search": "산마루·SearchBank",
+        "tiktok-native-search": "TikTok 전용 검색",
+        "tiktok-native-search-fallback": "TikTok 전용 검색 보조",
+        "facebook-native-search": "Facebook 전용 검색",
+        "facebook-native-watch-search": "Facebook Watch 검색",
+        "facebook-native-video-search": "Facebook 영상 검색",
+        "douyin-native-search": "Douyin 전용 검색",
+        "douyin-native-search-fallback": "Douyin 전용 검색 보조",
+        "dailymotion-native-api": "Dailymotion 공개 API",
+        "dailymotion-native-search": "Dailymotion 전용 검색",
+        "dailymotion-native-html": "Dailymotion 직접 검색",
+        "yahoo-html-social": "Yahoo 공개 검색",
+        "baidu-html-douyin": "Baidu Douyin 보조 검색",
+        "sogou-html-douyin": "Sogou Douyin 보조 검색",
       }[text(value)] || text(value)
     );
   }
@@ -1662,6 +1675,8 @@
         rate_limited: "호출 제한",
         timeout: "응답 지연",
         error: "오류",
+        degraded: "일부 경로 제한",
+        credential_or_api_restricted: "API 공개 접근 제한",
         unsupported_platform: "미지원",
       }[text(value)] || text(value)
     );
@@ -1823,13 +1838,21 @@
       qualitySweep: !!j.qualitySweepActive,
       registryOnly: !!j.registrySweepActive,
       registryCursor: Number(j.registryCursor || 0),
-      registryBatchSize: j.batchSize,
+      // Registered creators remain mandatory-first, but protected SNS providers
+      // must be researched in small request windows. Sending 8-12 creator queries
+      // in one serverless invocation caused provider throttling/timeouts before
+      // the gateway save step. The loop continues until the whole registry is done.
+      registryBatchSize: j.registrySweepActive
+        ? (/^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(section) ? 2 : 4)
+        : j.batchSize,
+      registrySweepDone: !!j.registrySweepDone,
       sectionKey: section,
       limit: j.batchSize,
       batchSize: j.batchSize,
-      queryPasses: j.qualitySweepActive
-        ? (/^social-(?:douyin|dailymotion)$/.test(section) ? 3 : 2)
-        : (/^social-(?:douyin|dailymotion)$/.test(section) ? 2 : 1),
+      // One rotating query per invocation is deliberate: queryCursor already
+      // advances every batch, so breadth is accumulated across bounded calls
+      // instead of multiplying external-provider work inside one request.
+      queryPasses: 1,
       queryCursor: j.queryCursor || 0,
       countryCode: j.countryCode || "",
       regionId: j.regionId || "",
@@ -1954,11 +1977,11 @@
       if (dryRun) break;
       if (!stopRequested && j.sectionCount < j.target) await wait(650);
     }
-    var sparseRescue = /^social-(?:douyin|dailymotion)$/.test(section);
+    var lowYieldRescue = /^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(section);
     if (
       !dryRun &&
       !stopRequested &&
-      (j.sectionCount >= j.target || sparseRescue) &&
+      (j.sectionCount >= j.target || lowYieldRescue) &&
       !j.qualitySweepDone
     ) {
       j.qualitySweepActive = true;
@@ -1966,11 +1989,16 @@
         3,
         Number(j.qualitySweepTarget || 3),
       );
+      // Quality rescue owns its own empty counter. The generic phase normally
+      // ends precisely because emptyBatches reached maxEmpty; reusing that same
+      // counter made the rescue loop execute zero times for the platforms that
+      // needed it most (TikTok/Facebook/Douyin/Dailymotion).
+      j.qualityEmptyBatches = Number(j.qualityEmptyBatches || 0);
       for (
         var sweep = 0;
         sweep < j.qualitySweepTarget &&
         !stopRequested &&
-        j.emptyBatches < maxEmpty;
+        j.qualityEmptyBatches < Math.max(3, Math.min(8, maxEmpty));
         sweep++
       ) {
         j.batch += 1;
@@ -1981,8 +2009,8 @@
         maxEmpty = sectionEmptyBatchLimit(section, j);
         j.newlyFound += qualityNew;
         j.sectionCount += qualityNew;
-        if (qualityNew) j.emptyBatches = 0;
-        else j.emptyBatches += 1;
+        if (qualityNew) j.qualityEmptyBatches = 0;
+        else j.qualityEmptyBatches += 1;
         progress(j);
         saveJob(j);
         if (sweep < j.qualitySweepTarget - 1 && !stopRequested)
@@ -2036,7 +2064,8 @@
       registrySweepDone: false,
       registrySweepActive: false,
       qualitySweepBatches: 0,
-      qualitySweepTarget: /^social-(?:douyin|dailymotion)$/.test(section) ? 8 : 6,
+      qualityEmptyBatches: 0,
+      qualitySweepTarget: /^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(section) ? 8 : 6,
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
@@ -2166,7 +2195,8 @@
           j.registrySweepDone = false;
           j.registrySweepActive = false;
           j.qualitySweepBatches = 0;
-          j.qualitySweepTarget = /^social-(?:douyin|dailymotion)$/.test(j.section) ? 8 : 6;
+          j.qualityEmptyBatches = 0;
+          j.qualitySweepTarget = /^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(j.section) ? 8 : 6;
           j.qualitySweepDone = false;
           j.qualitySweepActive = false;
           j.lastReason = "";
