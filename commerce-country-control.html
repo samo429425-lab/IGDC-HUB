@@ -373,11 +373,11 @@
             <div class="supplier-queue-toolbar">
               <label class="supplier-select-label"><input id="productHoldSelectAll" type="checkbox" data-product-exclusion-select-all="hold"> 목록 전체 선택(모든 페이지)</label>
               <span id="productHoldSelectedCount" class="supplier-selection-count">선택 0건</span>
-              <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="hold" disabled>선택 후보 목록으로 복원</button>
-              <button type="button" id="productHoldAiVerifyBtn" class="publish">AI 자동 검증·확인·보완</button>
-              <button type="button" id="productHoldVerifyAndPlaceBtn" class="publish">정상 보류상품 일괄 검증·원장 복귀·PSOM 자동 배치</button>
-              <button type="button" id="productHoldVerifyStopBtn" disabled>작업 중단</button>
-              <span id="productHoldVerifyProgress" class="small" aria-live="polite">대기 중 · 검증을 실행하면 건별 처리상태를 표시합니다.</span>
+              <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="hold" disabled>선택 후보 복원(수동 관리)</button>
+              <button type="button" id="productHoldAiVerifyBtn" class="publish">AI 검증·정상상품 분류(이동 없음)</button>
+              <button type="button" id="productHoldVerifyAndPlaceBtn" class="publish">검증 완료 정상상품 원장 복귀</button>
+              <label class="small">복귀 위치 <select id="holdVerifiedPlacement"><option value="unassigned">미배치 후보(기본)</option><option value="psom">PSOM 자동 섹션 배치</option></select></label><span id="productHoldVerifiedReviewCount" class="small">정상 검증 0건</span><button type="button" class="ghost" id="productHoldReviewReloadBtn">이전 검증 결과 불러오기</button><div id="holdVerifiedReviewList" class="small"></div><button type="button" id="productHoldVerifyStopBtn" disabled>작업 중단</button>
+              <span id="productHoldVerifyProgress" class="small" aria-live="polite">대기 중 · AI 검증에서는 목록/배치를 변경하지 않습니다. 정상 복귀는 별도 버튼으로 실행합니다.</span>
               <button type="button" class="danger" data-product-exclusion-bulk="reject" data-product-exclusion-scope="hold" disabled>선택 제외로 이동</button>
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="hold" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="hold" disabled>선택 상품 영구 제외</button>
@@ -535,7 +535,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20261016-hold-bulk-active-v4"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261016-verified-review-two-step-v1"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

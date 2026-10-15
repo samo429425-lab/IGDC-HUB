@@ -259,6 +259,7 @@ exports.handler=async function(event){
     if(action==="product_candidate_ledger_bulk_action")return json(200,await Automation.productCandidateLedgerBulkAction(actorId,body));
     if(action==="product_candidate_ai_recover")return json(200,await Automation.productCandidateAiRecover(actorId,body));
     if(action==="product_candidate_hold_verify")return json(200,await Automation.productCandidateHoldVerify(actorId,body));
+    if(action==="product_verified_review")return json(200,await Automation.productVerifiedReviewAction(actorId,body));
     if(action==="product_candidate_psom_place")return json(200,await Automation.productCandidatePsomPlace(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
     if(action==="product_front_finalize"){

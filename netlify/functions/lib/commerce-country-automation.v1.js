@@ -4626,6 +4626,88 @@ async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
   return{ok:false,reason:suggestions.length?"alternative_products_require_administrator_review":"same_product_not_verified",suggestions,excludedUrls:exclusions.urls.size,excludedIdentities:exclusions.identities.size,checkedVariants:variants.length};
 }
 
+
+
+// Two-step product review: proof is stored in a PRIVATE per-product policy, not
+// as a candidate decision. Verification may NEVER demote, stage, place or publish.
+// Only a later explicit administrator restore request can move an approved row.
+const VERIFIED_REVIEW_SCHEMA="igdc-private-product-two-step-verification.v1";
+const VERIFIED_REVIEW_MAX_AGE=24*60*60*1000;
+function verifiedReviewKey(scope,bucket,itemId){
+  return "igdc_private_product_verified_review_"+lower(scope.country)+"_"+lower(scope.region||"NATIONWIDE").replace(/[^a-z0-9_-]/g,"_")+"_"+bucket+"_"+sha256(text(itemId)).slice(0,28);
+}
+async function verifiedReviewGet(scope,bucket,itemId){
+  const id=verifiedReviewKey(scope,bucket,itemId),rows=await SlotStore.select("gslot_policies","select=id,rule&id=eq."+encodeURIComponent(id)+"&limit=1"),rule=plain(array(rows)[0]&&array(rows)[0].rule);
+  return rule.schema===VERIFIED_REVIEW_SCHEMA&&rule.bucket===bucket&&text(rule.itemId)===text(itemId)?rule:{};
+}
+async function verifiedReviewSave(scope,actor,bucket,itemId,proof){
+  const id=verifiedReviewKey(scope,bucket,itemId),now=iso(),rule=Object.assign({schema:VERIFIED_REVIEW_SCHEMA,bucket,itemId:text(itemId)},plain(proof),{updatedAt:now,updatedBy:actor});
+  await SlotStore.insert("gslot_policies",{id,name:"관리자 상품 정상 검증 결과",scope_hub:"country-private-product-verified-review",scope_country:scope.country,scope_region:scope.region==="NATIONWIDE"?null:scope.region,enabled:true,rule,updated_at:now,updated_by:actor},"resolution=merge-duplicates,return=minimal");
+  return rule;
+}
+function verifiedReviewFresh(proof,url,jobId){
+  const checked=Date.parse(text(proof.checkedAt)),now=Date.now();
+  return proof.state==="verified"&&Number.isFinite(checked)&&checked<=now+300000&&now-checked<VERIFIED_REVIEW_MAX_AGE
+    &&ProductRanking.canonicalProductUrl(proof.productUrl)===ProductRanking.canonicalProductUrl(url)
+    &&(!jobId||text(proof.jobId)===text(jobId));
+}
+async function productVerifiedReviewAction(actorId,input){
+  const scope=researchScope(input),actor=text(actorId)||"administrator",bucket=lower(input&&input.bucket)==="latest"?"latest":"hold",operation=lower(input&&input.operation),ids=Array.from(new Set(array(input&&input.ids).map(text).filter(Boolean))).slice(0,8);
+  if(!ids.length){const error=new Error("검증하거나 복귀할 상품을 선택하세요.");error.statusCode=400;throw error;}
+  if(!["verify","restore","status"].includes(operation)){const error=new Error("상품 검증 작업을 확인하세요.");error.statusCode=400;throw error;}
+  const job=bucket==="latest"?await loadProductResearchJob(scope):null;
+  if(bucket==="latest"&&(!job||job.schema!==PRODUCT_JOB_SCHEMA)){const error=new Error("최신 상품 조사 기록을 찾을 수 없습니다.");error.statusCode=404;throw error;}
+  const latest=bucket==="latest"?(job.resultStorage==="chunked_v1"?await resolveChunkedProductSelection(job,{productIds:ids,productRefs:array(input&&input.productRefs)}):array(job.products).filter((row)=>productSelectionMatches(row,new Set(ids)))):[];
+  const latestByAlias=new Map();for(const row of latest)for(const alias of productSelectionAliases(row))latestByAlias.set(alias,row);
+  const held=bucket==="hold"?await frontSyncSelectCandidates(ids):[],heldById=new Map(array(held).map((row)=>[text(row&&row.id),row]));
+  const results=[];
+  for(const id of ids){
+    try{
+      const candidate=plain(heldById.get(id)),source=bucket==="hold"?candidateRuntimeProduct(candidate,scope):plain(latestByAlias.get(id)),payload=plain(candidate.source_payload),url=productUrl(source),candidateState=lower(payload.slotDecision),proof=bucket==="hold"?await verifiedReviewGet(scope,bucket,id):await verifiedReviewGet(scope,bucket,id);
+      if(!source||!url||(bucket==="hold"&&(!text(candidate.id)||candidateState!=="hold"||plain(payload.queueControl).permanentExcluded===true))){results.push({id,state:"skipped",reason:"item_missing_or_not_in_expected_list"});continue;}
+      if(operation==="status"){
+        results.push({id,state:verifiedReviewFresh(proof,url,bucket==="latest"?job.jobId:null)?"verified":"pending",checkedAt:proof.checkedAt||null});continue;
+      }
+      if(operation==="verify"){
+        const inputRow=Object.assign({},source,{id,candidateId:id});let inspected=null;
+        try{const check=await RegionalSelector.inspectProductResearchStep([inputRow],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});inspected=plain(array(check&&check.items)[0]);}catch(_e){inspected={};}
+        const item=Object.keys(inspected).length?Object.assign({},source,inspected):Object.assign({},source,{productPageLive:false,inspectionComplete:false,researchStatus:"inspection_error"});
+        const health=candidateRuntimeHealth(item),exactSameUrl=ProductRanking.canonicalProductUrl(url)===ProductRanking.canonicalProductUrl(productUrl(item));
+        const verified=health.live===true&&inspected.productPageLive===true&&inspected.inspectionComplete===true&&exactSameUrl
+          &&inspected.sameSupplierSite===true&&!!productImageUrl(inspected)&&ProductRanking.isSpecificProductUrl(productUrl(inspected));
+        await verifiedReviewSave(scope,actor,bucket,id,{state:verified?"verified":(health.inconclusive?"inconclusive":"invalid"),checkedAt:iso(),productUrl:url,jobId:bucket==="latest"?job.jobId:null,reasons:health.reasons,exactSameUrl,inspectionComplete:item.inspectionComplete===true,productPageLive:item.productPageLive===true});
+        results.push({id,state:verified?"verified":(health.inconclusive?"inconclusive":"invalid"),reasons:health.reasons,checkedAt:iso()});continue;
+      }
+      // Operator restoration uses only a stored FRESH successful proof with the
+      // exact same detail URL. UI-supplied verdicts never authorize a mutation.
+      if(!verifiedReviewFresh(proof,url,bucket==="latest"?job.jobId:null)){results.push({id,state:"skipped",reason:"fresh_successful_verification_required"});continue;}
+      if(bucket==="hold"){
+        const existing=plain(payload.frontPublication),activeFront=["matched","published","active","publish_requested","queued"].includes(lower(existing.status));
+        if(activeFront){results.push({id,state:"preserved",reason:"existing_published_candidate_preserved"});continue;}
+        const priorAssignments=await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,publication_status",[id]);
+        if(array(priorAssignments).length){results.push({id,state:"preserved",reason:"existing_assignment_must_not_be_replaced"});continue;}
+        const clearedRisk=Object.assign({},plain(payload.riskAssessment),{explicitUnavailable:false,specificProductUrl:true,supplierSiteMatched:true});
+        clearedRisk.blockers=array(clearedRisk.blockers).filter(reason=>!["product_page_unavailable","supplier_product_domain_mismatch","specific_product_page_not_verified"].includes(lower(reason)));
+        const next=Object.assign({},payload,{slotDecision:"undecided",researchStatus:"ready_for_admin_review",sameSupplierSite:true,riskAssessment:clearedRisk,productPageLive:true,inspectionComplete:true,review:Object.assign({},plain(payload.review),{state:"undecided",twoStepVerifiedRestoration:true,verifiedAt:proof.checkedAt,decidedBy:actor,decidedAt:iso()}),queueControl:Object.assign({},plain(payload.queueControl),{action:"verified_normal_restoration",permanentExcluded:false,hiddenFromCountryQueue:false,rediscoveryAllowed:true,restoredAt:iso(),restoredBy:actor}),managementControl:Object.assign({},plain(payload.managementControl),{source:"administrator_verified_restore",administratorLocked:true,aiReclassificationAllowed:false,decidedBy:actor,decidedAt:iso()}),runtimeValidation:Object.assign({},plain(payload.runtimeValidation),{state:"live",live:true,dead:false,inconclusive:false,checkedAt:proof.checkedAt,source:"administrator_verified_review"})});
+        // Keep old section evidence for possible manual reconstruction; new
+        // private placement is an entirely separate administrator choice.
+        await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"research_pending",source_payload:next,updated_at:iso()});
+        await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");
+        results.push({id,candidateId:id,state:"restored"});
+      }else{
+        const previous=await registeredProductCandidateByUrl(source);
+        if(previous&&["slot_candidate","hold","reject","purge"].includes(lower(plain(previous.source_payload).slotDecision))){results.push({id,state:"preserved",reason:"existing_candidate_decision_preserved",candidateId:text(previous.id)});continue;}
+        const clearedRisk=Object.assign({},plain(source.riskAssessment),{explicitUnavailable:false,specificProductUrl:true,supplierSiteMatched:true});
+        clearedRisk.blockers=array(clearedRisk.blockers).filter(reason=>!["product_page_unavailable","supplier_product_domain_mismatch","specific_product_page_not_verified"].includes(lower(reason)));
+        const prepared=Object.assign({},source,{productPageLive:true,inspectionComplete:true,sameSupplierSite:true,riskAssessment:clearedRisk,researchStatus:"ready_for_admin_review"});
+        const saved=await syncProductResearchPreview(actorId,scope,prepared,{allowAdministratorReviewQueue:true});
+        results.push({id,candidateId:text(saved.candidateId),state:saved.registered===true?"restored":"skipped",reason:saved.registered===true?null:text(saved.status)});
+      }
+    }catch(error){results.push({id,state:"failed",reason:text(error&&error.message||error)});}
+  }
+  return{ok:true,bucket,operation,requested:ids.length,verified:results.filter(r=>r.state==="verified").length,restored:results.filter(r=>r.state==="restored").length,failed:results.filter(r=>r.state==="failed").length,results,automaticPublication:false,autoPlacement:false};
+}
+
 async function productCandidateHoldVerify(actorId, input) {
   const scope=researchScope(input),actor=text(actorId)||"administrator",ids=Array.from(new Set(array(input&&input.candidateIds).map(text).filter(Boolean))).slice(0,100);
   if(!ids.length){const error=new Error("AI 검증할 보류 상품을 선택하세요.");error.statusCode=400;throw error;}
@@ -6188,5 +6270,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateAiRecover, productCandidateHoldVerify, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
 };
