@@ -46,9 +46,14 @@
 
     .front-sync-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center}.front-sync-state{margin-top:8px;padding:8px 9px;border:1px solid #355677;border-radius:8px;background:#081421;color:#b9cee4;font-size:12px;line-height:1.45}.front-sync-state.running{border-color:#55c8ff;color:#d7efff}.front-sync-state.complete{border-color:#4ed18b;color:#c9f7df}.front-sync-state.warn{border-color:#f2b349;color:#ffe8b4}.product-section-front-button,.product-section-unmatch-button{min-height:34px!important;padding:8px 11px!important;font-size:12px!important;font-weight:600!important;letter-spacing:0!important;line-height:1.25!important;white-space:normal!important}.product-section-front-button{background:#1d4b35!important;color:#e5fff1!important;border-color:#5ca780!important}.product-section-unmatch-button{background:#4f2730!important;color:#ffe8eb!important;border-color:#aa6472!important}.product-section-front-button:disabled,.product-section-unmatch-button:disabled{opacity:1!important;background:#26384a!important;border-color:#52677d!important;color:#d5e2ee!important;cursor:not-allowed}.product-front-status{margin-top:6px;padding:6px 8px;border:1px solid #29425f;border-radius:7px;background:#07111e;color:#b9cee4;font-size:11px}.product-front-status.active{border-color:#4ed18b;color:#c9f7df}.affiliate-modal{position:fixed;inset:0;z-index:5200;display:grid;place-items:center;background:rgba(0,0,0,.76);padding:18px}.affiliate-sheet{width:min(820px,96vw);max-height:92vh;overflow:auto;background:#0c192a;border:1px solid #47698d;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.55);padding:16px}.affiliate-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.affiliate-head h2{margin:0;font-size:20px}.affiliate-form{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px;margin-top:12px}.affiliate-checks{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:8px;margin-top:12px}.affiliate-checks label{padding:8px;border:1px solid #29425f;border-radius:8px;background:#091525;font-size:12px}.affiliate-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px}.affiliate-settlement-summary{padding:7px 8px;border:1px solid #29425f;border-radius:7px;background:#07111e;font-size:11px;line-height:1.45}.affiliate-stage-pill.connection{background:#443717;color:#ffe6a2}.affiliate-stage-pill.referral{background:#174463;color:#d2efff}.affiliate-stage-pill.online{background:#174d36;color:#d0ffe7}.affiliate-stage-pill.partner{background:#41316a;color:#eadfff}@media(max-width:700px){.affiliate-form,.affiliate-checks{grid-template-columns:1fr}}
 
-    /* Simplified 3-stage operator flow: supplier research -> product research -> candidate placement.
-       Legacy queue controls remain in DOM/runtime for backward compatibility only. */
-    #queuePanel,#productQueueStageCurrentBtn,#productQueueAutoBtn,#productQueueStageState,.product-transition-audit{display:none!important}
+    /* The private research-to-candidate-queue handoff must remain operable.
+       After a safe pause the administrator can register validated results;
+       the existing server-side pause/phase gates still prevent concurrent
+       registration while product inspection is running. */
+    #queuePanel,.product-transition-audit{display:none!important}
+    #productQueueStageCurrentBtn,#productQueueAutoBtn{display:inline-flex!important}
+    #productQueueStageState{display:block!important;margin-top:8px}
+    #productQueueStageCurrentBtn:disabled,#productQueueAutoBtn:disabled{cursor:not-allowed;opacity:.56}
 
     .candidate-bulk-state{display:inline-flex;align-items:center;min-height:30px;padding:5px 9px;border:1px solid #355677;border-radius:8px;background:#091525;color:#b9cde3;font-weight:800}.candidate-bulk-state.working{border-color:#3b78a4;color:#ccecff}.candidate-bulk-state.ok{border-color:#2f7d5a;color:#c9f7df}.candidate-bulk-state.warn{border-color:#8b5c20;color:#ffe4ad}.candidate-bulk-state.fail{border-color:#9f4757;color:#ffd5dc}
 
@@ -316,7 +321,7 @@
     <details id="latestProductPanel" class="product-management-details heavy-data-panel" data-heavy-panel="latest-products">
       <summary class="heavy-panel-summary"><span><strong>최신 상품 리서치 목록</strong> <span id="latestProductSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="latest_product_research" data-policy-workspace-label="최신 상품 리서치 목록" data-policy-scope="country">AI 운영·정책 대화</button><span id="latestProductToggleLabel" class="pill info">목록 펼치기</span></span></summary>
       <div class="heavy-panel-content">
-        <div class="small">현재 선택 국가·지역의 이번 상품 리서치 사이클에서 발견·점검되어 저장된 최신 상품을 표시합니다. 조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관할 수 있습니다. 버튼 실행 시 실제 상품 상세페이지 조건을 통과한 상품은 전체 상품 후보·배치 관리 목록으로 이동하고, URL·페이지 검증에 실패하거나 확인이 끝나지 않은 상품은 제외·보류 업체 및 상품 목록으로 자동 분류됩니다. 상품 조사를 일시정지하면 그 시점까지 저장된 최신 상품 목록을 다시 읽습니다.</div>
+        <div class="small">현재 선택 국가·지역의 이번 상품 리서치 사이클에서 발견·점검되어 저장된 최신 상품을 표시합니다. 조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관할 수 있습니다. AI 검증에서 정상 상품임이 확인된 것만 전체 상품 후보·배치 관리 목록으로 이관하고 PSOM 기준 섹션을 배치합니다. 접속 제한·검증 미완료 상품은 최신 목록에 남겨 다음 검증에서 재시도합니다. 확인된 부정확한 상품 URL은 별도 검토하며 기존 확정 상품은 변경하지 않습니다. 상품 조사를 일시정지하면 그 시점까지 저장된 최신 상품 목록을 다시 읽습니다.</div>
         <div id="latestProductGrid" class="product-grid latest-product-grid"><div class="small">아직 최신 리서치 상품을 불러오지 않았습니다.</div></div>
       </div>
     </details>
@@ -370,6 +375,7 @@
               <span id="productHoldSelectedCount" class="supplier-selection-count">선택 0건</span>
               <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="hold" disabled>선택 후보 목록으로 복원</button>
               <button type="button" id="productHoldAiVerifyBtn" class="publish">AI 자동 검증·확인·보완</button>
+              <button type="button" id="productHoldVerifyAndPlaceBtn" class="publish">정상 보류상품 일괄 검증·원장 복귀·PSOM 자동 배치</button>
               <button type="button" class="danger" data-product-exclusion-bulk="reject" data-product-exclusion-scope="hold" disabled>선택 제외로 이동</button>
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="hold" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="hold" disabled>선택 상품 영구 제외</button>
@@ -527,7 +533,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20261015-product-supplier-delta-hold-v1"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261015-placement-safe-bulk-verify-v2"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

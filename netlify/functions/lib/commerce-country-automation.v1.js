@@ -21,9 +21,10 @@ const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
+const AdminPlacementGuard = require("./commerce-admin-placement-guard.v1");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 
-const VERSION = "commerce-country-automation-v3.37.2-admin-psom-group-authority";
+const VERSION = "commerce-country-automation-v3.37.3-established-placement-immutable";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2891,8 +2892,11 @@ function latestProductValidationDisposition(productInput){
   const product=plain(productInput),readiness=ProductPipeline.researchReadiness(product),risk=plain(product.riskAssessment),status=lower(product.researchStatus),blockers=array(readiness.blockers).map(lower),reviewGaps=array(readiness.reviewGaps).map(lower);
   const structuralBlockers=new Set(["specific_product_detail_url_missing","template_or_placeholder_url","supplier_identity_missing","supplier_product_domain_mismatch"]);
   const structuralInvalid=!productUrl(product)||risk.specificProductUrl===false||product.sameSupplierSite===false||blockers.some((code)=>structuralBlockers.has(code))||["http_404","non_html"].includes(status);
-  const decision=structuralInvalid?"reject":"hold";
-  const reason=structuralInvalid?"invalid_product_reference":((product.productPageLive===false||risk.explicitUnavailable===true||blockers.includes("product_page_unavailable"))?"product_page_temporarily_unavailable":"validation_incomplete");
+  // A temporary 403/429/Cafe24 restriction or incomplete scraper run is NOT a
+  // seller-confirmed product deletion. Leave the newly researched row in the
+  // latest review inbox; never manufacture a hold/reject for missing evidence.
+  const decision=structuralInvalid?"reject":"pending";
+  const reason=structuralInvalid?"invalid_product_reference":((product.productPageLive===false||risk.explicitUnavailable===true||blockers.includes("product_page_unavailable"))?"awaiting_confirmed_product_page":"validation_incomplete");
   return{decision,reason,blockers,reviewGaps,status:status||null};
 }
 async function persistLatestProductValidationDisposition(actorId,scope,productInput,dispositionInput){
@@ -2921,6 +2925,12 @@ async function routeBlockedLatestProducts(actorId,scope,rowsInput){
   const consumed=new Set(),holdKeys=new Set(),rejectKeys=new Set(),protectedKeys=new Set();
   for(const product of rows){
     const disposition=latestProductValidationDisposition(product),identity=productQueueIdentity(product),selectionKeys=productSelectionAliases(product);
+    if(disposition.decision==="pending"){
+      // Unknown evidence must not enter the excluded/held ledger or consume the
+      // original latest result. A later verified pass may still promote it.
+      out.details.push({productId:text(product&&product.id),status:"validation_pending_preserved_in_latest",reason:disposition.reason});
+      continue;
+    }
     try{
       const saved=await persistLatestProductValidationDisposition(actorId,scope,product,disposition),detail=Object.assign({productId:text(product&&product.id),title:text(product&&product.productName||product&&product.title)||null,url:productUrl(product)||null,identity:identity||null,selectionKeys},saved,{blockers:disposition.blockers,reviewGaps:disposition.reviewGaps});
       out.details.push(detail);
@@ -3503,11 +3513,17 @@ function automaticManagementControl(actorId, mode, runId, extra) {
   }, plain(extra));
 }
 function productAutomationPlanningSource(job) {
-  return array(job.rawProducts).concat(array(job.products).map((row) => productAdministratorLocked(row) ? plain(row) : stripAutomaticProductPlacement(row)));
+  // Never strip a previously confirmed placement while recomputing an AI plan.
+  // A prior AI placement is also a durable C-stage decision, not an invitation
+  // for every subsequent run to move the item back to research or hold.
+  return array(job.rawProducts).concat(array(job.products).map((row) => {
+    const decision=lower(row&&row.slotDecision||"undecided");
+    return productAdministratorLocked(row)||decision!=="undecided"?plain(row):stripAutomaticProductPlacement(row);
+  }));
 }
 function productNeedsAutomationEnrichment(rowInput) {
   const row = plain(rowInput), decision = lower(row.slotDecision || "undecided");
-  if (productAdministratorLocked(row) || ["hold","reject","purge"].includes(decision)) return false;
+  if (productAdministratorLocked(row) || decision !== "undecided") return false;
   if (!ProductRanking.isSpecificProductUrl(productUrl(row))) return false;
   const name = first(row.productName, row.title), attempts = Number(row.automationEnrichmentAttempts || 0);
   return attempts < 1 && (row.inspectionComplete !== true || row.provisionalName === true || ProductRanking.isGenericProductName(name));
@@ -3664,10 +3680,19 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
   row.created_at = iso(); row.created_by = text(actorId) || "product-research-orchestrator"; await SlotStore.insert("gslot_candidates", row, "return=minimal"); const durable=await durableProductCandidate(scope,product,candidateId);if(!durable)throw new Error("PRIVATE_PRODUCT_QUEUE_DURABLE_VERIFY_FAILED");candidateId=text(durable.id)||candidateId;return { status: "research_preview_created", candidateId, registered:true, decision: "undecided", approvedPlacement: null };
 }
 
-async function syncProductCandidateQueue(actorId, scope, product, decision) {
+async function syncProductCandidateQueue(actorId, scope, product, decision, optionsInput) {
   const candidateId = productCandidateId(scope, product);
   const existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
+  // Durable administrator ledger, not a possibly old research-job copy,
+  // is authoritative. AI may never demote/reassign an established candidate.
+  // This gate applies to ALL AI queue sync paths (including queue_sync batches).
+  if(plain(optionsInput).aiAutomation===true && existing && AdminPlacementGuard.establishedCandidate(existing)) {
+    return {status:"administrator_placement_immutable",candidateId,registered:true,
+      preserved:true,currentStatus:text(existing.status),
+      decision:text(plain(existing.source_payload).slotDecision)||null,
+      approvedPlacement:plain(plain(existing.source_payload).approvedPlacement)};
+  }
   const now = iso();
   if (decision !== "slot_candidate") {
     if (!existing) return { status: "no_private_candidate_created", candidateId: null };
@@ -3956,6 +3981,11 @@ function candidateRuntimeHealth(productInput) {
   const product = plain(productInput), status = lower(product.researchStatus), risk = plain(product.riskAssessment), reasons = [];
   const hardDeadStatuses = new Set(["http_404","http_410","invalid_product_url","product_page_explicit_invalid_message","product_page_redirected_to_seller_home"]);
   const inconclusiveStatuses = new Set(["http_401","http_403","http_408","http_409","http_425","http_429","http_500","http_502","http_503","http_504","page_too_large","non_html","blocked","unavailable","inspection_error","timeout","aborterror","fetch_failed"]);
+  // Anti-bot / transient gateway responses must NOT be promoted to a hard
+  // product deletion even if their HTML contains no product title or image.
+  if (AdminPlacementGuard.isTemporaryAccessFailure(status)) {
+    return { ok:false, live:false, dead:false, inconclusive:true, state:"inconclusive", reasons:["temporary_supplier_access_failure",status] };
+  }
   const productTitle = lower(first(product.productName, product.title, product.sourceTitle));
   const navigationTitle = /^(?:aside(?:_?menu)?|sidebar|side_?menu|navigation|nav_?menu|header|footer|recommend(?:ed)?_?item(?:_?\d+)?|product_?item(?:_?\d+)?)(?:_|\b)/.test(productTitle.replace(/\s+/g,"_"));
   let hardDead = hardDeadStatuses.has(status), inconclusive = false;
@@ -4162,8 +4192,9 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     const row = plain(rowById.get(id)), existingPayload = Object.assign({}, plain(row.source_payload)), target = authoritativeTargets.get(id), baseSourceProduct = candidateRuntimeProduct(row, scope), sourceProduct = baseSourceProduct ? authoritativeRuntimeProduct(baseSourceProduct, target) : null, inspectedRaw = plain(inspectedById.get(id));
     const activeAssignments = array(assignmentByCandidate.get(id)).filter((assignment) => normalizeCountry(assignment && assignment.country_code) === scope.country && frontSyncExpectedRegion(assignment, scope.country) === scope.region && candidateRuntimePublishedStatus(assignment && assignment.publication_status));
     if (!Object.keys(row).length || !sourceProduct) {
-      for (const assignment of activeAssignments) { withdrawAssignments.push({ candidateId:id, assignmentId:text(assignment.id), sectionKey:candidateRuntimeAssignmentKey(assignment), reason:"candidate_product_reference_missing" }); withdrawCandidateIds.add(id); }
-      results.push({ candidateId:id, status:"invalid", live:false, assigned:false, reason:"candidate_product_reference_missing", activePublication:activeAssignments.length>0 });
+      // Missing scraper data is NOT proof that the published supplier product
+      // was deleted. Preserve all existing assignments for review/recovery.
+      results.push({ candidateId:id, status:"inconclusive", live:false, invalid:false, inconclusive:true, assigned:activeAssignments.length>0, reason:"candidate_product_reference_missing_inspection_required", activePublication:activeAssignments.length>0, administratorLedgerPreserved:true });
       continue;
     }
     const inspected = Object.keys(inspectedRaw).length ? Object.assign({}, sourceProduct, inspectedRaw, { candidateId:id, id:id }) : Object.assign({}, sourceProduct, { candidateId:id, id:id, productPageLive:false, inspectionComplete:true, researchStatus:"inspection_error" });
@@ -4199,8 +4230,14 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       }
     }
     const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
+    // A product that reached C/D is immutable to automated revalidation.
+    // Even explicit 404 can block publication, but must never demote the
+    // administrator ledger or delete its slot while replacement is unresolved.
+    const establishedPlacement = (currentDecision === "slot_candidate" && validProductSectionKey(currentKey))
+      || activeAssignments.length > 0 || AdminPlacementGuard.establishedCandidate(row);
+    const preserveLedger = validationOnly || establishedPlacement;
     let nextDecision = currentDecision, nextPlacement = currentPlacement, status = text(row.status) || "research_pending", assigned = currentDecision === "slot_candidate" && validProductSectionKey(currentKey), changeReason = "runtime_revalidated", currentBalanceReleased = false;
-    if (validationOnly) {
+    if (preserveLedger) {
       // FRONT MATCH IS READ-ONLY AGAINST THE ADMINISTRATOR LEDGER.
       // Runtime checks may decide whether a public assignment should be built,
       // but they must never rewrite candidate.status, slotDecision, placement,
@@ -4211,13 +4248,9 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
         : (health.inconclusive
           ? (priorLiveFallback ? "front_validation_inconclusive_prior_verified_admin_ledger_preserved" : "front_validation_inconclusive_admin_ledger_preserved")
           : "front_validation_live_admin_ledger_preserved");
-      for (const assignment of activeAssignments) {
-        const assignmentKey = candidateRuntimeAssignmentKey(assignment);
-        if (health.dead) {
-          withdrawAssignments.push({ candidateId:id, assignmentId:text(assignment.id), sectionKey:assignmentKey, reason:"runtime_product_unavailable" });
-          withdrawCandidateIds.add(id);
-        }
-      }
+      // A single inspection error or dead-looking URL is a replacement
+      // investigation, never automatic deletion of an established slot.
+      // Withdrawal must use a separate verified-replacement lifecycle.
       results.push({
         candidateId:id,
         status:health.dead?"invalid":(health.inconclusive?"inconclusive":(assigned?"assigned":"unassigned")),
@@ -4242,7 +4275,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       if (currentKey === "tour|tour" && tourProfile.diningAuxiliary === true) tourDiningAutomaticCount = Math.max(0, tourDiningAutomaticCount - 1);
       currentBalanceReleased = true;
     };
-    if (validationOnly) {
+    if (preserveLedger) {
       // Front Match is publication validation only. Even a hard-dead/non-product
       // result MUST NOT demote, hold, unassign, rebalance, or move the durable
       // administrator ledger. Publication can be blocked independently while
@@ -4305,7 +4338,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     // product may be blocked from publication, but the administrator's work
     // remains exactly where it was until an explicit management action changes it.
     payload.publicPublication = false; payload.automaticImport = false;
-    if (validationOnly) {
+    if (preserveLedger) {
       payload.slotDecision = currentDecision;
       // Preserve every administrator placement field byte-for-byte where possible.
       if (Object.keys(currentPlacement).length) {
@@ -4335,10 +4368,18 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       else if (health.inconclusive) payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"inconclusive", runtimeReasons:health.reasons, runtimeCheckedAt:now });
       else payload.review = Object.assign({}, plain(payload.review), { runtimeValidation:"passed", runtimeReasons:[], runtimeCheckedAt:now });
     }
+    if (preserveLedger) {
+      const preservedPayload=Object.assign({},existingPayload,{
+        runtimeValidation:payload.runtimeValidation,
+        review:payload.review
+      });
+      for(const key of Object.keys(payload))delete payload[key];
+      Object.assign(payload,preservedPayload);
+    }
     await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), { title:payload.title || row.title, official_url:payload.url || row.official_url, thumbnail_url:payload.image || row.thumbnail_url, status, source_payload:payload, updated_at:now });
     const nextKey = productPlacementKey(payload.approvedPlacement || payload.placement);
     for (const assignment of activeAssignments) {
-      const assignmentKey = candidateRuntimeAssignmentKey(assignment), shouldWithdraw = !validationOnly && !health.inconclusive && (health.dead || nextDecision !== "slot_candidate" || !validProductSectionKey(nextKey) || assignmentKey !== nextKey);
+      const assignmentKey = candidateRuntimeAssignmentKey(assignment), shouldWithdraw = !preserveLedger && !health.inconclusive && (health.dead || nextDecision !== "slot_candidate" || !validProductSectionKey(nextKey) || assignmentKey !== nextKey);
       if (shouldWithdraw) { withdrawAssignments.push({ candidateId:id, assignmentId:text(assignment.id), sectionKey:assignmentKey, reason:health.dead?"runtime_product_unavailable":"runtime_section_changed" }); withdrawCandidateIds.add(id); }
     }
     results.push({ candidateId:id, status:health.dead?"invalid":(health.inconclusive?"inconclusive":(assigned?"assigned":"unassigned")), live:health.live, invalid:health.dead, inconclusive:health.inconclusive, assigned, manualLocked, reason:changeReason, reasons:health.reasons, previousSectionKey:currentKey || null, sectionKey:nextKey || null, changedSection:!!(currentKey && nextKey && currentKey !== nextKey), activePublication:activeAssignments.length>0 });
@@ -4366,13 +4407,15 @@ async function productCandidatePsomPlace(actorId, input) {
       // Administrator/manual decisions always outrank automatic PSOM placement.
       // A bulk AI click must never silently rewrite a manually fixed section or
       // a manually held/undecided candidate.
-      if (candidateRuntimeManualLock(payload) && current === "slot_candidate") {
-        const manualKey = productPlacementKey(payload.approvedPlacement || payload.placement || payload.selectedPlacement);
-        if (validProductSectionKey(manualKey)) {
-          counts[manualKey] = Number(counts[manualKey] || 0) + 1;
-          results.push({candidateId:id,assigned:true,sectionKey:manualKey,preservedManual:true,source:"administrator_manual_precedence"});
-        } else {
-          results.push({candidateId:id,assigned:false,preservedManual:true,error:"administrator_manual_assignment_invalid"});
+      if (current === "slot_candidate" || plain(payload.frontPublication).status && ["matched","published","active","publish_requested","queued"].includes(lower(plain(payload.frontPublication).status))) {
+        const lockedKey = productPlacementKey(payload.approvedPlacement || payload.placement || payload.selectedPlacement);
+        // Never let an AI/PSOM bulk pass rewrite an existing confirmed slot.
+        // Missing historical section data must be reviewed, not replaced by a guess.
+        if(validProductSectionKey(lockedKey)){
+          counts[lockedKey] = Number(counts[lockedKey] || 0) + 1;
+          results.push({candidateId:id,assigned:true,sectionKey:lockedKey,preservedExisting:true,source:"existing_placement_immutable"});
+        }else{
+          results.push({candidateId:id,assigned:false,preservedExisting:true,error:"existing_placement_missing_manual_repair_required"});
         }
         continue;
       }
@@ -4706,7 +4749,7 @@ async function syncPendingAiProductCandidates(actorId, scope, job, limitInput, r
   const settled=await Promise.allSettled(pending.map(async(product)=>{
     const candidateId=productCandidateId(scope,product);
     if(downstreamProtected(candidateId))return{status:"existing_front_publication_preserved",candidateId,preservedFrontPublication:true};
-    return syncProductCandidateQueue(actorId,scope,product,"slot_candidate");
+    return syncProductCandidateQueue(actorId,scope,product,"slot_candidate",{aiAutomation:true});
   }));
   const updates=new Map();
   settled.forEach((entry,index)=>{
@@ -4748,13 +4791,22 @@ async function productAiAutomation(actorId, input) {
     compact.aiAutomationResult={schema:"igdc-product-ai-private-placement-result.v4-draft-finalize",mode:"queue_sync",aiRunToken:runToken||null,queueSyncAttempted:queueBatch.attempted,queueSynced:queueBatch.synced,queueSyncFailed:queueBatch.failed,queueSyncRemaining:queueBatch.remaining,queueSyncBatchSize:PRODUCT_AI_QUEUE_SYNC_BATCH,automaticPublication:false,automaticProductImport:false,checkout:false,paymentExecution:false};
     return compact;
   }
+  // Read durable candidates before touching even the research-job projection.
+  // A stale job can say 'undecided' although the operator already placed it.
+  // If this read fails, stop AI BEFORE writes (fail closed).
+  const aiDurableIds = Array.from(new Set(array(job.products).map((row)=>productCandidateId(scope,row)).filter(Boolean)));
+  const aiDurableRows = await frontSyncSelectCandidates(aiDurableIds);
+  const aiDurableById = new Map(aiDurableRows.map((row)=>[text(row.id),row]));
+  const aiEstablishedIds = new Set(aiDurableRows.filter(AdminPlacementGuard.establishedCandidate).map((row)=>text(row.id)));
+  const isAiEstablished = (row) => aiEstablishedIds.has(productCandidateId(scope,row));
   const repairProductIds = new Set(array(job.products).filter((rowInput) => {
     const row = plain(rowInput), decision = lower(row.slotDecision || "undecided"), key = productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement);
-    return decision === "slot_candidate" && !validProductSectionKey(key) && !productAdministratorLocked(row);
+    return decision === "slot_candidate" && !validProductSectionKey(key) && !productAdministratorLocked(row) && !isAiEstablished(row);
   }).map((row) => text(row && row.id)).filter(Boolean));
   let recoveredMissingPlacements = 0;
   job.products = array(job.products).map((rowInput) => {
     const row = plain(rowInput), decision = lower(row.slotDecision || "undecided"), key = productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement);
+    if (isAiEstablished(row)) return AdminPlacementGuard.preserveDuringAutomation(row,aiDurableById.get(productCandidateId(scope,row)));
     if (decision !== "slot_candidate" || validProductSectionKey(key) || productAdministratorLocked(row)) return row;
     recoveredMissingPlacements += 1;
     const next = Object.assign({}, row, { slotDecision: "undecided", decisionSource: "placement_integrity_recovery", publicPublication: false, automaticImport: false });
@@ -4796,8 +4848,11 @@ async function productAiAutomation(actorId, input) {
   const automationCandidates = currentRows.map((current) => {
     if (repairOnly && !repairProductIds.has(text(current && current.id))) return null;
     if (selectionOnly && !selectedProductIds.has(text(current && current.id))) return null;
-    if (productAdministratorLocked(current)) return null;
+    if (productAdministratorLocked(current) || isAiEstablished(current)) return null;
     const decision = lower(current && current.slotDecision || "undecided");
+    // ABCD invariant: AI automation fills NEW/UNASSIGNED only. It is not a
+    // migration or revocation command for any previous placement/hold/reject.
+    if (decision !== "undecided") return null;
     if (unassignedPlacementOnly && decision !== "undecided") return null;
     if (["reject","purge"].includes(decision) && !productAutomationManaged(current)) return null;
     const identity = ProductRanking.productIdentity(current), evaluated = evaluatedByIdentity.get(identity);
@@ -4828,7 +4883,8 @@ async function productAiAutomation(actorId, input) {
     const identity = ProductRanking.productIdentity(current), evaluated = evaluatedByIdentity.get(identity) || plain(current), priorDecision = lower(current && current.slotDecision || "undecided"), priorKey = productPlacementKey(current && (current.approvedPlacement || current.selectedPlacement || current.primaryPlacement));
     if (repairOnly && !repairProductIds.has(text(current && current.id))) { nextRows.push(current); continue; }
     if (selectionOnly && !selectedProductIds.has(text(current && current.id))) { nextRows.push(current); continue; }
-    if (productAdministratorLocked(current)) { nextRows.push(current); continue; }
+    if (isAiEstablished(current)) { nextRows.push(AdminPlacementGuard.preserveDuringAutomation(current,aiDurableById.get(productCandidateId(scope,current)))); continue; }
+    if (productAdministratorLocked(current) || priorDecision !== "undecided") { nextRows.push(current); continue; }
     if (unassignedPlacementOnly && priorDecision !== "undecided") { nextRows.push(current); continue; }
     if (["hold","reject","purge"].includes(priorDecision) && !productAutomationManaged(current)) { nextRows.push(current); continue; }
     const preservedSettlement = normalizeAffiliateSettlement(current.affiliateSettlement || evaluated.affiliateSettlement, { existing: current.affiliateSettlement || evaluated.affiliateSettlement });
@@ -4879,7 +4935,7 @@ async function productAiAutomation(actorId, input) {
   }else{
     for (let offset = 0; offset < changed.length; offset += 8) {
       const batch = changed.slice(offset, offset + 8);
-      const settled = await Promise.allSettled(batch.map((product) => syncProductCandidateQueue(actorId, scope, product, lower(product.slotDecision) || "undecided")));
+      const settled = await Promise.allSettled(batch.map((product) => syncProductCandidateQueue(actorId, scope, product, lower(product.slotDecision) || "undecided",{aiAutomation:true})));
       settled.forEach((entry, index) => syncResults.push(entry.status === "fulfilled" ? { ok: true, productId: text(batch[index].id), status: text(entry.value && entry.value.status) } : { ok: false, productId: text(batch[index].id), error: text(entry.reason && entry.reason.message || entry.reason) }));
     }
   }
