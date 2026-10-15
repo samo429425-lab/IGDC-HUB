@@ -371,7 +371,7 @@
           <summary><span id="productHoldToggleLabel">보류 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
           <div class="supplier-control-content">
             <div class="supplier-queue-toolbar">
-              <label class="supplier-select-label"><input id="productHoldSelectAll" type="checkbox" data-product-exclusion-select-all="hold"> 전체 선택</label>
+              <label class="supplier-select-label"><input id="productHoldSelectAll" type="checkbox" data-product-exclusion-select-all="hold"> 목록 전체 선택(모든 페이지)</label>
               <span id="productHoldSelectedCount" class="supplier-selection-count">선택 0건</span>
               <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="hold" disabled>선택 후보 목록으로 복원</button>
               <button type="button" id="productHoldAiVerifyBtn" class="publish">AI 자동 검증·확인·보완</button>
@@ -389,7 +389,7 @@
           <summary><span id="productRejectToggleLabel">연구 제외 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
           <div class="supplier-control-content">
             <div class="supplier-queue-toolbar">
-              <label class="supplier-select-label"><input id="productRejectSelectAll" type="checkbox" data-product-exclusion-select-all="reject"> 전체 선택</label>
+              <label class="supplier-select-label"><input id="productRejectSelectAll" type="checkbox" data-product-exclusion-select-all="reject"> 목록 전체 선택(모든 페이지)</label>
               <span id="productRejectSelectedCount" class="supplier-selection-count">선택 0건</span>
               <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="reject" disabled>선택 후보 목록으로 복원</button>
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="reject" disabled>선택 영구 제외</button>
@@ -533,7 +533,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20261015-placement-safe-bulk-verify-v2"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261015-crosspage-bulk-selection-v3"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
