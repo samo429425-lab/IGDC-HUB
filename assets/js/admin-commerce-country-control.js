@@ -722,7 +722,7 @@
     var failed=Number(stageSummary.failed||0),staged=Number(summary.privateResearchQueueStaged||0),status=text(data.status||'not_started'),labels={not_started:'아직 상품 리서치를 시작하지 않았습니다.',discovering:'공식 업체 사이트에서 실제 상품 페이지를 찾는 중입니다. 발견된 상품은 검증 전 상태로 바로 표시합니다.',inspecting:'상품 페이지·이미지·가격·재고·영상·원본 링크를 확인하는 중입니다.',staging:'이전 버전의 자동 대기열 단계가 감지되었습니다. 새 정책에 따라 리서치 완료·수동 대기열 대기 상태로 전환합니다.',complete:'상품 리서치를 완료했습니다. 검증 완료 상품은 최신 상품 목록에서 확인한 뒤 현재 조사분 후보 관리목록 등록을 실행할 수 있습니다.',candidate_ledger:'저장된 상품 후보 원장을 기준으로 관리 목록을 불러왔습니다.',cancelled:'상품 리서치가 중단됐습니다.'};
     if(pause&&pause.paused===true){productPausedForQueue=true;productPauseServerConfirmed=true;}else if(pause&&pause.pauseRequested===false){productPausedForQueue=false;productPauseServerConfirmed=false;}if(status==='complete'||status==='cancelled'){productPausedForQueue=false;productPauseServerConfirmed=false;}
     var retryPending=Number(discovery.retryPending||summary.supplierRetryPending||0),deferredSuppliers=Number(discovery.temporarilyDeferred||summary.temporarilyDeferredSuppliers||0),inspectRetry=Number(inspection.retryPending||0);
-    if($('productResearchState'))$('productResearchState').textContent=(data.needsRefresh===true?'이전 상품 추출 결과입니다. 카테고리 페이지를 제외하고 실제 상품 상세페이지·썸네일을 다시 조사해야 합니다. · ':'')+(labels[status]||status)+' · 기존 업체 보존 '+Number(summary.skippedKnownSupplierSources==null?Math.max(0,Number(summary.existingSupplierSources||0)-Number(summary.gapSupplierSources||0)):summary.skippedKnownSupplierSources)+' · 보완 재조사 '+Number(summary.gapSuppliersChecked||0)+'/'+Number(summary.gapSupplierSources||0)+' · 신규 업체 조사 '+Number(summary.newSuppliersChecked||0)+'/'+Number(summary.newSupplierSources==null?Math.max(0,Number(discovery.total||0)-Number(summary.previouslyResearchedSuppliers||0)):summary.newSupplierSources)+' · 전체 진행 '+Number(discovery.done||0)+'/'+Number(discovery.total||0)+(retryPending?' · 느린 업체 재시도 '+retryPending+'건':'')+(deferredSuppliers?' · 다음 사이클 재확인 '+deferredSuppliers+'건':'')+' · 상품 점검 '+Number(inspection.done||0)+'/'+Number(inspection.total||0)+(inspectRetry?' · 느린 상품 재시도 '+inspectRetry+'건':'')+' · 후보 관리목록 등록 '+staged+'/'+Number(privateQueue.total||summary.privateResearchQueueEligible||0)+(failed?' · 등록 실패 '+failed:'');
+    if($('productResearchState'))$('productResearchState').textContent=(data.needsRefresh===true?'이전 상품 추출 결과입니다. 카테고리 페이지를 제외하고 실제 상품 상세페이지·썸네일을 다시 조사해야 합니다. · ':'')+(labels[status]||status)+' · 기존 업체 보존 '+Number(summary.skippedKnownSupplierSources==null?Math.max(0,Number(summary.existingSupplierSources||0)-Number(summary.gapSupplierSources||0)):summary.skippedKnownSupplierSources)+' · 보완 재조사 '+Number(summary.gapSuppliersChecked||0)+'/'+Number(summary.gapSupplierSources||0)+' · 신규 업체 조사 '+Number(summary.newSuppliersChecked||0)+'/'+Number(summary.newSupplierSources==null?Math.max(0,Number(discovery.total||0)-Number(summary.previouslyResearchedSuppliers||0)):summary.newSupplierSources)+' · 전체 진행 '+Number(discovery.done||0)+'/'+Number(discovery.total||0)+(retryPending?' · 느린 업체 재시도 '+retryPending+'건':'')+(deferredSuppliers?' · 다음 사이클 재확인 '+deferredSuppliers+'건':'')+(Number(summary.pendingNewSupplierSources||0)?' · 추가 업체 다음 차수 '+Number(summary.pendingNewSupplierSources)+'건':'')+' · 상품 점검 '+Number(inspection.done||0)+'/'+Number(inspection.total||0)+(inspectRetry?' · 느린 상품 재시도 '+inspectRetry+'건':'')+' · 후보 관리목록 등록 '+staged+'/'+Number(privateQueue.total||summary.privateResearchQueueEligible||0)+(failed?' · 등록 실패 '+failed:'');
     if($('latestProductSummary'))$('latestProductSummary').textContent=Number(summary.latestResearchProducts||latestProductRows.length)+'건';if($('latestProductPanel'))$('latestProductPanel').classList.remove('hidden');
     if(Array.isArray(data.latestProducts)){latestProductRows=data.latestProducts.slice();if($('latestProductPanel')&&$('latestProductPanel').open)renderLatestProductRows();else if($('latestProductGrid'))$('latestProductGrid').innerHTML='';syncLatestProductQueueControls();}
     var liveLatestExpected=Number(summary.latestResearchProducts||0),liveLatestPanel=$('latestProductPanel');if(liveLatestPanel&&liveLatestPanel.open&&selectedCountry&&!latestRefreshActive&&liveLatestExpected>latestProductRows.length){latestRefreshActive=true;refreshLatestResearchRows(selectedCountry,selectedSubdivision||'NATIONWIDE',{state:null,label:'최신 상품 리서치 목록',preserveOnFailure:true}).catch(function(){}).finally(function(){latestRefreshActive=false;});}
@@ -1688,19 +1688,31 @@
     var serverPaused=!!(lastProductJson&&lastProductJson.pause&&lastProductJson.pause.paused===true),serverResumable=!!(lastProductJson&&lastProductJson.progress&&lastProductJson.progress.resumable===true),resumePaused=(productPausedForQueue===true||serverPaused||serverResumable)&&lastProductJson&&['discovering','inspecting','staging'].indexOf(text(lastProductJson.status))>=0,hasPriorResearch=!!(lastProductJson&&lastProductJson.status&&lastProductJson.status!=='not_started');
     if(hasPriorResearch&&!resumePaused&&!options.automatic&&!window.confirm('기존 상품과 관리자 판정은 그대로 보존합니다. 이미 정상 조사된 업체는 중복 전체 재조사하지 않고, 새로 등록된 업체와 이전에 상품을 찾지 못했거나 일시 지연된 업체만 보완 조사합니다. 계속하시겠습니까?'))return;
     hide();productStopRequested=false;productLoopActive=true;if(!resumePaused){productPausedForQueue=false;productPauseServerConfirmed=false;}var button=$('productResearchBtn');button.disabled=true;button.textContent='신규·미확인 상품 조사 진행 중';setButtonEnabled('productResearchPauseBtn',true);if($('productResearchState'))$('productResearchState').textContent=(options.automatic?'공급업체 검증 완료 후 신규·미확인 상품 조사를 자동으로 시작했습니다. ':'')+'관리자가 선택한 '+requested.country+' 범위를 현재 접속 IP와 무관하게 조사합니다. 이미 정상 조사된 업체는 기존 결과를 보존하고 중복 전체 재조사를 하지 않습니다. 새로 등록된 업체와 이전에 상품을 찾지 못했거나 일시 지연된 업체만 다시 조사하며, 동일 상품은 중복 생성하지 않고 신규 상품만 후보 원장에 추가합니다.';
-    var researchFailureText='',pauseAutoStageAfterLoop=false;
+    var researchFailureText='',pauseAutoStageAfterLoop=false,followupDeltaChecks=0;
     try{
       var data;
       if(resumePaused){
-        // Resume is a durable server transition. Do not continue a paused job
-        // until the small runtime control row confirms resume.
-        await api(CONTROL,'product_research_pause_control','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,jobId:lastProductJson&&lastProductJson.jobId||'',mode:'resume',scopeAuthority:'administrator-selected',ignoreRequestGeo:true},8000);
-        data=await loadProductResearchCompact(requested.country,requested.region);productPausedForQueue=false;productPauseServerConfirmed=false;
-        if($('productResearchState'))$('productResearchState').textContent='서버에 저장된 상품 리서치를 저장된 진행 지점부터 계속합니다. 이미 대기열에 등록한 상품은 중복 생성하지 않습니다.';
+        // Refresh the CURRENT supplier ledger before resuming old discovery.
+        // A supplier added while the previous job was paused would otherwise
+        // never enter this cycle until a second manual start.
+        if($('productResearchState'))$('productResearchState').textContent='기존 상품 조사 재개 전에 신규 공급업체 원장을 대조합니다.';
+        var supplierRefresh=await api(CONTROL,'product_research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,refreshSources:true,fullRescan:false,compact:true,scopeAuthority:'administrator-selected',ignoreRequestGeo:true},20000);
+        if(supplierRefresh&&(text(supplierRefresh.jobId)!==text(lastProductJson&&lastProductJson.jobId)||supplierRefresh.status==='complete')){
+          // Another operator may have finished the paused job while this page
+          // kept an older checkpoint. Use the CURRENT server job, never resume
+          // or overwrite a job with an obsolete job ID.
+          data=supplierRefresh;productPausedForQueue=false;productPauseServerConfirmed=false;
+        }else{
+          // Resume is a durable server transition. Do not continue a paused job
+          // until the small runtime control row confirms resume.
+          await api(CONTROL,'product_research_pause_control','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,jobId:text(supplierRefresh&&supplierRefresh.jobId)||text(lastProductJson&&lastProductJson.jobId),mode:'resume',scopeAuthority:'administrator-selected',ignoreRequestGeo:true},8000);
+          data=await loadProductResearchCompact(requested.country,requested.region);productPausedForQueue=false;productPauseServerConfirmed=false;
+          if($('productResearchState'))$('productResearchState').textContent='서버에 저장된 상품 리서치를 저장된 진행 지점부터 계속합니다. 이미 대기열에 등록한 상품은 중복 생성하지 않습니다.';
+        }
       }else{
         var baselineData=await refreshCandidateLedgerProducts({preserveResearchReport:true}),baselineCount=Array.isArray(baselineData&&baselineData.products)?baselineData.products.length:productRows.length;
         if($('productResearchState'))$('productResearchState').textContent='1차 · 저장된 상품 후보 원장 '+baselineCount+'건 유지 완료 · 2차 · 현재 책임 공급업체 비공개 후보 전체의 공식 상품 리서치를 시작합니다. 기존 업체도 재확인하고 신규 업체는 별도 집계합니다.';
-        data=await api(CONTROL,'product_research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,restart:true,retryStaging:false,refreshSources:true,fullRescan:false,candidateLedgerBaseline:true,candidateLedgerBaselineCount:baselineCount,scopeAuthority:'administrator-selected',ignoreRequestGeo:true},20000);
+        data=await api(CONTROL,'product_research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,restart:true,retryStaging:false,refreshSources:true,fullRescan:false,compact:true,candidateLedgerBaseline:true,candidateLedgerBaselineCount:baselineCount,scopeAuthority:'administrator-selected',ignoreRequestGeo:true},20000);
       }
       while(true){
         if(scopeKey()!==requestedKey){productStopRequested=true;show('상품 조사 중 선택 범위가 바뀌어 화면 진행을 중단했습니다. 서버 작업은 원래 범위에서 재개할 수 있습니다.','warn');break;}
@@ -1709,6 +1721,20 @@
         renderProductProgress(lastProductJson);
         if(data.status==='complete'){
           productPausedForQueue=false;productPauseServerConfirmed=false;
+          // Each completed cycle must compare with the CURRENT private supplier
+          // ledger. Otherwise a newly added supplier is invisible after an old
+          // paused/inspecting job resumes. Safely finish the old job first, then
+          // start the incremental new/gap supplier cycle without dropping rows.
+          if(followupDeltaChecks<2&&!productStopRequested){
+            followupDeltaChecks++;
+            if($('productResearchState'))$('productResearchState').textContent='완료된 상품 조사 결과를 보존하고 새로 등록된 공급업체·미확인 업체를 추가 대조합니다.';
+            var completedJobId=text(data.jobId),deltaJob=await api(CONTROL,'product_research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,restart:true,refreshSources:true,fullRescan:false,compact:true,candidateLedgerBaseline:true,scopeAuthority:'administrator-selected',ignoreRequestGeo:true},20000);
+            if(deltaJob&&deltaJob.jobId&&text(deltaJob.jobId)!==completedJobId&&['discovering','inspecting','staging'].indexOf(text(deltaJob.status))>=0){
+              data=deltaJob;
+              if($('productResearchState'))$('productResearchState').textContent='기존 상품 원장을 보존하고 추가 공급업체 '+Number(deltaJob.summary&&deltaJob.summary.newSupplierSources||0)+'곳에 대한 증분 상품 조사를 이어서 시작했습니다.';
+              continue;
+            }
+          }
           if(data.compact===true){data=await loadProductResearchPaged(requested.country,requested.region,{state:$('productResearchState'),label:'완료 상품 관리 목록'});lastProductJson=data;renderProducts(data.products||[]);try{var completedLatest=await loadLatestResearchPaged(requested.country,requested.region,{state:$('productResearchState'),label:'완료 최신 상품 목록',preserveOnFailure:true});if(completedLatest&&Array.isArray(completedLatest.rows)&&(completedLatest.rows.length||completedLatest.complete===true))latestProductRows=completedLatest.rows;}catch(_latestCompleteError){}lastProductJson=Object.assign({},data,{products:productRows,latestProducts:latestProductRows});renderProductProgress(lastProductJson);rememberReport('product',lastProductJson);saveReviewSnapshot();data=lastProductJson;}
           var completedProducts=Array.isArray(data.products)?data.products:productRows,queueEligible=Number(data.summary&&data.summary.privateResearchQueueEligible||0);
           show(completedProducts.length?'상품 리서치를 완료했습니다. 최신 상품 목록을 확인한 뒤 현재 조사분 후보 관리목록 등록 버튼을 누르면 검증 완료 상품 '+queueEligible+'건을 비공개 후보·중개수익 대기열로 순차 등록합니다.':'상품 리서치는 끝났지만 확인 가능한 실제 상품 목록을 만들지 못했습니다. 업체 공식 사이트와 JSON 경로를 점검하세요.',completedProducts.length?'ok':'warn');

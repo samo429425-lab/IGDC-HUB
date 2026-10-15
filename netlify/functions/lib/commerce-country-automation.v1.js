@@ -2246,6 +2246,7 @@ function publicProductJob(job) {
       skippedKnownSupplierSources: Number(job.skippedKnownSupplierSourceCount||0),
       newSupplierSources: supplierResearch.newTotal,
       newSuppliersChecked: supplierResearch.newChecked,
+      pendingNewSupplierSources: Number(job.pendingNewSupplierCount||0),
       previouslyResearchedSuppliers: supplierResearch.existingTotal,
       supplierRetryPending: array(job.supplierRetryQueue).length,
       temporarilyDeferredSuppliers: array(job.temporarilyDeferredSupplierKeys).length,
@@ -2557,12 +2558,31 @@ async function beginProductResearchJob(actorId, input) {
   const forceSourceRefresh=raw.fullRescan===true||raw.forceFullRescan===true;
 
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!forceSourceRefresh&&!['complete','cancelled','failed'].includes(existing.status)){
-    return publicProductJob(existing);
+    // Never replace an unfinished product job: its discovery/result chunks and
+    // administrator queue checkpoints must survive a supplier-ledger update.
+    // While still discovering, append only NEW supplier roots to the same job.
+    // Once inspection/staging has begun the follow-up delta cycle is created
+    // AFTER completion (admin runProductResearch checks the ledger again).
+    const activeKeys=new Set(array(existing.supplierSources).map(productSupplierSourceKey).filter(Boolean));
+    const additions=classifiedSupplierSources.filter(source=>source.researchCycleGroup==="new"&&!activeKeys.has(productSupplierSourceKey(source)));
+    if(additions.length&&existing.status==="discovering"){
+      existing.supplierSources=array(existing.supplierSources).concat(additions);
+      existing.currentSupplierSourceCount=allSupplierSources.length;
+      existing.newSupplierSourceCount=Number(existing.newSupplierSourceCount||0)+additions.length;
+      existing.supplierSourceFingerprint=supplierSourceFingerprint;
+      existing.trace=array(existing.trace).concat([{at:iso(),source:"product-research-supplier-delta",status:"new_suppliers_appended_to_active_discovery",count:additions.length,sourceCount:existing.supplierSources.length}]).slice(-120);
+      await saveProductJob(existing,actorId);
+    }else if(additions.length){
+      // Expose the deferred delta for diagnostics, but do not mutate the
+      // inspection pool of a running job or discard verified products.
+      existing.pendingNewSupplierCount=additions.length;
+    }
+    return raw.compact===true?compactProductResearchStep(existing):publicProductJob(existing);
   }
   const supplierSources=forceSourceRefresh?classifiedSupplierSources:classifiedSupplierSources.filter((source)=>source.researchCycleGroup==="new"||source.researchCycleGroup==="gap");
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!forceSourceRefresh&&existing.status==="complete"&&!supplierSources.length){
     const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierLedgerSourceId,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,gapSupplierSourceCount,skippedKnownSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:Array.from(priorResearchedKeys)});
-    return publicProductJob(view);
+    return raw.compact===true?compactProductResearchStep(view):publicProductJob(view);
   }
 
   const rankingContext=await productRankingContext(scope);
@@ -4566,6 +4586,11 @@ async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
 async function productCandidateHoldVerify(actorId, input) {
   const scope=researchScope(input),actor=text(actorId)||"administrator",ids=Array.from(new Set(array(input&&input.candidateIds).map(text).filter(Boolean))).slice(0,100);
   if(!ids.length){const error=new Error("AI 검증할 보류 상품을 선택하세요.");error.statusCode=400;throw error;}
+  // Read the prior research status BEFORE revalidation. The validator writes
+  // the latest network outcome back to source_payload: an inconclusive 403 or
+  // timeout must not erase the earlier explicit-invalid evidence we need for
+  // a targeted same-product URL repair attempt.
+  const priorRows=await frontSyncSelectCandidates(ids),priorById=new Map(array(priorRows).map(row=>[text(row&&row.id),row]));
   const validation=await revalidateCandidateLedgerRows(actorId,input,ids,{source:"hold_ai_verify",reassign:false,reuseFreshValidation:false,freshValidationMinutes:5});
   const resultById=new Map(array(validation.results).map((row)=>[text(row&&row.candidateId),row]));
   const rows=await frontSyncSelectCandidates(ids),rowById=new Map(array(rows).map((row)=>[text(row&&row.id),row]));
@@ -4580,7 +4605,13 @@ async function productCandidateHoldVerify(actorId, input) {
       if(v.live===true){
         payload.slotDecision="undecided";payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"restored_after_hold_ai_verify",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor});payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_verify",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:actor};payload.review=Object.assign({},plain(payload.review),{state:"undecided",decidedAt:now,decidedBy:actor,holdAiVerified:true});
         await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"research_pending",source_payload:payload,updated_at:now});await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");restored+=1;results.push({candidateId:id,action:"restored",reasons:array(v.reasons)});
-      }else if(v.invalid===true){
+      }else if(v.invalid===true||(v.inconclusive===true&&new Set(["http_404","http_410","product_page_explicit_invalid_message","product_page_redirected_to_seller_home","invalid_product_url"]).has(lower(plain(plain(priorById.get(id)).source_payload).researchStatus)))){
+        // Legacy goodsno URLs can have an explicit prior invalid-page result,
+        // while a fresh fetch is inconclusive (403, timeout, anti-bot, etc.).
+        // In that case do not skip same-product reference recovery merely
+        // because this particular network request could not classify the page.
+        // The recovery is still verified against the same immutable product ID;
+        // unverified or unrelated items remain private hold/review suggestions.
         const recovery=await recoverHeldCandidateProduct(row,scope,{pass:Number(plain(payload.review).recoveryAttemptCount)||0});
         if(recovery.ok===true&&["same_product_url_repair","same_product_reference_recovered"].includes(recovery.kind)&&heldRecoveryReferenceMatches(recovery.currentUrl,recovery.recoveredUrl)){
           const recovered=plain(recovery.product),recoveredUrl=productUrl(recovered),recoveredImage=productImageUrl(recovered),recoveredTitle=first(recovered.productName,recovered.title),recoveredIdentity=ProductRanking.productIdentity(recovered);
@@ -4597,7 +4628,7 @@ async function productCandidateHoldVerify(actorId, input) {
           // Keep the row in a private maintenance/research hold when a verified
           // replacement was not found in this bounded pass. A later research pass
           // may discover a newly listed product on the same official seller site.
-          payload.slotDecision="hold";payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"maintenance_replacement_pending",hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:actor,reason:"dead_product_reference_replacement_pending",recoveryReason:recovery.reason||null,recoverySuggestionCount:array(recovery.suggestions).length});payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_verify",administratorLocked:false,aiReclassificationAllowed:true,decidedAt:now,decidedBy:actor};payload.review=Object.assign({},plain(payload.review),{state:"hold",decidedAt:now,decidedBy:actor,holdAiVerified:true,recoveryAttempted:true,recoveryReason:recovery.reason||null,maintenanceReplacementPending:true,recoverySuggestions:array(recovery.suggestions).slice(0,5),lastRecoveryCheckedAt:now,recoveryAttemptCount:Math.max(0,Number(plain(payload.review).recoveryAttemptCount)||0)+1});
+          payload.slotDecision="hold";payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"maintenance_replacement_pending",hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:actor,reason:v.invalid===true?"dead_product_reference_replacement_pending":"prior_dead_reference_new_check_inconclusive",recoveryReason:recovery.reason||null,recoverySuggestionCount:array(recovery.suggestions).length});payload.managementControl={schema:"igdc-product-management-control.v1",source:"hold_ai_verify",administratorLocked:false,aiReclassificationAllowed:true,decidedAt:now,decidedBy:actor};payload.review=Object.assign({},plain(payload.review),{state:"hold",decidedAt:now,decidedBy:actor,holdAiVerified:true,recoveryAttempted:true,recoveryReason:recovery.reason||null,maintenanceReplacementPending:true,recoverySuggestions:array(recovery.suggestions).slice(0,5),lastRecoveryCheckedAt:now,recoveryAttemptCount:Math.max(0,Number(plain(payload.review).recoveryAttemptCount)||0)+1});
           await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"hold",source_payload:payload,updated_at:now});keptHold+=1;results.push({candidateId:id,action:"hold_replacement_pending",suggestions:array(recovery.suggestions),reasons:array(v.reasons).concat([recovery.reason||"replacement_product_not_found"])});
         }
       }else{
