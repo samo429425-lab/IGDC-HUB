@@ -9,17 +9,21 @@
  * latest public video/post remains the visible candidate and outbound target.
  */
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const SocialStore = require("./lib/social-candidate-store.v1");
 const Policy = require("./lib/social-candidate-policy.v1");
 const ChannelLink = require("./lib/social-channel-link.v1");
 const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 const MaruSearch = require("./maru-search");
+let SearchBankEngine = null;
+try { SearchBankEngine = require("./search-bank-engine"); } catch (_error) { SearchBankEngine = null; }
 const CandidateGateway = require("./sanmaru-social-candidate-gateway");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.35.0-bounded-parallel-research";
+const VERSION = "sanmaru-social-live-collector-v1.36.0-psom-searchbank-content-first";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -28,9 +32,9 @@ const REGISTRY_SWEEP_BATCH_SIZE = 12;
 const REQUEST_TIMEOUT_MS = 3800;
 const PROVIDER_GROUP_COUNT = 3;
 const PROVIDER_GROUP_NAMES = Object.freeze([
-  "public_directory",
-  "configured_search_apis",
-  "sanmaru_searchbank"
+  "psom_searchbank_content",
+  "platform_direct_search_apis",
+  "sanmaru_platform_rescue"
 ]);
 const CHANNEL_RESOLUTION_TIMEOUT_MS = 1500;
 const PUBLIC_METADATA_TIMEOUT_MS = 1500;
@@ -87,6 +91,48 @@ const CONTENT_SITE_FILTERS = Object.freeze({
   douyin: "(site:douyin.com/video/ OR site:douyin.com/note/ OR site:v.douyin.com)",
   dailymotion: "(site:dailymotion.com/video/ OR site:dai.ly)"
 });
+
+// PSOM is the authoritative Social section/routing contract. The collector reads
+// this contract only; it never mutates PSOM or the shared SearchBank/Snapshot
+// engines. Search terms remain in the Social-only candidate policy.
+let SOCIAL_PSOM_CACHE = null;
+function readSocialPsomContract() {
+  if (SOCIAL_PSOM_CACHE) return SOCIAL_PSOM_CACHE;
+  const files = [
+    path.join(__dirname, "data", "psom.json"),
+    path.join(__dirname, "..", "..", "data", "psom.json")
+  ];
+  for (const file of files) {
+    try {
+      if (!fs.existsSync(file)) continue;
+      const doc = JSON.parse(fs.readFileSync(file, "utf8"));
+      const social = doc && doc.pages && doc.pages.social || {};
+      const sections = Array.isArray(social.sections) ? social.sections.slice() : [];
+      const mapping = social.mapping && typeof social.mapping === "object" ? social.mapping : {};
+      if (sections.length && Object.keys(mapping).length) {
+        SOCIAL_PSOM_CACHE = { file, sections, mapping };
+        return SOCIAL_PSOM_CACHE;
+      }
+    } catch (_error) {}
+  }
+  SOCIAL_PSOM_CACHE = { file: "", sections: [], mapping: {} };
+  return SOCIAL_PSOM_CACHE;
+}
+function psomSocialContract(plan) {
+  const contract = readSocialPsomContract();
+  const sectionKey = SocialStore.text(plan && plan.sectionKey);
+  const platform = SocialStore.lowerText(plan && plan.platform);
+  const mapped = SocialStore.text(contract.mapping && contract.mapping[platform]);
+  const sectionAllowed = contract.sections.includes(sectionKey);
+  return {
+    ok: !!(sectionKey && platform && sectionAllowed && mapped === sectionKey),
+    file: contract.file || null,
+    sectionKey,
+    platform,
+    mappedSection: mapped || null,
+    sectionAllowed
+  };
+}
 
 // Simple public-search forms used only by the Social collector rescue path.
 // They deliberately avoid Google-only inurl/parenthesized syntax because Bing
@@ -525,13 +571,18 @@ function providerReadiness(configValue) {
       clientSecretConfigured: !!cfg.naverSecret,
       role: "한국어 최신 공개 영상·게시물 검색 보조"
     },
+    psomSearchBankContentResearch: {
+      ready: !!(SearchBankEngine && typeof SearchBankEngine.runEngine === "function" && readSocialPsomContract().sections.length),
+      role: "PSOM Social 섹션 계약 + Social 정책 쿼리를 기준으로 SearchBank/Sanmaru에서 실제 콘텐츠를 우선 리서치",
+      writeMode: "read_only_discovery"
+    },
     publicSocialDirectory: {
       ready: true,
       apiKeyRequired: false,
       provider: "Wikidata Query Service",
-      role: "API 키 없이 공개 등록된 크리에이터를 찾고, YouTube는 공개 RSS로 최신 영상 확인"
+      role: "명시적 인플루언서 보조 관리에서만 사용하는 공개 제작자 디렉터리; 일반 콘텐츠 리서치의 전제조건이 아님"
     },
-    searchBankImport: { ready: true, role: "SearchBank의 실제 최신 SNS 영상·게시물 주소를 후보로 반입" },
+    searchBankImport: { ready: true, role: "이미 SearchBank에 존재하는 검증 가능한 실제 SNS 영상·게시물 주소만 후보로 반입(콘텐츠 신규 리서치와 별도)" },
     countryLanguageRouting: { ready: true, role: "국가 단위와 언어 우선순위 적용; 원 IP는 저장하지 않음" },
     directPublicUrlIntake: { ready: true, role: "키 없이 관리자가 공개 최신 영상·게시물 URL을 후보로 반입" },
     channelPromotion: { ready: true, role: "운영 채널은 내부 식별자로 보존하고 최신 영상·게시물을 표시·클릭 대상으로 유지" },
@@ -1775,28 +1826,111 @@ async function maruUnfilteredSearchOne(event, plan, queryText, limit, language, 
   }
 }
 
+async function searchBankContentResearchOne(event, plan, queryText, limit, language, start, route) {
+  const contract = psomSocialContract(plan);
+  if (!contract.ok) {
+    return {
+      provider: "psom-searchbank-content",
+      status: "blocked",
+      error: "psom_social_contract_mismatch",
+      psom: contract,
+      items: [],
+      trace: []
+    };
+  }
+  if (!SearchBankEngine || typeof SearchBankEngine.runEngine !== "function") {
+    return { provider: "psom-searchbank-content", status: "unavailable", error: "search_bank_engine_unavailable", psom: contract, items: [], trace: [] };
+  }
+  const exactQuery = publicSearchQuery(plan, queryText);
+  try {
+    const result = await withDeadline(
+      SearchBankEngine.runEngine({
+        httpMethod: "GET",
+        headers: event && event.headers || {},
+        queryStringParameters: {}
+      }, {
+        q: exactQuery,
+        query: exactQuery,
+        limit: Math.max(12, Math.min(48, Number(limit || 10) * 3)),
+        offset: Math.max(0, Number(start || 1) - 1),
+        lang: language || null,
+        country: route && route.countryCode || undefined,
+        region: route && (route.regionId || route.worldRegion) || undefined,
+        channel: "social",
+        page: "social",
+        route: "social",
+        section: plan.sectionKey,
+        psom_key: plan.sectionKey,
+        autoFill: true,
+        external: "force",
+        useExternalSources: true,
+        useSocial: true,
+        social: true,
+        preserveExactResearchQuery: true,
+        exactResearchQuery: exactQuery,
+        adapterAllowList: "social",
+        discoveryOnly: true,
+        readOnly: true,
+        noWrite: true,
+        noSync: true,
+        disableSync: true,
+        maruSearchType: plan.platform === "youtube" ? "video" : "all"
+      }),
+      Math.max(REQUEST_TIMEOUT_MS, 4600),
+      () => ({ __providerTimeout: true })
+    );
+    if (result && result.__providerTimeout) {
+      return { provider: "psom-searchbank-content", status: "timeout", error: "provider_deadline", psom: contract, items: [], trace: [] };
+    }
+    const rows = Array.isArray(result && result.items) ? result.items : [];
+    const items = rows.filter((item) => candidateUrls(item).some((url) =>
+      Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url)
+    ));
+    const adapters = Array.isArray(result && result.meta && result.meta.adapters) ? result.meta.adapters : [];
+    return {
+      provider: "psom-searchbank-content",
+      status: items.length ? "ok" : "empty",
+      source: result && result.served_from || null,
+      psom: contract,
+      items,
+      rawCount: rows.length,
+      rejectedNonContentRows: Math.max(0, rows.length - items.length),
+      trace: adapters.map((entry) => ({ name: entry && entry.name, status: entry && entry.ok === false ? "error" : "ok", count: Number(entry && entry.count || 0) }))
+    };
+  } catch (error) {
+    return { provider: "psom-searchbank-content", status: "error", error: error && error.message || "searchbank_content_research_failed", psom: contract, items: [], trace: [] };
+  }
+}
+
 async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup, registryTargeted, registrySeed) {
   const tasks = [];
   const sparse = SPARSE_DISCOVERY_PLATFORMS.has(plan.platform);
 
-  if (registrySeed && plan.platform !== "youtube") {
+  // Primary lane: every normal content pass is anchored to the PSOM section
+  // contract and routed through SearchBank in read-only discovery mode. This
+  // does not write the shared SearchBank snapshot; validated Social candidates
+  // continue through the Social-only candidate/publish pipeline.
+  tasks.push(searchBankContentResearchOne(event, plan, queryText, limit, language, start, route));
+
+  // Influencer-targeted lookup exists only for an explicit registry maintenance
+  // run. Normal content discovery never loads or depends on this registry seed.
+  if (registryTargeted && registrySeed && plan.platform !== "youtube") {
     tasks.push(registryNativeLatestSearch(plan, registrySeed, limit));
   }
 
   // Sparse providers must complete discovery before the serverless request
-  // deadline. Native/public-post lanes are therefore started immediately and
-  // in parallel with the selected provider group, not as a second serial rescue
-  // wave after the first providers have already consumed their timeout budget.
+  // deadline. Platform-native/public-post lanes run in parallel with the
+  // PSOM/SearchBank lane and are content URL searches, not creator prerequisites.
   if (sparse) {
     tasks.push(sparseNativePublicSearch(plan, queryText, limit, qualitySweep));
-    tasks.push(directPublicPostSearch(plan, queryText, limit, registrySeed));
+    tasks.push(directPublicPostSearch(plan, queryText, limit, registryTargeted ? registrySeed : null));
   }
 
   if (providerGroup === 0) {
-    tasks.push(publicDirectorySearch(plan, route, limit, directoryOffset));
-    if (registryTargeted || plan.platform !== "youtube") {
-      tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
-    }
+    // Group 0 deliberately stays content-only. A public creator directory is
+    // not used here because profile identities are auxiliary metadata, not the
+    // source of truth for what content gets researched.
+    if (registryTargeted) tasks.push(publicDirectorySearch(plan, route, limit, directoryOffset));
   } else if (providerGroup === 1) {
     if (plan.platform === "youtube") {
       tasks.push(youtubeVideoSearch(queryText, limit, cfg, qualitySweep, route));
@@ -1804,9 +1938,6 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     }
     tasks.push(googleChannelSearch(plan, queryText, limit, start, cfg));
     tasks.push(naverChannelSearch(plan, queryText, limit, start, route, cfg));
-    if (plan.platform !== "youtube") {
-      tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
-    }
   } else {
     tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
     if (sparse) tasks.push(maruUnfilteredSearchOne(event, plan, queryText, limit, language, start));
@@ -1847,7 +1978,9 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
       source: result.source || null, error: result.error || null, trace: result.trace || [],
       countryStrict: result.countryStrict == null ? null : !!result.countryStrict,
       countryFallback: !!result.countryFallback,
-      offset: Number(result.offset || 0)
+      offset: Number(result.offset || 0),
+      rawCount: result.rawCount == null ? null : Number(result.rawCount || 0),
+      rejectedNonContentRows: result.rejectedNonContentRows == null ? null : Number(result.rejectedNonContentRows || 0)
     }))
   };
 }
@@ -2543,7 +2676,8 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
 function latestContentPriority(item, platform) {
   return candidateUrls(item).some((url) => contentKind(platform, url)) ? 0 : 1;
 }
-async function resolveSearchCandidates(searchResults, sectionKey, platform, route, target) {
+async function resolveSearchCandidates(searchResults, sectionKey, platform, route, target, options) {
+  const allowRegistryBootstrap = !!(options && options.allowRegistryBootstrap);
   const inputs = [];
   (searchResults || []).forEach((result) => {
     (result.items || []).forEach((item) => {
@@ -2602,7 +2736,7 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
       // them as the influencer registry so the very next collector batch can
       // search that exact creator for a real latest post/video instead of
       // repeatedly discarding the same profile as "latest content required".
-      const bootstrap = input && registryOnlyFromItem(
+      const bootstrap = allowRegistryBootstrap && input && registryOnlyFromItem(
         input.item, sectionKey, platform, input.query, route
       );
       if (bootstrap && bootstrap.channelUrl) {
@@ -2716,8 +2850,10 @@ exports.handler = async function(event) {
         mode: "ready",
         allowedSections: Policy.SECTION_KEYS,
         externalProviderCalls: "POST only after administrator authorization",
-        source: "direct provider + existing Maru/Sanmaru public gateway",
-        target: "country-language matched creator latest public content through existing social candidate gateway",
+        source: "PSOM Social contract + SearchBank/Sanmaru + platform public content providers",
+        target: "country-language matched latest public content; influencer registry is supplemental metadata only",
+        researchAuthority: "psom_section_plus_social_policy_via_searchbank",
+        psomContract: readSocialPsomContract(),
         providerReadiness: providerReadiness(cfg),
         publicSnapshotMutation: false,
         searchBankCoreMutation: false,
@@ -2790,8 +2926,24 @@ exports.handler = async function(event) {
     const queryCursor = Math.max(0, Number(body.queryCursor || body.cursor || 0) || 0);
     const qualitySweep = flag(body.qualitySweep || body.quality_sweep);
     const registrySweepMode = flag(body.registryOnly || body.registry_only || body.registrySweep || body.registry_sweep);
-    const registrySweepComplete = flag(body.registrySweepDone || body.registry_sweep_done);
-    const registrySeeds = await influencerRegistrySeeds(sectionKey, plan.platform);
+    const contentFirst = body.contentFirst == null && body.content_first == null
+      ? !registrySweepMode
+      : flag(body.contentFirst || body.content_first);
+    const psomContract = psomSocialContract(plan);
+    if (!psomContract.ok) {
+      const error = new Error("PSOM Social section mapping does not match the requested content platform.");
+      error.statusCode = 409;
+      error.code = "social_psom_contract_mismatch";
+      throw error;
+    }
+    // Normal collection intentionally does not read the influencer registry.
+    // Creator rows are generated only as supplemental metadata from content we
+    // actually discover. The registry is loaded solely for an explicit registry
+    // maintenance request.
+    const registrySeeds = registrySweepMode
+      ? await influencerRegistrySeeds(sectionKey, plan.platform)
+      : [];
+    const registrySweepComplete = !registrySweepMode || flag(body.registrySweepDone || body.registry_sweep_done);
     const registryWindow = registrySweepWindow(
       registrySeeds,
       body.registryCursor == null ? 0 : body.registryCursor,
@@ -2805,18 +2957,11 @@ exports.handler = async function(event) {
     const aiQuerySuffix = AIPolicy.querySuffix(aiPolicy);
 
     if (registrySweepMode) {
-      // Mandatory registry-first sweep. Every registered influencer/profile that
-      // survives the policy block list receives an explicit latest-content
-      // research pass before generic discovery is allowed to satisfy the section.
-      // This is intentionally independent of the current number of latest-content
-      // rows: a section with 120+ rows still rechecks its approved creator registry.
-      providerGroup = 1; // Google/Naver + canonical Maru + direct-post rescue.
+      // Explicit auxiliary maintenance only. This path can refresh known creator
+      // identities, but it is never entered by normal/automatic content research.
+      providerGroup = 1;
       researchCursor = registryWindow.batchIndex;
-      scoped = {
-        targeted: true,
-        seed: registryWindow.seeds[0] || null,
-        seedByQuery: {},
-      };
+      scoped = { targeted: true, seed: registryWindow.seeds[0] || null, seedByQuery: {} };
       queries = registryWindow.seeds.map((seed) => {
         let value = registryLatestQuery(seed, route, plan.platform);
         value = qualitySweep ? value + " popular high quality active official" : value;
@@ -2825,22 +2970,17 @@ exports.handler = async function(event) {
         return value;
       }).filter(Boolean);
     } else {
-      // The administrator runner performs a complete registry-first sweep before
-      // generic discovery. Once that sweep is complete, do not keep spending one
-      // query lane on already-known creators in every subsequent batch; use the
-      // discovery budget to find new creators/content instead.
-      scoped = registrySweepComplete
-        ? { queries: scopedQueries(plan, researchCursor, passes, route), targeted: false, seed: null, seedByQuery: {} }
-        : scopedQueriesWithRegistry(plan, researchCursor, passes, route, registrySeeds);
+      // Authoritative normal path: PSOM section + Social policy queries ->
+      // SearchBank/Sanmaru/platform content discovery. No influencer seed is
+      // required, prioritized, or consulted here.
+      scoped = { queries: scopedQueries(plan, researchCursor, passes, route), targeted: false, seed: null, seedByQuery: {} };
       queries = scoped.queries.map((query) => {
         let value = qualitySweep ? query + " popular high quality active official" : query;
         value = aiQuerySuffix ? value + " " + aiQuerySuffix : value;
-        querySeeds[value] = scoped.seedByQuery && scoped.seedByQuery[query] || null;
         return value;
       });
     }
 
-    // Empty registries must not block ordinary discovery.
     if (!queries.length) {
       scoped = { targeted: false, seed: null, seedByQuery: {} };
       queries = scopedQueries(plan, researchCursor, passes, route).map((query) => {
@@ -2852,10 +2992,9 @@ exports.handler = async function(event) {
 
     const perQueryLimit = Math.max(1, Math.min(MAX_BATCH_SIZE, Math.ceil(target / Math.max(1, queries.length))));
     const baseCatalogSize = Math.max(1, plan.policy.collectionQueries.length);
-    const normalCatalogSize = Math.max(baseCatalogSize, registrySeeds.length || 0);
     const catalogSize = registrySweepMode
       ? Math.max(1, registryWindow.totalBatches)
-      : normalCatalogSize;
+      : baseCatalogSize;
     // Search-result pagination belongs to the generic discovery query cycle,
     // not to the size of the influencer registry. A large registry previously
     // kept searchStart pinned to page 1 for dozens/hundreds of batches.
@@ -2887,7 +3026,8 @@ exports.handler = async function(event) {
       sectionKey,
       plan.platform,
       route,
-      target
+      target,
+      { allowRegistryBootstrap: registrySweepMode }
     );
     const rejected = resolved.rejected;
     const candidates = resolved.candidates;
@@ -2977,7 +3117,11 @@ exports.handler = async function(event) {
       qualitySweep,
       broadDiscovery: SPARSE_DISCOVERY_PLATFORMS.has(plan.platform),
       broadDiscoveryTermCount: (SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || []).length,
-      registryTargeted: registrySweepMode ? true : scoped.targeted,
+      contentFirst,
+      researchAuthority: "psom_section_plus_social_policy_via_searchbank",
+      psomContract,
+      influencerRegistryRole: registrySweepMode ? "explicit_auxiliary_maintenance" : "supplemental_discovered_creator_metadata_only",
+      registryTargeted: registrySweepMode ? true : false,
       registryOnly: registrySweepMode,
       registrySeedCount: registrySeeds.length,
       registrySweepComplete,
@@ -3019,7 +3163,7 @@ exports.handler = async function(event) {
       nextQueryCursor: registrySweepMode ? queryCursor : queryCursor + 1,
       nextRegistryCursor: registrySweepMode ? registryWindow.nextCursor : null,
       providerReadiness: providerReadiness(cfg),
-      candidateAssetType: "influencer_registry_plus_latest_content",
+      candidateAssetType: "latest_content_primary_with_discovered_creator_supplement",
       publicSnapshotMutation: false,
       searchBankCoreMutation: false,
       sampleSlotMutation: false
@@ -3076,6 +3220,8 @@ exports.__test = {
   registrySweepWindow,
   sparseSearchTerms,
   sparseNativePublicSearch,
+  psomSocialContract,
+  searchBankContentResearchOne,
   genericNativeHtmlSearch,
   nativeDiscoveryItem,
   resolveSearchCandidates,

@@ -3,14 +3,15 @@
 /**
  * Scheduled Social refresh.
  * - Runs three times per week.
- * - Registered influencers are priority seeds, not exclusive sources.
- * - Every run also performs broad global discovery per SNS section.
+ * - Content research is PSOM/SearchBank/policy driven and independent of the influencer registry.
+ * - Influencer rows are supplemental metadata discovered from validated content.
+ * - Every run performs broad global discovery per SNS section.
  * - Publishes fresh GLOBAL and KR runtime releases without a Netlify rebuild.
  */
 const Collector = require("./sanmaru-social-live-collector");
 const Publisher = require("./social-snapshot-publish");
 
-const VERSION = "social-content-rotation-scheduler-v1.2.0-bounded-provider-research";
+const VERSION = "social-content-rotation-scheduler-v1.3.0-content-first";
 const SECTIONS = [
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
   "social-douyin", "social-dailymotion"
@@ -45,6 +46,9 @@ exports.handler = async function() {
       queryPasses: 1,
       queryCursor: cursorFor(i, startedAt),
       qualitySweep: true,
+      contentFirst: true,
+      registryOnly: false,
+      registrySweepDone: true,
       scopeMode: "global",
       countryCode: "",
       regionId: "",
@@ -95,7 +99,7 @@ exports.handler = async function() {
       version: VERSION,
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
-      strategy: "priority_registry_plus_broad_global_discovery_then_runtime_publish",
+      strategy: "psom_searchbank_content_first_plus_platform_discovery_then_runtime_publish",
       runs,
       publishes,
       netlifyRebuildRequired: false

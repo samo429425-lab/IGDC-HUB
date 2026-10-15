@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v4.1.0 - bounded parallel Social research */
+/* IGDC Social Hub Content Operations v4.3.0 - content-first research + read-only diagnostics */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -19,10 +19,9 @@
     ["social-douyin", "Douyin", "douyin"],
     ["social-dailymotion", "Dailymotion", "dailymotion"],
   ];
-  var COLLECTOR_JOB_VERSION = 5,
+  var COLLECTOR_JOB_VERSION = 6,
     STANDARD_EMPTY_BATCH_LIMIT = 12,
-    LOW_YIELD_EMPTY_BATCH_LIMIT = 18,
-    REGISTRY_SWEEP_SAFETY_LIMIT = 80;
+    LOW_YIELD_EMPTY_BATCH_LIMIT = 18;
   var order = SECTIONS.map(function (x) {
       return x[0];
     }),
@@ -1340,6 +1339,99 @@
       a.remove();
     }, 300);
   }
+  function contentDiagnosticRow(row) {
+    var raw = (row && row.raw) || {}, id = text(row && row.id);
+    return {
+      id: id,
+      sectionKey: text(row && row.sectionKey),
+      platform: text(row && row.platform),
+      assetClass: assetClass(row),
+      reviewStatus: text(row && row.reviewStatus),
+      candidateOnly: row && row.candidateOnly == null ? null : !!row.candidateOnly,
+      title: text(row && (row.title || row.name)),
+      creatorName: text(row && (row.creatorName || row.channelName || raw.creatorName || raw.channelName)),
+      sourceUrl: text(row && (row.sourceUrl || row.latestContentUrl || raw.sourceContentUrl || raw.latestContentUrl)),
+      channelUrl: text(row && (row.channelUrl || raw.channelUrl)),
+      thumbnailUrl: text(row && row.thumbnailUrl),
+      placement: waitingPlacement(row) || null,
+      frontPublished: publishedContentIds.has(id),
+      contentHold: contentHold(row),
+      searchExcluded: excluded(row) && !blocked(row),
+      permanentlyBlocked: blocked(row),
+      updatedAt: text(row && (row.updatedAt || row.updated_at)),
+    };
+  }
+  function groupDiagnosticRows(list) {
+    var grouped = {};
+    order.forEach(function (key) { grouped[key] = []; });
+    (list || []).forEach(function (row) {
+      var key = text(row && row.sectionKey);
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(contentDiagnosticRow(row));
+    });
+    return grouped;
+  }
+  async function downloadContentStateDiagnostic() {
+    try {
+      await loadPlacement();
+      await loadPublishedState();
+    } catch (_e) {}
+    var activeLatest = rows.filter(function (row) {
+        return assetClass(row) === "latest_content" && !excluded(row);
+      }),
+      candidateRows = activeLatest.filter(function (row) { return !contentHold(row); }),
+      freshRows = candidateRows.filter(function (row) { return !waitingPlacement(row); }),
+      publicRows = candidateRows.filter(function (row) { return waitingPlacement(row) === "public_selected"; }),
+      reserveRows = candidateRows.filter(function (row) { return waitingPlacement(row) === "replacement_waiting"; }),
+      frontRows = candidateRows.filter(function (row) { return publishedContentIds.has(text(row && row.id)); }),
+      holdRows = activeLatest.filter(contentHold),
+      now = new Date(),
+      report = {
+        ok: true,
+        reportType: "igdc-social-six-content-state-diagnostic",
+        generatedAt: now.toISOString(),
+        readOnly: true,
+        scope: currentScope(),
+        definitions: {
+          allCandidates: "활성 latest_content 중 보류·검색제외·차단을 제외한 후보",
+          newCollected: "placement가 아직 없는 최신 콘텐츠 후보",
+          frontPlanned: "rotation placement=public_selected",
+          reserveReplacement: "rotation placement=replacement_waiting",
+          currentFront: "현재 저장된 Social front release에 candidate id가 존재",
+          hold: "reviewStatus=hold/content_hold/held"
+        },
+        counts: {
+          allCandidates: candidateRows.length,
+          newCollected: freshRows.length,
+          frontPlanned: publicRows.length,
+          reserveReplacement: reserveRows.length,
+          currentFront: frontRows.length,
+          hold: holdRows.length,
+          searchExcluded: rows.filter(function (row) { return assetClass(row) === "latest_content" && excluded(row) && !blocked(row); }).length,
+          permanentlyBlocked: rows.filter(function (row) { return assetClass(row) === "latest_content" && blocked(row); }).length,
+        },
+        states: {
+          allCandidates: groupDiagnosticRows(candidateRows),
+          newCollected: groupDiagnosticRows(freshRows),
+          frontPlanned: groupDiagnosticRows(publicRows),
+          reserveReplacement: groupDiagnosticRows(reserveRows),
+          currentFront: groupDiagnosticRows(frontRows),
+          hold: groupDiagnosticRows(holdRows),
+        },
+        note: "이 JSON은 현재 후보/배치/프론트 상태를 읽기만 하며 프론트 등록·해제 또는 Snapshot 변경을 수행하지 않습니다."
+      };
+    diagnostic(report);
+    toggleDiagnosticPanel(true);
+    download(
+      "igdc-social-six-content-state-diagnostic-" +
+        now.toISOString().slice(0, 19).replace(/[:T]/g, "-") +
+        ".json",
+      report,
+    );
+    show("6개 콘텐츠 상태의 현재 JSON을 읽기 전용으로 다운로드했습니다.", "ok");
+    return report;
+  }
+
   function collectorSectionSummary() {
     var summary = {};
     SECTIONS.forEach(function (section) {
@@ -1583,7 +1675,7 @@
         "연결 정상 · " +
         ((d.source && d.source.candidateSourceMode) || "read_only");
       show(
-        "관리 화면에서는 인플루언서 등록부와 최신 콘텐츠 후보·교체 대기열을 유형별로 분리해 읽고, 실제 수집에서는 등록 인플루언서를 최신 콘텐츠 검색 시드로 함께 사용합니다.",
+        "관리 화면에서는 인플루언서 등록부와 최신 콘텐츠 후보·교체 대기열을 유형별로 분리합니다. 실제 수집은 PSOM·SearchBank 기준의 최신 콘텐츠 탐색을 먼저 수행하고, 인플루언서 등록부는 발견된 우수 제작자를 보조 데이터로 유지합니다.",
         "ok",
       );
     } catch (e) {
@@ -1738,7 +1830,7 @@
       renderProviderStatus(d);
       show(
         d.providerReadiness && d.providerReadiness.collectionCanRun
-          ? "키 없이 작동하는 공개 디렉터리·YouTube 최신 영상 RSS를 포함해 최신 콘텐츠 검색 경로가 준비되어 있습니다."
+          ? "PSOM·SearchBank 콘텐츠 우선 경로와 플랫폼별 공개 최신 콘텐츠 검색 경로가 준비되어 있습니다. 인플루언서 등록부는 보조 데이터이며 일반 수집의 전제조건이 아닙니다."
           : "자동 검색 경로를 사용할 수 없습니다. 제공자 상태를 확인해 주세요.",
         d.providerReadiness && d.providerReadiness.collectionCanRun
           ? "ok"
@@ -1798,12 +1890,6 @@
       "건 · 신규 " +
       j.newlyFound +
       "건" +
-      (j.registrySweepActive
-        ? " · 등록 인플루언서 필수 조사 " +
-          Number(j.registrySweepBatches || 0) +
-          "/" +
-          Math.max(1, Number(j.registrySweepTotal || 1))
-        : "") +
       (j.qualitySweepActive
         ? " · 인기·품질 보강 " +
           j.qualitySweepBatches +
@@ -1836,16 +1922,11 @@
       action: "collect_live",
       dryRun: !!dryRun,
       qualitySweep: !!j.qualitySweepActive,
-      registryOnly: !!j.registrySweepActive,
-      registryCursor: Number(j.registryCursor || 0),
-      // Registered creators remain mandatory-first, but protected SNS providers
-      // must be researched in small request windows. Sending 8-12 creator queries
-      // in one serverless invocation caused provider throttling/timeouts before
-      // the gateway save step. The loop continues until the whole registry is done.
-      registryBatchSize: j.registrySweepActive
-        ? (/^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(section) ? 2 : 4)
-        : j.batchSize,
-      registrySweepDone: !!j.registrySweepDone,
+      // Content discovery is authoritative. The influencer registry is not a
+      // prerequisite and must never consume or block the normal research budget.
+      contentFirst: true,
+      registryOnly: false,
+      registrySweepDone: true,
       sectionKey: section,
       limit: j.batchSize,
       batchSize: j.batchSize,
@@ -1899,23 +1980,12 @@
     j.providerGroup = Number(live.providerGroup || 0);
     j.providerGroupName =
       {
-        public_directory: "공개 디렉터리",
-        configured_search_apis: "YouTube·Google·Naver",
-        sanmaru_searchbank: "산마루·SearchBank",
-        influencer_registry_mandatory: "등록 인플루언서 필수 조사",
+        psom_searchbank_content: "PSOM·SearchBank 콘텐츠",
+        configured_search_apis: "플랫폼·Google·Naver",
+        platform_direct_search_apis: "플랫폼·Google·Naver",
+        sanmaru_platform_rescue: "산마루·플랫폼 보강",
+        influencer_registry_supplemental: "인플루언서 보조 조사",
       }[text(live.providerGroupName)] || text(live.providerGroupName);
-    if (live.registryOnly && live.registrySweep) {
-      j.registrySeedCount = Number(live.registrySweep.totalSeeds || j.registrySeedCount || 0);
-      j.registrySweepTotal = Number(live.registrySweep.totalBatches || j.registrySweepTotal || 0);
-      j.registrySweepBatches = Number(j.registrySweepBatches || 0) + 1;
-      j.registryCursor = Number(
-        live.nextRegistryCursor == null
-          ? Number(j.registryCursor || 0) + 1
-          : live.nextRegistryCursor,
-      );
-      j.registrySweepDone = !!live.registrySweep.done;
-      j.providerGroupName = "등록 인플루언서 필수 조사";
-    }
     return d;
   }
   async function collectSection(section, dryRun, j) {
@@ -1931,31 +2001,10 @@
     j.qualitySweepBatches = Number(j.qualitySweepBatches || 0);
     j.registrySweepBatches = Number(j.registrySweepBatches || 0);
     j.registryCursor = Number(j.registryCursor || 0);
-    // Registered influencers are not decorative metadata. Every normal section
-    // run must research every policy-allowed registered creator first, even when
-    // 120+ latest-content rows already exist. Only then does generic discovery
-    // continue filling or rotating the section.
-    if (!dryRun && !j.registrySweepDone) {
-      j.registrySweepActive = true;
-      var registrySafety = 0;
-      while (!stopRequested && !j.registrySweepDone && registrySafety < REGISTRY_SWEEP_SAFETY_LIMIT) {
-        registrySafety += 1;
-        j.batch += 1;
-        progress(j);
-        var registryResult = await collectOne(section, false, j);
-        var registryNew = newIds(registryResult, known);
-        j.newlyFound += registryNew;
-        j.sectionCount += registryNew;
-        progress(j);
-        saveJob(j);
-        if (!j.registrySweepDone && !stopRequested) await wait(450);
-      }
-      j.registrySweepActive = false;
-      if (!j.registrySweepDone && registrySafety >= REGISTRY_SWEEP_SAFETY_LIMIT) {
-        j.lastReason = "registry_sweep_safety_limit";
-      }
-      saveJob(j);
-    }
+    // Normal collection starts with content discovery. Registered creators are
+    // supplemental metadata only and never gate progression into the section.
+    j.registrySweepDone = true;
+    j.registrySweepActive = false;
     var maxEmpty = sectionEmptyBatchLimit(section, j);
     while (
       !stopRequested &&
@@ -2061,7 +2110,7 @@
       registrySeedCount: 0,
       registrySweepBatches: 0,
       registrySweepTotal: 0,
-      registrySweepDone: false,
+      registrySweepDone: true,
       registrySweepActive: false,
       qualitySweepBatches: 0,
       qualityEmptyBatches: 0,
@@ -2143,7 +2192,7 @@
       !skipConfirm && !confirm(
         "각 SNS 섹션을 " +
           $("collectorBatchSize").value +
-          "개 단위로 등록 인플루언서를 우선 조사하고, 섹션별 탐색 한도 안에서 120개(공개 100 + 예비 20) 운영 풀을 채운 뒤 다음 SNS로 자동 진행할까요? 한 SNS의 일반 검색 오류는 기록하고 다음 SNS를 계속 조사합니다.",
+          "개 단위로 PSOM·SearchBank 기준 최신 콘텐츠를 먼저 조사하고, 섹션별 탐색 한도 안에서 120개(공개 100 + 예비 20) 운영 풀을 채운 뒤 다음 SNS로 자동 진행할까요? 인플루언서 등록부는 검색 의존 대상이 아니라 발견된 우수 제작자의 보조 데이터로만 유지합니다. 한 SNS의 일반 검색 오류는 기록하고 다음 SNS를 계속 조사합니다.",
       )
     )
       return;
@@ -2192,7 +2241,7 @@
           j.registrySeedCount = 0;
           j.registrySweepBatches = 0;
           j.registrySweepTotal = 0;
-          j.registrySweepDone = false;
+          j.registrySweepDone = true;
           j.registrySweepActive = false;
           j.qualitySweepBatches = 0;
           j.qualityEmptyBatches = 0;
@@ -2369,22 +2418,18 @@
       state = $("channelIntakeState");
     var section = text($("collectorSection").value);
     if (!raw) {
-      if (!dryRun) {
-        // No manual URL was supplied: use the already discovered SearchBank
-        // candidates for the selected SNS instead of making the button appear dead.
-        return importSearchBank(section);
-      }
       show(
-        "직접 URL 점검에는 공개 최신 영상 또는 게시물 URL을 한 줄 이상 입력해 주세요.",
+        "공개 최신 콘텐츠 URL 직접 반입에는 실제 영상 또는 게시물 URL을 한 줄 이상 입력해 주세요. SearchBank 실후보 반입은 위의 별도 버튼을 사용합니다.",
         "warn",
       );
-      return;
+      return null;
     }
     state.textContent = dryRun
       ? "최신 콘텐츠 주소 점검 중"
       : "최신 콘텐츠 후보 반입 중";
     $("channelIntakeBtn").disabled = true;
     $("channelIntakeDryRunBtn").disabled = true;
+    if ($("channelIntakeDiagnosticJsonBtn")) $("channelIntakeDiagnosticJsonBtn").disabled = true;
     try {
       var d = await post(LIVE, {
         action: "intake_channels",
@@ -2425,12 +2470,15 @@
           ? "ok"
           : "warn",
       );
+      return d;
     } catch (e) {
       state.textContent = "반입 실패";
       show(e.message || "공개 URL 반입 실패", "warn");
+      return null;
     } finally {
       $("channelIntakeBtn").disabled = false;
       $("channelIntakeDryRunBtn").disabled = false;
+      if ($("channelIntakeDiagnosticJsonBtn")) $("channelIntakeDiagnosticJsonBtn").disabled = false;
     }
   }
   function selected(sel) {
@@ -3694,7 +3742,8 @@
         scopeMode: scopeMode(),
         regionId: text($("collectorRegion").value),
       });
-      var candidateReport = null, latestReport = null, pipelineReport = null, runtimeFront = null, snapshot = null;
+      var candidateReport = null, latestReport = null, pipelineReport = null, runtimeFront = null, snapshot = null, researchReadiness = null;
+      try { researchReadiness = await getReport(LIVE + "?_=" + Date.now()); } catch (e) { researchReadiness = { ok:false, error:e.message || String(e) }; }
       try { candidateReport = await getReport(REVIEW + "?action=diagnostic&" + params.toString()); } catch (e) { candidateReport = { ok:false, error:e.message || String(e) }; }
       try { latestReport = await getReport(REVIEW + "?action=latest_content_diagnostic&" + params.toString()); } catch (e) { latestReport = { ok:false, error:e.message || String(e) }; }
       try { pipelineReport = await getReport(PUBLISH + "?action=pipeline_diagnostic&" + params.toString()); } catch (e) { pipelineReport = { ok:false, error:e.message || String(e) }; }
@@ -3719,6 +3768,7 @@
         generatedAt: new Date().toISOString(),
         scope: currentScope(),
         checks: {
+          researchAuthorityAndProviders: researchReadiness,
           candidateResearchAndRegistry: candidateReport,
           latestContentQueue: latestReport,
           candidateState: { total: contentRows.length, approved: approvedRows.length, bySection: bySection },
@@ -3821,7 +3871,17 @@
       };
     if ($("latestContentDiagnosticBtn"))
       $("latestContentDiagnosticBtn").onclick = function () {
-        runQueueDiagnostic("latest_content_diagnostic", "최신 콘텐츠 후보·교체 대기열 점검 JSON을 읽었습니다.", "igdc-social-latest-content-diagnostic.json");
+        runQueueDiagnostic("latest_content_diagnostic", "최신 콘텐츠 후보·교체 대기열 요약 점검 JSON을 읽었습니다.", "igdc-social-latest-content-diagnostic.json");
+      };
+    if ($("contentStateDiagnosticBtn"))
+      $("contentStateDiagnosticBtn").onclick = downloadContentStateDiagnostic;
+    if ($("holdDiagnosticBtn"))
+      $("holdDiagnosticBtn").onclick = function () {
+        runQueueDiagnostic("hold_diagnostic", "보류 대기 점검 JSON을 읽었습니다.", "igdc-social-content-hold-diagnostic.json");
+      };
+    if ($("exclusionDiagnosticBtn"))
+      $("exclusionDiagnosticBtn").onclick = function () {
+        runQueueDiagnostic("exclusion_diagnostic", "검색 제외·영구 차단 점검 JSON을 읽었습니다.", "igdc-social-search-exclusion-diagnostic.json");
       };
     if ($("downloadJsonBtn")) $("downloadJsonBtn").onclick = function () {
       if (diagnosticCache)
@@ -3851,6 +3911,12 @@
     $("collectorProgressJsonBtn").onclick = downloadCollectorProgress;
     $("channelIntakeDryRunBtn").onclick = function () {
       intakeChannels(true);
+    };
+    if ($("channelIntakeDiagnosticJsonBtn")) $("channelIntakeDiagnosticJsonBtn").onclick = async function () {
+      var d = await intakeChannels(true);
+      if (!d) return;
+      download("igdc-social-direct-intake-diagnostic-" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", d);
+      show("직접 반입 URL의 변환·제외 사유 점검 JSON을 다운로드했습니다.", "ok");
     };
     $("channelIntakeBtn").onclick = function () {
       intakeChannels(false);

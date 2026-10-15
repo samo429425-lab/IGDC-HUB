@@ -546,7 +546,9 @@
         <div class="small">
           한 번에 100개를 검색하지 않습니다. 선택한 섹션을 8~10개 단위로
           조사·검증·저장합니다. 국가별 선호 언어를 검색어와 배치 기준에
-          반영하고, 한 인플루언서당 최신 공개 콘텐츠 1건을 후보로 유지합니다.
+          반영하며, PSOM·SearchBank 기준의 실제 최신 콘텐츠 자체를 우선 탐색합니다.
+          인플루언서 등록부는 콘텐츠 검색의 전제조건이 아니며, 검색 중 확인된 건전하고
+          지속 가치가 있는 제작자를 보조 데이터로 유지합니다.
           120개 후보 풀에 도달하면 인기·품질·활동성 중심의 보강
           검색을 공개 디렉터리·직접 검색 API·산마루 검색의 세 경로로 나누어
           실행하고, 전체 비교 후보에서 상위 100개를 공개 배치 대상으로, 다음 20개를 예비 교체 후보로
@@ -608,6 +610,7 @@
         <div class="collect-controls">
           <button id="channelIntakeDryRunBtn" class="secondary">
             최신 콘텐츠 주소 점검</button
+          ><button id="channelIntakeDiagnosticJsonBtn" class="secondary">직접 반입 점검 JSON</button
           ><button id="channelIntakeBtn">최신 콘텐츠 후보 반입</button
           ><button id="channelIntakeClearBtn" class="secondary">
             입력 비우기</button
@@ -660,7 +663,8 @@
             <h3>전체 최신 콘텐츠 후보</h3><div id="contentCountAll" class="content-ops-count">0</div>
             <div class="small content-ops-help">현재 관리 중인 최신 콘텐츠 후보 전체입니다.</div>
             <button id="replacementViewAllBtn" class="secondary" type="button">목록 보기</button>
-            <button id="latestContentDiagnosticBtn" class="secondary" type="button">목록 점검 JSON</button>
+            <button id="latestContentDiagnosticBtn" class="secondary" type="button">후보 요약 점검 JSON</button>
+            <button id="contentStateDiagnosticBtn" class="secondary" type="button">6개 상태 점검 JSON</button>
           </div>
           <div class="content-ops-card">
             <h3>새로 수집된 최신 콘텐츠</h3><div id="contentCountNew" class="content-ops-count">0</div>
@@ -741,6 +745,7 @@
           </div>
           <div style="display:flex;gap:8px;align-items:center">
             <span id="holdCapacityState" class="state"></span>
+            <button id="holdDiagnosticBtn" class="secondary" type="button">보류 대기 점검 JSON</button>
             <button id="toggleHoldPanelBtn" class="secondary" type="button">목록 열기</button>
           </div>
         </div>
@@ -767,7 +772,10 @@
               되돌립니다. 영구 차단과 기록 완전 삭제는 별도 작업입니다.
             </div>
           </div>
-          <button id="toggleExclusionBtn" class="secondary">목록 펼치기</button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="exclusionDiagnosticBtn" class="secondary" type="button">검색 제외 점검 JSON</button>
+            <button id="toggleExclusionBtn" class="secondary">목록 펼치기</button>
+          </div>
         </div>
         <div id="exclusionSummary" class="small" style="margin-top: 8px"></div>
         <div id="exclusionBody" class="hidden">
@@ -853,7 +861,7 @@
       </section>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=41"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=43"></script>
     <script src="/assets/js/admin-social-ai-dialog.js?v=2"></script>
   <script src="/assets/js/admin-checkbox-accessibility.js?v=20260925-1" defer></script>
 </body>

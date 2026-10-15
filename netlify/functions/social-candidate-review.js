@@ -17,7 +17,7 @@ let SocialStore = null;
 try { SocialStore = require("./lib/social-candidate-store.v1"); } catch (_error) { SocialStore = null; }
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-candidate-review-api-v1.2.2-real-recovery-only";
+const VERSION = "social-candidate-review-api-v1.3.0-status-diagnostics";
 const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager", "media_manager", "commerce_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -274,6 +274,64 @@ function diagnosticSectionSummary(rows) {
   });
   return result;
 }
+function isContentHold(row) {
+  return assetClass(row) === "latest_content" && /^(hold|content_hold|held)$/.test(reviewStatus(row));
+}
+function compactDiagnosticRow(row) {
+  const raw = row && row.raw || {};
+  return {
+    id: text(row && row.id),
+    sectionKey: text(row && (row.sectionKey || row.section_key)),
+    platform: lower(row && row.platform),
+    assetClass: assetClass(row),
+    reviewStatus: reviewStatus(row),
+    candidateOnly: row && row.candidateOnly == null ? (row && row.candidate_only == null ? null : !!row.candidate_only) : !!row.candidateOnly,
+    verificationStatus: text(row && (row.verificationStatus || row.verification_status)),
+    title: text(row && (row.title || row.name)),
+    creatorName: text(row && (row.creatorName || row.creator_name || row.channelName || row.channel_name)),
+    sourceUrl: text(row && (row.sourceUrl || row.source_url || row.url)),
+    latestContentUrl: text(row && (row.latestContentUrl || row.latest_content_url || raw.latestContentUrl || raw.sourceContentUrl)),
+    channelUrl: text(row && (row.channelUrl || row.channel_url || raw.channelUrl)),
+    thumbnailUrl: text(row && (row.thumbnailUrl || row.thumbnail_url)),
+    excluded: isExcluded(row),
+    blocked: isBlocked(row),
+    contentHold: isContentHold(row),
+    exclusionReason: text(raw.exclusionReason || raw.exclusion_reason || row && row.exclusionReason),
+    holdReason: text(raw.holdReason || raw.hold_reason || row && row.holdReason),
+    createdAt: text(row && (row.createdAt || row.created_at)),
+    updatedAt: text(row && (row.updatedAt || row.updated_at))
+  };
+}
+function detailedStatusDiagnostic(base, rows, kind, route) {
+  const scoped = scopedRows(rows, route);
+  let filtered = [];
+  let reportType = "igdc-social-status-diagnostic";
+  if (kind === "hold") {
+    filtered = scoped.filter(isContentHold);
+    reportType = "igdc-social-content-hold-diagnostic";
+  } else if (kind === "exclusion") {
+    filtered = scoped.filter(isExcluded);
+    reportType = "igdc-social-search-exclusion-diagnostic";
+  } else {
+    filtered = scoped.filter((row) => assetClass(row) === "latest_content");
+    reportType = "igdc-social-latest-content-rows-diagnostic";
+  }
+  return {
+    ok: true,
+    reportType,
+    version: VERSION,
+    generatedAt: new Date().toISOString(),
+    scope: { mode:text(route && route.scopeMode)||null, countryCode:text(route && route.countryCode).toUpperCase()||null, worldRegion:text(route && (route.worldRegion||route.regionId))||null, source:text(route && route.source)||null },
+    source: base.source,
+    queue: { schema:"social_candidates.supabase.v1", libraryVersion:base.libraryVersion, renderPolicy:"private_review_only", rowPayloadIncluded:true, rowCount:filtered.length, rotationPolicy:base.rotationPolicy },
+    counts: { total:filtered.length, active:filtered.filter((row)=>!isExcluded(row)).length, excluded:filtered.filter((row)=>reviewStatus(row)==="search_excluded").length, blocked:filtered.filter(isBlocked).length, held:filtered.filter(isContentHold).length },
+    consumptionScopeBreakdown: scopeBreakdown(filtered, route),
+    sections: diagnosticSectionSummary(filtered),
+    rows: filtered.map(compactDiagnosticRow),
+    safety: base.safety,
+    note: "읽기 전용 점검 JSON입니다. 이 요청은 후보·프론트·SearchBank·Snapshot 데이터를 변경하지 않습니다."
+  };
+}
 function lightweightDiagnostic(base, rows, kind, route) {
   const scoped = scopedRows(rows, route);
   const wanted = kind === "registry" ? "influencer_registry" : kind === "latest" ? "latest_content" : "";
@@ -333,6 +391,9 @@ exports.handler = async function(event) {
     if (action === "diagnostic") return json(200, Object.assign(lightweightDiagnostic(base,rows,"all",route), { administrator:admin }));
     if (action === "registry_diagnostic" || action === "influencer_registry_diagnostic") return json(200, Object.assign(lightweightDiagnostic(base,rows,"registry",route), { administrator:admin }));
     if (action === "latest_content_diagnostic" || action === "waiting_diagnostic") return json(200, Object.assign(lightweightDiagnostic(base,rows,"latest",route), { administrator:admin }));
+    if (action === "latest_content_rows_diagnostic") return json(200, Object.assign(detailedStatusDiagnostic(base,rows,"latest",route), { administrator:admin }));
+    if (action === "hold_diagnostic" || action === "content_hold_diagnostic") return json(200, Object.assign(detailedStatusDiagnostic(base,rows,"hold",route), { administrator:admin }));
+    if (action === "exclusion_diagnostic" || action === "search_exclusion_diagnostic") return json(200, Object.assign(detailedStatusDiagnostic(base,rows,"exclusion",route), { administrator:admin }));
     return json(200, {
       ok:true, reportType:"igdc-social-candidate-queue", version:VERSION, generatedAt:new Date().toISOString(), safety, administrator:admin,
       source:sourceInfo,

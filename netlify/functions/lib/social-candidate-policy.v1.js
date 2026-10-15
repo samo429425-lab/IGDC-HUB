@@ -8,12 +8,12 @@
  * from SearchBank core engines: SearchBank remains a broad ledger, and this
  * policy is applied only when copying social candidates into social_candidates.
  */
-const VERSION = "social-candidate-policy-v1.4.0-six-main-video-platforms";
+const VERSION = "social-candidate-policy-v1.5.0-content-pool-120";
 const CountryContentPolicy = require("./social-country-content-policy.v1");
 
-const POOL_TARGET_PER_SECTION = 300;
-const POOL_MIN_PER_SECTION = 250;
-const POOL_MAX_PER_SECTION = 350;
+const POOL_TARGET_PER_SECTION = 120;
+const POOL_MIN_PER_SECTION = 100;
+const POOL_MAX_PER_SECTION = 120;
 const ROTATION_LIMIT_PER_SECTION = 100;
 
 const LANGUAGES_30 = Object.freeze([
