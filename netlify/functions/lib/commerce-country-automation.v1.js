@@ -5899,8 +5899,8 @@ async function manualSupplierRegister(actorId,input){
 }
 
 async function persistSupplierResearchDecision(scope,targetRow,action,actorId,options){
-  options=plain(options);const exactRoot=supplierRootUrl(supplierRowUrl(targetRow)),targetHost=supplierRowHost(targetRow),matchHost=options.matchHost===true;
-  if(!exactRoot&&!targetHost)return{updated:0};
+  options=plain(options);const exactUrl=supplierControlTargetUrl(supplierRowUrl(targetRow)),targetHost=supplierRowHost(targetRow),matchHost=options.matchHost===true;
+  if(!exactUrl&&!targetHost)return{updated:0};
   let rows=[];if(Array.isArray(options.rows))rows=options.rows;else try{rows=array(await supplierScopedCandidateRows(scope,"id,status,source_ref,official_url,source_payload","",1000));}catch(error){return{updated:0,error:text(error&&error.message)||"supplier_ledger_read_failed"};}
   let updated=0;const now=iso(),actor=text(actorId)||"administrator";
   for(const entry of rows){
@@ -5908,8 +5908,10 @@ async function persistSupplierResearchDecision(scope,targetRow,action,actorId,op
     const payload=plain(entry&&entry.source_payload),automation=plain(payload.aiAutomation);
     if(normalizeCountry(automation.country)!==scope.country||normalizeRegion(automation.region||"NATIONWIDE",scope.country)!==scope.region)continue;
     if(text(payload.entityKind)==="supplier_control_tombstone")continue;
-    const rowRoot=supplierRootUrl(first(entry&&entry.official_url,payload.supplierOfficialUrl,payload.url)),rowHost=(()=>{try{return new URL(rowRoot).hostname.toLowerCase().replace(/^www\./,"");}catch(_e){return"";}})();
-    if(matchHost?(!!targetHost&&rowHost===targetHost):(!!exactRoot&&rowRoot===exactRoot)){
+    const specificUrls=[payload.sourceCandidateUrl,payload.url,automation.sourceUrl].map(supplierControlTargetUrl).filter(Boolean);
+    const urls=specificUrls.length?specificUrls:[entry&&entry.official_url,payload.supplierOfficialUrl,automation.officialUrl].map(supplierControlTargetUrl).filter(Boolean);
+    const rowHost=(()=>{try{return new URL(urls[0]||"").hostname.toLowerCase().replace(/^www\./,"");}catch(_e){return"";}})();
+    if(matchHost?(!!targetHost&&rowHost===targetHost):(!!exactUrl&&urls.some((value)=>value.toLowerCase()===exactUrl.toLowerCase()))){
       if(action==="dismiss"){await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(text(entry.id)));entry.__deleted=true;updated+=1;continue;}
       let status=lower(entry&&entry.status)||"approval_pending";
       if(action==="hold"||action==="unblock")status="hold";
@@ -5931,25 +5933,33 @@ function supplierControlTargetUrl(value){
 }
 
 async function recoverSupplierManagementJob(scope){
-  const rows=array(await listAutomationCandidates(scope.country,scope.region)),now=iso(),active=[],holding=[],blocked=[];for(const row of rows){const status=lower(row&&row.status);if(status==="hold")holding.push(row);else if(status==="suppressed"||status==="rejected")blocked.push(row);else if(status!=="removed")active.push(row);}const state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),blockedSupplierKeys=await persistentSupplierSuppressionKeys(scope);return{schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_management_recovery_"+sha256(scope.country+"|"+scope.region).slice(0,20),status:"complete",managementRecovered:true,startedAt:now,createdAt:now,finishedAt:now,scope,effective,researchPlanVersion:"durable-supplier-ledger-recovery",planRows:[],planDiagnostics:{managementRecovered:true},searchTasks:[],searchCursor:0,blockedSupplierKeys,manualSupplierCount:active.filter((row)=>row&&row.adminPinned===true).length,rawCandidates:active.concat(holding,blocked),supplierHoldingCandidates:holding,supplierBlockedCandidates:blocked,inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:active,rankQueue:active,rankCursor:active.length,rankAttempt:0,rankedEntries:[],candidates:reindexCandidateRows(active),trace:[{source:"supplier-management-recovery",status:"recovered_from_durable_ledger",at:now,count:rows.length}],errors:[],lastError:null,marketSignals:{active:false,categoryWeights:{}},policyControl:{active:false,categoryWeights:{},priorityDirections:[],avoidDirections:[],manualPriorityTargets:[],manualBlockedTargets:[]}};}
+  const rows=array(await listAutomationCandidates(scope.country,scope.region)),now=iso(),active=[],holding=[],blocked=[];for(const row of rows){if(text(row&&row.id).startsWith("country_supplier_control_"))continue;const status=lower(row&&row.status);if(status==="hold")holding.push(row);else if(status==="suppressed"||status==="rejected")blocked.push(row);else if(status!=="removed")active.push(row);}const state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),blockedSupplierKeys=await persistentSupplierSuppressionKeys(scope);return{schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_management_recovery_"+sha256(scope.country+"|"+scope.region).slice(0,20),status:"complete",managementRecovered:true,startedAt:now,createdAt:now,finishedAt:now,scope,effective,researchPlanVersion:"durable-supplier-ledger-recovery",planRows:[],planDiagnostics:{managementRecovered:true},searchTasks:[],searchCursor:0,blockedSupplierKeys,manualSupplierCount:active.filter((row)=>row&&row.adminPinned===true).length,rawCandidates:active.concat(holding,blocked),supplierHoldingCandidates:holding,supplierBlockedCandidates:blocked,inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:active,rankQueue:active,rankCursor:active.length,rankAttempt:0,rankedEntries:[],candidates:reindexCandidateRows(active),trace:[{source:"supplier-management-recovery",status:"recovered_from_durable_ledger",at:now,count:rows.length}],errors:[],lastError:null,marketSignals:{active:false,categoryWeights:{}},policyControl:{active:false,categoryWeights:{},priorityDirections:[],avoidDirections:[],manualPriorityTargets:[],manualBlockedTargets:[]}};}
 
+// Operator actions must address precisely the selected research URL. The general
+// sameSupplierUrl() is intentionally looser for supplier discovery deduplication,
+// but it must never delete/block an unrelated catalogue page on the same host.
+function operatorSupplierUrlMatch(row,url){
+  const target=supplierControlTargetUrl(url);
+  return !!target&&[row&&row.sourceCandidateUrl,row&&row.url,row&&row.normalizedSupplierUrl].map(supplierControlTargetUrl).some((value)=>!!value&&value.toLowerCase()===target.toLowerCase());
+}
 async function researchCandidateAction(actorId,input){
   const scope=researchScope(input);let job=await researchJobRule(scope);if(!job||job.schema!==RESEARCH_JOB_SCHEMA)job=await recoverSupplierManagementJob(scope);
   const action=lower(input&&input.decision),requested=Array.from(new Set(array(input&&input.urls).concat([first(input&&input.url,input&&input.supplierUrl)]).map(supplierControlTargetUrl).filter(Boolean))).slice(0,500),allowed=["keep","hold","unpin","restore","dismiss","purge","block","unblock","remove_from_list"];
   if(!requested.length||!allowed.includes(action)){const error=new Error("공급업체 후보 URL과 유지·보류·고정해제·복원·목록삭제·영구제외·차단·차단해제 결정을 확인하세요.");error.statusCode=400;throw error;}
-  let active=array(job.candidates),holding=array(job.supplierHoldingCandidates),blocked=array(job.supplierBlockedCandidates);const keys=new Set(array(job.blockedSupplierKeys).map(text).filter(Boolean)),results=[],registry=await manualSupplierRegistry(scope);let manualRows=array(registry.suppliers),manualChanged=false,durableRows=[],durableReadError="";
+  let active=array(job.candidates),holding=array(job.supplierHoldingCandidates),blocked=array(job.supplierBlockedCandidates);
+  const keys=new Set(array(job.blockedSupplierKeys).map(text).filter(Boolean)),results=[],registry=await manualSupplierRegistry(scope);let manualRows=array(registry.suppliers),manualChanged=false,durableRows=[],durableReadError="";
   try{durableRows=array(await supplierScopedCandidateRows(scope,"id,status,source_ref,official_url,source_payload","",1000));}catch(error){durableReadError=text(error&&error.message)||"supplier_ledger_read_failed";}
-  function allRows(){return active.concat(holding,blocked);}function removeUrl(rows,url){return array(rows).filter((row)=>!sameSupplierUrl(row,url));}function addUnique(rows,row){const url=supplierRowUrl(row);return removeUrl(rows,url).concat([row]);}
-  function removeManualExact(url){const before=manualRows.length;manualRows=manualRows.filter((row)=>supplierRootUrl(row&&row.officialUrl)!==supplierRootUrl(url));if(before!==manualRows.length)manualChanged=true;}
+  function allRows(){return active.concat(holding,blocked);}function removeUrl(rows,url){return array(rows).filter((row)=>!operatorSupplierUrlMatch(row,url));}function addUnique(rows,row){const url=supplierRowUrl(row);return removeUrl(rows,url).concat([row]);}
+  function removeManualExact(url){const before=manualRows.length;manualRows=manualRows.filter((row)=>supplierControlTargetUrl(row&&row.officialUrl)!==supplierControlTargetUrl(url));if(before!==manualRows.length)manualChanged=true;}
   function removeManualHost(host){const before=manualRows.length;manualRows=manualRows.filter((row)=>{try{return new URL(supplierRootUrl(row&&row.officialUrl)).hostname.toLowerCase().replace(/^www\./,"")!==host;}catch(_e){return true;}});if(before!==manualRows.length)manualChanged=true;}
   for(const targetUrl of requested){
-    let target=allRows().find((row)=>sameSupplierUrl(row,targetUrl));
+    let target=allRows().find((row)=>operatorSupplierUrlMatch(row,targetUrl));
     if(!target&&!durableReadError){
       const wanted=supplierControlTargetUrl(targetUrl).toLowerCase();
       const durableRow=durableRows.find((entry)=>{
         const payload=plain(entry&&entry.source_payload),automation=plain(payload.aiAutomation);
         const candidates=[payload.sourceCandidateUrl,payload.supplierOfficialUrl,payload.url,entry&&entry.official_url,automation.sourceUrl,automation.officialUrl].map(supplierControlTargetUrl).filter(Boolean);
-        return candidates.some((value)=>value.toLowerCase()===wanted||supplierRootUrl(value)===supplierRootUrl(targetUrl)||sameSupplierSite(value,targetUrl));
+        return candidates.some((value)=>value.toLowerCase()===wanted);
       });
       if(durableRow){
         const payload=plain(durableRow.source_payload),automation=plain(payload.aiAutomation),official=supplierControlTargetUrl(first(payload.supplierOfficialUrl,durableRow.official_url,targetUrl));
@@ -5963,13 +5973,15 @@ async function researchCandidateAction(actorId,input){
     }
     if(!target){results.push({url:targetUrl,status:"not_found"});continue;}
     const host=supplierRowHost(target),urlKey="url:"+sha256(targetUrl.toLowerCase()).slice(0,32),hostKey=host?"host:"+host:"";
-    if(action==="keep"){active=active.map((row)=>sameSupplierUrl(row,targetUrl)?Object.assign({},row,{operatorDecision:"keep",updatedAt:iso()}):row);
-    }else if(action==="unpin"){active=active.map((row)=>sameSupplierUrl(row,targetUrl)?Object.assign({},row,{adminPinned:false,manualPinned:false,operatorDecision:"unpin",updatedAt:iso()}):row);removeManualExact(targetUrl);
+    if(action==="keep"){active=active.map((row)=>operatorSupplierUrlMatch(row,targetUrl)?Object.assign({},row,{operatorDecision:"keep",updatedAt:iso()}):row);
+    }else if(action==="unpin"){active=active.map((row)=>operatorSupplierUrlMatch(row,targetUrl)?Object.assign({},row,{adminPinned:false,manualPinned:false,operatorDecision:"unpin",updatedAt:iso()}):row);removeManualExact(targetUrl);
     }else if(action==="hold"){active=removeUrl(active,targetUrl);blocked=removeUrl(blocked,targetUrl);holding=addUnique(holding,Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"holding",holdReason:"operator_hold",operatorDecision:"hold",updatedAt:iso()}));removeManualExact(targetUrl);
     }else if(action==="restore"){const hostWasBlocked=!!(hostKey&&keys.has(hostKey));holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);active=addUnique(active,Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"active",holdReason:null,operatorDecision:"restore",updatedAt:iso()}));keys.delete(urlKey);if(hostWasBlocked)keys.delete(hostKey);await removeSupplierSuppression(scope,target,hostWasBlocked?hostKey:urlKey,{matchHost:hostWasBlocked});
     }else if(action==="dismiss"){const hostWasBlocked=!!(hostKey&&keys.has(hostKey));active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);keys.delete(urlKey);if(hostWasBlocked)keys.delete(hostKey);await removeSupplierSuppression(scope,target,hostWasBlocked?hostKey:urlKey,{matchHost:hostWasBlocked});removeManualExact(targetUrl);
     }else if(action==="purge"){keys.add(urlKey);active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=addUnique(removeUrl(blocked,targetUrl),Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"blocked",holdReason:"operator_url_block",operatorDecision:"purge",updatedAt:iso()}));await persistSupplierSuppression(scope,target,actorId,"purge",urlKey);removeManualExact(targetUrl);
-    }else if(action==="block"){if(hostKey)keys.add(hostKey);const affected=allRows().filter((row)=>supplierRowHost(row)===host);active=active.filter((row)=>supplierRowHost(row)!==host);holding=holding.filter((row)=>supplierRowHost(row)!==host);blocked=blocked.filter((row)=>supplierRowHost(row)!==host);for(const row of affected)blocked=addUnique(blocked,Object.assign({},row,{adminPinned:false,manualPinned:false,queueState:"blocked",holdReason:"operator_domain_block",operatorDecision:"block",updatedAt:iso()}));await persistSupplierSuppression(scope,target,actorId,"block",hostKey);removeManualHost(host);
+    }else if(action==="block"){if(hostKey)keys.add(hostKey);const affected=allRows().filter((row)=>supplierRowHost(row)===host);active=active.filter((row)=>supplierRowHost(row)!==host);holding=holding.filter((row)=>supplierRowHost(row)!==host);blocked=blocked.filter((row)=>supplierRowHost(row)!==host);// Keep a reversible block-history entry separate from the active hold list.
+      for(const row of affected)blocked=addUnique(blocked,Object.assign({},row,{adminPinned:false,manualPinned:false,queueState:"blocked",holdReason:"operator_domain_block",operatorDecision:"block",updatedAt:iso()}));
+      await persistSupplierSuppression(scope,target,actorId,"block",hostKey);removeManualHost(host);
     }else if(action==="unblock"){keys.delete(urlKey);if(hostKey)keys.delete(hostKey);const same=blocked.filter((row)=>sameSupplierUrl(row,targetUrl)||supplierRowHost(row)===host);blocked=blocked.filter((row)=>!same.includes(row));for(const row of same)holding=addUnique(holding,Object.assign({},row,{adminPinned:false,manualPinned:false,queueState:"holding",holdReason:"operator_unblocked_review_required",operatorDecision:"unblock",updatedAt:iso()}));await removeSupplierSuppression(scope,target,hostKey||urlKey,{matchHost:true});
     }else if(action==="remove_from_list"){active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);removeManualExact(targetUrl);}
     // Keep the persisted private supplier ledger aligned with the research
@@ -6017,7 +6029,7 @@ async function listAutomationCandidates(countryCode, regionCode) {
   return array(rows).filter((row) => {
     const payload=plain(row&&row.source_payload),automation=plain(payload.aiAutomation);
     const rowCountry=normalizeCountry(first(automation.country,payload.targetCountry)),rowRegion=normalizeRegion(first(automation.region,payload.targetRegion,"NATIONWIDE"),rowCountry)||"NATIONWIDE";
-    return rowCountry===country&&rowRegion===region;
+    return rowCountry===country&&rowRegion===region&&text(payload.entityKind)!=="supplier_control_tombstone";
   }).map((row) => {
     const payload = plain(row && row.source_payload), automation = plain(payload.aiAutomation), profile = plain(payload.supplierProfile), evidence = plain(payload.brokerageVerification), contract = plain(payload.intermediaryContract), trust = plain(payload.supplierTrust);
     return {
