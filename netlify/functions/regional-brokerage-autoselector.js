@@ -608,11 +608,13 @@ async function inspectCandidate(item,geo,params){
   try{
     const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,PAGE_CHECK_TIMEOUT,3500,9000),controller=new AbortController();timer=setTimeout(()=>controller.abort(),timeoutMs);
     const response=await fetch(u.toString(),{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-BrokerageVerifier/1.3 (+https://igdcglobal.com)"}});
+    if(isAccessChallengeUrl(response.url||u.toString()))return researchCandidateShell(item,geo,"supplier_access_challenge",null);
     if(!response.ok)return researchCandidateShell(item,geo,"page_http_"+response.status,null);
     const finalUrl=safeHttpUrl(response.url||u.toString());if(!finalUrl)return researchCandidateShell(item,geo,"redirect_url_invalid",null);
     const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return researchCandidateShell(item,geo,"non_html_page",type);
     const length=Number(response.headers.get("content-length")||0);if(length>550000)return researchCandidateShell(item,geo,"page_too_large",String(length));
     const html=(await response.text()).slice(0,550000);
+    if(isRestrictedProductHtml(html))return researchCandidateShell(item,geo,"supplier_access_restricted_html",null);
     const policyUrls=policyPageUrls(html,finalUrl.toString());
     const policyPages=(await Promise.all(policyUrls.map(url=>fetchPolicyText(url,controller)))).filter(Boolean);
     const combinedHtml=[html].concat(policyPages).join("\n");
@@ -1188,6 +1190,19 @@ function catalogPageUrls(html,baseUrl,maxInput){
   }
   return out;
 }
+// A supplier WAF/Cafe24 protection challenge is not a product page. In
+// particular HTTP 200 after redirect must NEVER replace a valid detail URL.
+function isAccessChallengeUrl(value){
+  try {const u=new URL(String(value||"")),path=u.pathname.toLowerCase();
+    return /(?:^|\/)(?:challenge|captcha|access[-_]denied|bot[-_]check|security[-_]check)(?:\/|$)/.test(path)
+      || /\/cdn-cgi\/challenge-platform(?:\/|$)/.test(path);
+  }catch(_){return false;}
+}
+function isRestrictedProductHtml(html){
+  const opening=String(html||"").slice(0,18000);
+  return /access\s+temporarily\s+restricted|your\s+access\s+has\s+been\s+temporarily\s+restricted/i.test(opening)
+    || (/(?:cafe24|카페24)/i.test(opening)&&/(?:temporarily\s+restricted|접근이\s*일시적으로\s*제한)/i.test(opening));
+}
 async function fetchProductHtml(url,controller){
   const headers={
     "user-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0 Safari/537.36 IGDC-MARU-ProductReferenceResearch/1.0",
@@ -1196,7 +1211,20 @@ async function fetchProductHtml(url,controller){
     "cache-control":"no-cache",
     "pragma":"no-cache"
   };
-  try{const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers});if(!response.ok)return{ok:false,status:"http_"+response.status,url:response.url||url,html:""};const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return{ok:false,status:"non_html",url:response.url||url,html:""};const length=Number(response.headers.get("content-length")||0);if(length>1800000)return{ok:false,status:"page_too_large",url:response.url||url,html:""};return{ok:true,status:"ok",url:response.url||url,html:(await response.text()).slice(0,1400000)};}catch(error){return{ok:false,status:providerErrorCode(error),url,html:"",detail:providerErrorDetail(error)};}
+  // Do not request, store or reveal /challenge?auth=... as a product URL.
+  if(isAccessChallengeUrl(url))return{ok:false,status:"http_403",url:"",html:"",detail:"access_challenge_is_not_a_product_url"};
+  try{
+    const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers});
+    const finalUrl=String(response.url||url);
+    if(isAccessChallengeUrl(finalUrl))return{ok:false,status:"http_403",url,html:"",detail:"supplier_access_challenge_redirect"};
+    if(!response.ok)return{ok:false,status:"http_"+response.status,url,html:""};
+    const type=String(response.headers.get("content-type")||"");
+    if(!/text\/html|application\/xhtml\+xml/i.test(type))return{ok:false,status:"non_html",url,html:""};
+    const length=Number(response.headers.get("content-length")||0);if(length>1800000)return{ok:false,status:"page_too_large",url,html:""};
+    const html=(await response.text()).slice(0,1400000);
+    if(isRestrictedProductHtml(html))return{ok:false,status:"http_403",url,html:"",detail:"supplier_access_restricted_html"};
+    return{ok:true,status:"ok",url:finalUrl,html};
+  }catch(error){return{ok:false,status:providerErrorCode(error),url,html:"",detail:providerErrorDetail(error)};}
 }
 async function discoverSupplierProductsStep(supplier,params){
   const source=plain(supplier),supplierSiteUrl=absoluteHttpUrl(first(source.url,source.supplierSiteUrl),first(source.url,source.supplierSiteUrl));if(!supplierSiteUrl)return{ok:true,items:[],trace:{source:"supplier-product-discovery",status:"supplier_url_missing",count:0}};
@@ -1400,7 +1428,11 @@ async function recoverInvalidProductReference(rowInput,invalidUrl,supplierSiteUr
 }
 
 async function inspectProductCandidate(item,params){
-  const row=plain(item),productUrl=ProductRanking.canonicalProductUrl(absoluteHttpUrl(row.productUrl,row.productUrl)),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
+  const row=plain(item),originalUrl=absoluteHttpUrl(row.productUrl,row.productUrl),productUrl=ProductRanking.canonicalProductUrl(originalUrl),supplierSiteUrl=absoluteHttpUrl(row.supplierSiteUrl,row.supplierSiteUrl);
+  // Existing corrupted candidates are unverified, NOT dead products. Preserve
+  // identity and original data until an administrator restores a proven URL.
+  if(isAccessChallengeUrl(originalUrl))return Object.assign({},row,{researchStatus:"inspection_deferred",productPageLive:false,inspectionComplete:false,inspectionDeferred:true,inspectedAt:new Date().toISOString(),inspectionError:{code:"ACCESS_CHALLENGE_NOT_PRODUCT",message:"Recorded URL is an access challenge; restore known original detail URL"}});
+  if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
   const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,6000,3500,8000),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
     const page=await fetchProductHtml(productUrl,controller);if(!page.ok){const retryable=retryableProviderStatus(page.status);return Object.assign({},row,{researchStatus:retryable?"inspection_deferred":page.status,productPageLive:false,inspectionComplete:!retryable,inspectionDeferred:retryable,inspectedAt:new Date().toISOString(),inspectionError:retryable?{code:text(page.status)||"TRANSIENT_FETCH",message:page.detail||"temporary product-page fetch failure"}:row.inspectionError});}
     const invalidPage=productPageInvalidState(page.html,productUrl,page.url,supplierSiteUrl);
@@ -1410,7 +1442,7 @@ async function inspectProductCandidate(item,params){
       return Object.assign({},row,{researchStatus:invalidPage.reason,productPageLive:false,inspectionComplete:true,inspectedAt:new Date().toISOString(),inspectionError:{code:"PRODUCT_PAGE_INVALID",message:invalidPage.detail||invalidPage.reason},publicPublication:false,automaticImport:false});
     }
     const supplierMeta={supplierId:row.supplierId,supplierName:row.supplierName,supplierSiteUrl:supplierSiteUrl||row.supplierSiteUrl,supplierType:row.supplierType,trustScore:row.supplierTrustScore,supplierDecision:row.supplierDecision,approvalReady:row.supplierApprovalReady,evidenceReady:row.supplierEvidenceReady,supplyLane:row.supplyLane,discoverySource:row.discoverySource,officialDirectoryUrl:row.officialDirectoryUrl};
-    const parsed=productRowsFromHtml(page.html,page.url,supplierMeta,20),canonical=ProductRanking.canonicalProductUrl(canonicalPageUrl(page.html,page.url))||productUrl,exact=parsed.find(x=>ProductRanking.canonicalProductUrl(x.productUrl)===canonical)||{},pageVideo=videoInfoFromHtml(page.html,page.url);
+    const parsed=productRowsFromHtml(page.html,page.url,supplierMeta,20),pageCanonical=ProductRanking.canonicalProductUrl(canonicalPageUrl(page.html,page.url)),canonical=isAccessChallengeUrl(pageCanonical)?productUrl:(pageCanonical||productUrl),exact=parsed.find(x=>ProductRanking.canonicalProductUrl(x.productUrl)===canonical)||{},pageVideo=videoInfoFromHtml(page.html,page.url);
     const pageTitleRaw=meaningfulProductName(metaContent(page.html,["og:title","twitter:title"])||stripHtml((String(page.html).match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1])),pageTitle=providerEquivalentTitle(pageTitleRaw,row.supplierName)?"":pageTitleRaw,candidateNames=[exact.productName!=="상품명 확인 중"?exact.productName:"",row.productName,pageTitle].map(meaningfulProductName).filter(name=>name&&!ProductRanking.isGenericProductName(name)&&!providerEquivalentTitle(name,row.supplierName)),resolvedName=candidateNames[0]||"",name=resolvedName||"상품명 확인 중",image=first(exact.imageUrl,row.imageUrl),same=supplierSiteUrl?sameSite(supplierSiteUrl,page.url):true,pagePrice=priceInfoFromHtml(page.html),pageAvailability=availabilityFromHtml(page.html),price=first(exact.price,pagePrice.price,row.price),priceCurrency=first(exact.priceCurrency,pagePrice.priceCurrency,row.priceCurrency),availability=first(exact.availability,pageAvailability,row.availability),travelLike=travelInventoryUrl(canonical)||ProductRanking.tourRightProfile({productName:name,title:name,productUrl:canonical,url:canonical}).service===true,travelEvidence=travelLike?travelDetailEvidence(page.html,canonical,exact):{verified:true,source:"not_travel"},ready=!!resolvedName&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical)&&travelEvidence.verified===true;
     return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(canonical,name),productName:name,title:name,provisionalName:!resolvedName,productUrl:canonical,url:canonical,imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",price,priceCurrency,availability,offerPresent:exact.offerPresent===true||!!price,travelInventoryVerified:travelLike?travelEvidence.verified:undefined,travelInventoryEvidenceSource:travelLike?travelEvidence.source:undefined,videoUrl:first(exact.videoUrl,pageVideo.videoUrl,row.videoUrl),videoContentUrl:first(exact.videoContentUrl,pageVideo.videoContentUrl,row.videoContentUrl),videoEmbedUrl:first(exact.videoEmbedUrl,pageVideo.videoEmbedUrl,row.videoEmbedUrl),videoThumbnailUrl:first(exact.videoThumbnailUrl,pageVideo.videoThumbnailUrl,row.videoThumbnailUrl),videoSource:first(exact.videoSource,pageVideo.videoSource,row.videoSource),supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,supplierId:first(row.supplierId,exact.supplierId),supplierType:first(row.supplierType,exact.supplierType),supplierTrustScore:Math.max(Number(row.supplierTrustScore)||0,Number(exact.supplierTrustScore)||0),supplierEvidenceReady:row.supplierEvidenceReady===true||exact.supplierEvidenceReady===true,supplierApprovalReady:row.supplierApprovalReady===true||exact.supplierApprovalReady===true,sourcePageUrl:first(row.sourcePageUrl,exact.sourcePageUrl,page.url),verifiedDetailPageUrl:page.url,productPageLive:true,sameSupplierSite:same,inspectionComplete:true,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});
   }finally{clearTimeout(timer);}
