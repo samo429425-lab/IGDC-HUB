@@ -4,10 +4,10 @@
  * Optional Social AI policy envelope used only before SearchBank publication.
  * No snapshot/front/rightPanel mutation occurs here.
  */
-const VERSION = "social-ai-policy-runtime-v1.3.1-six-main-sections";
+const VERSION = "social-ai-policy-runtime-v1.4.0-bilibili-douyin-six";
 const SECTION_KEYS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-douyin", "social-dailymotion",
+  "social-bilibili", "social-douyin",
 ]);
 
 const DEFAULT_PREFERRED_TOPICS = Object.freeze([

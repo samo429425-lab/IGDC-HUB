@@ -16,10 +16,10 @@
     ["social-instagram", "Instagram", "instagram"],
     ["social-tiktok", "TikTok", "tiktok"],
     ["social-facebook", "Facebook", "facebook"],
-    ["social-douyin", "Douyin", "douyin"],
-    ["social-dailymotion", "Dailymotion", "dailymotion"],
+    ["social-bilibili", "Bilibili / 哔哩哔哩", "bilibili"],
+    ["social-douyin", "Douyin / 抖音", "douyin"],
   ];
-  var COLLECTOR_JOB_VERSION = 6,
+  var COLLECTOR_JOB_VERSION = 7,
     STANDARD_EMPTY_BATCH_LIMIT = 12,
     LOW_YIELD_EMPTY_BATCH_LIMIT = 18;
   var order = SECTIONS.map(function (x) {
@@ -1609,7 +1609,7 @@
       return signedPreviewExpired(platform, raw);
     } catch (_e) { return false; }
   }
-  var PROFILE_FALLBACK_SECTIONS = new Set(["social-douyin","social-dailymotion"]);
+  var PROFILE_FALLBACK_SECTIONS = new Set(["social-bilibili","social-douyin"]);
   function realPreviewMissing(row) {
     if (!row) return false;
     var cls=assetClass(row);
@@ -1625,7 +1625,7 @@
       (sourceUrl && thumbUrl === sourceUrl) ||
       genericProviderPreviewThumb(platform, thumbUrl);
     if (platform === "facebook") return noThumb;
-    var genericTitle = !title || ["instagram","tiktok","douyin","dailymotion"].indexOf(title) >= 0;
+    var genericTitle = !title || ["instagram","tiktok","bilibili","douyin"].indexOf(title) >= 0;
     return noThumb || genericTitle;
   }
   function mergeHydratedRows(items) {
@@ -1713,7 +1713,7 @@
     });
   }
   function sectionEmptyBatchLimit(section, j) {
-    var cap = /^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(section)
+    var cap = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section)
         ? LOW_YIELD_EMPTY_BATCH_LIMIT
         : STANDARD_EMPTY_BATCH_LIMIT,
       reported = Number(j && (j.discoveryCatalogSize || j.catalogSize) || 0);
@@ -1745,12 +1745,15 @@
         "facebook-native-search": "Facebook 전용 검색",
         "facebook-native-watch-search": "Facebook Watch 검색",
         "facebook-native-video-search": "Facebook 영상 검색",
+        "bilibili-native-api-search": "Bilibili 공개 API 검색",
+        "bilibili-native-api-popular": "Bilibili 공개 인기 영상",
+        "bilibili-native-search": "Bilibili 전용 검색",
+        "bilibili-native-html": "Bilibili 직접 검색",
         "douyin-native-search": "Douyin 전용 검색",
         "douyin-native-search-fallback": "Douyin 전용 검색 보조",
-        "dailymotion-native-api": "Dailymotion 공개 API",
-        "dailymotion-native-search": "Dailymotion 전용 검색",
-        "dailymotion-native-html": "Dailymotion 직접 검색",
         "yahoo-html-social": "Yahoo 공개 검색",
+        "baidu-html-bilibili": "Baidu Bilibili 보조 검색",
+        "sogou-html-bilibili": "Sogou Bilibili 보조 검색",
         "baidu-html-douyin": "Baidu Douyin 보조 검색",
         "sogou-html-douyin": "Sogou Douyin 보조 검색",
       }[text(value)] || text(value)
@@ -2026,7 +2029,7 @@
       if (dryRun) break;
       if (!stopRequested && j.sectionCount < j.target) await wait(650);
     }
-    var lowYieldRescue = /^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(section);
+    var lowYieldRescue = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section);
     if (
       !dryRun &&
       !stopRequested &&
@@ -2041,7 +2044,7 @@
       // Quality rescue owns its own empty counter. The generic phase normally
       // ends precisely because emptyBatches reached maxEmpty; reusing that same
       // counter made the rescue loop execute zero times for the platforms that
-      // needed it most (TikTok/Facebook/Douyin/Dailymotion).
+      // needed it most (TikTok/Facebook/Bilibili/Douyin).
       j.qualityEmptyBatches = Number(j.qualityEmptyBatches || 0);
       for (
         var sweep = 0;
@@ -2114,7 +2117,7 @@
       registrySweepActive: false,
       qualitySweepBatches: 0,
       qualityEmptyBatches: 0,
-      qualitySweepTarget: /^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(section) ? 8 : 6,
+      qualitySweepTarget: /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section) ? 8 : 6,
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
@@ -2245,7 +2248,7 @@
           j.registrySweepActive = false;
           j.qualitySweepBatches = 0;
           j.qualityEmptyBatches = 0;
-          j.qualitySweepTarget = /^social-(?:tiktok|facebook|douyin|dailymotion)$/.test(j.section) ? 8 : 6;
+          j.qualitySweepTarget = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(j.section) ? 8 : 6;
           j.qualitySweepDone = false;
           j.qualitySweepActive = false;
           j.lastReason = "";

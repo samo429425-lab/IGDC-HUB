@@ -121,8 +121,8 @@
         "instagram",
         "tiktok",
         "facebook",
+        "bilibili",
         "douyin",
-        "dailymotion",
         "right_panel"
       ]
     },
@@ -210,8 +210,8 @@
       "instagram",
       "tiktok",
       "facebook",
+      "bilibili",
       "douyin",
-      "dailymotion",
       "right_panel"
     ],
     "media": [
@@ -278,7 +278,7 @@
       "tiktok": "틱톡",
       "facebook": "페이스북",
       "douyin": "더우인",
-      "dailymotion": "데일리모션",
+      "bilibili": "빌리빌리",
       "right_panel": "우측"
     },
     "media": {
@@ -4990,16 +4990,16 @@
       "updated": "2026-03-28"
     },
     {
-      "id": "social-douyin-001",
+      "id": "social-bilibili-001",
       "page": "social",
-      "section": "douyin",
-      "title": "Douyin Channel 1",
+      "section": "bilibili",
+      "title": "Bilibili Channel 1",
       "category": "social",
       "type": "thumbnail",
       "url": "/socialnetwork/index.html",
       "keywords": [
-        "douyin",
-        "抖音"
+        "bilibili",
+        "哔哩哔哩"
       ],
       "weight": 1,
       "enabled": true,
@@ -5040,15 +5040,16 @@
       "updated": "2026-03-28"
     },
     {
-      "id": "social-dailymotion-001",
+      "id": "social-douyin-001",
       "page": "social",
-      "section": "dailymotion",
-      "title": "Dailymotion Channel 1",
+      "section": "douyin",
+      "title": "Douyin Channel 1",
       "category": "social",
       "type": "thumbnail",
       "url": "/socialnetwork/index.html",
       "keywords": [
-        "dailymotion"
+        "douyin",
+        "抖音"
       ],
       "weight": 1,
       "enabled": true,

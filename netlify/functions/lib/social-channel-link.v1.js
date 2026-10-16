@@ -5,22 +5,22 @@
  * recommends first during discovery. This is Social-candidate-only code and
  * does not mutate SearchBank, snapshots, releases, rightPanel, or Distribution.
  */
-const VERSION = "social-channel-link-v1.3.1-content-shortlink-fix";
+const VERSION = "social-channel-link-v1.4.0-bilibili-douyin-six";
 
 const PLATFORM_HOSTS = Object.freeze({
   youtube: ["youtube.com", "youtu.be"],
   instagram: ["instagram.com"],
   tiktok: ["tiktok.com"],
   facebook: ["facebook.com", "fb.watch"],
-  douyin: ["douyin.com", "v.douyin.com", "iesdouyin.com"],
-  dailymotion: ["dailymotion.com", "dai.ly"]
+  bilibili: ["bilibili.com", "b23.tv"],
+  douyin: ["douyin.com", "v.douyin.com", "iesdouyin.com"]
 });
 const RESERVED = Object.freeze({
   instagram: new Set(["about","accounts","developer","direct","directory","explore","legal","privacy","reels","stories","web"]),
   tiktok: new Set(["about","business","community-guidelines","discover","explore","legal","login","search","tag"]),
   facebook: new Set(["about","ads","business","events","gaming","groups","help","login","marketplace","privacy","reel","search","share","stories","watch"]),
-  douyin: new Set(["about","discover","hot","login","search","video","note","user"]),
-  dailymotion: new Set(["about","embed","legal","playlist","search","signin","upload","user","video"])
+  bilibili: new Set(["audio","blackboard","cheese","festival","read","search","video","v","watchlater"]),
+  douyin: new Set(["about","discover","hot","login","search","video","note","user"])
 });
 
 function text(value){ return value == null ? "" : String(value).trim(); }
@@ -51,8 +51,8 @@ function canonical(platform, path){
     instagram: "https://www.instagram.com",
     tiktok: "https://www.tiktok.com",
     facebook: "https://www.facebook.com",
-    douyin: "https://www.douyin.com",
-    dailymotion: "https://www.dailymotion.com"
+    bilibili: "https://www.bilibili.com",
+    douyin: "https://www.douyin.com"
   };
   return (roots[platform] || "") + (path.startsWith("/") ? path : "/" + path);
 }
@@ -118,16 +118,16 @@ function resolve(value, options){
     else if (path === "/profile.php" && evidence.searchParams.get("id")) { targetUrl = canonical(platform, "/profile.php?id=" + encodeURIComponent(evidence.searchParams.get("id"))); entityKind = "public_page"; }
     else if (/^\/(?:reel|watch|videos|posts|photos|photo|share)(?:\/|$)/i.test(path) || /^\/(?:permalink|story)\.php$/i.test(path) || evidence.searchParams.get("story_fbid")) { needsEnrichment = "facebook_public_meta_author"; entityKind = "public_page"; }
     else if (p[0] && handleAllowed(platform, p[0])) { targetUrl = canonical(platform, "/" + p[0]); entityKind = "public_page"; }
+  } else if (platform === "bilibili") {
+    const host = hostOf(evidence.toString());
+    if (host === "space.bilibili.com" && p[0] && /^\d+$/.test(p[0])) {
+      targetUrl = "https://space.bilibili.com/" + encodeURIComponent(p[0]); entityKind = "channel";
+    } else if (host === "b23.tv" || /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path)) {
+      needsEnrichment = "bilibili_public_meta_author"; entityKind = "channel";
+    }
   } else if (platform === "douyin") {
     if (p[0] === "user" && p[1]) { targetUrl = canonical(platform, "/user/" + encodeURIComponent(p[1])); entityKind = "profile"; }
     else if (/^\/(?:share\/)?(?:video|note)\//i.test(path) || hostOf(evidence.toString()) === "v.douyin.com") { needsEnrichment = "douyin_public_meta_author"; entityKind = "profile"; }
-  } else if (platform === "dailymotion") {
-    const host = hostOf(evidence.toString());
-    // dai.ly/<video-id> is content, never a creator/channel handle. Handle it
-    // before the one-segment channel rule to avoid registering a fake channel.
-    if (host === "dai.ly" || /^\/video\//i.test(path)) { needsEnrichment = "dailymotion_oembed_author"; entityKind = "channel"; }
-    else if (p[0] === "user" && p[1]) { targetUrl = canonical(platform, "/user/" + encodeURIComponent(p[1])); entityKind = "channel"; }
-    else if (p.length === 1 && p[0] !== "video" && handleAllowed(platform, p[0])) { targetUrl = canonical(platform, "/" + p[0]); entityKind = "channel"; }
   }
 
   if (!targetUrl && !needsEnrichment) return { ok:false, reason:"channel_target_not_resolved", platform, evidenceUrl:evidence.toString() };

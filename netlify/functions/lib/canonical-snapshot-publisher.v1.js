@@ -69,21 +69,11 @@ const SECTION_ALIASES = Object.freeze({
   distribution: {
     recommend: "distribution-recommend", today: "distribution-recommend", sponsored: "distribution-sponsor", sponsor: "distribution-sponsor",
     trending: "distribution-trending", popular: "distribution-trending", new: "distribution-new", special: "distribution-special",
-    others: "distribution-others", etc: "distribution-others", extra: "distribution-extra", outdoor_food: "distribution-extra", "distribution-extra": "distribution-extra", right_panel: "distribution-right", rightpanel: "distribution-right",
-    // Numeric/legacy section aliases are transport compatibility only. They
-    // normalize to the same canonical rails used by PSOM/Snapshot/AutoMap.
-    dist1:"distribution-recommend", dist_1:"distribution-recommend", "dist-1":"distribution-recommend", distribution1:"distribution-recommend", distribution_1:"distribution-recommend", "distribution-1":"distribution-recommend",
-    dist2:"distribution-sponsor", dist_2:"distribution-sponsor", "dist-2":"distribution-sponsor", distribution2:"distribution-sponsor", distribution_2:"distribution-sponsor", "distribution-2":"distribution-sponsor",
-    dist3:"distribution-trending", dist_3:"distribution-trending", "dist-3":"distribution-trending", distribution3:"distribution-trending", distribution_3:"distribution-trending", "distribution-3":"distribution-trending",
-    dist4:"distribution-new", dist_4:"distribution-new", "dist-4":"distribution-new", distribution4:"distribution-new", distribution_4:"distribution-new", "distribution-4":"distribution-new",
-    dist5:"distribution-special", dist_5:"distribution-special", "dist-5":"distribution-special", distribution5:"distribution-special", distribution_5:"distribution-special", "distribution-5":"distribution-special",
-    dist6:"distribution-others", dist_6:"distribution-others", "dist-6":"distribution-others", distribution6:"distribution-others", distribution_6:"distribution-others", "distribution-6":"distribution-others",
-    dist7:"distribution-right", dist_7:"distribution-right", "dist-7":"distribution-right", distribution7:"distribution-right", distribution_7:"distribution-right", "distribution-7":"distribution-right",
-    dist8:"distribution-extra", dist_8:"distribution-extra", "dist-8":"distribution-extra", distribution8:"distribution-extra", distribution_8:"distribution-extra", "distribution-8":"distribution-extra"
+    others: "distribution-others", etc: "distribution-others", extra: "distribution-extra", outdoor_food: "distribution-extra", "distribution-extra": "distribution-extra", right_panel: "distribution-right", rightpanel: "distribution-right"
   },
   social: {
     maru: "social-maru", youtube: "social-youtube", instagram: "social-instagram", tiktok: "social-tiktok", facebook: "social-facebook",
-    douyin: "social-douyin", dailymotion: "social-dailymotion",
+    bilibili: "social-bilibili", douyin: "social-douyin",
     right_panel: "rightPanel", rightpanel: "rightPanel"
   },
   media: {
@@ -507,7 +497,7 @@ function validateCandidate(raw, index, context) {
   if (region === "GLOBAL" && !geo.globalExplicit) reasons.push("GLOBAL_REGION_NOT_EXPLICIT");
   const adminAuthority = isObject(item.administratorFrontMatchAuthority) ? item.administratorFrontMatchAuthority : {};
   const explicitAdminPublication = adminAuthority.verified === true &&
-    ["publish_requested","queued","matched","published","active"].includes(lower(adminAuthority.publicationStatus)) &&
+    lower(adminAuthority.publicationStatus) === "publish_requested" &&
     str(adminAuthority.assignmentId) &&
     str(adminAuthority.page) === page && str(adminAuthority.section) === section &&
     normalizeCountry(adminAuthority.country, false) === country &&

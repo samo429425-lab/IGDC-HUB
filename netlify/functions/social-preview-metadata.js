@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.9.0-douyin-dailymotion";
+const VERSION = "social-preview-metadata-v1.10.0-bilibili-douyin";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -18,8 +18,8 @@ const PLATFORM_HOSTS = Object.freeze({
   instagram: [/(^|\.)instagram\.com$/i],
   tiktok: [/(^|\.)tiktok\.com$/i],
   facebook: [/(^|\.)facebook\.com$/i, /^fb\.watch$/i],
-  douyin: [/(^|\.)douyin\.com$/i, /(^|\.)iesdouyin\.com$/i],
-  dailymotion: [/(^|\.)dailymotion\.com$/i, /^dai\.ly$/i]
+  bilibili: [/(^|\.)bilibili\.com$/i, /^b23\.tv$/i],
+  douyin: [/(^|\.)douyin\.com$/i, /(^|\.)iesdouyin\.com$/i]
 });
 
 function json(statusCode, body, cacheable) {
@@ -112,6 +112,17 @@ function previewImageUrl(platform, value) {
     if (platform === "facebook") {
       // facebook.com post/watch URLs are pages, not image previews.
       if (/(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path + url.search)) return "";
+    }
+
+    if (platform === "bilibili") {
+      // Bilibili cover images are served from provider CDNs. Never let the
+      // thumbnail relay turn an arbitrary third-party URL into a server fetch.
+      if (!/(^|\.)(?:hdslb\.com|biliimg\.com)$/i.test(host)) return "";
+    }
+
+    if (platform === "douyin") {
+      // Douyin/Toutiao public preview images use ByteDance-owned image CDNs.
+      if (!/(^|\.)(?:douyincdn\.com|douyinpic\.com|byteimg\.com|pstatp\.com)$/i.test(host)) return "";
     }
     const expiry = signedPreviewExpiry(platform, url.toString());
     if (expiry && expiry <= Date.now() + 24 * 60 * 60 * 1000) return "";
@@ -249,7 +260,7 @@ function htmlImage(html, platform) {
   const raw = text(html);
   const patterns = [
     /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/ig,
-    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|douyincdn[^/]*\.com|douyinpic\.com|byteimg\.com|pstatp\.com|dmcdn\.net)[^"<>]*)"/ig,
+    /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|hdslb\.com|biliimg\.com|douyincdn[^/]*\.com|douyinpic\.com|byteimg\.com|pstatp\.com)[^"<>]*)"/ig,
     /(?:poster|data-poster|data-thumb|data-thumbnail)=["'](https:\/\/[^"'<>]+)["']/ig,
     /background-image\s*:\s*url\(["']?(https:\/\/[^"')<>]+)["']?\)/ig
   ];
@@ -263,7 +274,7 @@ function htmlImage(html, platform) {
 
   // Last-resort CDN scan: keep walking after a bad provider UI asset so a
   // provider script or logo cannot win before the actual media URL.
-  const genericRe = /https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|douyincdn[^/]*\.com|douyinpic\.com|byteimg\.com|pstatp\.com|dmcdn\.net)[^"'<>\s]*/ig;
+  const genericRe = /https:\\?\/\\?\/(?:[^"'<>\s\/]+\.)?(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|hdslb\.com|biliimg\.com|douyincdn[^/]*\.com|douyinpic\.com|byteimg\.com|pstatp\.com)[^"'<>\s]*/ig;
   let generic;
   while ((generic = genericRe.exec(raw))) {
     const image = previewImageUrl(platform, generic[0]);
@@ -275,7 +286,7 @@ function htmlImage(html, platform) {
 function htmlCreator(platform, html) {
   const meta = metaMap(html);
   const metaAuthor = firstMeta(meta, ["author", "article:author", "twitter:creator"]);
-  if (metaAuthor && !/^(instagram|tiktok|facebook|douyin|dailymotion)$/i.test(metaAuthor)) {
+  if (metaAuthor && !/^(instagram|tiktok|facebook|bilibili|douyin)$/i.test(metaAuthor)) {
     return stripTags(metaAuthor).replace(/^@/, "").trim();
   }
   const raw = text(html);
@@ -283,10 +294,10 @@ function htmlCreator(platform, html) {
     ? [/"username"\s*:\s*"([^"<>]{1,100})"/i, /"owner"\s*:\s*\{[^{}]{0,400}"username"\s*:\s*"([^"<>]{1,100})"/i]
     : platform === "tiktok"
       ? [/"uniqueId"\s*:\s*"([^"<>]{1,100})"/i, /"authorName"\s*:\s*"([^"<>]{1,120})"/i]
-      : platform === "douyin"
-        ? [/"nickname"\s*:\s*"([^"<>]{1,120})"/i, /"unique_id"\s*:\s*"([^"<>]{1,120})"/i, /"uniqueId"\s*:\s*"([^"<>]{1,120})"/i]
-        : platform === "dailymotion"
-          ? [/"owner(?:screenname|Screenname|_screenname)"\s*:\s*"([^"<>]{1,120})"/i, /"author_name"\s*:\s*"([^"<>]{1,120})"/i]
+      : platform === "bilibili"
+        ? [/"owner"\s*:\s*\{[^{}]{0,500}"name"\s*:\s*"([^"<>]{1,120})"/i, /"author"\s*:\s*"([^"<>]{1,120})"/i, /"up_name"\s*:\s*"([^"<>]{1,120})"/i]
+        : platform === "douyin"
+          ? [/"nickname"\s*:\s*"([^"<>]{1,120})"/i, /"unique_id"\s*:\s*"([^"<>]{1,120})"/i, /"uniqueId"\s*:\s*"([^"<>]{1,120})"/i]
           : [/"author_name"\s*:\s*"([^"<>]{1,120})"/i];
   for (const pattern of patterns) {
     const match = raw.match(pattern);
@@ -356,7 +367,6 @@ async function fetchJson(url) {
 async function oembed(platform, contentUrl) {
   let endpoint = "";
   if (platform === "tiktok") endpoint = "https://www.tiktok.com/oembed?url=" + encodeURIComponent(contentUrl);
-  else if (platform === "dailymotion") endpoint = "https://www.dailymotion.com/services/oembed?url=" + encodeURIComponent(contentUrl) + "&format=json";
   else return null;
   return fetchJson(endpoint);
 }
@@ -366,8 +376,8 @@ function shortProviderUrl(platform, value) {
     const url = new URL(value);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
     if (platform === "tiktok") return host === "vm.tiktok.com" || host === "vt.tiktok.com";
+    if (platform === "bilibili") return host === "b23.tv";
     if (platform === "douyin") return host === "v.douyin.com";
-    if (platform === "dailymotion") return host === "dai.ly";
     return false;
   } catch (_error) {
     return false;
@@ -413,12 +423,11 @@ function providerEmbedPreviewUrl(platform, contentUrl) {
       const kind = match[1].toLowerCase() === "reels" ? "reel" : match[1].toLowerCase();
       return "https://www.instagram.com/" + kind + "/" + match[2] + "/embed/";
     }
-    if (platform === "dailymotion") {
-      const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
-      const match = host === "dai.ly"
-        ? parsed.pathname.match(/^\/([A-Za-z0-9]+)/i)
-        : parsed.pathname.match(/^\/video\/([A-Za-z0-9]+)/i);
-      return match ? "https://www.dailymotion.com/embed/video/" + encodeURIComponent(match[1]) : "";
+    if (platform === "bilibili") {
+      let match = parsed.pathname.match(/^\/video\/(BV[0-9A-Za-z]+)/i);
+      if (match) return "https://player.bilibili.com/player.html?bvid=" + encodeURIComponent(match[1]);
+      match = parsed.pathname.match(/^\/video\/av(\d+)/i);
+      return match ? "https://player.bilibili.com/player.html?aid=" + encodeURIComponent(match[1]) : "";
     }
   } catch (_error) {}
   return "";

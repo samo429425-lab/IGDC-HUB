@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20261011-six-sns-douyin-dailymotion-v1'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20261017-six-sns-bilibili-douyin-v1'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -25,8 +25,8 @@
     'social-instagram': 'instagram',
     'social-tiktok': 'tiktok',
     'social-facebook': 'facebook',
-    'social-douyin': 'douyin',
-    'social-dailymotion': 'dailymotion'
+    'social-bilibili': 'bilibili',
+    'social-douyin': 'douyin'
   };
 
   var state = {
@@ -91,7 +91,7 @@
     return !url || url === '#' || /^javascript:/i.test(url) ||
       /\/pages\/coming-soon\.html/i.test(url) ||
       /(?:^|\.)example\.com(?:[\/:?#]|$)/i.test(url) ||
-      /social[_-](?:youtube|instagram|tiktok|facebook|douyin|dailymotion)[_-]?\d+/i.test(url) ||
+      /social[_-](?:youtube|instagram|tiktok|facebook|bilibili|douyin)[_-]?\d+/i.test(url) ||
       /tiktok\.com\/@seed\/video\//i.test(url);
   }
 
@@ -196,10 +196,12 @@
     } catch (_) { return ''; }
   }
 
-  function dailymotionVideoId(url) {
+  function bilibiliVideoId(url) {
     var raw = text(url);
-    var m = raw.match(/dailymotion\.com\/video\/([A-Za-z0-9]+)/i) || raw.match(/dai\.ly\/([A-Za-z0-9]+)/i);
-    return m ? m[1] : '';
+    var m = raw.match(/bilibili\.com\/video\/(BV[0-9A-Za-z]+)/i);
+    if (m) return { kind: 'bvid', id: m[1] };
+    m = raw.match(/bilibili\.com\/video\/av(\d+)/i);
+    return m ? { kind: 'aid', id: m[1] } : null;
   }
 
   function instagramEmbed(url) {
@@ -254,8 +256,8 @@
         var isVideo = /\/plugins\/video\.php$/i.test(path) || facebookIsVideo(contentUrl);
         return { mode: 'iframe', src: raw, aspect: isVideo ? '16/9' : 'auto', provider: isVideo ? 'facebook-video' : 'facebook-post' };
       }
-      if (platform === 'dailymotion' && /(?:^|\.)dailymotion\.com$/.test(host) && /^\/embed\/video\//i.test(path)) {
-        return { mode: 'iframe', src: raw, aspect: '16/9', provider: 'dailymotion-video' };
+      if (platform === 'bilibili' && /(?:^|\.)player\.bilibili\.com$/.test(host) && /^\/player\.html$/i.test(path)) {
+        return { mode: 'iframe', src: raw, aspect: '16/9', provider: 'bilibili-video' };
       }
     } catch (_) {}
     return null;
@@ -323,14 +325,14 @@
       };
     }
 
-    if (platform === 'dailymotion') {
-      var did = dailymotionVideoId(url);
-      if (!did) return containedFallbackEmbed(platform, card, titleOf(card));
+    if (platform === 'bilibili') {
+      var bid = bilibiliVideoId(url);
+      if (!bid) return containedFallbackEmbed(platform, card, titleOf(card));
       return {
         mode: 'iframe',
-        src: 'https://www.dailymotion.com/embed/video/' + encodeURIComponent(did) + '?autoplay=1&queue-enable=false',
+        src: 'https://player.bilibili.com/player.html?' + (bid.kind === 'bvid' ? 'bvid=' : 'aid=') + encodeURIComponent(bid.id) + '&autoplay=1&high_quality=1',
         aspect: '16/9',
-        provider: 'dailymotion-video'
+        provider: 'bilibili-video'
       };
     }
 

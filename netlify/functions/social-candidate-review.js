@@ -65,7 +65,7 @@ function readJsonFile(file) {
 function rowsFrom(doc) { return Array.isArray(doc && doc.items) ? doc.items : []; }
 function sectionKeys() {
   return SocialStore && SocialStore.Policy && Array.isArray(SocialStore.Policy.SECTION_KEYS)
-    ? SocialStore.Policy.SECTION_KEYS : ["social-youtube","social-instagram","social-tiktok","social-facebook","social-douyin","social-dailymotion"];
+    ? SocialStore.Policy.SECTION_KEYS : ["social-youtube","social-instagram","social-tiktok","social-facebook","social-bilibili","social-douyin"];
 }
 function first(obj, keys) {
   for (const key of keys) if (obj && obj[key] != null && text(obj[key])) return obj[key];

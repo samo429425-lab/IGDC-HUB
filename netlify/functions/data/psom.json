@@ -121,8 +121,8 @@
         "social-instagram",
         "social-tiktok",
         "social-facebook",
+        "social-bilibili",
         "social-douyin",
-        "social-dailymotion",
         "rightPanel"
       ],
       "mapping": {
@@ -131,7 +131,7 @@
         "tiktok": "social-tiktok",
         "facebook": "social-facebook",
         "douyin": "social-douyin",
-        "dailymotion": "social-dailymotion",
+        "bilibili": "social-bilibili",
         "maru": "social-maru"
       }
     },
@@ -219,8 +219,8 @@
       "social-instagram",
       "social-tiktok",
       "social-facebook",
+      "social-bilibili",
       "social-douyin",
-      "social-dailymotion",
       "rightPanel"
     ],
     "media": [
@@ -287,7 +287,7 @@
       "social-tiktok": "틱톡",
       "social-facebook": "페이스북",
       "social-douyin": "더우인",
-      "social-dailymotion": "데일리모션",
+      "social-bilibili": "빌리빌리",
       "rightPanel": "우측"
     },
     "media": {
@@ -1952,16 +1952,16 @@
       "updated": "2026-03-28"
     },
     {
-      "id": "social-douyin-001",
+      "id": "social-bilibili-001",
       "page": "social",
-      "section": "social-douyin",
-      "title": "Douyin Channel 1",
+      "section": "social-bilibili",
+      "title": "Bilibili Channel 1",
       "category": "social",
       "type": "thumbnail",
       "url": "/socialnetwork/index.html",
       "keywords": [
-        "douyin",
-        "抖音"
+        "bilibili",
+        "哔哩哔哩"
       ],
       "weight": 1,
       "enabled": true,
@@ -2002,15 +2002,16 @@
       "updated": "2026-03-28"
     },
     {
-      "id": "social-dailymotion-001",
+      "id": "social-douyin-001",
       "page": "social",
-      "section": "social-dailymotion",
-      "title": "Dailymotion Channel 1",
+      "section": "social-douyin",
+      "title": "Douyin Channel 1",
       "category": "social",
       "type": "thumbnail",
       "url": "/socialnetwork/index.html",
       "keywords": [
-        "dailymotion"
+        "douyin",
+        "抖音"
       ],
       "weight": 1,
       "enabled": true,

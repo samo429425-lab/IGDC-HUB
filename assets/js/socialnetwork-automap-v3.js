@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20261012-rightpanel-canonical-product-authority-v2
+// build: 20260923-six-main-sections-v1
 // 목적:
 // 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -27,8 +27,8 @@
     "social-instagram",
     "social-tiktok",
     "social-facebook",
+    "social-bilibili",
     "social-douyin",
-    "social-dailymotion",
   ]);
   const mainRenderTokens = new WeakMap();
   const rightRenderTokens = new WeakMap();
@@ -173,40 +173,6 @@
     return /^https?:\/\//i.test(safeText(url).trim());
   }
 
-  const COMMERCE_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20261011-commerce-contained-v2';
-  const COMMERCE_VIEWER_SCRIPT_ID = 'igdc-commerce-contained-viewer-loader-v1';
-  function ensureCommerceContainedViewer(){
-    if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 10 && typeof window.IGDCContainedViewer.open === 'function') return Promise.resolve(window.IGDCContainedViewer);
-    if(window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__) return window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__;
-    window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__ = new Promise(function(resolve,reject){
-      var script=document.getElementById(COMMERCE_VIEWER_SCRIPT_ID);
-      function finish(){
-        if(window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 10 && typeof window.IGDCContainedViewer.open === 'function') resolve(window.IGDCContainedViewer);
-        else reject(new Error('IGDC contained viewer unavailable'));
-      }
-      if(script){
-        if(script.dataset.loaded==='1'){finish();return;}
-        script.addEventListener('load',finish,{once:true});
-        script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
-        return;
-      }
-      script=document.createElement('script');
-      script.id=COMMERCE_VIEWER_SCRIPT_ID;script.src=COMMERCE_VIEWER_SRC;script.async=true;
-      script.addEventListener('load',function(){script.dataset.loaded='1';finish();},{once:true});
-      script.addEventListener('error',function(){reject(new Error('IGDC contained viewer load failed'));},{once:true});
-      (document.head||document.documentElement).appendChild(script);
-    }).catch(function(error){window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__=null;throw error;});
-    return window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__;
-  }
-  function openCommerceContained(url,label){
-    return ensureCommerceContainedViewer().then(function(viewer){
-      return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product',pushHistory:true});
-    }).catch(function(error){
-      try{console.warn('[IGDC][Commerce] contained viewer unavailable:',error&&error.message?error.message:error);}catch(_e){}
-      return false;
-    });
-  }
-
   function isInternalUrl(url) {
     url = safeText(url).trim();
     return (
@@ -231,98 +197,6 @@
     url = safeText(url).trim();
     if (isBadPlaceholderUrl(url)) return false;
     return isExternalUrl(url) || isInternalUrl(url);
-  }
-
-  // Social right is a commerce surface. A provider homepage, category, search
-  // or generic travel portal must never win over the actual product/detail URL.
-  const RIGHT_PRODUCT_ID_QUERY_KEYS = new Set([
-    "goodsno","goods_no","goodsid","goods_id","product_no","productno","productid","product_id",
-    "itemid","item_id","itemno","item_no","prdno","prd_no","sku","uid","pid","productcode","product_code",
-    "hotelid","hotel_id","roomid","room_id","activityid","activity_id","attractionid","attraction_id",
-    "tourid","tour_id","ticketid","ticket_id","packageid","package_id","bookingid","booking_id"
-  ]);
-
-  function isSpecificRightProductUrl(value) {
-    const raw = safeText(value).trim();
-    if (!isExternalUrl(raw) || isBadPlaceholderUrl(raw)) return false;
-    try {
-      const url = new URL(raw);
-      const path = decodeURIComponent(url.pathname || "/").replace(/\/{2,}/g, "/").replace(/\/+$/, "") || "/";
-      const low = path.toLowerCase();
-      const hasProductId = Array.from(url.searchParams.entries()).some(function(pair){
-        return RIGHT_PRODUCT_ID_QUERY_KEYS.has(String(pair[0] || "").toLowerCase()) && String(pair[1] || "").trim();
-      });
-      // Social right is also a commerce surface. A provider/host/agency profile
-      // must not qualify only because it happens to carry goodsid/productid in
-      // its query string.
-      if (/(?:^|\/)(?:hosts?|providers?|operators?|agencies?|partners?|company|about)(?:\/|$)/i.test(low)) return false;
-      if (hasProductId) return true;
-      if (path === "/") return false;
-      if (/(?:^|\/)(?:search|category|categories|catalog|collection|collections|brand|brands|best|event|events|home|main|travel|shop|store|list|destinations?|things-to-do)(?:\/|$)/i.test(low)) return false;
-      if (/(?:^|[?&])(?:category|cate|search|keyword|destination|city|region|sort|page)=/i.test(url.search)) return false;
-      if (/\/(?:dp\/prod|i\/item|goods\/view|product\/detail|products?\/[^/?#]{2,}|items?\/[^/?#]{2,}|detail\/[^/?#]{2,}|goods\/(?:view|detail)\/[^/?#]{1,}|prd\/[^/?#]{1,})/i.test(low)) return true;
-      if (/(?:goods_view|product_view|item_view|prd_view|goods_detail|product_detail|item_detail|shopdetail)\.(?:php|html?|aspx?|jsp)$/i.test(low)) return true;
-      const travel = low.match(/\/(hotels?|resorts?|rooms?|stays?|propert(?:y|ies)|activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|cruises?|packages?|car-rental|cars|restaurants?|dining|reservation)\/(.+)$/i);
-      if (travel && travel[2]) {
-        const tail = travel[2].replace(/\/+$/, "").replace(/\.(?:html?|php|aspx?|jsp)$/i, "").toLowerCase();
-        const flat = tail.replace(/\//g, "-");
-        if (/^(?:about(?:-us)?|company|operator|agency|provider|partner|partners|contact|support|help|faq|home|main|index|overview|information|info)(?:-|$)/i.test(flat)) return false;
-        if (/(?:^|-)(?:blog|news|article|guide|guides|destination|destinations|collection|collections|category|categories|search|listing|list|directory|deals?|offers?|promotions?|promo|campaigns?)(?:-|$)/i.test(flat)) return false;
-        if (/^(?:spring|summer|autumn|fall|winter|season|seasonal)[-_]?(?:19|20)\d{2}$/i.test(flat)) return false;
-        const parts = tail.split("/").filter(Boolean);
-        if (parts.some(function(part){ return !/^[a-z]{2}(?:-[a-z]{2})?$/i.test(part) && !/^(?:all|best|popular|featured|special|new|top)$/i.test(part); })) return true;
-      }
-      if (/\/(?:hotel-detail|hotel-information|property-detail|activity-detail|attraction-detail|tour-detail|ticket-detail|booking-detail|restaurant-detail|dining-detail)\/[^/?#]{2,}/i.test(low)) return true;
-      return false;
-    } catch (_e) { return false; }
-  }
-
-  function canonicalPublishedRightProductUrl(it) {
-    if (!it || typeof it !== "object") return "";
-    const publication = it.canonicalPublication && typeof it.canonicalPublication === "object" ? it.canonicalPublication : null;
-    if (!publication || String(publication.status || "").toLowerCase() !== "published" || !String(publication.candidateId || "").trim()) return "";
-    const directKeys = [
-      "externalProductUrl","officialProductUrl","productUrl","product_url","productPageUrl","detailUrl",
-      "checkoutUrl","paymentUrl","purchaseUrl","orderUrl","productLink","displayUrl","sourceUrl","source_url","url","href","link"
-    ];
-    for (const key of directKeys) {
-      const value = safeText(it[key]).trim();
-      // Canonical publication proves which candidate Admin approved; it does
-      // not turn a provider/category portal into an individual product page.
-      // Keep the exact approved detail URL when it is detail-bearing and let
-      // the research pipeline continue looking for inventory when it is not.
-      if (!isSpecificRightProductUrl(value)) continue;
-      return value;
-    }
-    return "";
-  }
-
-  function firstSpecificRightProductUrl(it) {
-    if (!it || typeof it !== "object") return "";
-    const canonical = canonicalPublishedRightProductUrl(it);
-    if (canonical) return canonical;
-    const rr = it.researchReadiness && typeof it.researchReadiness === "object" ? it.researchReadiness : null;
-    const nested = [it.productCard, rr && rr.productCard, it.directCommerceListing, it.brokerageContract];
-    const directKeys = [
-      "externalProductUrl","officialProductUrl","productUrl","product_url","productPageUrl","detailUrl","productLink","displayUrl",
-      "checkoutUrl","paymentUrl","purchaseUrl","orderUrl"
-    ];
-    for (const key of directKeys) {
-      const value = safeText(it[key]).trim();
-      if (isSpecificRightProductUrl(value)) return value;
-    }
-    for (const source of nested) {
-      if (!source || typeof source !== "object") continue;
-      for (const key of ["externalProductUrl","officialProductUrl","productUrl","productPageUrl","detailUrl","destinationUrl","checkoutUrl","paymentUrl","purchaseUrl","orderUrl","url","href","link"]) {
-        const value = safeText(source[key]).trim();
-        if (isSpecificRightProductUrl(value)) return value;
-      }
-    }
-    for (const key of ["affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url","sourceUrl","source_url","url","href","link"]) {
-      const value = safeText(it[key]).trim();
-      if (isSpecificRightProductUrl(value)) return value;
-    }
-    return "";
   }
 
   function isPlaceholderItem(it) {
@@ -386,9 +260,19 @@
 
   function resolveRightItemUrl(it) {
     if (!it || isPlaceholderItem(it)) return "";
-    // Right-panel publication is detail-only. Prefer the actual product field
-    // over affiliate/provider aliases and never fall back to a generic portal.
-    return firstSpecificRightProductUrl(it);
+    // Commercial right rail follows the administrator-verified product URL,
+    // not a synthetic /content.html id that may not exist in the public snapshot.
+    const direct = safeText(it && (
+      it.affiliateOutboundUrl || it.affiliate_outbound_url ||
+      it.externalOutboundUrl || it.external_outbound_url ||
+      it.externalProductUrl || it.officialProductUrl || it.productUrl ||
+      it.productPageUrl || it.detailUrl || it.checkoutUrl ||
+      it.purchaseUrl || it.orderUrl || it.productLink || it.displayUrl ||
+      it.sourceUrl || it.url || it.href || it.link || ""
+    )).trim();
+    if (isValidSecondUrl(direct)) return direct;
+    const id = pickProductId(it);
+    return id && !/^ph_/i.test(id) ? "/content.html?id=" + encodeURIComponent(id) : "";
   }
 
   function isRealItem(it) {
@@ -583,8 +467,8 @@
       "social-instagram": "Instagram",
       "social-tiktok": "TikTok",
       "social-facebook": "Facebook",
+      "social-bilibili": "Bilibili",
       "social-douyin": "Douyin",
-      "social-dailymotion": "Dailymotion",
     };
     return labels[safeText(key)] || "SNS";
   }
@@ -648,7 +532,7 @@
 
   function thumbnailRenderUrl(platform, contentUrl, thumb) {
     if (!thumb) return "";
-    if (["instagram", "tiktok", "facebook", "douyin", "dailymotion"].indexOf(platform) < 0) return thumb;
+    if (["instagram", "tiktok", "facebook", "bilibili", "douyin"].indexOf(platform) < 0) return thumb;
     var q = new URLSearchParams({ platform: platform, url: contentUrl || "", thumb: thumb });
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }
@@ -892,17 +776,10 @@
     }
     a.textContent = "";
     a.href = url;
-    a.removeAttribute("target");
+    a.target = isExternalUrl(url) ? "_top" : "_self";
     a.rel = "noopener";
-    a.removeAttribute("data-igdc-external");
-    if (isExternalUrl(url)) {
-      a.setAttribute("data-igdc-contained-product", "1");
-      a.addEventListener("click", function(ev){
-        if(ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
-        ev.preventDefault();
-        openCommerceContained(url,title);
-      }, { passive:false });
-    }
+    if (isExternalUrl(url)) a.setAttribute("data-igdc-external", "top");
+    else a.removeAttribute("data-igdc-external");
     a.dataset.productId = productId;
     a.dataset.productTitle = title;
     a.dataset.productLink = url;

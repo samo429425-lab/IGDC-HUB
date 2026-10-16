@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.36.0-psom-searchbank-content-first";
+const VERSION = "sanmaru-social-live-collector-v1.37.0-bilibili-douyin-six";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -47,7 +47,7 @@ const CHANNEL_RESOLUTION_CONCURRENCY = 4;
 // YouTube already has a stable publication path; the other five can require
 // provider metadata recovery before a candidate is publishable.
 const PREVIEW_RECOVERY_PLATFORMS = new Set([
-  "instagram", "tiktok", "facebook", "douyin", "dailymotion"
+  "instagram", "tiktok", "facebook", "bilibili", "douyin"
 ]);
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 const INTERNAL_SCHEDULE_EVENT = Symbol("igdc-social-scheduled-internal");
@@ -88,8 +88,8 @@ const CONTENT_SITE_FILTERS = Object.freeze({
   instagram: "(site:instagram.com/p/ OR site:instagram.com/reel/)",
   tiktok: "site:tiktok.com/@ inurl:video",
   facebook: "(site:facebook.com/reel/ OR site:facebook.com/watch OR site:facebook.com/videos/ OR site:facebook.com/posts/)",
-  douyin: "(site:douyin.com/video/ OR site:douyin.com/note/ OR site:v.douyin.com)",
-  dailymotion: "(site:dailymotion.com/video/ OR site:dai.ly)"
+  bilibili: "(site:bilibili.com/video/ OR site:b23.tv)",
+  douyin: "(site:douyin.com/video/ OR site:douyin.com/note/ OR site:v.douyin.com)"
 });
 
 // PSOM is the authoritative Social section/routing contract. The collector reads
@@ -141,8 +141,8 @@ const PUBLIC_POST_SEARCH = Object.freeze({
   instagram: { host: "instagram.com", hint: "reel post" },
   tiktok: { host: "tiktok.com", hint: "video" },
   facebook: { host: "facebook.com", hint: "reel video posts" },
-  douyin: { host: "douyin.com", hint: "video note" },
-  dailymotion: { host: "dailymotion.com", hint: "video" }
+  bilibili: { host: "bilibili.com", hint: "video UP creator" },
+  douyin: { host: "douyin.com", hint: "video note" }
 });
 
 const DISCOVERY_INTENT_TERMS = Object.freeze([
@@ -165,15 +165,15 @@ const SPARSE_PLATFORM_DISCOVERY_TERMS = Object.freeze({
     "education science public video", "art museum culture reel", "sports lifestyle creator",
     "nature travel public reel", "family entertainment creator"
   ],
+  bilibili: [
+    "音乐 演出 UP主", "旅行 旅游 城市 目的地", "文化 博物馆 纪录片",
+    "科普 教育 科技", "艺术 设计 摄影", "游戏 动画 创作者",
+    "美食 地方文化", "自然 户外 生活方式"
+  ],
   douyin: [
     "旅游 旅行 景点 目的地", "音乐 演出 现场", "文化 博物馆 非遗",
     "美食 地方菜", "教育 科普 科技", "艺术 设计 摄影",
     "自然 户外 健康", "娱乐 生活方式"
-  ],
-  dailymotion: [
-    "documentary culture", "music live performance", "travel destination",
-    "education science technology", "sports highlights", "entertainment",
-    "art film", "nature lifestyle"
   ]
 });
 const SPARSE_DISCOVERY_PLATFORMS = new Set(Object.keys(SPARSE_PLATFORM_DISCOVERY_TERMS));
@@ -181,8 +181,8 @@ const SPARSE_DISCOVERY_PLATFORMS = new Set(Object.keys(SPARSE_PLATFORM_DISCOVERY
 const REGISTRY_QUALITY_FOCUS = Object.freeze({
   tiktok: "music travel food culture education art nature lifestyle entertainment useful public creator",
   facebook: "creator reel public video music travel food culture education art nature lifestyle",
-  douyin: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education",
-  dailymotion: "documentary travel music culture art science education nature entertainment sports useful public creator"
+  bilibili: "UP主 视频 音乐 旅行 文化 科普 教育 科技 艺术 游戏 动画 美食 documentary creator",
+  douyin: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education"
 });
 
 const REGISTRY_BLOCK_TERMS = Object.freeze([
@@ -376,8 +376,8 @@ function contentKind(platform, value) {
     if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
     if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[a-z0-9_-]+/i.test(path) || /^(?:vm|vt)\.tiktok\.com$/i.test(url.hostname))) return "latest_video";
     if (platform === "facebook" && (/^fb\.watch$/i.test(url.hostname) || /^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (/^\/watch\/?$/i.test(path) && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
+    if (platform === "bilibili" && (/^b23\.tv$/i.test(url.hostname) || /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path))) return "latest_video";
     if (platform === "douyin" && (/^\/(?:share\/)?(video|note)\/\d+/i.test(path) || /^v\.douyin\.com$/i.test(url.hostname))) return /\/note\//i.test(path) ? "latest_post" : "latest_video";
-    if (platform === "dailymotion" && (/^\/video\/[a-z0-9]+/i.test(path) || /^dai\.ly$/i.test(url.hostname))) return "latest_video";
   } catch (_error) {}
   return "";
 }
@@ -395,7 +395,7 @@ function channelIdFromItem(item) {
 function syntheticTitle(value, platform) {
   const title = SocialStore.text(value).replace(/\s+/g, " ").trim();
   if (!title || /^\[[^\]]+\].*(검색|공개 게시물|공개 글|공개 영상)/i.test(title) || /(검색 결과|search results?)$/i.test(title)) return true;
-  const generic = /^(?:instagram|tiktok|facebook|douyin|dailymotion|youtube)(?:\s+(?:post|reel|video|note|content|item))?$/i;
+  const generic = /^(?:instagram|tiktok|facebook|bilibili|douyin|youtube)(?:\s+(?:post|reel|video|note|content|item))?$/i;
   if (generic.test(title)) return true;
   const p = SocialStore.text(platform).replace(/^social-/, "");
   return !!p && title.toLowerCase() === p.toLowerCase();
@@ -421,16 +421,16 @@ function sparseVerifiedContentTitle(platform, contentUrl, item) {
       const kind = reelIndex >= 0 ? "Reel" : "Video/Post";
       return "Facebook · " + kind + (id ? " " + id.slice(-16) : "");
     }
+    if (platform === "bilibili") {
+      const videoIndex = parts.findIndex((part) => part.toLowerCase() === "video");
+      const id = videoIndex >= 0 ? parts[videoIndex + 1] || "" : (url.hostname.toLowerCase() === "b23.tv" ? parts[0] || "" : "");
+      return "Bilibili · Video" + (id ? " " + id.slice(-14) : "");
+    }
     if (platform === "douyin") {
       const kindIndex = parts.findIndex((part) => /^(?:video|note)$/i.test(part));
       const kind = kindIndex >= 0 ? parts[kindIndex].toLowerCase() : "video";
       const id = kindIndex >= 0 ? parts[kindIndex + 1] || "" : "";
       return "Douyin · " + (kind === "note" ? "Note" : "Video") + (id ? " " + id.slice(-12) : "");
-    }
-    if (platform === "dailymotion") {
-      const videoIndex = parts.findIndex((part) => part.toLowerCase() === "video");
-      const id = videoIndex >= 0 ? parts[videoIndex + 1] || "" : (url.hostname.toLowerCase() === "dai.ly" ? parts[0] || "" : "");
-      return "Dailymotion · Video" + (id ? " " + id.slice(-12) : "");
     }
   } catch (_error) {}
   return "";
@@ -558,7 +558,7 @@ function providerReadiness(configValue) {
       ready: !!(cfg.googleKey && cfg.googleCx),
       googleApiKeyConfigured: !!cfg.googleKey,
       cseIdConfigured: !!cfg.googleCx,
-      role: "Instagram·TikTok·Facebook·Douyin·Dailymotion 공개 최신 영상·게시물 검색"
+      role: "Instagram·TikTok·Facebook·Bilibili·Douyin 공개 최신 영상·게시물 검색"
     },
     youtubeDataApi: {
       ready: !!cfg.youtubeKey,
@@ -588,7 +588,7 @@ function providerReadiness(configValue) {
     channelPromotion: { ready: true, role: "운영 채널은 내부 식별자로 보존하고 최신 영상·게시물을 표시·클릭 대상으로 유지" },
     collectionCanRun: true,
     keyFreeAutomaticDiscovery: true,
-    directPublicPostFallback: { ready: true, providers: ["Sanmaru/SearchBank", "Bing RSS/HTML", "DuckDuckGo Lite", "Yahoo", "Baidu/Sogou(Douyin)", "platform-native"], role: "활성 비YouTube 5개 SNS의 실제 공개 게시물·영상 URL 직접 발견" },
+    directPublicPostFallback: { ready: true, providers: ["Sanmaru/SearchBank", "Bing RSS/HTML", "DuckDuckGo Lite", "Yahoo", "Baidu/Sogou(Bilibili·Douyin)", "platform-native"], role: "활성 비YouTube 5개 SNS의 실제 공개 게시물·영상 URL 직접 발견" },
     requirements: [
       { key: "필수 키 없음", neededFor: "YouTube RSS + 활성 비YouTube 5개 SNS 공개 웹 검색 fallback", cost: "무료 공개 데이터; 공개 검색 제공자 응답 가능 범위" },
       { key: "GOOGLE_API_KEY + GOOGLE_CSE_ID", neededFor: "활성 비YouTube 5개 플랫폼의 최신 공개 게시물 발견", cost: "Google 무료 할당량 및 서비스 약관 범위" },
@@ -720,11 +720,8 @@ function registryHandleFromUrl(value, platform) {
       const token = parts.find((part) => /^@/.test(part));
       return token || "";
     }
+    if (platform === "bilibili" && /^space\.bilibili\.com$/i.test(url.hostname) && parts[0]) return decodeURIComponent(parts[0]);
     if (platform === "douyin") {
-      const userIndex = parts.findIndex((part) => /^user$/i.test(part));
-      if (userIndex >= 0 && parts[userIndex + 1]) return decodeURIComponent(parts[userIndex + 1]);
-    }
-    if (platform === "dailymotion") {
       const userIndex = parts.findIndex((part) => /^user$/i.test(part));
       if (userIndex >= 0 && parts[userIndex + 1]) return decodeURIComponent(parts[userIndex + 1]);
     }
@@ -804,7 +801,7 @@ async function influencerRegistrySeeds(sectionKey, platform) {
         return !!(seed.url || seed.title || seed.handle);
       });
 
-    if (["douyin", "dailymotion"].includes(platform)) {
+    if (["bilibili", "douyin"].includes(platform)) {
       return seeds
         .map((seed, index) => ({ seed, index, score: registrySeedQualityScore(seed) }))
         .sort((a, b) => b.score - a.score || a.index - b.index)
@@ -1225,7 +1222,7 @@ function registrySearchNeedle(seed, platform) {
   try {
     const url = new URL(SocialStore.text(seed.url));
     const parts = url.pathname.split("/").filter(Boolean);
-    if (platform === "douyin" || platform === "dailymotion") {
+    if (platform === "douyin") {
       const index = parts.findIndex((part) => /^user$/i.test(part));
       pathToken = index >= 0 && parts[index + 1] ? parts[index + 1] : (parts[0] || "");
     } else {
@@ -1247,8 +1244,8 @@ function publicSearchQuery(plan, queryText, registrySeed) {
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
   if (platform === "tiktok") return [base, exact, "site:tiktok.com", "video creator latest public"].filter(Boolean).join(" ");
   if (platform === "facebook") return [base, exact, "site:facebook.com", "reel video creator public"].filter(Boolean).join(" ");
+  if (platform === "bilibili") return [base, exact, "site:bilibili.com/video", "哔哩哔哩 最新 视频 UP主", "public video"].filter(Boolean).join(" ");
   if (platform === "douyin") return [base, exact, "site:douyin.com", "抖音 视频 最新 公开", "video note"].filter(Boolean).join(" ");
-  if (platform === "dailymotion") return [base, exact, "site:dailymotion.com/video", "latest public video"].filter(Boolean).join(" ");
   return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"].filter(Boolean).join(" ");
 }
 function publicSearchTitle(platform, title, description) {
@@ -1339,93 +1336,90 @@ function sparseSearchTerms(queryText, platform) {
 
 
 
-function dailymotionSearchText(queryText) {
+function bilibiliSearchText(queryText) {
   return SocialStore.text(queryText)
     .replace(/\b(?:site|inurl|intitle):\S+/gi, " ")
     .replace(/[()\[\]{}"']/g, " ")
-    .replace(/\bdailymotion\b/gi, " ")
+    .replace(/\bbilibili\b/gi, " ")
+    .replace(/哔哩哔哩|嗶哩嗶哩|B站/gi, " ")
     .replace(/\b(?:latest|recent|public|video|videos|post|posts|creator|channel|popular|high\s+quality|worldwide|global)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 180);
 }
-function dailymotionOwnerValue(row) {
-  const owner = row && row.owner;
-  if (owner && typeof owner === "object") {
-    return firstText([owner.username, owner.screenname, owner.screen_name, owner.id]);
-  }
-  return firstText([
-    row && row["owner.username"],
-    row && row["owner.screenname"],
-    row && row.owner_username,
-    row && row.owner_screenname,
-    typeof owner === "string" ? owner : ""
-  ]);
+function bilibiliHttpsImage(value) {
+  const raw = SocialStore.text(value);
+  if (!raw) return "";
+  const normalized = raw.startsWith("//") ? "https:" + raw : raw;
+  return /^https:\/\//i.test(normalized) ? normalized : "";
 }
-function dailymotionApiItem(row, provider, index) {
-  const id = firstText([row && row.id]).replace(/[^a-z0-9]/gi, "");
-  if (!id) return null;
-  const contentUrl = "https://www.dailymotion.com/video/" + id;
-  const owner = dailymotionOwnerValue(row);
-  let channelUrl = "";
-  if (owner && !/^x[0-9a-z]+$/i.test(owner)) {
-    channelUrl = "https://www.dailymotion.com/" + encodeURIComponent(owner.replace(/^@/, ""));
-  }
-  const created = Number(row && row.created_time || row && row.createdAt || 0);
-  const publishedAt = created > 0 ? new Date(created * 1000).toISOString() : firstText([row && row.created_time, row && row.createdAt]);
+function bilibiliApiItem(row, provider, index) {
+  const bvid = firstText([row && row.bvid, row && row.bv_id]);
+  const aid = firstText([row && row.aid, row && row.id]);
+  if (!bvid && !/^\d+$/.test(aid)) return null;
+  const contentUrl = bvid
+    ? "https://www.bilibili.com/video/" + encodeURIComponent(bvid)
+    : "https://www.bilibili.com/video/av" + encodeURIComponent(aid);
+  const owner = row && row.owner && typeof row.owner === "object" ? row.owner : {};
+  const mid = firstText([row && row.mid, row && row.author_mid, owner.mid]);
+  const creatorName = firstText([row && row.author, row && row.up_name, owner.name]);
+  const channelUrl = /^\d+$/.test(mid) ? "https://space.bilibili.com/" + mid : "";
+  const publishedRaw = Number(row && (row.pubdate || row.created || row.ctime) || 0);
+  const publishedAt = publishedRaw > 0 ? new Date(publishedRaw * 1000).toISOString() : "";
   return {
     provider,
-    platform: "dailymotion",
+    platform: "bilibili",
     url: contentUrl,
     sourceUrl: contentUrl,
     latestContentUrl: contentUrl,
-    title: firstText([row && row.title, "Dailymotion · Video " + id]),
-    creatorName: firstText([
-      row && row["owner.screenname"], row && row.owner_screenname,
-      row && row["owner.username"], row && row.owner_username,
-      owner
-    ]),
+    title: stripHtml(firstText([row && row.title, "Bilibili · Video " + (bvid || aid)])),
+    creatorName,
     channelUrl,
-    thumbnail: firstText([
-      row && row.thumbnail_1080_url, row && row.thumbnail_720_url,
-      row && row.thumbnail_480_url, row && row.thumbnail_360_url,
-      row && row.thumbnail_url
-    ]),
-    description: firstText([row && row.description]),
+    thumbnail: bilibiliHttpsImage(firstText([row && row.pic, row && row.cover, row && row.thumbnail])),
+    description: stripHtml(firstText([row && row.description, row && row.desc])),
     publishedAt,
     entityKind: "latest_video",
-    source: { name: provider, platform: "dailymotion", mode: "dailymotion_native_public", rank: Number(index || 0) + 1 }
+    engagement: {
+      views: Number(row && (row.play || row.view || row.views) || 0),
+      likes: Number(row && (row.like || row.likes) || 0),
+      comments: Number(row && (row.review || row.comment || row.comments) || 0)
+    },
+    source: { name: provider, platform: "bilibili", mode: "bilibili_native_public", rank: Number(index || 0) + 1 }
   };
 }
-async function dailymotionPublicApiSearch(queryText, limit, qualitySweep) {
-  const wanted = Math.max(4, Math.min(50, Number(limit || 10) * (qualitySweep ? 3 : 2)));
-  const fields = [
-    "id", "title", "description", "created_time", "url",
-    "thumbnail_1080_url", "thumbnail_720_url", "thumbnail_480_url", "thumbnail_360_url",
-    "owner", "owner.username", "owner.screenname"
-  ].join(",");
-  const clean = dailymotionSearchText(queryText);
-  const baseParams = { fields, limit: String(wanted), family_filter: "1" };
-  const makeUrl = (extra) => {
-    const params = new URLSearchParams(Object.assign({}, baseParams, extra || {}));
-    return "https://api.dailymotion.com/videos?" + params.toString();
+async function bilibiliPublicApiSearch(queryText, limit, qualitySweep) {
+  const wanted = Math.max(4, Math.min(30, Number(limit || 10) * (qualitySweep ? 2 : 1)));
+  const clean = bilibiliSearchText(queryText) || "音乐 旅行 文化 科普 教育";
+  const headers = {
+    Accept: "application/json",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+    Referer: "https://www.bilibili.com/"
   };
-  const requests = [];
-  if (clean) requests.push({ name: "dailymotion-public-api-search", url: makeUrl({ search: clean, sort: "relevance" }) });
-  // Do not let a narrow/translated query collapse the section. A bounded recent
-  // lane supplies globally fresh public videos; later IGDC policy/ranking still
-  // decides what may enter the candidate pool and front release.
-  requests.push({ name: "dailymotion-public-api-recent", url: makeUrl({ sort: "recent" }) });
-  const settled = await Promise.all(requests.map(async (request) => {
+  const specs = [
+    {
+      name: "bilibili-native-api-search",
+      url: "https://api.bilibili.com/x/web-interface/search/type?" + new URLSearchParams({
+        search_type: "video", keyword: clean, page: "1", page_size: String(wanted), order: "pubdate"
+      }).toString(),
+      rows: (data) => data && data.data && Array.isArray(data.data.result) ? data.data.result : []
+    },
+    {
+      name: "bilibili-native-api-popular",
+      url: "https://api.bilibili.com/x/web-interface/popular?" + new URLSearchParams({ ps: String(Math.min(20, wanted)), pn: "1" }).toString(),
+      rows: (data) => data && data.data && Array.isArray(data.data.list) ? data.data.list : []
+    }
+  ];
+  const settled = await Promise.all(specs.map(async (spec) => {
     try {
-      const data = await fetchJson(request.url, { headers: { Accept: "application/json" } }, REQUEST_TIMEOUT_MS);
-      const list = Array.isArray(data && data.list) ? data.list : Array.isArray(data && data.items) ? data.items : [];
-      return { provider: request.name, status: list.length ? "ok" : "empty", rows: list };
+      const data = await fetchJson(spec.url, { headers }, REQUEST_TIMEOUT_MS);
+      const code = Number(data && data.code || 0);
+      if (code !== 0) return { provider: spec.name, status: "api_restricted", error: "bilibili_code_" + code, rows: [] };
+      return { provider: spec.name, status: "ok", rows: spec.rows(data) };
     } catch (error) {
       return {
-        provider: request.name,
-        status: error && (error.statusCode === 401 || error.statusCode === 403) ? "credential_or_api_restricted" : (error && error.name === "AbortError" ? "timeout" : "error"),
-        error: error && error.message || "dailymotion_api_failed",
+        provider: spec.name,
+        status: error && (error.statusCode === 401 || error.statusCode === 403 || error.statusCode === 412) ? "credential_or_api_restricted" : (error && error.name === "AbortError" ? "timeout" : "error"),
+        error: error && error.message || "bilibili_api_failed",
         rows: []
       };
     }
@@ -1434,7 +1428,7 @@ async function dailymotionPublicApiSearch(queryText, limit, qualitySweep) {
   const items = [];
   settled.forEach((result) => {
     (result.rows || []).forEach((row, index) => {
-      const item = dailymotionApiItem(row, result.provider, index);
+      const item = bilibiliApiItem(row, result.provider, index);
       const key = item && SocialStore.text(item.latestContentUrl).toLowerCase();
       if (!item || !key || seen.has(key)) return;
       seen.add(key);
@@ -1442,39 +1436,41 @@ async function dailymotionPublicApiSearch(queryText, limit, qualitySweep) {
     });
   });
   return {
-    provider: "dailymotion-native-api",
-    status: items.length ? "ok" : (settled.some((row) => row.status === "error" || row.status === "credential_or_api_restricted") ? "degraded" : "empty"),
+    provider: "bilibili-native-api",
+    status: items.length ? "ok" : (settled.some((row) => row.status !== "ok") ? "degraded" : "empty"),
     items: items.slice(0, wanted),
     trace: settled.map((row) => ({ name: row.provider, status: row.status, count: (row.rows || []).length, error: row.error || null }))
   };
 }
-async function dailymotionNativeHtmlSearch(queryText, limit) {
+async function bilibiliNativeHtmlSearch(queryText, limit) {
   const wanted = Math.max(4, Math.min(30, Number(limit || 10) * 2));
-  const clean = dailymotionSearchText(queryText) || "documentary music travel culture education";
-  const url = "https://www.dailymotion.com/search/" + encodeURIComponent(clean) + "/videos";
-  try {
-    const html = await fetchText(url, {
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.8"
-      }
-    }, REQUEST_TIMEOUT_MS);
-    const urls = providerRelativePostUrls("dailymotion", html, "https://www.dailymotion.com/", wanted);
-    const items = urls.map((contentUrl, index) => ({
-      provider: "dailymotion-native-html",
-      platform: "dailymotion",
-      url: contentUrl,
-      sourceUrl: contentUrl,
-      latestContentUrl: contentUrl,
-      title: sparseVerifiedContentTitle("dailymotion", contentUrl, {}) || "Dailymotion public video",
-      entityKind: "latest_video",
-      source: { name: "dailymotion-native-html", platform: "dailymotion", mode: "dailymotion_native_html", rank: index + 1 }
-    }));
-    return { provider: "dailymotion-native-html", status: items.length ? "ok" : "empty", items };
-  } catch (error) {
-    return { provider: "dailymotion-native-html", status: error && error.name === "AbortError" ? "timeout" : "error", error: error && error.message || "dailymotion_html_failed", items: [] };
-  }
+  const clean = bilibiliSearchText(queryText) || "音乐 旅行 文化 科普 教育";
+  const urls = [
+    "https://search.bilibili.com/video?" + new URLSearchParams({ keyword: clean, order: "pubdate" }).toString(),
+    "https://search.bilibili.com/all?" + new URLSearchParams({ keyword: clean }).toString()
+  ];
+  const results = await Promise.all(urls.map((url, idx) => nativeHtmlDiscoveryPage(
+    "bilibili",
+    idx === 0 ? "bilibili-native-html" : "bilibili-native-html-fallback",
+    url,
+    "https://www.bilibili.com/",
+    wanted,
+    "zh-CN,zh;q=0.9,en;q=0.5"
+  )));
+  const seen = new Set();
+  const items = [];
+  results.forEach((result) => (result.items || []).forEach((item) => {
+    const key = SocialStore.text(item && (item.latestContentUrl || item.url)).toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    items.push(item);
+  }));
+  return {
+    provider: "bilibili-native-html",
+    status: items.length ? "ok" : (results.some((row) => row.status === "error" || row.status === "timeout") ? "degraded" : "empty"),
+    items,
+    trace: results.map((row) => ({ name: row.provider, status: row.status, count: (row.items || []).length, error: row.error || null }))
+  };
 }
 function nativeDiscoveryItem(platform, provider, contentUrl, index) {
   return {
@@ -1556,17 +1552,16 @@ async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
   if (!plan || !SPARSE_DISCOVERY_PLATFORMS.has(plan.platform)) {
     return { provider: "sparse-native-public-search", status: "not_needed", items: [] };
   }
-  if (plan.platform !== "dailymotion") {
+  if (plan.platform !== "bilibili") {
     return genericNativeHtmlSearch(plan.platform, queryText, limit);
   }
 
-  // Dailymotion API and public HTML are independent discovery lanes. The old
-  // serial fallback could consume two full provider timeouts before candidate
-  // conversion started. Launch both together so one slow/restricted endpoint
-  // cannot prevent the other from reaching the store in the same invocation.
+  // Bilibili exposes both public JSON discovery and public search HTML. Run
+  // them together so a regional/API restriction on one lane does not starve
+  // the section before the Social candidate gateway can persist real videos.
   const [api, html] = await Promise.all([
-    dailymotionPublicApiSearch(queryText, limit, qualitySweep),
-    dailymotionNativeHtmlSearch(queryText, limit)
+    bilibiliPublicApiSearch(queryText, limit, qualitySweep),
+    bilibiliNativeHtmlSearch(queryText, limit)
   ]);
   const seen = new Set();
   const items = [];
@@ -1579,10 +1574,10 @@ async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
     });
   });
   return {
-    provider: "dailymotion-native-search",
-    status: items.length ? "ok" : (api.status === "degraded" || html.status === "error" || html.status === "timeout" ? "degraded" : "empty"),
+    provider: "bilibili-native-search",
+    status: items.length ? "ok" : (api.status === "degraded" || html.status === "degraded" ? "degraded" : "empty"),
     items,
-    trace: [].concat(api.trace || [], [{ name: html.provider, status: html.status, count: (html.items || []).length, error: html.error || null }])
+    trace: [].concat(api.trace || [], html.trace || [])
   };
 }
 async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
@@ -1617,20 +1612,21 @@ async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
       ""
     ).then((html) => ({ provider: "yahoo-html-social", items: htmlPublicPostItems(html, plan, "yahoo-html-social") })).catch((error) => ({ provider: "yahoo-html-social", items: [], error: error && error.message }))
   ];
-  if (plan.platform === "douyin") {
-    // China-facing public indexes are supplemental only. Douyin's own public
-    // search remains primary; these lanes prevent a Google-centric blind spot.
+  if (plan.platform === "bilibili" || plan.platform === "douyin") {
+    // China-facing public indexes are supplemental only. Each platform's own
+    // public search remains primary; these lanes prevent a Google-centric blind spot.
+    const suffix = plan.platform;
     jobs.push(
       withDeadline(
         fetchText("https://www.baidu.com/s?wd=" + encodeURIComponent(q), { headers: Object.assign({}, headers, { "Accept-Language": "zh-CN,zh;q=0.9" }) }, REQUEST_TIMEOUT_MS),
         REQUEST_TIMEOUT_MS,
         ""
-      ).then((html) => ({ provider: "baidu-html-douyin", items: htmlPublicPostItems(html, plan, "baidu-html-douyin") })).catch((error) => ({ provider: "baidu-html-douyin", items: [], error: error && error.message })),
+      ).then((html) => ({ provider: "baidu-html-" + suffix, items: htmlPublicPostItems(html, plan, "baidu-html-" + suffix) })).catch((error) => ({ provider: "baidu-html-" + suffix, items: [], error: error && error.message })),
       withDeadline(
         fetchText("https://www.sogou.com/web?query=" + encodeURIComponent(q), { headers: Object.assign({}, headers, { "Accept-Language": "zh-CN,zh;q=0.9" }) }, REQUEST_TIMEOUT_MS),
         REQUEST_TIMEOUT_MS,
         ""
-      ).then((html) => ({ provider: "sogou-html-douyin", items: htmlPublicPostItems(html, plan, "sogou-html-douyin") })).catch((error) => ({ provider: "sogou-html-douyin", items: [], error: error && error.message }))
+      ).then((html) => ({ provider: "sogou-html-" + suffix, items: htmlPublicPostItems(html, plan, "sogou-html-" + suffix) })).catch((error) => ({ provider: "sogou-html-" + suffix, items: [], error: error && error.message }))
     );
   }
   const settled = await Promise.all(jobs);
@@ -1692,9 +1688,9 @@ function providerRelativePostUrls(platform, html, baseUrl, limit) {
     const rel = /(?:^|["'\s])\/(?:share\/)?(video|note)\/(\d{8,})(?=[?"'\s/]|$)/gi;
     while ((match = rel.exec(source)) && out.length < max) accept("https://www.douyin.com/" + match[1].toLowerCase() + "/" + match[2]);
   }
-  if (platform === "dailymotion" && out.length < max) {
-    const rel = /(?:^|["'\s])\/video\/([a-z0-9]+)(?=[?"'\s/]|$)/gi;
-    while ((match = rel.exec(source)) && out.length < max) accept("https://www.dailymotion.com/video/" + match[1]);
+  if (platform === "bilibili" && out.length < max) {
+    const rel = /(?:^|["'\s])\/video\/(BV[0-9A-Za-z]+|av\d+)(?=[?"'\s/]|$)/gi;
+    while ((match = rel.exec(source)) && out.length < max) accept("https://www.bilibili.com/video/" + match[1]);
   }
   return out.slice(0, max);
 }
@@ -2053,8 +2049,7 @@ function htmlMetaValue(html, names) {
 }
 async function publicOembed(platform, contentUrl) {
   const endpoints = {
-    tiktok: "https://www.tiktok.com/oembed?url=",
-    dailymotion: "https://www.dailymotion.com/services/oembed?format=json&url="
+    tiktok: "https://www.tiktok.com/oembed?url="
   };
   const endpoint = endpoints[platform];
   if (!endpoint) return {};
@@ -2082,12 +2077,11 @@ function providerEmbedMetadataUrl(platform, contentUrl) {
       const kind = match[1].toLowerCase() === "reels" ? "reel" : match[1].toLowerCase();
       return "https://www.instagram.com/" + kind + "/" + match[2] + "/embed/";
     }
-    if (platform === "dailymotion") {
-      let id = "";
-      const match = url.pathname.match(/^\/video\/([a-z0-9]+)/i);
-      if (match) id = match[1];
-      else if (/^dai\.ly$/i.test(url.hostname)) id = url.pathname.split("/").filter(Boolean)[0] || "";
-      return id ? "https://www.dailymotion.com/embed/video/" + id : "";
+    if (platform === "bilibili") {
+      let match = url.pathname.match(/^\/video\/(BV[0-9A-Za-z]+)/i);
+      if (match) return "https://player.bilibili.com/player.html?bvid=" + encodeURIComponent(match[1]);
+      match = url.pathname.match(/^\/video\/av(\d+)/i);
+      return match ? "https://player.bilibili.com/player.html?aid=" + encodeURIComponent(match[1]) : "";
     }
   } catch (_error) {}
   return "";
@@ -2220,8 +2214,8 @@ function usableThumbnail(value, contentUrl, platform) {
       facebook: /(^|\.)facebook\.com$/i,
       instagram: /(^|\.)instagram\.com$/i,
       tiktok: /(^|\.)tiktok\.com$/i,
+      bilibili: /(^|\.)bilibili\.com$|^b23\.tv$/i,
       douyin: /(^|\.)douyin\.com$/i,
-      dailymotion: /(^|\.)dailymotion\.com$|^dai\.ly$/i,
     };
     const pageHost = platformHosts[platform];
     const imagePath = /\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(url.pathname + url.search);
@@ -2499,7 +2493,7 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     deepThumbnail(item)
   ]);
   // Candidate persistence must not wait for protected-provider page metadata.
-  // TikTok/Facebook/Douyin/Dailymotion commonly throttle anonymous preview
+  // TikTok/Facebook/Bilibili/Douyin commonly throttle anonymous preview
   // requests even when the public content URL itself is valid. The previous
   // synchronous preview hydration delayed saving until the serverless request
   // timed out. Keep verified content immediately, using any provider-supplied

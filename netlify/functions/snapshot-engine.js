@@ -34,13 +34,13 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.8-social-six-slot-invariant";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.9-social-bilibili-douyin-six-slot-invariant";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
 const SOCIAL_MANAGED_MAIN_SECTIONS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-douyin", "social-dailymotion"
+  "social-bilibili", "social-douyin"
 ]);
 
 function uniq(arr) {
@@ -175,7 +175,7 @@ function snapshotCandidateAllowed(raw, context) {
   const publicationReview = raw.commerceCandidatePublication && raw.commerceCandidatePublication.review && typeof raw.commerceCandidatePublication.review === "object"
     ? raw.commerceCandidatePublication.review : {};
   const explicitAdministratorPublication =
-    (authority.verified === true && ["publish_requested","queued","matched","published","active"].includes(String(authority.publicationStatus || "").trim().toLowerCase())) ||
+    (authority.verified === true && ["publish_requested","published","matched"].includes(String(authority.publicationStatus || "").trim().toLowerCase())) ||
     publicationReview.explicitPublicationRequested === true;
   // Snapshot Engine is a transport/mapper after Canonical publication.  It must
   // not rerun risk/market/revenue eligibility on an authenticated administrator

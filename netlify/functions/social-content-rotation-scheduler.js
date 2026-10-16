@@ -11,10 +11,10 @@
 const Collector = require("./sanmaru-social-live-collector");
 const Publisher = require("./social-snapshot-publish");
 
-const VERSION = "social-content-rotation-scheduler-v1.3.0-content-first";
+const VERSION = "social-content-rotation-scheduler-v1.4.0-bilibili-douyin-six";
 const SECTIONS = [
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-douyin", "social-dailymotion"
+  "social-bilibili", "social-douyin"
 ];
 
 function bodyOf(response) {
@@ -23,7 +23,7 @@ function bodyOf(response) {
 function cursorFor(sectionIndex, now) {
   const day = Math.floor(now.getTime() / 86400000);
   // providerGroup = queryCursor % 3. The old day*3 term locked each SNS to
-  // the same provider group forever (for example Dailymotion stayed on group 2
+  // the same provider group forever (for example a sparse platform could stay on one provider group
   // and never reached native group 0). Let the day itself participate so every
   // scheduled run rotates public-directory/native -> configured APIs ->
   // Sanmaru/SearchBank over time.

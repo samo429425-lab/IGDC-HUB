@@ -8,7 +8,7 @@
  * from SearchBank core engines: SearchBank remains a broad ledger, and this
  * policy is applied only when copying social candidates into social_candidates.
  */
-const VERSION = "social-candidate-policy-v1.5.0-content-pool-120";
+const VERSION = "social-candidate-policy-v1.6.0-bilibili-douyin-six";
 const CountryContentPolicy = require("./social-country-content-policy.v1");
 
 const POOL_TARGET_PER_SECTION = 120;
@@ -27,8 +27,8 @@ const SECTION_KEYS = Object.freeze([
   "social-instagram",
   "social-tiktok",
   "social-facebook",
-  "social-douyin",
-  "social-dailymotion"
+  "social-bilibili",
+  "social-douyin"
 ]);
 
 const ALLOWED_SECTIONS = new Set(SECTION_KEYS);
@@ -39,8 +39,8 @@ const PLATFORM_BY_SECTION = Object.freeze({
   "social-instagram": "instagram",
   "social-tiktok": "tiktok",
   "social-facebook": "facebook",
-  "social-douyin": "douyin",
-  "social-dailymotion": "dailymotion"
+  "social-bilibili": "bilibili",
+  "social-douyin": "douyin"
 });
 
 const SECTION_ALIASES = Object.freeze({
@@ -48,8 +48,8 @@ const SECTION_ALIASES = Object.freeze({
   "instagram": "social-instagram", "insta": "social-instagram", "ig": "social-instagram", "social-instagram": "social-instagram",
   "tiktok": "social-tiktok", "tik-tok": "social-tiktok", "social-tiktok": "social-tiktok",
   "facebook": "social-facebook", "fb": "social-facebook", "social-facebook": "social-facebook",
-  "douyin": "social-douyin", "dy": "social-douyin", "抖音": "social-douyin", "social-douyin": "social-douyin",
-  "dailymotion": "social-dailymotion", "daily-motion": "social-dailymotion", "dm": "social-dailymotion", "social-dailymotion": "social-dailymotion"
+  "bilibili": "social-bilibili", "bili": "social-bilibili", "social-bilibili": "social-bilibili",
+  "douyin": "social-douyin", "dy": "social-douyin", "抖音": "social-douyin", "social-douyin": "social-douyin"
 });
 
 const HOST_PLATFORM = Object.freeze({
@@ -57,8 +57,8 @@ const HOST_PLATFORM = Object.freeze({
   "instagram.com": "instagram",
   "tiktok.com": "tiktok", "vm.tiktok.com": "tiktok", "vt.tiktok.com": "tiktok",
   "facebook.com": "facebook", "m.facebook.com": "facebook", "fb.watch": "facebook",
-  "douyin.com": "douyin", "www.douyin.com": "douyin", "v.douyin.com": "douyin", "iesdouyin.com": "douyin",
-  "dailymotion.com": "dailymotion", "www.dailymotion.com": "dailymotion", "dai.ly": "dailymotion"
+  "bilibili.com": "bilibili", "www.bilibili.com": "bilibili", "m.bilibili.com": "bilibili", "space.bilibili.com": "bilibili", "b23.tv": "bilibili",
+  "douyin.com": "douyin", "www.douyin.com": "douyin", "v.douyin.com": "douyin", "iesdouyin.com": "douyin"
 });
 
 const PLATFORM_POLICIES = Object.freeze({
@@ -123,6 +123,17 @@ const PLATFORM_POLICIES = Object.freeze({
       "facebook trending creator public video"
     ]
   },
+  bilibili: {
+    sectionKey: "social-bilibili",
+    defaultDisplayMode: "link_card_or_official_embed",
+    publicPreference: "public_video_or_creator_channel",
+    categories: ["music", "travel", "culture", "documentary", "education", "technology", "gaming", "animation", "art", "creator", "video"],
+    collectionQueries: [
+      "bilibili 热门 音乐 演出 UP主", "bilibili 旅行 旅游 文化 视频", "bilibili 科普 教育 科技 UP主",
+      "bilibili 纪录片 历史 文化", "bilibili 艺术 设计 摄影", "bilibili 游戏 动画 创作者",
+      "bilibili 美食 地方文化", "bilibili 高质量 UP主 最新 视频"
+    ]
+  },
   douyin: {
     sectionKey: "social-douyin",
     defaultDisplayMode: "link_card_or_contained_preview",
@@ -132,18 +143,6 @@ const PLATFORM_POLICIES = Object.freeze({
       "douyin popular music performance creator", "douyin travel tourism creator", "douyin food culture creator",
       "douyin healthy lifestyle creator", "douyin traditional culture heritage video", "douyin art design creator",
       "douyin useful education tutorial video", "douyin science technology creator"
-    ]
-  },
-  dailymotion: {
-    sectionKey: "social-dailymotion",
-    defaultDisplayMode: "link_card_or_official_embed",
-    publicPreference: "public_video_or_channel",
-    categories: ["music", "travel", "culture", "documentary", "education", "technology", "sports", "entertainment", "creator", "video"],
-    collectionQueries: [
-      "dailymotion popular music live performance", "dailymotion travel tourism culture video",
-      "dailymotion documentary education knowledge", "dailymotion science technology video",
-      "dailymotion art culture creator", "dailymotion sports lifestyle video",
-      "dailymotion entertainment performance", "dailymotion high quality creator channel"
     ]
   }
 });
@@ -196,11 +195,12 @@ function platformFromHost(url) {
   return "";
 }
 function normalizePlatform(value, url) {
+  const rawText = lowerText(value);
   const raw = lowerKey(value);
   if (raw === "yt") return "youtube";
   if (raw === "ig" || raw === "insta") return "instagram";
-  if (raw === "dy" || raw === "抖音") return "douyin";
-  if (raw === "dm" || raw === "daily-motion") return "dailymotion";
+  if (raw === "bili" || rawText === "哔哩哔哩" || rawText === "嗶哩嗶哩" || rawText === "b站") return "bilibili";
+  if (raw === "dy" || rawText === "抖音") return "douyin";
   if (Object.prototype.hasOwnProperty.call(PLATFORM_POLICIES, raw)) return raw;
   return platformFromHost(url) || "";
 }
@@ -218,7 +218,7 @@ function isBadPlaceholderUrl(url) {
   const raw = lowerText(url);
   if (!raw || raw === "#" || /^javascript:/i.test(raw)) return true;
   if (/example\.com|placehold\.co|placeholder\.|transparent\.gif|coming-soon/i.test(raw)) return true;
-  if (/social(?:youtube|instagram|tiktok|facebook|douyin|dailymotion)\d{3}/i.test(raw)) return true;
+  if (/social(?:youtube|instagram|tiktok|facebook|bilibili|douyin)\d{3}/i.test(raw)) return true;
   if (/watch\?v=xxxx/i.test(raw)) return true;
   return false;
 }

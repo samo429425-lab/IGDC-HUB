@@ -9,8 +9,8 @@
  */
 const Preview = require("./social-preview-metadata");
 
-const VERSION = "social-thumbnail-proxy-v1.0.0-provider-preview-relay";
-const SUPPORTED = new Set(["instagram", "tiktok", "facebook"]);
+const VERSION = "social-thumbnail-proxy-v1.1.0-bilibili-douyin-preview-relay";
+const SUPPORTED = new Set(["instagram", "tiktok", "facebook", "bilibili", "douyin"]);
 const MAX_BYTES = 4 * 1024 * 1024;
 const TIMEOUT_MS = 5500;
 
@@ -49,7 +49,7 @@ async function fetchImage(platform, value) {
       headers: {
         accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36",
-        referer: "https://igdcglobal.com/",
+        referer: platform === "bilibili" ? "https://www.bilibili.com/" : (platform === "douyin" ? "https://www.douyin.com/" : "https://igdcglobal.com/"),
       },
     });
     if (!response.ok) return null;

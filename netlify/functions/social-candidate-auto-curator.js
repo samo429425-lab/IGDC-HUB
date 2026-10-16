@@ -61,8 +61,8 @@ function realThumbnail(row) {
       facebook: /(^|\.)facebook\.com$/i,
       instagram: /(^|\.)instagram\.com$/i,
       tiktok: /(^|\.)tiktok\.com$/i,
+      bilibili: /(^|\.)bilibili\.com$|^b23\.tv$/i,
       douyin: /(^|\.)douyin\.com$/i,
-      dailymotion: /(^|\.)dailymotion\.com$/i,
     };
     const imagePath = /\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(url.pathname + url.search);
     if (pageHosts[platform] && pageHosts[platform].test(host) && !imagePath) return false;

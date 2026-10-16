@@ -127,8 +127,8 @@ function platformContentUrl(platform, value) {
   else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
   else if (p === "tiktok") ok = /\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[A-Za-z0-9_-]+/i.test(path) || host === "vm.tiktok.com" || host === "vt.tiktok.com";
   else if (p === "facebook") ok = host === "fb.watch" || /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (/^\/watch\/?$/i.test(path) && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
+  else if (p === "bilibili") ok = host === "b23.tv" ? /^\/[^/]+/i.test(path) : /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path);
   else if (p === "douyin") ok = host === "v.douyin.com" || /^\/(?:share\/)?(?:video|note)\/\d{8,}/i.test(path);
-  else if (p === "dailymotion") ok = host === "dai.ly" ? /^\/[A-Za-z0-9]+/i.test(path) : /^\/video\/[A-Za-z0-9]+/i.test(path);
   return ok ? url : "";
 }
 function socialEmbedUrl(platform, value) {
@@ -156,10 +156,11 @@ function socialEmbedUrl(platform, value) {
       ? "video.php" : "post.php";
     return "https://www.facebook.com/plugins/" + endpoint + "?href=" + encodeURIComponent(url) + (endpoint === "video.php" ? "&show_text=false&autoplay=true" : "&show_text=true");
   }
-  if (p === "dailymotion") {
-    if (u.hostname.toLowerCase().replace(/^www\./, "") === "dai.ly") match = path.match(/^\/([A-Za-z0-9]+)/i);
-    else match = path.match(/^\/video\/([A-Za-z0-9]+)/i);
-    return match ? "https://www.dailymotion.com/embed/video/" + encodeURIComponent(match[1]) + "?autoplay=1" : "";
+  if (p === "bilibili") {
+    match = path.match(/^\/video\/(BV[0-9A-Za-z]+)/i);
+    if (match) return "https://player.bilibili.com/player.html?bvid=" + encodeURIComponent(match[1]) + "&autoplay=1";
+    match = path.match(/^\/video\/av(\d+)/i);
+    return match ? "https://player.bilibili.com/player.html?aid=" + encodeURIComponent(match[1]) + "&autoplay=1" : "";
   }
   // Douyin does not expose a stable cross-origin player endpoint for all public
   // posts. The public content URL and provider-owned preview stay in the IGDC
@@ -1078,7 +1079,7 @@ function isApprovedInfluencer(row) {
     !!channelIdentity(r)
   );
 }
-const PROFILE_FALLBACK_SECTIONS = new Set(["social-douyin", "social-dailymotion"]);
+const PROFILE_FALLBACK_SECTIONS = new Set(["social-bilibili", "social-douyin"]);
 function platformProfileUrl(platform, value) {
   const url = Policy.normalizeUrl(value);
   if (!url) return "";
@@ -1086,8 +1087,8 @@ function platformProfileUrl(platform, value) {
     const u = new URL(url), p = text(platform).replace(/^social-/, "").toLowerCase();
     const host = u.hostname.toLowerCase().replace(/^www\./, ""), path = (u.pathname || "/").replace(/\/{2,}/g, "/");
     let ok = false;
-    if (p === "douyin") ok = /(^|\.)douyin\.com$/i.test(host) && /^\/user\/[^/]+\/?$/i.test(path);
-    else if (p === "dailymotion") ok = /(^|\.)dailymotion\.com$/i.test(host) && (/^\/user\/[^/]+\/?$/i.test(path) || /^\/(?!video(?:\/|$)|embed(?:\/|$)|playlist(?:\/|$))[^/]+\/?$/i.test(path));
+    if (p === "bilibili") ok = /^space\.bilibili\.com$/i.test(host) && /^\/\d+\/?$/i.test(path);
+    else if (p === "douyin") ok = /(^|\.)douyin\.com$/i.test(host) && /^\/user\/[^/]+\/?$/i.test(path);
     return ok ? url : "";
   } catch (_error) { return ""; }
 }
@@ -1111,7 +1112,7 @@ function generatedProfileCardThumbnail(row, platform) {
   }
   if (!creator) creator = "Creator";
   const labels = {
-    douyin: "Douyin · Creator", dailymotion: "Dailymotion · Channel",
+    bilibili: "Bilibili · Creator", douyin: "Douyin · Creator",
   };
   const label = labels[platform] || "Social · Creator";
   const initial = Array.from(creator || label)[0] || "•";
@@ -1190,7 +1191,7 @@ function genericContentTitle(platform, value) {
   if (!title) return true;
   if (/^loading[.…]*$/i.test(title)) return true;
   if (/^(?:false|null|undefined)$/i.test(title)) return true;
-  if (/^(?:instagram|tiktok|facebook|youtube|douyin|dailymotion)(?:\s+(?:post|reel|video|content|item))?$/i.test(title)) return true;
+  if (/^(?:instagram|tiktok|facebook|youtube|bilibili|douyin)(?:\s+(?:post|reel|video|content|item))?$/i.test(title)) return true;
   const p = text(platform).replace(/^social-/, "");
   return !!p && title.toLowerCase() === p.toLowerCase();
 }
@@ -1293,7 +1294,7 @@ function publishableIdentity(row) {
     r.description,
     raw.description,
   ].map(text).filter(Boolean);
-  const generic = /^(?:instagram|tiktok|facebook|youtube|douyin|dailymotion|social)(?:\s+(?:post|reel|video|content|item))?$/i;
+  const generic = /^(?:instagram|tiktok|facebook|youtube|bilibili|douyin|social)(?:\s+(?:post|reel|video|content|item))?$/i;
   return values.some((value) => {
     const clean = value.replace(/\s+/g, " ").trim();
     return clean.length >= 2 && !generic.test(clean) && !/^loading[.…]*$/i.test(clean);
@@ -1552,8 +1553,8 @@ function publicSocialSlot(row, slotId, defaults) {
     (platform === "instagram" ? "Instagram · Reel" :
       platform === "tiktok" ? "TikTok · Video" :
       platform === "facebook" ? "Facebook · Post" :
+      platform === "bilibili" ? (profileFallback ? "Bilibili · Creator" : "Bilibili · Video") :
       platform === "douyin" ? (profileFallback ? "Douyin · Creator" : "Douyin · Video") :
-      platform === "dailymotion" ? (profileFallback ? "Dailymotion · Channel" : "Dailymotion · Video") :
       rawTitle);
   const displayTitle = genericContentTitle(platform, rawTitle) ? fallbackTitle : rawTitle;
   return Object.assign({}, base, {
