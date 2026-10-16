@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IGDC 관리자 상품 원장 안전 복구</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#071525;color:#eef5ff;font:15px/1.6 system-ui,'Malgun Gothic',sans-serif}main{max-width:1200px;margin:35px auto;padding:0 24px 90px}.panel{border:1px solid #294b68;background:#10243c;border-radius:13px;padding:23px;margin:15px 0}h1{font-size:25px;margin:5px 0}h2{font-size:18px;margin:0 0 12px}p{margin:7px 0}.muted{color:#afc6d8}.warning{color:#f6c78d}.ok{color:#91e5bd}.error{color:#ff9797}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}button,a.button{border:1px solid #4f7ea2;border-radius:8px;background:#204969;color:#f2f7ff;padding:10px 15px;cursor:pointer;text-decoration:none;font:inherit}button.primary{background:#126cad;border-color:#2b8cd1}button.danger{background:#713d29;border-color:#ba774e}button:disabled{opacity:.45;cursor:not-allowed}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:8px;text-align:left;border-bottom:1px solid #294963;word-break:break-word}th{color:#a6d8f5}.scroll{max-height:370px;overflow:auto}pre{background:#07172b;padding:13px;white-space:pre-wrap;overflow-wrap:anywhere;border-radius:7px}.numbers{display:flex;flex-wrap:wrap;gap:12px}.numbers>div{min-width:120px;border:1px solid #32536f;border-radius:8px;padding:12px}strong.count{font-size:24px;display:block}.tiny{font-size:12px}#status{white-space:pre-wrap}
+</style></head><body><main>
+<p><a href="/admin?lang=ko" class="button">← 관리자 페이지</a></p>
+<h1>IGDC 상품 후보 원장 안전 복구</h1>
+<p class="muted">관리자 전용 독립 진단 화면입니다. 기존 AI 완전 자동화·프론트 매칭·공용 엔진을 실행하지 않습니다.</p>
+<section class="panel">
+<h2>1. 현재 DB 상태 읽기 전용 점검</h2>
+<p>2026년 10월 13일 확인된 후보 614건 중 배치 기록 589건과 현재 KR 전국 상품 원장을 비교합니다. 기존 정상 배치, 수동 보류, URL 불일치는 복구하지 않습니다.</p>
+<div class="actions"><button id="audit" class="primary">현재 원장 점검 · 복구 가능 상품 찾기</button><button id="json" disabled>점검 JSON 다운로드</button></div>
+<div class="numbers" id="metrics"></div><p id="diagnosis" class="muted">먼저 점검 버튼을 누르십시오.</p>
+</section>
+<section class="panel">
+<h2>2. 현재 목록에서 밀려난 기존 배치만 복구</h2>
+<p class="warning">이 기능은 과거에 배치가 확정됐던 상품의 <b>관리자 원장 배치 상태</b>만 복원합니다. 상품이 현재 판매 중인지 증명하지 않으며, 프론트 게시·재매칭은 실행하지 않습니다.</p>
+<p>확인된 대상은 8건씩 서버에서 다시 검사한 다음 복구합니다. 상품 ID·상세 URL·기존 섹션이 일치하지 않으면 건너뜁니다.</p>
+<div class="actions"><button id="restore" class="danger" disabled>복구 가능 상품 일괄 원장 복귀</button><button id="stop" disabled>남은 작업 중단</button><button id="refresh" disabled>점검 새로고침</button></div>
+<p id="status" aria-live="polite" class="muted">점검 전에는 복구 버튼이 활성화되지 않습니다.</p>
+<div class="scroll"><table><thead><tr><th>ID</th><th>상품명</th><th>현재 상태</th><th>기존 섹션</th></tr></thead><tbody id="preview"><tr><td colspan="4">점검 결과가 없습니다.</td></tr></tbody></table></div>
+</section>
+<section class="panel"><h2>복구 기준과 제한</h2><p>현재 관리자 상품 수가 0건이어도 DB에 보류·제외 상품이 남아 있다면 과거 배치를 복구할 수 있습니다. 단, DB에서 상품 자체가 사라졌거나 기존 ID·URL이 변경된 상품은 이 도구가 임의로 새 상품을 만들지 않습니다.</p>
+<p class="muted">이번 자료는 10월 13일 증빙이므로 10월 15일 오전 11시 50분의 완전한 DB 백업과 동일하지 않습니다. 복구 뒤 실제 상품 URL, 섹션 적합성, 후보 수를 확인해야 합니다.</p>
+</section>
+</main><script src="/assets/js/igdc-admin-ledger-rescue.js?v=20261016-1" defer></script></body></html>
