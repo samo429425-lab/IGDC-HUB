@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.37.0-bilibili-douyin-six";
+const VERSION = "sanmaru-social-live-collector-v1.40.0-provider-query-and-diagnostic-fix";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -408,6 +408,12 @@ function sparseVerifiedContentTitle(platform, contentUrl, item) {
   try {
     const url = new URL(contentUrl);
     const parts = url.pathname.split("/").filter(Boolean);
+    if (platform === "instagram") {
+      const kindIndex = parts.findIndex((part) => /^(?:p|reel|reels|tv)$/i.test(part));
+      const kind = kindIndex >= 0 ? parts[kindIndex].toLowerCase() : "post";
+      const id = kindIndex >= 0 ? parts[kindIndex + 1] || "" : "";
+      return "Instagram · " + (/^reel/.test(kind) ? "Reel" : "Post") + (id ? " " + id.slice(-14) : "");
+    }
     if (platform === "tiktok") {
       const videoIndex = parts.findIndex((part) => /^video$/i.test(part));
       const id = videoIndex >= 0 ? parts[videoIndex + 1] || "" : "";
@@ -680,27 +686,42 @@ function scopedQueries(plan, cursor, passes, route) {
   const offset = Math.max(0, Number(cursor || 0) || 0);
   const count = Math.max(1, Math.min(MAX_QUERY_PASSES, Number(passes || DEFAULT_QUERY_PASSES) || DEFAULT_QUERY_PASSES));
   const queries = [];
+  if (!base.length) return queries;
   for (let index = 0; index < count; index += 1) {
     const absoluteIndex = (offset * count) + index;
-    const baseQuery = base[absoluteIndex % base.length] || (plan.platform + " useful creator");
-    // Generic discovery must continuously escape stale creator registries and
-    // low-value seed results. Rotate a broad popularity/quality intent instead
-    // of relying only on literal platform/category phrases. Safety is still
-    // enforced later by the existing hard-block, AI-policy and safe-search gates.
-    const discoveryIntent = DISCOVERY_INTENT_TERMS[absoluteIndex % DISCOVERY_INTENT_TERMS.length];
+    const baseQuery = base[absoluteIndex % base.length] || (plan.platform + " latest public content");
     const sparseTerms = SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || [];
-    const sparseTerm = sparseTerms.length ? sparseTerms[absoluteIndex % sparseTerms.length] : "";
-    const sparseGlobal = SPARSE_DISCOVERY_PLATFORMS.has(plan.platform) && (absoluteIndex % 2 === 1);
-    queries.push([
-      baseQuery,
-      sparseTerm,
-      discoveryIntent,
-      sparseGlobal ? "global worldwide public" : countryQueryTerm(route),
-      sparseGlobal ? "" : languageQueryTerm(route)
-    ].filter(Boolean).join(" "));
+    const sparseTerm = sparseTerms.length && absoluteIndex % 2 === 0
+      ? sparseTerms[absoluteIndex % sparseTerms.length]
+      : "";
+
+    // Keep each provider query short. The old query builder appended country,
+    // language, global intent and a whole default topic catalog to every query,
+    // which frequently yielded zero results. Locale is a soft rotating hint,
+    // not a mandatory conjunction.
+    let localeHint = "";
+    // Country/IP is a preference, never a hard gate. For the sparse/global
+    // discovery platforms, every other query deliberately omits the locale
+    // hint so Bilibili/Douyin/TikTok/Facebook can still discover strong global
+    // content instead of repeatedly AND-ing a Korea/locale term into the query.
+    const globalComplementPass = plan.platform !== "youtube" && absoluteIndex % 2 === 0;
+    if (!globalComplementPass) {
+      if (absoluteIndex % 3 === 0) localeHint = countryQueryTerm(route);
+      else if (absoluteIndex % 3 === 1) localeHint = languageQueryTerm(route);
+    }
+    const discoveryIntent = absoluteIndex % 4 === 3
+      ? DISCOVERY_INTENT_TERMS[absoluteIndex % DISCOVERY_INTENT_TERMS.length]
+      : "";
+    const value = [baseQuery, sparseTerm, localeHint, discoveryIntent]
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (value) queries.push(value.slice(0, 220));
   }
-  return Array.from(new Set(queries));
+  return queries;
 }
+
 function registryRowActive(row) {
   const status = SocialStore.text(row && (row.review_status || row.reviewStatus)).toLowerCase();
   return !/^(search_excluded|permanent_blocked|blocked|rejected)$/.test(status);
@@ -1137,24 +1158,32 @@ async function naverChannelSearch(plan, queryText, limit, start, route, cfg) {
     return { provider: "naver-web-channel", status: "route_skipped", items: [] };
   }
   const params = new URLSearchParams({
-    // Naver Web Search often returns zero when Google-style site: filters are
-    // appended. Search broadly, then the latest-content resolver keeps only
-    // the requested platform's real public video/post URLs.
-    query: queryText + " " + plan.platform,
-    display: String(Math.min(100, limit)), start: String(Math.max(1, Math.min(1000, start || 1))), sort: "date"
+    // Naver does not consistently honor Google-style site: operators. Use a
+    // short domain/path hint and then discard every off-platform/profile-only
+    // result here, before it consumes the Social resolver budget.
+    query: naverProviderQuery(plan, queryText),
+    display: String(Math.min(100, Math.max(10, Number(limit || 10) * 3))), start: String(Math.max(1, Math.min(1000, start || 1))), sort: "date"
   });
   try {
     const data = await fetchJson("https://openapi.naver.com/v1/search/webkr.json?" + params.toString(), {
       headers: { "X-Naver-Client-Id": cfg.naverId, "X-Naver-Client-Secret": cfg.naverSecret }
     }, REQUEST_TIMEOUT_MS);
+    const rawRows = Array.isArray(data.items) ? data.items : [];
+    const items = rawRows.map((row) => {
+      const link = searchResultUrl(row.link);
+      if (Policy.platformFromHost(link) !== plan.platform || !contentKind(plan.platform, link)) return null;
+      return {
+        provider: "naver-web-channel", platform: plan.platform,
+        url: link, latestContentUrl: link, title: stripHtml(row.title), description: stripHtml(row.description),
+        entityKind: contentKind(plan.platform, link), language: "ko"
+      };
+    }).filter(Boolean);
     return {
       provider: "naver-web-channel",
-      status: "ok",
-      items: (data.items || []).map((row) => ({
-        provider: "naver-web-channel", platform: plan.platform,
-        url: row.link, title: stripHtml(row.title), description: stripHtml(row.description),
-        entityKind: contentKind(plan.platform, row.link) || "content_search_hit", language: "ko"
-      }))
+      status: items.length ? "ok" : "empty",
+      items,
+      rawCount: rawRows.length,
+      rejectedNonContentRows: Math.max(0, rawRows.length - items.length)
     };
   } catch (error) {
     return { provider: "naver-web-channel", status: error.statusCode === 401 || error.statusCode === 403 || error.statusCode === 429 ? "credential_or_quota_error" : "error", error: error.message, items: [] };
@@ -1248,6 +1277,35 @@ function publicSearchQuery(plan, queryText, registrySeed) {
   if (platform === "douyin") return [base, exact, "site:douyin.com", "抖音 视频 最新 公开", "video note"].filter(Boolean).join(" ");
   return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"].filter(Boolean).join(" ");
 }
+function directProviderQuery(plan, queryText, registrySeed) {
+  const platform = SocialStore.text(plan && plan.platform).toLowerCase();
+  const needle = registrySearchNeedle(registrySeed, platform);
+  const clean = sparseSearchTerms(queryText, platform)
+    .replace(new RegExp("\\b" + platform.replace(/[^a-z0-9]/g, "") + "\\b", "ig"), " ")
+    .replace(/\b(?:popular|public|latest|creator|official|high quality|active|trending|recent)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const topic = clean.split(/\s+/).filter(Boolean).slice(0, 7).join(" ");
+  const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
+  if (platform === "instagram") return [topic, exact, "site:instagram.com/reel"].filter(Boolean).join(" ");
+  if (platform === "tiktok") return [topic, exact, "site:tiktok.com/@", "video"].filter(Boolean).join(" ");
+  if (platform === "facebook") return [topic, exact, "site:facebook.com/reel", "video"].filter(Boolean).join(" ");
+  if (platform === "bilibili") return [topic || "热门", exact, "site:bilibili.com/video", "哔哩哔哩"].filter(Boolean).join(" ");
+  if (platform === "douyin") return [topic || "热门", exact, "site:douyin.com/video", "抖音"].filter(Boolean).join(" ");
+  return publicSearchQuery(plan, queryText, registrySeed);
+}
+function naverProviderQuery(plan, queryText) {
+  const platform = SocialStore.text(plan && plan.platform).toLowerCase();
+  const clean = sparseSearchTerms(queryText, platform).split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
+  const domainHint = {
+    instagram: "instagram.com/reel",
+    tiktok: "tiktok.com/@ video",
+    facebook: "facebook.com/reel",
+    bilibili: "bilibili.com/video",
+    douyin: "douyin.com/video"
+  }[platform] || platform;
+  return [clean, domainHint].filter(Boolean).join(" ").trim();
+}
 function publicSearchTitle(platform, title, description) {
   const primary = stripHtml(decodeXml(title)).replace(/\s+/g, " ").trim();
   if (primary && !syntheticTitle(primary, platform)) return primary;
@@ -1305,6 +1363,13 @@ function htmlPublicPostItems(html, plan, provider) {
   let match;
   while ((match = anchorRe.exec(source))) {
     pushPublicPost(out, seen, plan, provider, match[1], match[2], "");
+  }
+
+  // Baidu/Sogou and several mobile result pages often keep the real landing
+  // URL in data-* / mu attributes while href points at an opaque redirect.
+  const targetAttrRe = /(?:data-(?:url|href|landurl|mu)|mu|data-tools)=['"]([^'"]+)['"]/gi;
+  while ((match = targetAttrRe.exec(source))) {
+    pushPublicPost(out, seen, plan, provider, match[1], "", "");
   }
 
   // Some search pages place the destination in JSON/script rather than href.
@@ -1387,9 +1452,10 @@ function bilibiliApiItem(row, provider, index) {
     source: { name: provider, platform: "bilibili", mode: "bilibili_native_public", rank: Number(index || 0) + 1 }
   };
 }
-async function bilibiliPublicApiSearch(queryText, limit, qualitySweep) {
+async function bilibiliPublicApiSearch(queryText, limit, qualitySweep, pageIndex) {
   const wanted = Math.max(4, Math.min(30, Number(limit || 10) * (qualitySweep ? 2 : 1)));
   const clean = bilibiliSearchText(queryText) || "音乐 旅行 文化 科普 教育";
+  const page = Math.max(1, Math.min(50, Number(pageIndex || 1) || 1));
   const headers = {
     Accept: "application/json",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
@@ -1399,13 +1465,18 @@ async function bilibiliPublicApiSearch(queryText, limit, qualitySweep) {
     {
       name: "bilibili-native-api-search",
       url: "https://api.bilibili.com/x/web-interface/search/type?" + new URLSearchParams({
-        search_type: "video", keyword: clean, page: "1", page_size: String(wanted), order: "pubdate"
+        search_type: "video", keyword: clean, page: String(page), page_size: String(wanted), order: "pubdate"
       }).toString(),
       rows: (data) => data && data.data && Array.isArray(data.data.result) ? data.data.result : []
     },
     {
       name: "bilibili-native-api-popular",
-      url: "https://api.bilibili.com/x/web-interface/popular?" + new URLSearchParams({ ps: String(Math.min(20, wanted)), pn: "1" }).toString(),
+      url: "https://api.bilibili.com/x/web-interface/popular?" + new URLSearchParams({ ps: String(Math.min(20, wanted)), pn: String(page) }).toString(),
+      rows: (data) => data && data.data && Array.isArray(data.data.list) ? data.data.list : []
+    },
+    {
+      name: "bilibili-native-api-ranking",
+      url: "https://api.bilibili.com/x/web-interface/ranking/v2?rid=0&type=all",
       rows: (data) => data && data.data && Array.isArray(data.data.list) ? data.data.list : []
     }
   ];
@@ -1442,12 +1513,14 @@ async function bilibiliPublicApiSearch(queryText, limit, qualitySweep) {
     trace: settled.map((row) => ({ name: row.provider, status: row.status, count: (row.rows || []).length, error: row.error || null }))
   };
 }
-async function bilibiliNativeHtmlSearch(queryText, limit) {
+async function bilibiliNativeHtmlSearch(queryText, limit, pageIndex) {
   const wanted = Math.max(4, Math.min(30, Number(limit || 10) * 2));
   const clean = bilibiliSearchText(queryText) || "音乐 旅行 文化 科普 教育";
+  const page = Math.max(1, Math.min(50, Number(pageIndex || 1) || 1));
   const urls = [
-    "https://search.bilibili.com/video?" + new URLSearchParams({ keyword: clean, order: "pubdate" }).toString(),
-    "https://search.bilibili.com/all?" + new URLSearchParams({ keyword: clean }).toString()
+    "https://search.bilibili.com/video?" + new URLSearchParams({ keyword: clean, order: "pubdate", page: String(page) }).toString(),
+    "https://search.bilibili.com/all?" + new URLSearchParams({ keyword: clean, page: String(page) }).toString(),
+    "https://www.bilibili.com/v/popular/all"
   ];
   const results = await Promise.all(urls.map((url, idx) => nativeHtmlDiscoveryPage(
     "bilibili",
@@ -1501,16 +1574,17 @@ async function nativeHtmlDiscoveryPage(platform, provider, url, baseUrl, limit, 
     return { provider, status: error && error.name === "AbortError" ? "timeout" : "error", error: error && error.message || (provider + "_failed"), items: [] };
   }
 }
-async function genericNativeHtmlSearch(platform, queryText, limit) {
+async function genericNativeHtmlSearch(platform, queryText, limit, pageIndex) {
   const clean = sparseSearchTerms(queryText, platform) || {
     tiktok: "music travel culture food education creator",
     facebook: "creator reel music travel culture education",
     douyin: "旅游 音乐 文化 美食 教育 艺术",
   }[platform] || "popular public creator";
+  const page = Math.max(1, Math.min(50, Number(pageIndex || 1) || 1));
   const specs = platform === "tiktok"
     ? [
-        ["tiktok-native-search", "https://www.tiktok.com/search/video?q=" + encodeURIComponent(clean), "https://www.tiktok.com/", "en-US,en;q=0.8"],
-        ["tiktok-native-search-fallback", "https://www.tiktok.com/search?q=" + encodeURIComponent(clean), "https://www.tiktok.com/", "en-US,en;q=0.8"]
+        ["tiktok-native-search", "https://www.tiktok.com/search/video?q=" + encodeURIComponent(clean) + "&page=" + page, "https://www.tiktok.com/", "en-US,en;q=0.8"],
+        ["tiktok-native-search-fallback", "https://www.tiktok.com/search?q=" + encodeURIComponent(clean) + "&page=" + page, "https://www.tiktok.com/", "en-US,en;q=0.8"]
       ]
     : platform === "facebook"
       ? [
@@ -1519,8 +1593,9 @@ async function genericNativeHtmlSearch(platform, queryText, limit) {
         ]
       : platform === "douyin"
         ? [
-            ["douyin-native-search", "https://www.douyin.com/search/" + encodeURIComponent(clean) + "?type=video", "https://www.douyin.com/", "zh-CN,zh;q=0.9,en;q=0.5"],
-            ["douyin-native-search-fallback", "https://www.douyin.com/search/" + encodeURIComponent(clean), "https://www.douyin.com/", "zh-CN,zh;q=0.9,en;q=0.5"]
+            ["douyin-native-search", "https://www.douyin.com/search/" + encodeURIComponent(clean) + "?type=video&page=" + page, "https://www.douyin.com/", "zh-CN,zh;q=0.9,en;q=0.5"],
+            ["douyin-native-search-fallback", "https://www.douyin.com/search/" + encodeURIComponent(clean) + "?page=" + page, "https://www.douyin.com/", "zh-CN,zh;q=0.9,en;q=0.5"],
+            ["douyin-native-hot", "https://www.douyin.com/hot", "https://www.douyin.com/", "zh-CN,zh;q=0.9,en;q=0.5"]
           ]
         : [];
   if (!specs.length) return { provider: platform + "-native-search", status: "not_needed", items: [] };
@@ -1548,20 +1623,20 @@ async function genericNativeHtmlSearch(platform, queryText, limit) {
     trace: results.map((row) => ({ name: row.provider, status: row.status, count: (row.items || []).length, error: row.error || null }))
   };
 }
-async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
+async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep, pageIndex) {
   if (!plan || !SPARSE_DISCOVERY_PLATFORMS.has(plan.platform)) {
     return { provider: "sparse-native-public-search", status: "not_needed", items: [] };
   }
   if (plan.platform !== "bilibili") {
-    return genericNativeHtmlSearch(plan.platform, queryText, limit);
+    return genericNativeHtmlSearch(plan.platform, queryText, limit, pageIndex);
   }
 
   // Bilibili exposes both public JSON discovery and public search HTML. Run
   // them together so a regional/API restriction on one lane does not starve
   // the section before the Social candidate gateway can persist real videos.
   const [api, html] = await Promise.all([
-    bilibiliPublicApiSearch(queryText, limit, qualitySweep),
-    bilibiliNativeHtmlSearch(queryText, limit)
+    bilibiliPublicApiSearch(queryText, limit, qualitySweep, pageIndex),
+    bilibiliNativeHtmlSearch(queryText, limit, pageIndex)
   ]);
   const seen = new Set();
   const items = [];
@@ -1580,37 +1655,53 @@ async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep) {
     trace: [].concat(api.trace || [], html.trace || [])
   };
 }
-async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
+async function directPublicPostSearch(plan, queryText, limit, registrySeed, pageIndex) {
   if (!plan || plan.platform === "youtube") {
     return { provider: "direct-public-post-search", status: "not_needed", items: [] };
   }
-  const q = publicSearchQuery(plan, queryText, registrySeed);
+  // Generic web providers perform materially better with a short platform +
+  // content query than with the full policy sentence. Keep PSOM/policy breadth
+  // in the caller, but send each public index a compact content URL query.
+  const q = directProviderQuery(plan, queryText, registrySeed);
   const wanted = Math.max(1, Math.min(30, Number(limit || 10) || 10));
+  const page = Math.max(1, Math.min(50, Number(pageIndex || 1) || 1));
+  const webOffset = (page - 1) * Math.max(10, wanted);
+  const bingFirst = 1 + webOffset;
+  const yahooFirst = 1 + webOffset;
+  const chinaQuery = [
+    SocialStore.text(queryText).replace(/\bsite:[^\s)]+/gi, " ").replace(/\binurl:[^\s)]+/gi, " ").replace(/[()]/g, " ").replace(/\s+/g, " ").trim(),
+    plan.platform === "bilibili" ? "哔哩哔哩 视频" : (plan.platform === "douyin" ? "抖音 视频" : "")
+  ].filter(Boolean).join(" ").slice(0, 180);
   const headers = {
     Accept: "text/html,application/rss+xml,application/xml;q=0.9,*/*;q=0.8",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"
   };
   const jobs = [
     withDeadline(
-      fetchText("https://www.bing.com/search?format=rss&q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
+      fetchText("https://www.bing.com/search?format=rss&first=" + bingFirst + "&q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
       REQUEST_TIMEOUT_MS,
       ""
     ).then((xml) => ({ provider: "bing-rss-social", items: rssItems(xml, plan, "bing-rss-social") })).catch((error) => ({ provider: "bing-rss-social", items: [], error: error && error.message })),
     withDeadline(
-      fetchText("https://www.bing.com/search?count=30&q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
+      fetchText("https://www.bing.com/search?count=30&first=" + bingFirst + "&q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
       REQUEST_TIMEOUT_MS,
       ""
     ).then((html) => ({ provider: "bing-html-social", items: htmlPublicPostItems(html, plan, "bing-html-social") })).catch((error) => ({ provider: "bing-html-social", items: [], error: error && error.message })),
     withDeadline(
-      fetchText("https://lite.duckduckgo.com/lite/?q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
+      fetchText("https://lite.duckduckgo.com/lite/?s=" + webOffset + "&q=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
       REQUEST_TIMEOUT_MS,
       ""
     ).then((html) => ({ provider: "duckduckgo-lite-social", items: htmlPublicPostItems(html, plan, "duckduckgo-lite-social") })).catch((error) => ({ provider: "duckduckgo-lite-social", items: [], error: error && error.message })),
     withDeadline(
-      fetchText("https://search.yahoo.com/search?p=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
+      fetchText("https://search.yahoo.com/search?b=" + yahooFirst + "&p=" + encodeURIComponent(q), { headers }, REQUEST_TIMEOUT_MS),
       REQUEST_TIMEOUT_MS,
       ""
-    ).then((html) => ({ provider: "yahoo-html-social", items: htmlPublicPostItems(html, plan, "yahoo-html-social") })).catch((error) => ({ provider: "yahoo-html-social", items: [], error: error && error.message }))
+    ).then((html) => ({ provider: "yahoo-html-social", items: htmlPublicPostItems(html, plan, "yahoo-html-social") })).catch((error) => ({ provider: "yahoo-html-social", items: [], error: error && error.message })),
+    withDeadline(
+      fetchText("https://www.mojeek.com/search?q=" + encodeURIComponent(q) + "&s=" + webOffset, { headers }, REQUEST_TIMEOUT_MS),
+      REQUEST_TIMEOUT_MS,
+      ""
+    ).then((html) => ({ provider: "mojeek-html-social", items: htmlPublicPostItems(html, plan, "mojeek-html-social") })).catch((error) => ({ provider: "mojeek-html-social", items: [], error: error && error.message }))
   ];
   if (plan.platform === "bilibili" || plan.platform === "douyin") {
     // China-facing public indexes are supplemental only. Each platform's own
@@ -1618,12 +1709,12 @@ async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
     const suffix = plan.platform;
     jobs.push(
       withDeadline(
-        fetchText("https://www.baidu.com/s?wd=" + encodeURIComponent(q), { headers: Object.assign({}, headers, { "Accept-Language": "zh-CN,zh;q=0.9" }) }, REQUEST_TIMEOUT_MS),
+        fetchText("https://www.baidu.com/s?pn=" + webOffset + "&wd=" + encodeURIComponent(chinaQuery || q), { headers: Object.assign({}, headers, { "Accept-Language": "zh-CN,zh;q=0.9" }) }, REQUEST_TIMEOUT_MS),
         REQUEST_TIMEOUT_MS,
         ""
       ).then((html) => ({ provider: "baidu-html-" + suffix, items: htmlPublicPostItems(html, plan, "baidu-html-" + suffix) })).catch((error) => ({ provider: "baidu-html-" + suffix, items: [], error: error && error.message })),
       withDeadline(
-        fetchText("https://www.sogou.com/web?query=" + encodeURIComponent(q), { headers: Object.assign({}, headers, { "Accept-Language": "zh-CN,zh;q=0.9" }) }, REQUEST_TIMEOUT_MS),
+        fetchText("https://www.sogou.com/web?page=" + page + "&query=" + encodeURIComponent(chinaQuery || q), { headers: Object.assign({}, headers, { "Accept-Language": "zh-CN,zh;q=0.9" }) }, REQUEST_TIMEOUT_MS),
         REQUEST_TIMEOUT_MS,
         ""
       ).then((html) => ({ provider: "sogou-html-" + suffix, items: htmlPublicPostItems(html, plan, "sogou-html-" + suffix) })).catch((error) => ({ provider: "sogou-html-" + suffix, items: [], error: error && error.message }))
@@ -1644,6 +1735,7 @@ async function directPublicPostSearch(plan, queryText, limit, registrySeed) {
     provider: "direct-public-post-search",
     status: items.length ? "ok" : "empty",
     items,
+    effectiveQuery: q,
     trace: settled.map((result) => ({ name: result.provider, status: result.error ? "error" : "ok", count: (result.items || []).length, error: result.error || null }))
   };
 }
@@ -1917,9 +2009,16 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
   // Sparse providers must complete discovery before the serverless request
   // deadline. Platform-native/public-post lanes run in parallel with the
   // PSOM/SearchBank lane and are content URL searches, not creator prerequisites.
+  const discoveryPage = Math.max(1, Math.min(50, Math.floor(Math.max(0, Number(directoryOffset || 0)) / Math.max(1, Number(limit || 1))) + 1));
   if (sparse) {
-    tasks.push(sparseNativePublicSearch(plan, queryText, limit, qualitySweep));
-    tasks.push(directPublicPostSearch(plan, queryText, limit, registryTargeted ? registrySeed : null));
+    tasks.push(sparseNativePublicSearch(plan, queryText, limit, qualitySweep, discoveryPage));
+    tasks.push(directPublicPostSearch(plan, queryText, limit, registryTargeted ? registrySeed : null, discoveryPage));
+  } else if (plan.platform === "instagram") {
+    // Instagram has no dependable anonymous native search API, so direct public
+    // post/reel discovery must run on every content pass. Previously it only ran
+    // when every other provider returned zero actual posts; one stale repeated
+    // reel suppressed the rescue lane and made the section appear frozen.
+    tasks.push(directPublicPostSearch(plan, queryText, limit, null, discoveryPage));
   }
 
   if (providerGroup === 0) {
@@ -1950,19 +2049,15 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     };
   });
 
-  // Instagram is not in the sparse fast-path above. Preserve its existing
-  // fallback behaviour, but do not add a second network wave for the four
-  // low-yield providers because their independent lanes already ran in parallel.
+  // Instagram already runs direct public post/reel discovery in the primary
+  // wave. If all providers still miss an actual post, add only the broad
+  // Sanmaru/SearchBank rescue here instead of repeating the same web search.
   if (plan.platform === "instagram") {
     const hasActualPost = (list) => (list || []).some((result) => (result.items || []).some((item) =>
       candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
     ));
     if (!hasActualPost(providers)) {
-      const rescuePair = await Promise.all([
-        maruUnfilteredSearchOne(event, plan, queryText, limit, language, start),
-        directPublicPostSearch(plan, queryText, limit, registrySeed)
-      ]);
-      providers = providers.concat(rescuePair);
+      providers.push(await maruUnfilteredSearchOne(event, plan, queryText, limit, language, start));
     }
   }
 
@@ -1976,7 +2071,8 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
       countryFallback: !!result.countryFallback,
       offset: Number(result.offset || 0),
       rawCount: result.rawCount == null ? null : Number(result.rawCount || 0),
-      rejectedNonContentRows: result.rejectedNonContentRows == null ? null : Number(result.rejectedNonContentRows || 0)
+      rejectedNonContentRows: result.rejectedNonContentRows == null ? null : Number(result.rejectedNonContentRows || 0),
+      effectiveQuery: result.effectiveQuery || null
     }))
   };
 }
@@ -2547,7 +2643,7 @@ async function candidateFromItem(item, sectionKey, platform, queryText, route, r
     originalTitle,
     resolved.suggestedTitle
   ]));
-  if (syntheticTitle(title, platform) && SPARSE_DISCOVERY_PLATFORMS.has(platform)) {
+  if (syntheticTitle(title, platform) && platform !== "youtube") {
     title = sparseVerifiedContentTitle(platform, resolved.latestContentUrl, item);
   }
   if (syntheticTitle(title, platform)) return { ok: false, reason: "real_content_title_required" };
@@ -2944,7 +3040,11 @@ exports.handler = async function(event) {
       body.registryBatchSize || body.registry_batch_size
     );
     let providerGroup = queryCursor % PROVIDER_GROUP_COUNT;
-    let researchCursor = Math.floor(queryCursor / PROVIDER_GROUP_COUNT);
+    // Query policy advances every batch while the provider group rotates
+    // independently. The old floor(cursor/3) repeated the same policy query
+    // across three requests and exhausted the administrator's empty-batch
+    // budget before most of the policy catalog was ever searched.
+    let researchCursor = queryCursor;
     let scoped = null;
     let queries = [];
     const querySeeds = {};
@@ -3000,10 +3100,14 @@ exports.handler = async function(event) {
 
     const language = body.language || body.lang || route.languages[0];
     const directoryStride = Math.max(1, queries.length);
+    // Each distinct policy query should start at page 1. Only after one full
+    // policy-query cycle do we advance those same queries to page 2, then 3...
+    // The previous cursor-based offset sent query #2 straight to page 2, query
+    // #3 to page 3, etc., skipping the highest-ranked results for most topics.
+    const providerPageCycle = Math.max(1, baseCatalogSize);
+    const providerPageIndex = Math.floor(Math.max(0, researchCursor) / providerPageCycle);
     const searchResults = await Promise.all(queries.map(async (queryText, queryIndex) => {
-      // Advance every public-directory query by a full request batch so the
-      // next research cursor does not re-read the previous cursor's rows.
-      const directoryOffset = Math.max(0, ((researchCursor * directoryStride) + queryIndex) * perQueryLimit);
+      const directoryOffset = Math.max(0, ((providerPageIndex * directoryStride) + queryIndex) * perQueryLimit);
       const searchResult = await searchOne(
         event, plan, queryText, perQueryLimit,
         language,
@@ -3098,7 +3202,7 @@ exports.handler = async function(event) {
       // used by the administrator runner to decide when to advance to the next
       // SNS instead of retrying one section hundreds of times.
       queryCatalogSize: catalogSize * PROVIDER_GROUP_COUNT,
-      discoveryCatalogSize: Math.max(6, baseCatalogSize * PROVIDER_GROUP_COUNT),
+      discoveryCatalogSize: Math.max(6, baseCatalogSize),
       registryCatalogSize: registrySeeds.length,
       queryCursor,
       researchCursor,
@@ -3108,7 +3212,13 @@ exports.handler = async function(event) {
       searchStart,
       discoveryBatchCycle,
       directoryStride,
+      providerPageCycle,
+      providerPageIndex: providerPageIndex + 1,
       qualitySweep,
+      queryProgression: "one_policy_query_per_batch_provider_group_rotates_independently",
+      discoveryPolicy: "broad_content_first_then_strict_social_validation",
+      localePolicy: "ip_country_is_soft_preference_with_global_complement",
+      contentIdentity: "section_platform_content_url_hash",
       broadDiscovery: SPARSE_DISCOVERY_PLATFORMS.has(plan.platform),
       broadDiscoveryTermCount: (SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || []).length,
       contentFirst,
@@ -3194,6 +3304,8 @@ exports.__test = {
   candidateUrls,
   searchResultUrl,
   publicSearchQuery,
+  directProviderQuery,
+  naverProviderQuery,
   rssItems,
   htmlPublicPostItems,
   publicSearchTitle,

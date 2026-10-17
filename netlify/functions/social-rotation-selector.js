@@ -7,7 +7,7 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-rotation-selector-v1.1.0-public-and-replacement-queues";
+const VERSION = "social-rotation-selector-v1.2.0-section-complete-read";
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -39,9 +39,9 @@ exports.handler = async function (event) {
       });
     await actorFor(event);
     const params = event.queryStringParameters || {};
-    const rows = await SocialStore.selectCandidates(
-      approvedQuery(params.limit),
-    );
+    const rows = typeof SocialStore.selectCandidatesBySections === "function"
+      ? await SocialStore.selectCandidatesBySections(approvedQuery(params.limit), 1000)
+      : await SocialStore.selectCandidates(approvedQuery(params.limit));
     const route = CountryRouting.resolve(event, params);
     const rotation = SocialStore.selectRotation(
       Array.isArray(rows) ? rows : [],

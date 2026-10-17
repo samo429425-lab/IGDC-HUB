@@ -10,7 +10,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialPreview = require("./social-preview-metadata");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
-const VERSION = "social-candidate-action-v1.7.0-profile-preview";
+const VERSION = "social-candidate-action-v1.8.0-direct-id-and-complete-pool-read";
 const ACTIONS = new Set([
   "approve",
   "hold",
@@ -81,11 +81,21 @@ function originalState(row) {
   };
 }
 async function requestedRows(ids) {
-  const requested = new Set(ids);
-  const rows = await SocialStore.selectCandidates("select=*&limit=10000");
-  return (Array.isArray(rows) ? rows : []).filter((row) =>
-    requested.has(SocialStore.text(row && row.id)),
-  );
+  const list = Array.from(new Set((ids || []).map(SocialStore.text).filter(Boolean)));
+  if (!list.length) return [];
+  // Read the selected ids directly in bounded batches. The old full-table read
+  // could be capped at 1000 rows and fail to find a newly researched candidate;
+  // one enormous id=in.(...) URL could also exceed proxy limits when the
+  // administrator selects a whole queue.
+  const rows = [];
+  for (let offset = 0; offset < list.length; offset += 100) {
+    const batch = list.slice(offset, offset + 100);
+    const part = await SocialStore.selectCandidates(
+      "select=*&id=" + SocialStore.encodeIn(batch) + "&limit=" + batch.length,
+    );
+    if (Array.isArray(part)) rows.push.apply(rows, part);
+  }
+  return rows;
 }
 async function updateIndividually(rows, makePatch) {
   const updated = [];
@@ -283,9 +293,14 @@ exports.handler = async function (event) {
           message: "검색 제외 기록 완전 삭제 확인값이 필요합니다.",
         });
       }
-      const excludedRows = await SocialStore.selectCandidates(
-        "select=id,review_status&review_status=in.(search_excluded,permanent_blocked,blocked)&limit=10000",
-      );
+      const excludedRows = typeof SocialStore.selectCandidatesBySections === "function"
+        ? await SocialStore.selectCandidatesBySections(
+            "select=id,review_status,section_key&review_status=in.(search_excluded,permanent_blocked,blocked)",
+            1000,
+          )
+        : await SocialStore.selectCandidates(
+            "select=id,review_status&review_status=in.(search_excluded,permanent_blocked,blocked)&limit=10000",
+          );
       const requested = new Set(ids);
       const deletableIds = (Array.isArray(excludedRows) ? excludedRows : [])
         .map((row) => SocialStore.text(row && row.id))
@@ -415,9 +430,14 @@ exports.handler = async function (event) {
         });
       }
       const candidates = await requestedRows(ids);
-      const approvedRows = await SocialStore.selectCandidates(
-        "select=*&review_status=eq.approved&candidate_only=eq.false&seed_content=eq.false&order=section_key.asc,rotation_score.desc,approved_at.desc&limit=5000",
-      );
+      const approvedRows = typeof SocialStore.selectCandidatesBySections === "function"
+        ? await SocialStore.selectCandidatesBySections(
+            "select=*&review_status=eq.approved&candidate_only=eq.false&seed_content=eq.false&order=section_key.asc,rotation_score.desc,approved_at.desc",
+            1000,
+          )
+        : await SocialStore.selectCandidates(
+            "select=*&review_status=eq.approved&candidate_only=eq.false&seed_content=eq.false&order=section_key.asc,rotation_score.desc,approved_at.desc&limit=5000",
+          );
       const route = CountryRouting.resolve(event, body);
       const rotation = SocialStore.selectRotation(
         Array.isArray(approvedRows) ? approvedRows : [],

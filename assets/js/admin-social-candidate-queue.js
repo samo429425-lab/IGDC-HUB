@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v4.3.0 - content-first research + read-only diagnostics */
+/* IGDC Social Hub Content Operations v4.6.0 - resilient diagnostics + research pipeline probes */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -19,9 +19,9 @@
     ["social-bilibili", "Bilibili / 哔哩哔哩", "bilibili"],
     ["social-douyin", "Douyin / 抖音", "douyin"],
   ];
-  var COLLECTOR_JOB_VERSION = 7,
-    STANDARD_EMPTY_BATCH_LIMIT = 12,
-    LOW_YIELD_EMPTY_BATCH_LIMIT = 18;
+  var COLLECTOR_JOB_VERSION = 9,
+    STANDARD_EMPTY_BATCH_LIMIT = 40,
+    LOW_YIELD_EMPTY_BATCH_LIMIT = 40;
   var order = SECTIONS.map(function (x) {
       return x[0];
     }),
@@ -1685,7 +1685,7 @@
     }
   }
   function jobKey() {
-    return "igdc.socialCollector.job.v4.bounded-parallel-six-sections";
+    return "igdc.socialCollector.job.v6.full-policy-content-six-sections";
   }
   function loadJob() {
     try {
@@ -1717,12 +1717,11 @@
         ? LOW_YIELD_EMPTY_BATCH_LIMIT
         : STANDARD_EMPTY_BATCH_LIMIT,
       reported = Number(j && (j.discoveryCatalogSize || j.catalogSize) || 0);
-    // The old collector used queryCatalogSize directly. With a large creator
-    // registry that value can grow into the hundreds and keep YouTube running
-    // indefinitely before the loop ever advances to Instagram. The registry
-    // already has its own mandatory sweep; generic no-result retries therefore
-    // need a small, bounded discovery budget.
-    return Math.max(6, Math.min(cap, reported > 0 ? reported : cap));
+    // The collector now reports the actual content-query catalog (not
+    // influencer count and not provider-count multiplied breadth). Give each
+    // section enough empty batches to traverse one complete policy catalog once,
+    // while keeping a hard upper bound so one provider cannot loop forever.
+    return Math.max(12, Math.min(cap, reported > 0 ? reported : cap));
   }
   function fatalCollectionError(error) {
     var status = Number(error && error.status), message = text(error && error.message);
@@ -1827,6 +1826,160 @@
     $("providerStatus").innerHTML = lines.join("");
     $("providerStatus").classList.remove("hidden");
   }
+  function sectionProbeSummary(sectionKey, response, error) {
+    var live = response && response.liveCollection || {};
+    return {
+      sectionKey: sectionKey,
+      platform: label(sectionKey),
+      ok: !!(response && response.ok === true),
+      transportError: error ? { message: text(error.message), status: Number(error.status || 0) || null } : null,
+      accepted: Number(response && response.accepted || 0),
+      saved: Number(response && response.saved || 0),
+      dryRunExpectedSavedZero: true,
+      searchedRows: Number(live.searchedRows || 0),
+      directCandidates: Number(live.directCandidates || 0),
+      submittedCandidates: Number(live.submittedCandidates || 0),
+      submittedRecords: Number(live.submittedRecords || 0),
+      rejectedRows: Number(live.rejectedRows || 0),
+      rejectedByReason: live.rejectedByReason || {},
+      providerGroup: live.providerGroupName || null,
+      providerTrace: live.providerTrace || [],
+      psomContract: live.psomContract || null,
+      researchAuthority: live.researchAuthority || null,
+      influencerRegistryRole: live.influencerRegistryRole || null,
+      registryTargeted: !!live.registryTargeted,
+      contentFirst: live.contentFirst !== false,
+      queryCursor: live.queryCursor == null ? null : Number(live.queryCursor),
+      nextQueryCursor: live.nextQueryCursor == null ? null : Number(live.nextQueryCursor),
+      searchStart: live.searchStart == null ? null : Number(live.searchStart),
+      itemsPreview: Array.isArray(response && response.itemsPreview) ? response.itemsPreview : [],
+    };
+  }
+  async function downloadResearchPipelineDiagnostic() {
+    var button = $("researchPipelineDiagnosticBtn");
+    if (button) button.disabled = true;
+    var now = new Date(), probes = [], readiness = null, review = null, handoff = null, runtimeFront = null, staticSnapshot = null;
+    try {
+      show("6개 SNS의 리서치 연결을 저장 없이 점검하고 있습니다.", "warn");
+      try { readiness = await getReport(LIVE + "?_=" + Date.now()); } catch (e) { readiness = { ok:false, error:text(e.message), status:Number(e.status||0)||null }; }
+      for (var i = 0; i < order.length; i++) {
+        var key = order[i], response = null, failure = null;
+        try {
+          response = await post(LIVE, {
+            action: "collect_live",
+            dryRun: true,
+            contentFirst: true,
+            registryOnly: false,
+            registrySweepDone: true,
+            sectionKey: key,
+            limit: 4,
+            batchSize: 4,
+            queryPasses: 1,
+            queryCursor: 0,
+            countryCode: selectedCountry(),
+            scopeMode: scopeMode(),
+            regionId: text($("collectorRegion").value),
+            languages: text($("collectorLanguages").value),
+          });
+        } catch (e) { failure = e; }
+        probes.push(sectionProbeSummary(key, response, failure));
+      }
+      var params = new URLSearchParams({ countryCode:selectedCountry(), scopeMode:scopeMode(), regionId:text($("collectorRegion").value) });
+      try { review = await getReport(REVIEW + "?action=diagnostic&" + params.toString()); } catch (e) { review = { ok:false, error:text(e.message), status:Number(e.status||0)||null }; }
+      try { handoff = await getReport(PUBLISH + "?action=pipeline_diagnostic&" + params.toString()); } catch (e) { handoff = { ok:false, error:text(e.message), status:Number(e.status||0)||null }; }
+      try { runtimeFront = await getReport(CURRENT_SOCIAL + "?view=front&_=" + Date.now()); } catch (e) { runtimeFront = { ok:false, error:text(e.message), status:Number(e.status||0)||null }; }
+      try { staticSnapshot = summarizeCanonicalSnapshot(await staticJson(STATIC_SOCIAL_SNAPSHOT)); } catch (e) { staticSnapshot = { ok:false, error:text(e.message) }; }
+      var report = {
+        ok: probes.some(function (p) { return p.ok && (p.directCandidates > 0 || p.searchedRows > 0); }),
+        reportType: "igdc-social-six-section-research-pipeline-diagnostic",
+        generatedAt: now.toISOString(),
+        readOnly: true,
+        scope: currentScope(),
+        expectedSections: order.slice(),
+        expectedFlow: [
+          "PSOM Social section contract",
+          "Social content-first research policy",
+          "SearchBank/Sanmaru + platform/native/public search",
+          "Social candidate gateway/store",
+          "Social SearchBank release handoff",
+          "Snapshot Engine social target",
+          "social.snapshot",
+          "Social AutoMap/front"
+        ],
+        readiness: readiness,
+        sectionProbes: probes,
+        candidateQueue: review,
+        searchBankSnapshotHandoff: handoff,
+        runtimeFront: runtimeFront,
+        staticSocialSnapshot: staticSnapshot,
+        diagnosis: {
+          zeroDiscoverySections: probes.filter(function (p) { return !p.searchedRows && !p.directCandidates; }).map(function (p) { return p.sectionKey; }),
+          searchButNoContentSections: probes.filter(function (p) { return p.searchedRows > 0 && p.directCandidates === 0; }).map(function (p) { return p.sectionKey; }),
+          candidateResolvedSections: probes.filter(function (p) { return p.directCandidates > 0; }).map(function (p) { return p.sectionKey; }),
+          remoteFailureSections: probes.filter(function (p) { return !!p.transportError; }).map(function (p) { return p.sectionKey; }),
+        },
+        note: "각 섹션은 dryRun으로 조사하므로 후보 DB를 변경하지 않습니다. searchedRows가 있는데 directCandidates가 0이면 검색 결과 URL/정책 변환 단계, searchedRows 자체가 0이면 검색 제공자/외부 접근 단계부터 확인하십시오.",
+      };
+      diagnostic(report);
+      toggleDiagnosticPanel(true);
+      download("igdc-social-six-section-research-pipeline-diagnostic-" + now.toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", report);
+      show("6개 리서치 파이프라인 점검 JSON을 다운로드했습니다.", report.ok ? "ok" : "warn");
+      return report;
+    } catch (e) {
+      var failureReport = {
+        ok: false,
+        reportType: "igdc-social-six-section-research-pipeline-diagnostic",
+        generatedAt: now.toISOString(),
+        readOnly: true,
+        scope: currentScope(),
+        sectionProbes: probes,
+        fatalError: { message: text(e && e.message) || "pipeline_diagnostic_failed", status: Number(e && e.status || 0) || null },
+        note: "점검 중 일부 UI/네트워크 단계가 실패해도 버튼이 무반응으로 끝나지 않도록 현재까지의 섹션 점검 결과와 오류를 JSON으로 반환합니다."
+      };
+      diagnostic(failureReport);
+      toggleDiagnosticPanel(true);
+      download("igdc-social-six-section-research-pipeline-diagnostic-error-" + now.toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", failureReport);
+      show("리서치 파이프라인 점검 중 오류가 있어 오류 포함 JSON을 다운로드했습니다.", "warn");
+      return failureReport;
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+  async function downloadDirectIntakeDiagnostic() {
+    var now = new Date(), d = null;
+    try {
+      if (!text($("channelIntakeText").value)) {
+        d = {
+          ok: false,
+          reportType: "igdc-social-direct-intake-diagnostic",
+          generatedAt: now.toISOString(),
+          sectionKey: text($("collectorSection").value),
+          inputRequired: true,
+          inputLineCount: 0,
+          note: "직접 반입 점검은 실제 공개 영상/게시물 URL을 입력한 뒤 변환·제외 사유를 검사합니다. 입력이 없어도 버튼이 무반응으로 끝나지 않도록 이 진단 JSON을 반환합니다.",
+        };
+      } else {
+        d = await intakeChannels(true);
+        if (!d) d = { ok:false, reportType:"igdc-social-direct-intake-diagnostic", generatedAt:now.toISOString(), error:"direct_intake_probe_failed" };
+      }
+    } catch (e) {
+      d = {
+        ok: false,
+        reportType: "igdc-social-direct-intake-diagnostic",
+        generatedAt: now.toISOString(),
+        sectionKey: text($("collectorSection").value),
+        error: text(e && e.message) || "direct_intake_probe_failed",
+        status: Number(e && e.status || 0) || null,
+        note: "직접 반입 원격 점검이 실패해도 버튼이 무반응으로 끝나지 않도록 오류 자체를 JSON으로 반환합니다."
+      };
+    }
+    diagnostic(d);
+    toggleDiagnosticPanel(true);
+    download("igdc-social-direct-intake-diagnostic-" + now.toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", d);
+    show("직접 반입 점검 JSON을 다운로드했습니다.", d.ok === false ? "warn" : "ok");
+    return d;
+  }
+
   async function providerStatus() {
     try {
       var d = await get(LIVE);
@@ -3809,21 +3962,56 @@
     }
   }
 
+  function localDiagnosticRows(kind) {
+    var list = rows.slice();
+    if (kind === "registry_diagnostic") list = list.filter(function (row) { return assetClass(row) === "influencer_registry"; });
+    else if (kind === "latest_content_diagnostic" || kind === "latest_content_rows_diagnostic") list = list.filter(function (row) { return assetClass(row) === "latest_content" && !excluded(row); });
+    else if (kind === "hold_diagnostic") list = list.filter(contentHold);
+    else if (kind === "exclusion_diagnostic") list = list.filter(excluded);
+    return list.map(contentDiagnosticRow);
+  }
+  function fallbackDiagnostic(action, error) {
+    var local = localDiagnosticRows(action);
+    return {
+      ok: false,
+      reportType: "igdc-social-local-fallback-diagnostic",
+      requestedAction: action,
+      generatedAt: new Date().toISOString(),
+      scope: currentScope(),
+      remoteError: {
+        message: text(error && error.message) || "remote_diagnostic_unavailable",
+        status: Number(error && error.status || 0) || null,
+      },
+      localStateAvailable: true,
+      localRowCount: local.length,
+      localRows: local,
+      note: "원격 점검 API가 실패해도 버튼이 무반응으로 끝나지 않도록 현재 브라우저가 보유한 Social 후보 상태를 함께 내보냅니다. 원격 오류는 remoteError에서 확인하십시오.",
+    };
+  }
   async function runQueueDiagnostic(action, successMessage, downloadName) {
+    var d = null, remoteError = null;
     try {
       var q = new URLSearchParams({
-          action: action,
-          countryCode: selectedCountry(),
-          scopeMode: scopeMode(),
-          regionId: text($("collectorRegion").value),
-        }),
-        d = await getReport(REVIEW + "?" + q.toString());
-      diagnostic(d);
-      if (downloadName) download(downloadName, d);
-      show(successMessage + (downloadName ? " · 다운로드 완료" : ""), d.ok === false ? "warn" : "ok");
+        action: action,
+        countryCode: selectedCountry(),
+        scopeMode: scopeMode(),
+        regionId: text($("collectorRegion").value),
+      });
+      d = await getReport(REVIEW + "?" + q.toString());
     } catch (e) {
-      show(e.message || "점검 JSON을 읽지 못했습니다.", "warn");
+      remoteError = e;
+      d = fallbackDiagnostic(action, e);
     }
+    diagnostic(d);
+    toggleDiagnosticPanel(true);
+    if (downloadName) download(downloadName, d);
+    show(
+      remoteError
+        ? "원격 점검 API가 실패하여 현재 브라우저 상태와 오류를 JSON으로 다운로드했습니다."
+        : successMessage + (downloadName ? " · 다운로드 완료" : ""),
+      remoteError || d.ok === false ? "warn" : "ok",
+    );
+    return d;
   }
 
   function toggleHoldPanel(forceOpen) {
@@ -3863,8 +4051,18 @@
 
     $("refreshBtn").onclick = refresh;
     if ($("systemAuditBtn")) $("systemAuditBtn").onclick = runFullSystemDiagnostic;
-    if ($("systemAuditDownloadBtn")) $("systemAuditDownloadBtn").onclick = function () {
-      if (!systemAuditCache) return show("먼저 전체 시스템 점검을 실행해 주세요.", "warn");
+    if ($("systemAuditDownloadBtn")) $("systemAuditDownloadBtn").onclick = async function () {
+      if (!systemAuditCache) {
+        show("전체 시스템 점검을 먼저 실행한 뒤 JSON을 자동 다운로드합니다.", "warn");
+        systemAuditCache = await runFullSystemDiagnostic();
+      }
+      if (!systemAuditCache) {
+        var fallback = fallbackDiagnostic("full_system_diagnostic", new Error("full_system_diagnostic_failed"));
+        diagnostic(fallback);
+        toggleDiagnosticPanel(true);
+        download("igdc-social-full-system-diagnostic-error-" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", fallback);
+        return;
+      }
       download("igdc-social-full-system-diagnostic-" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", systemAuditCache);
     };
     if ($("toggleRegistryPanelBtn")) $("toggleRegistryPanelBtn").onclick = function () { toggleRegistryPanel(); };
@@ -3915,12 +4113,7 @@
     $("channelIntakeDryRunBtn").onclick = function () {
       intakeChannels(true);
     };
-    if ($("channelIntakeDiagnosticJsonBtn")) $("channelIntakeDiagnosticJsonBtn").onclick = async function () {
-      var d = await intakeChannels(true);
-      if (!d) return;
-      download("igdc-social-direct-intake-diagnostic-" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", d);
-      show("직접 반입 URL의 변환·제외 사유 점검 JSON을 다운로드했습니다.", "ok");
-    };
+    if ($("channelIntakeDiagnosticJsonBtn")) $("channelIntakeDiagnosticJsonBtn").onclick = downloadDirectIntakeDiagnostic;
     $("channelIntakeBtn").onclick = function () {
       intakeChannels(false);
     };
@@ -4074,16 +4267,62 @@
       }, this);
     };
   }
+  function bindDiagnosticControls() {
+    // Bind diagnostics independently from the rest of the admin UI. If a later
+    // non-diagnostic control throws during initialization, JSON diagnostics must
+    // still remain usable so the broken pipeline can be inspected in production.
+    if ($("systemAuditBtn")) $("systemAuditBtn").onclick = runFullSystemDiagnostic;
+    if ($("systemAuditDownloadBtn")) $("systemAuditDownloadBtn").onclick = async function () {
+      if (!systemAuditCache) systemAuditCache = await runFullSystemDiagnostic();
+      if (systemAuditCache) {
+        download("igdc-social-full-system-diagnostic-" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", systemAuditCache);
+      } else {
+        var fallback = fallbackDiagnostic("full_system_diagnostic", new Error("full_system_diagnostic_failed"));
+        diagnostic(fallback);
+        toggleDiagnosticPanel(true);
+        download("igdc-social-full-system-diagnostic-error-" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".json", fallback);
+      }
+    };
+    if ($("collectorProgressJsonBtn")) $("collectorProgressJsonBtn").onclick = downloadCollectorProgress;
+    if ($("researchPipelineDiagnosticBtn")) $("researchPipelineDiagnosticBtn").onclick = downloadResearchPipelineDiagnostic;
+    if ($("channelIntakeDiagnosticJsonBtn")) $("channelIntakeDiagnosticJsonBtn").onclick = downloadDirectIntakeDiagnostic;
+    if ($("registryDiagnosticBtn")) $("registryDiagnosticBtn").onclick = function () {
+      return runQueueDiagnostic("registry_diagnostic", "인플루언서 등록부 점검 JSON을 읽었습니다.", "igdc-social-influencer-registry-diagnostic.json");
+    };
+    if ($("latestContentDiagnosticBtn")) $("latestContentDiagnosticBtn").onclick = function () {
+      return runQueueDiagnostic("latest_content_diagnostic", "최신 콘텐츠 후보·교체 대기열 요약 점검 JSON을 읽었습니다.", "igdc-social-latest-content-diagnostic.json");
+    };
+    if ($("contentStateDiagnosticBtn")) $("contentStateDiagnosticBtn").onclick = downloadContentStateDiagnostic;
+    if ($("holdDiagnosticBtn")) $("holdDiagnosticBtn").onclick = function () {
+      return runQueueDiagnostic("hold_diagnostic", "보류 대기 점검 JSON을 읽었습니다.", "igdc-social-content-hold-diagnostic.json");
+    };
+    if ($("exclusionDiagnosticBtn")) $("exclusionDiagnosticBtn").onclick = function () {
+      return runQueueDiagnostic("exclusion_diagnostic", "검색 제외·영구 차단 점검 JSON을 읽었습니다.", "igdc-social-search-exclusion-diagnostic.json");
+    };
+    if ($("toggleDiagnosticPanelBtn")) $("toggleDiagnosticPanelBtn").onclick = function () { toggleDiagnosticPanel(); };
+  }
   function bindBatchExtras() {
-    $("providerStatusBtn").onclick = providerStatus;
-    $("searchBankImportBtn").onclick = importSearchBank;
+    if ($("providerStatusBtn")) $("providerStatusBtn").onclick = providerStatus;
+    if ($("researchPipelineDiagnosticBtn")) $("researchPipelineDiagnosticBtn").onclick = downloadResearchPipelineDiagnostic;
+    if ($("searchBankImportBtn")) $("searchBankImportBtn").onclick = importSearchBank;
     providerStatus();
   }
   async function start() {
-    bind();
-    bindBatchExtras();
-    await countryOptions();
-    refresh();
+    bindDiagnosticControls();
+    try { bind(); } catch (e) {
+      console.error("[IGDC Social Admin] non-diagnostic UI bind failed", e);
+      show("일부 관리자 UI 연결에 오류가 있습니다. 점검 JSON 버튼은 계속 사용할 수 있습니다: " + text(e && e.message), "warn");
+    }
+    try { bindBatchExtras(); } catch (e) {
+      console.error("[IGDC Social Admin] provider controls bind failed", e);
+    }
+    try { await countryOptions(); } catch (e) {
+      console.error("[IGDC Social Admin] country options failed", e);
+    }
+    try { await refresh(); } catch (e) {
+      console.error("[IGDC Social Admin] initial refresh failed", e);
+      show("초기 후보 데이터 읽기에 실패했습니다. 점검 JSON으로 연결 상태를 확인해 주세요: " + text(e && e.message), "warn");
+    }
   }
   if (document.readyState === "loading")
     document.addEventListener("DOMContentLoaded", start);

@@ -13,7 +13,7 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const Policy = require("./lib/social-candidate-policy.v1");
 const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 
-const VERSION = "sanmaru-social-candidate-gateway-v1.3.0-trusted-scheduler-entry";
+const VERSION = "sanmaru-social-candidate-gateway-v1.4.0-section-complete-exclusions";
 const INTERNAL_GATEWAY_EVENT = Symbol("igdc-social-candidate-gateway-internal");
 
 function internalAuthorized(event) {
@@ -65,7 +65,12 @@ function bySection(rows) {
 }
 async function excludedIdSet() {
   try {
-    const rows = await SocialStore.selectCandidates("select=id,review_status&review_status=in.(search_excluded,permanent_blocked,blocked)&limit=10000");
+    const rows = typeof SocialStore.selectCandidatesBySections === "function"
+      ? await SocialStore.selectCandidatesBySections(
+          "select=id,review_status,section_key&review_status=in.(search_excluded,permanent_blocked,blocked)",
+          1000,
+        )
+      : await SocialStore.selectCandidates("select=id,review_status&review_status=in.(search_excluded,permanent_blocked,blocked)&limit=10000");
     return new Set((Array.isArray(rows) ? rows : []).map((row) => SocialStore.text(row && row.id)).filter(Boolean));
   } catch (_error) {
     return new Set();

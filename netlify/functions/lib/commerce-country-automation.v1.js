@@ -3635,6 +3635,10 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, registered:false, currentStatus: text(existing.status) };
   const existingPayload = plain(existing && existing.source_payload), operatorDecision = lower(existingPayload.slotDecision), permanentExcluded = plain(existingPayload.queueControl).permanentExcluded === true;
   if(existing&&permanentExcluded)return { status: "operator_state_preserved", candidateId, registered:false, currentStatus: text(existing.status), decision: "purge", approvedPlacement: plain(existingPayload.approvedPlacement) };
+  // ABCD C/D immutability: a fresh supplier crawl is never an approval, a reset
+  // or a replacement for a confirmed administrator product. Do not rewrite even
+  // the saved original URL/image here if the incoming response was a challenge.
+  if(existing&&AdminPlacementGuard.establishedCandidate(existing))return {status:"confirmed_candidate_preserved_by_research",candidateId,registered:true,preserved:true,currentStatus:text(existing.status),decision:operatorDecision,approvedPlacement:plain(existingPayload.approvedPlacement)};
 
   const payload = productCandidatePayload(actorId, scope, product, "research_pending");
 
@@ -3687,7 +3691,7 @@ async function syncProductCandidateQueue(actorId, scope, product, decision, opti
   // Durable administrator ledger, not a possibly old research-job copy,
   // is authoritative. AI may never demote/reassign an established candidate.
   // This gate applies to ALL AI queue sync paths (including queue_sync batches).
-  if(plain(optionsInput).aiAutomation===true && existing && AdminPlacementGuard.establishedCandidate(existing)) {
+  if(existing && AdminPlacementGuard.establishedCandidate(existing) && plain(optionsInput).administratorExplicit!==true) {
     return {status:"administrator_placement_immutable",candidateId,registered:true,
       preserved:true,currentStatus:text(existing.status),
       decision:text(plain(existing.source_payload).slotDecision)||null,
@@ -3799,7 +3803,7 @@ async function productCandidateAction(actorId, input) {
     next.frontPublication = Object.assign({}, plain(next.frontPublication), { operation:"unmatch", status:"deferred_section_release", queued:false, persisted:true, pendingBuild:true, publicSnapshotConfirmed:false, buildVerificationRequired:true, deferredBuild:true, requestedAt:now, requestedBy:text(actorId)||"administrator" });
   }
   job.products[index] = next;
-  const savedProduct = job.products[index], queueSync = await syncProductCandidateQueue(actorId, scope, savedProduct, effectiveDecision);
+  const savedProduct = job.products[index], queueSync = await syncProductCandidateQueue(actorId, scope, savedProduct, effectiveDecision, {administratorExplicit:true});
   job.version = VERSION; job.rankingVersion = ProductRanking.VERSION;
   job.trace = array(job.trace).concat([{ at: now, source: "product-management-control", status: decision, productId: id, placementKey: effectiveDecision === "slot_candidate" ? productPlacementKey(next.approvedPlacement) : null, administratorPriority: decision !== "ai_reclassify", publicPublication: false }]).slice(-240);
   await saveProductJob(job, actorId);
@@ -4042,9 +4046,9 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
   // Physical outdoor/sports goods are retail products. Only travel/booking services are Tour-exclusive.
   if (automotiveFit || outdoorFit) add("home|home_right_middle", 124, automotiveFit?"자동차 용품 홈 우측 중단":"아웃도어 홈 우측 중단", "psom_home_right_automotive_outdoor");
   if (outdoorFit) add("distribution|distribution-extra", 112, "유통 아웃도어 전용", "psom_distribution_outdoor");
-  if (furnitureFit) add("home|home_right_bottom", 122, "가구·리빙 홈 우측 하단", "psom_home_right_living");
+  if (furnitureFit) { add("home|home_5",116,"홈 5 소형 리빙·가구","psom_home5_living"); add("home|home_right_bottom", 122, "가구·리빙 홈 우측 하단", "psom_home_right_living"); }
   if (bookFit) { add("home|home_6", 124, "웹툰·서적·전자책 Home 6", "psom_home6_books"); add("home|home_right_bottom", 108, "책방·리빙 우측 하단", "psom_home_right_books"); }
-  if (healthKnowledgeFit) add("home|home_right_top", 118, "지식·건강·생활 우측 상단", "psom_home_right_health_knowledge");
+  if (healthKnowledgeFit || /(헬스케어|건강식품|영양제|보충제|wellness|healthcare|supplement)/i.test(hay)) add("home|home_right_top", 118, "지식·건강·생활 우측 상단", "psom_home_right_health_knowledge");
 
   if (beautyFit) {
     add("home|home_1",124,"홈 1 뷰티 중심","psom_home1_beauty");
@@ -4052,30 +4056,30 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
     add("distribution|distribution-recommend",108,"뷰티 오늘의 추천","psom_distribution_recommend_beauty");
     add("social|rightPanel",104,"뷰티 소셜 우측 후보","psom_social_beauty");
   } else if (fashionFit) {
-    add("home|home_3",122,"홈 3 의류·패션","psom_home3_fashion");
+    add("home|home_2",122,"홈 2 의류·패션","psom_home2_fashion");
     add("distribution|distribution-special",122,"유통 의류·패션 전용","psom_distribution_fashion");
     add("social|rightPanel",104,"인기 의류·패션 소셜 우측 후보","psom_social_fashion");
   } else if (smallApplianceFit) {
-    add("home|home_3",122,"홈 3 소형가전·소형전자","psom_home3_small_appliance");
+    add("home|home_3",122,"홈 3 소형가전·컴퓨터 주변기기·문구","psom_home3_small_appliance");
     add("distribution|distribution-new",122,"유통 소형가전 전용","psom_distribution_small_appliance");
     add("distribution|distribution-recommend",106,"소형가전 오늘의 추천","psom_distribution_recommend_small_appliance");
   } else if (explicitFoodFit) {
-    add("home|home_2",124,"홈 2 식품·푸드","psom_home2_food");
+    add("home|home_4",124,"홈 4 포장 식재료·식품","psom_home4_food");
     add("distribution|distribution-extra",122,"유통 식품 전용","psom_distribution_food");
   } else if (householdFit) {
-    add("home|home_4",122,"홈 4 생필품·생활필수","psom_home4_essentials");
+    add("home|home_5",122,"홈 5 생필품·생활필수","psom_home5_essentials");
     add("distribution|distribution-others",120,"유통 생필품·생활","psom_distribution_essentials");
   } else if (furnitureFit) {
     add("distribution|distribution-others",112,"유통 리빙·가구","psom_distribution_living");
   } else if (!automotiveFit && !outdoorFit && !bookFit && !healthKnowledgeFit) {
-    add("home|home_5",108,"홈 5 일상 잡화·기타","psom_home5_misc");
+    add("home|home_5",108,"홈 5 생활잡화·소형 리빙","psom_home5_misc");
   }
-  if (premiumBrandFit) add("distribution|distribution-right",126,"프리미엄·고가 브랜드 우측 추천","psom_distribution_premium_brand");
+  if (premiumBrandFit && (fashionFit||furnitureFit||beautyFit)) add("distribution|distribution-right",126,"검증 브랜드 가구·의류·뷰티 우측 추천","psom_distribution_premium_brand");
   // Unknown-but-real product candidates are still allowed into a private
   // pre-front placement so hundreds of rows do not require hand assignment.
   // Final Front Match keeps the strict live/evidence/revenue safety gates.
   if (!options.length) {
-    add("home|home_5", 86, "분류 보강이 필요한 일반 일상 잡화의 홈 5 비공개 후보", "psom_general_home5_misc");
+    add("distribution|distribution-extra", 86, "분류 보강이 필요한 일반 상품은 전용 미배치 검토", "psom_general_distribution_review");
     add("distribution|distribution-extra", 78, "분류 보강이 필요한 기타 상품의 유통 기타 비공개 후보", "psom_general_distribution_extra");
   }
   return options;

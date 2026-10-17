@@ -14,7 +14,7 @@ const ChannelLink = require("./social-channel-link.v1");
 const AIPolicy = require("./social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-store-v1.12.5-content-url-parity";
+  "social-candidate-store-v1.15.0-selective-front-replacement";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -377,6 +377,29 @@ async function selectCandidates(query) {
     headers: { Prefer: "count=exact" },
   });
 }
+async function selectCandidatesBySections(query, perSectionLimit) {
+  const raw = text(query || "select=*").replace(/^\?/, "");
+  // A single Supabase/PostgREST response is often capped at 1000 rows even
+  // when a larger `limit` is requested. Social has six independent pools, so
+  // read each active section separately and merge them. This keeps newly
+  // researched sections visible to review/curation/rotation/publication even
+  // when legacy rows remain in the same database table.
+  const base = raw
+    .replace(/(?:^|&)section_key=(?:eq\.)?[^&]*/gi, "")
+    .replace(/(?:^|&)limit=\d+/gi, "")
+    .replace(/^&+|&+$/g, "") || "select=*";
+  const cap = Math.max(1, Math.min(1000, Number(perSectionLimit || 1000) || 1000));
+  const pages = await Promise.all(Policy.SECTION_KEYS.map(async (sectionKey) => {
+    const q = [
+      base,
+      "section_key=eq." + encodeURIComponent(sectionKey),
+      "limit=" + cap,
+    ].filter(Boolean).join("&");
+    const rows = await selectCandidates(q);
+    return Array.isArray(rows) ? rows : [];
+  }));
+  return pages.flat();
+}
 async function upsertCandidates(rows) {
   if (!rows.length) return [];
   return supabase(rest(CANDIDATE_TABLE, "on_conflict=id"), {
@@ -407,22 +430,36 @@ function idFor(input, normalized) {
   const assetClass = lowerKey(
     row.assetClass || row.asset_class || plain(row.raw).assetClass,
   );
-  const raw = text(row.id || row.contentId || row.candidateId);
-  if (raw && !/^ph_/i.test(raw) && !/seed/i.test(raw))
-    return raw
-      .toLowerCase()
-      .replace(/[^a-z0-9_.:-]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 110);
-  return (
-    (assetClass === "influencer-registry" ? "influencer_" : "social_") +
-    shortHash({
+
+  // Latest-content identity MUST be the actual post/video URL, not the creator
+  // channel. The previous creator-channel hash caused every newly discovered
+  // post from the same TikTok/Facebook/YouTube creator to overwrite the prior
+  // row, which made repeated research look frozen even when discovery worked.
+  // Influencer-registry rows intentionally keep channel identity.
+  if (assetClass === "influencer-registry") {
+    const raw = text(row.id || row.contentId || row.candidateId);
+    if (raw && !/^ph_/i.test(raw) && !/seed/i.test(raw))
+      return raw
+        .toLowerCase()
+        .replace(/[^a-z0-9_.:-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 110);
+    return "influencer_" + shortHash({
       section: normalized.sectionKey,
       platform: normalized.platform,
-      creatorChannel:
-        text(row.channelUrl || row.channel_url) || normalized.sourceUrl,
-    })
-  );
+      creatorChannel: text(row.channelUrl || row.channel_url) || normalized.sourceUrl,
+    });
+  }
+
+  const contentUrl = Policy.normalizeUrl(
+    row.latestContentUrl || row.latest_content_url || row.sourceContentUrl ||
+    row.source_content_url || normalized.sourceUrl || row.sourceUrl || row.source_url,
+  ) || normalized.sourceUrl;
+  return "social_" + shortHash({
+    section: normalized.sectionKey,
+    platform: normalized.platform,
+    contentUrl,
+  });
 }
 function normalizeCandidate(input, actor) {
   let row = plain(input);
@@ -1664,6 +1701,253 @@ function pruneObsoleteSocialSections(sectionMap) {
   });
   return target;
 }
+
+function slotPublishedValue(slot) {
+  const value = plain(slot);
+  const social = plain(value.social);
+  const timestamps = plain(value.timestamps);
+  const parsed = Date.parse(text(
+    social.contentPublishedAt ||
+      social.content_published_at ||
+      timestamps.published ||
+      value.contentPublishedAt ||
+      value.publishedAt
+  ));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+function slotPlatform(slot, sectionKey) {
+  const value = plain(slot);
+  return text(
+    value.platform ||
+      plain(value.social).platform ||
+      plain(value.source).platform ||
+      PLATFORM_BY_SECTION[sectionKey]
+  ).replace(/^social-/, "").toLowerCase();
+}
+function slotSourceUrl(slot) {
+  const value = plain(slot);
+  return text(
+    value.latestContentUrl ||
+      plain(value.social).latestContentUrl ||
+      value.sourceUrl ||
+      value.url ||
+      value.link ||
+      value.href ||
+      value.permalink
+  );
+}
+function slotHasRealPreview(slot) {
+  const value = plain(slot);
+  const thumb = text(
+    value.thumbnailUrl || value.thumbnail || value.thumb || value.image
+  );
+  return /^https:\/\//i.test(thumb) &&
+    !/placeholder|\/assets\/sample\//i.test(thumb);
+}
+function rowHasRealPreview(row) {
+  return !!publishableThumbnail(row);
+}
+function replacementNeed(slot, currentRow, alternativeRow, sectionKey) {
+  const value = plain(slot);
+  if (!isPublishedSocialCandidateSlot(value)) {
+    return { needed: false, hard: false, reason: "sample_or_placeholder" };
+  }
+  const platform = slotPlatform(value, sectionKey);
+  const sourceUrl = slotSourceUrl(value);
+  if (!platformContentUrl(platform, sourceUrl)) {
+    return { needed: true, hard: true, reason: "invalid_or_noncontent_front_url" };
+  }
+  if (!currentRow || !isPublishEligibleContentRow(currentRow)) {
+    return { needed: true, hard: true, reason: "candidate_missing_or_no_longer_publishable" };
+  }
+  if (plain(currentRow.raw).placementOverride === "replacement_waiting") {
+    return { needed: true, hard: true, reason: "manual_replacement_waiting" };
+  }
+  if (!alternativeRow || text(alternativeRow.id) === text(currentRow.id)) {
+    return { needed: false, hard: false, reason: "healthy_no_better_alternative" };
+  }
+
+  const now = Date.now();
+  const currentPublished = contentPublishedValue(currentRow) || slotPublishedValue(value);
+  const alternativePublished = contentPublishedValue(alternativeRow);
+  const currentAgeDays = currentPublished ? Math.max(0, (now - currentPublished) / 86400000) : null;
+  const alternativeAgeDays = alternativePublished ? Math.max(0, (now - alternativePublished) / 86400000) : null;
+  const newerByDays = currentPublished && alternativePublished
+    ? (alternativePublished - currentPublished) / 86400000
+    : 0;
+  const currentScore = rowScore(currentRow);
+  const alternativeScore = rowScore(alternativeRow);
+  const scoreGain = alternativeScore - currentScore;
+
+  if (
+    currentAgeDays != null && currentAgeDays >= 365 &&
+    alternativeAgeDays != null && alternativeAgeDays <= 120 &&
+    newerByDays >= 120
+  ) {
+    return {
+      needed: true,
+      hard: false,
+      reason: "hard_stale_with_fresh_replacement",
+      currentAgeDays: Math.round(currentAgeDays),
+      alternativeAgeDays: Math.round(alternativeAgeDays),
+      scoreGain: Math.round(scoreGain),
+    };
+  }
+  if (
+    currentAgeDays != null && currentAgeDays >= 180 &&
+    alternativeAgeDays != null && alternativeAgeDays <= 75 &&
+    newerByDays >= 90 && scoreGain >= 20
+  ) {
+    return {
+      needed: true,
+      hard: false,
+      reason: "stale_and_outscored",
+      currentAgeDays: Math.round(currentAgeDays),
+      alternativeAgeDays: Math.round(alternativeAgeDays),
+      scoreGain: Math.round(scoreGain),
+    };
+  }
+  if (
+    !slotHasRealPreview(value) && rowHasRealPreview(alternativeRow) &&
+    scoreGain >= -20
+  ) {
+    return {
+      needed: true,
+      hard: false,
+      reason: "missing_preview_with_verified_replacement",
+      currentAgeDays: currentAgeDays == null ? null : Math.round(currentAgeDays),
+      alternativeAgeDays: alternativeAgeDays == null ? null : Math.round(alternativeAgeDays),
+      scoreGain: Math.round(scoreGain),
+    };
+  }
+  return {
+    needed: false,
+    hard: false,
+    reason: "healthy_preserve",
+    currentAgeDays: currentAgeDays == null ? null : Math.round(currentAgeDays),
+    alternativeAgeDays: alternativeAgeDays == null ? null : Math.round(alternativeAgeDays),
+    scoreGain: Math.round(scoreGain),
+  };
+}
+function buildSelectiveSection(current, seedSections, sectionKey, approvedRows, route, salt, capacity) {
+  const next = [];
+  for (let index = 0; index < capacity; index += 1) {
+    const fallback = sampleSlot(seedSections, sectionKey, index);
+    next.push(current[index] ? Object.assign({}, current[index]) : fallback);
+  }
+
+  const ranked = approvedRows
+    .filter((row) => lowerKey(row.section_key || row.sectionKey) === sectionKey)
+    .slice()
+    .sort(byRouteRank(route || {}, salt));
+  const byId = new Map(ranked.map((row) => [text(row.id), row]));
+  const existingIds = new Set(
+    next.filter(isPublishedSocialCandidateSlot).map(slotCandidateId).filter(Boolean),
+  );
+  const usedIds = new Set();
+  const retiredIds = new Set();
+  const report = {
+    preserved: 0,
+    metadataRefreshed: 0,
+    samplesFilled: 0,
+    replaced: 0,
+    hardRemovedToSample: 0,
+    reasons: {},
+    replacements: [],
+  };
+
+  function addReason(reason) {
+    report.reasons[reason] = Number(report.reasons[reason] || 0) + 1;
+  }
+  function candidateForSlot(currentId) {
+    return ranked.find((row) => {
+      const id = text(row && row.id);
+      if (!id || id === currentId || usedIds.has(id) || retiredIds.has(id)) return false;
+      // Do not duplicate a healthy item that is already on the live front.
+      if (existingIds.has(id)) return false;
+      return true;
+    }) || null;
+  }
+
+  for (let index = 0; index < next.length; index += 1) {
+    const slot = next[index];
+    if (!isPublishedSocialCandidateSlot(slot)) {
+      const replacement = candidateForSlot("");
+      if (!replacement) continue;
+      const replacementId = text(replacement.id);
+      next[index] = publicSocialSlot(replacement, index + 1, slot);
+      usedIds.add(replacementId);
+      existingIds.add(replacementId);
+      report.samplesFilled += 1;
+      addReason("sample_fill");
+      report.replacements.push({
+        slotId: index + 1,
+        fromCandidateId: null,
+        toCandidateId: replacementId,
+        reason: "sample_fill",
+      });
+      continue;
+    }
+
+    const currentId = slotCandidateId(slot);
+    const currentRow = byId.get(currentId) || null;
+    const alternative = candidateForSlot(currentId);
+    const assessment = replacementNeed(slot, currentRow, alternative, sectionKey);
+    if (!assessment.needed) {
+      // Keep the same content/slot, but refresh its title/thumbnail/metadata from
+      // the latest verified candidate row when it still qualifies.
+      if (currentRow) {
+        next[index] = publicSocialSlot(currentRow, index + 1, slot);
+        usedIds.add(currentId);
+        report.metadataRefreshed += 1;
+      } else {
+        report.preserved += 1;
+      }
+      addReason(assessment.reason || "healthy_preserve");
+      continue;
+    }
+
+    if (alternative) {
+      const replacementId = text(alternative.id);
+      next[index] = publicSocialSlot(alternative, index + 1, slot);
+      usedIds.add(replacementId);
+      if (currentId) retiredIds.add(currentId);
+      existingIds.delete(currentId);
+      existingIds.add(replacementId);
+      report.replaced += 1;
+      addReason(assessment.reason || "selective_replacement");
+      report.replacements.push({
+        slotId: index + 1,
+        fromCandidateId: currentId || null,
+        toCandidateId: replacementId,
+        reason: assessment.reason || "selective_replacement",
+        currentAgeDays: assessment.currentAgeDays == null ? null : assessment.currentAgeDays,
+        alternativeAgeDays: assessment.alternativeAgeDays == null ? null : assessment.alternativeAgeDays,
+        scoreGain: assessment.scoreGain == null ? null : assessment.scoreGain,
+      });
+      continue;
+    }
+
+    if (assessment.hard) {
+      next[index] = sampleSlot(seedSections, sectionKey, index);
+      if (currentId) retiredIds.add(currentId);
+      existingIds.delete(currentId);
+      report.hardRemovedToSample += 1;
+      addReason(assessment.reason || "hard_remove_no_replacement");
+      report.replacements.push({
+        slotId: index + 1,
+        fromCandidateId: currentId || null,
+        toCandidateId: null,
+        reason: assessment.reason || "hard_remove_no_replacement",
+      });
+    } else {
+      report.preserved += 1;
+      addReason("needed_but_no_verified_replacement_preserved");
+    }
+  }
+  return { slots: next, report };
+}
+
 function buildSnapshot(baseSnapshot, rows, options) {
   const opts = plain(options);
   const base = cloneJson(baseSnapshot || {});
@@ -1691,9 +1975,11 @@ function buildSnapshot(baseSnapshot, rows, options) {
         ? requestedSections
         : Policy.SECTION_KEYS;
   const reconcileTargetSections = opts.reconcileTargetSections === true;
+  const selectiveReplacement = reconcileTargetSections && opts.selectiveReplacement === true;
   const rotation = selectRotation(rows, opts);
   const approvedRows = approvedContentRows(rows);
   const filled = {};
+  const selectiveReplacementReport = {};
 
   targetSections.forEach((sectionKey) => {
     const current = Array.isArray(sections[sectionKey])
@@ -1724,7 +2010,19 @@ function buildSnapshot(baseSnapshot, rows, options) {
     }
 
     const selected = rotation.selected[sectionKey] || [];
-    if (reconcileTargetSections) {
+    if (selectiveReplacement) {
+      const selective = buildSelectiveSection(
+        current,
+        seedSections,
+        sectionKey,
+        approvedRows,
+        opts.route || {},
+        rotation.rotationSalt,
+        capacity,
+      );
+      next.splice(0, next.length, ...selective.slots);
+      selectiveReplacementReport[sectionKey] = selective.report;
+    } else if (reconcileTargetSections) {
       selected.slice(0, capacity).forEach((row, index) => {
         next[index] = publicSocialSlot(row, index + 1, next[index]);
       });
@@ -1804,9 +2102,11 @@ function buildSnapshot(baseSnapshot, rows, options) {
     generatedAt: nowIso(),
     generatedBy: "social-snapshot-publish",
     source: "supabase.social_candidates",
-    samplePreservePolicy: reconcileTargetSections
-      ? "Target SNS sections are recalculated from their permanent sample slots; publish-ready real content replaces samples and any vanished real content returns to its sample fallback."
-      : "Selected real content replaces only an available sample slot or its own existing slot; unrelated live content and all remaining sample slots are preserved.",
+    samplePreservePolicy: selectiveReplacement
+      ? "Existing healthy live Social content stays in its current slot. Re-research fills SAMPLE slots and replaces only content that is no longer publishable, manually queued for replacement, invalid, materially stale versus a verified fresher candidate, or missing a usable preview when a verified replacement exists."
+      : reconcileTargetSections
+        ? "Target SNS sections are recalculated from their permanent sample slots; publish-ready real content replaces samples and any vanished real content returns to its sample fallback."
+        : "Selected real content replaces only an available sample slot or its own existing slot; unrelated live content and all remaining sample slots are preserved.",
     excludedSections: ["social-maru", "rightPanel"],
     appliedSections: targetSections,
     applicationScope: {
@@ -1825,6 +2125,21 @@ function buildSnapshot(baseSnapshot, rows, options) {
       rawIpStored: false,
     },
     filled,
+    selectiveReplacement: {
+      enabled: selectiveReplacement,
+      mode: selectiveReplacement ? "needed_only" : "off",
+      policy: selectiveReplacement ? {
+        preserveHealthyExisting: true,
+        fillSamples: true,
+        hardReplaceWhenNoLongerPublishable: true,
+        staleAgeDays: 180,
+        hardStaleAgeDays: 365,
+        minimumFreshnessGainDays: 90,
+        minimumScoreGainForStale: 20,
+        preserveWhenNoVerifiedAlternative: true,
+      } : null,
+      bySection: selectiveReplacementReport,
+    },
     rotation: {
       salt: rotation.rotationSalt,
       counts: rotation.counts,
@@ -1975,6 +2290,7 @@ module.exports = {
   insertRelease,
   selectReleases,
   selectCandidates,
+  selectCandidatesBySections,
   upsertCandidates,
   updateCandidates,
   deleteCandidates,

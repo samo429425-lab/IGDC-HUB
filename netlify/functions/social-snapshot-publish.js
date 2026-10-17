@@ -16,7 +16,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 
 const VERSION =
-  "social-snapshot-publish-v1.18.2-scheduled-runtime-rotation";
+  "social-snapshot-publish-v1.19.0-selective-needed-only-replacement";
 const INTERNAL_SCHEDULE_EVENT = Symbol("igdc-social-publish-scheduled-internal");
 function text(value) {
   return value == null ? "" : String(value).trim();
@@ -884,9 +884,9 @@ exports.handler = async function (event) {
       );
       snapshot = unpublish.snapshot;
     } else {
-      const allRows = await SocialStore.selectCandidates(
-        approvedQuery(params.limit),
-      );
+      const allRows = typeof SocialStore.selectCandidatesBySections === "function"
+        ? await SocialStore.selectCandidatesBySections(approvedQuery(params.limit), 1000)
+        : await SocialStore.selectCandidates(approvedQuery(params.limit));
       const approvedRows = Array.isArray(allRows) ? allRows : [];
       const requestedIds = new Set(candidateIds);
       const requestedSectionSet = new Set(requestedSections);
@@ -912,6 +912,10 @@ exports.handler = async function (event) {
           requestedSections,
           seedSnapshot: deployedBase.doc,
           reconcileTargetSections: authoritativeReconcile,
+          // Re-research must not churn every existing live card. Full/section
+          // authoritative publication preserves healthy content and fills or
+          // replaces only slots that actually need attention.
+          selectiveReplacement: authoritativeReconcile,
         },
       );
     }
@@ -1038,6 +1042,7 @@ exports.handler = async function (event) {
           Object.entries(publicationPlan).map(([key, list]) => [key, Array.isArray(list) ? list.length : 0]),
         ),
         publicationDiff,
+        selectiveReplacement: snapshot && snapshot.meta && snapshot.meta.selectiveReplacement || null,
         noChange: true,
         duplicateDeploymentPrevented: true,
         deploymentRequired: false,
@@ -1221,6 +1226,7 @@ exports.handler = async function (event) {
       publicationPlanHash,
       publicationPlanCount,
       publicationDiff,
+      selectiveReplacement: snapshot && snapshot.meta && snapshot.meta.selectiveReplacement || null,
       noChange: false,
       duplicateDeploymentPrevented: false,
       deploymentRequired: forceStaticBuild,
@@ -1273,6 +1279,8 @@ exports.handler = async function (event) {
           "existing_social_automap",
         ],
         sampleSlotsPreserved: true,
+        healthyExistingContentPreservedOnResearch: !unpublishSelected && serverAuthoritativeCandidateSelection,
+        replacementPolicy: !unpublishSelected && serverAuthoritativeCandidateSelection ? "selective_needed_only" : "explicit_selection_only",
         selectedCandidatesReturnedToWaiting: unpublishSelected,
         externalProviderCalls: false,
         externalMembershipOverride: false,

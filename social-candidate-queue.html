@@ -457,8 +457,8 @@
       </p>
       <div class="bar">
         <button id="refreshBtn">현재 상태 새로고침</button
-        ><button id="systemAuditBtn" class="publish">소셜 네트워크 전체 시스템 점검</button
-        ><button id="systemAuditDownloadBtn" class="secondary" disabled>전체 점검 JSON 다운로드</button
+        ><button id="systemAuditBtn" class="publish" type="button">소셜 네트워크 전체 시스템 점검</button
+        ><button id="systemAuditDownloadBtn" class="secondary" type="button">전체 점검 JSON 다운로드</button
         ><button id="socialFullRunBtn" class="publish" type="button">소셜 네트워크 전체 실행</button
         ><button id="socialFullCancelBtn" class="danger" type="button">소셜 네트워크 전체 실행 취소</button
         ><button id="returnBtn" class="secondary">관리자 화면으로</button
@@ -564,21 +564,23 @@
             <option value="8">묶음 8개</option>
             <option value="10" selected>묶음 10개</option>
             <option value="12">묶음 12개</option></select
-          ><button id="collectDryRunBtn" class="secondary">
+          ><button id="collectDryRunBtn" class="secondary" type="button">
             선택 섹션 1묶음 점검</button
-          ><button id="collectSectionBtn">선택 섹션 120개 후보 수집</button
-          ><button id="collectAllBtn" class="publish">
+          ><button id="collectSectionBtn" type="button">선택 섹션 120개 후보 수집</button
+          ><button id="collectAllBtn" class="publish" type="button">
             전체 6개 섹션 순차 수집</button
           ><button id="collectorStopBtn" class="secondary" disabled>
             일시정지</button
-          ><button id="collectorProgressJsonBtn" class="secondary">
+          ><button id="collectorProgressJsonBtn" class="secondary" type="button">
             수집 진행 JSON</button
           ><span id="collectorState" class="state">수집 전</span>
         </div>
         <div class="collect-controls">
-          <button id="providerStatusBtn" class="secondary">
+          <button id="providerStatusBtn" class="secondary" type="button">
             검색 제공자·필요 설정 확인</button
-          ><button id="searchBankImportBtn" class="secondary">
+          ><button id="researchPipelineDiagnosticBtn" class="secondary" type="button">
+            6개 리서치 파이프라인 점검 JSON</button
+          ><button id="searchBankImportBtn" class="secondary" type="button">
             SearchBank 실후보 반입</button
           ><span class="small"
             ><strong>SearchBank 실후보 반입</strong>은 이미 SearchBank에서 발견된 공개 소셜 후보를 관리자 후보 목록으로 가져오는 자동 입력 경로입니다.
@@ -608,11 +610,11 @@
           placeholder="https://www.youtube.com/watch?v=VIDEO_ID | 영상 제목 | travel&#10;https://www.tiktok.com/@creator/video/123456789 | 영상 제목 | culture"
         ></textarea>
         <div class="collect-controls">
-          <button id="channelIntakeDryRunBtn" class="secondary">
+          <button id="channelIntakeDryRunBtn" class="secondary" type="button">
             최신 콘텐츠 주소 점검</button
-          ><button id="channelIntakeDiagnosticJsonBtn" class="secondary">직접 반입 점검 JSON</button
-          ><button id="channelIntakeBtn">최신 콘텐츠 후보 반입</button
-          ><button id="channelIntakeClearBtn" class="secondary">
+          ><button id="channelIntakeDiagnosticJsonBtn" class="secondary" type="button">직접 반입 점검 JSON</button
+          ><button id="channelIntakeBtn" type="button">최신 콘텐츠 후보 반입</button
+          ><button id="channelIntakeClearBtn" class="secondary" type="button">
             입력 비우기</button
           ><span id="channelIntakeState" class="state">입력 대기</span>
         </div>
@@ -837,7 +839,7 @@
         </div>
         <div id="registryPanelBody" class="hidden">
           <div class="reviewbar">
-            <button id="registryDiagnosticBtn" class="secondary">인플루언서 등록부 점검 JSON</button
+            <button id="registryDiagnosticBtn" class="secondary" type="button">인플루언서 등록부 점검 JSON</button
             ><label class="small"><input id="selectAllFinalMaster" type="checkbox" /> 전체 섹션 선택</label
             ><button id="selectAllFinalBtn" class="secondary">
               현재 조회 전체 선택</button
@@ -861,7 +863,7 @@
       </section>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=43"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=45"></script>
     <script src="/assets/js/admin-social-ai-dialog.js?v=2"></script>
   <script src="/assets/js/admin-checkbox-accessibility.js?v=20260925-1" defer></script>
 </body>

@@ -131,8 +131,8 @@
         "tiktok": "social-tiktok",
         "facebook": "social-facebook",
         "douyin": "social-douyin",
-        "bilibili": "social-bilibili",
-        "maru": "social-maru"
+        "maru": "social-maru",
+        "bilibili": "social-bilibili"
       }
     },
     "media": {
@@ -287,8 +287,8 @@
       "social-tiktok": "틱톡",
       "social-facebook": "페이스북",
       "social-douyin": "더우인",
-      "social-bilibili": "빌리빌리",
-      "rightPanel": "우측"
+      "rightPanel": "우측",
+      "social-bilibili": "빌리빌리"
     },
     "media": {
       "media-trending": "지금 뜨는 콘텐츠",
@@ -3127,7 +3127,19 @@
       "psom-Q.json"
     ],
     "pageOrderLocked": true,
-    "sectionOrderLocked": true
+    "sectionOrderLocked": true,
+    "commercePolicyUpdate_20261017": {
+      "scope": "home main + home right + distribution 8 + network/social/tour right; proposals for unassigned products only",
+      "homeMainPolicy": [
+        "beauty,bags,accessories",
+        "apparel,fashion",
+        "portable_electronics,computer_peripherals,stationery",
+        "packaged_ingredients,grocery",
+        "household,kitchen,small_living"
+      ],
+      "searchbankHandoff": "verify individual official product detail URL and snapshot key before C-stage; do not mutate existing placement",
+      "legacySectionKeysPreserved": true
+    }
   },
   "sectionOverrides": [
     {
@@ -3186,113 +3198,939 @@
     "social-maru": "social-instagram"
   },
   "commercePlacementPolicy": {
-    "version": "commerce-20-section-policy-2026-10-01",
+    "version": "commerce-20-section-policy-2026-10-17-v1",
     "authority": "administrator-ledger-first",
     "manualPlacementPriority": true,
     "frontSnapshotReverseWrite": false,
     "travelServiceExclusiveSection": "tour|tour",
     "sections": {
       "home|home_1": {
-        "intent": "ranked_consumer_hot",
+        "intent": "beauty_bags_accessories",
         "priority": [
-          "fashion",
           "beauty",
-          "small_electronics",
-          "small_appliances",
-          "household_essentials"
-        ]
+          "skincare",
+          "cosmetics",
+          "handbag",
+          "bags",
+          "accessories",
+          "jewelry"
+        ],
+        "categoryFamilies": [
+          "beauty",
+          "skincare",
+          "cosmetics",
+          "handbag",
+          "bags",
+          "accessories",
+          "jewelry"
+        ],
+        "searchbankKeywordsKo": [
+          "화장품",
+          "뷰티",
+          "스킨케어",
+          "핸드백",
+          "가방",
+          "주얼리",
+          "패션 액세서리"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "home|home_2": {
-        "intent": "ranked_consumer_hot",
+        "intent": "apparel_trendy_fashion",
         "priority": [
           "fashion",
-          "beauty",
-          "small_electronics",
-          "small_appliances",
-          "household_essentials"
-        ]
+          "apparel",
+          "clothes",
+          "brand_fashion",
+          "lingerie",
+          "scarf"
+        ],
+        "categoryFamilies": [
+          "fashion",
+          "apparel",
+          "clothes",
+          "brand_fashion",
+          "lingerie",
+          "scarf"
+        ],
+        "searchbankKeywordsKo": [
+          "의류",
+          "트렌디 의류",
+          "브랜드 패션",
+          "란제리",
+          "아웃도어 의류",
+          "스카프"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "home|home_3": {
-        "intent": "ranked_consumer_hot",
+        "intent": "portable_electronics_computer_stationery",
         "priority": [
-          "fashion",
-          "beauty",
-          "small_electronics",
           "small_appliances",
-          "household_essentials"
-        ]
+          "mobile_accessories",
+          "audio",
+          "computer_peripherals",
+          "stationery"
+        ],
+        "categoryFamilies": [
+          "small_appliances",
+          "mobile_accessories",
+          "audio",
+          "computer_peripherals",
+          "stationery"
+        ],
+        "searchbankKeywordsKo": [
+          "소형가전",
+          "블루투스 이어폰",
+          "스피커",
+          "마이크",
+          "휴대용 선풍기",
+          "충전기",
+          "태블릿 거치대",
+          "무선 키보드",
+          "마우스",
+          "프린터 용지",
+          "문구"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "home|home_4": {
-        "intent": "ranked_consumer_hot",
+        "intent": "packaged_food_ingredients_grocery",
         "priority": [
-          "fashion",
-          "beauty",
-          "small_electronics",
-          "small_appliances",
-          "household_essentials"
-        ]
+          "packaged_food",
+          "agriculture",
+          "processed_ingredients",
+          "seafood_gifts",
+          "grocery"
+        ],
+        "categoryFamilies": [
+          "packaged_food",
+          "agriculture",
+          "processed_ingredients",
+          "seafood_gifts",
+          "grocery"
+        ],
+        "searchbankKeywordsKo": [
+          "한우 세트",
+          "홍삼",
+          "김치",
+          "고추장",
+          "된장",
+          "간장",
+          "라면 세트",
+          "만두 세트",
+          "포장 식재료",
+          "농축수산물"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "home|home_5": {
-        "intent": "ranked_consumer_hot",
+        "intent": "household_diy_living",
         "priority": [
-          "fashion",
-          "beauty",
-          "small_electronics",
-          "small_appliances",
-          "household_essentials"
-        ]
+          "household_essentials",
+          "cleaning",
+          "bathroom",
+          "kitchenware",
+          "small_furniture",
+          "home_fragrance"
+        ],
+        "categoryFamilies": [
+          "household_essentials",
+          "cleaning",
+          "bathroom",
+          "kitchenware",
+          "small_furniture",
+          "home_fragrance"
+        ],
+        "searchbankKeywordsKo": [
+          "청소 도구",
+          "분무기",
+          "수건",
+          "타월",
+          "세제",
+          "화장지",
+          "키친타월",
+          "주방용품",
+          "방향제",
+          "작은 의자",
+          "생활 가구"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "home|home_6": {
-        "intent": "webtoon_books_ebooks_digital_reading_publishers_bookstores",
+        "intent": "digital_reading_books_comics",
         "priority": [
           "fashion",
           "beauty",
           "small_electronics",
           "small_appliances",
           "household_essentials"
-        ]
+        ],
+        "categoryFamilies": [
+          "books",
+          "ebooks",
+          "webtoon",
+          "digital_reading"
+        ],
+        "searchbankKeywordsKo": [
+          "웹툰",
+          "서적",
+          "전자책"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "home|home_right_top": {
-        "intent": "knowledge_health_daily_life"
+        "intent": "health_knowledge_nutrition",
+        "categoryFamilies": [
+          "healthy_grocery",
+          "healthcare",
+          "fitness",
+          "wellness",
+          "knowledge"
+        ],
+        "searchbankKeywordsKo": [
+          "건강 식재료",
+          "헬스",
+          "헬스케어",
+          "건강 안내",
+          "영양제"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true,
+        "priority": [
+          "healthy_grocery",
+          "healthcare",
+          "fitness",
+          "wellness",
+          "knowledge"
+        ]
       },
       "home|home_right_middle": {
-        "intent": "automotive_outdoor"
+        "intent": "automotive_outdoor",
+        "categoryFamilies": [
+          "automotive",
+          "car_care",
+          "outdoor",
+          "camping"
+        ],
+        "searchbankKeywordsKo": [
+          "자동차",
+          "자동차용품",
+          "아웃도어",
+          "캠핑"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true,
+        "priority": [
+          "automotive",
+          "car_care",
+          "outdoor",
+          "camping"
+        ]
       },
       "home|home_right_bottom": {
-        "intent": "living_books_other"
+        "intent": "living_kitchen_bookshop",
+        "categoryFamilies": [
+          "furniture",
+          "kitchen",
+          "dining",
+          "interior",
+          "bookshop"
+        ],
+        "searchbankKeywordsKo": [
+          "가구",
+          "식탁",
+          "주방",
+          "거실",
+          "의자",
+          "책상",
+          "책꽂이",
+          "리빙"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true,
+        "priority": [
+          "furniture",
+          "kitchen",
+          "dining",
+          "interior",
+          "bookshop"
+        ]
       },
       "distribution|distribution-recommend": {
-        "intent": "today_mixed_beauty_small_appliance_hot_fashion"
+        "intent": "editorial_today_recommendations",
+        "categoryFamilies": [
+          "admin_picks",
+          "ai_fresh_picks",
+          "apparel",
+          "beauty",
+          "new_products"
+        ],
+        "searchbankKeywordsKo": [
+          "관리자 추천",
+          "AI 추천",
+          "핫한 의류",
+          "신상 뷰티",
+          "화장품"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "distribution|distribution-trending": {
-        "intent": "verified_realtime_popularity_core_consumer_goods"
+        "intent": "verified_live_popularity",
+        "categoryFamilies": [
+          "measured_demand",
+          "verified_popularity",
+          "luxury_apparel",
+          "beauty"
+        ],
+        "searchbankKeywordsKo": [
+          "검증된 인기",
+          "명품 의류",
+          "뷰티 화장품",
+          "실제 인기도"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "distribution|distribution-sponsor": {
-        "intent": "beauty_category_section"
+        "intent": "beauty_skin_body_hair",
+        "categoryFamilies": [
+          "skincare",
+          "cosmetics",
+          "makeup",
+          "body_care",
+          "hair_care"
+        ],
+        "searchbankKeywordsKo": [
+          "스킨케어",
+          "화장품",
+          "바디케어",
+          "헤어케어",
+          "미용 제품"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "distribution|distribution-new": {
-        "intent": "small_appliance_electronics_category_section"
+        "intent": "consumer_electronics_all",
+        "categoryFamilies": [
+          "small_appliances",
+          "electronics",
+          "computer",
+          "mobile",
+          "audio",
+          "accessories"
+        ],
+        "searchbankKeywordsKo": [
+          "소형 가전",
+          "전자제품",
+          "컴퓨터",
+          "모바일",
+          "이어폰",
+          "스피커",
+          "USB",
+          "충전기"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "distribution|distribution-special": {
-        "intent": "apparel_fashion_category_section"
+        "intent": "all_clothes_fashion",
+        "categoryFamilies": [
+          "fashion",
+          "apparel",
+          "lingerie",
+          "outdoor_wear",
+          "designer_brand",
+          "scarf"
+        ],
+        "searchbankKeywordsKo": [
+          "일반 의류",
+          "란제리",
+          "아웃도어 의류",
+          "브랜드 의류",
+          "스카프"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "distribution|distribution-others": {
-        "intent": "household_essentials_living_category_section"
+        "intent": "daily_essentials_home_goods",
+        "categoryFamilies": [
+          "hygiene",
+          "cleaning",
+          "household",
+          "kitchenware",
+          "hardware",
+          "tools"
+        ],
+        "searchbankKeywordsKo": [
+          "화장지",
+          "키친타월",
+          "청소",
+          "세제",
+          "욕실",
+          "주방도구",
+          "가정용 공구",
+          "생활용품"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "distribution|distribution-extra": {
-        "intent": "other_outdoor_food_category_section"
+        "intent": "outdoor_and_packaged_food",
+        "categoryFamilies": [
+          "outdoor",
+          "garden",
+          "shoes",
+          "hiking_boots",
+          "ingredients",
+          "farm",
+          "seafood"
+        ],
+        "searchbankKeywordsKo": [
+          "정원",
+          "아웃도어",
+          "신발",
+          "등산화",
+          "식재료",
+          "농산물",
+          "수산물",
+          "굴비 선물세트"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "distribution|distribution-right": {
-        "intent": "brand_focused_mixed_consumer_picks"
+        "intent": "verified_brand_furniture_apparel",
+        "categoryFamilies": [
+          "branded_furniture",
+          "brand_apparel",
+          "premium_brands"
+        ],
+        "searchbankKeywordsKo": [
+          "브랜드 가구",
+          "브랜드 의류",
+          "프리미엄 브랜드"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "network|network-right": {
-        "intent": "household_essentials_living"
+        "intent": "real_life_grocery_daily_needs",
+        "categoryFamilies": [
+          "grocery",
+          "regional_goods",
+          "beef_gifts",
+          "detergent",
+          "kitchen",
+          "dairy",
+          "seasoning"
+        ],
+        "searchbankKeywordsKo": [
+          "한우 세트",
+          "지역 특산품",
+          "세탁 세제",
+          "유제품",
+          "양념",
+          "주부 생활용품",
+          "마트 필수품"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "social|rightPanel": {
-        "intent": "small_electronics_beauty_popular_apparel"
+        "intent": "creator_local_activity_products",
+        "categoryFamilies": [
+          "creator_gear",
+          "broadcast_equipment",
+          "cafe",
+          "restaurant",
+          "hiking",
+          "travel_creator",
+          "outdoor"
+        ],
+        "searchbankKeywordsKo": [
+          "유튜버 장비",
+          "방송 장비",
+          "카페",
+          "식당",
+          "여행 유튜버",
+          "등산용품",
+          "SNS 촬영"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
       },
       "tour|tour": {
-        "intent": "travel_accommodation_transport_ticket_booking_exclusive"
+        "intent": "tour_travel_specific_bookings",
+        "categoryFamilies": [
+          "hotel",
+          "accommodation",
+          "tourism_ticket",
+          "transport",
+          "bookable_activity"
+        ],
+        "searchbankKeywordsKo": [
+          "관광상품",
+          "호텔",
+          "숙박권",
+          "입장권",
+          "교통",
+          "예약권"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
+      }
+    },
+    "policyRevision": "20261017-semantic-nonretroactive-v1",
+    "researchAndPlacementContract": {
+      "version": "igdc-psom-commerce-intent-2026-10-17-v1",
+      "policyContract": "ABCD-research-verify-private-candidate-front",
+      "existingPlacementImmutable": true,
+      "manualPlacementPriority": true,
+      "frontSnapshotReverseWrite": false,
+      "noAutomaticRebalanceOfPlacedCandidates": true,
+      "noAutomaticDemotionOnHttp403Or429": true,
+      "searchbank": {
+        "A": "discover verified official supplier product detail URLs, not category index or challenge pages",
+        "B": "verify real product title/image/availability before marking normal; temporary 403/429 stays inconclusive",
+        "C": "place only new verified and unassigned goods in private PSOM candidate sections, retain old approvals and positions",
+        "D": "front matching only via separate admin command; no research-triggered publication"
+      },
+      "noForcedProductCountFilling": true,
+      "buckets": {
+        "raw_or_processed_ingredients": "home|home_4",
+        "small_electronics_and_stationery": "home|home_3",
+        "household_essentials": "home|home_5"
+      },
+      "sections": {
+        "home|home_1": {
+          "intent": "beauty_bags_accessories",
+          "families": [
+            "beauty",
+            "skincare",
+            "cosmetics",
+            "handbag",
+            "bags",
+            "accessories",
+            "jewelry"
+          ],
+          "researchKeywordsKo": [
+            "화장품",
+            "뷰티",
+            "스킨케어",
+            "핸드백",
+            "가방",
+            "주얼리",
+            "패션 액세서리"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "home|home_2": {
+          "intent": "apparel_trendy_fashion",
+          "families": [
+            "fashion",
+            "apparel",
+            "clothes",
+            "brand_fashion",
+            "lingerie",
+            "scarf"
+          ],
+          "researchKeywordsKo": [
+            "의류",
+            "트렌디 의류",
+            "브랜드 패션",
+            "란제리",
+            "아웃도어 의류",
+            "스카프"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "home|home_3": {
+          "intent": "portable_electronics_computer_stationery",
+          "families": [
+            "small_appliances",
+            "mobile_accessories",
+            "audio",
+            "computer_peripherals",
+            "stationery"
+          ],
+          "researchKeywordsKo": [
+            "소형가전",
+            "블루투스 이어폰",
+            "스피커",
+            "마이크",
+            "휴대용 선풍기",
+            "충전기",
+            "태블릿 거치대",
+            "무선 키보드",
+            "마우스",
+            "프린터 용지",
+            "문구"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "home|home_4": {
+          "intent": "packaged_food_ingredients_grocery",
+          "families": [
+            "packaged_food",
+            "agriculture",
+            "processed_ingredients",
+            "seafood_gifts",
+            "grocery"
+          ],
+          "researchKeywordsKo": [
+            "한우 세트",
+            "홍삼",
+            "김치",
+            "고추장",
+            "된장",
+            "간장",
+            "라면 세트",
+            "만두 세트",
+            "포장 식재료",
+            "농축수산물"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "home|home_5": {
+          "intent": "household_diy_living",
+          "families": [
+            "household_essentials",
+            "cleaning",
+            "bathroom",
+            "kitchenware",
+            "small_furniture",
+            "home_fragrance"
+          ],
+          "researchKeywordsKo": [
+            "청소 도구",
+            "분무기",
+            "수건",
+            "타월",
+            "세제",
+            "화장지",
+            "키친타월",
+            "주방용품",
+            "방향제",
+            "작은 의자",
+            "생활 가구"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "home|home_6": {
+          "intent": "digital_reading_books_comics",
+          "families": [
+            "books",
+            "ebooks",
+            "webtoon",
+            "digital_reading"
+          ],
+          "researchKeywordsKo": [
+            "웹툰",
+            "서적",
+            "전자책"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "home|home_right_top": {
+          "intent": "health_knowledge_nutrition",
+          "families": [
+            "healthy_grocery",
+            "healthcare",
+            "fitness",
+            "wellness",
+            "knowledge"
+          ],
+          "researchKeywordsKo": [
+            "건강 식재료",
+            "헬스",
+            "헬스케어",
+            "건강 안내",
+            "영양제"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "home|home_right_middle": {
+          "intent": "automotive_outdoor",
+          "families": [
+            "automotive",
+            "car_care",
+            "outdoor",
+            "camping"
+          ],
+          "researchKeywordsKo": [
+            "자동차",
+            "자동차용품",
+            "아웃도어",
+            "캠핑"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "home|home_right_bottom": {
+          "intent": "living_kitchen_bookshop",
+          "families": [
+            "furniture",
+            "kitchen",
+            "dining",
+            "interior",
+            "bookshop"
+          ],
+          "researchKeywordsKo": [
+            "가구",
+            "식탁",
+            "주방",
+            "거실",
+            "의자",
+            "책상",
+            "책꽂이",
+            "리빙"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "distribution|distribution-recommend": {
+          "intent": "editorial_today_recommendations",
+          "families": [
+            "admin_picks",
+            "ai_fresh_picks",
+            "apparel",
+            "beauty",
+            "new_products"
+          ],
+          "researchKeywordsKo": [
+            "관리자 추천",
+            "AI 추천",
+            "핫한 의류",
+            "신상 뷰티",
+            "화장품"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "distribution|distribution-trending": {
+          "intent": "verified_live_popularity",
+          "families": [
+            "measured_demand",
+            "verified_popularity",
+            "luxury_apparel",
+            "beauty"
+          ],
+          "researchKeywordsKo": [
+            "검증된 인기",
+            "명품 의류",
+            "뷰티 화장품",
+            "실제 인기도"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "distribution|distribution-sponsor": {
+          "intent": "beauty_skin_body_hair",
+          "families": [
+            "skincare",
+            "cosmetics",
+            "makeup",
+            "body_care",
+            "hair_care"
+          ],
+          "researchKeywordsKo": [
+            "스킨케어",
+            "화장품",
+            "바디케어",
+            "헤어케어",
+            "미용 제품"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "distribution|distribution-new": {
+          "intent": "consumer_electronics_all",
+          "families": [
+            "small_appliances",
+            "electronics",
+            "computer",
+            "mobile",
+            "audio",
+            "accessories"
+          ],
+          "researchKeywordsKo": [
+            "소형 가전",
+            "전자제품",
+            "컴퓨터",
+            "모바일",
+            "이어폰",
+            "스피커",
+            "USB",
+            "충전기"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "distribution|distribution-special": {
+          "intent": "all_clothes_fashion",
+          "families": [
+            "fashion",
+            "apparel",
+            "lingerie",
+            "outdoor_wear",
+            "designer_brand",
+            "scarf"
+          ],
+          "researchKeywordsKo": [
+            "일반 의류",
+            "란제리",
+            "아웃도어 의류",
+            "브랜드 의류",
+            "스카프"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "distribution|distribution-others": {
+          "intent": "daily_essentials_home_goods",
+          "families": [
+            "hygiene",
+            "cleaning",
+            "household",
+            "kitchenware",
+            "hardware",
+            "tools"
+          ],
+          "researchKeywordsKo": [
+            "화장지",
+            "키친타월",
+            "청소",
+            "세제",
+            "욕실",
+            "주방도구",
+            "가정용 공구",
+            "생활용품"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "distribution|distribution-extra": {
+          "intent": "outdoor_and_packaged_food",
+          "families": [
+            "outdoor",
+            "garden",
+            "shoes",
+            "hiking_boots",
+            "ingredients",
+            "farm",
+            "seafood"
+          ],
+          "researchKeywordsKo": [
+            "정원",
+            "아웃도어",
+            "신발",
+            "등산화",
+            "식재료",
+            "농산물",
+            "수산물",
+            "굴비 선물세트"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "distribution|distribution-right": {
+          "intent": "verified_brand_furniture_apparel",
+          "families": [
+            "branded_furniture",
+            "brand_apparel",
+            "premium_brands"
+          ],
+          "researchKeywordsKo": [
+            "브랜드 가구",
+            "브랜드 의류",
+            "프리미엄 브랜드"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "network|network-right": {
+          "intent": "real_life_grocery_daily_needs",
+          "families": [
+            "grocery",
+            "regional_goods",
+            "beef_gifts",
+            "detergent",
+            "kitchen",
+            "dairy",
+            "seasoning"
+          ],
+          "researchKeywordsKo": [
+            "한우 세트",
+            "지역 특산품",
+            "세탁 세제",
+            "유제품",
+            "양념",
+            "주부 생활용품",
+            "마트 필수품"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "social|rightPanel": {
+          "intent": "creator_local_activity_products",
+          "families": [
+            "creator_gear",
+            "broadcast_equipment",
+            "cafe",
+            "restaurant",
+            "hiking",
+            "travel_creator",
+            "outdoor"
+          ],
+          "researchKeywordsKo": [
+            "유튜버 장비",
+            "방송 장비",
+            "카페",
+            "식당",
+            "여행 유튜버",
+            "등산용품",
+            "SNS 촬영"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        },
+        "tour|tour": {
+          "intent": "tour_travel_specific_bookings",
+          "families": [
+            "hotel",
+            "accommodation",
+            "tourism_ticket",
+            "transport",
+            "bookable_activity"
+          ],
+          "researchKeywordsKo": [
+            "관광상품",
+            "호텔",
+            "숙박권",
+            "입장권",
+            "교통",
+            "예약권"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true
+        }
       }
     }
   }

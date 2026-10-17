@@ -13,7 +13,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-auto-curator-v1.5.1-content-first-global-preference";
+  "social-candidate-auto-curator-v1.5.2-section-complete-read";
 const MAX_PER_SECTION = SocialStore.POOL_MAX_PER_SECTION || 350;
 
 function text(value) {
@@ -172,9 +172,14 @@ exports.handler = async function (event) {
       });
     }
     const route = CountryRouting.resolve(event, body);
-    const rows = await SocialStore.selectCandidates(
-      "select=*&order=section_key.asc,rotation_score.desc,updated_at.desc&limit=10000",
-    );
+    const rows = typeof SocialStore.selectCandidatesBySections === "function"
+      ? await SocialStore.selectCandidatesBySections(
+          "select=*&order=section_key.asc,rotation_score.desc,updated_at.desc",
+          1000,
+        )
+      : await SocialStore.selectCandidates(
+          "select=*&order=section_key.asc,rotation_score.desc,updated_at.desc&limit=10000",
+        );
     const groups = {};
     SocialStore.Policy.SECTION_KEYS.forEach((section) => {
       groups[section] = [];

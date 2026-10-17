@@ -17,7 +17,7 @@ let SocialStore = null;
 try { SocialStore = require("./lib/social-candidate-store.v1"); } catch (_error) { SocialStore = null; }
 const CountryRouting = require("./lib/social-country-routing.v1");
 
-const VERSION = "social-candidate-review-api-v1.3.0-status-diagnostics";
+const VERSION = "social-candidate-review-api-v1.4.0-six-section-complete-read";
 const READ_ROLES = new Set(["owner", "admin", "super_admin", "site_manager", "site_manager_director", "director", "social_manager", "media_manager", "commerce_manager"]);
 
 function text(value) { return value == null ? "" : String(value).trim(); }
@@ -212,11 +212,39 @@ async function candidateSnapshot(root) {
   if (SocialStore && typeof SocialStore.selectCandidates === "function") {
     try {
       SocialStore.config();
-      const rows = await SocialStore.selectCandidates("select=*&order=updated_at.desc&limit=10000");
-      if (Array.isArray(rows) && rows.length) {
-        return { file: "supabase:" + (SocialStore.CANDIDATE_TABLE || "social_candidates"), sourceMode: "supabase", storeError: null, rows };
+      // PostgREST/Supabase projects commonly cap a single response at 1000 rows.
+      // The old one-shot `limit=10000` therefore returned exactly 1000 mixed
+      // legacy/current rows and could hide newly researched Bilibili/Douyin
+      // candidates. Read each of the six active Social sections independently
+      // so every current section is visible to the administrator and diagnostics.
+      const activeSections = sectionKeys();
+      const settled = await Promise.allSettled(activeSections.map(async (sectionKey) => {
+        const rows = await SocialStore.selectCandidates(
+          "select=*&section_key=eq." + encodeURIComponent(sectionKey) +
+          "&order=updated_at.desc&limit=1000"
+        );
+        return Array.isArray(rows) ? rows : [];
+      }));
+      const pages = settled.map((entry) => entry.status === "fulfilled" ? entry.value : []);
+      const rows = pages.flat();
+      const sectionReadErrors = Object.fromEntries(activeSections.map((key, index) => {
+        const entry = settled[index];
+        return [key, entry && entry.status === "rejected" ? text(entry.reason && (entry.reason.message || entry.reason)) : null];
+      }).filter((row) => row[1]));
+      if (rows.length) {
+        return {
+          file: "supabase:" + (SocialStore.CANDIDATE_TABLE || "social_candidates"),
+          sourceMode: Object.keys(sectionReadErrors).length ? "supabase_active_sections_partial" : "supabase_active_sections_complete",
+          storeError: null,
+          rows,
+          sectionReadCounts: Object.fromEntries(activeSections.map((key, index) => [key, pages[index].length])),
+          sectionReadErrors
+        };
       }
-      stage = { sourceMode: "supabase_empty_ambiguous", storeError: null };
+      stage = {
+        sourceMode: Object.keys(sectionReadErrors).length ? "supabase_active_sections_unavailable" : "supabase_active_sections_empty_ambiguous",
+        storeError: Object.keys(sectionReadErrors).length ? { code:"social_section_reads_failed", message:JSON.stringify(sectionReadErrors) } : null
+      };
     } catch (error) {
       stage = { sourceMode: "supabase_unavailable", storeError: { code: error && error.code || null, message: text(error && error.message || error) } };
     }
@@ -231,6 +259,7 @@ async function candidateSnapshot(root) {
   return { file: "", sourceMode: stage && stage.sourceMode || "missing", storeError: stage && stage.storeError || null, rows: [] };
 }
 function normalizeRows(rows) {
+  const allowed = new Set(sectionKeys());
   return rows.map((row) => {
     const normalized = SocialStore && SocialStore.normalizeDbRow ? SocialStore.normalizeDbRow(row) : Object.assign({}, row);
     const platform = lower(normalized && normalized.platform || row && row.platform);
@@ -243,7 +272,7 @@ function normalizeRows(rows) {
       if (yt) { normalized.thumbnailUrl = yt; normalized.thumbnail_url = yt; }
     }
     return normalized;
-  });
+  }).filter((row) => allowed.has(text(row && (row.sectionKey || row.section_key))));
 }
 function assetClass(row) {
   const raw = row && row.raw || {};
@@ -380,6 +409,10 @@ exports.handler = async function(event) {
     const safety = { readOnly:true, writes:false, publicSnapshotPublication:false, socialSnapshotMutation:false, externalProviderCalls:false, externalMembershipOverride:false, paymentOrRevenueMutation:false, secretsExcluded:true };
     const sourceInfo = {
       candidateFileLoaded:!!rows.length, candidateFile:source.file, candidateSourceMode:source.sourceMode,
+      sectionReadCounts: source.sectionReadCounts || null,
+      sectionReadErrors: source.sectionReadErrors || null,
+      activeSectionFilter: sectionKeys(),
+      legacySectionRowsIgnored: true,
       supabaseStoreError:source.storeError || null, zeroRowsNeverMeansDelete:true,
       publicSnapshotChecked:publicSnapshot.checked, publicSnapshotSections:publicSnapshot.sectionKeys, publicSnapshotSectionCounts:publicSnapshot.sectionCounts
     };
