@@ -13,7 +13,7 @@
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 
-const VERSION = "commerce-product-ranking-v1.22.5-psom-full-policy-immutable-v20261017";
+const VERSION = "commerce-product-ranking-v1.22.7-section-local-ranking-preserve-placement-v20261017";
 
 const CATEGORY_KEYS = Object.freeze([
   "local_products",
@@ -150,7 +150,7 @@ const POLICY = Object.freeze({
     administratorOverridePreserved: true,
     directDetailPageRequired: true
   }),
-  valueRankingRule: "trust_gate_then_audience_need_then_transaction_frequency_and_total_expected_value; verified_revenue_right_outranks_unverified_opportunity",
+  valueRankingRule: "trust_gate_then_verified_partner_revenue_then_approved_ad_inventory_then_ad_opportunity_then_ordinary_products; never_discard_lower_tiers; preserve_approved_section_and_front_match; reorder_positions_only_inside_same_section_on_publication",
   valueWeights: VALUE_WEIGHTS,
   allowedSections: FRONT_SECTION_KEYS
 });
@@ -1378,6 +1378,16 @@ function evaluateProduct(rowInput, contextInput) {
   const revenueValue = revenueValueAssessment(row, audience, commercial);
   revenueValue.commercialClass = profitability.commercialClass;
   revenueValue.commercialPriority = profitability.commercialPriority;
+  // Advertising inventory readiness is not a commission entitlement. Rank it
+  // above unverified opportunities in PRIVATE proposal lists only. No product
+  // becomes publishable or receives a revenue claim from this ranking signal.
+  if (profitability.commercialClass === "AD_INVENTORY_READY") {
+    revenueValue.sourcePriorityScore = Math.max(Number(revenueValue.sourcePriorityScore || 0), 55);
+    revenueValue.revenuePriorityState = "approved_ad_inventory_candidate_only";
+  } else if (profitability.commercialClass === "AD_OPPORTUNITY") {
+    revenueValue.sourcePriorityScore = Math.max(Number(revenueValue.sourcePriorityScore || 0), 35);
+    revenueValue.revenuePriorityState = "advertising_opportunity_unverified";
+  }
   revenueValue.profitabilityGatePassed = profitability.gatePassed === true;
   revenueValue.monetizationAllowed = profitability.monetizationAllowed === true;
   // A contract without verified tax/legal/cost economics must never receive
@@ -1564,20 +1574,24 @@ function deterministicFraction(seed) {
   return parseInt(hex, 16) / 0xffffffff;
 }
 
-// Only an explicit administrator decision is immutable. Older AI runs also
-// persisted their result in approvedPlacement; treating every approvedPlacement
-// as manual caused stale AI sponsor/trending/special placements to survive later
-// policy upgrades and then fail only at the public Snapshot gate.
+// Durable C-stage placements are immutable in the private ranking proposal,
+// regardless of whether the original placement was made by AI or an operator.
+// Classification upgrades apply to unassigned candidates; they do not evict
+// a live, valid section placement or silently rewrite Front Match results.
 function explicitAdministratorPlacement(rowInput) {
   const row = plain(rowInput);
   const control = plain(row.managementControl);
   const candidates = [plain(row.approvedPlacement), plain(row.selectedPlacement)];
   for (const placement of candidates) {
-    if (!assignmentKey(placement)) continue;
-    if (placement.administratorSelected === true || placement.manualPinned === true || control.administratorLocked === true || control.aiReclassificationAllowed === false) return placement;
-    if (placement.aiSelected === true || placement.administratorSelected === false || lower(control.source) === "ai_automation") continue;
-    // Legacy approved placements without an AI marker are preserved as manual.
-    return placement;
+    const key = assignmentKey(placement);
+    if (!SECTION_ORDER.includes(key)) continue;
+    if (row.placementInvalid === true || placement.placementInvalid === true) continue;
+    // Do not silently unassign a valid existing placement when the AI refresh
+    // does not like its monetization class or category score.
+    if (lower(row.slotDecision) === "slot_candidate" ||
+        placement.administratorSelected === true || placement.aiSelected === true ||
+        control.administratorLocked === true || control.aiReclassificationAllowed === false ||
+        ["queued","publish_requested","matched","published","active"].includes(lower(plain(row.frontPublication).status))) return placement;
   }
   return {};
 }
@@ -1610,11 +1624,10 @@ function allocatePrimaryPlacements(rowsInput) {
     const eligible = proposals.filter((item) => item.approvalEligible === true);
     let candidates = eligible;
     if (manualKey && SECTION_ORDER.includes(manualKey)) {
-      const matched = proposals.find((item) => assignmentKey(item) === manualKey) || Object.assign({}, manual, {
+      const matched = Object.assign({}, proposals.find((item) => assignmentKey(item) === manualKey) || {}, manual, {
         key: manualKey,
         page: manualKey.split("|")[0],
         sectionKey: manualKey.split("|")[1],
-        administratorSelected: true,
         approvalEligible: true,
         valueQualified: true,
         proposalOnly: false,

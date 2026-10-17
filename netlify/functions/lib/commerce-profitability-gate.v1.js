@@ -17,7 +17,7 @@
  * settlement record. Unknown tax/legal state fails closed for monetization.
  */
 
-const VERSION = "commerce-profitability-gate-v1.1.0-traffic-opportunity-order";
+const VERSION = "commerce-profitability-gate-v1.1.1-ad-inventory-priority";
 
 const PRIORITY = Object.freeze({
   DIRECT_COMMERCE_VERIFIED: 700,
@@ -26,7 +26,9 @@ const PRIORITY = Object.freeze({
   DIRECT_SPONSOR: 550,
   REFERRAL_VERIFIED: 500,
   VERIFIED_REVENUE_ROUTE: 450,
+  AD_INVENTORY_READY: 100,
   TRAFFIC_VALUE_ONLY: 65,
+  AD_OPPORTUNITY: 50,
   ORDINARY: 40,
   REVENUE_ROUTE_HOLD: 25,
   NON_REVENUE: 20,
@@ -125,9 +127,18 @@ function routeFacts(rowInput, revenueInput){
   const affiliateReady = revenue.affiliateReady === true;
   const referralReady = revenue.referralReady === true;
   const trafficOnly = revenue.trafficOnly === true;
+  const ad = plain(row.advertisingInventory), opportunity = plain(row.advertisingOpportunity);
+  // Only server-approved publisher inventory and approved placement policy may
+  // receive this private ranking tier. Seller-hosted ads, a generic banner,
+  // crawler-provided claims and merely enabled monetization are not evidence.
+  const adInventoryReady = ad.serverVerified === true && ad.publisherApproved === true &&
+    ad.placementApproved === true && low(ad.networkStatus) === "active" &&
+    !!text(ad.networkId) && !!text(ad.placementId);
+  const adOpportunity = opportunity.policyEligible === true &&
+    opportunity.reviewedByOperator === true && opportunity.verifiedRevenue !== true;
   const directSource = sourceTier === "approved_commerce_member" || sourceTier === "direct_member";
   const monetized = contractReady || directPayable || sponsorReady || affiliateReady || referralReady;
-  return { sourceTier, stage, contractReady, directPayable, sponsorReady, affiliateReady, referralReady, trafficOnly, directSource, monetized };
+  return { sourceTier, stage, contractReady, directPayable, sponsorReady, affiliateReady, referralReady, trafficOnly, adInventoryReady, adOpportunity, directSource, monetized };
 }
 
 function classifyRoute(facts, gatePassed){
@@ -150,7 +161,8 @@ function assess(rowInput, revenueInput, contextInput){
   const blockers = [], warnings = [];
 
   if(!facts.monetized){
-    const commercialClass = facts.trafficOnly ? "TRAFFIC_VALUE_ONLY" : "ORDINARY";
+    const commercialClass = facts.adInventoryReady ? "AD_INVENTORY_READY" :
+      (facts.trafficOnly ? "TRAFFIC_VALUE_ONLY" : (facts.adOpportunity ? "AD_OPPORTUNITY" : "ORDINARY"));
     return {
       version: VERSION,
       applicable: false,
@@ -158,7 +170,8 @@ function assess(rowInput, revenueInput, contextInput){
       monetizationAllowed: false,
       commercialClass,
       commercialPriority: PRIORITY[commercialClass],
-      state: facts.trafficOnly ? "traffic_value_only" : "not_monetized",
+      state: facts.adInventoryReady ? "approved_ad_inventory_private_ranking_only" :
+        (facts.trafficOnly ? "traffic_value_only" : (facts.adOpportunity ? "advertising_opportunity_unverified" : "not_monetized")),
       blockers: [], warnings: [], policy: publicPolicy(policy)
     };
   }

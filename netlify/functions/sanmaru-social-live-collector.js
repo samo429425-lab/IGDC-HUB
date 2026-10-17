@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.40.0-provider-query-and-diagnostic-fix";
+const VERSION = "sanmaru-social-live-collector-v1.41.0-progressive-provider-and-native-json-fix";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -1287,22 +1287,34 @@ function directProviderQuery(plan, queryText, registrySeed) {
     .trim();
   const topic = clean.split(/\s+/).filter(Boolean).slice(0, 7).join(" ");
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
-  if (platform === "instagram") return [topic, exact, "site:instagram.com/reel"].filter(Boolean).join(" ");
-  if (platform === "tiktok") return [topic, exact, "site:tiktok.com/@", "video"].filter(Boolean).join(" ");
-  if (platform === "facebook") return [topic, exact, "site:facebook.com/reel", "video"].filter(Boolean).join(" ");
-  if (platform === "bilibili") return [topic || "热门", exact, "site:bilibili.com/video", "哔哩哔哩"].filter(Boolean).join(" ");
-  if (platform === "douyin") return [topic || "热门", exact, "site:douyin.com/video", "抖音"].filter(Boolean).join(" ");
+  if (platform === "instagram") return [topic, exact, "site:instagram.com", "inurl:reel"].filter(Boolean).join(" ");
+  if (platform === "tiktok") return [topic, exact, "site:tiktok.com", "inurl:video"].filter(Boolean).join(" ");
+  if (platform === "facebook") return [topic, exact, "site:facebook.com", "inurl:reel OR inurl:videos"].filter(Boolean).join(" ");
+  if (platform === "bilibili") return [topic || "热门", exact, "site:bilibili.com", "inurl:video", "哔哩哔哩"].filter(Boolean).join(" ");
+  if (platform === "douyin") return [topic || "热门", exact, "site:douyin.com", "inurl:video", "抖音"].filter(Boolean).join(" ");
   return publicSearchQuery(plan, queryText, registrySeed);
+}
+function directProviderBroadQuery(plan, queryText) {
+  const platform = SocialStore.text(plan && plan.platform).toLowerCase();
+  const clean = sparseSearchTerms(queryText, platform)
+    .replace(new RegExp("\\b" + platform.replace(/[^a-z0-9]/g, "") + "\\b", "ig"), " ")
+    .replace(/\b(?:popular|public|latest|creator|official|high quality|active|trending|recent)\b/gi, " ")
+    .replace(/\s+/g, " ").trim();
+  const topic = clean.split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
+  if (platform === "tiktok") return [topic, "site:tiktok.com", "video"].filter(Boolean).join(" ");
+  if (platform === "facebook") return [topic, "site:facebook.com", "reel video"].filter(Boolean).join(" ");
+  if (platform === "douyin") return [topic || "热门", "site:douyin.com", "抖音 视频"].filter(Boolean).join(" ");
+  return "";
 }
 function naverProviderQuery(plan, queryText) {
   const platform = SocialStore.text(plan && plan.platform).toLowerCase();
   const clean = sparseSearchTerms(queryText, platform).split(/\s+/).filter(Boolean).slice(0, 6).join(" ");
   const domainHint = {
-    instagram: "instagram.com/reel",
-    tiktok: "tiktok.com/@ video",
-    facebook: "facebook.com/reel",
-    bilibili: "bilibili.com/video",
-    douyin: "douyin.com/video"
+    instagram: "instagram.com reel",
+    tiktok: "tiktok.com video",
+    facebook: "facebook.com reel video",
+    bilibili: "bilibili.com video BV",
+    douyin: "douyin.com video 抖音"
   }[platform] || platform;
   return [clean, domainHint].filter(Boolean).join(" ").trim();
 }
@@ -1623,9 +1635,93 @@ async function genericNativeHtmlSearch(platform, queryText, limit, pageIndex) {
     trace: results.map((row) => ({ name: row.provider, status: row.status, count: (row.items || []).length, error: row.error || null }))
   };
 }
+function douyinApiItem(row, provider, index) {
+  const item = row && row.aweme_info && typeof row.aweme_info === "object" ? row.aweme_info : row;
+  const awemeId = firstText([item && item.aweme_id, item && item.awemeId, item && item.group_id, item && item.item_id]);
+  if (!/^\d{8,}$/.test(awemeId)) return null;
+  const author = item && item.author && typeof item.author === "object" ? item.author : {};
+  const secUid = firstText([author.sec_uid, author.secUid, author.uid]);
+  const video = item && item.video && typeof item.video === "object" ? item.video : {};
+  const cover = video.cover && typeof video.cover === "object" ? video.cover : {};
+  const dynamicCover = video.dynamic_cover && typeof video.dynamic_cover === "object" ? video.dynamic_cover : {};
+  const coverUrls = [].concat(cover.url_list || cover.urlList || [], dynamicCover.url_list || dynamicCover.urlList || []).filter(Boolean);
+  const created = Number(item && (item.create_time || item.createTime) || 0);
+  const contentUrl = "https://www.douyin.com/video/" + awemeId;
+  return {
+    provider, platform: "douyin", url: contentUrl, sourceUrl: contentUrl, latestContentUrl: contentUrl,
+    title: firstText([item && item.desc, "Douyin · Video " + awemeId.slice(-12)]),
+    creatorName: firstText([author.nickname, author.unique_id, author.uniqueId]),
+    channelUrl: secUid ? "https://www.douyin.com/user/" + encodeURIComponent(secUid) : "",
+    thumbnail: firstText(coverUrls), description: firstText([item && item.desc]),
+    publishedAt: created > 0 ? new Date(created * 1000).toISOString() : "", entityKind: "latest_video",
+    source: { name: provider, platform: "douyin", mode: "douyin_public_web_api", rank: Number(index || 0) + 1 }
+  };
+}
+function collectDouyinApiRows(value, out, seen, depth) {
+  if (!value || depth > 7 || out.length >= 40) return;
+  if (Array.isArray(value)) {
+    for (const entry of value) collectDouyinApiRows(entry, out, seen, depth + 1);
+    return;
+  }
+  if (typeof value !== "object") return;
+  const item = douyinApiItem(value, "douyin-native-api", out.length);
+  if (item) {
+    const key = item.latestContentUrl.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); out.push(item); }
+  }
+  for (const key of Object.keys(value)) {
+    if (out.length >= 40) break;
+    collectDouyinApiRows(value[key], out, seen, depth + 1);
+  }
+}
+async function douyinPublicApiSearch(queryText, limit, pageIndex) {
+  const wanted = Math.max(4, Math.min(20, Number(limit || 10) * 2));
+  const clean = sparseSearchTerms(queryText, "douyin") || "旅游 音乐 文化 美食 教育";
+  const offset = Math.max(0, (Math.max(1, Number(pageIndex || 1)) - 1) * wanted);
+  const params = new URLSearchParams({
+    device_platform: "webapp", aid: "6383", channel: "channel_pc_web", search_channel: "aweme_general",
+    keyword: clean, offset: String(offset), count: String(wanted), sort_type: "1", publish_time: "0"
+  });
+  try {
+    const data = await fetchJson("https://www.douyin.com/aweme/v1/web/general/search/single/?" + params.toString(), {
+      headers: {
+        Accept: "application/json,text/plain,*/*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+        Referer: "https://www.douyin.com/search/" + encodeURIComponent(clean)
+      }
+    }, REQUEST_TIMEOUT_MS);
+    const items = [], seen = new Set();
+    collectDouyinApiRows(data, items, seen, 0);
+    return { provider: "douyin-native-api", status: items.length ? "ok" : "empty", items: items.slice(0, wanted), trace: [{ name: "douyin-native-api", status: items.length ? "ok" : "empty", count: items.length, error: null }] };
+  } catch (error) {
+    const status = error && (error.statusCode === 401 || error.statusCode === 403 || error.statusCode === 412) ? "api_restricted" : (error && error.name === "AbortError" ? "timeout" : "error");
+    return { provider: "douyin-native-api", status, error: error && error.message || "douyin_api_failed", items: [], trace: [{ name: "douyin-native-api", status, count: 0, error: error && error.message || "douyin_api_failed" }] };
+  }
+}
+
 async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep, pageIndex) {
   if (!plan || !SPARSE_DISCOVERY_PLATFORMS.has(plan.platform)) {
     return { provider: "sparse-native-public-search", status: "not_needed", items: [] };
+  }
+  if (plan.platform === "douyin") {
+    const [api, html] = await Promise.all([
+      douyinPublicApiSearch(queryText, limit, pageIndex),
+      genericNativeHtmlSearch(plan.platform, queryText, limit, pageIndex)
+    ]);
+    const seen = new Set();
+    const items = [];
+    [api, html].forEach((result) => (result.items || []).forEach((item) => {
+      const key = SocialStore.text(item && (item.latestContentUrl || item.url)).toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      items.push(item);
+    }));
+    return {
+      provider: "douyin-native-search",
+      status: items.length ? "ok" : (api.status === "error" || api.status === "timeout" || html.status === "degraded" ? "degraded" : "empty"),
+      items,
+      trace: [].concat(api.trace || [], html.trace || [])
+    };
   }
   if (plan.platform !== "bilibili") {
     return genericNativeHtmlSearch(plan.platform, queryText, limit, pageIndex);
@@ -1663,6 +1759,7 @@ async function directPublicPostSearch(plan, queryText, limit, registrySeed, page
   // content query than with the full policy sentence. Keep PSOM/policy breadth
   // in the caller, but send each public index a compact content URL query.
   const q = directProviderQuery(plan, queryText, registrySeed);
+  const qBroad = directProviderBroadQuery(plan, queryText);
   const wanted = Math.max(1, Math.min(30, Number(limit || 10) || 10));
   const page = Math.max(1, Math.min(50, Number(pageIndex || 1) || 1));
   const webOffset = (page - 1) * Math.max(10, wanted);
@@ -1703,6 +1800,20 @@ async function directPublicPostSearch(plan, queryText, limit, registrySeed, page
       ""
     ).then((html) => ({ provider: "mojeek-html-social", items: htmlPublicPostItems(html, plan, "mojeek-html-social") })).catch((error) => ({ provider: "mojeek-html-social", items: [], error: error && error.message }))
   ];
+  if (qBroad && qBroad !== q) {
+    jobs.push(
+      withDeadline(
+        fetchText("https://www.bing.com/search?format=rss&first=" + bingFirst + "&q=" + encodeURIComponent(qBroad), { headers }, REQUEST_TIMEOUT_MS),
+        REQUEST_TIMEOUT_MS,
+        ""
+      ).then((xml) => ({ provider: "bing-rss-social-broad", items: rssItems(xml, plan, "bing-rss-social-broad") })).catch((error) => ({ provider: "bing-rss-social-broad", items: [], error: error && error.message })),
+      withDeadline(
+        fetchText("https://www.bing.com/search?count=30&first=" + bingFirst + "&q=" + encodeURIComponent(qBroad), { headers }, REQUEST_TIMEOUT_MS),
+        REQUEST_TIMEOUT_MS,
+        ""
+      ).then((html) => ({ provider: "bing-html-social-broad", items: htmlPublicPostItems(html, plan, "bing-html-social-broad") })).catch((error) => ({ provider: "bing-html-social-broad", items: [], error: error && error.message }))
+    );
+  }
   if (plan.platform === "bilibili" || plan.platform === "douyin") {
     // China-facing public indexes are supplemental only. Each platform's own
     // public search remains primary; these lanes prevent a Google-centric blind spot.
@@ -1745,10 +1856,26 @@ function providerRelativePostUrls(platform, html, baseUrl, limit) {
   const max = Math.max(1, Math.min(30, Number(limit || 10) || 10));
   const out = [];
   const seen = new Set();
-  const source = String(html || "").slice(0, 2000000)
+  let source = String(html || "").slice(0, 2000000)
     .replace(/\\u002f/gi, "/")
     .replace(/\\\//g, "/")
     .replace(/&amp;/gi, "&");
+  // TikTok/Douyin may keep content ids inside percent-encoded hydration JSON
+  // instead of href attributes. Decode only bounded script payloads; the strict
+  // platform/contentKind gate below still decides what can enter the pipeline.
+  const hydrationRe = /<script\b[^>]*(?:RENDER_DATA|UNIVERSAL_DATA_FOR_REHYDRATION|SIGI_STATE|__NEXT_DATA__)[^>]*>([\s\S]*?)<\/script>/gi;
+  let hydrationMatch;
+  let hydrationExtra = "";
+  while ((hydrationMatch = hydrationRe.exec(String(html || ""))) && hydrationExtra.length < 1000000) {
+    const rawPayload = String(hydrationMatch[1] || "").trim();
+    if (!rawPayload) continue;
+    let decodedPayload = rawPayload;
+    if (/%[0-9A-Fa-f]{2}/.test(rawPayload)) {
+      try { decodedPayload = decodeURIComponent(rawPayload); } catch (_error) {}
+    }
+    hydrationExtra += "\n" + decodedPayload.slice(0, 500000);
+  }
+  if (hydrationExtra) source = (source + hydrationExtra).slice(0, 3000000);
   const accept = (raw) => {
     if (out.length >= max || !raw) return;
     try {
@@ -1779,6 +1906,14 @@ function providerRelativePostUrls(platform, html, baseUrl, limit) {
   if (platform === "douyin" && out.length < max) {
     const rel = /(?:^|["'\s])\/(?:share\/)?(video|note)\/(\d{8,})(?=[?"'\s/]|$)/gi;
     while ((match = rel.exec(source)) && out.length < max) accept("https://www.douyin.com/" + match[1].toLowerCase() + "/" + match[2]);
+    const aweme = /["'](?:aweme_id|awemeId|item_id|itemId)["']\s*:\s*["'](\d{8,})["']/gi;
+    while ((match = aweme.exec(source)) && out.length < max) accept("https://www.douyin.com/video/" + match[1]);
+  }
+  if (platform === "tiktok" && out.length < max) {
+    const pairA = /["']id["']\s*:\s*["'](\d{12,})["'][\s\S]{0,1800}?["']uniqueId["']\s*:\s*["']([^"'\s]{2,80})["']/gi;
+    while ((match = pairA.exec(source)) && out.length < max) accept("https://www.tiktok.com/@" + match[2].replace(/^@/, "") + "/video/" + match[1]);
+    const pairB = /["']uniqueId["']\s*:\s*["']([^"'\s]{2,80})["'][\s\S]{0,1800}?["']id["']\s*:\s*["'](\d{12,})["']/gi;
+    while ((match = pairB.exec(source)) && out.length < max) accept("https://www.tiktok.com/@" + match[1].replace(/^@/, "") + "/video/" + match[2]);
   }
   if (platform === "bilibili" && out.length < max) {
     const rel = /(?:^|["'\s])\/video\/(BV[0-9A-Za-z]+|av\d+)(?=[?"'\s/]|$)/gi;
@@ -3048,7 +3183,11 @@ exports.handler = async function(event) {
     let scoped = null;
     let queries = [];
     const querySeeds = {};
-    const aiQuerySuffix = AIPolicy.querySuffix(aiPolicy);
+    // Historical/local AI conversations are post-discovery curation guidance by
+    // default, not hidden search prerequisites. Only an explicit request may
+    // alter discovery terms; policy safety/quality evaluation still runs below.
+    const aiDiscoveryGuidance = flag(body.aiDiscoveryGuidance || body.ai_discovery_guidance || body.applyAiToDiscovery);
+    const aiQuerySuffix = aiDiscoveryGuidance ? AIPolicy.querySuffix(aiPolicy) : "";
 
     if (registrySweepMode) {
       // Explicit auxiliary maintenance only. This path can refresh known creator
@@ -3246,6 +3385,7 @@ exports.handler = async function(event) {
       } : null,
       aiPolicy: {
         applied: !!(body.aiPolicy && typeof body.aiPolicy === "object"),
+        discoveryQueryGuidanceApplied: !!aiDiscoveryGuidance,
         scopeType: aiPolicy.scopeType,
         includeTopics: aiPolicy.includeTopics,
         excludeTopics: aiPolicy.excludeTopics,

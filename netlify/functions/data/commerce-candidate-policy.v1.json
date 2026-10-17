@@ -386,6 +386,27 @@
       "maximumContribution": 4,
       "requiresServerVerifiedOutboundSignals": true,
       "doesNotRepresentAffiliateRevenue": true
+    },
+    "advertisingOpportunity": {
+      "rule": "Keep every verified ordinary product in research. Rank candidates with administrator-approved advertising inventory above unverified ad prospects and ordinary items, below verified profitable direct/partner revenue.",
+      "verifiedAdInventoryPriority": 100,
+      "unverifiedTrafficOpportunityPriority": 65,
+      "operatorReviewedAdvertisingPotentialPriority": 50,
+      "ordinaryProductPriority": 40,
+      "verificationRequiredFields": [
+        "serverVerified",
+        "publisherApproved",
+        "placementApproved",
+        "networkStatus=active",
+        "networkId",
+        "placementId"
+      ],
+      "neverTreatExternalSellerAdsAsIgdcRevenue": true,
+      "privateRankingOnlyUntilExistingPublicationAndNetProfitGatesPass": true,
+      "existingApprovedPlacementAndFrontMatchImmutable": true,
+      "neverExcludeOrdinaryProducts": true,
+      "placementInvariant": "Never change approved page/section/country/region, product identity, URL, image, or publication permission due to scoring.",
+      "frontSlotRanking": "At an authorized publication, re-rank within the exact existing page/section/country/region only; honor explicit administrator pins; do not publish automatically."
     }
   },
   "reviewQueue": {

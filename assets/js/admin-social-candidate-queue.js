@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v4.6.0 - resilient diagnostics + research pipeline probes */
+/* IGDC Social Hub Content Operations v4.7.0 - progressive research cursors + fair six-section traversal */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -19,9 +19,10 @@
     ["social-bilibili", "Bilibili / 哔哩哔哩", "bilibili"],
     ["social-douyin", "Douyin / 抖音", "douyin"],
   ];
-  var COLLECTOR_JOB_VERSION = 9,
-    STANDARD_EMPTY_BATCH_LIMIT = 40,
-    LOW_YIELD_EMPTY_BATCH_LIMIT = 40;
+  var COLLECTOR_JOB_VERSION = 10,
+    STANDARD_EMPTY_BATCH_LIMIT = 8,
+    LOW_YIELD_EMPTY_BATCH_LIMIT = 8,
+    COLLECTOR_CURSOR_KEY = "igdc.socialCollector.discoveryCursors.v2";
   var order = SECTIONS.map(function (x) {
       return x[0];
     }),
@@ -1475,6 +1476,7 @@
         selectedBatchSize: Number($("collectorBatchSize").value) || 10,
         collectorState: text($("collectorState").textContent),
         savedJob: loadJob(),
+        discoveryCursors: discoveryCursors(),
         sectionSummary: collectorSectionSummary(),
         collectionBatches: liveReports.map(function (row) {
           return row && row.liveCollection ? row.liveCollection : row;
@@ -1707,21 +1709,46 @@
       localStorage.removeItem(jobKey());
     } catch (_e) {}
   }
+  function discoveryCursors() {
+    try {
+      var value = JSON.parse(localStorage.getItem(COLLECTOR_CURSOR_KEY) || "{}");
+      return value && typeof value === "object" ? value : {};
+    } catch (_e) {
+      return {};
+    }
+  }
+  function loadDiscoveryCursor(section) {
+    var value = Number(discoveryCursors()[text(section)] || 0);
+    return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+  }
+  function saveDiscoveryCursor(section, cursor) {
+    try {
+      var all = discoveryCursors(),
+        key = text(section),
+        value = Math.max(0, Math.floor(Number(cursor || 0)));
+      // Keep enough history to advance across policy pages while eventually
+      // wrapping instead of growing without bound across years of operation.
+      all[key] = value % 384;
+      localStorage.setItem(COLLECTOR_CURSOR_KEY, JSON.stringify(all));
+    } catch (_e) {}
+  }
   function wait(ms) {
     return new Promise(function (resolve) {
       setTimeout(resolve, ms);
     });
   }
   function sectionEmptyBatchLimit(section, j) {
-    var cap = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section)
-        ? LOW_YIELD_EMPTY_BATCH_LIMIT
-        : STANDARD_EMPTY_BATCH_LIMIT,
-      reported = Number(j && (j.discoveryCatalogSize || j.catalogSize) || 0);
-    // The collector now reports the actual content-query catalog (not
-    // influencer count and not provider-count multiplied breadth). Give each
-    // section enough empty batches to traverse one complete policy catalog once,
-    // while keeping a hard upper bound so one provider cannot loop forever.
-    return Math.max(12, Math.min(cap, reported > 0 ? reported : cap));
+    var lowYield = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section),
+      cap = lowYield ? LOW_YIELD_EMPTY_BATCH_LIMIT : STANDARD_EMPTY_BATCH_LIMIT,
+      reported = Number(j && (j.discoveryCatalogSize || j.catalogSize) || 0),
+      allMode = !!(j && j.runMode === "all"),
+      fairCap = allMode ? 4 : cap;
+    // A full six-section run must never spend dozens of empty network calls on
+    // TikTok/Facebook before Bilibili/Douyin are even reached. Repeated runs
+    // continue from a persisted per-section cursor, so a small fair budget here
+    // increases breadth over time instead of repeating the first queries.
+    if (reported > 0) fairCap = Math.min(fairCap, reported);
+    return Math.max(allMode ? 3 : 4, fairCap);
   }
   function fatalCollectionError(error) {
     var status = Number(error && error.status), message = text(error && error.message);
@@ -2129,6 +2156,7 @@
         ? (j.queryCursor || 0) + 1
         : live.nextQueryCursor,
     );
+    saveDiscoveryCursor(section, j.queryCursor);
     j.catalogSize = Number(live.queryCatalogSize || j.catalogSize || 5);
     j.discoveryCatalogSize = Number(
       live.discoveryCatalogSize || j.discoveryCatalogSize || j.catalogSize || 5,
@@ -2182,7 +2210,7 @@
       if (dryRun) break;
       if (!stopRequested && j.sectionCount < j.target) await wait(650);
     }
-    var lowYieldRescue = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section);
+    var lowYieldRescue = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section) && Number(j.newlyFound || 0) > 0;
     if (
       !dryRun &&
       !stopRequested &&
@@ -2251,7 +2279,7 @@
           regionId: text($("collectorRegion").value),
       languages: text($("collectorLanguages").value),
       batch: 0,
-      queryCursor: 0,
+      queryCursor: loadDiscoveryCursor(section),
       catalogSize: 15,
       discoveryCatalogSize: 12,
       sectionCount: sectionCount(section),
@@ -2270,7 +2298,7 @@
       registrySweepActive: false,
       qualitySweepBatches: 0,
       qualityEmptyBatches: 0,
-      qualitySweepTarget: /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section) ? 8 : 6,
+      qualitySweepTarget: (runMode === "all" ? 2 : (/^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section) ? 4 : 3)),
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
@@ -2388,7 +2416,7 @@
           j.languages = text($("collectorLanguages").value);
           j.sectionCount = sectionCount(j.section);
           j.batch = 0;
-          j.queryCursor = 0;
+          j.queryCursor = loadDiscoveryCursor(j.section);
           j.catalogSize = 15;
           j.discoveryCatalogSize = 12;
           j.emptyBatches = 0;
@@ -2401,7 +2429,7 @@
           j.registrySweepActive = false;
           j.qualitySweepBatches = 0;
           j.qualityEmptyBatches = 0;
-          j.qualitySweepTarget = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(j.section) ? 8 : 6;
+          j.qualitySweepTarget = 2;
           j.qualitySweepDone = false;
           j.qualitySweepActive = false;
           j.lastReason = "";

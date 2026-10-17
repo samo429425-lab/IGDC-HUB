@@ -25,7 +25,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.8.0-intake-release-passthrough";
+const VERSION = "canonical-snapshot-publisher-v1.8.1-section-local-monetization-rank";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
@@ -609,30 +609,94 @@ function sourceTierOf(candidate) {
   const selection = isObject(raw.candidateSelection) ? raw.candidateSelection : {};
   return str(selection.sourceTier || objectAt(raw, ["commerceCandidate", "sourceTier"]));
 }
-function isApprovedDirect(candidate) { return sourceTierOf(candidate) === "approved_commerce_member"; }
-function numeric(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
-function getPriority(candidate) {
-  const raw = candidate.raw || {};
+function sourceTierOf(candidate) {
+  const raw = candidate && candidate.raw || {};
   const selection = isObject(raw.candidateSelection) ? raw.candidateSelection : {};
+  return str(selection.sourceTier || objectAt(raw, ["commerceCandidate", "sourceTier"]));
+}
+// Section-local order is a presentation concern. Neither this module nor the
+// revenue score is permitted to select or change a candidate's PSOM section.
+// Only a server-issued Commerce Candidate Intake release envelope can supply
+// revenue-class evidence; raw user/website 'priority' flags never confer a
+// verified paid-partner or approved-ad ranking tier.
+const COMMERCIAL_SLOT_TIERS = Object.freeze({
+  DIRECT_COMMERCE_VERIFIED: 700, FORMAL_PARTNER: 650,
+  AFFILIATE_ACTIVE: 600, DIRECT_SPONSOR: 550,
+  REFERRAL_VERIFIED: 500, VERIFIED_REVENUE_ROUTE: 450,
+  AD_INVENTORY_READY: 100, TRAFFIC_VALUE_ONLY: 65,
+  AD_OPPORTUNITY: 50, ORDINARY: 40,
+  REVENUE_ROUTE_HOLD: 25, NON_REVENUE: 20, FALLBACK: 10
+});
+const VERIFIED_SETTLEMENT_CLASSES = new Set([
+  "DIRECT_COMMERCE_VERIFIED", "FORMAL_PARTNER", "AFFILIATE_ACTIVE",
+  "DIRECT_SPONSOR", "REFERRAL_VERIFIED", "VERIFIED_REVENUE_ROUTE"
+]);
+function numeric(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
+function validatedSelection(candidate) {
+  const raw = candidate && candidate.raw || {};
+  const selection = isObject(raw.candidateSelection) ? raw.candidateSelection : {};
+  const context = isObject(raw.commerceCandidate) ? raw.commerceCandidate : {};
+  if (selection.releaseEligible !== true || context.releaseEligible !== true ||
+      !str(selection.selectionDigest) || !str(selection.sourceTier)) return null;
+  return selection;
+}
+function commercialSlotTier(candidate) {
+  const selection = validatedSelection(candidate);
+  if (!selection) return COMMERCIAL_SLOT_TIERS.ORDINARY;
+  const kind = str(selection.commercialPriorityClass);
+  if (!Object.prototype.hasOwnProperty.call(COMMERCIAL_SLOT_TIERS, kind)) return COMMERCIAL_SLOT_TIERS.ORDINARY;
+  const assessment = isObject(selection.profitabilityAssessment) ? selection.profitabilityAssessment : {};
+  // A paid contract is not a paid route until the server passed all
+  // economics/legal/tax/profitability gates. Ad inventory remains its own tier.
+  if (VERIFIED_SETTLEMENT_CLASSES.has(kind) && assessment.gatePassed !== true) return COMMERCIAL_SLOT_TIERS.ORDINARY;
+  if (kind === "AD_INVENTORY_READY" && assessment.commercialClass !== kind) return COMMERCIAL_SLOT_TIERS.ORDINARY;
+  return COMMERCIAL_SLOT_TIERS[kind];
+}
+function getPriority(candidate) {
+  const raw = candidate && candidate.raw || {};
+  const selection = validatedSelection(candidate);
+  if (selection) return numeric(selection.rankingScore);
+  // Preserve the exact original scoring rule for non-commerce/legacy pages.
   const sourceTier = sourceTierOf(candidate);
-  const sourceBoost = sourceTier === "approved_commerce_member" ? 10000000 : (sourceTier === "managed_sponsor" ? 5000000 : 0);
+  const sourceBoost = sourceTier === "approved_commerce_member" ? 10000000 :
+    (sourceTier === "managed_sponsor" ? 5000000 : 0);
   const managedBoost = raw.managedPriority === true ? 1000000 : 0;
-  // Use a sum, not the first numeric value: a generic candidate with
-  // managedPriority=false must still keep its verified ranking score.
-  return sourceBoost + managedBoost + numeric(selection.rankingScore) + numeric(raw.priority) + numeric(raw.score) + numeric(raw.compositeScore) + numeric(raw.qualityScore);
+  return sourceBoost + managedBoost + numeric(raw.priority) + numeric(raw.score) +
+    numeric(raw.compositeScore) + numeric(raw.qualityScore);
 }
-function sectionSlotCapacity(policy,page,section){
-  const base=Math.max(1,Number(policy&&policy.slotCapacityDefault)||100);
-  // Tour right panel was designed with 200 physical front slots.  All other
-  // commerce sections keep the standard 100-slot front contract.
-  if(page==="tour"&&section==="tour")return Math.max(base,200);
-  return base;
+function stableCandidateRank(a, b) {
+  return commercialSlotTier(b) - commercialSlotTier(a) ||
+    getPriority(b) - getPriority(a) ||
+    a.candidateId.localeCompare(b.candidateId);
 }
-
+function explicitSlotPin(candidate, ledger, capacity) {
+  const raw = candidate && candidate.raw || {};
+  const placement = isObject(raw.placement) ? raw.placement : {};
+  const admin = isObject(raw.administratorFrontMatchAuthority) ? raw.administratorFrontMatchAuthority : {};
+  // A normal prior placement (including its mapping.locked marker) is NOT an
+  // operator pin. Otherwise existing Front Match would prevent reranking.
+  const pinned = raw.manualPinned === true || placement.manualPinned === true ||
+    (admin.verified === true && admin.manualPinned === true);
+  if (!pinned) return null;
+  const requested = candidate.requestedSlot;
+  if (requested != null && Number.isInteger(requested) && requested >= 1 && requested <= capacity) return requested;
+  const previous = ledger.entries[candidate.candidateId];
+  if (previous && previous.page === candidate.page && previous.section === candidate.section &&
+      previous.country === candidate.country && previous.region === candidate.region &&
+      previous.fingerprint === candidate.fingerprint && Number.isInteger(Number(previous.slot)) &&
+      Number(previous.slot) >= 1 && Number(previous.slot) <= capacity) return Number(previous.slot);
+  return null;
+}
+function sectionLocalCommerceGroup(group) {
+  return !!group.length && productBearingRoute(group[0].page, group[0].section) &&
+    group.every(candidate => validatedSelection(candidate) !== null);
+}
+function sectionSlotCapacity(policy, page, section) {
+  const base = Math.max(1, Number(policy && policy.slotCapacityDefault) || 100);
+  return page === "tour" && section === "tour" ? Math.max(base, 200) : base;
+}
 function assignSlots(candidates, ledger, policy) {
-  const rejected = [];
-  const assigned = [];
-  const groups = new Map();
+  const rejected = [], assigned = [], groups = new Map();
   for (const candidate of candidates) {
     const key = candidate.page + "|" + candidate.section + "|" + candidate.country + "|" + candidate.region;
     if (!groups.has(key)) groups.set(key, []);
@@ -640,65 +704,82 @@ function assignSlots(candidates, ledger, policy) {
   }
   for (const [, group] of groups.entries()) {
     const used = new Map();
-    const page=group[0]&&group[0].page,section=group[0]&&group[0].section,capacity=sectionSlotCapacity(policy,page,section);
-    const firstFree = usedSlots => { for (let i = 1; i <= capacity; i += 1) if (!usedSlots.has(i)) return i; return null; };
-    const priorFor = candidate => {
-      const prior = ledger.entries[candidate.candidateId];
-      return prior && prior.fingerprint === candidate.fingerprint && prior.page === candidate.page && prior.section === candidate.section && prior.country === candidate.country && prior.region === candidate.region && Number(prior.slot) >= 1 && Number(prior.slot) <= capacity ? Number(prior.slot) : null;
+    const page = group[0].page, section = group[0].section;
+    const capacity = sectionSlotCapacity(policy, page, section);
+    const firstFree = () => {
+      for (let i = 1; i <= capacity; i += 1) if (!used.has(i)) return i;
+      return null;
     };
     const place = (candidate, slot, origin) => {
       used.set(slot, candidate.candidateId);
-      assigned.push(Object.assign({}, candidate, { slot, slotOrigin: origin }));
+      assigned.push(Object.assign({}, candidate, {slot, slotOrigin: origin}));
     };
 
-    // Administrator-approved direct commerce is intentionally allowed to take
-    // the foremost free positions before generic referral rows retained from a
-    // prior release. It still must satisfy all Canonical evidence contracts.
-    const direct = group.filter(isApprovedDirect).sort((a, b) => getPriority(b) - getPriority(a) || a.candidateId.localeCompare(b.candidateId));
-    const remaining = group.filter(candidate => !isApprovedDirect(candidate));
-    for (const candidate of direct) {
-      // Direct listings are re-ranked ahead of generic brokerage on every
-      // release unless an administrator explicitly pins a slot upstream.
-      let slot = candidate.requestedSlot != null ? candidate.requestedSlot : firstFree(used);
-      if (slot != null && used.has(slot)) {
-        // A direct item may not displace another direct item; when the desired
-        // slot is occupied it falls to the next free slot rather than silently
-        // overwriting a manager's approved placement.
-        slot = firstFree(used);
+    if (sectionLocalCommerceGroup(group)) {
+      // Pin only operator-pinned slots; all other already-matched products can
+      // move forward/backward WITHIN this exact page/section/market group.
+      const pinned = [], movable = [];
+      for (const candidate of group) {
+        const slot = explicitSlotPin(candidate, ledger, capacity);
+        if (slot !== null) pinned.push({candidate, slot});
+        else movable.push(candidate);
       }
-      if (!slot || slot > capacity) { rejected.push({ candidate, reason: "SECTION_CAPACITY_EXHAUSTED" }); continue; }
-      place(candidate, slot, candidate.requestedSlot != null ? "upstream-direct" : "publisher-direct");
+      pinned.sort((a, b) => a.slot - b.slot || stableCandidateRank(a.candidate, b.candidate));
+      for (const entry of pinned) {
+        if (used.has(entry.slot)) { movable.push(entry.candidate); continue; }
+        place(entry.candidate, entry.slot, "administrator-pin");
+      }
+      movable.sort(stableCandidateRank);
+      for (const candidate of movable) {
+        const slot = firstFree();
+        if (slot === null) { rejected.push({candidate, reason: "SECTION_CAPACITY_EXHAUSTED"}); continue; }
+        place(candidate, slot, "section-local-revenue-rank");
+      }
+      continue;
     }
 
-    const retained = [];
-    const incoming = [];
+    // Non-commerce and mixed/legacy groups retain the previous publisher slot
+    // algorithm. Never remap an unrelated media/social front surface.
+    const priorFor = candidate => {
+      const prior = ledger.entries[candidate.candidateId];
+      return prior && prior.fingerprint === candidate.fingerprint && prior.page === candidate.page &&
+        prior.section === candidate.section && prior.country === candidate.country && prior.region === candidate.region &&
+        Number(prior.slot) >= 1 && Number(prior.slot) <= capacity ? Number(prior.slot) : null;
+    };
+    const direct = group.filter(candidate => sourceTierOf(candidate) === "approved_commerce_member")
+      .sort((a, b) => getPriority(b) - getPriority(a) || a.candidateId.localeCompare(b.candidateId));
+    const remaining = group.filter(candidate => sourceTierOf(candidate) !== "approved_commerce_member");
+    for (const candidate of direct) {
+      let slot = candidate.requestedSlot != null ? candidate.requestedSlot : firstFree();
+      if (slot != null && used.has(slot)) slot = firstFree();
+      if (!slot || slot > capacity) { rejected.push({candidate, reason:"SECTION_CAPACITY_EXHAUSTED"}); continue; }
+      place(candidate, slot, candidate.requestedSlot != null ? "upstream-direct" : "publisher-direct");
+    }
+    const retained = [], incoming = [];
     for (const candidate of remaining) {
-      const priorSlot = priorFor(candidate);
-      if (priorSlot != null && !used.has(priorSlot)) retained.push({ candidate, slot: priorSlot, origin: "ledger" });
+      const prior = priorFor(candidate);
+      if (prior !== null && !used.has(prior)) retained.push({candidate, slot:prior});
       else incoming.push(candidate);
     }
     retained.sort((a, b) => a.slot - b.slot || getPriority(b.candidate) - getPriority(a.candidate) || a.candidate.candidateId.localeCompare(b.candidate.candidateId));
     for (const entry of retained) {
-      if (used.has(entry.slot)) { incoming.push(entry.candidate); continue; }
-      place(entry.candidate, entry.slot, entry.origin);
+      if (used.has(entry.slot)) {incoming.push(entry.candidate); continue;}
+      place(entry.candidate, entry.slot, "ledger");
     }
     incoming.sort((a, b) => getPriority(b) - getPriority(a) || a.candidateId.localeCompare(b.candidateId));
     for (const candidate of incoming) {
       let slot = candidate.requestedSlot;
       if (slot != null && used.has(slot)) {
-        const incumbentId = used.get(slot);
-        const incumbent = assigned.find(entry => entry.candidateId === incumbentId);
-        // An approved direct item may legitimately take the prominent slot;
-        // retain the otherwise valid generic candidate in the next free slot.
-        if (incumbent && isApprovedDirect(incumbent)) slot = firstFree(used);
-        else { rejected.push({ candidate, reason: "REQUESTED_SLOT_COLLISION" }); continue; }
+        const prior = assigned.find(entry => entry.candidateId === used.get(slot));
+        if (prior && sourceTierOf(prior) === "approved_commerce_member") slot = firstFree();
+        else {rejected.push({candidate, reason:"REQUESTED_SLOT_COLLISION"}); continue;}
       }
-      if (slot == null) slot = firstFree(used);
-      if (!slot || slot > capacity) { rejected.push({ candidate, reason: "SECTION_CAPACITY_EXHAUSTED" }); continue; }
+      if (slot == null) slot = firstFree();
+      if (!slot || slot > capacity) { rejected.push({candidate, reason:"SECTION_CAPACITY_EXHAUSTED"}); continue; }
       place(candidate, slot, candidate.requestedSlot != null ? "upstream" : "publisher");
     }
   }
-  return { assigned, rejected };
+  return {assigned, rejected};
 }
 
 function buildCanonicalItem(entry, releaseId) {
@@ -1132,6 +1213,8 @@ module.exports = {
   PUBLIC_FILE,
   publish,
   verifyPublished,
+  assignSlots,
+  commercialSlotTier,
   loadRouteRegistry,
   loadPolicy,
   publicPaths,

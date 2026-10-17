@@ -3281,6 +3281,12 @@ function productFrontPublicationLocked(rowInput) {
 function productAdministratorLocked(rowInput) {
   const row = plain(rowInput), control = plain(row.managementControl), placement = plain(row.approvedPlacement), source = lower(control.source || row.decisionSource);
   if (productFrontPublicationLocked(row)) return true;
+  // A valid recorded slot assignment is already C-stage state, even if an old
+  // automation stored slotDecision=undecided or aiReclassificationAllowed=true.
+  // Only a distinct explicit repair or administrator action may alter it.
+  const durableKey = productPlacementKey(row.approvedPlacement || row.selectedPlacement);
+  if (validProductSectionKey(durableKey) && row.placementInvalid !== true && placement.placementInvalid !== true &&
+      !["purge", "reject"].includes(lower(row.slotDecision))) return true;
   if (control.administratorLocked === true || control.aiReclassificationAllowed === false || source === "administrator") return true;
   if (placement.administratorSelected === true && placement.aiSelected !== true) return true;
   const decision = lower(row.slotDecision || "undecided");
@@ -5856,8 +5862,8 @@ async function supplierScopedCandidateRows(scope,fields,extra,limitInput){
   if(!successful){const error=new Error("현재 국가의 책임 공급업체 원장을 읽지 못했습니다.");error.statusCode=502;throw error;}
   return Array.from(seen.values()).slice(0,limit);
 }
-async function persistSupplierSuppression(scope,row,actorId,action,key){
-  const url=supplierControlTargetUrl(supplierRowUrl(row)); if(!url) return {status:"suppression_not_persisted",reason:"url_missing"};
+async function persistSupplierSuppression(scope,row,actorId,action,key,exactSelectedUrl){
+  const url=supplierControlTargetUrl(exactSelectedUrl||supplierRowUrl(row)); if(!url) return {status:"suppression_not_persisted",reason:"url_missing"};
   const id="country_supplier_control_"+sha256(scope.country+"|"+scope.region+"|"+url).slice(0,24),now=iso();
   const payload={entityKind:"supplier_control_tombstone",targetCountry:scope.country,targetRegion:scope.region,sourceCandidateUrl:url,supplierOfficialUrl:first(row&&row.normalizedSupplierUrl,url),operatorControl:{action,key,blockedAt:now,blockedBy:text(actorId)||"administrator",preventsRediscovery:true},aiAutomation:{country:scope.country,region:scope.region,operatorDecision:action,operatorDecisionAt:now,operatorDecisionBy:text(actorId)||"administrator",publicPublication:false,productImport:false}};
   const dbrow={id,kind:"supplier",title:text(row&&row.title)||supplierHostLabel(supplierRowHost(row)),official_url:url,status:"suppressed",source_ref:SOURCE_REF,description:"Administrator supplier research suppression tombstone. It prevents the same URL or domain from being reintroduced automatically.",owner_note:"표시 데이터는 제거하고 재수집 방지용 최소 차단 지문만 유지합니다.",source_payload:payload,updated_at:now};
@@ -5913,7 +5919,7 @@ async function persistSupplierResearchDecision(scope,targetRow,action,actorId,op
     if(normalizeCountry(automation.country)!==scope.country||normalizeRegion(automation.region||"NATIONWIDE",scope.country)!==scope.region)continue;
     if(text(payload.entityKind)==="supplier_control_tombstone")continue;
     const specificUrls=[payload.sourceCandidateUrl,payload.url,automation.sourceUrl].map(supplierControlTargetUrl).filter(Boolean);
-    const urls=specificUrls.length?specificUrls:[entry&&entry.official_url,payload.supplierOfficialUrl,automation.officialUrl].map(supplierControlTargetUrl).filter(Boolean);
+    const urls=Array.from(new Set(specificUrls.concat([entry&&entry.official_url,payload.supplierOfficialUrl,automation.officialUrl].map(supplierControlTargetUrl).filter(Boolean))));
     const rowHost=(()=>{try{return new URL(urls[0]||"").hostname.toLowerCase().replace(/^www\./,"");}catch(_e){return"";}})();
     if(matchHost?(!!targetHost&&rowHost===targetHost):(!!exactUrl&&urls.some((value)=>value.toLowerCase()===exactUrl.toLowerCase()))){
       if(action==="dismiss"){await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(text(entry.id)));entry.__deleted=true;updated+=1;continue;}
@@ -5982,10 +5988,10 @@ async function researchCandidateAction(actorId,input){
     }else if(action==="hold"){active=removeUrl(active,targetUrl);blocked=removeUrl(blocked,targetUrl);holding=addUnique(holding,Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"holding",holdReason:"operator_hold",operatorDecision:"hold",updatedAt:iso()}));removeManualExact(targetUrl);
     }else if(action==="restore"){const hostWasBlocked=!!(hostKey&&keys.has(hostKey));holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);active=addUnique(active,Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"active",holdReason:null,operatorDecision:"restore",updatedAt:iso()}));keys.delete(urlKey);if(hostWasBlocked)keys.delete(hostKey);await removeSupplierSuppression(scope,target,hostWasBlocked?hostKey:urlKey,{matchHost:hostWasBlocked});
     }else if(action==="dismiss"){const hostWasBlocked=!!(hostKey&&keys.has(hostKey));active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);keys.delete(urlKey);if(hostWasBlocked)keys.delete(hostKey);await removeSupplierSuppression(scope,target,hostWasBlocked?hostKey:urlKey,{matchHost:hostWasBlocked});removeManualExact(targetUrl);
-    }else if(action==="purge"){keys.add(urlKey);active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=addUnique(removeUrl(blocked,targetUrl),Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"blocked",holdReason:"operator_url_block",operatorDecision:"purge",updatedAt:iso()}));await persistSupplierSuppression(scope,target,actorId,"purge",urlKey);removeManualExact(targetUrl);
+    }else if(action==="purge"){keys.add(urlKey);active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=addUnique(removeUrl(blocked,targetUrl),Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"blocked",holdReason:"operator_url_block",operatorDecision:"purge",updatedAt:iso()}));await persistSupplierSuppression(scope,target,actorId,"purge",urlKey,targetUrl);removeManualExact(targetUrl);
     }else if(action==="block"){if(hostKey)keys.add(hostKey);const affected=allRows().filter((row)=>supplierRowHost(row)===host);active=active.filter((row)=>supplierRowHost(row)!==host);holding=holding.filter((row)=>supplierRowHost(row)!==host);blocked=blocked.filter((row)=>supplierRowHost(row)!==host);// Keep a reversible block-history entry separate from the active hold list.
       for(const row of affected)blocked=addUnique(blocked,Object.assign({},row,{adminPinned:false,manualPinned:false,queueState:"blocked",holdReason:"operator_domain_block",operatorDecision:"block",updatedAt:iso()}));
-      await persistSupplierSuppression(scope,target,actorId,"block",hostKey);removeManualHost(host);
+      await persistSupplierSuppression(scope,target,actorId,"block",hostKey,targetUrl);removeManualHost(host);
     }else if(action==="unblock"){keys.delete(urlKey);if(hostKey)keys.delete(hostKey);const same=blocked.filter((row)=>sameSupplierUrl(row,targetUrl)||supplierRowHost(row)===host);blocked=blocked.filter((row)=>!same.includes(row));for(const row of same)holding=addUnique(holding,Object.assign({},row,{adminPinned:false,manualPinned:false,queueState:"holding",holdReason:"operator_unblocked_review_required",operatorDecision:"unblock",updatedAt:iso()}));await removeSupplierSuppression(scope,target,hostKey||urlKey,{matchHost:true});
     }else if(action==="remove_from_list"){active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);removeManualExact(targetUrl);}
     // Keep the persisted private supplier ledger aligned with the research
