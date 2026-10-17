@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v4.7.0 - progressive research cursors + fair six-section traversal */
+/* IGDC Social Hub Content Operations v4.8.0 - complete content lanes + verified storage bridge */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -303,6 +303,7 @@
         (d && d.message) || (d && d.error) || "요청 실패: HTTP " + r.status,
       );
       e.status = r.status;
+      e.payload = d || null;
       throw e;
     }
     return d;
@@ -1764,6 +1765,7 @@
         "wikidata-public-social-directory": "키 없는 공개 디렉터리",
         "youtube-data-api-channel": "YouTube API",
         "google-cse-channel": "Google CSE",
+        "google-cse-content": "Google CSE 실콘텐츠",
         "naver-web-channel": "Naver 검색",
         "sanmaru-public-search": "산마루·SearchBank",
         "tiktok-native-search": "TikTok 전용 검색",
@@ -1871,6 +1873,7 @@
       rejectedByReason: live.rejectedByReason || {},
       providerGroup: live.providerGroupName || null,
       providerTrace: live.providerTrace || [],
+      gateway: live.gateway || null,
       psomContract: live.psomContract || null,
       researchAuthority: live.researchAuthority || null,
       influencerRegistryRole: live.influencerRegistryRole || null,
@@ -2156,7 +2159,7 @@
         ? (j.queryCursor || 0) + 1
         : live.nextQueryCursor,
     );
-    saveDiscoveryCursor(section, j.queryCursor);
+    if (!dryRun) saveDiscoveryCursor(section, j.queryCursor);
     j.catalogSize = Number(live.queryCatalogSize || j.catalogSize || 5);
     j.discoveryCatalogSize = Number(
       live.discoveryCatalogSize || j.discoveryCatalogSize || j.catalogSize || 5,
@@ -2206,7 +2209,7 @@
       if (newly) j.emptyBatches = 0;
       else j.emptyBatches += 1;
       progress(j);
-      saveJob(j);
+      if (!dryRun) saveJob(j);
       if (dryRun) break;
       if (!stopRequested && j.sectionCount < j.target) await wait(650);
     }
@@ -2318,7 +2321,7 @@
       await collectSection(key, dry, j);
       j.done = 1;
       j.paused = stopRequested;
-      saveJob(j);
+      if (!dry) saveJob(j);
       diagnostic({
         reportType: "igdc-social-section-batch-collection-report",
         generatedAt: new Date().toISOString(),
@@ -2356,7 +2359,7 @@
     } catch (e) {
       failed = true;
       j.paused = true;
-      saveJob(j);
+      if (!dry) saveJob(j);
       $("collectorState").textContent = collectionErrorState(e);
       show(
         (e.message || "수집 오류") + " · 현재 지점은 저장되었습니다.",
@@ -2446,6 +2449,17 @@
             platform: label(j.section),
             message: text(sectionError && sectionError.message) || "section_collection_failed",
             status: Number(sectionError && sectionError.status) || null,
+            gateway: sectionError && sectionError.payload && sectionError.payload.liveCollection
+              ? sectionError.payload.liveCollection.gateway || null
+              : null,
+            payloadError: sectionError && sectionError.payload
+              ? {
+                  error: text(sectionError.payload.error),
+                  message: text(sectionError.payload.message),
+                  accepted: Number(sectionError.payload.accepted || 0),
+                  saved: Number(sectionError.payload.saved || 0),
+                }
+              : null,
             at: new Date().toISOString(),
           });
           // One provider/platform must not block the remaining Social sections.

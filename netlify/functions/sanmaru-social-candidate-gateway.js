@@ -13,7 +13,7 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const Policy = require("./lib/social-candidate-policy.v1");
 const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 
-const VERSION = "sanmaru-social-candidate-gateway-v1.4.0-section-complete-exclusions";
+const VERSION = "sanmaru-social-candidate-gateway-v1.5.0-trusted-collector-store-bridge";
 const INTERNAL_GATEWAY_EVENT = Symbol("igdc-social-candidate-gateway-internal");
 
 function internalAuthorized(event) {
@@ -24,7 +24,20 @@ function internalAuthorized(event) {
   return !!(got && got === expected);
 }
 async function actorFor(event) {
-  if (event && event[INTERNAL_GATEWAY_EVENT]) return { memberId: "social-scheduler", email: "social-scheduler", roles: ["social_manager"], mode: "scheduled_internal" };
+  const trusted = event && event[INTERNAL_GATEWAY_EVENT];
+  if (trusted) {
+    const supplied = trusted && trusted.actor && typeof trusted.actor === "object"
+      ? trusted.actor
+      : { memberId: "social-scheduler", email: "social-scheduler", roles: ["social_manager"] };
+    // This branch is reachable only through the module-local Symbol created by
+    // storeInternal(). The live collector has already authenticated/authorized
+    // the actor (or established the trusted scheduler actor), so do not perform
+    // a second role normalization check here. Re-checking here can reject valid
+    // internal roles such as social_manager after key normalization.
+    return Object.assign({}, supplied, {
+      mode: SocialStore.text(trusted && trusted.mode) || SocialStore.text(supplied.mode) || "collector_internal"
+    });
+  }
   if (internalAuthorized(event)) return { memberId: "sanmaru-internal", email: "sanmaru-internal", roles: ["social_manager"], mode: "internal" };
   const actor = await AdminAuth.authenticateCommerceAdmin(event);
   SocialStore.requireRole(actor, "write");
@@ -231,7 +244,7 @@ exports.handler = async function(event) {
  * Trusted in-process entry for scheduled Social collection.
  * The marker is a module-local Symbol, so an external HTTP request cannot spoof it.
  */
-exports.storeInternal = async function(body) {
+exports.storeInternal = async function(body, actor) {
   const event = {
     httpMethod: "POST",
     headers: {},
@@ -239,7 +252,13 @@ exports.storeInternal = async function(body) {
     path: "/.netlify/functions/sanmaru-social-candidate-gateway",
     body: JSON.stringify(body || {})
   };
-  event[INTERNAL_GATEWAY_EVENT] = true;
+  // Module-local Symbol: an external HTTP caller cannot forge this bridge.
+  // The LIVE collector has already authenticated the administrator/scheduler,
+  // so preserve that actor and avoid a second, failure-prone auth hop.
+  event[INTERNAL_GATEWAY_EVENT] = {
+    actor: actor && typeof actor === "object" ? actor : null,
+    mode: actor && actor.mode ? actor.mode : "collector_internal"
+  };
   return exports.handler(event);
 };
 

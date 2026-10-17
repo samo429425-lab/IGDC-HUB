@@ -22,9 +22,10 @@ const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 const AdminPlacementGuard = require("./commerce-admin-placement-guard.v1");
+const OriginalProductEvidence = require("./igdc-original-product-url-evidence-20261013-all-safe.json");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 
-const VERSION = "commerce-country-automation-v3.37.3-established-placement-immutable";
+const VERSION = "commerce-country-automation-v3.38.0-research-delta-immutable-ledger";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1818,15 +1819,18 @@ function attachProductRuntime(dataInput, runtimeInput) {
   if (deletedLatest.size) {
     const pagination = plain(data.pagination), alreadyFiltered = lower(pagination.kind) === "latest" && pagination.deletedFiltered === true;
     const visibleLatest = alreadyFiltered ? array(data.latestProducts) : array(data.latestProducts).filter((row) => !deletedLatest.has(ProductRanking.productIdentity(row) || text(row && row.id)));
+    const removedFromVisible=Math.max(0,array(data.latestProducts).length-visibleLatest.length);
     if (Array.isArray(data.latestProducts)) data.latestProducts = visibleLatest;
-    if (!alreadyFiltered) data.summary = Object.assign({}, plain(data.summary), { latestResearchProducts: Math.max(0, Number(plain(data.summary).latestResearchProducts || 0) - deletedLatest.size) });
-    if (lower(pagination.kind) === "latest" && !alreadyFiltered) data.pagination = Object.assign({}, pagination, { total: Math.max(0, Number(pagination.total || 0) - deletedLatest.size), returned: visibleLatest.length });
+    if (!alreadyFiltered) data.summary = Object.assign({}, plain(data.summary), { latestResearchProducts: Math.max(0, Number(plain(data.summary).latestResearchProducts || 0) - removedFromVisible) });
+    if (lower(pagination.kind) === "latest" && !alreadyFiltered) data.pagination = Object.assign({}, pagination, { total: Math.max(0, Number(pagination.total || 0) - removedFromVisible), returned: visibleLatest.length });
     data.pipeline = Object.assign({}, plain(data.pipeline), { latestResearchDeleted: deletedLatest.size });
   }
   return data;
 }
 async function productResearchPauseControl(actorId, input) {
   const raw = plain(input), scope = researchScope(raw), mode = lower(raw.mode) === "resume" ? "resume" : "pause", jobId = text(raw.jobId);
+  const currentJob=await productJobRule(scope);
+  if(currentJob&&jobId&&text(currentJob.jobId)!==jobId){const error=new Error("다른 조사 주기의 중단·재개 요청은 거부합니다. 현재 작업 상태를 다시 조회하세요.");error.statusCode=409;error.code="PRODUCT_RESEARCH_STALE_JOB";throw error;}
   if (mode === "resume") {
     const runtime = await saveProductRuntime(scope, actorId, { jobId: jobId || null, pauseRequested: false, paused: false, pauseMode: "manual", resumedAt: iso() });
     return { ok: true, reportType: "igdc-country-product-reference-research-pause-control", version: VERSION, scope, pause: publicProductRuntime(runtime, jobId) };
@@ -2052,9 +2056,9 @@ function compactProductInspectionCheckpoint(job, force) {
   job.inspectionTotalCount = Math.max(Number(job.inspectionTotalCount || 0), Number(job.inspectionProcessedBase || 0) + array(job.inspectionPool).length);
 }
 function prepareProductStagingPhase(job) {
-  // Inspection completion now flows directly into the private candidate ledger.
-  // The existing bounded staging engine is reused in small batches, so the
-  // operator no longer has to manage a separate intermediary queue screen.
+  // A/B cannot write to C or D. All inspected results stay in durable
+  // country/job chunks until the administrator explicitly registers candidates.
+  // In particular, stopping research must never silently mutate placements.
   if (job && job.resultStorage === "chunked_v1") {
     const stats = plain(job.resultStats), eligible = Math.max(0, Number(stats.queueEligible || 0));
     job.stagePool = [];
@@ -2076,12 +2080,12 @@ function prepareProductStagingPhase(job) {
     job.stageCursor = 0;
     job.stageSummary = { eligible: ids.length, created: 0, updated: 0, preserved: 0, skipped: 0, failed: 0 };
   }
-  job.status = "staging";
-  job.finishedAt = null;
+  job.status = "complete";
+  job.finishedAt = iso();
   job.inspectionPool = [];
   job.inspectCursor = Math.max(0, Number(job.inspectionTotalCount || job.inspectCursor || 0));
   job.productInspectionRetryPending = 0;
-  job.trace = array(job.trace).concat([{ at: iso(), source: "product-research", status: "research_complete_candidate_sync_started", eligible: Number(plain(job.stageSummary).eligible || 0), automaticPrivateQueueWrite: true }]).slice(-240);
+  job.trace = array(job.trace).concat([{ at: iso(), source: "product-research", status: "inspected_results_saved_awaiting_explicit_registration", eligible: Number(plain(job.stageSummary).eligible || 0), automaticPrivateQueueWrite: false }]).slice(-240);
 }
 
 function productStageBatch(job, start, count) {
@@ -2247,6 +2251,8 @@ function publicProductJob(job) {
       skippedKnownSupplierSources: Number(job.skippedKnownSupplierSourceCount||0),
       newSupplierSources: supplierResearch.newTotal,
       newSuppliersChecked: supplierResearch.newChecked,
+      scheduledExistingSupplierRefresh: Number(job.refreshedSupplierSourceCount||0),
+      refreshedExistingSuppliersChecked: array(job.supplierSources).slice(0,Math.max(0,Number(job.discoveryCursor||0))).filter((row)=>text(row&&row.researchCycleGroup)==="refresh").length,
       pendingNewSupplierSources: Number(job.pendingNewSupplierCount||0),
       previouslyResearchedSuppliers: supplierResearch.existingTotal,
       supplierRetryPending: array(job.supplierRetryQueue).length,
@@ -2329,6 +2335,8 @@ function compactProductResearchStep(job) {
       skippedKnownSupplierSources:Number(job.skippedKnownSupplierSourceCount||0),
       newSupplierSources:supplierResearch.newTotal,
       newSuppliersChecked:supplierResearch.newChecked,
+      scheduledExistingSupplierRefresh:Number(job.refreshedSupplierSourceCount||0),
+      refreshedExistingSuppliersChecked:array(job.supplierSources).slice(0,Math.max(0,Number(job.discoveryCursor||0))).filter((row)=>text(row&&row.researchCycleGroup)==="refresh").length,
       previouslyResearchedSuppliers:supplierResearch.existingTotal,
       supplierRetryPending:array(job.supplierRetryQueue).length,
       temporarilyDeferredSuppliers:array(job.temporarilyDeferredSupplierKeys).length,
@@ -2501,6 +2509,25 @@ async function productRankingContext(scope) {
     safety: { advisoryWeightsOnly: true, administratorPolicyRankingApplied: true, riskGateChanged: false, supplierApprovalChanged: false, productImport: false, publicPublication: false }
   };
 }
+async function archiveProductResearchCycle(job, actorId){
+  if(!job||!text(job.jobId))return;
+  const now=iso(),scope=job.scope;
+  const id="country_product_research_archive_"+sha256(scope.country+"|"+scope.region+"|"+job.jobId).slice(0,32);
+  const previousRuntime=await productRuntimeRule(scope);
+  const archived=Object.assign({},job,{
+    archivedRuntimeCheckpoint:previousRuntime,
+    archiveReason:"new_research_cycle_preserves_prior_inspection_and_queue_checkpoints",
+    archivedAt:now,archivedBy:text(actorId)||"administrator",
+    rawProducts:job.discoveryStorage==="chunked_v1"?[]:array(job.rawProducts).map(compactProductWorkingRow),
+    products:job.resultStorage==="chunked_v1"?[]:array(job.products).map(compactProductWorkingRow)
+  });
+  // Fail closed: no new job if the previous metadata cannot be archived.
+  await SlotStore.insert("gslot_policies",{
+    id,name:"보존된 국가별 상품 리서치 주기",scope_hub:"country-product-reference-research-archive",
+    scope_country:scope.country,scope_region:scope.region==="NATIONWIDE"?null:scope.region,
+    enabled:false,rule:storageSafeJsonValue(archived,0),updated_at:now,updated_by:text(actorId)||"administrator"
+  },"resolution=merge-duplicates,return=minimal");
+}
 async function beginProductResearchJob(actorId, input) {
   const raw=plain(input),scope=researchScope(raw),existing=await loadProductResearchJob(scope);
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&raw.retryStaging===true){
@@ -2511,13 +2538,23 @@ async function beginProductResearchJob(actorId, input) {
     existing.version=VERSION;existing.rankingVersion=ProductRanking.VERSION;prepareProductStagingPhase(existing);existing.lastError=null;existing.trace=array(existing.trace).concat([{at:iso(),source:"private-product-research-queue",status:"explicit_queue_registration_required",products:Number(existing.stageTotalCount||array(existing.stagePool).length),reason:"automatic_restage_disabled"}]).slice(-240);await saveProductJob(existing,actorId);return publicProductJob(existing);
   }
 
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&existing.status==="staging"&&raw.restart===true){
+    // Historical research may be stranded here indefinitely. A/B is complete;
+    // never invoke the old implicit candidate-writer just to unblock research.
+    existing.status="complete";existing.finishedAt=existing.finishedAt||iso();
+    existing.trace=array(existing.trace).concat([{at:iso(),source:"research-start",status:"stale_staging_completed_without_queue_write",automaticPrivateQueueWrite:false}]).slice(-120);
+    await saveProductJob(existing,actorId);
+  }
   const supplierJob=await researchJobRule(scope);
   // Product research must follow the CURRENT durable supplier candidate ledger,
   // not only the snapshot captured by the last supplier-research job.  A newly
   // registered/selected supplier can therefore enter product research
   // immediately even when it was added after that job was committed.
+  // The current supplier ledger is mandatory. A stale supplier-research job
+  // must never masquerade as a successful new search when this read fails.
   let durableSupplierRows=[];
-  try{durableSupplierRows=await listAutomationCandidates(scope.country,scope.region);}catch(_durableSupplierReadError){durableSupplierRows=[];}
+  try{durableSupplierRows=await listAutomationCandidates(scope.country,scope.region);}
+  catch(durableSupplierReadError){const error=new Error("현재 책임 공급업체 원장을 읽지 못해 신규 상품 조사를 시작하지 않았습니다. 저장된 조사 결과는 유지됩니다: "+text(durableSupplierReadError&&durableSupplierReadError.message));error.statusCode=502;error.code="PRODUCT_SUPPLIER_LEDGER_UNAVAILABLE";throw error;}
   // The visible private supplier candidate list is a PRODUCT-RESEARCH source
   // even when a deterministic supplier assessment stored the durable DB row as
   // "hold" for missing release evidence.  "hold" here is not the same as an
@@ -2558,7 +2595,7 @@ async function beginProductResearchJob(actorId, input) {
   // searched. A diagnostic full rescan is available only with fullRescan=true.
   const forceSourceRefresh=raw.fullRescan===true||raw.forceFullRescan===true;
 
-  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!forceSourceRefresh&&!['complete','cancelled','failed'].includes(existing.status)){
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!['complete','cancelled','failed'].includes(existing.status)){
     // Never replace an unfinished product job: its discovery/result chunks and
     // administrator queue checkpoints must survive a supplier-ledger update.
     // While still discovering, append only NEW supplier roots to the same job.
@@ -2580,7 +2617,17 @@ async function beginProductResearchJob(actorId, input) {
     }
     return raw.compact===true?compactProductResearchStep(existing):publicProductJob(existing);
   }
-  const supplierSources=forceSourceRefresh?classifiedSupplierSources:classifiedSupplierSources.filter((source)=>source.researchCycleGroup==="new"||source.researchCycleGroup==="gap");
+  // Refresh a bounded rolling window of already-known sources when the
+  // operator explicitly starts research. Without this, 124 known suppliers
+  // always produce 0 new products even if they have updated their catalogs.
+  const refreshRequested=raw.refreshExisting===true&&!forceSourceRefresh;
+  const refreshPool=classifiedSupplierSources.filter((source)=>source.researchCycleGroup==="existing");
+  const refreshFrom=refreshPool.length?Math.max(0,Number(existing&&existing.supplierRefreshCursor||0))%refreshPool.length:0;
+  const refreshSize=refreshRequested?Math.min(16,refreshPool.length):0;
+  const refreshing=[];
+  for(let n=0;n<refreshSize;n++)refreshing.push(Object.assign({},refreshPool[(refreshFrom+n)%refreshPool.length],{researchCycleGroup:"refresh"}));
+  const nextSupplierRefreshCursor=refreshPool.length?(refreshFrom+refreshSize)%refreshPool.length:0;
+  const supplierSources=forceSourceRefresh?classifiedSupplierSources:classifiedSupplierSources.filter((source)=>source.researchCycleGroup==="new"||source.researchCycleGroup==="gap").concat(refreshing);
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!forceSourceRefresh&&existing.status==="complete"&&!supplierSources.length){
     const view=Object.assign({},existing,{version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchJobId:supplierLedgerSourceId,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,gapSupplierSourceCount,skippedKnownSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:Array.from(priorResearchedKeys)});
     return raw.compact===true?compactProductResearchStep(view):publicProductJob(view);
@@ -2601,7 +2648,8 @@ async function beginProductResearchJob(actorId, input) {
   // new products are appended.
   const previousCycleProductCount=existing&&existing.schema===PRODUCT_JOB_SCHEMA?(existing.resultStorage==="chunked_v1"?Number(existing.resultCount||0):array(existing.products).length):0;
   const cycleResearchedKeys=forceSourceRefresh?[]:Array.from(priorResearchedKeys);
-  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,gapSupplierSourceCount,skippedKnownSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,zeroProductSupplierKeys:Array.from(priorGapKeys),supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,discoveryStorage:"chunked_v1",discoveryResultCount:0,discoveryChunkCount:0,discoveryIdentities:[],rawProducts:[],rawProductCount:0,inspectionStorage:"discovery_chunks_v1",inspectionPool:[],inspectionProcessedBase:0,inspectionTotalCount:0,inspectCursor:0,productInspectionRetryRefs:[],productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],resultStorage:"chunked_v1",resultCount:0,resultChunkCount:0,resultIdentities:[],resultStats:summarizeProductResultRows([]),products:[],preservedProductIdentities:[],currentCycleTouchedIdentities:[],stagePool:[],stagePoolFormat:"result_cursor_v1",stageTotalCount:0,stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},partialQueueStagedIdentities:[],partialQueueLast:null,trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,gapSupplierSources:gapSupplierSourceCount,skippedKnownSupplierSources:skippedKnownSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,storage:"country_region_chunked_v1",chunkSize:PRODUCT_CHUNK_SIZE,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; explicit_full_rescan; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; skip_successfully_researched_suppliers; research_new_and_gap_suppliers_only; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
+  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,supplierRefreshCursor:nextSupplierRefreshCursor,refreshedSupplierSourceCount:refreshing.length,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,gapSupplierSourceCount,skippedKnownSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,zeroProductSupplierKeys:Array.from(priorGapKeys),supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,discoveryStorage:"chunked_v1",discoveryResultCount:0,discoveryChunkCount:0,discoveryIdentities:[],rawProducts:[],rawProductCount:0,inspectionStorage:"discovery_chunks_v1",inspectionPool:[],inspectionProcessedBase:0,inspectionTotalCount:0,inspectCursor:0,productInspectionRetryRefs:[],productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],resultStorage:"chunked_v1",resultCount:0,resultChunkCount:0,resultIdentities:[],resultStats:summarizeProductResultRows([]),products:[],preservedProductIdentities:[],currentCycleTouchedIdentities:[],stagePool:[],stagePoolFormat:"result_cursor_v1",stageTotalCount:0,stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},partialQueueStagedIdentities:[],partialQueueLast:null,trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,gapSupplierSources:gapSupplierSourceCount,skippedKnownSupplierSources:skippedKnownSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,storage:"country_region_chunked_v1",chunkSize:PRODUCT_CHUNK_SIZE,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; explicit_full_rescan; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; skip_successfully_researched_suppliers; research_new_and_gap_suppliers_only; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA)await archiveProductResearchCycle(existing,actorId);
   await saveProductJob(job,actorId);
   await saveProductRuntime(scope,actorId,{jobId:job.jobId,pauseRequested:false,paused:false,pauseMode:"manual",pauseRequestedAt:null,resumedAt:null,partialQueueScanCursor:0,partialQueueStagedIdentities:[],partialQueueUnstagedIdentities:[],latestResearchDeletedIdentities:[],partialQueueLast:null,checkpoint:productRuntimeCheckpoint(compactProductResearchStep(job),scope)});
   // product_research_begin only needs to return progress metadata.  Returning
@@ -2678,18 +2726,20 @@ async function fallbackDiscoverSupplierProducts(sourceInput, scopeInput) {
 async function advanceProductResearchJob(actorId, input) {
   const scope=researchScope(input),requestedJobId=text(input&&input.jobId);
   let runtime={};try{runtime=await productRuntimeRule(scope);}catch(_runtimeReadError){runtime={};}
-  const pauseMatches=runtime.pauseRequested===true&&(!text(runtime.jobId)||!requestedJobId||text(runtime.jobId)===requestedJobId);
-  if(pauseMatches&&runtime.checkpoint)return attachProductRuntime(productRuntimeCheckpoint(runtime.checkpoint,scope),runtime);
   const job=await productJobRule(scope);if(!job||job.schema!==PRODUCT_JOB_SCHEMA){const error=new Error("진행 중인 공식 상품 리서치 작업이 없습니다.");error.statusCode=404;throw error;}
   if(requestedJobId&&text(job.jobId)&&requestedJobId!==text(job.jobId)){const error=new Error("현재 국가·지역의 최신 상품 리서치 작업과 요청 작업 ID가 일치하지 않습니다.");error.statusCode=409;throw error;}
+  const pauseMatches=runtime.pauseRequested===true&&(!text(runtime.jobId)||text(runtime.jobId)===text(job.jobId));
+  if(pauseMatches&&runtime.checkpoint&&text(runtime.checkpoint.jobId)===text(job.jobId))return attachProductRuntime(productRuntimeCheckpoint(runtime.checkpoint,scope),runtime);
   if(pauseMatches)return attachProductRuntime(productResearchStepResponse(job,input),runtime);
   if(job.status==="staging"){
-    const stageResult=await stageCurrentProductResearchQueue(actorId,{countryCode:scope.country,subdivisionCode:scope.region,jobId:job.jobId,source:"research_auto",operation:"stage"}),part=plain(stageResult&&stageResult.partialQueue);
-    job.stageSummary=Object.assign({},plain(job.stageSummary),{eligible:Number(part.eligible||plain(job.stageSummary).eligible||0),created:Number(part.created||0),updated:Number(part.updated||0),preserved:Number(part.preserved||0),skipped:Number(part.skipped||0),failed:Number(part.failed||0),remaining:Number(part.remaining||0)});
-    if(part.complete===true||Number(part.remaining||0)===0){job.status="complete";job.finishedAt=iso();job.lastError=null;job.trace=array(job.trace).concat([{at:iso(),source:"product-research",status:"candidate_ledger_sync_complete",eligible:Number(part.eligible||0),automaticPrivateQueueWrite:true}]).slice(-240);await saveProductJob(job,actorId);}
-    else{job.trace=array(job.trace).concat([{at:iso(),source:"product-research",status:"candidate_ledger_sync_progress",remaining:Number(part.remaining||0),attempted:Number(part.attempted||0),automaticPrivateQueueWrite:true}]).slice(-240);await saveProductJob(job,actorId);}
-    const syncRuntime=await refreshPausedProductRuntime(scope,actorId,job,requestedJobId),response=productResearchStepResponse(job,input);response.candidateSync=part;
-    return attachProductRuntime(response,syncRuntime);
+    // Legacy jobs were left in staging and could auto-write the C-stage ledger
+    // on every resume. They are already inspected: checkpoint and end A/B only.
+    job.status="complete";job.finishedAt=job.finishedAt||iso();job.lastError=null;
+    job.trace=array(job.trace).concat([{at:iso(),source:"legacy-staging-recovery",status:"safe_complete_no_candidate_write",automaticPrivateQueueWrite:false}]).slice(-240);
+    await saveProductJob(job,actorId);
+    const view=productResearchStepResponse(job,input);
+    view.registrationRequired=true;
+    return attachProductRuntime(view,await refreshPausedProductRuntime(scope,actorId,job,requestedJobId));
   }
   if(["complete","cancelled"].includes(job.status))return attachProductRuntime(productResearchStepResponse(job,input),runtime);
 
@@ -3284,7 +3334,7 @@ function productAdministratorLocked(rowInput) {
   // A valid recorded slot assignment is already C-stage state, even if an old
   // automation stored slotDecision=undecided or aiReclassificationAllowed=true.
   // Only a distinct explicit repair or administrator action may alter it.
-  const durableKey = productPlacementKey(row.approvedPlacement || row.selectedPlacement);
+  const durableKey = productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement || row.placement);
   if (validProductSectionKey(durableKey) && row.placementInvalid !== true && placement.placementInvalid !== true &&
       !["purge", "reject"].includes(lower(row.slotDecision))) return true;
   if (control.administratorLocked === true || control.aiReclassificationAllowed === false || source === "administrator") return true;
@@ -3644,7 +3694,8 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
   // ABCD C/D immutability: a fresh supplier crawl is never an approval, a reset
   // or a replacement for a confirmed administrator product. Do not rewrite even
   // the saved original URL/image here if the incoming response was a challenge.
-  if(existing&&AdminPlacementGuard.establishedCandidate(existing))return {status:"confirmed_candidate_preserved_by_research",candidateId,registered:true,preserved:true,currentStatus:text(existing.status),decision:operatorDecision,approvedPlacement:plain(existingPayload.approvedPlacement)};
+  const previewAssignments=existing?await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1"):[];
+  if(existing&&(AdminPlacementGuard.establishedCandidate(existing)||array(previewAssignments).length>0))return {status:"confirmed_candidate_preserved_by_research",candidateId,registered:true,preserved:true,currentStatus:text(existing.status),decision:operatorDecision,approvedPlacement:plain(existingPayload.approvedPlacement)};
 
   const payload = productCandidatePayload(actorId, scope, product, "research_pending");
 
@@ -3694,10 +3745,17 @@ async function syncProductCandidateQueue(actorId, scope, product, decision, opti
   const candidateId = productCandidateId(scope, product);
   const existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
+  // A stale research identity can refer to an already placed durable product
+  // under a DIFFERENT candidate id. Never create a duplicate by URL in AI sync.
+  if(!existing&&productUrl(product)){
+    const sameUrl=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(productUrl(product))+"&limit=1"))[0];
+    if(sameUrl)return{status:"matching_url_candidate_preserved",candidateId:text(sameUrl.id),preserved:true,currentStatus:text(sameUrl.status)};
+  }
   // Durable administrator ledger, not a possibly old research-job copy,
   // is authoritative. AI may never demote/reassign an established candidate.
   // This gate applies to ALL AI queue sync paths (including queue_sync batches).
-  if(existing && AdminPlacementGuard.establishedCandidate(existing) && plain(optionsInput).administratorExplicit!==true) {
+  const assignmentLocks=existing?await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1"):[];
+  if(existing && (AdminPlacementGuard.establishedCandidate(existing)||array(assignmentLocks).length>0) && plain(optionsInput).administratorExplicit!==true) {
     return {status:"administrator_placement_immutable",candidateId,registered:true,
       preserved:true,currentStatus:text(existing.status),
       decision:text(plain(existing.source_payload).slotDecision)||null,
@@ -4614,7 +4672,7 @@ async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
   const originalRef=heldProductReference(currentUrl),exact=originalRef?pool.filter(row=>heldProductReference(productUrl(row))===originalRef):[];
   const others=pool.filter(row=>!exact.includes(row));
   const rotation=(parseInt(sha256(text(candidate.id)+"|"+currentUrl).slice(0,8),16)+Math.max(0,Number(options.pass)||0)*24)%Math.max(others.length,1);
-  pool=exact.concat(others.slice(rotation).concat(others.slice(0,rotation))).slice(0,24);
+  pool=exact.concat(others.slice(rotation).concat(others.slice(0,rotation))).slice(0,options.reviewMaxInspectionCandidates===8?8:24);
   const suggestions=[];
   for(let offset=0;offset<pool.length;offset+=4){
     let checked=null;try{checked=await RegionalSelector.inspectProductResearchStep(pool.slice(offset,offset+4),{country:scope.country,region:scope.region,timeoutMs:5000,allowSupplierRecovery:false});}catch(_error){checked=null;}
@@ -4638,6 +4696,78 @@ async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
 
 
 
+// Historical URLs are merely original-source evidence. They are never deemed
+// current/live unless the independent detail-page inspector succeeds. Look up
+// by immutable ledger id AND the complete product title, not seller/brand alone.
+function normalizedHeldEvidenceTitle(value){
+  return text(value).normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu,"");
+}
+function historicalHeldOriginal(candidateInput){
+  const candidate=plain(candidateInput),payload=plain(candidate.source_payload),row=plain(plain(OriginalProductEvidence).entries)[text(candidate.id)];
+  const name=first(candidate.title,payload.productName,payload.title),url=ProductRanking.canonicalProductUrl(row.url);
+  const expected=normalizedHeldEvidenceTitle(name),recorded=normalizedHeldEvidenceTitle(row.name);
+  if(!expected||!recorded||expected!==recorded||!url||!ProductRanking.isSpecificProductUrl(url))return null;
+  const current=safeUrl(first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url));
+  const supplierSite=safeUrl(first(plain(payload.supplier).officialUrl,payload.supplierSiteUrl));
+  // If the current/detail or trusted seller URL exists, historical evidence
+  // cannot silently redirect to a different merchant's domain.
+  if(current&&!sameSupplierSite(current,url))return null;
+  if(!current&&supplierSite&&!sameSupplierSite(supplierSite,url))return null;
+  return{url,name:text(row.name),source:"historical_exact_candidate_id_and_title",imageUrl:ProductRanking.safeProductImageUrl(row.imageUrl)};
+}
+function verifiedHeldInspection(itemInput,originalUrl,expectedUrl){
+  const item=plain(itemInput),candidateUrl=ProductRanking.canonicalProductUrl(productUrl(item));
+  if(!candidateUrl||!ProductRanking.isSpecificProductUrl(candidateUrl)||
+     !item.productPageLive||item.inspectionComplete!==true||item.sameSupplierSite!==true||
+     !productImageUrl(item)||!first(item.productName,item.title)||
+     ProductRanking.isGenericProductName(first(item.productName,item.title))||!candidateRuntimeHealth(item).live)return false;
+  const expected=ProductRanking.canonicalProductUrl(expectedUrl),source=ProductRanking.canonicalProductUrl(originalUrl);
+  if(!expected||!sameSupplierSite(expected,candidateUrl))return false;
+  // Only the same, immutable vendor item reference may survive redirects.
+  const expectedId=ProductRanking.productIdFromUrl(expected),actualId=ProductRanking.productIdFromUrl(candidateUrl);
+  const expectedReference=heldProductReference(expected),actualReference=heldProductReference(candidateUrl);
+  if(!((expectedReference&&expectedReference===actualReference)||(expectedId&&expectedId===actualId)))return false;
+  const detail=ProductRanking.canonicalProductUrl(first(item.verifiedDetailPageUrl,candidateUrl));
+  if(!detail||!sameSupplierSite(expected,detail)||
+     !((expectedReference&&heldProductReference(detail)===expectedReference)||(expectedId&&ProductRanking.productIdFromUrl(detail)===expectedId)))return false;
+  // A changed original item number is acceptable ONLY with an independent
+  // immutable candidate+name historical proof (checked by caller).
+  return !source||sameSupplierSite(source,candidateUrl);
+}
+async function twoStepHeldProductRecovery(candidateInput,scope,sourceInput,currentInput){
+  const candidate=plain(candidateInput),source=plain(sourceInput),current=ProductRanking.canonicalProductUrl(currentInput);
+  const historical=historicalHeldOriginal(candidate),attempts=[];
+  if(historical&&historical.url!==current){
+    const seed=Object.assign({},source,{id:text(candidate.id),candidateId:text(candidate.id),
+      productUrl:historical.url,url:historical.url,productName:historical.name,title:historical.name,
+      imageUrl:"",imageOriginalUrl:""});
+    let inspected={};
+    try{const result=await RegionalSelector.inspectProductResearchStep([seed],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});inspected=plain(array(result&&result.items)[0]);}
+    catch(_error){attempts.push("historical_url_inspection_network_failure");}
+    if(verifiedHeldInspection(inspected,current,historical.url)){
+      const recoveredUrl=ProductRanking.canonicalProductUrl(productUrl(inspected));
+      const duplicate=await replacementProductAlreadyInLedger(inspected,text(candidate.id));
+      if(duplicate.duplicate!==true)return{verified:true,url:recoveredUrl,product:inspected,source:historical.source,previousUrl:current};
+      attempts.push(duplicate.reason||"duplicate_product_url");
+    }else attempts.push("historical_original_url_not_live_verified");
+  }
+  // Bounded vendor-catalog search is the fallback when the historical detail
+  // page cannot be confirmed. It can propose alternatives, but only the very
+  // same item reference may be accepted as a recovered original.
+  if(current&&ProductRanking.isSpecificProductUrl(current)){
+    let recovered={};
+    try{recovered=plain(await recoverHeldCandidateProduct(candidate,scope,{reviewMaxInspectionCandidates:8}));}
+    catch(_error){attempts.push("supplier_catalog_recovery_network_failure");}
+    if(recovered.ok===true&&["same_product_url_repair","same_product_reference_recovered"].includes(recovered.kind)&&
+       heldRecoveryReferenceMatches(current,recovered.recoveredUrl)&&
+       verifiedHeldInspection(recovered.product,current,recovered.recoveredUrl)){
+      return{verified:true,url:ProductRanking.canonicalProductUrl(recovered.recoveredUrl),product:plain(recovered.product),source:recovered.kind,previousUrl:current};
+    }
+    attempts.push(recovered.reason||"same_product_not_verified");
+  }
+  return{verified:false,reason:attempts.length?Array.from(new Set(attempts)).join("|"):"same_product_original_proof_missing",historicalFound:!!historical};
+}
+
 // Two-step product review: proof is stored in a PRIVATE per-product policy, not
 // as a candidate decision. Verification may NEVER demote, stage, place or publish.
 // Only a later explicit administrator restore request can move an approved row.
@@ -4656,15 +4786,53 @@ async function verifiedReviewSave(scope,actor,bucket,itemId,proof){
   return rule;
 }
 function verifiedReviewFresh(proof,url,jobId){
-  const checked=Date.parse(text(proof.checkedAt)),now=Date.now();
+  const checked=Date.parse(text(proof.checkedAt)),now=Date.now(),canonical=ProductRanking.canonicalProductUrl(url);
+  const urlMatched=proof.sourceUrlFingerprint?text(proof.sourceUrlFingerprint)===sha256(canonical):
+    ProductRanking.canonicalProductUrl(proof.productUrl)===canonical;
   return proof.state==="verified"&&Number.isFinite(checked)&&checked<=now+300000&&now-checked<VERIFIED_REVIEW_MAX_AGE
-    &&ProductRanking.canonicalProductUrl(proof.productUrl)===ProductRanking.canonicalProductUrl(url)
-    &&(!jobId||text(proof.jobId)===text(jobId));
+    &&urlMatched&&(!jobId||text(proof.jobId)===text(jobId));
+}
+// Read review classes in bounded batches.  This is *read-only* and is scoped
+// to the explicit country and region: a country switch never reuses old classifications.
+async function verifiedReviewInventory(scope, bucket, requestedIds) {
+  const ids=Array.from(new Set(array(requestedIds).map(text).filter(Boolean))).slice(0,100), records=new Map();
+  for(let offset=0;offset<ids.length;offset+=25){
+    const group=ids.slice(offset,offset+25), keys=group.map(id=>verifiedReviewKey(scope,bucket,id));
+    const filter="select=id,rule&id=in.("+keys.map(key=>'"'+key+'"').join(",")+")&limit=100";
+    const rows=array(await SlotStore.select("gslot_policies",filter));
+    for(const row of rows){const proof=plain(row.rule);if(proof.schema===VERIFIED_REVIEW_SCHEMA&&proof.bucket===bucket&&group.includes(text(proof.itemId)))records.set(text(proof.itemId),proof);}
+  }
+  return ids.map(id=>{const proof=plain(records.get(id));let state=text(proof.state)||"pending";
+    const checked=Date.parse(text(proof.checkedAt));
+    if(state==="verified"&&(!Number.isFinite(checked)||Date.now()-checked>=VERIFIED_REVIEW_MAX_AGE))state="pending";
+    // A previous success is not used after it expires; a fresh proof is
+    // checked again by the server at the time of the restore call.
+    return{id,state,checkedAt:proof.checkedAt||null,verifiedUrl:state==="verified"?text(proof.verifiedUrl):null,
+      urlRepaired:proof.urlRepaired===true,deletedAt:proof.urlDeletedAt||null,
+      recoverySource:text(proof.recoverySource),reasons:array(proof.reasons)};
+  });
+}
+function heldCandidateMatchesScope(candidate,scope){
+  const payload=plain(candidate&&candidate.source_payload),market=plain(payload.marketScope),supply=plain(payload.countrySupply);
+  const country=normalizeCountry(first(market.marketCountry,supply.country,plain(payload.approvedPlacement).country));
+  const region=normalizeRegion(first(market.marketRegion,supply.region,plain(payload.approvedPlacement).region,"NATIONWIDE"),country)||"NATIONWIDE";
+  return !!country&&country===scope.country&&region===scope.region;
+}
+async function heldCandidateNoPublicAssignment(candidate,scope){
+  const id=text(candidate.id),payload=plain(candidate.source_payload),publication=plain(payload.frontPublication);
+  if(text(publication.status)&&!["unmatched","unpublished","cancelled","draft"].includes(lower(publication.status)))return false;
+  const assignments=await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,country_code,region_code,publication_status",[id]);
+  // Do not clear URLs while ANY slot assignment remains, regardless of region.
+  return array(assignments).length===0;
 }
 async function productVerifiedReviewAction(actorId,input){
-  const scope=researchScope(input),actor=text(actorId)||"administrator",bucket=lower(input&&input.bucket)==="latest"?"latest":"hold",operation=lower(input&&input.operation),ids=Array.from(new Set(array(input&&input.ids).map(text).filter(Boolean))).slice(0,8);
+  const scope=researchScope(input),actor=text(actorId)||"administrator",bucket=lower(input&&input.bucket)==="latest"?"latest":"hold",operation=lower(input&&input.operation),ids=Array.from(new Set(array(input&&input.ids).map(text).filter(Boolean))).slice(0,operation==="inventory"?100:8);
   if(!ids.length){const error=new Error("검증하거나 복귀할 상품을 선택하세요.");error.statusCode=400;throw error;}
-  if(!["verify","restore","status"].includes(operation)){const error=new Error("상품 검증 작업을 확인하세요.");error.statusCode=400;throw error;}
+  if(!["verify","restore","status","inventory","classify_incomplete","return_hold","delete_url"].includes(operation)){const error=new Error("상품 검증 작업을 확인하세요.");error.statusCode=400;throw error;}
+  if(operation==="inventory")return{ok:true,bucket,operation,results:await verifiedReviewInventory(scope,bucket,ids)};
+  if(["classify_incomplete","return_hold","delete_url"].includes(operation)&&bucket!=="hold"){
+    const error=new Error("불완전상품 분류·URL 삭제는 보류상품에서만 허용됩니다.");error.statusCode=400;throw error;
+  }
   const job=bucket==="latest"?await loadProductResearchJob(scope):null;
   if(bucket==="latest"&&(!job||job.schema!==PRODUCT_JOB_SCHEMA)){const error=new Error("최신 상품 조사 기록을 찾을 수 없습니다.");error.statusCode=404;throw error;}
   const latest=bucket==="latest"?(job.resultStorage==="chunked_v1"?await resolveChunkedProductSelection(job,{productIds:ids,productRefs:array(input&&input.productRefs)}):array(job.products).filter((row)=>productSelectionMatches(row,new Set(ids)))):[];
@@ -4673,37 +4841,152 @@ async function productVerifiedReviewAction(actorId,input){
   const results=[];
   for(const id of ids){
     try{
-      const candidate=plain(heldById.get(id)),source=bucket==="hold"?candidateRuntimeProduct(candidate,scope):plain(latestByAlias.get(id)),payload=plain(candidate.source_payload),url=productUrl(source),candidateState=lower(payload.slotDecision),proof=bucket==="hold"?await verifiedReviewGet(scope,bucket,id):await verifiedReviewGet(scope,bucket,id);
-      if(!source||!url||(bucket==="hold"&&(!text(candidate.id)||candidateState!=="hold"||plain(payload.queueControl).permanentExcluded===true))){results.push({id,state:"skipped",reason:"item_missing_or_not_in_expected_list"});continue;}
+      const candidate=plain(heldById.get(id)),payload=plain(candidate.source_payload),candidateState=lower(payload.slotDecision),
+        source=bucket==="hold"?(candidateRuntimeProduct(candidate,scope)||{}):plain(latestByAlias.get(id)),
+        url=productUrl(source),proof=await verifiedReviewGet(scope,bucket,id),jobId=bucket==="latest"?job.jobId:null;
+      if((bucket==="hold"&&(!text(candidate.id)||candidateState!=="hold"||plain(payload.queueControl).permanentExcluded===true||!heldCandidateMatchesScope(candidate,scope)))||
+         (bucket==="latest"&&(!Object.keys(source).length||!url))){results.push({id,state:"skipped",reason:"item_missing_or_not_in_expected_list"});continue;}
+      // Protected incomplete items are never silently revalidated, restored or
+      // deleted by a generalized AI action.  An operator must explicitly return
+      // the item to hold before running a new AI verification.
+      if(proof.state==="incomplete"||proof.state==="url_deleted"){
+        if(operation==="return_hold"){
+          const record=Object.assign({},proof,{state:"pending",reasons:["administrator_returned_for_reverification"],reviewReturnedAt:iso(),reviewReturnedBy:actor});
+          await verifiedReviewSave(scope,actor,bucket,id,record);
+          results.push({id,state:"pending",reason:"returned_to_hold"});continue;
+        }
+        if(operation==="delete_url"&&proof.state==="incomplete"){
+          // A later research pass must not turn a deletion confirmation for the
+          // formerly reviewed URL into deletion of a newly corrected URL.
+          if(text(proof.sourceUrlFingerprint)!==sha256(ProductRanking.canonicalProductUrl(url))||
+             (proof.candidateTitle&&normalizedHeldEvidenceTitle(proof.candidateTitle)!==normalizedHeldEvidenceTitle(candidate.title))){
+            results.push({id,state:"preserved",reason:"candidate_url_or_identity_changed_reverify_first"});continue;
+          }
+          if(input&&input.confirmation!=="DELETE_INCOMPLETE_URL"){
+            results.push({id,state:"failed",reason:"explicit_url_deletion_confirmation_required"});continue;
+          }
+          if(!(await heldCandidateNoPublicAssignment(candidate,scope))){
+            results.push({id,state:"preserved",reason:"front_or_slot_assignment_must_be_removed_separately"});continue;
+          }
+          // Delete only the private held item's active destination fields. Do
+          // not destroy the candidate or any other country's publication.
+          const previousUrl=first(payload.externalProductUrl,payload.productUrl,payload.url,candidate.official_url);
+          const now=iso(),next=Object.assign({},payload,{
+            externalProductUrl:null,productUrl:null,url:null,verifiedDetailPageUrl:null,productDetailUrl:null,
+            originalProductUrl:null,originalUrl:null,checkoutUrl:null,officialProductUrl:null,productPageUrl:null,
+            detailUrl:null,purchaseUrl:null,orderUrl:null,productLink:null,productPageLive:false,inspectionComplete:false,
+            researchStatus:"incomplete_url_removed",slotDecision:"hold",
+            runtimeValidation:Object.assign({},plain(payload.runtimeValidation),{exactProductUrl:null,state:"incomplete",live:false,dead:false,inconclusive:true}),
+            productCard:Object.assign({},plain(payload.productCard),{productUrl:null,url:null,checkoutUrl:null,officialProductUrl:null,productPageUrl:null,detailUrl:null,purchaseUrl:null,orderUrl:null,productLink:null}),
+            researchReadiness:Object.assign({},plain(payload.researchReadiness),{productCard:Object.assign({},plain(plain(payload.researchReadiness).productCard),{productUrl:null,url:null,checkoutUrl:null,officialProductUrl:null,productPageUrl:null,detailUrl:null,purchaseUrl:null,orderUrl:null,productLink:null})}),
+            incompleteUrlRemoval:{removedAt:now,removedBy:actor,priorUrlFingerprint:sha256(ProductRanking.canonicalProductUrl(previousUrl)),reason:"administrator_confirmed_incomplete_url_deletion",originalCandidatePreserved:true},
+            managementControl:Object.assign({},plain(payload.managementControl),{administratorLocked:true,aiReclassificationAllowed:false})
+          });
+          // Only URL and related card references change; title/image/row ID
+          // remain for audit and a later manual supplier re-research.
+          await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{official_url:null,source_payload:next,updated_at:now});
+          await verifiedReviewSave(scope,actor,bucket,id,Object.assign({},proof,{state:"url_deleted",verifiedUrl:null,urlDeletedAt:now,urlDeletedBy:actor,productUrl:"",reasons:["administrator_confirmed_incomplete_url_deletion"]}));
+          results.push({id,state:"url_deleted",deletedAt:now});continue;
+        }
+        results.push({id,state:proof.state,reasons:array(proof.reasons),reason:"operator_classification_locked"});continue;
+      }
+      if(operation==="classify_incomplete"){
+        const lastCheck=Date.parse(text(proof.checkedAt));
+        const matchedProof=text(proof.sourceUrlFingerprint)===sha256(ProductRanking.canonicalProductUrl(url))&&
+          (!proof.candidateTitle||normalizedHeldEvidenceTitle(proof.candidateTitle)===normalizedHeldEvidenceTitle(candidate.title));
+        if(!matchedProof||!Number.isFinite(lastCheck)||Date.now()-lastCheck>=VERIFIED_REVIEW_MAX_AGE){
+          results.push({id,state:"skipped",reason:"reverify_current_candidate_before_classification"});continue;
+        }
+        if(!["invalid","inconclusive"].includes(text(proof.state))){results.push({id,state:"skipped",reason:"ai_review_must_first_find_invalid_or_inconclusive"});continue;}
+        const approved=Object.assign({},proof,{state:"incomplete",classifiedAt:iso(),classifiedBy:actor,automaticDeletion:false,
+          reasons:Array.from(new Set(array(proof.reasons).concat(["administrator_classified_incomplete"]))) });
+        await verifiedReviewSave(scope,actor,bucket,id,approved);
+        results.push({id,state:"incomplete",reasons:approved.reasons});continue;
+      }
+      if(["delete_url","return_hold"].includes(operation)){results.push({id,state:"skipped",reason:"classify_incomplete_first"});continue;}
+      const fresh=verifiedReviewFresh(proof,url,jobId)&&
+        (bucket!=="hold"||!proof.candidateTitle||normalizedHeldEvidenceTitle(proof.candidateTitle)===normalizedHeldEvidenceTitle(candidate.title));
       if(operation==="status"){
-        results.push({id,state:verifiedReviewFresh(proof,url,bucket==="latest"?job.jobId:null)?"verified":"pending",checkedAt:proof.checkedAt||null});continue;
+        results.push({id,state:fresh?"verified":"pending",checkedAt:proof.checkedAt||null,
+          verifiedUrl:fresh?proof.verifiedUrl||url:null,urlRepaired:fresh&&proof.urlRepaired===true,recoverySource:fresh?proof.recoverySource||"":null,
+          lastState:text(proof.state)||null,reasons:array(proof.reasons)});continue;
       }
       if(operation==="verify"){
-        const inputRow=Object.assign({},source,{id,candidateId:id});let inspected=null;
-        try{const check=await RegionalSelector.inspectProductResearchStep([inputRow],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});inspected=plain(array(check&&check.items)[0]);}catch(_e){inspected={};}
+        let inspected={};
+        if(url&&ProductRanking.isSpecificProductUrl(url)){
+          const seed=Object.assign({},source,{id,candidateId:id});
+          try{const check=await RegionalSelector.inspectProductResearchStep([seed],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});inspected=plain(array(check&&check.items)[0]);}catch(_error){inspected={};}
+        }
         const item=Object.keys(inspected).length?Object.assign({},source,inspected):Object.assign({},source,{productPageLive:false,inspectionComplete:false,researchStatus:"inspection_error"});
-        const health=candidateRuntimeHealth(item),exactSameUrl=ProductRanking.canonicalProductUrl(url)===ProductRanking.canonicalProductUrl(productUrl(item));
-        const verified=health.live===true&&inspected.productPageLive===true&&inspected.inspectionComplete===true&&exactSameUrl
-          &&inspected.sameSupplierSite===true&&!!productImageUrl(inspected)&&ProductRanking.isSpecificProductUrl(productUrl(inspected));
-        await verifiedReviewSave(scope,actor,bucket,id,{state:verified?"verified":(health.inconclusive?"inconclusive":"invalid"),checkedAt:iso(),productUrl:url,jobId:bucket==="latest"?job.jobId:null,reasons:health.reasons,exactSameUrl,inspectionComplete:item.inspectionComplete===true,productPageLive:item.productPageLive===true});
-        results.push({id,state:verified?"verified":(health.inconclusive?"inconclusive":"invalid"),reasons:health.reasons,checkedAt:iso()});continue;
+        const health=candidateRuntimeHealth(item),sameUrl=!!url&&ProductRanking.canonicalProductUrl(url)===ProductRanking.canonicalProductUrl(productUrl(inspected));
+        const direct=!!url&&health.live===true&&inspected.productPageLive===true&&inspected.inspectionComplete===true&&sameUrl&&
+          inspected.sameSupplierSite===true&&!!productImageUrl(inspected)&&ProductRanking.isSpecificProductUrl(productUrl(inspected));
+        let recovery={verified:false,reason:"not_required"};
+        if(!direct&&bucket==="hold")recovery=await twoStepHeldProductRecovery(candidate,scope,source,url);
+        const verified=direct||recovery.verified===true,verifiedUrl=direct?url:(recovery.verified===true?recovery.url:""),
+          urlRepaired=verified&&!!verifiedUrl&&ProductRanking.canonicalProductUrl(url)!==ProductRanking.canonicalProductUrl(verifiedUrl),
+          verifiedProduct=direct?inspected:plain(recovery.product),
+          ambiguous=!url||health.inconclusive===true||["http_403","http_429","http_503","blocked","inspection_error"].includes(lower(item.researchStatus))||
+            /network_failure|not_live_verified|same_product_not_verified|proof_missing/i.test(text(recovery.reason));
+        const state=verified?"verified":(ambiguous?"inconclusive":"invalid"),checkedAt=iso(),
+          reasons=verified?(urlRepaired?["same_product_detail_url_live_recovered",text(recovery.source)]:["exact_product_detail_url_live"]):
+            Array.from(new Set(array(health.reasons).concat(recovery.reason?[recovery.reason]:[]).filter(Boolean)));
+        const record={state,checkedAt,productUrl:ProductRanking.isSpecificProductUrl(url)?url:"",sourceUrlFingerprint:sha256(ProductRanking.canonicalProductUrl(url)),
+          jobId,verifiedUrl:verifiedUrl||null,urlRepaired,recoverySource:urlRepaired?text(recovery.source):null,
+          verifiedProductName:verified?first(verifiedProduct.productName,verifiedProduct.title,source.productName,source.title):null,
+          verifiedImageUrl:verified?productImageUrl(verifiedProduct)||null:null,candidateTitle:bucket==="hold"?text(candidate.title):null,
+          reasons,inspectionComplete:verified,productPageLive:verified,originalLedgerPreserved:true,automaticRestoration:false};
+        await verifiedReviewSave(scope,actor,bucket,id,record);
+        results.push({id,state,checkedAt,verifiedUrl:verified?verifiedUrl:null,urlRepaired,recoverySource:record.recoverySource,reasons});
+        continue;
       }
-      // Operator restoration uses only a stored FRESH successful proof with the
-      // exact same detail URL. UI-supplied verdicts never authorize a mutation.
-      if(!verifiedReviewFresh(proof,url,bucket==="latest"?job.jobId:null)){results.push({id,state:"skipped",reason:"fresh_successful_verification_required"});continue;}
+      // Only a separate operator restore can mutate the candidate. The proof
+      // is bound to this immutable candidate and the URL seen during review.
+      if(!fresh){results.push({id,state:"skipped",reason:"fresh_successful_verification_required"});continue;}
       if(bucket==="hold"){
-        const existing=plain(payload.frontPublication),activeFront=["matched","published","active","publish_requested","queued"].includes(lower(existing.status));
+        const priorFront=plain(payload.frontPublication),activeFront=["matched","published","active","publish_requested","queued"].includes(lower(priorFront.status));
         if(activeFront){results.push({id,state:"preserved",reason:"existing_published_candidate_preserved"});continue;}
-        const priorAssignments=await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,publication_status",[id]);
-        if(array(priorAssignments).length){results.push({id,state:"preserved",reason:"existing_assignment_must_not_be_replaced"});continue;}
+        const assignments=await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,publication_status",[id]);
+        if(array(assignments).length){results.push({id,state:"preserved",reason:"existing_assignment_must_not_be_replaced"});continue;}
+        const fixed=ProductRanking.canonicalProductUrl(proof.verifiedUrl||url);
+        if(!fixed||!ProductRanking.isSpecificProductUrl(fixed)||!proof.verifiedImageUrl){results.push({id,state:"skipped",reason:"verified_detail_url_or_image_missing"});continue;}
+        if(proof.urlRepaired===true){
+          // A repaired original can only be reused with its still-unexpired
+          // evidence. Reject another candidate already using this live URL.
+          const duplicate=await replacementProductAlreadyInLedger({productUrl:fixed},id);
+          if(duplicate.duplicate===true){results.push({id,state:"skipped",reason:duplicate.reason||"recovered_url_duplicate"});continue;}
+          const historical=historicalHeldOriginal(candidate);
+          if(proof.recoverySource==="historical_exact_candidate_id_and_title"){
+            if(!historical||historical.url!==fixed){results.push({id,state:"skipped",reason:"historical_exact_product_proof_changed"});continue;}
+          }else if(!heldRecoveryReferenceMatches(url,fixed)){
+            results.push({id,state:"skipped",reason:"repaired_url_product_identity_unconfirmed"});continue;
+          }
+        }
         const clearedRisk=Object.assign({},plain(payload.riskAssessment),{explicitUnavailable:false,specificProductUrl:true,supplierSiteMatched:true});
         clearedRisk.blockers=array(clearedRisk.blockers).filter(reason=>!["product_page_unavailable","supplier_product_domain_mismatch","specific_product_page_not_verified"].includes(lower(reason)));
-        const next=Object.assign({},payload,{slotDecision:"undecided",researchStatus:"ready_for_admin_review",sameSupplierSite:true,riskAssessment:clearedRisk,productPageLive:true,inspectionComplete:true,review:Object.assign({},plain(payload.review),{state:"undecided",twoStepVerifiedRestoration:true,verifiedAt:proof.checkedAt,decidedBy:actor,decidedAt:iso()}),queueControl:Object.assign({},plain(payload.queueControl),{action:"verified_normal_restoration",permanentExcluded:false,hiddenFromCountryQueue:false,rediscoveryAllowed:true,restoredAt:iso(),restoredBy:actor}),managementControl:Object.assign({},plain(payload.managementControl),{source:"administrator_verified_restore",administratorLocked:true,aiReclassificationAllowed:false,decidedBy:actor,decidedAt:iso()}),runtimeValidation:Object.assign({},plain(payload.runtimeValidation),{state:"live",live:true,dead:false,inconclusive:false,checkedAt:proof.checkedAt,source:"administrator_verified_review"})});
-        // Keep old section evidence for possible manual reconstruction; new
-        // private placement is an entirely separate administrator choice.
-        await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"research_pending",source_payload:next,updated_at:iso()});
+        const next=Object.assign({},payload,{
+          slotDecision:"undecided",researchStatus:"ready_for_admin_review",sameSupplierSite:true,riskAssessment:clearedRisk,
+          productPageLive:true,inspectionComplete:true,
+          review:Object.assign({},plain(payload.review),{state:"undecided",twoStepVerifiedRestoration:true,verifiedAt:proof.checkedAt,decidedBy:actor,decidedAt:iso(),
+            previousProductUrl:proof.urlRepaired===true&&ProductRanking.isSpecificProductUrl(url)?url||null:null,recoveredProductUrl:proof.urlRepaired===true?fixed:null}),
+          queueControl:Object.assign({},plain(payload.queueControl),{action:"verified_normal_restoration",permanentExcluded:false,hiddenFromCountryQueue:false,rediscoveryAllowed:true,restoredAt:iso(),restoredBy:actor}),
+          managementControl:Object.assign({},plain(payload.managementControl),{source:"administrator_verified_restore",administratorLocked:true,aiReclassificationAllowed:false,decidedBy:actor,decidedAt:iso()}),
+          runtimeValidation:Object.assign({},plain(payload.runtimeValidation),{state:"live",live:true,dead:false,inconclusive:false,checkedAt:proof.checkedAt,source:"administrator_verified_review",exactProductUrl:fixed})
+        });
+        const patch={status:"research_pending",source_payload:next,updated_at:iso()};
+        if(proof.urlRepaired===true){
+          // URL and its image are a single product record; never repoint an old
+          // URL without preserving the corresponding detail card + audit data.
+          next.externalProductUrl=fixed;next.productUrl=fixed;next.url=fixed;next.verifiedDetailPageUrl=fixed;
+          next.previousProductUrl=ProductRanking.isSpecificProductUrl(url)?url||null:null;next.sourceTitle=first(proof.verifiedProductName,next.sourceTitle);
+          next.imageUrl=proof.verifiedImageUrl;next.image=proof.verifiedImageUrl;next.thumb=proof.verifiedImageUrl;
+          next.productName=first(proof.verifiedProductName,candidate.title);next.title=next.productName;
+          next.productCard=Object.assign({},plain(next.productCard),{productUrl:fixed,url:fixed,imageUrl:proof.verifiedImageUrl,checkoutUrl:fixed,title:next.productName});
+          patch.official_url=fixed;patch.thumbnail_url=proof.verifiedImageUrl;patch.title=next.productName;
+        }
+        await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),patch);
         await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");
-        results.push({id,candidateId:id,state:"restored"});
+        results.push({id,candidateId:id,state:"restored",urlRepaired:proof.urlRepaired===true,productUrl:fixed});
       }else{
         const previous=await registeredProductCandidateByUrl(source);
         if(previous&&["slot_candidate","hold","reject","purge"].includes(lower(plain(previous.source_payload).slotDecision))){results.push({id,state:"preserved",reason:"existing_candidate_decision_preserved",candidateId:text(previous.id)});continue;}
@@ -4715,7 +4998,9 @@ async function productVerifiedReviewAction(actorId,input){
       }
     }catch(error){results.push({id,state:"failed",reason:text(error&&error.message||error)});}
   }
-  return{ok:true,bucket,operation,requested:ids.length,verified:results.filter(r=>r.state==="verified").length,restored:results.filter(r=>r.state==="restored").length,failed:results.filter(r=>r.state==="failed").length,results,automaticPublication:false,autoPlacement:false};
+  return{ok:true,bucket,operation,requested:ids.length,verified:results.filter(r=>r.state==="verified").length,
+    restored:results.filter(r=>r.state==="restored").length,failed:results.filter(r=>r.state==="failed").length,
+    results,automaticPublication:false,autoPlacement:false};
 }
 
 async function productCandidateHoldVerify(actorId, input) {
@@ -4887,9 +5172,15 @@ async function productAiAutomation(actorId, input) {
   // A stale job can say 'undecided' although the operator already placed it.
   // If this read fails, stop AI BEFORE writes (fail closed).
   const aiDurableIds = Array.from(new Set(array(job.products).map((row)=>productCandidateId(scope,row)).filter(Boolean)));
-  const aiDurableRows = await frontSyncSelectCandidates(aiDurableIds);
+  const [aiDurableRows, aiDurableAssignments] = await Promise.all([
+    frontSyncSelectCandidates(aiDurableIds),
+    frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id",aiDurableIds)
+  ]);
   const aiDurableById = new Map(aiDurableRows.map((row)=>[text(row.id),row]));
   const aiEstablishedIds = new Set(aiDurableRows.filter(AdminPlacementGuard.establishedCandidate).map((row)=>text(row.id)));
+  // The independent slot-assignment ledger is authoritative even if an old
+  // candidate payload says undecided. A failed read aborts the whole AI action.
+  for(const assignment of aiDurableAssignments)if(text(assignment.candidate_id))aiEstablishedIds.add(text(assignment.candidate_id));
   const isAiEstablished = (row) => aiEstablishedIds.has(productCandidateId(scope,row));
   const repairProductIds = new Set(array(job.products).filter((rowInput) => {
     const row = plain(rowInput), decision = lower(row.slotDecision || "undecided"), key = productPlacementKey(row.approvedPlacement || row.selectedPlacement || row.primaryPlacement);

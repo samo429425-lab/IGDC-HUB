@@ -374,8 +374,8 @@
               <label class="supplier-select-label"><input id="productHoldSelectAll" type="checkbox" data-product-exclusion-select-all="hold"> 목록 전체 선택(모든 페이지)</label>
               <span id="productHoldSelectedCount" class="supplier-selection-count">선택 0건</span>
               <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="hold" disabled>선택 후보 복원(수동 관리)</button>
-              <button type="button" id="productHoldAiVerifyBtn" class="publish">AI 검증·정상상품 분류(이동 없음)</button>
-              <button type="button" id="productHoldVerifyAndPlaceBtn" class="publish">검증 완료 정상상품 원장 복귀</button>
+              <button type="button" id="productHoldAiVerifyBtn" class="publish">AI 검증·3분류(원장 자동 변경 없음)</button>
+              <button type="button" data-hold-review-action="classify_incomplete" class="ghost">선택 검증 불가·부적합 → 불완전상품으로 분리</button>
               <label class="small">복귀 위치 <select id="holdVerifiedPlacement"><option value="unassigned">미배치 후보(기본)</option><option value="psom">PSOM 자동 섹션 배치</option></select></label><span id="productHoldVerifiedReviewCount" class="small">정상 검증 0건</span><button type="button" class="ghost" id="productHoldReviewReloadBtn">이전 검증 결과 불러오기</button><div id="holdVerifiedReviewList" class="small"></div><button type="button" id="productHoldVerifyStopBtn" disabled>작업 중단</button>
               <span id="productHoldVerifyProgress" class="small" aria-live="polite">대기 중 · AI 검증에서는 목록/배치를 변경하지 않습니다. 정상 복귀는 별도 버튼으로 실행합니다.</span>
               <button type="button" class="danger" data-product-exclusion-bulk="reject" data-product-exclusion-scope="hold" disabled>선택 제외로 이동</button>
@@ -387,6 +387,31 @@
           </div>
         </details>
 
+        <details id="productHoldVerifiedQueue" class="supplier-control-queue">
+          <summary><span id="holdVerifiedToggle">AI 검증 완료 정상상품 · 0건</span><span class="pill info">별도 목록</span></summary>
+          <div class="supplier-control-content">
+            <div class="supplier-queue-toolbar">
+              <label class="supplier-select-label"><input id="holdVerifiedSelectAll" type="checkbox" data-hold-class-all="verified"> 모든 페이지 전체 선택</label>
+              <span id="holdVerifiedSelectedCount" class="small">선택 0건</span>
+              <button type="button" id="productHoldVerifiedRestoreBtn" class="publish">선택 정상상품 원장 복귀(별도 실행)</button>
+              <span class="small">복귀 위치는 위 보류상품 블록의 ‘복귀 위치’ 설정 적용 · 기존 확정 배치와 프론트 매칭 보존</span>
+            </div>
+            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>검증된 상품·상세주소</th><th>검증 결과</th></tr></thead><tbody id="holdVerifiedRows"></tbody></table></div>
+          </div>
+        </details>
+        <details id="productIncompleteQueue" class="supplier-control-queue">
+          <summary><span id="holdIncompleteToggle">불완전상품 별도 관리 · 0건</span><span class="pill info">원장 보존 · 관리자가 확정</span></summary>
+          <div class="supplier-control-content">
+            <div class="supplier-queue-toolbar">
+              <label class="supplier-select-label"><input id="holdIncompleteSelectAll" type="checkbox" data-hold-class-all="incomplete"> 모든 페이지 전체 선택</label>
+              <span id="holdIncompleteSelectedCount" class="small">선택 0건</span>
+              <button type="button" data-hold-review-action="return_hold" class="ghost">선택 보류상품으로 되돌리기</button>
+              <button type="button" data-hold-review-action="delete_url" class="danger">선택 상품 원장 URL 삭제(최종 확인)</button>
+              <span class="small">403·429·접근 제한은 자동 삭제하지 않음 · URL 삭제는 관리자 재확인 후 실행 · 이미 배치·공개된 상품 삭제 차단</span>
+            </div>
+            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>불완전상품·기존 URL</th><th>분류·삭제 상태</th></tr></thead><tbody id="holdIncompleteRows"></tbody></table></div>
+          </div>
+        </details>
         <details id="productRejectQueue" class="supplier-control-queue">
           <summary><span id="productRejectToggleLabel">연구 제외 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
           <div class="supplier-control-content">
@@ -535,7 +560,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20261017-hold-historical-original-lookup-v2"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261018-research-delta-placement-guard-v1"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

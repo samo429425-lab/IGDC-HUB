@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.41.0-progressive-provider-and-native-json-fix";
+const VERSION = "sanmaru-social-live-collector-v1.42.0-complete-provider-and-store-bridge-fix";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -84,12 +84,16 @@ const PUBLIC_DIRECTORY = Object.freeze({
 });
 
 const CONTENT_SITE_FILTERS = Object.freeze({
-  youtube: "(site:youtube.com/watch OR site:youtube.com/shorts/ OR site:youtu.be)",
-  instagram: "(site:instagram.com/p/ OR site:instagram.com/reel/)",
-  tiktok: "site:tiktok.com/@ inurl:video",
-  facebook: "(site:facebook.com/reel/ OR site:facebook.com/watch OR site:facebook.com/videos/ OR site:facebook.com/posts/)",
-  bilibili: "(site:bilibili.com/video/ OR site:b23.tv)",
-  douyin: "(site:douyin.com/video/ OR site:douyin.com/note/ OR site:v.douyin.com)"
+  // Google CSE's `site:` operator is domain-oriented. Path-bearing values such
+  // as `site:tiktok.com/@` or `site:instagram.com/reel/` frequently return zero
+  // even when indexed content exists. Keep the domain in `siteSearch` and place
+  // path hints in the query itself.
+  youtube: { host: "youtube.com", hint: "(inurl:watch OR inurl:shorts)" },
+  instagram: { host: "instagram.com", hint: "(inurl:reel OR inurl:/p/)" },
+  tiktok: { host: "tiktok.com", hint: "inurl:video" },
+  facebook: { host: "facebook.com", hint: "(inurl:reel OR inurl:videos OR inurl:watch OR inurl:posts)" },
+  bilibili: { host: "bilibili.com", hint: "inurl:video" },
+  douyin: { host: "douyin.com", hint: "(inurl:video OR inurl:note)" }
 });
 
 // PSOM is the authoritative Social section/routing contract. The collector reads
@@ -358,6 +362,28 @@ function candidateUrls(item) {
     for (const [key, entry] of entries) {
       if (typeof entry === "string" && keyPattern.test(key)) direct.push(entry);
       else if (entry && typeof entry === "object" && current.depth < 3 && /^(?:payload|data|result|item|source|social|media|preview|metadata|pagemap|links?|content|post|video|page)$/i.test(key)) queue.push({ value: entry, depth: current.depth + 1 });
+    }
+  }
+
+  // SearchBank/Maru can return a search-page URL in `url` while the actual
+  // social permalink appears only inside a title/snippet/description. The old
+  // extractor discarded those rows as non-content before the Social resolver
+  // ever saw the real URL. Extract bounded social URLs from textual metadata;
+  // the caller still performs strict host + content-path validation.
+  const textFields = [
+    row.title, row.description, row.snippet, row.summary, row.caption, row.text,
+    payload.title, payload.description, payload.snippet,
+    source.title, source.description, social.title, social.description,
+    data.title, data.description, data.snippet
+  ].map((value) => decodeXml(SocialStore.text(value))).filter(Boolean);
+  const socialUrlRe = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com|youtu\.be|instagram\.com|tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com|facebook\.com|fb\.watch|bilibili\.com|b23\.tv|douyin\.com|v\.douyin\.com)\/[^\s<>"'`\]\[()]+/ig;
+  for (const value of textFields.slice(0, 18)) {
+    let match;
+    let guard = 0;
+    while ((match = socialUrlRe.exec(value)) && guard++ < 12) {
+      let found = match[0].replace(/[.,;:!?]+$/g, "");
+      if (!/^https?:\/\//i.test(found)) found = "https://" + found;
+      direct.push(found);
     }
   }
   return Array.from(new Set(direct.map(Policy.normalizeUrl).filter(Boolean)));
@@ -1119,16 +1145,37 @@ async function youtubePopularChart(queryText, limit, cfg, route) {
   }
 }
 async function googleChannelSearch(plan, queryText, limit, start, cfg) {
-  if (!cfg.googleKey || !cfg.googleCx) return { provider: "google-cse-channel", status: "not_configured", items: [] };
+  if (!cfg.googleKey || !cfg.googleCx) {
+    return { provider: "google-cse-content", status: "not_configured", items: [] };
+  }
+  const filter = CONTENT_SITE_FILTERS[plan.platform] || {};
+  const base = sparseSearchTerms(queryText, plan.platform)
+    .replace(/\b(?:official|high\s+quality|active|latest|public|creator)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const query = [base || queryText, filter.hint || ""].filter(Boolean).join(" ").trim();
   const params = new URLSearchParams({
-    key: cfg.googleKey, cx: cfg.googleCx,
-    q: queryText + " " + CONTENT_SITE_FILTERS[plan.platform],
-    num: String(Math.min(10, limit)), start: String(Math.max(1, Math.min(91, start || 1))),
-    safe: "active", dateRestrict: "m6"
+    key: cfg.googleKey,
+    cx: cfg.googleCx,
+    q: query,
+    num: String(Math.min(10, Math.max(1, Number(limit || 10)))),
+    start: String(Math.max(1, Math.min(91, Number(start || 1)))),
+    safe: "active",
   });
+  if (filter.host) {
+    params.set("siteSearch", filter.host);
+    params.set("siteSearchFilter", "i");
+  }
   try {
-    const data = await fetchJson("https://www.googleapis.com/customsearch/v1?" + params.toString(), {}, REQUEST_TIMEOUT_MS);
-    const items = (data.items || []).map((row) => {
+    const data = await fetchJson(
+      "https://www.googleapis.com/customsearch/v1?" + params.toString(),
+      {},
+      REQUEST_TIMEOUT_MS
+    );
+    const rawRows = Array.isArray(data && data.items) ? data.items : [];
+    const items = rawRows.map((row) => {
+      const link = searchResultUrl(row && row.link);
+      if (Policy.platformFromHost(link) !== plan.platform || !contentKind(plan.platform, link)) return null;
       const page = row.pagemap || {};
       const thumb = (page.cse_thumbnail && page.cse_thumbnail[0] && page.cse_thumbnail[0].src) ||
         (page.cse_image && page.cse_image[0] && page.cse_image[0].src) ||
@@ -1137,18 +1184,34 @@ async function googleChannelSearch(plan, queryText, limit, start, cfg) {
           "thumbnailUrl", "thumbnailurl", "image", "contentUrl"
         ]) || "";
       return {
-        provider: "google-cse-channel",
+        provider: "google-cse-content",
         platform: plan.platform,
-        url: row.link,
+        url: link,
+        latestContentUrl: link,
         title: row.title,
         description: row.snippet,
         thumbnail: thumb,
-        entityKind: contentKind(plan.platform, row.link) || "content_search_hit"
+        entityKind: contentKind(plan.platform, link),
       };
-    });
-    return { provider: "google-cse-channel", status: "ok", items };
+    }).filter(Boolean);
+    return {
+      provider: "google-cse-content",
+      status: items.length ? "ok" : "empty",
+      items,
+      rawCount: rawRows.length,
+      rejectedNonContentRows: Math.max(0, rawRows.length - items.length),
+      effectiveQuery: query,
+      siteSearch: filter.host || null,
+    };
   } catch (error) {
-    return { provider: "google-cse-channel", status: error.statusCode === 403 || error.statusCode === 429 ? "quota_or_api_disabled" : "error", error: error.message, items: [] };
+    return {
+      provider: "google-cse-content",
+      status: error.statusCode === 403 || error.statusCode === 429 ? "quota_or_api_disabled" : "error",
+      error: error.message,
+      items: [],
+      effectiveQuery: query,
+      siteSearch: filter.host || null,
+    };
   }
 }
 async function naverChannelSearch(plan, queryText, limit, start, route, cfg) {
@@ -1273,7 +1336,7 @@ function publicSearchQuery(plan, queryText, registrySeed) {
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
   if (platform === "tiktok") return [base, exact, "site:tiktok.com", "video creator latest public"].filter(Boolean).join(" ");
   if (platform === "facebook") return [base, exact, "site:facebook.com", "reel video creator public"].filter(Boolean).join(" ");
-  if (platform === "bilibili") return [base, exact, "site:bilibili.com/video", "哔哩哔哩 最新 视频 UP主", "public video"].filter(Boolean).join(" ");
+  if (platform === "bilibili") return [base, exact, "site:bilibili.com", "inurl:video", "哔哩哔哩 最新 视频 UP主", "public video"].filter(Boolean).join(" ");
   if (platform === "douyin") return [base, exact, "site:douyin.com", "抖音 视频 最新 公开", "video note"].filter(Boolean).join(" ");
   return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"].filter(Boolean).join(" ");
 }
@@ -1966,7 +2029,7 @@ async function maruSearchOne(event, plan, queryText, limit, language, start) {
           openPipe: "1", external: "1", noAnalytics: "1", noRevenue: "1"
         }
       }, {
-        q: queryText + " " + CONTENT_SITE_FILTERS[plan.platform],
+        q: publicSearchQuery(plan, queryText),
         limit, lang: language || null, start: start || 1, deep: false, external: true,
         // The shared Maru `sns` classifier is broader than the six managed providers.
         // Read the broad pool for non-YouTube sections, then apply the strict
@@ -2129,48 +2192,59 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
   const tasks = [];
   const sparse = SPARSE_DISCOVERY_PLATFORMS.has(plan.platform);
 
-  // Primary lane: every normal content pass is anchored to the PSOM section
-  // contract and routed through SearchBank in read-only discovery mode. This
-  // does not write the shared SearchBank snapshot; validated Social candidates
-  // continue through the Social-only candidate/publish pipeline.
+  // Every pass is anchored to the Social PSOM/SearchBank read lane.
   tasks.push(searchBankContentResearchOne(event, plan, queryText, limit, language, start, route));
 
-  // Influencer-targeted lookup exists only for an explicit registry maintenance
-  // run. Normal content discovery never loads or depends on this registry seed.
+  // Influencer-targeted lookup exists only for explicit registry maintenance.
   if (registryTargeted && registrySeed && plan.platform !== "youtube") {
     tasks.push(registryNativeLatestSearch(plan, registrySeed, limit));
   }
 
-  // Sparse providers must complete discovery before the serverless request
-  // deadline. Platform-native/public-post lanes run in parallel with the
-  // PSOM/SearchBank lane and are content URL searches, not creator prerequisites.
-  const discoveryPage = Math.max(1, Math.min(50, Math.floor(Math.max(0, Number(directoryOffset || 0)) / Math.max(1, Number(limit || 1))) + 1));
-  if (sparse) {
-    tasks.push(sparseNativePublicSearch(plan, queryText, limit, qualitySweep, discoveryPage));
-    tasks.push(directPublicPostSearch(plan, queryText, limit, registryTargeted ? registrySeed : null, discoveryPage));
-  } else if (plan.platform === "instagram") {
-    // Instagram has no dependable anonymous native search API, so direct public
-    // post/reel discovery must run on every content pass. Previously it only ran
-    // when every other provider returned zero actual posts; one stale repeated
-    // reel suppressed the rescue lane and made the section appear frozen.
-    tasks.push(directPublicPostSearch(plan, queryText, limit, null, discoveryPage));
-  }
+  const discoveryPage = Math.max(
+    1,
+    Math.min(
+      50,
+      Math.floor(Math.max(0, Number(directoryOffset || 0)) / Math.max(1, Number(limit || 1))) + 1
+    )
+  );
 
-  if (providerGroup === 0) {
-    // Group 0 deliberately stays content-only. A public creator directory is
-    // not used here because profile identities are auxiliary metadata, not the
-    // source of truth for what content gets researched.
-    if (registryTargeted) tasks.push(publicDirectorySearch(plan, route, limit, directoryOffset));
-  } else if (providerGroup === 1) {
-    if (plan.platform === "youtube") {
+  if (plan.platform === "youtube") {
+    // YouTube has a stable first-party API; keep its heavy providers rotating.
+    if (providerGroup === 1) {
       tasks.push(youtubeVideoSearch(queryText, limit, cfg, qualitySweep, route));
       tasks.push(youtubePopularChart(queryText, limit, cfg, route));
+    } else if (providerGroup === 2) {
+      tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
     }
+  } else {
+    // The five non-YouTube providers are sparse/hostile to anonymous crawling.
+    // A previous three-group rotation meant a real content lane could be skipped
+    // for several clicks and the empty-batch budget expired before that lane ran.
+    // Run the bounded content lanes together on every pass; all requests have
+    // strict per-provider deadlines and all returned URLs still pass the Social
+    // platform/content validator before they can reach storage.
     tasks.push(googleChannelSearch(plan, queryText, limit, start, cfg));
     tasks.push(naverChannelSearch(plan, queryText, limit, start, route, cfg));
-  } else {
-    tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
-    if (sparse) tasks.push(maruUnfilteredSearchOne(event, plan, queryText, limit, language, start));
+
+    if (sparse) {
+      tasks.push(sparseNativePublicSearch(plan, queryText, limit, qualitySweep, discoveryPage));
+      tasks.push(directPublicPostSearch(plan, queryText, limit, registryTargeted ? registrySeed : null, discoveryPage));
+      // This broad Sanmaru lane has already produced real Douyin/TikTok URLs in
+      // deployment diagnostics. Keep it active every pass instead of only one
+      // provider-group turn, then apply strict platform+content filtering.
+      tasks.push(maruUnfilteredSearchOne(event, plan, queryText, limit, language, start));
+    } else if (plan.platform === "instagram") {
+      tasks.push(directPublicPostSearch(plan, queryText, limit, null, discoveryPage));
+    }
+
+    // Keep the narrower Sanmaru lane as an additional rotating supplement.
+    if (providerGroup === 2) {
+      tasks.push(maruSearchOne(event, plan, queryText, limit, language, start));
+    }
+  }
+
+  if (providerGroup === 0 && registryTargeted) {
+    tasks.push(publicDirectorySearch(plan, route, limit, directoryOffset));
   }
 
   const settled = await Promise.allSettled(tasks);
@@ -2184,9 +2258,9 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     };
   });
 
-  // Instagram already runs direct public post/reel discovery in the primary
-  // wave. If all providers still miss an actual post, add only the broad
-  // Sanmaru/SearchBank rescue here instead of repeating the same web search.
+  // Instagram has no dependable anonymous native search endpoint. If the
+  // primary CSE/public-post lanes still miss a real post/reel, add the broad
+  // Sanmaru rescue once. This is supplemental and does not depend on a registry.
   if (plan.platform === "instagram") {
     const hasActualPost = (list) => (list || []).some((result) => (result.items || []).some((item) =>
       candidateUrls(item).some((url) => Policy.platformFromHost(url) === plan.platform && !!contentKind(plan.platform, url))
@@ -2200,14 +2274,19 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     query: queryText,
     items: providers.flatMap((result) => result.items || []),
     providers: providers.map((result) => ({
-      provider: result.provider, status: result.status, count: (result.items || []).length,
-      source: result.source || null, error: result.error || null, trace: result.trace || [],
+      provider: result.provider,
+      status: result.status,
+      count: (result.items || []).length,
+      source: result.source || null,
+      error: result.error || null,
+      trace: result.trace || [],
       countryStrict: result.countryStrict == null ? null : !!result.countryStrict,
       countryFallback: !!result.countryFallback,
       offset: Number(result.offset || 0),
       rawCount: result.rawCount == null ? null : Number(result.rawCount || 0),
       rejectedNonContentRows: result.rejectedNonContentRows == null ? null : Number(result.rejectedNonContentRows || 0),
-      effectiveQuery: result.effectiveQuery || null
+      effectiveQuery: result.effectiveQuery || null,
+      siteSearch: result.siteSearch || null,
     }))
   };
 }
@@ -3114,8 +3193,8 @@ exports.handler = async function(event) {
         limit: submitted.length || 1,
         source: "admin-public-influencer-and-latest-content-intake"
       };
-      const gatewayResponse = actor.mode === "scheduled_internal" && typeof CandidateGateway.storeInternal === "function"
-        ? await CandidateGateway.storeInternal(intakeGatewayBody)
+      const gatewayResponse = typeof CandidateGateway.storeInternal === "function"
+        ? await CandidateGateway.storeInternal(intakeGatewayBody, actor)
         : await CandidateGateway.handler(gatewayEvent(
             event,
             submitted,
@@ -3312,13 +3391,15 @@ exports.handler = async function(event) {
       limit: submitted.length || 1,
       source: "social-hub-channel-discovery"
     };
-    // collectInternal() is an in-process scheduled call. Previously it reached
-    // the gateway without a bearer/internal header and the gateway returned 401,
-    // so automatic research could discover rows but never save them. Use the
-    // gateway's unspoofable module-local internal entry only for that scheduler
-    // actor; browser/admin requests keep the existing authorization path.
-    const gatewayResponse = actor.mode === "scheduled_internal" && typeof CandidateGateway.storeInternal === "function"
-      ? await CandidateGateway.storeInternal(gatewayBody)
+    // The collector has already authenticated the administrator/scheduler.
+    // Persist through the gateway's module-local bridge so discovery does not
+    // perform a second auth hop before the DB write. This was especially
+    // important for Bilibili/Douyin: dry-run could resolve valid videos while a
+    // live run could still fail before storage. External callers cannot forge
+    // this path because storeInternal() is an in-process export guarded by a
+    // module-local Symbol inside the gateway.
+    const gatewayResponse = typeof CandidateGateway.storeInternal === "function"
+      ? await CandidateGateway.storeInternal(gatewayBody, actor)
       : await CandidateGateway.handler(
           gatewayEvent(event, submitted, sectionKey, dryRun, submitted.length || 1)
         );
@@ -3354,7 +3435,7 @@ exports.handler = async function(event) {
       providerPageCycle,
       providerPageIndex: providerPageIndex + 1,
       qualitySweep,
-      queryProgression: "one_policy_query_per_batch_provider_group_rotates_independently",
+      queryProgression: "one_policy_query_per_batch_core_content_lanes_run_together_provider_group_is_supplemental",
       discoveryPolicy: "broad_content_first_then_strict_social_validation",
       localePolicy: "ip_country_is_soft_preference_with_global_complement",
       contentIdentity: "section_platform_content_url_hash",
@@ -3404,6 +3485,16 @@ exports.handler = async function(event) {
       rejectedRows: rejected.length,
       rejectedByReason: rejectionSummary(rejected),
       providerTrace: searchResults.map((result) => ({ query: result.query, providers: result.providers })),
+      gateway: {
+        statusCode: Number(gatewayResponse && gatewayResponse.statusCode || 0) || null,
+        ok: payload && payload.ok === true,
+        accepted: Number(payload && payload.accepted || 0),
+        saved: Number(payload && payload.saved || 0),
+        excludedSkipped: Number(payload && payload.excludedSkipped || 0),
+        rejectedCount: Number(payload && payload.rejectedCount || 0),
+        error: payload && payload.error || null,
+        message: payload && payload.message || null,
+      },
       nextQueryCursor: registrySweepMode ? queryCursor : queryCursor + 1,
       nextRegistryCursor: registrySweepMode ? registryWindow.nextCursor : null,
       providerReadiness: providerReadiness(cfg),
@@ -3468,6 +3559,8 @@ exports.__test = {
   sparseNativePublicSearch,
   psomSocialContract,
   searchBankContentResearchOne,
+  googleChannelSearch,
+  searchOne,
   genericNativeHtmlSearch,
   nativeDiscoveryItem,
   resolveSearchCandidates,
