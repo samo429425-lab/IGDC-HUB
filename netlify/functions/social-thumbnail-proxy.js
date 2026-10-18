@@ -10,7 +10,7 @@
 const Preview = require("./social-preview-metadata");
 
 const VERSION = "social-thumbnail-proxy-v1.1.0-bilibili-douyin-preview-relay";
-const SUPPORTED = new Set(["instagram", "tiktok", "facebook", "bilibili", "douyin"]);
+const SUPPORTED = new Set(["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"]);
 const MAX_BYTES = 4 * 1024 * 1024;
 const TIMEOUT_MS = 5500;
 

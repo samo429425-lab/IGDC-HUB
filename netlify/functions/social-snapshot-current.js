@@ -15,6 +15,7 @@ function text(value) {
 
 const FRONT_SECTION_KEYS = Object.freeze([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
+  "social-snapchat",
   "social-bilibili", "social-douyin",
 ]);
 const FRONT_SLOT_LIMIT = 100;
@@ -238,7 +239,7 @@ exports.handler = async function (event) {
       },
       {
         "cache-control": frontView
-          ? "private, max-age=2"
+          ? "private, max-age=30, stale-while-revalidate=120"
           : "no-store, max-age=0",
         "access-control-allow-origin": "*",
         vary: "x-country-code, x-nf-country, cf-ipcountry",

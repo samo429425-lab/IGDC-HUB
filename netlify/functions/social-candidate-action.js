@@ -11,6 +11,7 @@ const SocialPreview = require("./social-preview-metadata");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 
 const VERSION = "social-candidate-action-v1.8.0-direct-id-and-complete-pool-read";
+const INTERNAL_PREVIEW_ACTOR = Symbol("igdc-social-scheduled-preview");
 const ACTIONS = new Set([
   "approve",
   "hold",
@@ -253,7 +254,9 @@ exports.handler = async function (event) {
         ok: false,
         error: "method_not_allowed",
       });
-    const actor = await actorFor(event);
+    const actor = event && event[INTERNAL_PREVIEW_ACTOR] === true
+      ? { memberId: "igdc-social-preview-scheduler", email: "", roles: ["social_manager"] }
+      : await actorFor(event);
     const body = SocialStore.parseBody(event);
     const action = String(body.action || "")
       .trim()
@@ -672,4 +675,11 @@ exports.handler = async function (event) {
       message: error.message || String(error),
     });
   }
+};
+
+// Reuse the same policy-gated thumbnail hydration used by the administrator.
+exports.hydratePreviewInternal = function (ids) {
+  const event = { httpMethod: "POST", body: JSON.stringify({ action: "hydrate_preview", ids: Array.isArray(ids) ? ids.slice(0, 16) : [] }) };
+  event[INTERNAL_PREVIEW_ACTOR] = true;
+  return exports.handler(event);
 };

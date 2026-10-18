@@ -11,7 +11,7 @@
   var CHAT_KEY = "igdc.socialAiChats.v1";
   var SECTION_LABELS = {
     "social-youtube":"YouTube", "social-instagram":"Instagram", "social-tiktok":"TikTok",
-    "social-facebook":"Facebook", "social-bilibili":"Bilibili / 哔哩哔哩", "social-douyin":"Douyin / 抖音"
+    "social-facebook":"Facebook", "social-snapchat":"Snapchat", "social-bilibili":"Bilibili / 哔哩哔哩", "social-douyin":"Douyin / 抖音"
   };
   function text(v){ return v == null ? "" : String(v).trim(); }
   function readJson(key, fallback){ try { return JSON.parse(localStorage.getItem(key) || "") || fallback; } catch(_e){ return fallback; } }

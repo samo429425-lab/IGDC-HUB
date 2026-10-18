@@ -7,6 +7,7 @@
 const VERSION = "social-ai-policy-runtime-v1.4.0-bilibili-douyin-six";
 const SECTION_KEYS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
+  "social-snapchat",
   "social-bilibili", "social-douyin",
 ]);
 

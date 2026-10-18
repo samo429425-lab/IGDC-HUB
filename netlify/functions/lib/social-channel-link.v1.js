@@ -12,6 +12,7 @@ const PLATFORM_HOSTS = Object.freeze({
   instagram: ["instagram.com"],
   tiktok: ["tiktok.com"],
   facebook: ["facebook.com", "fb.watch"],
+  snapchat: ["snapchat.com"],
   bilibili: ["bilibili.com", "b23.tv"],
   douyin: ["douyin.com", "v.douyin.com", "iesdouyin.com"]
 });
@@ -19,6 +20,7 @@ const RESERVED = Object.freeze({
   instagram: new Set(["about","accounts","developer","direct","directory","explore","legal","privacy","reels","stories","web"]),
   tiktok: new Set(["about","business","community-guidelines","discover","explore","legal","login","search","tag"]),
   facebook: new Set(["about","ads","business","events","gaming","groups","help","login","marketplace","privacy","reel","search","share","stories","watch"]),
+  snapchat: new Set(["spotlight","explore","add","discover","search","chat","stories","settings","login"]),
   bilibili: new Set(["audio","blackboard","cheese","festival","read","search","video","v","watchlater"]),
   douyin: new Set(["about","discover","hot","login","search","video","note","user"])
 });
@@ -51,6 +53,7 @@ function canonical(platform, path){
     instagram: "https://www.instagram.com",
     tiktok: "https://www.tiktok.com",
     facebook: "https://www.facebook.com",
+    snapchat: "https://www.snapchat.com",
     bilibili: "https://www.bilibili.com",
     douyin: "https://www.douyin.com"
   };
@@ -118,6 +121,13 @@ function resolve(value, options){
     else if (path === "/profile.php" && evidence.searchParams.get("id")) { targetUrl = canonical(platform, "/profile.php?id=" + encodeURIComponent(evidence.searchParams.get("id"))); entityKind = "public_page"; }
     else if (/^\/(?:reel|watch|videos|posts|photos|photo|share)(?:\/|$)/i.test(path) || /^\/(?:permalink|story)\.php$/i.test(path) || evidence.searchParams.get("story_fbid")) { needsEnrichment = "facebook_public_meta_author"; entityKind = "public_page"; }
     else if (p[0] && handleAllowed(platform, p[0])) { targetUrl = canonical(platform, "/" + p[0]); entityKind = "public_page"; }
+  } else if (platform === "snapchat") {
+    // Content is primary; channel enrichment is optional. The Spotlight
+    // permalink remains the public candidate URL even without a creator.
+    if (/^\/spotlight\/[^/]+/i.test(path)) { needsEnrichment = "snapchat_public_meta_author"; entityKind = "profile"; }
+    else if (p[0] && /^@/.test(p[0]) && handleAllowed(platform, p[0])) {
+      targetUrl = canonical(platform, "/" + p[0]); entityKind = "profile";
+    }
   } else if (platform === "bilibili") {
     const host = hostOf(evidence.toString());
     if (host === "space.bilibili.com" && p[0] && /^\d+$/.test(p[0])) {

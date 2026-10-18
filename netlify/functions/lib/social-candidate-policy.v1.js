@@ -27,6 +27,7 @@ const SECTION_KEYS = Object.freeze([
   "social-instagram",
   "social-tiktok",
   "social-facebook",
+  "social-snapchat",
   "social-bilibili",
   "social-douyin"
 ]);
@@ -39,6 +40,7 @@ const PLATFORM_BY_SECTION = Object.freeze({
   "social-instagram": "instagram",
   "social-tiktok": "tiktok",
   "social-facebook": "facebook",
+  "social-snapchat": "snapchat",
   "social-bilibili": "bilibili",
   "social-douyin": "douyin"
 });
@@ -48,6 +50,7 @@ const SECTION_ALIASES = Object.freeze({
   "instagram": "social-instagram", "insta": "social-instagram", "ig": "social-instagram", "social-instagram": "social-instagram",
   "tiktok": "social-tiktok", "tik-tok": "social-tiktok", "social-tiktok": "social-tiktok",
   "facebook": "social-facebook", "fb": "social-facebook", "social-facebook": "social-facebook",
+  "snapchat": "social-snapchat", "snap": "social-snapchat", "spotlight": "social-snapchat", "social-snapchat": "social-snapchat",
   "bilibili": "social-bilibili", "bili": "social-bilibili", "social-bilibili": "social-bilibili",
   "douyin": "social-douyin", "dy": "social-douyin", "抖音": "social-douyin", "social-douyin": "social-douyin"
 });
@@ -57,6 +60,7 @@ const HOST_PLATFORM = Object.freeze({
   "instagram.com": "instagram",
   "tiktok.com": "tiktok", "vm.tiktok.com": "tiktok", "vt.tiktok.com": "tiktok",
   "facebook.com": "facebook", "m.facebook.com": "facebook", "fb.watch": "facebook",
+  "snapchat.com": "snapchat", "www.snapchat.com": "snapchat",
   "bilibili.com": "bilibili", "www.bilibili.com": "bilibili", "m.bilibili.com": "bilibili", "space.bilibili.com": "bilibili", "b23.tv": "bilibili",
   "douyin.com": "douyin", "www.douyin.com": "douyin", "v.douyin.com": "douyin", "iesdouyin.com": "douyin"
 });
@@ -123,6 +127,19 @@ const PLATFORM_POLICIES = Object.freeze({
       "facebook trending creator public video"
     ]
   },
+  snapchat: {
+    sectionKey: "social-snapchat",
+    defaultDisplayMode: "link_card_or_contained_preview",
+    publicPreference: "public_spotlight_video_card",
+    categories: ["music", "travel", "culture", "food", "education", "art", "nature", "lifestyle", "creator", "short_video"],
+    // Discover individual Spotlight posts worldwide. Profiles are supplemental only.
+    collectionQueries: [
+      "snapchat spotlight music performance", "snapchat spotlight travel places",
+      "snapchat spotlight food culture", "snapchat spotlight education tutorial",
+      "snapchat spotlight art design", "snapchat spotlight nature outdoor",
+      "snapchat spotlight comedy creator", "snapchat spotlight wellness lifestyle"
+    ]
+  },
   bilibili: {
     sectionKey: "social-bilibili",
     defaultDisplayMode: "link_card_or_official_embed",
@@ -179,6 +196,31 @@ function normalizeUrl(value) {
     const url = new URL(raw);
     if (url.protocol !== "https:") return "";
     url.hash = "";
+    // Stable content identities, independent of tracking queries. Preserve
+    // non-content query parameters for endpoints that require them (YouTube watch).
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const path = url.pathname.replace(/\/{2,}/g, "/");
+    if (host === "snapchat.com" && /^\/spotlight\/[^/]+\/?$/i.test(path)) {
+      url.hostname = "www.snapchat.com";
+      url.pathname = "/spotlight/" + path.split("/").filter(Boolean)[1];
+      url.search = "";
+    } else if (host === "bilibili.com" && /^\/video\/(BV[0-9A-Za-z]+|av\d+)\/?$/i.test(path)) {
+      url.hostname = "www.bilibili.com";
+      url.pathname = "/video/" + path.split("/").filter(Boolean)[1];
+      url.search = "";
+    } else if (host === "douyin.com" && /^\/(video|note)\/\d+\/?$/i.test(path)) {
+      url.hostname = "www.douyin.com";
+      url.pathname = path.replace(/\/$/, "");
+      url.search = "";
+    } else if (host === "instagram.com" && /^\/(reel|p|tv)\/[A-Za-z0-9_-]+\/?$/i.test(path)) {
+      url.hostname = "www.instagram.com";
+      url.pathname = path.replace(/\/$/, "");
+      url.search = "";
+    } else if (host === "tiktok.com" && /^\/@[^/]+\/video\/\d+\/?$/i.test(path)) {
+      url.hostname = "www.tiktok.com";
+      url.pathname = path.replace(/\/$/, "");
+      url.search = "";
+    }
     return url.toString();
   } catch (_e) { return ""; }
 }
@@ -218,7 +260,7 @@ function isBadPlaceholderUrl(url) {
   const raw = lowerText(url);
   if (!raw || raw === "#" || /^javascript:/i.test(raw)) return true;
   if (/example\.com|placehold\.co|placeholder\.|transparent\.gif|coming-soon/i.test(raw)) return true;
-  if (/social(?:youtube|instagram|tiktok|facebook|bilibili|douyin)\d{3}/i.test(raw)) return true;
+  if (/social(?:youtube|instagram|tiktok|facebook|snapchat|bilibili|douyin)\d{3}/i.test(raw)) return true;
   if (/watch\?v=xxxx/i.test(raw)) return true;
   return false;
 }

@@ -17,7 +17,7 @@
   const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
   const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
-  const MAIN_ROWS = 6;
+  const MAIN_ROWS = 7;
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 12;
   const RIGHT_LIMIT = 100;
@@ -27,6 +27,7 @@
     "social-instagram",
     "social-tiktok",
     "social-facebook",
+    "social-snapchat",
     "social-bilibili",
     "social-douyin",
   ]);
@@ -402,6 +403,31 @@
     return initialRightSnapshotPromise;
   }
 
+  // Public Social main release only. Session-local projection avoids repeat
+  // network/DB gating when a user reopens or refreshes the page; the current
+  // release is still fetched asynchronously and wins on successful readback.
+  const MAIN_FAST_CACHE = "igdc.social.mainRelease.v7";
+  function readFastMain() {
+    try {
+      const raw = sessionStorage.getItem(MAIN_FAST_CACHE);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (!data || !data.at || Date.now() - data.at > 20 * 60 * 1000) return null;
+      if (!data.snapshot || !data.snapshot.pages || !data.snapshot.pages.social) return null;
+      return data;
+    } catch (_) { return null; }
+  }
+  function saveFastMain(current) {
+    try {
+      if (!current || !current.snapshot || !current.pipeline) return;
+      sessionStorage.setItem(MAIN_FAST_CACHE, JSON.stringify({
+        at: Date.now(), snapshot: current.snapshot,
+        route: current.pipeline.route || {},
+        releaseId: current.pipeline.releaseId || null
+      }));
+    } catch (_) { /* storage disabled or quota: online flow remains intact */ }
+  }
+
   async function loadCurrentSnapshot() {
     try {
       const res = await fetch(
@@ -467,6 +493,7 @@
       "social-instagram": "Instagram",
       "social-tiktok": "TikTok",
       "social-facebook": "Facebook",
+      "social-snapchat": "Snapchat",
       "social-bilibili": "Bilibili",
       "social-douyin": "Douyin",
     };
@@ -532,7 +559,7 @@
 
   function thumbnailRenderUrl(platform, contentUrl, thumb) {
     if (!thumb) return "";
-    if (["instagram", "tiktok", "facebook", "bilibili", "douyin"].indexOf(platform) < 0) return thumb;
+    if (["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].indexOf(platform) < 0) return thumb;
     var q = new URLSearchParams({ platform: platform, url: contentUrl || "", thumb: thumb });
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }
@@ -954,6 +981,16 @@
     // request country, so waiting for social-country-route as a second serverless
     // dependency only delays the six main rows. Browser language remains the
     // lightweight fallback for language ranking.
+    const warm = readFastMain();
+    if (warm) {
+      const fallback = routeFallback();
+      lastRoute = Object.assign({}, fallback, warm.route || {}, { source: "session_public_release_fast_path" });
+      lastMainSnapshot = warm.snapshot;
+      window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+        source: "session_public_release_fast_path", releaseId: warm.releaseId, status: "cached_repaint_then_verify"
+      };
+      renderMainSnapshot(warm.snapshot, lastRoute);
+    }
     mainRunInFlight = loadCurrentSnapshot()
       .then(function (current) {
         const fallbackRoute = routeFallback();
@@ -969,6 +1006,7 @@
         // Distribution-owned right panel already started. Never start a duplicate
         // multi-megabyte snapshot fetch from the Social main path.
         if (!(current && current.snapshot)) {
+          if (warm && warm.snapshot) return true;
           return getInitialRightSnapshotPromise().then(function (canonicalSnapshot) {
             if (!canonicalSnapshot) {
               window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
@@ -990,6 +1028,7 @@
         }
 
         lastMainSnapshot = current.snapshot;
+        saveFastMain(current);
         window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
         return renderMainSnapshot(lastMainSnapshot, lastRoute);
       })

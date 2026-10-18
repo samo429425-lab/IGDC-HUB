@@ -15,6 +15,9 @@ const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const VERSION =
   "social-candidate-auto-curator-v1.5.2-section-complete-read";
 const MAX_PER_SECTION = SocialStore.POOL_MAX_PER_SECTION || 350;
+// Only an in-process scheduler call may use this symbol; HTTP callers still
+// require ordinary authenticated Social administrator credentials.
+const INTERNAL_SCHEDULE_ACTOR = Symbol("igdc-social-scheduled-curator");
 
 function text(value) {
   return value == null ? "" : String(value).trim();
@@ -91,6 +94,10 @@ function eligible(row, route, aiPolicy) {
     )
   )
     return { ok: false, reason: "review_status_not_eligible" };
+  // Explicit administrator holds/rejections are never overturned by AI curation.
+  if (/^(hold|held|content_hold|replacement_requested|replacement_waiting|rejected|delete_waiting)$/.test(reviewKey(row)) ||
+      /^(hold|replacement_waiting|manual_exclude)$/.test(text(raw.placementOverride).toLowerCase()))
+    return { ok: false, reason: "administrator_hold_or_replacement_preserved" };
   if (row.public_access !== true || row.login_required === true)
     return { ok: false, reason: "public_channel_required" };
   if (text(row.risk_level) === "blocked")
@@ -147,7 +154,9 @@ exports.handler = async function (event) {
         version: VERSION,
         error: "method_not_allowed",
       });
-    const actor = await actorFor(event);
+    const actor = event && event[INTERNAL_SCHEDULE_ACTOR] === true
+      ? { memberId: "igdc-social-scheduler", email: "", roles: ["social_manager"] }
+      : await actorFor(event);
     const body = SocialStore.parseBody(event);
     const aiPolicy = AIPolicy.normalize(body.aiPolicy || {});
     if (body.confirmAutoCurate !== true && body.confirmAutoCurate !== "true") {
@@ -299,4 +308,11 @@ exports.handler = async function (event) {
       snapshotPublication: false,
     });
   }
+};
+
+// Trusted server-only operation. No new unauthenticated HTTP route is exposed.
+exports.curateInternal = function (options) {
+  const event = { httpMethod: "POST", body: JSON.stringify(Object.assign({}, options || {}, { confirmAutoCurate: true })) };
+  event[INTERNAL_SCHEDULE_ACTOR] = true;
+  return exports.handler(event);
 };

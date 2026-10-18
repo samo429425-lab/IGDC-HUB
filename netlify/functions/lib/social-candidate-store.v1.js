@@ -127,6 +127,7 @@ function platformContentUrl(platform, value) {
   else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
   else if (p === "tiktok") ok = /\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[A-Za-z0-9_-]+/i.test(path) || host === "vm.tiktok.com" || host === "vt.tiktok.com";
   else if (p === "facebook") ok = host === "fb.watch" || /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (/^\/watch\/?$/i.test(path) && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
+  else if (p === "snapchat") ok = host === "snapchat.com" && /^\/spotlight\/[^/]+\/?$/i.test(path);
   else if (p === "bilibili") ok = host === "b23.tv" ? /^\/[^/]+/i.test(path) : /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path);
   else if (p === "douyin") ok = host === "v.douyin.com" || /^\/(?:share\/)?(?:video|note)\/\d{8,}/i.test(path);
   return ok ? url : "";
@@ -1228,7 +1229,7 @@ function genericContentTitle(platform, value) {
   if (!title) return true;
   if (/^loading[.…]*$/i.test(title)) return true;
   if (/^(?:false|null|undefined)$/i.test(title)) return true;
-  if (/^(?:instagram|tiktok|facebook|youtube|bilibili|douyin)(?:\s+(?:post|reel|video|content|item))?$/i.test(title)) return true;
+  if (/^(?:instagram|tiktok|facebook|youtube|snapchat|bilibili|douyin)(?:\s+(?:post|reel|video|content|item))?$/i.test(title)) return true;
   const p = text(platform).replace(/^social-/, "");
   return !!p && title.toLowerCase() === p.toLowerCase();
 }
@@ -1310,7 +1311,9 @@ function publishableThumbnail(row) {
 }
 // Public Social cards must carry a real provider-owned preview image. Keeping
 // this strict prevents blank or synthetic cards from consuming permanent slots.
-const PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS = new Set([]);
+const PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS = new Set([
+  "instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"
+]);
 function publishableIdentity(row) {
   const r = plain(row);
   const raw = plain(r.raw);
@@ -1331,7 +1334,7 @@ function publishableIdentity(row) {
     r.description,
     raw.description,
   ].map(text).filter(Boolean);
-  const generic = /^(?:instagram|tiktok|facebook|youtube|bilibili|douyin|social)(?:\s+(?:post|reel|video|content|item))?$/i;
+  const generic = /^(?:instagram|tiktok|facebook|youtube|snapchat|bilibili|douyin|social)(?:\s+(?:post|reel|video|content|item))?$/i;
   return values.some((value) => {
     const clean = value.replace(/\s+/g, " ").trim();
     return clean.length >= 2 && !generic.test(clean) && !/^loading[.…]*$/i.test(clean);
@@ -2322,6 +2325,7 @@ module.exports = {
   channelIdentity,
   assetClassOf,
   socialEmbedUrl,
+  platformContentUrl,
   isApprovedInfluencer,
   approvedContentRows,
 };

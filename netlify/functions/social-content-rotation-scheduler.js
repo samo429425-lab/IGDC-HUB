@@ -10,10 +10,14 @@
  */
 const Collector = require("./sanmaru-social-live-collector");
 const Publisher = require("./social-snapshot-publish");
+const Curator = require("./social-candidate-auto-curator");
+const Actions = require("./social-candidate-action");
+const Store = require("./lib/social-candidate-store.v1");
 
 const VERSION = "social-content-rotation-scheduler-v1.4.0-bilibili-douyin-six";
 const SECTIONS = [
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
+  "social-snapchat",
   "social-bilibili", "social-douyin"
 ];
 
@@ -66,6 +70,43 @@ exports.handler = async function() {
     });
   }
 
+  // Bounded existing-schedule thumbnail repair: at most 2 rows per SNS.
+  // This path is Social-only and never invokes a public new scheduler route.
+  const previewIds = [];
+  for (const sectionKey of SECTIONS) {
+    try {
+      const rows = await Store.selectCandidates("select=*&section_key=eq." + encodeURIComponent(sectionKey) +
+        "&order=updated_at.desc&limit=60");
+      for (const row of (Array.isArray(rows) ? rows : [])) {
+        if (previewIds.filter((id) => id.sectionKey === sectionKey).length >= 2) break;
+        if (Store.assetClassOf(row) !== "latest_content" || Store.publishableThumbnail(row)) continue;
+        if (/^(hold|held|blocked|permanent_blocked|search_excluded|rejected|replacement_requested|replacement_waiting)$/i.test(String(row.review_status || ""))) continue;
+        if (!Store.platformContentUrl(row.platform, row.source_url || (row.raw && row.raw.latestContentUrl))) continue;
+        if (row.id) previewIds.push({ id: row.id, sectionKey });
+      }
+    } catch (_error) { /* Preserve other sections and the current durable release. */ }
+  }
+  let preview = { ok: true, requested: previewIds.length, updated: 0 };
+  if (previewIds.length) {
+    try {
+      const result = bodyOf(await Actions.hydratePreviewInternal(previewIds.map((row) => row.id)));
+      preview = { ok: result.ok === true, requested: previewIds.length, updated: Number(result.updated || 0), error: result.error || null };
+    } catch (error) { preview = { ok: false, requested: previewIds.length, updated: 0, error: String(error && error.message || error) }; }
+  }
+
+  // New discoveries arrive pending; the previous scheduler published immediately
+  // and could never surface newly eligible content in the same operation.
+  let curation = { ok: false, error: "not_run" };
+  try {
+    const reviewed = bodyOf(await Curator.curateInternal({ scopeMode: "global", countryCode: "" }));
+    curation = { ok: reviewed.ok === true, updated: reviewed.updated || 0,
+      latestContentPools: Object.fromEntries(Object.entries(reviewed.bySection || {}).map(([key, value]) =>
+        [key, Number(value && value.latestContentPool || 0)])),
+      error: reviewed.error || null };
+  } catch (error) {
+    curation = { ok: false, error: String(error && error.message || error) };
+  }
+
   const publishes = [];
   for (const scope of [
     { scopeMode: "global", countryCode: "" },
@@ -95,12 +136,14 @@ exports.handler = async function() {
     statusCode: 200,
     headers: { "content-type": "application/json; charset=utf-8" },
     body: JSON.stringify({
-      ok: runs.some((row) => row.ok) && publishes.every((row) => row.ok),
+      ok: runs.some((row) => row.ok) && curation.ok && publishes.every((row) => row.ok),
       version: VERSION,
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
       strategy: "psom_searchbank_content_first_plus_platform_discovery_then_runtime_publish",
       runs,
+      preview,
+      curation,
       publishes,
       netlifyRebuildRequired: false
     })

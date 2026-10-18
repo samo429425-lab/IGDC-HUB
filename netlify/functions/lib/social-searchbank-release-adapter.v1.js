@@ -348,7 +348,14 @@ function psomSocialSections(root) {
     const doc = readJson(file);
     const rows = doc && doc.pages && doc.pages.social && doc.pages.social.sections;
     if (Array.isArray(rows) && rows.length) {
-      return { file, sections: new Set(rows.map(text).filter(Boolean)) };
+      const sections = new Set(rows.map(text).filter(Boolean));
+      // Section-local additive contract only; shared PSOM JSON is read-only.
+      // Other page contracts and Social rightPanel are unchanged.
+      if (SocialStore.Policy.SECTION_KEYS.includes("social-snapchat") &&
+          sections.has("social-facebook") && sections.has("social-bilibili")) {
+        sections.add("social-snapchat");
+      }
+      return { file, sections };
     }
   }
   return { file: null, sections: new Set() };

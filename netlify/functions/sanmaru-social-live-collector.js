@@ -47,7 +47,7 @@ const CHANNEL_RESOLUTION_CONCURRENCY = 4;
 // YouTube already has a stable publication path; the other five can require
 // provider metadata recovery before a candidate is publishable.
 const PREVIEW_RECOVERY_PLATFORMS = new Set([
-  "instagram", "tiktok", "facebook", "bilibili", "douyin"
+  "instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"
 ]);
 const WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql";
 const INTERNAL_SCHEDULE_EVENT = Symbol("igdc-social-scheduled-internal");
@@ -92,6 +92,7 @@ const CONTENT_SITE_FILTERS = Object.freeze({
   instagram: { host: "instagram.com", hint: "(inurl:reel OR inurl:/p/)" },
   tiktok: { host: "tiktok.com", hint: "inurl:video" },
   facebook: { host: "facebook.com", hint: "(inurl:reel OR inurl:videos OR inurl:watch OR inurl:posts)" },
+  snapchat: { host: "snapchat.com", hint: "inurl:spotlight" },
   bilibili: { host: "bilibili.com", hint: "inurl:video" },
   douyin: { host: "douyin.com", hint: "(inurl:video OR inurl:note)" }
 });
@@ -112,7 +113,16 @@ function readSocialPsomContract() {
       const doc = JSON.parse(fs.readFileSync(file, "utf8"));
       const social = doc && doc.pages && doc.pages.social || {};
       const sections = Array.isArray(social.sections) ? social.sections.slice() : [];
-      const mapping = social.mapping && typeof social.mapping === "object" ? social.mapping : {};
+      const mapping = social.mapping && typeof social.mapping === "object" ? { ...social.mapping } : {};
+      // Social-only runtime extension. Preserve canonical shared PSOM byte-for-byte;
+      // only add the newly approved Spotlight section to this Social collector's
+      // effective contract. Never extend Distribution, rightPanel or other pages.
+      if (SocialStore.Policy.SECTION_KEYS.includes("social-snapchat") &&
+          sections.includes("social-facebook") && sections.includes("social-bilibili") &&
+          !sections.includes("social-snapchat")) {
+        sections.splice(sections.indexOf("social-bilibili"), 0, "social-snapchat");
+        mapping.snapchat = "social-snapchat";
+      }
       if (sections.length && Object.keys(mapping).length) {
         SOCIAL_PSOM_CACHE = { file, sections, mapping };
         return SOCIAL_PSOM_CACHE;
@@ -145,6 +155,7 @@ const PUBLIC_POST_SEARCH = Object.freeze({
   instagram: { host: "instagram.com", hint: "reel post" },
   tiktok: { host: "tiktok.com", hint: "video" },
   facebook: { host: "facebook.com", hint: "reel video posts" },
+  snapchat: { host: "snapchat.com", hint: "spotlight video" },
   bilibili: { host: "bilibili.com", hint: "video UP creator" },
   douyin: { host: "douyin.com", hint: "video note" }
 });
@@ -169,6 +180,11 @@ const SPARSE_PLATFORM_DISCOVERY_TERMS = Object.freeze({
     "education science public video", "art museum culture reel", "sports lifestyle creator",
     "nature travel public reel", "family entertainment creator"
   ],
+  snapchat: [
+    "spotlight music performance", "spotlight travel culture", "spotlight education howto",
+    "spotlight food creators", "spotlight art nature", "spotlight comedy entertainment",
+    "spotlight fashion wellness", "spotlight creative short video"
+  ],
   bilibili: [
     "音乐 演出 UP主", "旅行 旅游 城市 目的地", "文化 博物馆 纪录片",
     "科普 教育 科技", "艺术 设计 摄影", "游戏 动画 创作者",
@@ -185,6 +201,7 @@ const SPARSE_DISCOVERY_PLATFORMS = new Set(Object.keys(SPARSE_PLATFORM_DISCOVERY
 const REGISTRY_QUALITY_FOCUS = Object.freeze({
   tiktok: "music travel food culture education art nature lifestyle entertainment useful public creator",
   facebook: "creator reel public video music travel food culture education art nature lifestyle",
+  snapchat: "spotlight music travel food culture education nature art entertainment public creator",
   bilibili: "UP主 视频 音乐 旅行 文化 科普 教育 科技 艺术 游戏 动画 美食 documentary creator",
   douyin: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education"
 });
@@ -376,7 +393,7 @@ function candidateUrls(item) {
     source.title, source.description, social.title, social.description,
     data.title, data.description, data.snippet
   ].map((value) => decodeXml(SocialStore.text(value))).filter(Boolean);
-  const socialUrlRe = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com|youtu\.be|instagram\.com|tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com|facebook\.com|fb\.watch|bilibili\.com|b23\.tv|douyin\.com|v\.douyin\.com)\/[^\s<>"'`\]\[()]+/ig;
+  const socialUrlRe = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com|youtu\.be|instagram\.com|tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com|facebook\.com|fb\.watch|snapchat\.com|bilibili\.com|b23\.tv|douyin\.com|v\.douyin\.com)\/[^\s<>"'`\]\[()]+/ig;
   for (const value of textFields.slice(0, 18)) {
     let match;
     let guard = 0;
@@ -402,6 +419,7 @@ function contentKind(platform, value) {
     if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
     if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[a-z0-9_-]+/i.test(path) || /^(?:vm|vt)\.tiktok\.com$/i.test(url.hostname))) return "latest_video";
     if (platform === "facebook" && (/^fb\.watch$/i.test(url.hostname) || /^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (/^\/watch\/?$/i.test(path) && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
+    if (platform === "snapchat" && /^\/spotlight\/[^/]+\/?$/i.test(path)) return "latest_video";
     if (platform === "bilibili" && (/^b23\.tv$/i.test(url.hostname) || /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path))) return "latest_video";
     if (platform === "douyin" && (/^\/(?:share\/)?(video|note)\/\d+/i.test(path) || /^v\.douyin\.com$/i.test(url.hostname))) return /\/note\//i.test(path) ? "latest_post" : "latest_video";
   } catch (_error) {}
@@ -421,7 +439,7 @@ function channelIdFromItem(item) {
 function syntheticTitle(value, platform) {
   const title = SocialStore.text(value).replace(/\s+/g, " ").trim();
   if (!title || /^\[[^\]]+\].*(검색|공개 게시물|공개 글|공개 영상)/i.test(title) || /(검색 결과|search results?)$/i.test(title)) return true;
-  const generic = /^(?:instagram|tiktok|facebook|bilibili|douyin|youtube)(?:\s+(?:post|reel|video|note|content|item))?$/i;
+  const generic = /^(?:instagram|tiktok|facebook|snapchat|bilibili|douyin|youtube)(?:\s+(?:post|reel|video|note|content|item))?$/i;
   if (generic.test(title)) return true;
   const p = SocialStore.text(platform).replace(/^social-/, "");
   return !!p && title.toLowerCase() === p.toLowerCase();
@@ -452,6 +470,10 @@ function sparseVerifiedContentTitle(platform, contentUrl, item) {
       const id = reelIndex >= 0 ? parts[reelIndex + 1] || "" : (videoIndex >= 0 ? parts[videoIndex + 1] || "" : (url.searchParams.get("v") || url.searchParams.get("story_fbid") || ""));
       const kind = reelIndex >= 0 ? "Reel" : "Video/Post";
       return "Facebook · " + kind + (id ? " " + id.slice(-16) : "");
+    }
+    if (platform === "snapchat") {
+      const videoId = parts[0] === "spotlight" ? parts[1] || "" : "";
+      return "Snapchat · Spotlight" + (videoId ? " " + videoId.slice(0, 14) : "");
     }
     if (platform === "bilibili") {
       const videoIndex = parts.findIndex((part) => part.toLowerCase() === "video");
@@ -1336,6 +1358,7 @@ function publicSearchQuery(plan, queryText, registrySeed) {
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
   if (platform === "tiktok") return [base, exact, "site:tiktok.com", "video creator latest public"].filter(Boolean).join(" ");
   if (platform === "facebook") return [base, exact, "site:facebook.com", "reel video creator public"].filter(Boolean).join(" ");
+  if (platform === "snapchat") return [base, exact, "site:snapchat.com", "inurl:spotlight", "spotlight video"].filter(Boolean).join(" ");
   if (platform === "bilibili") return [base, exact, "site:bilibili.com", "inurl:video", "哔哩哔哩 最新 视频 UP主", "public video"].filter(Boolean).join(" ");
   if (platform === "douyin") return [base, exact, "site:douyin.com", "抖音 视频 最新 公开", "video note"].filter(Boolean).join(" ");
   return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"].filter(Boolean).join(" ");
@@ -1353,6 +1376,7 @@ function directProviderQuery(plan, queryText, registrySeed) {
   if (platform === "instagram") return [topic, exact, "site:instagram.com", "inurl:reel"].filter(Boolean).join(" ");
   if (platform === "tiktok") return [topic, exact, "site:tiktok.com", "inurl:video"].filter(Boolean).join(" ");
   if (platform === "facebook") return [topic, exact, "site:facebook.com", "inurl:reel OR inurl:videos"].filter(Boolean).join(" ");
+  if (platform === "snapchat") return [topic, exact, "site:snapchat.com", "inurl:spotlight"].filter(Boolean).join(" ");
   if (platform === "bilibili") return [topic || "热门", exact, "site:bilibili.com", "inurl:video", "哔哩哔哩"].filter(Boolean).join(" ");
   if (platform === "douyin") return [topic || "热门", exact, "site:douyin.com", "inurl:video", "抖音"].filter(Boolean).join(" ");
   return publicSearchQuery(plan, queryText, registrySeed);
@@ -1376,6 +1400,7 @@ function naverProviderQuery(plan, queryText) {
     instagram: "instagram.com reel",
     tiktok: "tiktok.com video",
     facebook: "facebook.com reel video",
+    snapchat: "snapchat.com spotlight video",
     bilibili: "bilibili.com video BV",
     douyin: "douyin.com video 抖音"
   }[platform] || platform;

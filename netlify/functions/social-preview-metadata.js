@@ -18,6 +18,7 @@ const PLATFORM_HOSTS = Object.freeze({
   instagram: [/(^|\.)instagram\.com$/i],
   tiktok: [/(^|\.)tiktok\.com$/i],
   facebook: [/(^|\.)facebook\.com$/i, /^fb\.watch$/i],
+  snapchat: [/(^|\.)snapchat\.com$/i],
   bilibili: [/(^|\.)bilibili\.com$/i, /^b23\.tv$/i],
   douyin: [/(^|\.)douyin\.com$/i, /(^|\.)iesdouyin\.com$/i]
 });
@@ -112,6 +113,14 @@ function previewImageUrl(platform, value) {
     if (platform === "facebook") {
       // facebook.com post/watch URLs are pages, not image previews.
       if (/(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path + url.search)) return "";
+    }
+
+    if (platform === "snapchat") {
+      // Public Snapchat Spotlight covers are hosted by Snap-owned media CDNs.
+      // A Spotlight page itself is HTML, not a valid thumb/relay destination.
+      if (!/(^|\.)(?:sc-cdn\.net|snapchat\.com)$/i.test(host)) return "";
+      if (/(^|\.)snapchat\.com$/i.test(host) &&
+          !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path + url.search)) return "";
     }
 
     if (platform === "bilibili") {
@@ -286,7 +295,7 @@ function htmlImage(html, platform) {
 function htmlCreator(platform, html) {
   const meta = metaMap(html);
   const metaAuthor = firstMeta(meta, ["author", "article:author", "twitter:creator"]);
-  if (metaAuthor && !/^(instagram|tiktok|facebook|bilibili|douyin)$/i.test(metaAuthor)) {
+  if (metaAuthor && !/^(instagram|tiktok|facebook|snapchat|bilibili|douyin)$/i.test(metaAuthor)) {
     return stripTags(metaAuthor).replace(/^@/, "").trim();
   }
   const raw = text(html);

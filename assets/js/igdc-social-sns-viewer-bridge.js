@@ -25,6 +25,7 @@
     'social-instagram': 'instagram',
     'social-tiktok': 'tiktok',
     'social-facebook': 'facebook',
+    'social-snapchat': 'snapchat',
     'social-bilibili': 'bilibili',
     'social-douyin': 'douyin'
   };
@@ -91,7 +92,7 @@
     return !url || url === '#' || /^javascript:/i.test(url) ||
       /\/pages\/coming-soon\.html/i.test(url) ||
       /(?:^|\.)example\.com(?:[\/:?#]|$)/i.test(url) ||
-      /social[_-](?:youtube|instagram|tiktok|facebook|bilibili|douyin)[_-]?\d+/i.test(url) ||
+      /social[_-](?:youtube|instagram|tiktok|facebook|snapchat|bilibili|douyin)[_-]?\d+/i.test(url) ||
       /tiktok\.com\/@seed\/video\//i.test(url);
   }
 
@@ -323,6 +324,11 @@
         aspect: facebookIsVideo(url) ? '16/9' : 'auto',
         provider: facebookIsVideo(url) ? 'facebook-video' : 'facebook-post'
       };
+    }
+
+    if (platform === 'snapchat' && validHttp(url)) {
+      // Never claim that a YouTube player is supported by Snapchat.
+      return containedFallbackEmbed(platform, card, titleOf(card));
     }
 
     if (platform === 'bilibili') {

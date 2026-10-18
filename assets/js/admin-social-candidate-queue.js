@@ -16,6 +16,7 @@
     ["social-instagram", "Instagram", "instagram"],
     ["social-tiktok", "TikTok", "tiktok"],
     ["social-facebook", "Facebook", "facebook"],
+    ["social-snapchat", "Snapchat / Spotlight", "snapchat"],
     ["social-bilibili", "Bilibili / 哔哩哔哩", "bilibili"],
     ["social-douyin", "Douyin / 抖音", "douyin"],
   ];
@@ -1739,7 +1740,7 @@
     });
   }
   function sectionEmptyBatchLimit(section, j) {
-    var lowYield = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section),
+    var lowYield = /^social-(?:tiktok|facebook|snapchat|bilibili|douyin)$/.test(section),
       cap = lowYield ? LOW_YIELD_EMPTY_BATCH_LIMIT : STANDARD_EMPTY_BATCH_LIMIT,
       reported = Number(j && (j.discoveryCatalogSize || j.catalogSize) || 0),
       allMode = !!(j && j.runMode === "all"),
@@ -2029,7 +2030,10 @@
   function sectionCount(section) {
     return countryScopedActive().filter(function (r) {
       return (
-        r.sectionKey === section && assetClass(r) === "latest_content"
+        r.sectionKey === section && assetClass(r) === "latest_content" &&
+        !/^(hold|held|content_hold|replacement_requested|replacement_waiting|rejected)$/i.test(text(r.reviewStatus)) &&
+        /^https:\/\//i.test(text(r.sourceUrl || (r.raw && (r.raw.latestContentUrl || r.raw.sourceUrl)))) &&
+        !!text(r.title)
       );
     }).length;
   }
@@ -2213,7 +2217,7 @@
       if (dryRun) break;
       if (!stopRequested && j.sectionCount < j.target) await wait(650);
     }
-    var lowYieldRescue = /^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section) && Number(j.newlyFound || 0) > 0;
+    var lowYieldRescue = /^social-(?:tiktok|facebook|snapchat|bilibili|douyin)$/.test(section) && Number(j.newlyFound || 0) > 0;
     if (
       !dryRun &&
       !stopRequested &&
@@ -2301,7 +2305,7 @@
       registrySweepActive: false,
       qualitySweepBatches: 0,
       qualityEmptyBatches: 0,
-      qualitySweepTarget: (runMode === "all" ? 2 : (/^social-(?:tiktok|facebook|bilibili|douyin)$/.test(section) ? 4 : 3)),
+      qualitySweepTarget: (runMode === "all" ? 2 : (/^social-(?:tiktok|facebook|snapchat|bilibili|douyin)$/.test(section) ? 4 : 3)),
       qualitySweepDone: false,
       qualitySweepActive: false,
       lastReason: "",
@@ -2928,7 +2932,7 @@
     }
   }
   async function autoCurate(sectionKey, skipConfirm) {
-    var target = sectionKey ? label(sectionKey) : "전체 6개 섹션",
+    var target = sectionKey ? label(sectionKey) : "전체 7개 섹션",
       scope = currentScope(),
       scopeName =
         (scope.country &&
