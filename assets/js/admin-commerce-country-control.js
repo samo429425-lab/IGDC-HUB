@@ -450,7 +450,7 @@
       if(!page){partialError=lastError||new Error('상품 관리 원장 전용 조회가 중단되었습니다.');break;}
       pages+=1;var rows=Array.isArray(page.candidates)?page.candidates:[];rows.forEach(function(row){var id=text(row&&row.candidateId||row&&row.id);if(!id||seen[id])return;seen[id]=true;all.push(row);});
       var pg=page.pagination||{},hasMore=pg.hasMore===true,next=Number(pg.nextOffset);
-      if(pages===1||pages%2===0||!hasMore){var interim={ok:true,candidates:all.slice()};renderQueue(interim.candidates);renderProducts(candidateLedgerProductData(interim).products||[]);}
+      if(options.atomicLedgerRefresh!==true&&options.readOnlyLedgerRefresh!==true&&(pages===1||pages%2===0||!hasMore)){var interim={ok:true,candidates:all.slice()};renderQueue(interim.candidates);renderProducts(candidateLedgerProductData(interim).products||[]);}
       if(!hasMore)break;if(!Number.isFinite(next)||next<=offset){partialError=new Error('상품 관리 원장 페이지 커서가 반복되었습니다.');break;}offset=next;
     }
     if(pages>=40&&hasMore&&!partialError)partialError=new Error('상품 후보 원장 페이지 제한에 도달해 전체 목록이 아직 완성되지 않았습니다.');
@@ -466,7 +466,11 @@
     }
     if(!all.length&&partialError)throw partialError;
     var q={ok:!partialError,candidates:all,pagination:{loadedPages:pages,loadedItems:all.length,complete:!partialError,source:source,partial:!!partialError,error:partialError?text(partialError&&partialError.message):null}};
-    renderQueue(q.candidates);var data=candidateLedgerProductData(q);data.candidateRows=q.candidates.slice();data.pipeline=Object.assign({},data.pipeline||{},{directManagementLedger:true,ledgerLoadComplete:!partialError,loadedPages:pages,loadedItems:all.length,source:source,partialError:partialError?text(partialError&&partialError.message):null});renderProducts(data.products||[]);
+    var data=candidateLedgerProductData(q);data.candidateRows=q.candidates.slice();data.pipeline=Object.assign({},data.pipeline||{},{directManagementLedger:true,ledgerLoadComplete:!partialError,loadedPages:pages,loadedItems:all.length,source:source,partialError:partialError?text(partialError&&partialError.message):null});
+    // Product research may READ this ledger, but must never replace the visible
+    // 20-section administrator board with a partial page or research result.
+    if((options.atomicLedgerRefresh===true||options.readOnlyLedgerRefresh===true)&&partialError)throw partialError;
+    if(options.readOnlyLedgerRefresh!==true){renderQueue(q.candidates);renderProducts(data.products||[]);}
     var currentStatus=text(lastProductJson&&lastProductJson.status),hasResearchState=!!lastProductJson&&currentStatus&&currentStatus!=='candidate_ledger'&&currentStatus!=='not_started',preserve=options.preserveResearchReport===true||(options.preserveResearchReport!==false&&hasResearchState);
     if(preserve){saveReviewSnapshot();if(partialError)throw partialError;return data;}lastProductJson=data;rememberReport('product',data);renderProductProgress(data);saveReviewSnapshot();if(partialError)throw partialError;return data;
   }
@@ -2134,14 +2138,14 @@
           if($('productResearchState'))$('productResearchState').textContent='서버에 저장된 상품 리서치를 저장된 진행 지점부터 계속합니다. 이미 대기열에 등록한 상품은 중복 생성하지 않습니다.';
         }
       }else{
-        var baselineData=await refreshCandidateLedgerProducts({preserveResearchReport:true}),baselineCount=Array.isArray(baselineData&&baselineData.products)?baselineData.products.length:productRows.length;
+        var baselineData=await refreshCandidateLedgerProducts({preserveResearchReport:true,readOnlyLedgerRefresh:true}),baselineCount=Array.isArray(baselineData&&baselineData.products)?baselineData.products.length:productRows.length;
         if($('productResearchState'))$('productResearchState').textContent='1차 · 저장된 상품 후보 원장 '+baselineCount+'건 유지 완료 · 2차 · 현재 책임 공급업체 비공개 후보 전체의 공식 상품 리서치를 시작합니다. 기존 업체도 재확인하고 신규 업체는 별도 집계합니다.';
         data=await api(CONTROL,'product_research_begin','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,restart:true,retryStaging:false,refreshSources:true,refreshExisting:true,fullRescan:false,compact:true,candidateLedgerBaseline:true,candidateLedgerBaselineCount:baselineCount,scopeAuthority:'administrator-selected',ignoreRequestGeo:true},20000);
       }
       while(true){
         if(scopeKey()!==requestedKey){productStopRequested=true;show('상품 조사 중 선택 범위가 바뀌어 화면 진행을 중단했습니다. 서버 작업은 원래 범위에서 재개할 수 있습니다.','warn');break;}
         if(data&&data.compact===true){lastProductJson=Object.assign({},lastProductJson||{},data,{products:productRows});}
-        else{lastProductJson=data;if(Array.isArray(data.products))renderProducts(data.products);rememberReport('product',data);saveReviewSnapshot();}
+        else{lastProductJson=data;rememberReport('product',data);saveReviewSnapshot();}
         renderProductProgress(lastProductJson);
         if(data.status==='complete'){
           productPausedForQueue=false;productPauseServerConfirmed=false;
@@ -2159,10 +2163,10 @@
               continue;
             }
           }
-          if(data.compact===true){data=await loadProductResearchPaged(requested.country,requested.region,{state:$('productResearchState'),label:'완료 상품 관리 목록'});lastProductJson=data;renderProducts(data.products||[]);try{var completedLatest=await loadLatestResearchPaged(requested.country,requested.region,{state:$('productResearchState'),label:'완료 최신 상품 목록',preserveOnFailure:true});if(completedLatest&&Array.isArray(completedLatest.rows)&&(completedLatest.rows.length||completedLatest.complete===true))latestProductRows=completedLatest.rows;}catch(_latestCompleteError){}lastProductJson=Object.assign({},data,{products:productRows,latestProducts:latestProductRows});renderProductProgress(lastProductJson);rememberReport('product',lastProductJson);saveReviewSnapshot();data=lastProductJson;}
+          if(data.compact===true){data=await loadProductResearchPaged(requested.country,requested.region,{state:$('productResearchState'),label:'완료 상품 관리 목록'});lastProductJson=data;try{var completedLatest=await loadLatestResearchPaged(requested.country,requested.region,{state:$('productResearchState'),label:'완료 최신 상품 목록',preserveOnFailure:true});if(completedLatest&&Array.isArray(completedLatest.rows)&&(completedLatest.rows.length||completedLatest.complete===true))latestProductRows=completedLatest.rows;}catch(_latestCompleteError){}lastProductJson=Object.assign({},data,{products:productRows,latestProducts:latestProductRows});renderProductProgress(lastProductJson);rememberReport('product',lastProductJson);saveReviewSnapshot();data=lastProductJson;}
           var completedProducts=Array.isArray(data.products)?data.products:productRows,queueEligible=Number(data.summary&&data.summary.privateResearchQueueEligible||0);
           show(completedProducts.length?'상품 리서치를 완료했습니다. 최신 상품 목록을 확인한 뒤 현재 조사분 후보 관리목록 등록 버튼을 누르면 검증 완료 상품 '+queueEligible+'건을 비공개 후보·중개수익 대기열로 순차 등록합니다.':'상품 리서치는 끝났지만 확인 가능한 실제 상품 목록을 만들지 못했습니다. 업체 공식 사이트와 JSON 경로를 점검하세요.',completedProducts.length?'ok':'warn');
-          try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}catch(_ledgerRefreshError){}
+          try{await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});}catch(_ledgerRefreshError){}
           break;
         }
         if(productStopRequested){productPausedForQueue=true;pauseAutoStageAfterLoop=productPauseAutoQueue===true;show('상품 조사를 일시정지했습니다. 지금까지의 결과는 관리 DB에 보존됐습니다.'+(productPauseAutoQueue?' 현재 처리 중인 요청이 끝난 뒤 검증 완료 상품을 자동으로 비공개 대기열에 등록합니다.':' 현재 조사분 후보 관리목록 등록 버튼으로 수동 등록할 수 있습니다.'),'warn');syncProductQueueStageControls();break;}

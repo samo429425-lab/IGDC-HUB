@@ -761,7 +761,7 @@ function compactResearchItem(item){
 function createSupplierResearchPlan(params){
   const geo=stagedGeo(params);if(!geo.country)return{geo,rows:[],tasks:[],seeds:[],diagnostics:{error:"country_missing"}};
   const locales=localeList(geo.country);let plan={rows:[],seeds:[],diagnostics:null,version:null};
-  if(SupplierResearchPlan&&typeof SupplierResearchPlan.buildPlan==="function")plan=SupplierResearchPlan.buildPlan({geo,locales,maxQueries:24,seedLimit:40});
+  if(SupplierResearchPlan&&typeof SupplierResearchPlan.buildPlan==="function")plan=SupplierResearchPlan.buildPlan({geo,locales,maxQueries:geo.country==="KR"?30:24,seedLimit:40});
   const rows=[];const seen=new Set();for(const row of array(plan.rows)){const q=text(row&&row.query).replace(/\s+/g," ");if(!q||seen.has(q.toLowerCase()))continue;seen.add(q.toLowerCase());rows.push({query:q,locale:text(row&&row.locale)||locales[0]||"en",origin:text(row&&row.origin)||"searchbank-psom-policy-plan",lane:text(row&&row.lane)||"general",localName:text(row&&row.localName)||geo.countryName||geo.country});}
   const tasks=[];rows.forEach((row,index)=>{if(geo.country==="KR")tasks.push({lane:"naver",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});else tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});tasks.push({lane:"sanmaru",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0});});
   if(geo.country==="KR")rows.slice(0,8).forEach((row,index)=>tasks.push({lane:"google",rowIndex:index,query:row.query,locale:row.locale,origin:row.origin,supplyLane:row.lane,attempt:0}));

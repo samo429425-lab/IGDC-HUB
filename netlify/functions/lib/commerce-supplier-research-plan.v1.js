@@ -107,6 +107,19 @@ const KR_BALANCED_PRIORITY_QUERIES = Object.freeze([
   "대한민국 가구 리빙 침구 인테리어 생활가전 생활소모품 제조사 브랜드 공식몰 직영몰"
 ]);
 
+// The 24 baseline Korean supplier searches remain unchanged.  These concise,
+// product-specific searches are EXTRA requests rather than broad keyword chains.
+// They reach the responsible manufacturer or official seller first; individual
+// product details still pass the existing independent evidence/quality gates.
+const KR_ELECTRONICS_DETAIL_QUERIES = Object.freeze([
+  "대한민국 블루투스 무선이어폰 이어버드 제조사 공식몰 직영몰",
+  "대한민국 블루투스 스피커 휴대용 스피커 브랜드 공식몰 직영몰",
+  "대한민국 웹캠 홈카메라 액션카메라 브이로그카메라 제조사 공식몰",
+  "대한민국 태블릿 태블릿 케이스 거치대 브랜드 제조사 공식몰",
+  "대한민국 스마트폰 휴대폰 액세서리 무선충전기 보조배터리 USB-C 케이블 공식몰",
+  "대한민국 미니가전 휴대용 선풍기 미니 가습기 핸디청소기 전기포트 공식몰"
+]);
+
 const KR_FOUNDATION_QUERIES = Object.freeze([
   "대한민국 생활필수품 식료품 농수축임산물 생산자 농협 축협 수협 산림조합 협동조합 공식몰 직거래 배송 반품 환불 고객센터",
   "대한민국 화장품 스킨케어 메이크업 파운데이션 쿠션 BB CC 립스틱 립틴트 립밤 마스카라 아이라이너 아이브로우 아이섀도 블러셔 컨실러 파우더 향수 네일 샴푸 트리트먼트 바디워시 미용기기 LED마스크 갈바닉 피부마사지 두피관리 전동면도기 헤어스타일러 제조사 브랜드 본사 책임판매업자 공식몰 제품 구매 배송 반품 환불 고객센터",
@@ -489,7 +502,7 @@ function restoredKrRows(geo, sourceTerms, maxQueries){
   // health-food, fashion and local-food suppliers are represented.
   const foundationOrder=[0,4,10,11,12,13,14,15,3,5,6,7,8,9,1,2];
   const balancedFoundation=foundationOrder.map((index)=>KR_FOUNDATION_QUERIES[index]).filter(Boolean);
-  return unique(KR_BALANCED_PRIORITY_QUERIES.concat(balancedFoundation,KR_PRIORITY_QUERIES,dynamic),maxQueries).map((query,index)=>({query,locale:"ko",origin:`country-supply-lane:${laneFor(query,index)}`,lane:laneFor(query,index),localName:"대한민국",localizationError:null}));
+  return unique(KR_BALANCED_PRIORITY_QUERIES.concat(balancedFoundation,KR_ELECTRONICS_DETAIL_QUERIES,KR_PRIORITY_QUERIES,dynamic),maxQueries).map((query,index)=>({query,locale:"ko",origin:`country-supply-lane:${laneFor(query,index)}`,lane:laneFor(query,index),localName:"대한민국",localizationError:null}));
 }
 function buildCountryRows(geo, locales, sourceTerms, maxQueries){
   const country=text(geo&&geo.country).toUpperCase();
@@ -589,7 +602,7 @@ function buildPlan(input){
   const raw=input&&typeof input==="object"?input:{};
   const geo=raw.geo&&typeof raw.geo==="object"?raw.geo:raw;
   const locales=unique(raw.locales&&raw.locales.length?raw.locales:[geo.country==="KR"?"ko":"en"],12);
-  const maxQueries=Math.max(3,Math.min(24,Number(raw.maxQueries)||12));
+  const maxQueries=Math.max(3,Math.min(30,Number(raw.maxQueries)||12));
   const sources=loadSources();
   const bank=bankTaxonomy(sources.bank);
   const terms=unique([].concat(psomTerms(sources.psom),commercePolicyTerms(sources.commerce),regionalPolicyTerms(sources.regional),bank.tags,bank.categories,bank.producers),280);
