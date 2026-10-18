@@ -2412,6 +2412,19 @@ function productResearchStepResponse(job, input) {
   return input && input.compact === true ? compactProductResearchStep(job) : publicProductJob(job);
 }
 
+function supplierSpecificStorefrontUrl(value){
+  const url=safeUrl(value);if(!url)return"";
+  try{
+    const parsed=new URL(url),host=lower(parsed.hostname).replace(/^www\./,"");
+    // These hosts can contain multiple independent sellers. The first path
+    // segment is their storefront identifier; a domain-only key would merge
+    // different newly registered suppliers into one previously checked site.
+    if(!["smartstore.naver.com","brand.naver.com","storefarm.naver.com"].includes(host))return"";
+    const shop=text(parsed.pathname.split("/").filter(Boolean)[0]);
+    if(!shop||!/^[-a-z0-9_]{2,80}$/i.test(shop)||/^(?:products?|goods|search|category|categories|login|cart|mypage|home|main)$/i.test(shop))return"";
+    return parsed.protocol+"//"+parsed.host+"/"+shop+"/";
+  }catch(_error){return"";}
+}
 function productSupplierSource(row) {
   const url=researchCandidateUrl(row),evidence=plain(row&&row.evidence),title=text(row&&row.title),recommendation=lower(row&&row.recommendation),decision=lower(row&&row.decision);
   // Product discovery is a PRIVATE research stage.  A supplier that the
@@ -2434,7 +2447,9 @@ function productSupplierSource(row) {
   // market, safety, evidence, revenue and administrator Front Match gates.
   const privateResearchEligible=true;
   const releaseEvidenceReady=evidence.supplierReviewEligible===true||(evidence.official===true&&evidence.responsibleEntity===true&&evidence.directSales===true&&evidence.legalIdentity===true&&evidence.contactChannel===true&&evidence.marketplace!==true);
-  const designated=safeUrl(first(row&&row.productPageUrl,row&&row.sourceCandidateUrl));parsed.pathname="/";parsed.search="";parsed.hash="";const supplierSiteUrl=parsed.toString(),sourceCandidateUrl=designated&&sameSupplierSite(supplierSiteUrl,designated)?designated:supplierSiteUrl,priority=merchandisePriority(title+" "+url+" "+parsed.hostname);
+  const designated=safeUrl(first(row&&row.productPageUrl,row&&row.sourceCandidateUrl));parsed.pathname="/";parsed.search="";parsed.hash="";
+  const supplierSiteUrl=supplierSpecificStorefrontUrl(designated)||supplierSpecificStorefrontUrl(url)||parsed.toString();
+  const sourceCandidateUrl=designated&&sameSupplierSite(supplierSiteUrl,designated)?designated:supplierSiteUrl,priority=merchandisePriority(title+" "+url+" "+parsed.hostname);
   const affiliateSettlement=normalizeAffiliateSettlement(row&&row.affiliateSettlement,{existing:row&&row.affiliateSettlement});
   return{supplierId:text(row&&[row.id,row.candidateId,row.manualSupplierId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl,url:supplierSiteUrl,supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),supplierRecommendation:recommendation,approvalReady:row&&row.approvalReady===true,sourceCandidateUrl,productPageUrl:sourceCandidateUrl,evidenceReady:releaseEvidenceReady,privateResearchOnly:releaseEvidenceReady!==true,supplyLane:text(evidence.supplyLane)||"general",discoverySource:text(evidence.discoverySource),officialDirectoryUrl:text(evidence.officialDirectoryUrl),adminPinned:row&&row.adminPinned===true,manualRegistered:row&&row.manualRegistered===true,affiliateSettlement,affiliateStage:affiliateSettlement.stage,affiliatePriority:affiliateSettlement.stageRank,priorityScore:priority.score+affiliateSettlement.stageRank*400,priorityLabel:affiliateSettlement.stageRank>0?affiliateSettlement.stage+" · "+(priority.label||"제휴 사이트"):priority.label};
 }
@@ -2576,8 +2591,18 @@ async function beginProductResearchJob(actorId, input) {
   const inactiveSupplierStatuses=new Set(["blocked","suppressed","rejected","reject","disabled","excluded"]);
   const inactiveOperatorDecisions=new Set(["hold","held","blocked","suppressed","rejected","reject","disabled","excluded"]);
   const currentDurableRows=array(durableSupplierRows).filter((row)=>!inactiveSupplierStatuses.has(lower(row&&row.status))&&!inactiveOperatorDecisions.has(lower(plain(row&&row.ai).operatorDecision)));
-  const historicalRows=supplierJob&&["complete","committed"].includes(supplierJob.status)?array(supplierJob.candidates):[];
-  const supplierRows=currentDurableRows.concat(historicalRows);
+  // Supplier registrations are persisted to the *active* supplier-research
+  // job as vetted candidates even while its search/inspection is unfinished.
+  // Read that private candidate list now, not only after complete/commit.
+  // Never import the unverified raw/inspection pools as product suppliers.
+  const activeReviewRows=supplierJob&&supplierJob.schema===RESEARCH_JOB_SCHEMA
+    ?array(supplierJob.candidates).filter(Boolean)
+    :[];
+  const supplierBlockedKeys=array(supplierJob&&supplierJob.blockedSupplierKeys);
+  const supplierRows=currentDurableRows.concat(activeReviewRows.filter((row)=>{
+    const action=lower(first(row&&row.operatorDecision,plain(row&&row.ai).operatorDecision));
+    return !inactiveOperatorDecisions.has(action)&&!inactiveSupplierStatuses.has(lower(row&&row.status))&&supplierSurfaceDisposition(row,supplierBlockedKeys).state!=="blocked";
+  }));
   if(!supplierRows.length){const error=new Error("책임 공급업체 비공개 후보 원장에 상품 리서치할 활성 공급업체가 없습니다.");error.statusCode=409;throw error;}
   const sourcePool=[],seenSupplierSites=new Set();
   // Durable rows come first so the newest operator state/URL wins; the last
