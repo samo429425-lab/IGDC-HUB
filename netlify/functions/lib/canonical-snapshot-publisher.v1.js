@@ -25,7 +25,7 @@ const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 
-const VERSION = "canonical-snapshot-publisher-v1.8.1-section-local-monetization-rank";
+const VERSION = "canonical-snapshot-publisher-v1.8.2-admin-section-order";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
 const UPSTREAM_FILE = "search-bank.upstream.snapshot.json";
 const PUBLIC_FILE = "search-bank.snapshot.json";
@@ -664,6 +664,15 @@ function getPriority(candidate) {
   return sourceBoost + managedBoost + numeric(raw.priority) + numeric(raw.score) +
     numeric(raw.compositeScore) + numeric(raw.qualityScore);
 }
+function validatedSectionOrder(candidate) {
+  const raw=candidate&&candidate.raw||{},rank=isObject(raw.sectionRevenueRanking)?raw.sectionRevenueRanking:{};
+  const scope=[candidate.country,candidate.region,candidate.page+'|'+candidate.section].join('|');
+  const number=Number(rank.rank);
+  return rank.schema==='igdc-section-revenue-order-v1.0.0'&&str(rank.scopeKey)===scope&&Number.isInteger(number)&&number>0?number:null;
+}
+function hasCompleteSectionOrder(group) {
+  return !!group.length&&productBearingRoute(group[0].page,group[0].section)&&group.every(candidate=>validatedSectionOrder(candidate)!==null);
+}
 function stableCandidateRank(a, b) {
   return commercialSlotTier(b) - commercialSlotTier(a) ||
     getPriority(b) - getPriority(a) ||
@@ -715,7 +724,7 @@ function assignSlots(candidates, ledger, policy) {
       assigned.push(Object.assign({}, candidate, {slot, slotOrigin: origin}));
     };
 
-    if (sectionLocalCommerceGroup(group)) {
+    if (sectionLocalCommerceGroup(group) || hasCompleteSectionOrder(group)) {
       // Pin only operator-pinned slots; all other already-matched products can
       // move forward/backward WITHIN this exact page/section/market group.
       const pinned = [], movable = [];
@@ -729,7 +738,7 @@ function assignSlots(candidates, ledger, policy) {
         if (used.has(entry.slot)) { movable.push(entry.candidate); continue; }
         place(entry.candidate, entry.slot, "administrator-pin");
       }
-      movable.sort(stableCandidateRank);
+      movable.sort(hasCompleteSectionOrder(group) ? ((a,b)=>validatedSectionOrder(a)-validatedSectionOrder(b)||stableCandidateRank(a,b)) : stableCandidateRank);
       for (const candidate of movable) {
         const slot = firstFree();
         if (slot === null) { rejected.push({candidate, reason: "SECTION_CAPACITY_EXHAUSTED"}); continue; }

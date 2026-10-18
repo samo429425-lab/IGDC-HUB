@@ -1495,6 +1495,10 @@ function researchProgress(job) {
   const rankTotal = array(job.rankQueue).length, rankDone = Math.min(rankTotal, Number(job.rankCursor || 0));
   return { stage: job.status, search: { done: searchDone, total: searchTotal }, inspection: { done: inspectDone, total: inspectTotal }, ranking: { done: rankDone, total: rankTotal }, resumable: !["complete","committed","cancelled"].includes(job.status) };
 }
+function supplierSuppressedWorklistRow(rowInput){
+  const row=plain(rowInput),decision=lower(first(row.operatorDecision,plain(row.aiAutomation).operatorDecision)),reason=lower(row.holdReason);
+  return ["purge","block"].includes(decision)||["operator_url_block","operator_domain_block"].includes(reason)||lower(row.queueState)==="suppressed";
+}
 function publicResearchJob(job) {
   if (!job) return { ok: true, reportType: "igdc-country-responsible-supplier-research-status", version: VERSION, status: "not_started", candidates: [] };
   const candidates = array(job.candidates);
@@ -1505,7 +1509,7 @@ function publicResearchJob(job) {
     researchPlan: { version: job.researchPlanVersion || null, queryCount: array(job.planRows).length, taskCount: array(job.searchTasks).length, diagnostics: plain(job.planDiagnostics) },
     progress: researchProgress(job),
     summary: { collected: array(job.rawCandidates).length + array(job.supplierHoldingCandidates).length + array(job.supplierBlockedCandidates).length, considered: array(job.inspectionPool).length, inspected: array(job.inspectedCandidates).length, researchCandidates: array(job.reviewPool).length, evidenceReady: array(job.reviewPool).filter((item) => plain(item && item.brokerageVerification).supplierReviewEligible === true).length, ranked: candidates.length, newRanked: candidates.filter((row)=>row&&row.preservedExisting!==true).length, preservedExisting: candidates.filter((row)=>row&&row.preservedExisting===true).length, targetTotalCandidates:Number(job.targetTotalCandidates||job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES), newCandidateTarget:Number(job.newCandidateTarget||0), researchRounds:Number(job.researchRounds||1), perRoundCandidateLimit:Number(job.perRunCandidateLimit||job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES), duplicateResearchSkipped:true, trustGatePassed: candidates.filter((row) => row.hardGatePassed === true).length, approvalReady: candidates.filter((row) => row.approvalReady === true).length, previewed: candidates.length, held: array(job.supplierHoldingCandidates).length, blocked: array(job.supplierBlockedCandidates).length, created: 0, updated: 0, manualPreserved: candidates.filter((row) => row.adminPinned === true).length, skipped: 0, persistenceFailed: 0 },
-    candidates, holdingCandidates: array(job.supplierHoldingCandidates), blockedCandidates: array(job.supplierBlockedCandidates), blockedSupplierKeys: array(job.blockedSupplierKeys), trace: array(job.trace).slice(-120), errors: array(job.errors).slice(-30), lastError: job.lastError || null, commit: plain(job.commit)
+    candidates, holdingCandidates: array(job.supplierHoldingCandidates).filter((row)=>!supplierSuppressedWorklistRow(row)), blockedCandidates: array(job.supplierBlockedCandidates).filter((row)=>!supplierSuppressedWorklistRow(row)), blockedSupplierKeys: array(job.blockedSupplierKeys), trace: array(job.trace).slice(-120), errors: array(job.errors).slice(-30), lastError: job.lastError || null, commit: plain(job.commit)
   };
 }
 async function researchContext(scope) {
@@ -1928,7 +1932,15 @@ async function saveProductJob(job, actorId) {
   return job;
 }
 function productUrl(item) { return ProductRanking.canonicalProductUrl(first(item && item.productUrl, item && item.url)); }
-function productImageUrl(item) { return ProductRanking.safeProductImageUrl(first(item && item.imageUrl, item && item.imageOriginalUrl)); }
+function productImageUrl(item) {
+  const url=ProductRanking.safeProductImageUrl(first(item&&item.imageUrl,item&&item.imageOriginalUrl));
+  if(!url)return "";
+  try{const u=new URL(url),path=decodeURIComponent(u.pathname).toLowerCase();
+    if(/(?:^|\/)(?:shop_assets\/img\/btn|assets?\/img\/btn|images?\/buttons?|img\/common\/btn)(?:\/|$)/.test(path))return "";
+    if(/(?:^|[\/_\-.])(?:btn[_-]|button|favicon|logo|icon|sprite|no[_-]?image|placeholder|loading|search[_-]?btn|magnifier)(?:[\/_\-.]|[a-z0-9])/i.test(path))return "";
+  }catch(_error){return "";}
+  return url;
+}
 function productVideoUrl(item) { return safeUrl(first(item && item.videoUrl, item && item.videoContentUrl, item && item.videoEmbedUrl)); }
 function productVideoThumbnailUrl(item) { return safeUrl(first(item && item.videoThumbnailUrl, item && item.videoPosterUrl)); }
 function isSpecificProductUrl(value) { return ProductRanking.isSpecificProductUrl(value); }
@@ -3349,7 +3361,8 @@ function productPrivateReviewAssessment(rowInput) {
   if (row.sameSupplierSite === false) return { eligible: false, hold: true, reason: "supplier_product_domain_mismatch", warnings };
   if (!productImageUrl(row)) return { eligible: false, hold: false, reason: "actual_product_image_not_verified", warnings };
   const genericNamePending = row.provisionalName === true || ProductRanking.isGenericProductName(first(row.productName, row.title)) || blockers.includes("generic_or_unresolved_product_name");
-  if (genericNamePending && !text(row.priorityLabel) && !text(row.supplierName)) return { eligible: false, hold: false, reason: "product_name_not_verified", warnings };
+  if (genericNamePending || /^(?:keep\s*shopping|continue\s*shopping|re[- ]?order|shop\s*now|add\s*to\s*cart|product\s*information|view\s*details?)$/i.test(text(first(row.productName,row.title))))
+    return { eligible: false, hold: false, reason: "product_name_not_verified", warnings };
   const hardBlockers = blockers.filter((item) => !PRIVATE_REVIEW_SOFT_BLOCKERS.has(item) && !PRIVATE_REVIEW_UNASSIGNED_BLOCKERS.has(item));
   if (hardBlockers.length) return { eligible: false, hold: true, reason: hardBlockers.join(",") || "risk_gate_failed", warnings };
   if (genericNamePending) warnings.push("product_name_pending");
@@ -3754,7 +3767,7 @@ async function syncProductCandidateQueue(actorId, scope, product, decision, opti
   // Durable administrator ledger, not a possibly old research-job copy,
   // is authoritative. AI may never demote/reassign an established candidate.
   // This gate applies to ALL AI queue sync paths (including queue_sync batches).
-  const assignmentLocks=existing?await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1"):[];
+  const assignmentLocks=await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1");
   if(existing && (AdminPlacementGuard.establishedCandidate(existing)||array(assignmentLocks).length>0) && plain(optionsInput).administratorExplicit!==true) {
     return {status:"administrator_placement_immutable",candidateId,registered:true,
       preserved:true,currentStatus:text(existing.status),
@@ -5107,8 +5120,11 @@ async function syncPendingAiProductCandidates(actorId, scope, job, limitInput, r
       frontSyncSelectCandidates(candidateIds),
       frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at",candidateIds)
     ]);
-  }catch(_frontProtectionReadError){
-    candidateRows=[];assignmentRows=[];
+  }catch(frontProtectionReadError){
+    const error=new Error("AI 최종 완료 중단: 기존 상품 후보·슬롯 배정 원장을 읽지 못했습니다. 관리자 배치를 보호하기 위해 이번 묶음은 저장하지 않았습니다.");
+    error.statusCode=503;error.code="AI_AUTHORITY_PREFLIGHT_FAILED";
+    error.cause=text(frontProtectionReadError&&frontProtectionReadError.message)||"durable_ledger_unavailable";
+    throw error;
   }
   const candidateById=new Map(array(candidateRows).map((row)=>[text(row&&row.id),row]));
   const assignmentByCandidate=new Map();
@@ -5117,10 +5133,9 @@ async function syncPendingAiProductCandidates(actorId, scope, job, limitInput, r
     const candidate=plain(candidateById.get(candidateId)),payload=plain(candidate.source_payload),frontStatus=lower(plain(payload.frontPublication).status),candidateStatus=lower(candidate.status);
     if(["queued","ready","audit_ready","publish_requested","published","matched","active","unpublish_requested","unpublish_failed"].includes(frontStatus))return true;
     if(["revenue_ready","enrollable","published","active"].includes(candidateStatus))return true;
-    return array(assignmentByCandidate.get(candidateId)).some((row)=>{
-      const publication=lower(row&&row.publication_status),state=lower(row&&row.state);
-      return ["approved","pinned"].includes(state)&&["audit_ready","ready","queued","publish_requested","published","matched","active"].includes(publication);
-    });
+    // Assignment ledger ownership is independent of publication flags. A
+    // pending/front-unmatched assignment is still an administrator placement.
+    return array(assignmentByCandidate.get(candidateId)).length>0;
   }
 
   const settled=await Promise.allSettled(pending.map(async(product)=>{
@@ -5470,7 +5485,7 @@ function frontSyncAuthoritativeBoardMap(input) {
       productUrl:safeUrl(row.productUrl||row.url),
       imageUrl:safeUrl(row.imageUrl||row.thumbnailUrl||row.thumbnail),
       supplierName:text(row.supplierName),supplierUrl:safeUrl(row.supplierUrl||row.supplierSiteUrl),
-      price:row.price==null?null:row.price,priceCurrency:text(row.priceCurrency),availability:row.availability==null?null:row.availability
+      price:row.price==null?null:row.price,priceCurrency:text(row.priceCurrency),availability:row.availability==null?null:row.availability,priority:Number.isFinite(Number(row.priority))&&Number(row.priority)>0?Number(row.priority):null
     });
   }
   return out;
@@ -5623,7 +5638,7 @@ async function prepareAuthoritativeAdminFrontTargets(actorId,input,targetsInput)
     const existing=rows.find(row=>text(row&&row.hub_key)===split.page&&text(row&&row.slot_key)===split.sectionKey&&normalizeCountry(row&&row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region);
     const assignmentId=text(existing&&existing.id)||frontSyncAssignmentId(candidateId,scope,sectionKey);
     for(const old of rows){const oldId=text(old&&old.id),sameScope=normalizeCountry(old&&old.country_code)===scope.country&&frontSyncExpectedRegion(old,scope.country)===scope.region,samePlacement=text(old&&old.hub_key)===split.page&&text(old&&old.slot_key)===split.sectionKey;if(oldId&&sameScope&&!samePlacement&&candidateRuntimePublishedStatus(old&&old.publication_status))staleIds.push(oldId);}
-    upserts.push({id:assignmentId,candidate_id:candidateId,hub_key:split.page,country_code:scope.country,region_code:scope.region||"NATIONWIDE",slot_key:split.sectionKey,priority:Math.max(0,Number(target.priority||0)),state:existing&&lower(existing.state)==="pinned"?"pinned":"approved",publication_status:"publish_requested",manual_pinned:existing&&existing.manual_pinned===true,decision_note:frontAuthorityEnvelopeNote(candidateId,target,scope,split,actor,now),created_at:text(existing&&existing.created_at)||now,updated_at:now,updated_by:actor});
+    upserts.push({id:assignmentId,candidate_id:candidateId,hub_key:split.page,country_code:scope.country,region_code:scope.region||"NATIONWIDE",slot_key:split.sectionKey,priority:Math.max(0,Number(target.priority!=null?target.priority:(existing&&existing.priority)||0)),state:existing&&lower(existing.state)==="pinned"?"pinned":"approved",publication_status:"publish_requested",manual_pinned:existing&&existing.manual_pinned===true,decision_note:frontAuthorityEnvelopeNote(candidateId,target,scope,split,actor,now),created_at:text(existing&&existing.created_at)||now,updated_at:now,updated_by:actor});
     preparedCandidateIds.push(candidateId);items.push({candidateId,status:"publish_requested",queued:false,persisted:true,pendingBuild:true,reason:"administrator_board_assignment_prepared",assignmentId,sectionKey,title,productUrl,imageUrl});
   }
   try{
@@ -6234,7 +6249,7 @@ function supplierControlTargetUrl(value){
 }
 
 async function recoverSupplierManagementJob(scope){
-  const rows=array(await listAutomationCandidates(scope.country,scope.region)),now=iso(),active=[],holding=[],blocked=[];for(const row of rows){if(text(row&&row.id).startsWith("country_supplier_control_"))continue;const status=lower(row&&row.status);if(status==="hold")holding.push(row);else if(status==="suppressed"||status==="rejected")blocked.push(row);else if(status!=="removed")active.push(row);}const state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),blockedSupplierKeys=await persistentSupplierSuppressionKeys(scope);return{schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_management_recovery_"+sha256(scope.country+"|"+scope.region).slice(0,20),status:"complete",managementRecovered:true,startedAt:now,createdAt:now,finishedAt:now,scope,effective,researchPlanVersion:"durable-supplier-ledger-recovery",planRows:[],planDiagnostics:{managementRecovered:true},searchTasks:[],searchCursor:0,blockedSupplierKeys,manualSupplierCount:active.filter((row)=>row&&row.adminPinned===true).length,rawCandidates:active.concat(holding,blocked),supplierHoldingCandidates:holding,supplierBlockedCandidates:blocked,inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:active,rankQueue:active,rankCursor:active.length,rankAttempt:0,rankedEntries:[],candidates:reindexCandidateRows(active),trace:[{source:"supplier-management-recovery",status:"recovered_from_durable_ledger",at:now,count:rows.length}],errors:[],lastError:null,marketSignals:{active:false,categoryWeights:{}},policyControl:{active:false,categoryWeights:{},priorityDirections:[],avoidDirections:[],manualPriorityTargets:[],manualBlockedTargets:[]}};}
+  const rows=array(await listAutomationCandidates(scope.country,scope.region)),now=iso(),active=[],holding=[],blocked=[];for(const row of rows){if(text(row&&row.id).startsWith("country_supplier_control_"))continue;const status=lower(row&&row.status);if(status==="hold")holding.push(row);else if(status==="rejected")blocked.push(row);else if(status!=="removed"&&status!=="suppressed")active.push(row);}const state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),blockedSupplierKeys=await persistentSupplierSuppressionKeys(scope);return{schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_management_recovery_"+sha256(scope.country+"|"+scope.region).slice(0,20),status:"complete",managementRecovered:true,startedAt:now,createdAt:now,finishedAt:now,scope,effective,researchPlanVersion:"durable-supplier-ledger-recovery",planRows:[],planDiagnostics:{managementRecovered:true},searchTasks:[],searchCursor:0,blockedSupplierKeys,manualSupplierCount:active.filter((row)=>row&&row.adminPinned===true).length,rawCandidates:active.concat(holding,blocked),supplierHoldingCandidates:holding,supplierBlockedCandidates:blocked,inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:active,rankQueue:active,rankCursor:active.length,rankAttempt:0,rankedEntries:[],candidates:reindexCandidateRows(active),trace:[{source:"supplier-management-recovery",status:"recovered_from_durable_ledger",at:now,count:rows.length}],errors:[],lastError:null,marketSignals:{active:false,categoryWeights:{}},policyControl:{active:false,categoryWeights:{},priorityDirections:[],avoidDirections:[],manualPriorityTargets:[],manualBlockedTargets:[]}};}
 
 // Operator actions must address precisely the selected research URL. The general
 // sameSupplierUrl() is intentionally looser for supplier discovery deduplication,
@@ -6279,9 +6294,8 @@ async function researchCandidateAction(actorId,input){
     }else if(action==="hold"){active=removeUrl(active,targetUrl);blocked=removeUrl(blocked,targetUrl);holding=addUnique(holding,Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"holding",holdReason:"operator_hold",operatorDecision:"hold",updatedAt:iso()}));removeManualExact(targetUrl);
     }else if(action==="restore"){const hostWasBlocked=!!(hostKey&&keys.has(hostKey));holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);active=addUnique(active,Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"active",holdReason:null,operatorDecision:"restore",updatedAt:iso()}));keys.delete(urlKey);if(hostWasBlocked)keys.delete(hostKey);await removeSupplierSuppression(scope,target,hostWasBlocked?hostKey:urlKey,{matchHost:hostWasBlocked});
     }else if(action==="dismiss"){const hostWasBlocked=!!(hostKey&&keys.has(hostKey));active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);keys.delete(urlKey);if(hostWasBlocked)keys.delete(hostKey);await removeSupplierSuppression(scope,target,hostWasBlocked?hostKey:urlKey,{matchHost:hostWasBlocked});removeManualExact(targetUrl);
-    }else if(action==="purge"){keys.add(urlKey);active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=addUnique(removeUrl(blocked,targetUrl),Object.assign({},target,{adminPinned:false,manualPinned:false,queueState:"blocked",holdReason:"operator_url_block",operatorDecision:"purge",updatedAt:iso()}));await persistSupplierSuppression(scope,target,actorId,"purge",urlKey,targetUrl);removeManualExact(targetUrl);
-    }else if(action==="block"){if(hostKey)keys.add(hostKey);const affected=allRows().filter((row)=>supplierRowHost(row)===host);active=active.filter((row)=>supplierRowHost(row)!==host);holding=holding.filter((row)=>supplierRowHost(row)!==host);blocked=blocked.filter((row)=>supplierRowHost(row)!==host);// Keep a reversible block-history entry separate from the active hold list.
-      for(const row of affected)blocked=addUnique(blocked,Object.assign({},row,{adminPinned:false,manualPinned:false,queueState:"blocked",holdReason:"operator_domain_block",operatorDecision:"block",updatedAt:iso()}));
+    }else if(action==="purge"){keys.add(urlKey);active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);await persistSupplierSuppression(scope,target,actorId,"purge",urlKey,targetUrl);removeManualExact(targetUrl);
+    }else if(action==="block"){if(hostKey)keys.add(hostKey);const affected=allRows().filter((row)=>supplierRowHost(row)===host);active=active.filter((row)=>supplierRowHost(row)!==host);holding=holding.filter((row)=>supplierRowHost(row)!==host);blocked=blocked.filter((row)=>supplierRowHost(row)!==host);// Keep the block history exclusively in the durable suppression ledger, not the current candidate worklist.
       await persistSupplierSuppression(scope,target,actorId,"block",hostKey,targetUrl);removeManualHost(host);
     }else if(action==="unblock"){keys.delete(urlKey);if(hostKey)keys.delete(hostKey);const same=blocked.filter((row)=>sameSupplierUrl(row,targetUrl)||supplierRowHost(row)===host);blocked=blocked.filter((row)=>!same.includes(row));for(const row of same)holding=addUnique(holding,Object.assign({},row,{adminPinned:false,manualPinned:false,queueState:"holding",holdReason:"operator_unblocked_review_required",operatorDecision:"unblock",updatedAt:iso()}));await removeSupplierSuppression(scope,target,hostKey||urlKey,{matchHost:true});
     }else if(action==="remove_from_list"){active=removeUrl(active,targetUrl);holding=removeUrl(holding,targetUrl);blocked=removeUrl(blocked,targetUrl);removeManualExact(targetUrl);}
@@ -6289,7 +6303,7 @@ async function researchCandidateAction(actorId,input){
     // workspace so hold/restore/block states survive a new cumulative run.
     let durable={updated:0},durableError=durableReadError;
     if(!durableError){try{durable=await persistSupplierResearchDecision(scope,target,action,actorId,{matchHost:action==="block",rows:durableRows});if(durable&&durable.error)durableError=text(durable.error);}catch(error){durableError=text(error&&error.message)||"supplier_ledger_write_failed";}}
-    results.push({url:targetUrl,host,status:durableError?"durable_failed":action,requestedAction:action,durableUpdated:Number(durable&&durable.updated||0),durableError:durableError||null});
+    results.push({url:targetUrl,host,status:durableError?"durable_failed":action,requestedAction:action,durableUpdated:Number(durable&&durable.updated||0),durableError:durableError||null,worklistRemoved:["purge","block","dismiss","remove_from_list"].includes(action)});
   }
   if(manualChanged){registry.suppliers=manualRows;await saveManualSupplierRegistry(scope,registry,actorId);}job.candidates=reindexCandidateRows(active);job.supplierHoldingCandidates=holding;job.supplierBlockedCandidates=blocked;job.blockedSupplierKeys=Array.from(keys);job.manualSupplierCount=manualRows.filter((row)=>row&&row.adminPinned===true&&row.state!=="disabled").length;job.trace=array(job.trace).concat(results.map((row)=>({source:"supplier-candidate-control",status:row.status,at:iso(),url:row.url,host:row.host||null,actor:text(actorId)||"administrator"}))).slice(-160);await saveResearchJob(job,actorId);
   const result=publicResearchJob(job);result.candidateAction={action,requested:requested.length,processed:results.filter((row)=>row.status!=="not_found"&&row.status!=="durable_failed").length,notFound:results.filter((row)=>row.status==="not_found").length,durableFailed:results.filter((row)=>row.status==="durable_failed").length,results,blockedKeyCount:job.blockedSupplierKeys.length,manualRegistryUpdated:manualChanged,publicPublication:false,productImport:false};return result;
