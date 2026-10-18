@@ -492,6 +492,10 @@
     if(action==='unpin')return '선택 '+count+'건의 관리자 고정을 해제합니다. 현재 본 후보에는 남지만 다음 자동 리서치에서 고정 우선권은 유지되지 않습니다. 계속하시겠습니까?';
     return '';
   }
+  function excludedOperationStatus(message,failed){
+    var area=$('excludedManagementOperationStatus');
+    if(area){area.textContent=message;area.setAttribute('data-failed',failed?'true':'false');}
+  }
   async function applySupplierResearchAction(action,urlOrUrls){
     var urls=Array.from(new Set((Array.isArray(urlOrUrls)?urlOrUrls:[urlOrUrls]).map(safeExternalUrl).filter(Boolean)));
     if(!urls.length){show('처리할 공급업체 후보를 선택해 주세요.','warn');return;}
@@ -505,7 +509,7 @@
       if(stateEl)stateEl.textContent=message;
       if($('supplierHoldSelectedCount'))$('supplierHoldSelectedCount').textContent=message;
     }
-    progress();
+    progress();excludedOperationStatus('공급업체 '+supplierActionLabel(action)+' 요청 중 · 선택 URL '+urls.length+'건',false);
     try{
       for(var offset=0;offset<urls.length;offset+=chunkSize){
         if(selectedCountry!==frozen.country||(selectedSubdivision||'NATIONWIDE')!==frozen.region){failures.push('관리 국가·지역 변경으로 중단');break;}
@@ -539,8 +543,9 @@
       }
       var explanation=action==='purge'?' · 보류 목록에서 제외, 차단 원장은 보존':action==='block'?' · 해당 도메인 보류 목록에서 제외, 차단 원장은 보존':action==='remove_from_list'?' · 재수집 정책은 기존 차단 기록을 따름':'';
       var output='공급업체 '+supplierActionLabel(action)+' · 요청 '+urls.length+'건 · 성공 '+processed+'건 · 대상 없음 '+missing+'건 · 실패 '+durableFailed+'건'+explanation+(failures.length?' · 오류: '+failures.slice(0,2).join(' / '):'');
-      show(output,durableFailed||missing||failures.length?'warn':'ok');if(stateEl)stateEl.textContent=output;
-    }catch(error){show('공급업체 일괄 관리 요청 실패: '+text(error&&error.message),'fail');}
+      var stillVisible=urls.filter(function(url){return ['purge','block','remove_from_list','dismiss'].indexOf(action)>=0&&supplierHoldingRows.some(function(row){return text(row.url||row.sourceCandidateUrl).toLowerCase()===url.toLowerCase();});});if(stillVisible.length){output+=' · 재조회 후 남아 있는 URL '+stillVisible.length+'건';failures.push('supplier_post_write_visible');}
+      excludedOperationStatus(output,!!(durableFailed||missing||failures.length));show(output,durableFailed||missing||failures.length?'warn':'ok');if(stateEl)stateEl.textContent=output;
+    }catch(error){var message='공급업체 일괄 관리 요청 실패: '+text(error&&error.message);excludedOperationStatus(message,true);show(message,'fail');}
     finally{supplierActionActive=false;['active','hold','blocked'].forEach(syncSupplierSelection);}
   }
   async function registerManualSupplier(){
@@ -1493,15 +1498,16 @@
     if(productExclusionActionActive)return;var ids=selectedProductExclusionIds(kind);if(!ids.length){show('처리할 상품을 선택해 주세요.','warn');return;}
     var labels={reject:'제외 관리로 이동',purge:'영구 제외',dismiss:'관리목록 삭제·재수집 허용',remove_from_list:'현재 관리 목록에서만 제거',undecided:'전체 상품 후보·배치 관리 목록으로 복원'},serverAction=decision==='undecided'?'restore':decision;
     if(['reject','purge','dismiss','remove_from_list'].indexOf(decision)>=0&&!window.confirm('선택 '+ids.length+'건을 '+(labels[decision]||decision)+' 처리하시겠습니까?'+(decision==='dismiss'?'\n\n공유 후보 원장과 검토 증빙은 보존하며 다음 공식 리서치에서 다시 발견될 수 있습니다.':decision==='purge'?'\n\n재수집 차단 기록은 유지됩니다.':'')))return;
-    productExclusionActionActive=true;syncProductExclusionSelection('hold');syncProductExclusionSelection('reject');
+    productExclusionActionActive=true;syncProductExclusionSelection('hold');syncProductExclusionSelection('reject');excludedOperationStatus('보류·제외 상품 '+(labels[decision]||decision)+' · '+ids.length+'건 처리 중',false);
     var selectedRows=ids.map(productById).filter(Boolean),processed=0,failures=[];
     try{
       var bulkResult=await exclusionQueueBulk(kind,ids,decision,function(done,total,failCount){var count=$(kind==='hold'?'productHoldSelectedCount':'productRejectSelectedCount');if(count)count.textContent='처리 '+done+'/'+total+'건 · 실패 '+failCount;});
       processed=Number(bulkResult&&bulkResult.processed||0);failures=(bulkResult&&bulkResult.failures||[]).slice();
-      await refreshCandidateLedgerProducts({preserveResearchReport:true});
+      var refreshed=await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});
+      if(!(refreshed&&refreshed.pipeline&&refreshed.pipeline.ledgerLoadComplete===true&&refreshed.pipeline.source==='direct_management_ledger'))throw new Error('상품 후보 원장의 직접 재조회가 완료되지 않아 삭제 반영 여부를 확정하지 못했습니다.');
       var transition=verifyProductExclusionTransition(kind,decision,ids);if(!transition.ok){transition.wrong.concat(transition.missing).forEach(function(id){if(!failures.some(function(f){return text(f&&f.id)===id;}))failures.push({id:id,error:'post_write_state_not_confirmed'});});}
-      var suffix=decision==='undecided'?' · 전체 상품 후보·배치 관리 목록의 미배정 후보로 복원':decision==='reject'?' · 제외 상품 목록으로 이동':decision==='purge'?' · 영구 제외·재수집 차단 저장':decision==='dismiss'?' · 현재 관리 목록 삭제·재수집 허용':decision==='remove_from_list'?' · 현재 관리 목록에서만 제거':'';show('요청 '+ids.length+'건 · 성공 '+processed+'건 · 실패 '+failures.length+'건'+suffix+(failures.length?' · '+failures.slice(0,2).map(function(f){return text(f&&f.error||'처리 실패');}).join(' / '):''),failures.length?'warn':'ok');
-    }catch(error){show(text(error&&error.message)||'선택 상품 일괄 처리를 완료하지 못했습니다.','fail');}
+      var suffix=decision==='undecided'?' · 전체 상품 후보·배치 관리 목록의 미배정 후보로 복원':decision==='reject'?' · 제외 상품 목록으로 이동':decision==='purge'?' · 영구 제외·재수집 차단 저장':decision==='dismiss'?' · 현재 관리 목록 삭제·재수집 허용':decision==='remove_from_list'?' · 현재 관리 목록에서만 제거':'';show('요청 '+ids.length+'건 · 성공 '+processed+'건 · 실패 '+failures.length+'건'+suffix+(failures.length?' · '+failures.slice(0,2).map(function(f){return text(f&&f.error||'처리 실패');}).join(' / '):''),failures.length?'warn':'ok');excludedOperationStatus('상품 '+(labels[decision]||decision)+' · 성공 '+processed+'건 · 실패 '+failures.length+'건'+(failures.length?' · '+failures.slice(0,2).map(function(f){return text(f&&f.error||'요청 실패');}).join(' / '):''),!!failures.length);
+    }catch(error){var message='상품 관리 작업 미완료: '+(text(error&&error.message)||'선택 상품 일괄 처리 실패');excludedOperationStatus(message,true);show(message,'fail');}
     finally{productExclusionActionActive=false;renderExcludedLedger();syncProductExclusionSelection('hold');syncProductExclusionSelection('reject');}
   }
   function sectionCleanupPlan(keys){var topRows=[],reserveRows=[],warnings=[],sectionSummary=[];(keys||[]).forEach(function(key){if(!PRODUCT_SECTION_MAP[key])return;var rows=rankedSectionRows(key),locked=rows.filter(productManagementLocked),limit=frontSlotCapacity(key),top=rows.slice(0,limit),reserve=rows.slice(limit);topRows=topRows.concat(top);reserveRows=reserveRows.concat(reserve);sectionSummary.push({key:key,total:rows.length,front:top.length,reserve:reserve.length,locked:locked.length,capacity:limit});if(locked.length>limit)warnings.push(sectionLabel(key)+' 관리자 수동 고정 '+locked.length+'건 · 프론트 한도 '+limit+'건');});return{topRows:topRows,reserveRows:reserveRows,warnings:warnings,sectionSummary:sectionSummary};}

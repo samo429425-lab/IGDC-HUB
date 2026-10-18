@@ -34,12 +34,14 @@ async function readCandidate(id){
   return Array.isArray(rows)?rows[0]||null:null;
 }
 async function readAssignments(candidateId){
-  try{const rows=await SlotStore.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=100");return Array.isArray(rows)?rows:[];}
-  catch(_error){return[];}
+  const rows=await SlotStore.select("gslot_slot_assignments","select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=100");
+  if(!Array.isArray(rows))throw new Error("assignment_ledger_read_unconfirmed");
+  return rows;
 }
 async function releaseSectionAssignment(candidateId){
-  try{const rows=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId));return{ok:true,count:Array.isArray(rows)?rows.length:0};}
-  catch(error){return{ok:false,error:text(error&&error.message||error)};}
+  const rows=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId));
+  if(!Array.isArray(rows))throw new Error("assignment_ledger_delete_not_confirmed");
+  return{ok:true,count:rows.length};
 }
 function frontStateActive(value){return ["queued","publish_requested","published","matched","active"].includes(lower(value));}
 function previousFrontPlacement(payload,assignments){
@@ -64,9 +66,11 @@ function stageFrontWithdrawal(payload,candidateId,prior,actorId,now,reason){
 }
 function candidateManagementBucket(row){
   const payload=plain(row&&row.source_payload),status=lower(row&&row.status),decision=lower(payload.slotDecision),review=lower(plain(payload.review).state),queueAction=lower(plain(payload.queueControl).action);
-  if(status==="hold"||decision==="hold"||review==="hold"||queueAction==="hold")return "hold";
-  if(["reject","rejected","suppressed","purge","excluded"].includes(status)||["reject","purge"].includes(decision)||["reject","rejected","permanent_excluded"].includes(review)||["reject","purge"].includes(queueAction))return "reject";
+  // The most recent authoritative operator state outranks stale review hints.
+  // Historically a review.state=hold could mask a completed removal/rejection.
   if(status==="removed"||decision==="removed"||["removed_from_list","deleted_from_management"].includes(review)||["remove_from_list","dismiss"].includes(queueAction))return "removed";
+  if(["reject","rejected","suppressed","purge","excluded"].includes(status)||["reject","purge"].includes(decision)||["reject","rejected","permanent_excluded"].includes(review)||["reject","purge"].includes(queueAction))return "reject";
+  if(status==="hold"||decision==="hold"||review==="hold"||queueAction==="hold")return "hold";
   return "active";
 }
 function candidateAlreadyRestored(row){
@@ -93,6 +97,11 @@ function requireExpectedBucket(row,expectedBucket,action){
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
   const oldAssignments=await readAssignments(id),priorFront=previousFrontPlacement(payload,oldAssignments);
+  // Excluded-queue deletion is never a back door for removing assigned or
+  // already-public items. Those require the ordinary section/front workflow.
+  if(action!=="restore"&&(oldAssignments.length||priorFront&&priorFront.frontActive||plain(payload.approvedPlacement).sectionKey||plain(payload.approvedPlacement).section)){
+    const error=new Error("assigned_or_published_candidate_protected:"+id);error.statusCode=409;throw error;
+  }
   if(action==="restore"){
     if(candidateAlreadyRestored(row))return{id,action,status:text(row&&row.status)||"approval_pending",restoredToCandidate:true,idempotent:true,assignmentCleanup:{ok:true,count:0}};
     const previousStatus=text(row&&row.status)||"approval_pending",previousBucket=candidateManagementBucket(row),assignmentCleanup=await releaseSectionAssignment(id);
@@ -104,7 +113,8 @@ async function applyAction(actorId,row,action){
     payload.managementControl={schema:"igdc-product-management-control.v1",source:"administrator_restore",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:text(actorId)||"administrator"};
     payload.frontPublication=Object.assign({},plain(payload.frontPublication),{operation:"unmatch",status:"unmatched",queued:false,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:false,deferredBuild:false,reason:"administrator_restored_to_candidate_pool",requestedAt:now,requestedBy:text(actorId)||"administrator"});
     payload.decisionAt=now;payload.decisionBy=text(actorId)||"administrator";payload.decisionSource="administrator_restore";payload.publicPublication=false;payload.automaticImport=false;
-    await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"approval_pending",source_payload:payload,owner_note:"관리자가 보류·제외 상품을 전체 상품 후보·배치 관리 목록으로 복원했습니다.",updated_at:now});
+    const confirmedUpdate=await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"approval_pending",source_payload:payload,owner_note:"관리자가 보류·제외 상품을 전체 상품 후보·배치 관리 목록으로 복원했습니다.",updated_at:now});
+    if(!array(confirmedUpdate).some((item)=>text(item&&item.id)===id))throw new Error("candidate_update_not_confirmed:"+id);
     return{id,action,status:"approval_pending",restoredToCandidate:true,previousBucket,assignmentCleanup};
   }
   if(action==="dismiss"){
@@ -124,7 +134,8 @@ async function applyAction(actorId,row,action){
     delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
     payload.review=Object.assign({},plain(payload.review),{state:"deleted_from_management",decidedAt:now,decidedBy:text(actorId)||"administrator"});
     stageFrontWithdrawal(payload,id,priorFront,actorId,now,"administrator_management_dismiss");
-    await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"removed",source_payload:payload,owner_note:"관리자가 보류·제외 관리 목록에서 삭제했습니다. 공유 후보 원장은 보존하며 재수집을 허용합니다.",updated_at:now});
+    const confirmedUpdate=await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"removed",source_payload:payload,owner_note:"관리자가 보류·제외 관리 목록에서 삭제했습니다. 공유 후보 원장은 보존하며 재수집을 허용합니다.",updated_at:now});
+    if(!array(confirmedUpdate).some((item)=>text(item&&item.id)===id))throw new Error("candidate_update_not_confirmed:"+id);
     return {id,action,status:"removed",deletedFromManagement:true,masterLedgerPreserved:true,rediscoveryAllowed:true,assignmentCleanup};
   }
   const previousStatus=text(row&&row.status)||"approval_pending";
@@ -161,7 +172,8 @@ async function applyAction(actorId,row,action){
       :action==="remove_from_list"
         ?"관리자가 이 상품 후보 원장은 보존하고 현재 후보 관리 목록에서만 제거했습니다. 이후 리서치 재발견은 허용됩니다."
         :"관리자가 이 상품 후보를 보류했습니다. 원장과 기존 검토 기록은 보존합니다.";
-  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status,source_payload:payload,owner_note:note,updated_at:now});
+  const confirmedUpdate=await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status,source_payload:payload,owner_note:note,updated_at:now});
+  if(!array(confirmedUpdate).some((item)=>text(item&&item.id)===id))throw new Error("candidate_update_not_confirmed:"+id);
   return {id,action,status,assignmentCleanup,frontBuildDispatched:false};
 }
 
@@ -187,11 +199,12 @@ exports.handler=async function(event){
         // not only permanent exclusion. Otherwise hold/reject/list-removal rows
         // can be reloaded from the research job and appear to "come back".
         applied.researchVisibility=await CommerceAutomation.syncCandidateManagementResearchVisibilityByInput(actorId,body,id,action==="restore"?"undecided":action);
+        if(applied.researchVisibility&&applied.researchVisibility.ok===false)applied.warning="research_visibility_sync_failed:"+text(applied.researchVisibility.error);
         return applied;
       }));
       settled.forEach((entry,index)=>{const id=chunk[index];if(entry.status==="fulfilled")processed.push(entry.value);else failures.push({id,error:text(entry.reason&&entry.reason.message||entry.reason)});});
     }
-    if(!processed.length){const error=new Error("선택 항목을 처리하지 못했습니다. 최신 대기열을 다시 불러와 주세요.");error.statusCode=409;error.failures=failures;throw error;}
+    if(!processed.length){const firstFailure=text(failures[0]&&failures[0].error),error=new Error("선택 항목을 처리하지 못했습니다. "+(firstFailure?"원인: "+firstFailure+" · ":"")+"현재 원장 상태를 확인해 주세요.");error.statusCode=409;error.failures=failures;throw error;}
     return json(200,{ok:true,version:VERSION,decision:action,requested:ids.length,processed:processed.length,processedIds:processed.map((row)=>row.id),results:processed,failures,publicPublication:false,paymentExecution:false});
   }catch(error){return json(error&&error.statusCode||500,{ok:false,error:text(error&&error.message||error),code:text(error&&error.code)||null,failures:error&&error.failures||undefined});}
 };
