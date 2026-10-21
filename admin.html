@@ -3312,7 +3312,8 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
     var social=document.getElementById('igdc-admin-social-candidate-link-card');
     if(media&&social&&social.previousElementSibling!==media)media.insertAdjacentElement('afterend',social);
     var anchor=social||media;
-    if(anchor&&commerce&&commerce.previousElementSibling!==anchor)anchor.insertAdjacentElement('afterend',commerce);
+    // Commerce queue is pinned immediately after the go-live audit card.
+    // Media/social ordering must never pull it below their cards.
   }
   function arm(){var tries=0,timer=setInterval(function(){tries+=1;if(install()){keepOrder();}if(tries>80)clearInterval(timer);},250);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){install();keepOrder();});else{install();keepOrder();}var panel=document.getElementById('igdc-site-control');if(panel&&window.MutationObserver){var o=new MutationObserver(function(){install();keepOrder();});o.observe(panel,{childList:true,subtree:true});}}
   arm();
@@ -3424,7 +3425,7 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
     if(!social)return;
     if(media&&social.previousElementSibling!==media){media.insertAdjacentElement('afterend',social);}
     else if(!media&&insight&&social.previousElementSibling!==insight){insight.insertAdjacentElement('afterend',social);}
-    if(social&&commerce&&commerce.previousElementSibling!==social){social.insertAdjacentElement('afterend',commerce);}
+    // Commerce placement is maintained by its own installer beside product go-live audit.
   }
   function arm(){
     var tries=0,timer=setInterval(function(){tries+=1;if(install()){keepOrder();}if(tries>80)clearInterval(timer);},250);
@@ -3483,6 +3484,8 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
   function pageUrl(){
     var u = new URL('/commerce-candidate-pipeline.html', window.location.origin);
     u.searchParams.set('source', 'admin-right-panel');
+    // Use the explicit current administrator country scope, never a guessed IP.
+    try{var saved=JSON.parse(sessionStorage.getItem('igdc_admin_country_scope_v1')||'null');var cc=String(saved&&saved.country||'').toUpperCase(),rr=String(saved&&saved.region||'NATIONWIDE').toUpperCase();if(/^[A-Z]{2}$/.test(cc)){u.searchParams.set('country',cc);u.searchParams.set('region',rr||'NATIONWIDE');}}catch(_e){}
     u.searchParams.set('returnPath', window.location.pathname + window.location.search + window.location.hash);
     return u.pathname + u.search;
   }
@@ -3507,14 +3510,14 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
   }
   function install(){
     var panel=document.getElementById('igdc-site-control');if(!panel)return false;
-    var current=document.getElementById('igdc-admin-commerce-candidate-link-card');if(current&&panel.contains(current))return true;
+    var current=document.getElementById('igdc-admin-commerce-candidate-link-card');if(current&&panel.contains(current)){var productAudit=document.getElementById('igdc-admin-product-go-live-link-card');if(productAudit&&productAudit.parentNode===current.parentNode&&current.previousElementSibling!==productAudit)productAudit.insertAdjacentElement('afterend',current);return true;}
     if(current&&current.parentNode)current.parentNode.removeChild(current);
     var card=makeCard();
     var media=document.getElementById('igdc-admin-media-candidate-link-card')||findCard(panel,/미디어\s*콘텐츠\s*후보|영상\s*후보/i);
     var product=document.getElementById('igdc-admin-product-go-live-link-card')||findCard(panel,/실상품\s*공급\s*개방\s*점검/i);
     var insight=findCard(panel,/MARU\s*Global\s*Insight|마루\s*Global\s*Insight/i);
-    if(media&&media.parentNode){media.insertAdjacentElement('afterend',card);return true;}
     if(product&&product.parentNode){product.insertAdjacentElement('afterend',card);return true;}
+    if(media&&media.parentNode){media.insertAdjacentElement('afterend',card);return true;}
     if(insight&&insight.parentNode){insight.insertAdjacentElement('afterend',card);return true;}
     (panel.querySelector('.igdc-sc-grid')||panel).appendChild(card);return true;
   }

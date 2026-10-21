@@ -89,7 +89,7 @@
     return out;
   }
   async function request(action,token,method,body){
-    var u=new URL(ENDPOINT,location.origin);u.searchParams.set('action',action);if(action!=='session'&&ACTIVE_SCOPE.country){u.searchParams.set('country',ACTIVE_SCOPE.country);u.searchParams.set('region',ACTIVE_SCOPE.region||'ALL');}
+    var u=new URL(ENDPOINT,location.origin);u.searchParams.set('action',action);if(action==='dashboard'){u.searchParams.set('compact','1');u.searchParams.set('limit','120');}if(action!=='session'&&ACTIVE_SCOPE.country){u.searchParams.set('country',ACTIVE_SCOPE.country);u.searchParams.set('region',ACTIVE_SCOPE.region||'ALL');}
     var verb=method||'GET',headers={Authorization:'Bearer '+token,Accept:'application/json'},init={method:verb,headers:headers,credentials:'same-origin',cache:'no-store'};
     if(verb!=='GET'){headers['Content-Type']='application/json';init.body=JSON.stringify(Object.assign({action:action},body||{}));}
     var response=await fetch(u.pathname+u.search,init);
@@ -151,10 +151,10 @@
   function statusPill(c){return c.releaseEligible?'<span class="pill release">발행 전 통과</span>':'<span class="pill hold">'+esc(stageLabel(c.stageStatus))+'</span>';}
   function number(v){var n=Number(v);return Number.isFinite(n)?n:0;}
   function gridCard(title,value,small){return '<article class="card"><h2>'+esc(title)+'</h2><div class="num">'+esc(value)+'</div><div class="small">'+esc(small||'')+'</div></article>';}
-  function renderSummary(summary){
+  function renderSummary(summary,viewScope){
     var s=summary.summary||{};var g=$('summaryGrid');
     g.innerHTML=''
-      +gridCard('전체 비공개 후보',s.considered||0,'상품 리서치·정식 스테이징 결합')
+      +gridCard(viewScope&&viewScope.bounded?'현재 조회 후보':'전체 비공개 후보',s.considered||0,'최초 조회 120건 상한 · 전체 원장 집계 아님')
       +gridCard('상품 리서치 대기열',s.liveResearchQueue||0,'보완 필요 '+number(s.researchNeedsCompletion)+'건')
       +gridCard('승인 절차 진행 가능',s.researchPromotionEligible||0,'상품·공급업체 위험 게이트 통과')
       +gridCard('개방 점검 후보 확정',s.registrySyncReady||0,'시장·증빙·수익·PSOM 승인 완료')
@@ -278,8 +278,8 @@
       try{
         await ensureSession(false);
         var data=await api('dashboard');dashboardCache=data||{};diagnosticCache=data&&data.diagnostic||null;lastRefreshAt=Date.now();
-        updateScope(data.scope);state.textContent='관리자 공통 세션 확인 · 범위 '+scopeLabel();renderSummary(data.summary||{});renderRows(data.candidates||[]);
-        show(scopeLabel()+' 비공개 상품 후보 대기열을 한 번의 통합 조회로 새로 읽었습니다. 이 동작은 공개 발행·외부 판매처 이동·결제를 실행하지 않습니다.','ok');
+        updateScope(data.scope);state.textContent='관리자 공통 세션 확인 · 범위 '+scopeLabel();renderSummary(data.summary||{},data.viewScope||{});renderRows(data.candidates||[]);
+        show(scopeLabel()+' 비공개 상품 후보 대기열 · 504 방지를 위해 최초 '+Number(data.viewScope&&data.viewScope.returned||0)+'건만 안전 조회했습니다. 전체 원장 총계가 아닙니다. 공개 발행·결제를 실행하지 않습니다.','ok');
         return data;
       }catch(error){show(authErrorMessage(error),'warn');throw error;}
       finally{button.disabled=false;refreshPromise=null;}

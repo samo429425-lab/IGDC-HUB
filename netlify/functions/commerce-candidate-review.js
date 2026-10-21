@@ -647,10 +647,11 @@ exports.handler=async function(event){
       const probe=geoProbe(event);const requested=text(query.country).toUpperCase();
       const scopeCountry=requested||(probe.resolved?probe.country:"UNRESOLVED");
       const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
-      const stageLimit=action==="diagnostic"?600:(action==="summary"?800:5000);
+      const dashboardLimit=Math.max(60,Math.min(200,Number(query.limit)||120));
+      const stageLimit=action==="dashboard"?dashboardLimit:(action==="diagnostic"?250:(action==="summary"?250:5000));
       const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion,stageLimit);
       if(action==="dashboard"){
-        const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,5000)};
+        const summary=summaryDoc(doc),response={ok:true,scope:doc.selectedScope,summary,candidates:(doc.candidates||[]).slice(0,dashboardLimit),viewScope:{bounded:true,requestedLimit:dashboardLimit,returned:Math.min(dashboardLimit,(doc.candidates||[]).length),fullLedgerCountNotCalculated:true}};
         if(!["1","true","yes"].includes(lower(query.compact)))response.diagnostic=diagnosticDoc(doc,member);
         return json(200,response);
       }
