@@ -4931,6 +4931,116 @@ async function verifyLatestDuringExplicitRestore(scope,actor,id,sourceInput,url,
   await verifiedReviewSave(scope,actor,"latest",id,record);
   return{ok:true,proof:record,reused:reuse};
 }
+// Explicit A/B -> C hand-off for a single verified latest product.
+// No Front Match, assignment, PSOM mutation, research-job rewrite or AI review
+// side-effect. This is intentionally independent of syncProductResearchPreview.
+async function restoreVerifiedLatestCandidate(actor,scope,sourceInput,proofInput){
+  const source=plain(sourceInput),proof=plain(proofInput),url=ProductRanking.canonicalProductUrl(productUrl(source));
+  if(!url||!ProductRanking.isSpecificProductUrl(url)||
+     proof.state!=="verified"||ProductRanking.canonicalProductUrl(proof.verifiedUrl)!==url||
+     !text(proof.verifiedImageUrl)||!text(proof.verifiedProductName)){
+    return {state:"skipped",reason:"verified_exact_product_evidence_missing"};
+  }
+  // Resolve the country/region-scoped candidate ID first.  A seller URL can be
+  // sold into more than one market: never rewrite another market's ledger row.
+  const candidateId=productCandidateId(scope,source);
+  if(!candidateId)return {state:"skipped",reason:"product_identity_missing"};
+  const fields="select=id,status,source_ref,source_payload,official_url,title,thumbnail_url";
+  let existing=array(await SlotStore.select("gslot_candidates",fields+"&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0]||null;
+  if(!existing){
+    const sameUrl=array(await SlotStore.select("gslot_candidates",fields+
+      "&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+
+      "&official_url=eq."+encodeURIComponent(url)+"&limit=30"));
+    existing=sameUrl.find(row=>heldCandidateMatchesScope(row,scope))||null;
+  }
+  const targetId=text(existing&&existing.id)||candidateId;
+  if(existing&&text(existing.source_ref)!==PRODUCT_SOURCE_REF)
+    return {state:"preserved",candidateId:targetId,reason:"other_source_candidate_preserved"};
+  const assignments=array(await SlotStore.select("gslot_slot_assignments",
+    "select=id&candidate_id=eq."+encodeURIComponent(targetId)+"&limit=1"));
+  if(assignments.length)return {state:"preserved",candidateId:targetId,reason:"existing_slot_assignment_preserved"};
+  const old=plain(existing&&existing.source_payload),oldQueue=plain(old.queueControl),oldDecision=lower(old.slotDecision);
+  const priorExplicitRestore=oldQueue.action==="verified_latest_restore"&&oldDecision==="undecided"&&
+    !plain(old.approvedPlacement).page&&!plain(old.selectedPlacement).page&&
+    !plain(old.primaryPlacement).page&&!old.publicPublication;
+  const already=existing&&lower(existing.status)==="approval_pending"&&priorExplicitRestore&&
+    !oldQueue.hiddenFromCountryQueue&&!oldQueue.permanentExcluded;
+  if(existing&&(!heldCandidateMatchesScope(existing,scope)||
+    (latestRestoreHasConfirmedAuthority(existing)&&!priorExplicitRestore)||
+    !["","undecided"].includes(oldDecision)||
+    oldQueue.hiddenFromCountryQueue===true||oldQueue.permanentExcluded===true||
+    ["removed","hold","rejected","suppressed","published","active"].includes(lower(existing.status)))){
+    return {state:"preserved",candidateId:targetId,reason:"existing_administrator_decision_preserved"};
+  }
+  if(already)return {state:"already_registered",candidateId:targetId,reason:"already_in_unassigned_candidate_ledger"};
+  const checked=Object.assign({},source,{
+    productName:text(proof.verifiedProductName),title:text(proof.verifiedProductName),
+    imageUrl:text(proof.verifiedImageUrl),imageOriginalUrl:text(proof.verifiedImageUrl),
+    inspectionComplete:true,productPageLive:true,sameSupplierSite:true,
+    researchStatus:"ready_for_admin_review"
+  });
+  const now=iso(),base=productCandidatePayload(actor,scope,checked,"research_pending");
+  // The stored selection proposal stays informational only.  No 20-section
+  // assignment is made by this explicit unassigned-queue registration.
+  const payload=existing?Object.assign({},old):base;
+  payload.slotDecision="undecided";
+  payload.approvedPlacement=null;payload.selectedPlacement=null;payload.primaryPlacement=null;
+  payload.placement=Object.assign({},plain(payload.placement),{proposalOnly:true,administratorSelected:false,aiSelected:false,publicationPending:false,publicPublication:false});
+  payload.queueControl=Object.assign({},plain(payload.queueControl),{
+    schema:"igdc-private-product-queue-control.v1",action:"verified_latest_restore",
+    hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,
+    restoredAt:now,restoredBy:actor
+  });
+  payload.review=Object.assign({},plain(payload.review),{
+    state:"research_pending",nextGate:"administrator_product_selection",
+    verifiedAt:text(proof.checkedAt),explicitOperatorRestore:true
+  });
+  payload.managementControl=Object.assign({},plain(payload.managementControl),{
+    source:"administrator_verified_restore",administratorLocked:true,aiReclassificationAllowed:false,
+    decidedAt:now,decidedBy:actor
+  });
+  payload.marketScope={marketCountry:scope.country,marketRegion:scope.region};
+  payload.countrySupply=Object.assign({},plain(payload.countrySupply),{country:scope.country,region:scope.region});
+  payload.publicPublication=false;payload.automaticImport=false;
+  // For a brand new row use the tested canonical product card. For a legacy
+  // undecided row preserve all other administrator-entered fields.
+  if(!existing){
+    payload.id=targetId;payload.productName=text(proof.verifiedProductName);
+    payload.title=text(proof.verifiedProductName);
+    payload.productUrl=url;payload.externalProductUrl=url;payload.url=url;
+    payload.imageUrl=text(proof.verifiedImageUrl);payload.image=text(proof.verifiedImageUrl);
+    payload.thumb=text(proof.verifiedImageUrl);
+  }
+  const patch={status:"approval_pending",source_payload:payload,updated_at:now};
+  if(existing){
+    // A pre-existing undecided candidate might carry curated title/thumbnail.
+    // Never replace those merely because a new inspection was successful.
+    await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(targetId),patch);
+  }else{
+    await SlotStore.insert("gslot_candidates",{
+      id:targetId,kind:"product",title:text(proof.verifiedProductName),
+      official_url:url,thumbnail_url:text(proof.verifiedImageUrl),
+      status:"approval_pending",source_ref:PRODUCT_SOURCE_REF,
+      description:"Private researched product awaiting administrator section selection.",
+      owner_note:"Administrator verified product registration; no Front Match or publication.",
+      source_payload:payload,created_at:now,created_by:actor,updated_at:now
+    },"return=minimal");
+  }
+  // Read-after-write is REQUIRED. A 2xx response with zero updated records
+  // must never be mistaken for a successful C-stage hand-off.
+  const saved=array(await SlotStore.select("gslot_candidates",fields+
+    "&id=eq."+encodeURIComponent(targetId)+"&limit=1"))[0];
+  const q=plain(plain(saved&&saved.source_payload).queueControl);
+  const actual=plain(saved&&saved.source_payload);
+  if(!saved||text(saved.source_ref)!==PRODUCT_SOURCE_REF||
+     lower(saved.status)!=="approval_pending"||lower(actual.slotDecision)!=="undecided"||
+     q.action!=="verified_latest_restore"||q.hiddenFromCountryQueue===true||
+     !heldCandidateMatchesScope(saved,scope)){
+    return {state:"failed",candidateId:targetId,reason:"candidate_write_not_confirmed_by_ledger_readback"};
+  }
+  return {state:"restored",candidateId:targetId,reason:existing?"existing_unassigned_registered":"new_unassigned_registered"};
+}
+
 async function productVerifiedReviewAction(actorId,input){
   const scope=researchScope(input),actor=text(actorId)||"administrator",bucket=lower(input&&input.bucket)==="latest"?"latest":"hold",operation=lower(input&&input.operation),ids=Array.from(new Set(array(input&&input.ids).map(text).filter(Boolean))).slice(0,operation==="inventory"?100:8);
   if(!ids.length){const error=new Error("검증하거나 복귀할 상품을 선택하세요.");error.statusCode=400;throw error;}
@@ -5102,63 +5212,13 @@ async function productVerifiedReviewAction(actorId,input){
         await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");
         results.push({id,candidateId:id,state:"restored",urlRepaired:proof.urlRepaired===true,productUrl:fixed});
       }else{
-        // An AI research-preview "registered" result is NOT proof that a
-        // candidate entered the administrator's unassigned queue. It can also
-        // mean "preserved an existing hold/reject/assigned row". Never report
-        // those as successful restorations, and never reclassify them here.
-        const directId=productCandidateId(scope,source);
-        const directRows=directId?array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url&id=eq."+encodeURIComponent(directId)+"&limit=1")):[];
-        const prior=directRows[0]||await registeredProductCandidateByUrl(source);
-        const priorPayload=plain(prior&&prior.source_payload),priorDecision=lower(priorPayload.slotDecision);
-        if(prior){
-          const priorId=text(prior.id),priorAssignments=array(await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(priorId)+"&limit=1"));
-          if(text(prior.source_ref)!==PRODUCT_SOURCE_REF||
-             latestRestoreHasConfirmedAuthority(prior)||priorAssignments.length||
-             priorDecision!=="undecided"||plain(priorPayload.queueControl).permanentExcluded===true||
-             plain(priorPayload.queueControl).hiddenFromCountryQueue===true||
-             ["removed","rejected","suppressed","hold","published","active"].includes(lower(prior.status))){
-            results.push({id,candidateId:priorId,state:"preserved",reason:"existing_administrator_decision_or_slot_preserved"});continue;
-          }
-        }
-        const clearedRisk=Object.assign({},plain(source.riskAssessment),{explicitUnavailable:false,specificProductUrl:true,supplierSiteMatched:true});
-        clearedRisk.blockers=array(clearedRisk.blockers).filter(reason=>!["product_page_unavailable","supplier_product_domain_mismatch","specific_product_page_not_verified"].includes(lower(reason)));
-        const prepared=Object.assign({},source,{productPageLive:true,inspectionComplete:true,sameSupplierSite:true,riskAssessment:clearedRisk,researchStatus:"ready_for_admin_review"});
-        const saved=await syncProductResearchPreview(actorId,scope,prepared,{allowAdministratorReviewQueue:true});
-        if(saved.registered!==true||!text(saved.candidateId)){
-          results.push({id,candidateId:text(saved.candidateId),state:"skipped",reason:text(saved.status)||"candidate_not_registered"});continue;
-        }
-        // Read the exact candidate and its real slot assignments AFTER the
-        // write. Only a persisted, unassigned private product row can count.
-        const candidateId=text(saved.candidateId),read=async()=>array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0];
-        let durable=await read();
-        if(!durable||text(durable.source_ref)!==PRODUCT_SOURCE_REF){results.push({id,candidateId,state:"failed",reason:"restored_candidate_not_found_in_durable_ledger"});continue;}
-        const durablePayload=plain(durable.source_payload),durableDecision=lower(durablePayload.slotDecision),matchesScope=heldCandidateMatchesScope(durable,scope);
-        const assigned=array(await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1"));
-        if(!matchesScope||assigned.length||durableDecision!=="undecided"||
-           plain(durablePayload.queueControl).permanentExcluded===true||
-           latestRestoreHasConfirmedAuthority(durable)){
-          results.push({id,candidateId,state:"preserved",reason:"durable_candidate_not_unassigned_or_scope_mismatch"});continue;
-        }
-        // The generic research preview can retain a legacy research_pending
-        // status. Explicitly place verified, undecided rows in the PRIVATE C
-        // candidate queue and mark them for the admin's unassigned group.
-        const queueControl=plain(durablePayload.queueControl),alreadyRestored=lower(durable.status)==="approval_pending"&&queueControl.action==="verified_latest_restore";
-        if(!alreadyRestored){
-          const now=iso(),nextPayload=Object.assign({},durablePayload,{
-            slotDecision:"undecided",approvedPlacement:null,selectedPlacement:null,primaryPlacement:null,
-            queueControl:Object.assign({},queueControl,{action:"verified_latest_restore",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor}),
-            review:Object.assign({},plain(durablePayload.review),{state:"research_pending",nextGate:"administrator_product_selection",verifiedAt:proof.checkedAt}),
-            publicPublication:false,automaticImport:false
-          });
-          await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{status:"approval_pending",source_payload:nextPayload,updated_at:now});
-          durable=await read();
-        }
-        const persisted=plain(durable&&durable.source_payload),persistedQueue=plain(persisted.queueControl);
-        if(!durable||lower(durable.status)!=="approval_pending"||lower(persisted.slotDecision)!=="undecided"||
-           persistedQueue.action!=="verified_latest_restore"||!heldCandidateMatchesScope(durable,scope)){
-          results.push({id,candidateId,state:"failed",reason:"unassigned_candidate_persistence_verification_failed"});continue;
-        }
-        results.push({id,candidateId,state:alreadyRestored?"already_registered":"restored",reason:alreadyRestored?"already_in_unassigned_candidate_ledger":null});
+        // This is an OPERATOR-INITIATED C-stage registration, not an automatic
+        // research preview. Preview deliberately preserves old AI decisions and
+        // may return registered:true WITHOUT making an unassigned candidate.
+        // Never infer registration success from that general-purpose API.
+        const persisted=await restoreVerifiedLatestCandidate(actor,scope,source,proof);
+        results.push(Object.assign({id},persisted));
+
       }
     }catch(error){results.push({id,state:"failed",reason:text(error&&error.message||error)});}
   }

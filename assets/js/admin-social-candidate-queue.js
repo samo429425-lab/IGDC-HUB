@@ -1684,8 +1684,10 @@
         "관리 화면에서는 인플루언서 등록부와 최신 콘텐츠 후보·교체 대기열을 유형별로 분리합니다. 실제 수집은 PSOM·SearchBank 기준의 최신 콘텐츠 탐색을 먼저 수행하고, 인플루언서 등록부는 발견된 우수 제작자를 보조 데이터로 유지합니다.",
         "ok",
       );
+      return true;
     } catch (e) {
       show(e.message || "대기열을 읽지 못했습니다.", "warn");
+      return false;
     } finally {
       $("refreshBtn").disabled = false;
     }
@@ -2550,6 +2552,11 @@
     return Number(result.updated || 0);
   }
   function openContentSection(sectionKey) {
+    // An explicit "show candidates" action must not silently inherit an
+    // unrelated search/section/review filter from a previous admin operation.
+    ["searchInput", "sectionFilter", "platformFilter", "riskFilter", "reviewFilter"].forEach(function (id) {
+      if ($(id)) $(id).value = "";
+    });
     waitingViewMode = "all";
     openDetailQueue = "content";
     var key = sectionKey;
@@ -2568,6 +2575,14 @@
     }
   }
   async function importSearchBank(sectionKey) {
+    // This function also powers a per-section import action. A raw click Event
+    // is NEVER a Social section key (the former onclick binding passed it here).
+    var requested = typeof sectionKey === "string" ? text(sectionKey) : "";
+    var activeKey = requested || text($("collectorSection") && $("collectorSection").value);
+    if (order.indexOf(activeKey) < 0) {
+      show("반입할 SNS 섹션을 먼저 선택해 주세요.", "warn");
+      return null;
+    }
     if (searchBankImportBusy) {
       show("SearchBank 실후보 반입이 이미 진행 중입니다.", "warn");
       return null;
@@ -2575,33 +2590,66 @@
     searchBankImportBusy = true;
     var button = $("searchBankImportBtn");
     if (button) button.disabled = true;
+    var before = rows.filter(function (r) {
+      return r.sectionKey === activeKey && assetClass(r) === "latest_content";
+    }).length;
     try {
-      var repaired = await repairLegacyFrontUnpublishHolds(sectionKey || "");
-      show(
-        (sectionKey ? label(sectionKey) + " · " : "") +
-          "SearchBank 실후보를 관리자 후보 목록으로 반입하고 있습니다.",
-        "warn",
-      );
-      var body = { action: "import_searchbank", limit: 5000 };
-      if (sectionKey) body.sectionKey = sectionKey;
-      var d = await post(PIPELINE, body);
-      diagnostic(d);
-      await refresh();
-      openContentSection(sectionKey || "");
-      show(
-        (sectionKey ? label(sectionKey) + " · " : "") +
-          "SearchBank 실후보 반입 완료: 후보 " +
-          Number(d.accepted || 0) +
-          "개, 저장 " +
-          Number(d.saved || 0) +
-          "개" +
-          (repaired ? ", 이전 프론트 해제로 잘못 보류된 " + repaired + "개 복구" : "") +
-          ". seed·placeholder는 제외되고 콘텐츠 후보 목록을 열었습니다.",
-        Number(d.accepted || 0) || repaired ? "ok" : "warn",
-      );
-      return d;
+      show(label(activeKey) + " · SearchBank 실콘텐츠 주소를 확인하고 있습니다.", "warn");
+      // The snapshot can contain thousands of generic search results and zero
+      // real social video URLs. Never misreport those as newly imported rows.
+      // Do not auto-approve old held content as a side effect of a read/import.
+      var d = await post(PIPELINE, {
+        action: "import_searchbank", limit: 5000, sectionKey: activeKey
+      });
+      var direct = null;
+      var directError = null;
+      if (Number(d.accepted || 0) === 0) {
+        // A static snapshot with zero genuine Social URLs cannot fill the DB.
+        // On an explicit import click perform ONE real, bounded live discovery
+        // for the selected SNS only. Repeated clicks advance that SNS cursor.
+        // The collector uses the regular authorized Candidate Gateway write.
+        show(label(activeKey) + " · SearchBank 스냅샷의 실콘텐츠 0건. 공개 SNS 실제 영상 검색으로 보강 중입니다.", "warn");
+        try {
+          direct = await post(LIVE, {
+            action: "collect_live", dryRun: false, contentFirst: true,
+            registryOnly: false, registrySweepDone: true,
+            sectionKey: activeKey, limit: 10, batchSize: 10,
+            queryPasses: 1, queryCursor: loadDiscoveryCursor(activeKey),
+            countryCode: selectedCountry(), scopeMode: scopeMode(),
+            regionId: text($("collectorRegion") && $("collectorRegion").value),
+            languages: text($("collectorLanguages") && $("collectorLanguages").value)
+          });
+          var nextCursor = direct.liveCollection && direct.liveCollection.nextQueryCursor;
+          if (Number.isFinite(Number(nextCursor))) saveDiscoveryCursor(activeKey, Number(nextCursor));
+        } catch (error) {
+          directError = text(error && error.message) || "live_discovery_failed";
+        }
+      }
+      var refreshed = await refresh();
+      if (!refreshed) {
+        show("반입 요청을 처리했으나 후보 DB 재조회에 실패했습니다. 저장 확인 전에는 성공으로 표시하지 않습니다.", "warn");
+        return { snapshot: d, discovery: direct, refreshOk: false };
+      }
+      openContentSection(activeKey);
+      var after = rows.filter(function (r) {
+        return r.sectionKey === activeKey && assetClass(r) === "latest_content";
+      }).length;
+      var added = Math.max(0, after - before);
+      var importSaved = Number(d.saved || 0);
+      var liveSaved = Number(direct && direct.saved || 0);
+      var accepted = Number(d.accepted || 0) + Number(direct && direct.accepted || 0);
+      var message = label(activeKey) + " · SearchBank 승인 후보 " + Number(d.accepted || 0) +
+        "개, 정적 반입 저장 응답 " + importSaved + "건" +
+        (direct ? ", 실시간 발견 수용 " + Number(direct.accepted || 0) +
+          "건 · 저장 응답 " + liveSaved + "건" : "") +
+        ". 후보 DB 재조회 결과 " + before + " → " + after + "개 (신규 증가 " + added + "개).";
+      if (directError) message += " 실시간 검색 오류: " + directError;
+      if (!added && (importSaved || liveSaved)) message += " 저장 응답은 기존 후보의 갱신일 수 있습니다.";
+      if (!accepted) message += " 실제 영상 URL이 발견되지 않았습니다. 검색 제공자 진단 JSON을 확인해야 합니다.";
+      show(message, added ? "ok" : "warn");
+      return { snapshot: d, discovery: direct, discoveredError: directError, before, after, added, refreshOk: true };
     } catch (e) {
-      show(e.message || "SearchBank 실후보 반입 실패", "warn");
+      show((e && e.message) || "SearchBank 실후보 반입 실패", "warn");
       return null;
     } finally {
       searchBankImportBusy = false;
@@ -4343,7 +4391,9 @@
   function bindBatchExtras() {
     if ($("providerStatusBtn")) $("providerStatusBtn").onclick = providerStatus;
     if ($("researchPipelineDiagnosticBtn")) $("researchPipelineDiagnosticBtn").onclick = downloadResearchPipelineDiagnostic;
-    if ($("searchBankImportBtn")) $("searchBankImportBtn").onclick = importSearchBank;
+    if ($("searchBankImportBtn")) $("searchBankImportBtn").onclick = function () {
+      return importSearchBank(text($("collectorSection") && $("collectorSection").value));
+    };
     providerStatus();
   }
   async function start() {

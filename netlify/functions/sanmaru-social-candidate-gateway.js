@@ -13,7 +13,7 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const Policy = require("./lib/social-candidate-policy.v1");
 const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 
-const VERSION = "sanmaru-social-candidate-gateway-v1.5.0-trusted-collector-store-bridge";
+const VERSION = "sanmaru-social-candidate-gateway-v1.5.1-content-readback-diagnostics";
 const INTERNAL_GATEWAY_EVENT = Symbol("igdc-social-candidate-gateway-internal");
 
 function internalAuthorized(event) {
@@ -210,6 +210,28 @@ exports.handler = async function(event) {
       );
     const excludedSkipped = capped.length - normalized.length;
     const saved = dryRun ? [] : await SocialStore.upsertCandidates(normalized);
+    // A 200/upsert count is not proof that a *new latest-content* row can be
+    // read from the administrator ledger. Validate a bounded sample from live
+    // small batches. Never delete/rewrite rows if the readback is unavailable.
+    const latestSubmitted = normalized.filter((row) =>
+      SocialStore.assetClassOf(row) === "latest_content"
+    );
+    let readback = { checked: false, submittedContent: latestSubmitted.length,
+      verifiedContent: null, missingIds: [], error: null };
+    if (!dryRun && latestSubmitted.length && latestSubmitted.length <= 24) {
+      const ids = Array.from(new Set(latestSubmitted.map((row) => SocialStore.text(row.id)).filter(Boolean)));
+      try {
+        const found = await SocialStore.selectCandidates("select=id,section_key,raw,source_url&id=" + SocialStore.encodeIn(ids));
+        const stored = new Set((Array.isArray(found) ? found : []).filter((row) =>
+          SocialStore.assetClassOf(row) === "latest_content"
+        ).map((row) => SocialStore.text(row.id)));
+        readback = { checked: true, submittedContent: ids.length,
+          verifiedContent: ids.filter((id) => stored.has(id)).length,
+          missingIds: ids.filter((id) => !stored.has(id)), error: null };
+      } catch (error) {
+        readback.error = SocialStore.text(error && error.message || error);
+      }
+    }
     return SocialStore.response(200, {
       ok: true,
       version: VERSION,
@@ -222,6 +244,8 @@ exports.handler = async function(event) {
       accepted: normalized.length,
       acceptedBySection: bySection(normalized),
       saved: dryRun ? 0 : (Array.isArray(saved) ? saved.length : normalized.length),
+      submittedLatestContent: latestSubmitted.length,
+      readback,
       excludedSkipped,
       rejectedCount: rejected.length,
       rejectedByReason: rejectSummary(rejected),

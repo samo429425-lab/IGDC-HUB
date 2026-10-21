@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.43.0-global-discovery-soft-locale";
+const VERSION = "sanmaru-social-live-collector-v1.44.0-broad-searchbank-window-verified-write";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -737,7 +737,16 @@ function scopedQueries(plan, cursor, passes, route) {
   if (!base.length) return queries;
   for (let index = 0; index < count; index += 1) {
     const absoluteIndex = (offset * count) + index;
-    const baseQuery = base[absoluteIndex % base.length] || (plan.platform + " latest public content");
+    const originalQuery = base[absoluteIndex % base.length] || (plan.platform + " latest public content");
+    // Preserve existing searches on one pass in three, but use short topical
+    // searches on other passes. Mandatory English promotion qualifiers were
+    // silently turning useful public posts into zero-result searches.
+    // This is discovery only; actual video URL and safety gates remain strict.
+    const broadPass = plan.platform !== "youtube" && absoluteIndex % 3 !== 2;
+    const baseQuery = broadPass
+      ? originalQuery.replace(/\b(?:official|public|latest|high\s+quality|popular|high\s+engagement|active|trending|recent|creator|best)\b/gi, " ")
+        .replace(/\s+/g, " ").trim() || originalQuery
+      : originalQuery;
     const sparseTerms = SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || [];
     // Native Chinese indices are sensitive to excessively long mixed-script
     // queries. The section's own Chinese topic is the research seed; do not
@@ -746,7 +755,7 @@ function scopedQueries(plan, cursor, passes, route) {
     // Dedicated short content queries now sit beside the older searches. Do
     // not AND a second full discovery topic onto most of them: one genuinely
     // relevant public result is better than zero matches from long phrases.
-    const sparseTerm = plan.platform !== "snapchat" && !chineseNativeTopic &&
+    const sparseTerm = plan.platform !== "snapchat" && !chineseNativeTopic && !broadPass &&
       sparseTerms.length && absoluteIndex % 8 === 3
       ? sparseTerms[absoluteIndex % sparseTerms.length] : "";
 
@@ -760,7 +769,7 @@ function scopedQueries(plan, cursor, passes, route) {
     // hint so Bilibili/Douyin/TikTok/Facebook can still discover strong global
     // content instead of repeatedly AND-ing a Korea/locale term into the query.
     const globalComplementPass = plan.platform !== "youtube" && absoluteIndex % 2 === 0;
-    if (!globalComplementPass && !chineseNativeTopic && plan.platform !== "snapchat") {
+    if (!globalComplementPass && !broadPass && !chineseNativeTopic && plan.platform !== "snapchat") {
       if (absoluteIndex % 3 === 0) localeHint = countryQueryTerm(route);
       else if (absoluteIndex % 3 === 1) localeHint = languageQueryTerm(route);
     }
@@ -2162,7 +2171,7 @@ async function maruUnfilteredSearchOne(event, plan, queryText, limit, language, 
   }
 }
 
-async function searchBankContentResearchOne(event, plan, queryText, limit, language, start, route) {
+async function searchBankContentResearchOne(event, plan, queryText, limit, language, start, route, researchCursor) {
   const contract = psomSocialContract(plan);
   if (!contract.ok) {
     return {
@@ -2178,6 +2187,12 @@ async function searchBankContentResearchOne(event, plan, queryText, limit, langu
     return { provider: "psom-searchbank-content", status: "unavailable", error: "search_bank_engine_unavailable", psom: contract, items: [], trace: [] };
   }
   const exactQuery = publicSearchQuery(plan, queryText);
+  // SearchBank often yields hundreds of generic profile/home rows, while the
+  // first 30 ranked entries have no video permalink. Rotate through bounded
+  // result windows rather than re-reading only offset 0 for every SNS pass.
+  // No SearchBank engine or persistent snapshot is modified by this cursor.
+  const bankOffset = plan.platform === "youtube" ? 0 :
+    (Math.max(0, Number(researchCursor || 0) || 0) % 24) * 24;
   try {
     const result = await withDeadline(
       SearchBankEngine.runEngine({
@@ -2188,7 +2203,7 @@ async function searchBankContentResearchOne(event, plan, queryText, limit, langu
         q: exactQuery,
         query: exactQuery,
         limit: Math.max(12, Math.min(48, Number(limit || 10) * 3)),
-        offset: Math.max(0, Number(start || 1) - 1),
+        offset: bankOffset,
         // Global Social discovery: do NOT send lang/country/region. The shared
         // SearchBank interprets those as hard exclusions (rather than soft
         // locality preferences); they were hiding zh-CN Bilibili/Douyin
@@ -2199,7 +2214,10 @@ async function searchBankContentResearchOne(event, plan, queryText, limit, langu
         route: "social",
         section: plan.sectionKey,
         psom_key: plan.sectionKey,
-        autoFill: true,
+        // This is a broad external DISCOVERY call, not a front slot fill.
+        // autoFill=true activates SearchBank's strictFrontSection gate, which
+        // can reject valid foreign-language posts before Social validation.
+        autoFill: false,
         external: "force",
         useExternalSources: true,
         useSocial: true,
@@ -2232,6 +2250,7 @@ async function searchBankContentResearchOne(event, plan, queryText, limit, langu
       psom: contract,
       items,
       rawCount: rows.length,
+      offset: bankOffset,
       rejectedNonContentRows: Math.max(0, rows.length - items.length),
       trace: adapters.map((entry) => ({ name: entry && entry.name, status: entry && entry.ok === false ? "error" : "ok", count: Number(entry && entry.count || 0) }))
     };
@@ -2240,12 +2259,12 @@ async function searchBankContentResearchOne(event, plan, queryText, limit, langu
   }
 }
 
-async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup, registryTargeted, registrySeed) {
+async function searchOne(event, plan, queryText, limit, language, start, route, cfg, qualitySweep, directoryOffset, providerGroup, registryTargeted, registrySeed, researchCursor) {
   const tasks = [];
   const sparse = SPARSE_DISCOVERY_PLATFORMS.has(plan.platform);
 
   // Every pass is anchored to the Social PSOM/SearchBank read lane.
-  tasks.push(searchBankContentResearchOne(event, plan, queryText, limit, language, start, route));
+  tasks.push(searchBankContentResearchOne(event, plan, queryText, limit, language, start, route, researchCursor));
 
   // Influencer-targeted lookup exists only for explicit registry maintenance.
   if (registryTargeted && registrySeed && plan.platform !== "youtube") {
@@ -3381,7 +3400,8 @@ exports.handler = async function(event) {
         language,
         searchStart, route, cfg, qualitySweep, directoryOffset, providerGroup,
         registrySweepMode ? true : scoped.targeted,
-        querySeeds[queryText] || null
+        querySeeds[queryText] || null,
+        researchCursor + queryIndex
       );
       searchResult.registrySeed = querySeeds[queryText] || null;
       return searchResult;
@@ -3490,6 +3510,8 @@ exports.handler = async function(event) {
       localePolicy: "ip_country_is_soft_preference_with_global_complement",
       contentIdentity: "section_platform_content_url_hash",
       broadDiscovery: SPARSE_DISCOVERY_PLATFORMS.has(plan.platform),
+      searchBankReadMode: "discovery_only_soft_geo_rotating_windows",
+      searchBankResultWindow: plan.platform === "youtube" ? 0 : (researchCursor % 24) * 24,
       broadDiscoveryTermCount: (SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || []).length,
       contentFirst,
       researchAuthority: "psom_section_plus_social_policy_via_searchbank",
@@ -3540,6 +3562,8 @@ exports.handler = async function(event) {
         ok: payload && payload.ok === true,
         accepted: Number(payload && payload.accepted || 0),
         saved: Number(payload && payload.saved || 0),
+        submittedLatestContent: Number(payload && payload.submittedLatestContent || 0),
+        readback: payload && payload.readback || null,
         excludedSkipped: Number(payload && payload.excludedSkipped || 0),
         rejectedCount: Number(payload && payload.rejectedCount || 0),
         error: payload && payload.error || null,

@@ -1425,7 +1425,7 @@
           else if(item.state==='already_registered'){totals.alreadyRegistered++;}
           else if(item.state==='preserved'){totals.preserved++;}
           else if(item.state==='failed'){totals.failed++;failures.push(text(item.reason));}
-          else totals.skipped++;
+          else {totals.skipped++;if(operation==='restore'&&item.reason&&failures.length<8)failures.push(text(item.reason));}
         });
         if(target)target.textContent=(operation==='restore'?'원장 복귀':'검증')+' 처리 '+Math.min(offset+chunk.length,ids.length)+'/'+ids.length+'건 · 신규 미배치 등록 '+totals.restored+' · 기존 등록 '+totals.alreadyRegistered+' · 관리자 결정 유지 '+totals.preserved+' · 별도 확인 '+totals.skipped+' · 검사 불가 '+totals.inconclusive+' · 오류 '+totals.failed;
       }
@@ -1433,8 +1433,26 @@
         var placed=await placeNewlyVerifiedCandidates(restoreIds,'검증 정상상품 PSOM 자동 배치',target,{country:freeze.country,subdivision:freeze.region});
         totals.placed=placed.assigned;totals.placeFailed=placed.failed;
       }
+      var ledgerShown=0,ledgerHidden=0;
       if(operation==='restore'){
-        try{await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});}catch(e){failures.push('관리자 목록 새로고침 실패: '+text(e&&e.message));}
+        try{
+          var ledger=await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});
+          if(ledger&&ledger.pipeline&&ledger.pipeline.ledgerLoadComplete!==true)throw new Error('후보 원장 전체 조회가 완료되지 않았습니다.');
+          if(bucket==='latest'){
+            var restoredUnique=Array.from(new Set(restoreIds.map(text).filter(Boolean)));
+            var visibleIds={};productRows.forEach(function(row){if(productDecision(row)==='undecided'&&candidateGroupKey(row)==='unassigned')visibleIds[frontCandidateLedgerId(row)]=true;});
+            restoredUnique.forEach(function(id){if(visibleIds[id])ledgerShown++;else ledgerHidden++;});
+            // Registration and UI visibility are separate facts. Explicitly
+            // open the ordinary unassigned pool only AFTER readback success.
+            if(ledgerShown>0){
+              var panel=$('productCandidatePanel');if(panel&&!panel.open)panel.open=true;
+              renderProductCandidateGroups();
+              var pool=$('productGrid')&&$('productGrid').querySelector('details[data-product-group="unassigned"]');
+              if(pool&&!pool.open)pool.open=true;
+            }
+            if(ledgerHidden)failures.push('원장 저장 '+ledgerHidden+'건이 미배치 목록에 표시되지 않았습니다. 원장 점검 JSON으로 확인하세요.');
+          }
+        }catch(e){failures.push('관리자 후보 원장 재조회 실패: '+text(e&&e.message));}
         if(bucket==='latest')try{await refreshLatestResearchRows(freeze.country,freeze.region,{label:'검증 정상상품 원장 복귀',preserveOnFailure:true});}catch(_e){}
       }
       var n=Object.keys(verifiedReviewUi[bucket]).filter(function(id){return verifiedReviewUi[bucket][id]==='verified';}).length;
@@ -1443,7 +1461,7 @@
       if(list){var pending=Object.keys(verifiedReviewUi[bucket]).filter(function(id){return verifiedReviewUi[bucket][id]==='verified'&&names[id];});list.innerHTML=pending.length?'<details><summary>정상 검증 완료 '+pending.length+'건 · 상품별 결과 확인(복귀 버튼은 별도)</summary>'+pending.map(function(id,i){var detail=verifiedReviewDetailsUi[bucket][id]||{},link=safeProductDetailUrl(detail.verifiedUrl);return '<div class="small">'+(i+1)+'. '+esc(names[id])+' · <span class="pill good">'+(detail.urlRepaired?'동일상품 상세주소 복구 검증':'실상품 정상 검증')+'</span>'+(link?' · '+externalReviewAnchor(link,'검증된 상품 상세페이지 열기','queue-review-link'):'')+(detail.urlRepaired?' · 원장 복귀 시에만 복구 주소 적용':'')+'</div>';}).join('')+'</details>':'<span class="small">정상 검증 완료 항목 없음 · 원장 이동 없음</span>';var unresolved=Object.keys(unresolvedReviewDetailsUi[bucket]).filter(function(id){return names[id]&&verifiedReviewUi[bucket][id]!=='verified';});if(unresolved.length){list.innerHTML+='<details><summary>확인 불가·부적합 '+unresolved.length+'건 · 기존 보류 유지(자동 삭제 없음)</summary>'+unresolved.slice(0,100).map(function(id,i){var d=unresolvedReviewDetailsUi[bucket][id]||{},reasons=(Array.isArray(d.reasons)?d.reasons:[]).map(text).filter(Boolean).slice(0,3);return '<div class="small">'+(i+1)+'. '+esc(names[id])+' · '+esc(d.state==='inconclusive'?'접근 제한·원본 검증 불가':'부적합·상세주소 재확인 필요')+(reasons.length?' · '+esc(reasons.join(' / ')):'')+'</div>';}).join('')+'</details>';}}
       
       var repairedVerified=Object.keys(verifiedReviewDetailsUi[bucket]).filter(function(id){return verifiedReviewUi[bucket][id]==='verified'&&verifiedReviewDetailsUi[bucket][id].urlRepaired===true;}).length;
-      var msg=(operation==='verify'?'AI 검증·분류 완료(이동 없음)':(operation==='status'?'검증 기록 불러오기 완료':'정상 검증상품 원장 복귀 완료'))+' · 정상 검증 '+totals.verified+' · 동일상품 URL 복구 검증 '+repairedVerified+' · 신규 미배치 등록 '+totals.restored+' · 기존 등록 '+totals.alreadyRegistered+' · 기존 관리자 결정 유지 '+totals.preserved+' · 불확실 '+totals.inconclusive+' · 오류/부적합 '+totals.invalid+' · 제외 '+totals.skipped+' · 실패 '+totals.failed+(operation==='restore'?(autoPlace?' · PSOM 신규 배치 '+(totals.placed||0)+' · 배치 실패 '+(totals.placeFailed||0):' · 미배치 후보로 등록'):' · 원장 상태 유지')+(failures.length?' · '+failures.slice(0,2).join(' / '):'');
+      var msg=(operation==='verify'?'AI 검증·분류 완료(이동 없음)':(operation==='status'?'검증 기록 불러오기 완료':'정상 검증상품 원장 복귀 완료'))+' · 정상 검증 '+totals.verified+' · 동일상품 URL 복구 검증 '+repairedVerified+' · 신규 미배치 등록 '+totals.restored+' · 기존 등록 '+totals.alreadyRegistered+' · 기존 관리자 결정 유지 '+totals.preserved+' · 불확실 '+totals.inconclusive+' · 오류/부적합 '+totals.invalid+' · 제외 '+totals.skipped+' · 실패 '+totals.failed+(operation==='restore'?(autoPlace?' · PSOM 신규 배치 '+(totals.placed||0)+' · 배치 실패 '+(totals.placeFailed||0):' · 미배치 후보 등록')+(bucket==='latest'?' · 미배치 화면 확인 '+ledgerShown+'건'+(ledgerHidden?' · 미표시 '+ledgerHidden+'건':''):''):' · 원장 상태 유지')+(failures.length?' · '+failures.slice(0,2).join(' / '):'');
       if(operation==='restore'&&bucket==='latest'&&!totals.restored&&ids.length)msg+=' · 신규 이관 0건: 기존 등록·관리자 결정·검증 근거를 확인하세요.';
       if(target)target.textContent=msg;show(msg,totals.failed||failures.length||(operation==='restore'&&bucket==='latest'&&!totals.restored)?'warn':'ok');
       if(bucket==='hold'){await refreshHoldReviewInventory();renderProductExcludedTable('hold');}else renderLatestProductRows();
