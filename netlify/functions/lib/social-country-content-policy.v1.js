@@ -251,18 +251,32 @@ function applyToPlatformPolicy(basePolicy, routeOrCountry, platform) {
     topicTerms = topicTerms.filter((term) => !NONPOLITICAL_QUERY_BLOCK.test(text(term)));
     baseQueries = baseQueries.filter((query) => !NONPOLITICAL_QUERY_BLOCK.test(text(query)));
   }
-  const topicSearchQueries = topicTerms.map((term) =>
-    [platform, term, "official public latest high quality"].filter(Boolean).join(" ")
-  );
+  const platformName = text(platform).toLowerCase();
+  const sparseVideoPlatform = ["tiktok", "bilibili", "douyin"].includes(platformName);
+  // Discovery on sparse video indices must begin with short, platform-native
+  // actual-content topics rather than two localized "official latest high
+  // quality" conjunctive queries for every single base query. IP/country is
+  // a downstream ranking signal, never the condition to discover a video.
+  const topicSearchQueries = NONPOLITICAL_SOCIAL_QUERY_PLATFORMS.has(platformName)
+    ? [] // Prefer native Chinese search; regional English/Korean topics hide videos.
+    : topicTerms.map((term) =>
+        sparseVideoPlatform
+          ? [platform, term].filter(Boolean).join(" ")
+          : [platform, term, "official public latest high quality"].filter(Boolean).join(" ")
+      );
   const queries = [];
-  const max = Math.max(baseQueries.length, Math.ceil(topicSearchQueries.length / 2));
-  for (let i = 0; i < max; i += 1) {
-    const a = topicSearchQueries[i * 2];
-    const b = topicSearchQueries[i * 2 + 1];
-    const baseQuery = baseQueries[i];
-    if (a) queries.push(a);
-    if (b) queries.push(b);
-    if (baseQuery) queries.push(baseQuery);
+  if (sparseVideoPlatform) {
+    queries.push(...baseQueries, ...topicSearchQueries);
+  } else {
+    const max = Math.max(baseQueries.length, Math.ceil(topicSearchQueries.length / 2));
+    for (let i = 0; i < max; i += 1) {
+      const a = topicSearchQueries[i * 2];
+      const b = topicSearchQueries[i * 2 + 1];
+      const baseQuery = baseQueries[i];
+      if (a) queries.push(a);
+      if (b) queries.push(b);
+      if (baseQuery) queries.push(baseQuery);
+    }
   }
   return Object.assign({}, base, {
     categories: unique((base.categories || []).concat(p.topics.map((t) => t.key))),

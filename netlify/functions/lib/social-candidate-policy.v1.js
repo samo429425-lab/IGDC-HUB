@@ -145,10 +145,11 @@ const PLATFORM_POLICIES = Object.freeze({
     defaultDisplayMode: "link_card_or_official_embed",
     publicPreference: "public_video_or_creator_channel",
     categories: ["music", "travel", "culture", "documentary", "education", "technology", "gaming", "animation", "art", "creator", "video"],
+    // Native-search seed terms deliberately stay short and in Chinese.
+    // Quality verification is applied after actual video URLs are discovered.
     collectionQueries: [
-      "bilibili 热门 音乐 演出 UP主", "bilibili 旅行 旅游 文化 视频", "bilibili 科普 教育 科技 UP主",
-      "bilibili 纪录片 历史 文化", "bilibili 艺术 设计 摄影", "bilibili 游戏 动画 创作者",
-      "bilibili 美食 地方文化", "bilibili 高质量 UP主 最新 视频"
+      "音乐 演出", "旅行 旅游", "科普 教育", "纪录片 文化",
+      "艺术 摄影", "游戏 动画", "美食 文化", "自然 生活"
     ]
   },
   douyin: {
@@ -156,10 +157,11 @@ const PLATFORM_POLICIES = Object.freeze({
     defaultDisplayMode: "link_card_or_contained_preview",
     publicPreference: "public_video_or_note_card",
     categories: ["music", "dance", "travel", "food", "culture", "lifestyle", "creator", "short_video", "education", "art"],
+    // Chinese first. English-only creator queries return very little from
+    // Douyin's native public search and Chinese regional indices.
     collectionQueries: [
-      "douyin popular music performance creator", "douyin travel tourism creator", "douyin food culture creator",
-      "douyin healthy lifestyle creator", "douyin traditional culture heritage video", "douyin art design creator",
-      "douyin useful education tutorial video", "douyin science technology creator"
+      "音乐 演出", "旅行 景点", "美食 文化", "健康 生活",
+      "非遗 传统文化", "艺术 摄影", "教育 科普", "科技 创意"
     ]
   }
 });

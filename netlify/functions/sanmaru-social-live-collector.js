@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.42.0-complete-provider-and-store-bridge-fix";
+const VERSION = "sanmaru-social-live-collector-v1.43.0-global-discovery-soft-locale";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -739,7 +739,11 @@ function scopedQueries(plan, cursor, passes, route) {
     const absoluteIndex = (offset * count) + index;
     const baseQuery = base[absoluteIndex % base.length] || (plan.platform + " latest public content");
     const sparseTerms = SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || [];
-    const sparseTerm = sparseTerms.length && absoluteIndex % 2 === 0
+    // Native Chinese indices are sensitive to excessively long mixed-script
+    // queries. The section's own Chinese topic is the research seed; do not
+    // combine it with a second independent keyword catalog.
+    const chineseNativeTopic = ["bilibili", "douyin"].includes(plan.platform);
+    const sparseTerm = !chineseNativeTopic && sparseTerms.length && absoluteIndex % 2 === 0
       ? sparseTerms[absoluteIndex % sparseTerms.length]
       : "";
 
@@ -753,11 +757,14 @@ function scopedQueries(plan, cursor, passes, route) {
     // hint so Bilibili/Douyin/TikTok/Facebook can still discover strong global
     // content instead of repeatedly AND-ing a Korea/locale term into the query.
     const globalComplementPass = plan.platform !== "youtube" && absoluteIndex % 2 === 0;
-    if (!globalComplementPass) {
+    if (!globalComplementPass && !chineseNativeTopic) {
       if (absoluteIndex % 3 === 0) localeHint = countryQueryTerm(route);
       else if (absoluteIndex % 3 === 1) localeHint = languageQueryTerm(route);
     }
-    const discoveryIntent = absoluteIndex % 4 === 3
+    // Keep discovery broad. Quality and topical trust are evaluated after
+    // URLs are found; English marketing qualifiers must not be a Chinese
+    // platform's search prerequisite.
+    const discoveryIntent = !chineseNativeTopic && absoluteIndex % 4 === 3
       ? DISCOVERY_INTENT_TERMS[absoluteIndex % DISCOVERY_INTENT_TERMS.length]
       : "";
     const value = [baseQuery, sparseTerm, localeHint, discoveryIntent]
@@ -1356,11 +1363,11 @@ function publicSearchQuery(plan, queryText, registrySeed) {
     .trim();
   const needle = registrySearchNeedle(registrySeed, platform);
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
-  if (platform === "tiktok") return [base, exact, "site:tiktok.com", "video creator latest public"].filter(Boolean).join(" ");
+  if (platform === "tiktok") return [base, exact, "site:tiktok.com", "video"].filter(Boolean).join(" ");
   if (platform === "facebook") return [base, exact, "site:facebook.com", "reel video creator public"].filter(Boolean).join(" ");
   if (platform === "snapchat") return [base, exact, "site:snapchat.com", "inurl:spotlight", "spotlight video"].filter(Boolean).join(" ");
-  if (platform === "bilibili") return [base, exact, "site:bilibili.com", "inurl:video", "哔哩哔哩 最新 视频 UP主", "public video"].filter(Boolean).join(" ");
-  if (platform === "douyin") return [base, exact, "site:douyin.com", "抖音 视频 最新 公开", "video note"].filter(Boolean).join(" ");
+  if (platform === "bilibili") return [base, exact, "site:bilibili.com", "视频"].filter(Boolean).join(" ");
+  if (platform === "douyin") return [base, exact, "site:douyin.com", "视频"].filter(Boolean).join(" ");
   return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"].filter(Boolean).join(" ");
 }
 function directProviderQuery(plan, queryText, registrySeed) {
@@ -2164,9 +2171,11 @@ async function searchBankContentResearchOne(event, plan, queryText, limit, langu
         query: exactQuery,
         limit: Math.max(12, Math.min(48, Number(limit || 10) * 3)),
         offset: Math.max(0, Number(start || 1) - 1),
-        lang: language || null,
-        country: route && route.countryCode || undefined,
-        region: route && (route.regionId || route.worldRegion) || undefined,
+        // Global Social discovery: do NOT send lang/country/region. The shared
+        // SearchBank interprets those as hard exclusions (rather than soft
+        // locality preferences); they were hiding zh-CN Bilibili/Douyin
+        // results for a Korean/English administrator. Locality is ranked
+        // later using `route`, never excluded at this research gateway.
         channel: "social",
         page: "social",
         route: "social",
@@ -3312,19 +3321,17 @@ exports.handler = async function(event) {
       // required, prioritized, or consulted here.
       scoped = { queries: scopedQueries(plan, researchCursor, passes, route), targeted: false, seed: null, seedByQuery: {} };
       queries = scoped.queries.map((query) => {
-        let value = qualitySweep ? query + " popular high quality active official" : query;
-        value = aiQuerySuffix ? value + " " + aiQuerySuffix : value;
-        return value;
+        // qualitySweep is post-discovery ranking, not a mandatory AND term.
+        // For ordinary collection, never over-constrain the discovery query.
+        return aiQuerySuffix ? query + " " + aiQuerySuffix : query;
       });
     }
 
     if (!queries.length) {
       scoped = { targeted: false, seed: null, seedByQuery: {} };
-      queries = scopedQueries(plan, researchCursor, passes, route).map((query) => {
-        let value = qualitySweep ? query + " popular high quality active official" : query;
-        value = aiQuerySuffix ? value + " " + aiQuerySuffix : value;
-        return value;
-      });
+      queries = scopedQueries(plan, researchCursor, passes, route).map((query) =>
+        aiQuerySuffix ? query + " " + aiQuerySuffix : query
+      );
     }
 
     const perQueryLimit = Math.max(1, Math.min(MAX_BATCH_SIZE, Math.ceil(target / Math.max(1, queries.length))));
