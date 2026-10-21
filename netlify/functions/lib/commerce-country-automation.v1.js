@@ -4873,6 +4873,22 @@ async function heldCandidateNoPublicAssignment(candidate,scope){
   // Do not clear URLs while ANY slot assignment remains, regardless of region.
   return array(assignments).length===0;
 }
+// In the latest-product *explicit* restore path a research proposal is NOT an
+// administrator placement. The generic establishedCandidate guard intentionally
+// treats even legacy placement fields as protected for AI processes, but the
+// research preview writes a proposalOnly placement for an UNASSIGNED candidate.
+// Do not confuse those two concepts when restoring into the C-stage pool.
+function latestRestoreHasConfirmedAuthority(rowInput){
+  const row=plain(rowInput),p=plain(row.source_payload),control=plain(p.managementControl),front=plain(p.frontPublication),placement=plain(p.placement);
+  const hasRealPlacement=(value)=>{const item=plain(value);return !!(item.page&&(item.sectionKey||item.section||item.key)&&item.proposalOnly!==true);};
+  return lower(p.slotDecision)==="slot_candidate"||hasRealPlacement(p.approvedPlacement)||hasRealPlacement(p.selectedPlacement)||
+    hasRealPlacement(p.primaryPlacement)||
+    (hasRealPlacement(placement)&&placement.proposalOnly!==true)||
+    control.administratorLocked===true||control.aiReclassificationAllowed===false||
+    plain(p.queueControl).permanentExcluded===true||p.publicPublication===true||
+    ["queued","publish_requested","matched","published","active","unpublish_requested","unpublish_failed"].includes(lower(front.status))||
+    ["approved","revenue_ready","enrollable","published","active"].includes(lower(row.status));
+}
 // Reuse only evidence persisted by THIS product-research job. A browser-provided
 // "inspected" flag never authorizes candidate registration. If the durable
 // inspection proof is stale/incomplete, inspect the exact detail page again.
@@ -5086,18 +5102,69 @@ async function productVerifiedReviewAction(actorId,input){
         await syncCandidateManagementResearchVisibility(actorId,scope,id,"undecided");
         results.push({id,candidateId:id,state:"restored",urlRepaired:proof.urlRepaired===true,productUrl:fixed});
       }else{
-        const previous=await registeredProductCandidateByUrl(source);
-        if(previous&&["slot_candidate","hold","reject","purge"].includes(lower(plain(previous.source_payload).slotDecision))){results.push({id,state:"preserved",reason:"existing_candidate_decision_preserved",candidateId:text(previous.id)});continue;}
+        // An AI research-preview "registered" result is NOT proof that a
+        // candidate entered the administrator's unassigned queue. It can also
+        // mean "preserved an existing hold/reject/assigned row". Never report
+        // those as successful restorations, and never reclassify them here.
+        const directId=productCandidateId(scope,source);
+        const directRows=directId?array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url&id=eq."+encodeURIComponent(directId)+"&limit=1")):[];
+        const prior=directRows[0]||await registeredProductCandidateByUrl(source);
+        const priorPayload=plain(prior&&prior.source_payload),priorDecision=lower(priorPayload.slotDecision);
+        if(prior){
+          const priorId=text(prior.id),priorAssignments=array(await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(priorId)+"&limit=1"));
+          if(text(prior.source_ref)!==PRODUCT_SOURCE_REF||
+             latestRestoreHasConfirmedAuthority(prior)||priorAssignments.length||
+             priorDecision!=="undecided"||plain(priorPayload.queueControl).permanentExcluded===true||
+             plain(priorPayload.queueControl).hiddenFromCountryQueue===true||
+             ["removed","rejected","suppressed","hold","published","active"].includes(lower(prior.status))){
+            results.push({id,candidateId:priorId,state:"preserved",reason:"existing_administrator_decision_or_slot_preserved"});continue;
+          }
+        }
         const clearedRisk=Object.assign({},plain(source.riskAssessment),{explicitUnavailable:false,specificProductUrl:true,supplierSiteMatched:true});
         clearedRisk.blockers=array(clearedRisk.blockers).filter(reason=>!["product_page_unavailable","supplier_product_domain_mismatch","specific_product_page_not_verified"].includes(lower(reason)));
         const prepared=Object.assign({},source,{productPageLive:true,inspectionComplete:true,sameSupplierSite:true,riskAssessment:clearedRisk,researchStatus:"ready_for_admin_review"});
         const saved=await syncProductResearchPreview(actorId,scope,prepared,{allowAdministratorReviewQueue:true});
-        results.push({id,candidateId:text(saved.candidateId),state:saved.registered===true?"restored":"skipped",reason:saved.registered===true?null:text(saved.status)});
+        if(saved.registered!==true||!text(saved.candidateId)){
+          results.push({id,candidateId:text(saved.candidateId),state:"skipped",reason:text(saved.status)||"candidate_not_registered"});continue;
+        }
+        // Read the exact candidate and its real slot assignments AFTER the
+        // write. Only a persisted, unassigned private product row can count.
+        const candidateId=text(saved.candidateId),read=async()=>array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0];
+        let durable=await read();
+        if(!durable||text(durable.source_ref)!==PRODUCT_SOURCE_REF){results.push({id,candidateId,state:"failed",reason:"restored_candidate_not_found_in_durable_ledger"});continue;}
+        const durablePayload=plain(durable.source_payload),durableDecision=lower(durablePayload.slotDecision),matchesScope=heldCandidateMatchesScope(durable,scope);
+        const assigned=array(await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1"));
+        if(!matchesScope||assigned.length||durableDecision!=="undecided"||
+           plain(durablePayload.queueControl).permanentExcluded===true||
+           latestRestoreHasConfirmedAuthority(durable)){
+          results.push({id,candidateId,state:"preserved",reason:"durable_candidate_not_unassigned_or_scope_mismatch"});continue;
+        }
+        // The generic research preview can retain a legacy research_pending
+        // status. Explicitly place verified, undecided rows in the PRIVATE C
+        // candidate queue and mark them for the admin's unassigned group.
+        const queueControl=plain(durablePayload.queueControl),alreadyRestored=lower(durable.status)==="approval_pending"&&queueControl.action==="verified_latest_restore";
+        if(!alreadyRestored){
+          const now=iso(),nextPayload=Object.assign({},durablePayload,{
+            slotDecision:"undecided",approvedPlacement:null,selectedPlacement:null,primaryPlacement:null,
+            queueControl:Object.assign({},queueControl,{action:"verified_latest_restore",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor}),
+            review:Object.assign({},plain(durablePayload.review),{state:"research_pending",nextGate:"administrator_product_selection",verifiedAt:proof.checkedAt}),
+            publicPublication:false,automaticImport:false
+          });
+          await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{status:"approval_pending",source_payload:nextPayload,updated_at:now});
+          durable=await read();
+        }
+        const persisted=plain(durable&&durable.source_payload),persistedQueue=plain(persisted.queueControl);
+        if(!durable||lower(durable.status)!=="approval_pending"||lower(persisted.slotDecision)!=="undecided"||
+           persistedQueue.action!=="verified_latest_restore"||!heldCandidateMatchesScope(durable,scope)){
+          results.push({id,candidateId,state:"failed",reason:"unassigned_candidate_persistence_verification_failed"});continue;
+        }
+        results.push({id,candidateId,state:alreadyRestored?"already_registered":"restored",reason:alreadyRestored?"already_in_unassigned_candidate_ledger":null});
       }
     }catch(error){results.push({id,state:"failed",reason:text(error&&error.message||error)});}
   }
   return{ok:true,bucket,operation,requested:ids.length,verified:results.filter(r=>r.state==="verified").length,
-    restored:results.filter(r=>r.state==="restored").length,failed:results.filter(r=>r.state==="failed").length,
+    restored:results.filter(r=>r.state==="restored").length,alreadyRegistered:results.filter(r=>r.state==="already_registered").length,
+    preserved:results.filter(r=>r.state==="preserved").length,failed:results.filter(r=>r.state==="failed").length,
     results,automaticPublication:false,autoPlacement:false};
 }
 

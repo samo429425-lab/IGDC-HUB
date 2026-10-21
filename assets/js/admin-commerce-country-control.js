@@ -425,6 +425,7 @@
     else if(explicit==='slot_candidate')decision='slot_candidate';
     else if(stage==='held'||stage==='hold')decision='hold';
     else if(stage==='rejected'||stage==='reject'||stage==='suppressed')decision='reject';
+    else if(explicit==='undecided'&&queueAction==='verified_latest_restore')decision='undecided';
     else if(key&&PRODUCT_SECTION_MAP[key]&&stage!=='administrator_selection_pending')decision='slot_candidate';
     else if(explicit==='undecided')decision='undecided';
     var url=safeExternalUrl(card.checkoutUrl||row.url||row.official_url),image=safeExternalImageUrl(card.image||row.image||row.thumbnail_url),supplierUrl=safeExternalUrl(card.supplierUrl||supplier.officialUrl||supplier.url),front=candidateLedgerFrontStatus(row),ranking=row.ranking||{},management=row.managementControl||{},integrity=row.managementIntegrity||{};
@@ -862,7 +863,7 @@
   //   group so the administrator can reclassify, hold, reject or restore it.
   // Hiding assigned slot candidates here makes them impossible to remove later.
   function candidatePoolRow(row){var decision=productDecision(row);return decision==='undecided'||decision==='slot_candidate';}
-  function candidateGroupKey(row){var decision=productDecision(row);return decision==='slot_candidate'?(assignedSectionKey(row)||'assignment_repair'):candidatePlacementKey(row);}
+  function candidateGroupKey(row){var decision=productDecision(row);if(decision==='undecided'&&text(row&&row.queueControl&&row.queueControl.action)==='verified_latest_restore')return'unassigned';return decision==='slot_candidate'?(assignedSectionKey(row)||'assignment_repair'):candidatePlacementKey(row);}
   function sectionRevenuePosition(row,sectionKey){
     var key=text(row&&row.candidateId||row&&row.id),rank=sectionRevenueView[key];
     return sectionRevenueViewScope===scopeKey()&&rank&&rank.sectionKey===sectionKey?Number(rank.rank||0):0;
@@ -1407,7 +1408,7 @@
     if(operation==='restore'&&!window.confirm((bucket==='latest'?'선택한 최신 상품 '+ids.length+'건 중 정상 상세검사 근거가 확인되는 상품만 복귀시킵니다. 근거가 오래되거나 부족하면 실제 상세페이지를 다시 확인하고, 부적합·접근 제한 상품은 등록하지 않습니다.':'정상 검증된 '+ids.length+'건만 복귀시킵니다.')+' 기존 배치와 프론트는 유지합니다. 계속할까요?'))return;
     var freeze={country:selectedCountry,region:selectedSubdivision||'NATIONWIDE'},target=bucket==='hold'?$('productHoldVerifyProgress'):$('latestManualActionState'),
         locationChoice=$(bucket==='hold'?'holdVerifiedPlacement':'latestVerifiedPlacement'),autoPlace=operation==='restore'&&locationChoice&&locationChoice.value==='psom',
-        totals={verified:0,inconclusive:0,invalid:0,restored:0,skipped:0,failed:0},restoreIds=[],failures=[];
+        totals={verified:0,inconclusive:0,invalid:0,restored:0,alreadyRegistered:0,preserved:0,skipped:0,failed:0},restoreIds=[],failures=[];
     productVerifiedFlowBusy=true; if(bucket==='hold'){productExclusionActionActive=true;syncProductExclusionSelection('hold');}else{latestQueueActionActive=true;syncLatestProductQueueControls();}
     productHoldVerifyStopRequested=false; if($('productHoldVerifyStopBtn')&&bucket==='hold')$('productHoldVerifyStopBtn').disabled=false;
     try{
@@ -1421,17 +1422,19 @@
           if(item.state==='verified'){verifiedReviewUi[bucket][item.id]='verified';verifiedReviewDetailsUi[bucket][item.id]={verifiedUrl:text(item.verifiedUrl),urlRepaired:item.urlRepaired===true,recoverySource:text(item.recoverySource),reasons:item.reasons||[]};delete unresolvedReviewDetailsUi[bucket][item.id];totals.verified++;}else if(operation==='status'&&item.state==='pending'){delete verifiedReviewUi[bucket][item.id];delete verifiedReviewDetailsUi[bucket][item.id];if(item.lastState==='invalid'||item.lastState==='inconclusive')unresolvedReviewDetailsUi[bucket][item.id]={state:item.lastState,reasons:item.reasons||[]};else delete unresolvedReviewDetailsUi[bucket][item.id];totals.skipped++;}
           else if(operation==='verify'){delete verifiedReviewUi[bucket][item.id];delete verifiedReviewDetailsUi[bucket][item.id];unresolvedReviewDetailsUi[bucket][item.id]={state:item.state,reasons:item.reasons||[]};if(item.state==='inconclusive')totals.inconclusive++;else if(item.state==='invalid')totals.invalid++;else totals.skipped++;}
           else if(item.state==='restored'){restoreIds.push(text(item.candidateId));delete verifiedReviewUi[bucket][item.id];delete verifiedReviewDetailsUi[bucket][item.id];delete unresolvedReviewDetailsUi[bucket][item.id];totals.restored++;}
+          else if(item.state==='already_registered'){totals.alreadyRegistered++;}
+          else if(item.state==='preserved'){totals.preserved++;}
           else if(item.state==='failed'){totals.failed++;failures.push(text(item.reason));}
           else totals.skipped++;
         });
-        if(target)target.textContent=(operation==='restore'?'원장 복귀':'검증')+' 처리 '+Math.min(offset+chunk.length,ids.length)+'/'+ids.length+'건 · 등록 '+totals.restored+' · 별도 확인 '+totals.skipped+' · 검사 불가 '+totals.inconclusive+' · 오류 '+totals.failed;
+        if(target)target.textContent=(operation==='restore'?'원장 복귀':'검증')+' 처리 '+Math.min(offset+chunk.length,ids.length)+'/'+ids.length+'건 · 신규 미배치 등록 '+totals.restored+' · 기존 등록 '+totals.alreadyRegistered+' · 관리자 결정 유지 '+totals.preserved+' · 별도 확인 '+totals.skipped+' · 검사 불가 '+totals.inconclusive+' · 오류 '+totals.failed;
       }
       if(operation==='restore'&&autoPlace&&restoreIds.length){
         var placed=await placeNewlyVerifiedCandidates(restoreIds,'검증 정상상품 PSOM 자동 배치',target,{country:freeze.country,subdivision:freeze.region});
         totals.placed=placed.assigned;totals.placeFailed=placed.failed;
       }
       if(operation==='restore'){
-        try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}catch(e){failures.push('관리자 목록 새로고침 실패: '+text(e&&e.message));}
+        try{await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});}catch(e){failures.push('관리자 목록 새로고침 실패: '+text(e&&e.message));}
         if(bucket==='latest')try{await refreshLatestResearchRows(freeze.country,freeze.region,{label:'검증 정상상품 원장 복귀',preserveOnFailure:true});}catch(_e){}
       }
       var n=Object.keys(verifiedReviewUi[bucket]).filter(function(id){return verifiedReviewUi[bucket][id]==='verified';}).length;
@@ -1440,8 +1443,8 @@
       if(list){var pending=Object.keys(verifiedReviewUi[bucket]).filter(function(id){return verifiedReviewUi[bucket][id]==='verified'&&names[id];});list.innerHTML=pending.length?'<details><summary>정상 검증 완료 '+pending.length+'건 · 상품별 결과 확인(복귀 버튼은 별도)</summary>'+pending.map(function(id,i){var detail=verifiedReviewDetailsUi[bucket][id]||{},link=safeProductDetailUrl(detail.verifiedUrl);return '<div class="small">'+(i+1)+'. '+esc(names[id])+' · <span class="pill good">'+(detail.urlRepaired?'동일상품 상세주소 복구 검증':'실상품 정상 검증')+'</span>'+(link?' · '+externalReviewAnchor(link,'검증된 상품 상세페이지 열기','queue-review-link'):'')+(detail.urlRepaired?' · 원장 복귀 시에만 복구 주소 적용':'')+'</div>';}).join('')+'</details>':'<span class="small">정상 검증 완료 항목 없음 · 원장 이동 없음</span>';var unresolved=Object.keys(unresolvedReviewDetailsUi[bucket]).filter(function(id){return names[id]&&verifiedReviewUi[bucket][id]!=='verified';});if(unresolved.length){list.innerHTML+='<details><summary>확인 불가·부적합 '+unresolved.length+'건 · 기존 보류 유지(자동 삭제 없음)</summary>'+unresolved.slice(0,100).map(function(id,i){var d=unresolvedReviewDetailsUi[bucket][id]||{},reasons=(Array.isArray(d.reasons)?d.reasons:[]).map(text).filter(Boolean).slice(0,3);return '<div class="small">'+(i+1)+'. '+esc(names[id])+' · '+esc(d.state==='inconclusive'?'접근 제한·원본 검증 불가':'부적합·상세주소 재확인 필요')+(reasons.length?' · '+esc(reasons.join(' / ')):'')+'</div>';}).join('')+'</details>';}}
       
       var repairedVerified=Object.keys(verifiedReviewDetailsUi[bucket]).filter(function(id){return verifiedReviewUi[bucket][id]==='verified'&&verifiedReviewDetailsUi[bucket][id].urlRepaired===true;}).length;
-      var msg=(operation==='verify'?'AI 검증·분류 완료(이동 없음)':(operation==='status'?'검증 기록 불러오기 완료':'정상 검증상품 원장 복귀 완료'))+' · 정상 검증 '+totals.verified+' · 동일상품 URL 복구 검증 '+repairedVerified+' · 원장 복귀 '+totals.restored+' · 불확실 '+totals.inconclusive+' · 오류/부적합 '+totals.invalid+' · 제외 '+totals.skipped+' · 실패 '+totals.failed+(operation==='restore'?(autoPlace?' · PSOM 신규 배치 '+(totals.placed||0)+' · 배치 실패 '+(totals.placeFailed||0):' · 미배치 후보로 등록'):' · 원장 상태 유지')+(failures.length?' · '+failures.slice(0,2).join(' / '):'');
-      if(operation==='restore'&&bucket==='latest'&&!totals.restored&&ids.length)msg+=' · 이관 0건: 기존 후보 상태나 검증 근거를 확인하세요.';
+      var msg=(operation==='verify'?'AI 검증·분류 완료(이동 없음)':(operation==='status'?'검증 기록 불러오기 완료':'정상 검증상품 원장 복귀 완료'))+' · 정상 검증 '+totals.verified+' · 동일상품 URL 복구 검증 '+repairedVerified+' · 신규 미배치 등록 '+totals.restored+' · 기존 등록 '+totals.alreadyRegistered+' · 기존 관리자 결정 유지 '+totals.preserved+' · 불확실 '+totals.inconclusive+' · 오류/부적합 '+totals.invalid+' · 제외 '+totals.skipped+' · 실패 '+totals.failed+(operation==='restore'?(autoPlace?' · PSOM 신규 배치 '+(totals.placed||0)+' · 배치 실패 '+(totals.placeFailed||0):' · 미배치 후보로 등록'):' · 원장 상태 유지')+(failures.length?' · '+failures.slice(0,2).join(' / '):'');
+      if(operation==='restore'&&bucket==='latest'&&!totals.restored&&ids.length)msg+=' · 신규 이관 0건: 기존 등록·관리자 결정·검증 근거를 확인하세요.';
       if(target)target.textContent=msg;show(msg,totals.failed||failures.length||(operation==='restore'&&bucket==='latest'&&!totals.restored)?'warn':'ok');
       if(bucket==='hold'){await refreshHoldReviewInventory();renderProductExcludedTable('hold');}else renderLatestProductRows();
     }finally{productVerifiedFlowBusy=false;if(bucket==='hold'){productExclusionActionActive=false;syncProductExclusionSelection('hold');if($('productHoldVerifyStopBtn'))$('productHoldVerifyStopBtn').disabled=true;}else{latestQueueActionActive=false;syncLatestProductQueueControls();}}
