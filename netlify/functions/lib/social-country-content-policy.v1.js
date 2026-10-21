@@ -278,9 +278,33 @@ function applyToPlatformPolicy(basePolicy, routeOrCountry, platform) {
       if (baseQuery) queries.push(baseQuery);
     }
   }
+  // Preserve the legacy queries as a fallback, but interleave short video
+  // discovery terms early in each cursor cycle. The old localized queries
+  // could put 'official public latest high quality' into EVERY provider query,
+  // excluding otherwise valid public reels/videos before policy validation.
+  // Only Social discovery is affected; shared SearchBank and PSOM stay intact.
+  if (["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].includes(platformName)) {
+    const legacy = queries.slice();
+    const mediaHint = {
+      instagram: "reel", tiktok: "video", facebook: "reel",
+      snapchat: "spotlight", bilibili: "", douyin: ""
+    }[platformName];
+    const shortBase = baseQueries.map((query) => {
+      if (["bilibili", "douyin"].includes(platformName)) return text(query);
+      const topic = text(query)
+        .replace(/\b(?:official|public|latest|popular|high quality|trending|recent|active|influencer|creator|post|posts|videos?|reels?|spotlight)\b/gi, " ")
+        .replace(/\s+/g, " ").trim();
+      return unique([topic, mediaHint]).join(" ").trim();
+    }).filter(Boolean);
+    queries.length = 0;
+    for (let index = 0; index < Math.max(shortBase.length, legacy.length); index++) {
+      if (index < shortBase.length) queries.push(shortBase[index]);
+      if (index < legacy.length) queries.push(legacy[index]);
+    }
+  }
   return Object.assign({}, base, {
     categories: unique((base.categories || []).concat(p.topics.map((t) => t.key))),
-    collectionQueries: queries,
+    collectionQueries: unique(queries),
     countryContentPolicy: {
       version: VERSION,
       countryCode: p.countryCode,

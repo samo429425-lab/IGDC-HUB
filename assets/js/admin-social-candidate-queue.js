@@ -20,7 +20,9 @@
     ["social-bilibili", "Bilibili / 哔哩哔哩", "bilibili"],
     ["social-douyin", "Douyin / 抖音", "douyin"],
   ];
-  var COLLECTOR_JOB_VERSION = 10,
+  var COLLECTOR_JOB_VERSION = 11,
+    FULL_RESEARCH_ROUNDS = 3,
+    SECTION_BATCHES_PER_ROUND = 4,
     STANDARD_EMPTY_BATCH_LIMIT = 8,
     LOW_YIELD_EMPTY_BATCH_LIMIT = 8,
     COLLECTOR_CURSOR_KEY = "igdc.socialCollector.discoveryCursors.v2";
@@ -1689,7 +1691,7 @@
     }
   }
   function jobKey() {
-    return "igdc.socialCollector.job.v6.full-policy-content-six-sections";
+    return "igdc.socialCollector.job.v7.seven-section-multi-round";
   }
   function loadJob() {
     try {
@@ -1744,9 +1746,9 @@
       cap = lowYield ? LOW_YIELD_EMPTY_BATCH_LIMIT : STANDARD_EMPTY_BATCH_LIMIT,
       reported = Number(j && (j.discoveryCatalogSize || j.catalogSize) || 0),
       allMode = !!(j && j.runMode === "all"),
-      fairCap = allMode ? 4 : cap;
-    // A full six-section run must never spend dozens of empty network calls on
-    // TikTok/Facebook before Bilibili/Douyin are even reached. Repeated runs
+      fairCap = allMode ? SECTION_BATCHES_PER_ROUND : cap;
+    // A full seven-section run allocates a fair budget to every platform; repeated rounds
+    // prevent TikTok/Facebook exhausting the budget before Bilibili/Douyin are reached. Runs
     // continue from a persisted per-section cursor, so a small fair budget here
     // increases breadth over time instead of repeating the first queries.
     if (reported > 0) fairCap = Math.min(fairCap, reported);
@@ -2061,8 +2063,7 @@
     );
     $("collectorProgress").classList.remove("hidden");
     $("collectorProgressText").textContent =
-      j.index +
-      1 +
+      (j.runMode === "all" ? (Number(j.round || 0) * order.length + j.index + 1) : j.index + 1) +
       "/" +
       j.total +
       " · " +
@@ -2179,7 +2180,7 @@
       }[text(live.providerGroupName)] || text(live.providerGroupName);
     return d;
   }
-  async function collectSection(section, dryRun, j) {
+  async function collectSection(section, dryRun, j, roundBatchLimit, finalRound) {
     var known = new Set(
       rows
         .map(function (r) {
@@ -2197,10 +2198,13 @@
     j.registrySweepDone = true;
     j.registrySweepActive = false;
     var maxEmpty = sectionEmptyBatchLimit(section, j);
+    var roundsStartingBatch = Number(j.batch || 0);
+    var boundedRound = Number(roundBatchLimit || 0) > 0;
     while (
       !stopRequested &&
       j.sectionCount < j.target &&
-      j.emptyBatches < maxEmpty
+      j.emptyBatches < maxEmpty &&
+      (!boundedRound || Number(j.batch || 0) - roundsStartingBatch < roundBatchLimit)
     ) {
       j.qualitySweepActive = false;
       j.batch += 1;
@@ -2217,7 +2221,10 @@
       if (dryRun) break;
       if (!stopRequested && j.sectionCount < j.target) await wait(650);
     }
-    var lowYieldRescue = /^social-(?:tiktok|facebook|snapchat|bilibili|douyin)$/.test(section) && Number(j.newlyFound || 0) > 0;
+    // Empty batches must not suppress the final native-provider rescue. In the
+    // former implementation a zero-result section could never enter this phase.
+    var lowYieldRescue = /^social-(?:tiktok|facebook|snapchat|bilibili|douyin)$/.test(section) &&
+      (!boundedRound || !!finalRound);
     if (
       !dryRun &&
       !stopRequested &&
@@ -2275,6 +2282,8 @@
     );
     return {
       schemaVersion: COLLECTOR_JOB_VERSION,
+      round: 0,
+      totalRounds: FULL_RESEARCH_ROUNDS,
       runMode: runMode || "section",
       index: index || 0,
       total: total || 1,
@@ -2379,108 +2388,105 @@
     }
   }
   async function collectAll(skipConfirm) {
-    if (
-      !skipConfirm && !confirm(
-        "각 SNS 섹션을 " +
-          $("collectorBatchSize").value +
-          "개 단위로 PSOM·SearchBank 기준 최신 콘텐츠를 먼저 조사하고, 섹션별 탐색 한도 안에서 120개(공개 100 + 예비 20) 운영 풀을 채운 뒤 다음 SNS로 자동 진행할까요? 인플루언서 등록부는 검색 의존 대상이 아니라 발견된 우수 제작자의 보조 데이터로만 유지합니다. 한 SNS의 일반 검색 오류는 기록하고 다음 SNS를 계속 조사합니다.",
-      )
-    )
-      return;
+    if (!skipConfirm && !confirm(
+      "Social 7개 섹션을 " + FULL_RESEARCH_ROUNDS + "차례 순환하면서 각 섹션을 " +
+      SECTION_BATCHES_PER_ROUND + "묶음씩 검색합니다. 기존 후보는 삭제하지 않고, " +
+      "각 섹션의 미달 수량을 보충하며 실패한 SNS는 기록한 후 다음 SNS로 진행합니다. 계속할까요?"
+    )) return false;
     hide();
     stopRequested = false;
     liveReports = [];
     lockCollection(true);
-    var j = loadJob(),
-      resume = !!(
-        j && j.paused && j.runMode === "all" &&
-        Number(j.schemaVersion) === COLLECTOR_JOB_VERSION &&
-        order.indexOf(text(j.section)) >= 0 &&
-        Number(j.index) >= 0 && Number(j.index) < order.length
-      );
+    var j = loadJob();
+    var resume = !!(j && j.paused && j.runMode === "all" &&
+      Number(j.schemaVersion) === COLLECTOR_JOB_VERSION &&
+      Number(j.round) >= 0 && Number(j.round) < FULL_RESEARCH_ROUNDS &&
+      Number(j.index) >= 0 && Number(j.index) < order.length &&
+      order.indexOf(text(j.section)) >= 0);
     if (!resume) {
-      j = newJob(order[0], 0, order.length, "all");
+      j = newJob(order[0], 0, order.length * FULL_RESEARCH_ROUNDS, "all");
+      j.round = 0;
     } else {
       j.paused = false;
-      j.total = order.length;
-      j.target = 120;
-      j.sectionFailures = Array.isArray(j.sectionFailures) ? j.sectionFailures : [];
     }
-    var failed = false, completedWithErrors = false;
+    j.total = order.length * FULL_RESEARCH_ROUNDS;
+    j.totalRounds = FULL_RESEARCH_ROUNDS;
+    j.sectionFailures = Array.isArray(j.sectionFailures) ? j.sectionFailures : [];
+    var failed = false;
+    var completedWithErrors = false;
     try {
-      for (; j.index < order.length && !stopRequested; j.index++) {
-        var continuing = resume && j.section === order[j.index];
-        j.section = order[j.index];
-        if (!continuing) {
-          j.target = 120;
-          j.batchSize = Math.max(
-            8,
-            Math.min(12, Number($("collectorBatchSize").value) || 10),
-          );
-          j.countryCode = selectedCountry();
-          j.regionId = text($("collectorRegion").value);
-          j.scopeMode = scopeMode();
-          j.languages = text($("collectorLanguages").value);
-          j.sectionCount = sectionCount(j.section);
-          j.batch = 0;
-          j.queryCursor = loadDiscoveryCursor(j.section);
-          j.catalogSize = 15;
-          j.discoveryCatalogSize = 12;
-          j.emptyBatches = 0;
-          j.newlyFound = 0;
-          j.registryCursor = 0;
-          j.registrySeedCount = 0;
-          j.registrySweepBatches = 0;
-          j.registrySweepTotal = 0;
-          j.registrySweepDone = true;
-          j.registrySweepActive = false;
-          j.qualitySweepBatches = 0;
-          j.qualityEmptyBatches = 0;
-          j.qualitySweepTarget = 2;
-          j.qualitySweepDone = false;
-          j.qualitySweepActive = false;
-          j.lastReason = "";
+      for (; j.round < FULL_RESEARCH_ROUNDS && !stopRequested; j.round++) {
+        for (; j.index < order.length && !stopRequested; j.index++) {
+          var sectionKey = order[j.index];
+          var continuing = resume && j.section === sectionKey;
+          j.section = sectionKey;
+          if (!continuing) {
+            j.target = 120;
+            j.batchSize = Math.max(8, Math.min(12, Number($("collectorBatchSize").value) || 10));
+            j.countryCode = selectedCountry();
+            j.regionId = text($("collectorRegion").value);
+            j.scopeMode = scopeMode();
+            j.languages = text($("collectorLanguages").value);
+            j.sectionCount = sectionCount(sectionKey);
+            j.batch = 0;
+            j.queryCursor = loadDiscoveryCursor(sectionKey);
+            j.discoveryCatalogSize = 12;
+            j.emptyBatches = 0;
+            j.newlyFound = 0;
+            j.qualitySweepBatches = 0;
+            j.qualityEmptyBatches = 0;
+            j.qualitySweepTarget = 2;
+            j.qualitySweepDone = false;
+            j.qualitySweepActive = false;
+            j.lastReason = "";
+          }
+          $("collectorState").textContent =
+            (j.round + 1) + "/" + FULL_RESEARCH_ROUNDS + "차 순환 · " +
+            (j.index + 1) + "/" + order.length + " · " + label(sectionKey) + " 검색 중";
+          try {
+            // Each round advances a different section's saved query cursor. An
+            // empty result in one round never prevents subsequent passes.
+            await collectSection(sectionKey, false, j, SECTION_BATCHES_PER_ROUND,
+              j.round === FULL_RESEARCH_ROUNDS - 1);
+          } catch (sectionError) {
+            if (fatalCollectionError(sectionError)) throw sectionError;
+            completedWithErrors = true;
+            j.sectionFailures.push({
+              round: j.round + 1,
+              sectionKey: sectionKey,
+              platform: label(sectionKey),
+              message: text(sectionError && sectionError.message) || "section_collection_failed",
+              status: Number(sectionError && sectionError.status) || null,
+              at: new Date().toISOString()
+            });
+            // Avoid retrying the same failed query in the next round.
+            j.queryCursor = Number(j.queryCursor || 0) + 1;
+            saveDiscoveryCursor(sectionKey, j.queryCursor);
+            j.lastReason = "section_error_continue_next_round";
+          }
+          j.done = j.round * order.length + j.index + 1;
+          resume = false;
+          saveJob(j);
+          if (stopRequested) break;
+          await wait(450);
         }
-        $("collectorState").textContent =
-          "전체 " + (j.index + 1) + "/" + order.length + " · " + label(j.section) + " 검색 중";
-        try {
-          await collectSection(j.section, false, j);
-        } catch (sectionError) {
-          if (fatalCollectionError(sectionError)) throw sectionError;
-          completedWithErrors = true;
-          j.sectionFailures.push({
-            sectionKey: j.section,
-            platform: label(j.section),
-            message: text(sectionError && sectionError.message) || "section_collection_failed",
-            status: Number(sectionError && sectionError.status) || null,
-            gateway: sectionError && sectionError.payload && sectionError.payload.liveCollection
-              ? sectionError.payload.liveCollection.gateway || null
-              : null,
-            payloadError: sectionError && sectionError.payload
-              ? {
-                  error: text(sectionError.payload.error),
-                  message: text(sectionError.payload.message),
-                  accepted: Number(sectionError.payload.accepted || 0),
-                  saved: Number(sectionError.payload.saved || 0),
-                }
-              : null,
-            at: new Date().toISOString(),
-          });
-          // One provider/platform must not block the remaining Social sections.
-          // Save the failure, advance the loop, and continue with the next SNS.
-          j.lastReason = "section_error_continue_next";
+        if (stopRequested) break;
+        if (!stopRequested) {
+          j.index = 0;
+          // Re-read actual DB rows between passes so the next round sees all
+          // successful inserts/upserts, not only the limited itemsPreview.
+          try { await refresh(); } catch (_refreshError) {}
+          saveJob(j);
         }
-        j.done = j.index + 1;
-        resume = false;
-        saveJob(j);
       }
-      j.paused = stopRequested || j.index < order.length;
-      saveJob(j);
+      j.paused = stopRequested || j.round < FULL_RESEARCH_ROUNDS;
       if (j.paused) {
-        show(
-          "수집을 일시정지했습니다. 전체 6개 섹션 버튼을 다시 누르면 현재 섹션부터 이어집니다.",
-          "ok",
-        );
+        // A completed section must resume at the next one, not repeat the
+        // same query batch. Persist this exact section/round cursor.
+        if (j.index >= order.length) j.index = 0;
+        j.section = order[j.index] || order[0];
+        saveJob(j);
+        show("7개 SNS 반복 수집을 일시정지했습니다. 다시 누르면 현재 차례부터 재개합니다.", "ok");
       } else {
         clearJob();
         waitingViewMode = "new";
@@ -2488,44 +2494,31 @@
         openDetailSection = order[0] || "";
         await refresh();
         diagnostic({
-          reportType: "igdc-social-batch-collection-report",
+          reportType: "igdc-social-seven-section-multi-round-report",
           generatedAt: new Date().toISOString(),
           summary: j,
-          sectionFailures: j.sectionFailures || [],
-          sections: liveReports.map(function (x) {
-            return x.liveCollection || x;
-          }),
+          totalRounds: FULL_RESEARCH_ROUNDS,
+          sectionFailures: j.sectionFailures,
+          sections: liveReports.map(function (x) { return x.liveCollection || x; })
         });
-        show(
-          "전체 6개 섹션 순차 수집 완료: 검색 " +
-            j.searched +
-            "건, 최신 콘텐츠 후보 " +
-            j.direct +
-            "건, 저장 응답 " +
-            j.saved +
-            "건" +
-            (j.sectionFailures && j.sectionFailures.length
-              ? ". 섹션 오류 " + j.sectionFailures.length + "건은 기록하고 다음 SNS까지 계속 진행했습니다."
-              : "."),
-          completedWithErrors ? "warn" : "ok",
-        );
+        show("7개 SNS " + FULL_RESEARCH_ROUNDS + "차 순환 완료: 검색 " +
+          j.searched + "건, 실제 콘텐츠 후보 " + j.direct +
+          "건, 저장 응답 " + j.saved + "건" +
+          (j.sectionFailures.length ? ". 오류 " + j.sectionFailures.length +
+           "건은 기록하고 다음 섹션으로 계속 진행했습니다." : "."),
+          completedWithErrors || j.sectionFailures.length ? "warn" : "ok");
       }
-    } catch (e) {
+    } catch (error) {
       failed = true;
       j.paused = true;
+      j.section = order[j.index] || order[0];
       saveJob(j);
-      $("collectorState").textContent = collectionErrorState(e);
-      show(
-        (e.message || "수집 오류") + " · 관리자 인증/공통 경로 오류이므로 현재 지점을 저장하고 중단했습니다.",
-        "warn",
-      );
+      $("collectorState").textContent = collectionErrorState(error);
+      show((error.message || "수집 오류") + " · 인증 또는 공통 경로 오류로 작업 위치를 보존했습니다.", "warn");
     } finally {
       lockCollection(false);
       stopRequested = false;
-      if (!failed)
-        $("collectorState").textContent = j.paused
-          ? "일시정지됨"
-          : "수집 대기";
+      if (!failed) $("collectorState").textContent = j.paused ? "일시정지됨" : "수집 대기";
     }
     return !failed && !j.paused;
   }
@@ -3286,7 +3279,7 @@
   }
 
   async function actualApply(sectionKey, skipConfirm, exactIds, publishMode, requestedSections) {
-    var target = sectionKey ? label(sectionKey) : "전체 6개 섹션",
+    var target = sectionKey ? label(sectionKey) : "전체 7개 섹션",
       scope = currentScope(),
       scopeName =
         (scope.country &&
@@ -3569,7 +3562,7 @@
   async function actualUnapplyAll(sectionKey) {
     var target = sectionKey
       ? label(sectionKey) + " 섹션 전체"
-      : "전체 6개 섹션";
+      : "전체 7개 섹션";
     try {
       var ids = await currentPublishedIds(sectionKey);
       if (!ids.length) {

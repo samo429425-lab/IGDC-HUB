@@ -743,9 +743,12 @@ function scopedQueries(plan, cursor, passes, route) {
     // queries. The section's own Chinese topic is the research seed; do not
     // combine it with a second independent keyword catalog.
     const chineseNativeTopic = ["bilibili", "douyin"].includes(plan.platform);
-    const sparseTerm = plan.platform !== "snapchat" && !chineseNativeTopic && sparseTerms.length && absoluteIndex % 2 === 0
-      ? sparseTerms[absoluteIndex % sparseTerms.length]
-      : "";
+    // Dedicated short content queries now sit beside the older searches. Do
+    // not AND a second full discovery topic onto most of them: one genuinely
+    // relevant public result is better than zero matches from long phrases.
+    const sparseTerm = plan.platform !== "snapchat" && !chineseNativeTopic &&
+      sparseTerms.length && absoluteIndex % 8 === 3
+      ? sparseTerms[absoluteIndex % sparseTerms.length] : "";
 
     // Keep each provider query short. The old query builder appended country,
     // language, global intent and a whole default topic catalog to every query,
@@ -764,7 +767,7 @@ function scopedQueries(plan, cursor, passes, route) {
     // Keep discovery broad. Quality and topical trust are evaluated after
     // URLs are found; English marketing qualifiers must not be a Chinese
     // platform's search prerequisite.
-    const discoveryIntent = plan.platform !== "snapchat" && !chineseNativeTopic && absoluteIndex % 4 === 3
+    const discoveryIntent = plan.platform !== "snapchat" && !chineseNativeTopic && absoluteIndex % 8 === 7
       ? DISCOVERY_INTENT_TERMS[absoluteIndex % DISCOVERY_INTENT_TERMS.length]
       : "";
     const value = [baseQuery, sparseTerm, localeHint, discoveryIntent]
@@ -1364,7 +1367,9 @@ function publicSearchQuery(plan, queryText, registrySeed) {
   const needle = registrySearchNeedle(registrySeed, platform);
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
   if (platform === "tiktok") return [base, exact, "site:tiktok.com", "video"].filter(Boolean).join(" ");
-  if (platform === "facebook") return [base, exact, "site:facebook.com", "reel video creator public"].filter(Boolean).join(" ");
+  // Social-only SearchBank query: remove redundant creator/public qualifiers.
+  // Actual Facebook reel/video/post validation still runs after discovery.
+  if (platform === "facebook") return [base, exact, "site:facebook.com", "reel"].filter(Boolean).join(" ");
   if (platform === "snapchat") {
     const topic = base.replace(/\b(?:snapchat|spotlight|video|videos|shorts|official|public|latest|popular|creator|high quality)\b/gi, " ")
       .replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
@@ -1386,7 +1391,7 @@ function directProviderQuery(plan, queryText, registrySeed) {
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
   if (platform === "instagram") return [topic, exact, "site:instagram.com", "inurl:reel"].filter(Boolean).join(" ");
   if (platform === "tiktok") return [topic, exact, "site:tiktok.com", "inurl:video"].filter(Boolean).join(" ");
-  if (platform === "facebook") return [topic, exact, "site:facebook.com", "inurl:reel OR inurl:videos"].filter(Boolean).join(" ");
+  if (platform === "facebook") return [topic, exact, "site:facebook.com", "reel"].filter(Boolean).join(" ");
   if (platform === "snapchat") {
     const shortTopic = topic.replace(/\b(?:spotlight|video|videos|shorts|official|public|latest|popular|creator|high quality)\b/gi, " ")
       .replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
