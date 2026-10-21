@@ -252,13 +252,13 @@ function applyToPlatformPolicy(basePolicy, routeOrCountry, platform) {
     baseQueries = baseQueries.filter((query) => !NONPOLITICAL_QUERY_BLOCK.test(text(query)));
   }
   const platformName = text(platform).toLowerCase();
-  const sparseVideoPlatform = ["tiktok", "bilibili", "douyin"].includes(platformName);
+  const sparseVideoPlatform = ["tiktok", "snapchat", "bilibili", "douyin"].includes(platformName);
   // Discovery on sparse video indices must begin with short, platform-native
   // actual-content topics rather than two localized "official latest high
   // quality" conjunctive queries for every single base query. IP/country is
   // a downstream ranking signal, never the condition to discover a video.
-  const topicSearchQueries = NONPOLITICAL_SOCIAL_QUERY_PLATFORMS.has(platformName)
-    ? [] // Prefer native Chinese search; regional English/Korean topics hide videos.
+  const topicSearchQueries = platformName === "snapchat" || NONPOLITICAL_SOCIAL_QUERY_PLATFORMS.has(platformName)
+    ? [] // Spotlight and Chinese video discovery use short native/content topics; locale is ranking, not a search condition.
     : topicTerms.map((term) =>
         sparseVideoPlatform
           ? [platform, term].filter(Boolean).join(" ")

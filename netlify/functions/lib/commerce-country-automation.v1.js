@@ -4873,6 +4873,48 @@ async function heldCandidateNoPublicAssignment(candidate,scope){
   // Do not clear URLs while ANY slot assignment remains, regardless of region.
   return array(assignments).length===0;
 }
+// Reuse only evidence persisted by THIS product-research job. A browser-provided
+// "inspected" flag never authorizes candidate registration. If the durable
+// inspection proof is stale/incomplete, inspect the exact detail page again.
+function reusableLatestResearchInspection(sourceInput,job,url){
+  const source=plain(sourceInput),checked=Date.parse(text(source.inspectedAt)),now=Date.now();
+  if(text(source.researchCycleJobId)!==text(job&&job.jobId)||!Number.isFinite(checked)||checked>now+300000||now-checked>=VERIFIED_REVIEW_MAX_AGE)return false;
+  const canonical=ProductRanking.canonicalProductUrl(url),observed=ProductRanking.canonicalProductUrl(productUrl(source));
+  if(!canonical||canonical!==observed||!ProductRanking.isSpecificProductUrl(canonical))return false;
+  if(source.inspectionComplete!==true||source.productPageLive!==true||source.sameSupplierSite!==true||!productImageUrl(source))return false;
+  const title=first(source.productName,source.title);
+  if(!title||ProductRanking.isGenericProductName(title)||candidateRuntimeHealth(source).live!==true)return false;
+  return true;
+}
+async function verifyLatestDuringExplicitRestore(scope,actor,id,sourceInput,url,job){
+  // The operator has explicitly requested restoration; this path cannot run
+  // from ordinary research, background automation or a preview-only action.
+  const source=plain(sourceInput),reuse=reusableLatestResearchInspection(source,job,url);
+  let inspected=source;
+  if(!reuse){
+    let response;
+    try{response=await RegionalSelector.inspectProductResearchStep([Object.assign({},source,{id,candidateId:id})],{
+      country:scope.country,region:scope.region,timeoutMs:5500,allowSupplierRecovery:false
+    });}catch(error){return{ok:false,reason:"current_product_verification_unavailable"};}
+    inspected=plain(array(response&&response.items)[0]);
+  }
+  const exactUrl=ProductRanking.canonicalProductUrl(url),confirmedUrl=ProductRanking.canonicalProductUrl(productUrl(inspected));
+  const title=first(inspected.productName,inspected.title);
+  if(!exactUrl||exactUrl!==confirmedUrl||!ProductRanking.isSpecificProductUrl(exactUrl)||
+     inspected.inspectionComplete!==true||inspected.productPageLive!==true||inspected.sameSupplierSite!==true||
+     !productImageUrl(inspected)||!title||ProductRanking.isGenericProductName(title)||
+     candidateRuntimeHealth(inspected).live!==true){
+    return{ok:false,reason:reuse?"stored_inspection_failed_quality_gate":"fresh_exact_product_verification_required"};
+  }
+  const checkedAt=iso(),record={state:"verified",checkedAt,productUrl:url,
+    sourceUrlFingerprint:sha256(exactUrl),jobId:job.jobId,verifiedUrl:url,urlRepaired:false,
+    verifiedProductName:title,verifiedImageUrl:productImageUrl(inspected),
+    recoverySource:reuse?"same_cycle_inspection_reused":"live_detail_inspection_on_explicit_restore",
+    reasons:[reuse?"same_cycle_inspection_evidence_reused":"exact_detail_url_live_reverified"],
+    inspectionComplete:true,productPageLive:true,originalLedgerPreserved:true,automaticRestoration:false};
+  await verifiedReviewSave(scope,actor,"latest",id,record);
+  return{ok:true,proof:record,reused:reuse};
+}
 async function productVerifiedReviewAction(actorId,input){
   const scope=researchScope(input),actor=text(actorId)||"administrator",bucket=lower(input&&input.bucket)==="latest"?"latest":"hold",operation=lower(input&&input.operation),ids=Array.from(new Set(array(input&&input.ids).map(text).filter(Boolean))).slice(0,operation==="inventory"?100:8);
   if(!ids.length){const error=new Error("검증하거나 복귀할 상품을 선택하세요.");error.statusCode=400;throw error;}
@@ -4952,8 +4994,16 @@ async function productVerifiedReviewAction(actorId,input){
         results.push({id,state:"incomplete",reasons:approved.reasons});continue;
       }
       if(["delete_url","return_hold"].includes(operation)){results.push({id,state:"skipped",reason:"classify_incomplete_first"});continue;}
-      const fresh=verifiedReviewFresh(proof,url,jobId)&&
+      let fresh=verifiedReviewFresh(proof,url,jobId)&&
         (bucket!=="hold"||!proof.candidateTitle||normalizedHeldEvidenceTitle(proof.candidateTitle)===normalizedHeldEvidenceTitle(candidate.title));
+      // Explicit latest-list restore can consume recent, server-persisted
+      // research inspection evidence. Without it, re-verify the exact product
+      // URL before any ledger write; the separate Verify button is optional.
+      if(operation==="restore"&&bucket==="latest"&&!fresh){
+        const prepared=await verifyLatestDuringExplicitRestore(scope,actor,id,source,url,job);
+        if(!prepared.ok){results.push({id,state:"skipped",reason:prepared.reason});continue;}
+        fresh=verifiedReviewFresh(prepared.proof,url,jobId);
+      }
       if(operation==="status"){
         results.push({id,state:fresh?"verified":"pending",checkedAt:proof.checkedAt||null,
           verifiedUrl:fresh?proof.verifiedUrl||url:null,urlRepaired:fresh&&proof.urlRepaired===true,recoverySource:fresh?proof.recoverySource||"":null,

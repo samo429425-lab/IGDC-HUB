@@ -743,7 +743,7 @@ function scopedQueries(plan, cursor, passes, route) {
     // queries. The section's own Chinese topic is the research seed; do not
     // combine it with a second independent keyword catalog.
     const chineseNativeTopic = ["bilibili", "douyin"].includes(plan.platform);
-    const sparseTerm = !chineseNativeTopic && sparseTerms.length && absoluteIndex % 2 === 0
+    const sparseTerm = plan.platform !== "snapchat" && !chineseNativeTopic && sparseTerms.length && absoluteIndex % 2 === 0
       ? sparseTerms[absoluteIndex % sparseTerms.length]
       : "";
 
@@ -757,14 +757,14 @@ function scopedQueries(plan, cursor, passes, route) {
     // hint so Bilibili/Douyin/TikTok/Facebook can still discover strong global
     // content instead of repeatedly AND-ing a Korea/locale term into the query.
     const globalComplementPass = plan.platform !== "youtube" && absoluteIndex % 2 === 0;
-    if (!globalComplementPass && !chineseNativeTopic) {
+    if (!globalComplementPass && !chineseNativeTopic && plan.platform !== "snapchat") {
       if (absoluteIndex % 3 === 0) localeHint = countryQueryTerm(route);
       else if (absoluteIndex % 3 === 1) localeHint = languageQueryTerm(route);
     }
     // Keep discovery broad. Quality and topical trust are evaluated after
     // URLs are found; English marketing qualifiers must not be a Chinese
     // platform's search prerequisite.
-    const discoveryIntent = !chineseNativeTopic && absoluteIndex % 4 === 3
+    const discoveryIntent = plan.platform !== "snapchat" && !chineseNativeTopic && absoluteIndex % 4 === 3
       ? DISCOVERY_INTENT_TERMS[absoluteIndex % DISCOVERY_INTENT_TERMS.length]
       : "";
     const value = [baseQuery, sparseTerm, localeHint, discoveryIntent]
@@ -1365,7 +1365,11 @@ function publicSearchQuery(plan, queryText, registrySeed) {
   const exact = needle ? '"' + needle.replace(/"/g, "") + '"' : "";
   if (platform === "tiktok") return [base, exact, "site:tiktok.com", "video"].filter(Boolean).join(" ");
   if (platform === "facebook") return [base, exact, "site:facebook.com", "reel video creator public"].filter(Boolean).join(" ");
-  if (platform === "snapchat") return [base, exact, "site:snapchat.com", "inurl:spotlight", "spotlight video"].filter(Boolean).join(" ");
+  if (platform === "snapchat") {
+    const topic = base.replace(/\b(?:snapchat|spotlight|video|videos|shorts|official|public|latest|popular|creator|high quality)\b/gi, " ")
+      .replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
+    return [topic, exact, "site:snapchat.com", "spotlight"].filter(Boolean).join(" ");
+  }
   if (platform === "bilibili") return [base, exact, "site:bilibili.com", "视频"].filter(Boolean).join(" ");
   if (platform === "douyin") return [base, exact, "site:douyin.com", "视频"].filter(Boolean).join(" ");
   return [base, cfg.host ? "site:" + cfg.host : "", cfg.hint || "", "public latest"].filter(Boolean).join(" ");
@@ -1383,7 +1387,11 @@ function directProviderQuery(plan, queryText, registrySeed) {
   if (platform === "instagram") return [topic, exact, "site:instagram.com", "inurl:reel"].filter(Boolean).join(" ");
   if (platform === "tiktok") return [topic, exact, "site:tiktok.com", "inurl:video"].filter(Boolean).join(" ");
   if (platform === "facebook") return [topic, exact, "site:facebook.com", "inurl:reel OR inurl:videos"].filter(Boolean).join(" ");
-  if (platform === "snapchat") return [topic, exact, "site:snapchat.com", "inurl:spotlight"].filter(Boolean).join(" ");
+  if (platform === "snapchat") {
+    const shortTopic = topic.replace(/\b(?:spotlight|video|videos|shorts|official|public|latest|popular|creator|high quality)\b/gi, " ")
+      .replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
+    return [shortTopic, exact, "site:snapchat.com", "spotlight"].filter(Boolean).join(" ");
+  }
   if (platform === "bilibili") return [topic || "热门", exact, "site:bilibili.com", "inurl:video", "哔哩哔哩"].filter(Boolean).join(" ");
   if (platform === "douyin") return [topic || "热门", exact, "site:douyin.com", "inurl:video", "抖音"].filter(Boolean).join(" ");
   return publicSearchQuery(plan, queryText, registrySeed);
@@ -1395,6 +1403,11 @@ function directProviderBroadQuery(plan, queryText) {
     .replace(/\b(?:popular|public|latest|creator|official|high quality|active|trending|recent)\b/gi, " ")
     .replace(/\s+/g, " ").trim();
   const topic = clean.split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
+  if (platform === "snapchat") {
+    const shortTopic = topic.replace(/\b(?:spotlight|video|videos|shorts|official|public|latest|popular|creator|high quality)\b/gi, " ")
+      .replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).slice(0, 4).join(" ");
+    return [shortTopic, "snapchat spotlight"].filter(Boolean).join(" ");
+  }
   if (platform === "tiktok") return [topic, "site:tiktok.com", "video"].filter(Boolean).join(" ");
   if (platform === "facebook") return [topic, "site:facebook.com", "reel video"].filter(Boolean).join(" ");
   if (platform === "douyin") return [topic || "热门", "site:douyin.com", "抖音 视频"].filter(Boolean).join(" ");

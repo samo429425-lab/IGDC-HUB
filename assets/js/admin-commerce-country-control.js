@@ -1395,12 +1395,16 @@
     if(operation==='restore'){
       if(bucket==='hold'&&scopeMode!=='all'&&!ids.length){show('정상 검증 완료 목록에서 복귀할 상품을 선택하거나 모든 페이지 전체 선택을 눌러주세요.','warn');return;}
       var verified=verifiedReviewUi[bucket]||{};
-      if(!ids.length)ids=rows.map(function(r){return bucket==='hold'?managementRowId(r):latestProductKey(r);}).filter(function(id){return verified[id]==='verified';});
-      else ids=ids.filter(function(id){return verified[id]==='verified';});
-      if(!ids.length){show('먼저 AI 검증을 실행해 정상 판정된 상품을 확인하세요. 미검증·접속 제한 상품은 복귀할 수 없습니다.','warn');return;}
+      // Hold retains the operator's two-step proof gate. Latest-list restore
+      // delegates fresh/durable product validation to the SERVER before writing.
+      if(bucket==='hold'){
+        if(!ids.length)ids=rows.map(function(r){return managementRowId(r);}).filter(function(id){return verified[id]==='verified';});
+        else ids=ids.filter(function(id){return verified[id]==='verified';});
+        if(!ids.length){show('먼저 AI 검증을 실행해 정상 판정된 보류 상품을 확인하세요.','warn');return;}
+      }else if(!ids.length){show('복귀할 최신 상품을 선택하세요.','warn');return;}
     }else if(!ids.length){show('먼저 검증할 상품을 선택하세요. 전체 검증은 목록 전체 선택을 누른 뒤 실행할 수 있습니다.','warn');return;}
     if(bucket==='latest'&&all&&!latestProductRowsComplete){show('최신 목록 로딩이 완료되지 않아 전체 검증을 시작하지 않았습니다.','warn');return;}
-    if(operation==='restore'&&!window.confirm('정상 검증된 '+ids.length+'건만 전체 상품 후보·배치 관리 목록으로 복귀시킵니다. 기존 배치와 프론트는 유지합니다. 계속할까요?'))return;
+    if(operation==='restore'&&!window.confirm((bucket==='latest'?'선택한 최신 상품 '+ids.length+'건 중 정상 상세검사 근거가 확인되는 상품만 복귀시킵니다. 근거가 오래되거나 부족하면 실제 상세페이지를 다시 확인하고, 부적합·접근 제한 상품은 등록하지 않습니다.':'정상 검증된 '+ids.length+'건만 복귀시킵니다.')+' 기존 배치와 프론트는 유지합니다. 계속할까요?'))return;
     var freeze={country:selectedCountry,region:selectedSubdivision||'NATIONWIDE'},target=bucket==='hold'?$('productHoldVerifyProgress'):$('latestManualActionState'),
         locationChoice=$(bucket==='hold'?'holdVerifiedPlacement':'latestVerifiedPlacement'),autoPlace=operation==='restore'&&locationChoice&&locationChoice.value==='psom',
         totals={verified:0,inconclusive:0,invalid:0,restored:0,skipped:0,failed:0},restoreIds=[],failures=[];
@@ -1420,6 +1424,7 @@
           else if(item.state==='failed'){totals.failed++;failures.push(text(item.reason));}
           else totals.skipped++;
         });
+        if(target)target.textContent=(operation==='restore'?'원장 복귀':'검증')+' 처리 '+Math.min(offset+chunk.length,ids.length)+'/'+ids.length+'건 · 등록 '+totals.restored+' · 별도 확인 '+totals.skipped+' · 검사 불가 '+totals.inconclusive+' · 오류 '+totals.failed;
       }
       if(operation==='restore'&&autoPlace&&restoreIds.length){
         var placed=await placeNewlyVerifiedCandidates(restoreIds,'검증 정상상품 PSOM 자동 배치',target,{country:freeze.country,subdivision:freeze.region});
@@ -1436,7 +1441,8 @@
       
       var repairedVerified=Object.keys(verifiedReviewDetailsUi[bucket]).filter(function(id){return verifiedReviewUi[bucket][id]==='verified'&&verifiedReviewDetailsUi[bucket][id].urlRepaired===true;}).length;
       var msg=(operation==='verify'?'AI 검증·분류 완료(이동 없음)':(operation==='status'?'검증 기록 불러오기 완료':'정상 검증상품 원장 복귀 완료'))+' · 정상 검증 '+totals.verified+' · 동일상품 URL 복구 검증 '+repairedVerified+' · 원장 복귀 '+totals.restored+' · 불확실 '+totals.inconclusive+' · 오류/부적합 '+totals.invalid+' · 제외 '+totals.skipped+' · 실패 '+totals.failed+(operation==='restore'?(autoPlace?' · PSOM 신규 배치 '+(totals.placed||0)+' · 배치 실패 '+(totals.placeFailed||0):' · 미배치 후보로 등록'):' · 원장 상태 유지')+(failures.length?' · '+failures.slice(0,2).join(' / '):'');
-      if(target)target.textContent=msg;show(msg,totals.failed||failures.length?'warn':'ok');
+      if(operation==='restore'&&bucket==='latest'&&!totals.restored&&ids.length)msg+=' · 이관 0건: 기존 후보 상태나 검증 근거를 확인하세요.';
+      if(target)target.textContent=msg;show(msg,totals.failed||failures.length||(operation==='restore'&&bucket==='latest'&&!totals.restored)?'warn':'ok');
       if(bucket==='hold'){await refreshHoldReviewInventory();renderProductExcludedTable('hold');}else renderLatestProductRows();
     }finally{productVerifiedFlowBusy=false;if(bucket==='hold'){productExclusionActionActive=false;syncProductExclusionSelection('hold');if($('productHoldVerifyStopBtn'))$('productHoldVerifyStopBtn').disabled=true;}else{latestQueueActionActive=false;syncLatestProductQueueControls();}}
   }
