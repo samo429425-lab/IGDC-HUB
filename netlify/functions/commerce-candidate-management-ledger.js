@@ -40,6 +40,7 @@ function scopeMatch(payload,countryInput,regionInput){
 }
 function compact(candidate,assignmentRowsInput){
   const payload=plain(candidate&&candidate.source_payload),assignmentRows=array(assignmentRowsInput),live=ProductPipeline.liveQueueRow(candidate,{assignments:assignmentRows,markets:[],revenues:[],evidence:[]});
+  live.officialProductUrl=text(candidate.official_url)||text(payload.externalProductUrl)||text(payload.productUrl);
   live.queueControl=plain(payload.queueControl);live.slotDecision=text(payload.slotDecision);live.recoverySuggestions=array(plain(payload.review).recoverySuggestions).slice(0,5);live.recoveryReason=text(plain(payload.review).recoveryReason);live.lastRecoveryCheckedAt=text(plain(payload.review).lastRecoveryCheckedAt);live.managementControl=plain(payload.managementControl);live.decisionSource=text(payload.decisionSource);
   live.createdAt=text(candidate&&candidate.created_at);live.updatedAt=text(candidate&&candidate.updated_at);
   const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.placement),front=plain(payload.frontPublication||payload.publication||payload.frontSync);
