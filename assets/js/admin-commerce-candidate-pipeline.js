@@ -289,9 +289,9 @@
   async function diagnostic(){
     hideNotice();var button=$('diagnosticBtn');button.disabled=true;
     try{
-      if(!diagnosticCache){var data=await refresh(true);diagnosticCache=data&&data.diagnostic||null;}
+      if(!diagnosticCache){await ensureSession(false);diagnosticCache=await api('diagnostic');}
       if(!diagnosticCache)throw new Error('후보·수익 점검 JSON을 만들지 못했습니다.');
-      renderDiagnostic(diagnosticCache);show('현재 통합 조회에 포함된 상품 후보·중개수익 점검 JSON을 표시했습니다. 추가 중복 조회는 실행하지 않았습니다.','ok');
+      renderDiagnostic(diagnosticCache);show('후보·중개수익 진단 전용 API에서 점검 JSON을 불러왔습니다. 원장 변경은 수행하지 않았습니다.','ok');
     }catch(error){show(authErrorMessage(error),'warn');}
     finally{button.disabled=false;}
   }

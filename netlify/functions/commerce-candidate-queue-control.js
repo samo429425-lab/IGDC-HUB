@@ -41,6 +41,8 @@ async function readAssignments(candidateId){
 async function releaseSectionAssignment(candidateId){
   const rows=await SlotStore.remove("gslot_slot_assignments","candidate_id=eq."+encodeURIComponent(candidateId));
   if(!Array.isArray(rows))throw new Error("assignment_ledger_delete_not_confirmed");
+  const remaining=await readAssignments(candidateId);
+  if(remaining.length)throw new Error("assignment_ledger_cleanup_incomplete:"+candidateId);
   return{ok:true,count:rows.length};
 }
 function frontStateActive(value){return ["queued","publish_requested","published","matched","active"].includes(lower(value));}
@@ -99,7 +101,12 @@ async function applyAction(actorId,row,action){
   const oldAssignments=await readAssignments(id),priorFront=previousFrontPlacement(payload,oldAssignments);
   // Excluded-queue deletion is never a back door for removing assigned or
   // already-public items. Those require the ordinary section/front workflow.
-  if(action!=="restore"&&(oldAssignments.length||priorFront&&priorFront.frontActive||plain(payload.approvedPlacement).sectionKey||plain(payload.approvedPlacement).section)){
+  // Historical inactive slot rows can remain after a HOLD/REJECT decision.
+  // They must not permanently block explicit deletion from the private lists.
+  // Keep ACTIVE publication and currently approved section cards protected.
+  const currentDecision=lower(payload.slotDecision),hasCurrentPlacement=!!(plain(payload.approvedPlacement).sectionKey||plain(payload.approvedPlacement).section);
+  const livePublication=oldAssignments.some((entry)=>frontStateActive(entry&&entry.publication_status))||!!(priorFront&&priorFront.frontActive);
+  if(action!=="restore"&&(livePublication||(currentDecision==="slot_candidate"&&hasCurrentPlacement))){
     const error=new Error("assigned_or_published_candidate_protected:"+id);error.statusCode=409;throw error;
   }
   if(action==="restore"){

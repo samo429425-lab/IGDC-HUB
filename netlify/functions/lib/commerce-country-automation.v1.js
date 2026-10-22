@@ -46,7 +46,7 @@ const DEFAULT_INTERVAL_DAYS = 7;
 const DEFAULT_MAX_CANDIDATES = 20;
 const DEFAULT_SCOPES_PER_RUN = 12;
 const MAX_SCOPES_PER_RUN = 24;
-const PRODUCT_PORTFOLIO_LIMIT = 4500;
+const PRODUCT_PORTFOLIO_LIMIT = 20000; // Current research cycle/identity-checkpoint safety; NOT a cumulative research or front pool cap.
 const PRODUCT_STATUS_PAGE_LIMIT = 200;
 const PRODUCT_STAGE_BATCH = 10;
 const PRODUCT_STAGE_CONCURRENCY = 2;
@@ -1759,9 +1759,13 @@ async function readProductChunkRange(job,kind,offsetInput,limitInput){
   const rows=[];for(const chunk of chunks)rows.push(...array(chunk.rows));const relativeStart=offset-firstChunk*PRODUCT_CHUNK_SIZE;return rows.slice(relativeStart,relativeStart+(end-offset));
 }
 async function readAllProductChunkRows(job,kind){const count=Math.max(0,Number(job[productChunkCountField(kind)]||0)),out=[];for(let offset=0;offset<count;offset+=PRODUCT_STATUS_PAGE_LIMIT)out.push(...await readProductChunkRange(job,kind,offset,PRODUCT_STATUS_PAGE_LIMIT));return out.slice(0,PRODUCT_PORTFOLIO_LIMIT);}
+function productResearchStagingQualityReady(row){
+  return !!(row&&row.inspectionComplete===true&&productImageUrl(row)&&
+    !ProductRanking.isGenericProductName(first(row.productName,row.title)));
+}
 function summarizeProductResultRows(rowsInput){
   const stats={inspected:0,withImage:0,withVideo:0,readyForAdminReview:0,queueEligible:0,slotCandidates:0,held:0,rejected:0,permanentExcluded:0};
-  for(const row of array(rowsInput)){if(row&&row.inspectionComplete===true)stats.inspected+=1;if(productImageUrl(row))stats.withImage+=1;if(productVideoUrl(row))stats.withVideo+=1;if(row&&row.researchStatus==="ready_for_admin_review")stats.readyForAdminReview+=1;if(row&&row.inspectionComplete===true&&ProductPipeline.researchReadiness(row).queueEligible===true)stats.queueEligible+=1;const d=lower(row&&row.slotDecision||"undecided");if(d==="slot_candidate")stats.slotCandidates+=1;else if(d==="hold")stats.held+=1;else if(d==="reject")stats.rejected+=1;else if(d==="purge")stats.permanentExcluded+=1;}return stats;
+  for(const row of array(rowsInput)){if(row&&row.inspectionComplete===true)stats.inspected+=1;if(productImageUrl(row))stats.withImage+=1;if(productVideoUrl(row))stats.withVideo+=1;if(row&&row.researchStatus==="ready_for_admin_review")stats.readyForAdminReview+=1;if(productResearchStagingQualityReady(row)&&ProductPipeline.researchReadiness(row).queueEligible===true)stats.queueEligible+=1;const d=lower(row&&row.slotDecision||"undecided");if(d==="slot_candidate")stats.slotCandidates+=1;else if(d==="hold")stats.held+=1;else if(d==="reject")stats.rejected+=1;else if(d==="purge")stats.permanentExcluded+=1;}return stats;
 }
 function mergeProductResultStats(baseInput,deltaInput){const base=Object.assign({inspected:0,withImage:0,withVideo:0,readyForAdminReview:0,queueEligible:0,slotCandidates:0,held:0,rejected:0,permanentExcluded:0},plain(baseInput)),delta=plain(deltaInput);for(const key of Object.keys(base))base[key]=Math.max(0,Number(base[key]||0)+Number(delta[key]||0));return base;}
 async function appendInspectedProductResults(job,rowsInput,actorId){
@@ -2385,31 +2389,26 @@ async function fastProductResearchStatus(job, input) {
   if(!job)return{ok:true,fast:true,reportType:"igdc-country-product-reference-research-status",version:VERSION,rankingVersion:ProductRanking.VERSION,status:"not_started",products:[],latestProducts:[],summary:{},progress:{},pagination:{enabled:true,offset:0,limit:0,total:0,returned:0,nextOffset:null,hasMore:false}};
   const base=compactProductResearchStep(job),token=text(options.fast),match=/^(page|latest):(\d+):(\d+)$/.exec(token);
   if(job.resultStorage==="chunked_v1"){
-    const kind=match?match[1]:"page",rawTotal=Math.max(0,Number(job.resultCount||0)),visibleTotal=kind==="latest"?Math.max(0,rawTotal-deletedLatest.size):rawTotal,offset=match?Math.max(0,Math.min(visibleTotal,Number(match[2]||0))):0,limit=match?Math.max(25,Math.min(PRODUCT_STATUS_PAGE_LIMIT,Number(match[3]||PRODUCT_STATUS_PAGE_LIMIT))):PRODUCT_STATUS_PAGE_LIMIT;
-    let rows=[];
-    if(kind!=="latest"||!deletedLatest.size){rows=await readProductChunkRange(job,"result",offset,limit);}
-    else{
-      // Offset/limit are expressed in the VISIBLE latest-research list. Scan raw
-      // chunks only until the requested visible window is filled so deleted rows
-      // can never reappear or create pagination holes.
-      let rawOffset=0,visibleIndex=0;
-      while(rawOffset<rawTotal&&rows.length<limit){
-        const batch=await readProductChunkRange(job,"result",rawOffset,PRODUCT_STATUS_PAGE_LIMIT);if(!batch.length)break;
-        for(const row of batch){
-          const identity=ProductRanking.productIdentity(row)||text(row&&row.id);if(identity&&deletedLatest.has(identity))continue;
-          if(visibleIndex>=offset&&rows.length<limit)rows.push(row);
-          visibleIndex+=1;
-          if(rows.length>=limit)break;
-        }
-        rawOffset+=batch.length;
-      }
-    }
-    const nextOffset=offset+rows.length;
+    // Latest paging cursor indexes the RAW research chunks, not the visible
+    // collection. Deletions may refer to a previous research cycle, so
+    // `rawTotal - deletedIdentities.size` is NOT the visible count.
+    // Filtering one raw window per call avoids quadratic rescans and holes.
+    const kind=match?match[1]:"page",rawTotal=Math.max(0,Number(job.resultCount||0));
+    const offset=match?Math.max(0,Math.min(rawTotal,Number(match[2]||0))):0;
+    const limit=match?Math.max(25,Math.min(PRODUCT_STATUS_PAGE_LIMIT,Number(match[3]||PRODUCT_STATUS_PAGE_LIMIT))):PRODUCT_STATUS_PAGE_LIMIT;
+    const rawRows=await readProductChunkRange(job,"result",offset,limit);
+    if(offset<rawTotal&&!rawRows.length){const error=new Error("RESEARCH_RESULT_CHUNK_MISSING at offset "+offset);error.statusCode=503;throw error;}
+    const rows=kind==="latest"&&deletedLatest.size?rawRows.filter((row)=>{
+      const identity=ProductRanking.productIdentity(row)||text(row&&row.id);
+      return !identity||!deletedLatest.has(identity);
+    }):rawRows;
+    const nextRawOffset=offset+rawRows.length;
     base.fast=true;base.reportType="igdc-country-product-reference-research-fast-status";
     base.products=kind==="latest"?[]:rows;
     base.latestProducts=kind==="latest"?rows:[];
-    base.summary=Object.assign({},plain(base.summary),kind==="latest"?{latestResearchProducts:visibleTotal}:{});
-    base.pagination={enabled:true,kind,offset,limit,total:visibleTotal,returned:rows.length,nextOffset:nextOffset<visibleTotal?nextOffset:null,hasMore:nextOffset<visibleTotal,deletedFiltered:kind==="latest"&&deletedLatest.size>0};
+    // `total` is the RAW scan domain; visible rows are counted by the client
+    // after the final cursor, never estimated by subtracting historical IDs.
+    base.pagination={enabled:true,kind,offset,limit,total:rawTotal,rawTotal,returned:rows.length,scanned:rawRows.length,nextOffset:nextRawOffset<rawTotal?nextRawOffset:null,hasMore:nextRawOffset<rawTotal,deletedFiltered:kind==="latest"&&deletedLatest.size>0,visibleTotalFinal:null};
     return base;
   }
   const allProducts=array(job.products).filter((row)=>{if(!row)return false;const url=productUrl(row),image=productImageUrl(row),decision=lower(row.slotDecision||"undecided");return!!url||!!image||decision!=="undecided"||row.inspectionComplete===true;}).slice(0,PRODUCT_PORTFOLIO_LIMIT),rawLatest=latestResearchProducts(job,allProducts),allLatest=deletedLatest.size?rawLatest.filter((row)=>!deletedLatest.has(ProductRanking.productIdentity(row)||text(row&&row.id))):rawLatest;
@@ -3074,7 +3073,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   const durableLedgerCheckpointFresh=text(runtime.partialQueueLedgerVerifiedVersion)===VERSION;
   if(!hasSelection&&!durableLedgerCheckpointFresh){scanCursor=0;handled.clear();}
   const researchSuppressed=new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean).concat(array(runtime.researchExcludedIdentities).map(text).filter(Boolean)));
-  const queueAccepts=(row)=>{const identity=productQueueIdentity(row);return row&&(!identity||!researchSuppressed.has(identity))&&row.inspectionComplete===true&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));};
+  const queueAccepts=(row)=>{const identity=productQueueIdentity(row);return row&&(!identity||!researchSuppressed.has(identity))&&productResearchStagingQualityReady(row)&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));};
   // An explicit latest-list registration/AI request is an administrator command to
   // re-check the selected product pages now. Product discovery may have produced a
   // provisional row (for example a catalog anchor with an image) before the normal
@@ -3126,7 +3125,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
     for(let i=0;i<settled.length;i++){const result=settled[i],entry=group[i];if(result.status!=="fulfilled"){summary.failed+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}const state=text(result.value&&result.value.status),candidateId=text(result.value&&result.value.candidateId),registered=result.value&&result.value.registered===true;if(!registered){summary.skipped+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}if(/created/.test(state))summary.created+=1;else if(/updated/.test(state))summary.updated+=1;else summary.preserved+=1;handled.add(entry.identity);explicitlyUnstaged.delete(entry.identity);if(candidateId)stagedCandidateIds.add(candidateId);}
   }
   if(!hasSelection&&firstFailed!=null)scanCursor=Math.min(scanCursor,firstFailed);
-  const globalEligibleTotal=Math.max(0,Number(plain(job.resultStats).queueEligible||0)-Math.min(Number(plain(job.resultStats).queueEligible||0),explicitlyUnstaged.size)),globalDone=Math.min(globalEligibleTotal,handled.size),rawGlobalRemaining=Math.max(0,globalEligibleTotal-globalDone),globalRemaining=!hasSelection&&scanCursor<total?Math.max(1,rawGlobalRemaining):rawGlobalRemaining;
+  const globalEligibleTotal=Math.max(0,Number(plain(job.resultStats).queueEligible||0)-Math.min(Number(plain(job.resultStats).queueEligible||0),explicitlyUnstaged.size)),globalDone=Math.min(globalEligibleTotal,handled.size),rawGlobalRemaining=Math.max(0,globalEligibleTotal-globalDone),globalRemaining=!hasSelection&&scanCursor>=total&&summary.failed===0?0:(!hasSelection&&scanCursor<total?Math.max(1,rawGlobalRemaining):rawGlobalRemaining);
   const selectedEligible=hasSelection?selectedRows.filter(queueAccepts):[],selectedPending=hasSelection?selectedEligible.filter((row)=>{const identity=productQueueIdentity(row);return identity&&!handled.has(identity);}):[],eligibleTotal=hasSelection?selectedEligible.length:globalEligibleTotal,done=hasSelection?Math.max(0,eligibleTotal-selectedPending.length):globalDone,remaining=hasSelection?selectedPending.length+Number(validationRoute.failed||0):globalRemaining,totalFailed=summary.failed+Number(validationRoute.failed||0),complete=hasSelection?(remaining===0&&totalFailed===0):(scanCursor>=total&&summary.failed===0);
   const selectedBlocked=hasSelection?Math.max(0,Number(validationRoute.unresolved||0)+Number(validationRoute.failed||0)):0,blockedReasons=hasSelection?selectedValidationBlockedRows.map((row)=>{const readiness=ProductPipeline.researchReadiness(row),disposition=latestProductValidationDisposition(row);return{productId:text(row&&row.id)||null,title:text(row&&row.productName||row&&row.title)||null,url:productUrl(row)||null,inspectionComplete:row&&row.inspectionComplete===true,researchStatus:text(row&&row.researchStatus)||null,automaticDisposition:disposition.decision,automaticDispositionReason:disposition.reason,blockers:array(readiness&&readiness.blockers),reviewGaps:array(readiness&&readiness.reviewGaps)};}).slice(0,20):[],verifiedCandidateIds=Array.from(new Set(selectionReconcile.actualCandidateIds.concat(Array.from(stagedCandidateIds)))).slice(0,100);
   const candidateTransferredIdentities=new Set(),candidateTransferredKeys=new Set();
@@ -3259,10 +3258,10 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
     const checked=await RegionalSelector.inspectProductResearchStep(requestedRows.slice(0,4),{country:scope.country,region:scope.region,timeoutMs:6000}),checkedRows=array(checked&&checked.items);
     requestedRows=requestedRows.map((prior,index)=>index<checkedRows.length?Object.assign({},prior,checkedRows[index]):prior);
   }
-  const eligibleAll = requestedRows.filter((row) => row && row.inspectionComplete === true && (ProductPipeline.researchReadiness(row).queueEligible === true || (manualReviewQueue && administratorReviewQueueEligible(row))));
+  const eligibleAll = requestedRows.filter((row) => productResearchStagingQualityReady(row) && (ProductPipeline.researchReadiness(row).queueEligible === true || (manualReviewQueue && administratorReviewQueueEligible(row))));
   const blockedLegacyRows=requestedIds.size&&manualReviewQueue?requestedRows.filter((row)=>!eligibleAll.includes(row)):[],legacyValidationRoute=blockedLegacyRows.length?await routeBlockedLatestProducts(actorId,scope,blockedLegacyRows):{attempted:0,routedHold:0,routedReject:0,protectedPreserved:0,failed:0,routed:0,unresolved:blockedLegacyRows.length,details:[]};
   selectionReconcile=await reconcileExplicitPrivateQueueSelection(scope,eligibleAll,handled,job.rankingContext);
-  const eligibleRows=array(selectionReconcile.products).filter((row)=>row&&row.inspectionComplete===true&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row))));
+  const eligibleRows=array(selectionReconcile.products).filter((row)=>productResearchStagingQualityReady(row)&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row))));
   const eligibleByIdentity = new Map();
   for (const row of eligibleRows) { const identity = productQueueIdentity(row); if (identity && !eligibleByIdentity.has(identity)) eligibleByIdentity.set(identity, row); }
 
@@ -3718,6 +3717,12 @@ function administratorReviewQueueEligible(productInput) {
 }
 async function syncProductResearchPreview(actorId, scope, productInput, optionsInput) {
   const options=plain(optionsInput),readiness = ProductPipeline.researchReadiness(productInput),manualReviewQueue=options.allowAdministratorReviewQueue===true;
+  // A bare sitemap/catalog URL or a text-only discovery is RESEARCH evidence,
+  // not a ready product card. Keep it in the research result until inspection
+  // recovers an authentic image. Never fabricate a misleading seller thumbnail.
+  if(!productImageUrl(productInput)||ProductRanking.isGenericProductName(first(productInput&&productInput.productName,productInput&&productInput.title))){
+    return{status:"product_media_or_title_incomplete",candidateId:null,registered:false,blockers:[!productImageUrl(productInput)?"product_image_missing":"",ProductRanking.isGenericProductName(first(productInput&&productInput.productName,productInput&&productInput.title))?"product_title_generic":""].filter(Boolean)};
+  }
   if (!readiness.queueEligible && !(manualReviewQueue&&administratorReviewQueueEligible(productInput))) return { status: "research_preview_skipped", candidateId: null, registered:false, blockers: readiness.blockers };
   let product=productInput,candidateId=productCandidateId(scope, product);
   let existing=array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,official_url,thumbnail_url,title&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
@@ -4528,7 +4533,8 @@ async function productCandidatePsomPlace(actorId, input) {
         // Never let an AI/PSOM bulk pass rewrite an existing confirmed slot.
         // Missing historical section data must be reviewed, not replaced by a guess.
         if(validProductSectionKey(lockedKey)){
-          counts[lockedKey] = Number(counts[lockedKey] || 0) + 1;
+          // balanceCounts already includes the entire current 20-section board.
+          // Preserving a placed row does not consume a new slot.
           results.push({candidateId:id,assigned:true,sectionKey:lockedKey,preservedExisting:true,source:"existing_placement_immutable"});
         }else{
           results.push({candidateId:id,assigned:false,preservedExisting:true,error:"existing_placement_missing_manual_repair_required"});
@@ -6454,20 +6460,27 @@ async function manualSupplierRegister(actorId,input){
 }
 
 async function persistSupplierResearchDecision(scope,targetRow,action,actorId,options){
-  options=plain(options);const exactUrl=supplierControlTargetUrl(supplierRowUrl(targetRow)),targetHost=supplierRowHost(targetRow),matchHost=options.matchHost===true;
+  options=plain(options);const exactUrl=supplierControlTargetUrl(options.selectedUrl||supplierRowUrl(targetRow)),targetHost=supplierRowHost(targetRow),matchHost=options.matchHost===true;
   if(!exactUrl&&!targetHost)return{updated:0};
   let rows=[];if(Array.isArray(options.rows))rows=options.rows;else try{rows=array(await supplierScopedCandidateRows(scope,"id,status,source_ref,official_url,source_payload","",1000));}catch(error){return{updated:0,error:text(error&&error.message)||"supplier_ledger_read_failed"};}
   let updated=0;const now=iso(),actor=text(actorId)||"administrator";
   for(const entry of rows){
     if(entry&&entry.__deleted===true)continue;
     const payload=plain(entry&&entry.source_payload),automation=plain(payload.aiAutomation);
-    if(normalizeCountry(automation.country)!==scope.country||normalizeRegion(automation.region||"NATIONWIDE",scope.country)!==scope.region)continue;
+    const durableCountry=normalizeCountry(first(automation.country,payload.targetCountry,plain(payload.countrySupply).country));
+    const durableRegion=normalizeRegion(first(automation.region,payload.targetRegion,plain(payload.countrySupply).region,"NATIONWIDE"),scope.country)||"NATIONWIDE";
+    if(durableCountry!==scope.country||durableRegion!==scope.region)continue;
     if(text(payload.entityKind)==="supplier_control_tombstone")continue;
     const specificUrls=[payload.sourceCandidateUrl,payload.url,automation.sourceUrl].map(supplierControlTargetUrl).filter(Boolean);
     const urls=Array.from(new Set(specificUrls.concat([entry&&entry.official_url,payload.supplierOfficialUrl,automation.officialUrl].map(supplierControlTargetUrl).filter(Boolean))));
     const rowHost=(()=>{try{return new URL(urls[0]||"").hostname.toLowerCase().replace(/^www\./,"");}catch(_e){return"";}})();
     if(matchHost?(!!targetHost&&rowHost===targetHost):(!!exactUrl&&urls.some((value)=>value.toLowerCase()===exactUrl.toLowerCase()))){
-      if(action==="dismiss"){await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(text(entry.id)));entry.__deleted=true;updated+=1;continue;}
+      if(action==="dismiss"){
+        await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(text(entry.id)));
+        const remaining=array(await SlotStore.select("gslot_candidates","select=id&id=eq."+encodeURIComponent(text(entry.id))+"&limit=1"));
+        if(remaining.length)throw new Error("supplier_candidate_delete_not_confirmed:"+text(entry.id));
+        entry.__deleted=true;updated+=1;continue;
+      }
       let status=lower(entry&&entry.status)||"approval_pending";
       if(action==="hold"||action==="unblock")status="hold";
       else if(action==="restore"||action==="keep")status="approval_pending";
@@ -6544,7 +6557,7 @@ async function researchCandidateAction(actorId,input){
     // Keep the persisted private supplier ledger aligned with the research
     // workspace so hold/restore/block states survive a new cumulative run.
     let durable={updated:0},durableError=durableReadError;
-    if(!durableError){try{durable=await persistSupplierResearchDecision(scope,target,action,actorId,{matchHost:action==="block",rows:durableRows});if(durable&&durable.error)durableError=text(durable.error);}catch(error){durableError=text(error&&error.message)||"supplier_ledger_write_failed";}}
+    if(!durableError){try{durable=await persistSupplierResearchDecision(scope,target,action,actorId,{matchHost:action==="block",selectedUrl:targetUrl,rows:durableRows});if(durable&&durable.error)durableError=text(durable.error);}catch(error){durableError=text(error&&error.message)||"supplier_ledger_write_failed";}}
     results.push({url:targetUrl,host,status:durableError?"durable_failed":action,requestedAction:action,durableUpdated:Number(durable&&durable.updated||0),durableError:durableError||null,worklistRemoved:["purge","block","dismiss","remove_from_list"].includes(action)});
   }
   if(manualChanged){registry.suppliers=manualRows;await saveManualSupplierRegistry(scope,registry,actorId);}job.operatorHiddenSupplierUrls=Array.from(hiddenUrls).slice(-3000);job.candidates=reindexCandidateRows(active);job.supplierHoldingCandidates=holding;job.supplierBlockedCandidates=blocked;job.blockedSupplierKeys=Array.from(keys);job.manualSupplierCount=manualRows.filter((row)=>row&&row.adminPinned===true&&row.state!=="disabled").length;job.trace=array(job.trace).concat(results.map((row)=>({source:"supplier-candidate-control",status:row.status,at:iso(),url:row.url,host:row.host||null,actor:text(actorId)||"administrator"}))).slice(-160);await saveResearchJob(job,actorId);
