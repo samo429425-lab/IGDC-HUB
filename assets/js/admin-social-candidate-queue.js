@@ -3009,17 +3009,27 @@
     }
   }
   function candidateRegistered(row) {
-    if (!row || contentHold(row)) return false;
-    var cls=assetClass(row), isProfileFallback=cls === "influencer_registry" && PROFILE_FALLBACK_SECTIONS.has(row.sectionKey);
-    if (cls !== "latest_content" && !isProfileFallback) return false;
-    var thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url || row.raw.channelThumbnailUrl)));
-    var hasRealThumb = /^https:\/\//i.test(thumbUrl) && !/placeholder|\/assets\/sample\//i.test(thumbUrl) && !genericProviderPreviewThumb(lower(row.platform).replace(/^social-/,""),thumbUrl);
-    var baseOk = text(row.reviewStatus).toLowerCase() === "approved" &&
-      /^(approved_for_snapshot|verified|approved)$/i.test(text(row.verificationStatus)) &&
-      row.candidateOnly === false && row.seedContent !== true && row.publicAccess === true && row.loginRequired !== true;
-    if (isProfileFallback) return baseOk && /^https:\/\//i.test(text(row.channelUrl || row.sourceUrl));
-    if (typeof row.promotable === "boolean") return row.promotable === true && hasRealThumb;
-    return baseOk && /^https:\/\//i.test(text(row.latestContentUrl || row.sourceUrl)) && hasRealThumb;
+    // Use the same content-only publication rule as the Social server.
+    // Creator registry rows are supplemental and never occupy a public slot.
+    if (!row || contentHold(row) || assetClass(row) !== "latest_content") return false;
+    var platform = lower(row.platform).replace(/^social-/, "");
+    var previewOptional = ["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].indexOf(platform) >= 0;
+    var thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url)));
+    var hasRealThumb = /^https:\/\//i.test(thumbUrl) &&
+      !/placeholder|\/assets\/sample\//i.test(thumbUrl) &&
+      !genericProviderPreviewThumb(platform, thumbUrl);
+    // promotable comes from SocialStore.isApprovedForSnapshot on the server.
+    // The publisher accepts validated latest-content posts without a preview
+    // for these six platforms; do not block them in the browser first.
+    if (typeof row.promotable === "boolean")
+      return row.promotable === true && (hasRealThumb || previewOptional);
+    var baseOk = text(row.reviewStatus || row.review_status).toLowerCase() === "approved" &&
+      /^(approved_for_snapshot|verified|approved)$/i.test(text(row.verificationStatus || row.verification_status)) &&
+      row.candidateOnly === false && row.seedContent !== true &&
+      row.publicAccess === true && row.loginRequired !== true &&
+      text(row.riskLevel || row.risk_level).toLowerCase() !== "blocked";
+    return baseOk && /^https:\/\//i.test(text(row.latestContentUrl || row.sourceUrl)) &&
+      (hasRealThumb || previewOptional);
   }
   function registeredContentIds(sectionKey) {
     return rows

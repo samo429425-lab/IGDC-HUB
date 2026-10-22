@@ -548,6 +548,32 @@ async function latestStoredReleaseForRoute(route) {
   }
   return latest || null;
 }
+// The candidate-ID plan does not change when a verified URL's title or
+// recovered thumbnail changes. Compare the actual front-visible fields as
+// well, or the old noChange shortcut would silently suppress the correction.
+// Exclude generated_at/timestamp fields: they change on every preview build.
+function frontVisiblePayloadSignature(snapshot) {
+  const sections = snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections || {};
+  return SocialStore.sha256(Object.fromEntries(
+    SocialStore.Policy.SECTION_KEYS.map((key) => [key,
+      (Array.isArray(sections[key]) ? sections[key] : []).map((slot) => {
+        const item = slot || {};
+        const social = item.social || {};
+        return [
+          text(item.type),
+          text(item.contentId || item.candidateId || item.id),
+          text(item.title || item.name),
+          text(item.latestContentUrl || social.latestContentUrl || item.sourceUrl || item.url),
+          text(item.thumb || item.image || item.thumbnail || item.thumbnailUrl),
+          text(item.description),
+          text(item.creatorName || item.creator || item.creatorHandle),
+          text(item.embedUrl),
+          text(item.displayMode),
+        ];
+      })
+    ])
+  ));
+}
 function releasedIdsBySection(snapshot) {
   const sections = snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections || {};
   const result = {};
@@ -1012,7 +1038,8 @@ exports.handler = async function (event) {
       actualApplyOperation &&
       !unpublishSelected &&
       hasDurablePreviousRelease &&
-      publicationPlanHash === previousPublicationPlanHash
+      publicationPlanHash === previousPublicationPlanHash &&
+      frontVisiblePayloadSignature(snapshot) === frontVisiblePayloadSignature(base.doc)
     ) {
       return SocialStore.response(200, {
         ok: true,
