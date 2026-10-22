@@ -4578,8 +4578,21 @@ async function productCandidatePsomPlace(actorId, input) {
       payload.managementControl = Object.assign({}, plain(payload.managementControl), {schema:"igdc-product-management-control.v1",source:"ai_psom_bulk",administratorLocked:false,aiReclassificationAllowed:true,automaticPrivatePlacement:true,publicPublication:false,productImport:false,checkout:false,paymentExecution:false,decidedAt:now,decidedBy:actor});
       payload.review = Object.assign({}, plain(payload.review), {state:"pending",nextGate:"administrator_front_match",psomPlacementAt:now,psomPlacementBy:actor});
       await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), {status:"approval_pending",source_payload:payload,updated_at:now});
+      // A successful HTTP PATCH alone is not evidence that any candidate row
+      // changed. Check the durable C-stage decision before counting a transfer.
+      // This is read-only verification; it never alters existing assignments.
+      const confirmedRows=await frontSyncSelectCandidates([id]);
+      const confirmed=plain(array(confirmedRows).find((item)=>text(item&&item.id)===id));
+      const savedPayload=plain(confirmed.source_payload);
+      const savedKey=productPlacementKey(savedPayload.approvedPlacement||savedPayload.selectedPlacement||savedPayload.placement);
+      if(!text(confirmed.id)||text(confirmed.source_ref)!==PRODUCT_SOURCE_REF||
+         lower(confirmed.status)!=="approval_pending"||lower(savedPayload.slotDecision)!=="slot_candidate"||
+         savedKey!==key||!heldCandidateMatchesScope(confirmed,scope)){
+        results.push({candidateId:id,assigned:false,error:"psom_candidate_write_not_confirmed",expectedSectionKey:key,actualSectionKey:savedKey||null});
+        continue;
+      }
       counts[key] = Number(counts[key] || 0) + 1;
-      results.push({candidateId:id,assigned:true,sectionKey:key,category:plan.category.primary,score:Number(picked.score||0),source:preferredSectionKey?"psom_group_preserved":"psom_saved_research",requestedSectionKey:preferredSectionKey||null});
+      results.push({candidateId:id,assigned:true,sectionKey:key,category:plan.category.primary,score:Number(picked.score||0),source:preferredSectionKey?"psom_group_preserved":"psom_saved_research",requestedSectionKey:preferredSectionKey||null,ledgerVerified:true});
     } catch (error) {
       // One damaged/slow row must never invalidate already-durable placements in
       // the same Netlify invocation. Return the exact failed candidate so the
@@ -6128,6 +6141,13 @@ async function productFrontReplacementPlan(input) {
   const sectionKeys = Array.from(new Set(array(input && input.replacementSectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
   const desiredCandidateIds = Array.from(new Set(array(input && input.replacementCandidateIds).map(text).filter(Boolean))).slice(0, 3000);
   if (!authoritative || !sectionKeys.length) return { ok:true, applied:false, scope, sectionKeys:[], desiredCandidateIds, staleCandidateIds:[], withdrawAssignments:[] };
+  // Never treat an empty/unavailable administrator-board projection as a
+  // request to withdraw all existing published products. Explicit Unmatch is
+  // the operator-controlled way to remove publication for an empty section.
+  if (!desiredCandidateIds.length) {
+    const error=new Error("Front Match 치환 대상 상품이 0건입니다. 기존 공개 상품을 보존합니다. 관리 원장/선택 섹션을 다시 조회하거나 매칭 해제를 별도로 실행하세요.");
+    error.statusCode=409;error.code="FRONT_REPLACEMENT_EMPTY_BOARD_PROTECTED";throw error;
+  }
   const sectionSet = new Set(sectionKeys), desired = new Set(desiredCandidateIds);
   const rows = await SlotStore.select("gslot_slot_assignments", [
     "select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at",
@@ -6160,14 +6180,17 @@ async function productFrontSyncTargets(input, jobInput) {
     const ids = mode === "candidate" ? [requestedCandidateId || requestedProductId].filter(Boolean) : requestedCandidateIds.length ? requestedCandidateIds : requestedProductIds;
     const authoritativeBoardById=frontSyncAuthoritativeBoardMap(input);
     const [candidateRows, assignmentRows] = await Promise.all([frontSyncSelectCandidates(ids), frontSyncSelectByCandidate("gslot_slot_assignments", "id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,created_at,updated_at", ids)]), targets = [];
+    const foundCandidateIds=new Set(candidateRows.map((row)=>text(row&&row.id)));
+    const targetIssues=ids.filter((id)=>!foundCandidateIds.has(id)).map((id)=>({candidateId:id,reason:"candidate_missing_from_durable_ledger"}));
     const assignmentsByCandidate = new Map();
     for (const assignment of array(assignmentRows)) { const id=text(assignment&&assignment.candidate_id); if(!assignmentsByCandidate.has(id))assignmentsByCandidate.set(id,[]); assignmentsByCandidate.get(id).push(assignment); }
     for (const candidate of candidateRows) {
-      const product = candidateRuntimeProduct(candidate, scope); if (!product) continue;
+      const product = candidateRuntimeProduct(candidate, scope);
+      if (!product) {targetIssues.push({candidateId:text(candidate&&candidate.id),reason:"candidate_missing_product_detail_url"});continue;}
       const payload = plain(candidate && candidate.source_payload), queueControl = plain(payload.queueControl), candidateStatus = lower(candidate && candidate.status), sourceDecision = lower(payload.slotDecision || product.slotDecision || "undecided"), candidateId = text(candidate.id), boardItem=plain(authoritativeBoardById.get(candidateId));
       const activeAssignment = array(assignmentsByCandidate.get(candidateId)).find((row)=>normalizeCountry(row&&row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region&&candidateRuntimePublishedStatus(row&&row.publication_status));
       const boardKey=text(boardItem.sectionKey),payloadKey = productPlacementKey(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || product.placement), activeKey = candidateRuntimeAssignmentKey(activeAssignment), key = validProductSectionKey(boardKey)?boardKey:(validProductSectionKey(payloadKey) ? payloadKey : activeKey);
-      if (!validProductSectionKey(key)) continue;
+      if (!validProductSectionKey(key)) {targetIssues.push({candidateId,reason:"candidate_has_no_valid_approved_section"});continue;}
       const authoritativeBoard=boardItem.authoritative===true&&validProductSectionKey(boardKey);
       if (operation === "match") {
         if(authoritativeBoard){
@@ -6177,13 +6200,17 @@ async function productFrontSyncTargets(input, jobInput) {
           const blockedDecision = ["hold","reject","purge"].includes(sourceDecision);
           const blockedStatus = ["suppressed","rejected"].includes(candidateStatus) || (candidateStatus === "hold" && sourceDecision !== "slot_candidate");
           const blocked = blockedDecision || blockedStatus || queueControl.permanentExcluded === true;
-          if (blocked && !activeAssignment) continue;
+          if (blocked && !activeAssignment) {targetIssues.push({candidateId,reason:"candidate_is_held_excluded_or_blocked"});continue;}
           if (!blocked) { product.slotDecision = "slot_candidate"; if (!product.approvedPlacement) { const split=splitProductSectionKey(key); product.approvedPlacement = { page:split.page, sectionKey:split.sectionKey, section:split.sectionKey, country:scope.country, region:scope.region, administratorSelected:true, proposalOnly:false, publicPublication:false }; } }
         }
       }
       targets.push({ productId:text(product.id)||candidateId, candidateId, title:first(boardItem.title,product.productName,product.title,candidate.title), sectionKey:key, administratorBoardAuthority:authoritativeBoard, administratorTitle:text(boardItem.title), administratorProductUrl:text(boardItem.productUrl), administratorImageUrl:text(boardItem.imageUrl), administratorSupplierName:text(boardItem.supplierName), administratorSupplierUrl:text(boardItem.supplierUrl), administratorPrice:boardItem.price==null?null:boardItem.price, administratorPriceCurrency:text(boardItem.priceCurrency), administratorAvailability:boardItem.availability==null?null:boardItem.availability, existingPublicationActive:!!activeAssignment, digest:sha256({id:candidateId,placement:key,updatedAt:candidate.updated_at||null,administratorBoardAuthority:authoritativeBoard}) });
     }
-    return { ok:true, candidateLedger:true, scope, mode, sectionKey:targets[0]&&targets[0].sectionKey||null, sectionKeys:requestedSectionKeys, productId:requestedProductId||null, productIds:requestedProductIds, candidateId:requestedCandidateId||null, candidateIds:ids, operation, targets, productCount:candidateRows.length };
+    if(operation==="match"&&ids.length&&!targets.length){
+      const error=new Error("Front Match 대상 "+ids.length+"건 중 실제 후보 원장·상품 URL·확정 섹션에 연결된 상품이 없습니다. "+targetIssues.slice(0,3).map((item)=>item.reason).join(","));
+      error.statusCode=409;error.code="FRONT_MATCH_NO_DURABLE_TARGETS";error.targetIssues=targetIssues;throw error;
+    }
+    return { ok:true, candidateLedger:true, scope, mode, sectionKey:targets[0]&&targets[0].sectionKey||null, sectionKeys:requestedSectionKeys, productId:requestedProductId||null, productIds:requestedProductIds, candidateId:requestedCandidateId||null, candidateIds:ids, operation, targets, targetIssues, productCount:candidateRows.length };
   }
   const job = jobInput&&jobInput.schema===PRODUCT_JOB_SCHEMA?jobInput:await loadProductResearchJob(scope);
   if (!job || job.schema !== PRODUCT_JOB_SCHEMA) { const error = new Error("공식 상품 리서치 작업을 찾을 수 없습니다."); error.statusCode = 404; throw error; }

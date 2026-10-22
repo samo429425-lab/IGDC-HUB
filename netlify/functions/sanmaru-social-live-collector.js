@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.44.0-broad-searchbank-window-verified-write";
+const VERSION = "sanmaru-social-live-collector-v1.44.1-searchbank-query-result-integrity";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -2187,17 +2187,21 @@ async function searchBankContentResearchOne(event, plan, queryText, limit, langu
     return { provider: "psom-searchbank-content", status: "unavailable", error: "search_bank_engine_unavailable", psom: contract, items: [], trace: [] };
   }
   const exactQuery = publicSearchQuery(plan, queryText);
-  // SearchBank often yields hundreds of generic profile/home rows, while the
-  // first 30 ranked entries have no video permalink. Rotate through bounded
-  // result windows rather than re-reading only offset 0 for every SNS pass.
-  // No SearchBank engine or persistent snapshot is modified by this cursor.
-  const bankOffset = plan.platform === "youtube" ? 0 :
-    (Math.max(0, Number(researchCursor || 0) || 0) % 24) * 24;
+  // SearchBank's offset slices the *already fetched* results; it is NOT a
+  // provider page cursor. Nonzero values silently discard short result sets.
+  // Rotate the Social query and native-provider cursors upstream instead.
+  // The shared SearchBank engine and snapshots remain untouched.
+  const bankOffset = 0;
   try {
     const result = await withDeadline(
       SearchBankEngine.runEngine({
         httpMethod: "GET",
-        headers: event && event.headers || {},
+        // This is a trusted in-process READ-ONLY discovery invocation, not a
+        // visitor HTTP request. Do not forward client IP/geo headers: the
+        // shared SearchBank's social adapter turns those into mandatory query
+        // terms (e.g. Chinese video query + KR), silently reducing coverage.
+        // Auth was completed by the Social collector before this call.
+        headers: {},
         queryStringParameters: {}
       }, {
         q: exactQuery,
@@ -3510,8 +3514,8 @@ exports.handler = async function(event) {
       localePolicy: "ip_country_is_soft_preference_with_global_complement",
       contentIdentity: "section_platform_content_url_hash",
       broadDiscovery: SPARSE_DISCOVERY_PLATFORMS.has(plan.platform),
-      searchBankReadMode: "discovery_only_soft_geo_rotating_windows",
-      searchBankResultWindow: plan.platform === "youtube" ? 0 : (researchCursor % 24) * 24,
+      searchBankReadMode: "discovery_only_global_queries_no_local_result_offset",
+      searchBankResultWindow: 0,
       broadDiscoveryTermCount: (SPARSE_PLATFORM_DISCOVERY_TERMS[plan.platform] || []).length,
       contentFirst,
       researchAuthority: "psom_section_plus_social_policy_via_searchbank",
