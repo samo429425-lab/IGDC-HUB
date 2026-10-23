@@ -215,9 +215,22 @@ function googleServiceAccountFromEnv() {
   return clientEmail && privateKey ? { clientEmail, privateKey } : null;
 }
 function supabaseSecretStoreConfig() {
-  const url = clean(process.env.SUPABASE_URL).replace(/\/+$/, '');
-  const key = clean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY);
-  return /^https:\/\/[^/]+$/i.test(url) && key ? { url, key } : null;
+  const candidates = [
+    {
+      url: clean(process.env.GSLOT_SUPABASE_URL).replace(/\/+$/, ''),
+      key: clean(process.env.GSLOT_SUPABASE_SECRET_KEY || process.env.GSLOT_SUPABASE_SERVICE_ROLE_KEY || process.env.GSLOT_SUPABASE_SERVICE_KEY),
+      source: 'gslot'
+    },
+    {
+      url: clean(process.env.SUPABASE_URL).replace(/\/+$/, ''),
+      key: clean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY),
+      source: 'default'
+    }
+  ];
+  for (const item of candidates) {
+    if (/^https:\/\/[^/]+$/i.test(item.url) && item.key) return item;
+  }
+  return null;
 }
 async function googleServiceAccountFromSupabase() {
   const now = Date.now();

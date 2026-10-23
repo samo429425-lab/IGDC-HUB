@@ -1051,11 +1051,16 @@ function bindIncremental(target, items) {
 
       const preserveSnapshotOrder = loaded.source === 'snapshot';
 
-      for (const key of KEYS_MAIN) {
+      // First-paint priority: the first main and right rail become visible
+      // before the rest of the document's cards are assembled. Every section
+      // keeps its complete 100-slot list and the canonical snapshot ordering.
+      renderSlot(KEYS_MAIN[0], resolveSectionItems(sections, KEYS_MAIN[0]), preserveSnapshotOrder);
+      renderSlot(KEYS_RIGHT[0], resolveSectionItems(sections, KEYS_RIGHT[0]), preserveSnapshotOrder);
+      await new Promise(function(resolve){setTimeout(resolve, 0);});
+      for (const key of KEYS_MAIN.slice(1)) {
         renderSlot(key, resolveSectionItems(sections, key), preserveSnapshotOrder);
       }
-
-      for (const key of KEYS_RIGHT) {
+      for (const key of KEYS_RIGHT.slice(1)) {
         renderSlot(key, resolveSectionItems(sections, key), preserveSnapshotOrder);
       }
 

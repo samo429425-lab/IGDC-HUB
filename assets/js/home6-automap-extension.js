@@ -429,6 +429,10 @@
 
   var lastRightRenderToken=0;
   function rebalanceRight(){
+    // Home AutoMap v2 now owns all three right rails. Repainting the exact
+    // same authoritative snapshot here doubles DOM/image work and resets
+    // scroll position. Keep this renderer only for legacy Home AutoMap.
+    if(window.__HOME_PRODUCTS_AUTOMAP_V2__) return;
     var token=++lastRightRenderToken;
     return getSnapshot().then(function(doc){
       if(token!==lastRightRenderToken) return;

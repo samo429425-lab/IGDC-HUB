@@ -28,7 +28,9 @@
   const REGIONAL_EMPTY_RECHECK_TTL=90*1000;
   const REGIONAL_FAILURE_RECHECK_TTL=45*1000;
   const REGIONAL_REFRESH_DELAY=1400;
-  const INITIAL_SEED_PER_SECTION=100;
+  // Only visible loading skeletons belong in the DOM. Real published lists
+  // still retain every approved slot (100 per section) in incrementalJobs.
+  const INITIAL_SEED_PER_SECTION=6;
   const STATIC_TIMEOUT=12000;
   const REGIONAL_TIMEOUT=8500;
   const CACHE_PREFIX='igdc:distribution:instant-render:v5:';

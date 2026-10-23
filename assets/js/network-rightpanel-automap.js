@@ -294,7 +294,7 @@
     return out;
   }
 
-  function createCard(item, mobile){
+  function createCard(item, mobile, index){
     const card = document.createElement('div');
     card.className = mobile ? 'card' : 'ad-box';
 
@@ -304,8 +304,11 @@
     const img = document.createElement('img');
     img.src = item.thumb;
     img.alt = item.title || '';
-    img.loading = 'lazy';
+    // The first visible rail items should not wait for a lazy-load threshold.
+    const firstView = index < 3;
+    img.loading = firstView ? 'eager' : 'lazy';
     img.decoding = 'async';
+    if (firstView) { try { img.fetchPriority = 'high'; } catch (_e) {} }
     try { img.referrerPolicy = 'no-referrer'; } catch (_e) {}
     img.setAttribute('referrerpolicy','no-referrer');
 
@@ -357,7 +360,7 @@
       if(!current || railRenderJobs.get(container)!==current) return;
       const end=Math.min(current.offset+RENDER_BATCH,current.items.length);
       const frag=document.createDocumentFragment();
-      for(let i=current.offset;i<end;i++) frag.appendChild(createCard(current.items[i],current.mobile));
+      for(let i=current.offset;i<end;i++) frag.appendChild(createCard(current.items[i],current.mobile,i));
       current.container.appendChild(frag);
       current.offset=end;
       armObserver(current);
@@ -392,18 +395,25 @@
     renderRail(panel,items,false);
   }
 
-  async function run(){
-    disablePsomThumbGrid();
-    installExternalTopNavigation();
-    const snap = await fetchJson(SNAPSHOT_URL);
+  let railBootPromise = null;
+  function run(){
+    // DOMContentLoaded and window.load may both fire; only one of them may
+    // fetch/render the country-scoped rail. Never empty already painted cards.
+    if (railBootPromise) return railBootPromise;
+    railBootPromise = (async function(){
+      disablePsomThumbGrid();
+      installExternalTopNavigation();
+      const snap = await fetchJson(SNAPSHOT_URL);
 
-    let items = snap && Array.isArray(snap.items)
-      ? normalizeItems(snap.items)
-      : [];
+      const items = snap && Array.isArray(snap.items)
+        ? normalizeItems(snap.items)
+        : [];
 
-    // No generic feed fallback: it has no canonical country/region scope.
-    renderMobile(items);
-    renderDesktopDirect(items);
+      // No generic feed fallback: it has no canonical country/region scope.
+      renderMobile(items);
+      renderDesktopDirect(items);
+    })();
+    return railBootPromise;
   }
 
   disablePsomThumbGrid();
