@@ -20,12 +20,15 @@ const RegionalSelector = require("../regional-brokerage-autoselector");
 const MarketSignals = require("./commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./commerce-policy-discussion.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
+const ProductReserve = require("./commerce-product-research-reserve.v1");
+const PSOMRankCompare = require("./commerce-product-psom-rank-compare.v1");
+const ProductDetailQuality = require("./commerce-product-detail-quality.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 const AdminPlacementGuard = require("./commerce-admin-placement-guard.v1");
 const OriginalProductEvidence = require("./igdc-original-product-url-evidence-20261013-all-safe.json");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 
-const VERSION = "commerce-country-automation-v3.38.0-research-delta-immutable-ledger";
+const VERSION = "commerce-country-automation-v3.40.0-country-scoped-reserve-quality-guard";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2622,7 +2625,7 @@ async function beginProductResearchJob(actorId, input) {
   // this job. advanceProductResearchJob still processes them incrementally so
   // serverless request duration stays bounded without dropping any supplier.
   function focusedProductResearchPriority(source){return ["beauty_focus","electronics_focus","small_appliance_focus"].includes(lower(source&&source.supplyLane))?1:0;}
-  const allSupplierSources=sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||focusedProductResearchPriority(b)-focusedProductResearchPriority(a)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName)));
+  const allSupplierSources=ProductReserve.interleaveSuppliers(sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||focusedProductResearchPriority(b)-focusedProductResearchPriority(a)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))));
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
 
   const supplierLedgerSourceId=text(supplierJob&&supplierJob.jobId)||"durable_supplier_candidate_ledger";
@@ -2697,7 +2700,7 @@ async function beginProductResearchJob(actorId, input) {
   const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,supplierRefreshCursor:nextSupplierRefreshCursor,refreshedSupplierSourceCount:refreshing.length,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,gapSupplierSourceCount,skippedKnownSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,zeroProductSupplierKeys:Array.from(priorGapKeys),supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,discoveryStorage:"chunked_v1",discoveryResultCount:0,discoveryChunkCount:0,discoveryIdentities:[],rawProducts:[],rawProductCount:0,inspectionStorage:"discovery_chunks_v1",inspectionPool:[],inspectionProcessedBase:0,inspectionTotalCount:0,inspectCursor:0,productInspectionRetryRefs:[],productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],resultStorage:"chunked_v1",resultCount:0,resultChunkCount:0,resultIdentities:[],resultStats:summarizeProductResultRows([]),products:[],preservedProductIdentities:[],currentCycleTouchedIdentities:[],stagePool:[],stagePoolFormat:"result_cursor_v1",stageTotalCount:0,stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},partialQueueStagedIdentities:[],partialQueueLast:null,trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,gapSupplierSources:gapSupplierSourceCount,skippedKnownSupplierSources:skippedKnownSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,storage:"country_region_chunked_v1",chunkSize:PRODUCT_CHUNK_SIZE,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; explicit_full_rescan; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; skip_successfully_researched_suppliers; research_new_and_gap_suppliers_only; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA)await archiveProductResearchCycle(existing,actorId);
   await saveProductJob(job,actorId);
-  await saveProductRuntime(scope,actorId,{jobId:job.jobId,pauseRequested:false,paused:false,pauseMode:"manual",pauseRequestedAt:null,resumedAt:null,partialQueueScanCursor:0,partialQueueStagedIdentities:[],partialQueueUnstagedIdentities:[],latestResearchDeletedIdentities:[],partialQueueLast:null,checkpoint:productRuntimeCheckpoint(compactProductResearchStep(job),scope)});
+  await saveProductRuntime(scope,actorId,{jobId:job.jobId,pauseRequested:false,paused:false,pauseMode:"manual",pauseRequestedAt:null,resumedAt:null,partialQueueScanCursor:0,partialQueueStagedIdentities:[],partialQueueUnstagedIdentities:[],partialQueueReserveDeferredIdentities:[],latestResearchDeletedIdentities:[],partialQueueLast:null,checkpoint:productRuntimeCheckpoint(compactProductResearchStep(job),scope)});
   // product_research_begin only needs to return progress metadata.  Returning
   // the full historical product payload recreates the exact large-response
   // failure this lightweight cycle is designed to remove.
@@ -2909,11 +2912,11 @@ async function resolveChunkedProductSelection(job,input){
   for(let offset=0;offset<total&&out.length<ids.size;offset+=PRODUCT_STATUS_PAGE_LIMIT){const rows=await readProductChunkRange(job,"result",offset,PRODUCT_STATUS_PAGE_LIMIT);for(const row of rows){const identity=ProductRanking.productIdentity(row),key=identity||text(row&&row.id)||productUrl(row);if(productSelectionMatches(row,ids)&&key&&!seen.has(key)){seen.add(key);out.push(row);}}}
   return out;
 }
-async function registeredProductCandidateByUrl(product){
+async function registeredProductCandidateByUrl(product,scope){
   const url=productUrl(product);if(!url)return null;
   try{
-    const rows=await SlotStore.select("gslot_candidates","select=id,official_url,status,source_ref,source_payload&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(url)+"&limit=1");
-    const row=array(rows)[0];return row&&text(row.source_ref)===PRODUCT_SOURCE_REF?row:null;
+    const rows=await SlotStore.select("gslot_candidates","select=id,official_url,status,source_ref,source_payload&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(url)+"&limit=300");
+    const row=array(rows).find(r=>heldCandidateMatchesScope(r,scope));return row&&text(row.source_ref)===PRODUCT_SOURCE_REF?row:null;
   }catch(_error){return null;}
 }
 async function durableProductCandidate(scope,product,candidateIdInput){
@@ -2924,7 +2927,7 @@ async function durableProductCandidate(scope,product,candidateIdInput){
       if(row&&text(row.source_ref)===PRODUCT_SOURCE_REF)return row;
     }catch(_error){}
   }
-  return registeredProductCandidateByUrl(product);
+  return registeredProductCandidateByUrl(product,scope);
 }
 function candidateNeedsQueueReactivation(row){
   const payload=plain(row&&row.source_payload),decision=lower(payload.slotDecision),control=plain(payload.managementControl),queue=plain(payload.queueControl),front=plain(payload.frontPublication),frontStatus=lower(front.status);
@@ -2940,7 +2943,7 @@ async function reconcileExplicitPrivateQueueSelection(scope,products,handled,ran
      unresolved deterministic IDs against official_url as well. Without this,
      the same first 10 rows were repeatedly treated as unstaged forever. */
   for(let offset=0;offset<unresolved.length;offset+=6){
-    const group=unresolved.slice(offset,offset+6),rows=await Promise.all(group.map((entry)=>registeredProductCandidateByUrl(entry.product)));
+    const group=unresolved.slice(offset,offset+6),rows=await Promise.all(group.map((entry)=>registeredProductCandidateByUrl(entry.product,scope)));
     for(let i=0;i<group.length;i++){const entry=group[i],row=rows[i];if(row){if(reactivateReviewable&&candidateNeedsQueueReactivation(row)){handled.delete(entry.identity);reactivationPending+=1;}else{handled.add(entry.identity);actualIdentities.add(entry.identity);actualCandidateIds.push(text(row.id));}}else if(handled.delete(entry.identity))staleHandledRepaired+=1;}
   }
   return{products:evaluated,actualCandidateIds:Array.from(new Set(actualCandidateIds.filter(Boolean))),actualIdentities,staleHandledRepaired,reactivationPending,checked:identityByCandidate.size};
@@ -2952,7 +2955,7 @@ async function unmatchPrivateResearchRows(actorId,scope,products,handled,explici
     const identity=ProductRanking.productIdentity(product);
     try{
       let candidateId=productCandidateId(scope,product),candidate=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0];
-      if(!candidate){const currentUrl=productUrl(product);if(currentUrl)candidate=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(currentUrl)+"&limit=1"))[0];if(candidate)candidateId=text(candidate.id);}
+      if(!candidate){const currentUrl=productUrl(product);if(currentUrl)candidate=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(currentUrl)+"&limit=1000")).find(r=>heldCandidateMatchesScope(r,scope));if(candidate)candidateId=text(candidate.id);}
       if(!candidate||text(candidate.source_ref)!==PRODUCT_SOURCE_REF){skipped+=1;handled.delete(identity);if(identity)explicitlyUnstaged.add(identity);details.push({productId:text(product.id),candidateId:candidateId||null,status:"not_registered"});continue;}
       const payload=plain(candidate.source_payload),decision=lower(payload.slotDecision||"undecided"),control=plain(payload.managementControl),front=plain(payload.frontPublication),frontStatus=lower(front.status),status=lower(candidate.status||"approval_pending");
       const protectedState=decision!=="undecided"||control.administratorLocked===true||!["approval_pending","research_pending"].includes(status)||["queued","publish_requested","published","matched","active","unpublish_requested"].includes(frontStatus);
@@ -2999,7 +3002,7 @@ async function persistLatestProductValidationDisposition(actorId,scope,productIn
   const product=plain(productInput),disposition=plain(dispositionInput),decision=disposition.decision==="reject"?"reject":"hold",candidateId=productCandidateId(scope,product),now=iso();
   if(!candidateId)return{status:"failed",decision,error:"missing_product_identity"};
   let existing=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url,thumbnail_url,title&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0];
-  if(!existing){const currentUrl=productUrl(product);if(currentUrl)existing=await registeredProductCandidateByUrl(product);}
+  if(!existing){const currentUrl=productUrl(product);if(currentUrl)existing=await registeredProductCandidateByUrl(product,scope);}
   if(existing&&text(existing.source_ref)!==PRODUCT_SOURCE_REF)return{status:"protected",decision,candidateId:text(existing.id)||candidateId,reason:"existing_non_product_candidate_preserved"};
   const prior=plain(existing&&existing.source_payload),priorDecision=lower(prior.slotDecision),priorControl=plain(prior.managementControl),priorQueue=plain(prior.queueControl),front=plain(prior.frontPublication),frontStatus=lower(front.status);
   const protectedState=priorQueue.permanentExcluded===true||priorControl.administratorLocked===true||lower(priorControl.source)==="administrator"||priorDecision==="slot_candidate"||["queued","publish_requested","matched","published","active","unpublish_requested"].includes(frontStatus);
@@ -3043,7 +3046,9 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   const requestedIds=new Set(array(input&&input.productIds).map(text).filter(Boolean).slice(0,100)),hasSelection=requestedIds.size>0||array(input&&input.productRefs).length>0,handled=new Set(array(runtime.partialQueueStagedIdentities).map(text).filter(Boolean)),explicitlyUnstaged=new Set(array(runtime.partialQueueUnstagedIdentities).map(text).filter(Boolean));
   if(operation==="purge"){
     if(!hasSelection){const error=new Error("영구 제외할 최신 상품을 선택하세요.");error.statusCode=400;throw error;}
-    const rows=await resolveChunkedProductSelection(job,input),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)),details=[];let excluded=0,failed=0;
+    const rows=await resolveChunkedProductSelection(job,input);
+    if(!rows.length){const error=new Error("최신 리서치 결과에서 영구 제외 대상 ID를 찾지 못했습니다. 최신 목록을 새로 읽고 다시 시도하세요.");error.statusCode=409;error.code="LATEST_RESEARCH_PURGE_TARGET_NOT_FOUND";throw error;}
+    const deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)),details=[];let excluded=0,failed=0;
     for(const product of rows){try{const saved=await persistLatestProductPermanentExclusion(actorId,scope,product),identity=saved.identity;if(identity)deletedLatest.add(identity);excluded+=1;details.push(saved);}catch(error){failed+=1;details.push({productId:text(product&&product.id),status:"failed",error:text(error&&error.message||error)});}}
     const deletedKeys=Array.from(new Set(rows.flatMap(productSelectionAliases))).slice(0,400),partialQueue={schema:"igdc-product-research-partial-private-queue.v4",operation:"purge",source:"latest_list_manual",eligible:rows.length,done:excluded,remaining:0,attempted:rows.length,handled:excluded,permanentExcluded:excluded,deletedKeys,blocked:0,failed,complete:true,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsPreserved:false,latestResearchRowsDeleted:excluded,rediscoveryAllowed:false,automaticFullCompletionStaging:false,stagedAt:iso(),stagedBy:text(actorId)||"administrator",details};
     {const permanent=new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean));for(const product of rows){const identity=ProductRanking.productIdentity(product)||text(product&&product.id)||productUrl(product);if(identity)permanent.add(identity);}runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),permanentExcludedIdentities:Array.from(permanent).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});}
@@ -3051,7 +3056,9 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   }
   if(operation==="delete"){
     if(!hasSelection){const error=new Error("대기열에서 삭제할 최신 상품을 선택하세요.");error.statusCode=400;throw error;}
-    const rows=await resolveChunkedProductSelection(job,input),result=await unmatchPrivateResearchRows(actorId,scope,rows,handled,explicitlyUnstaged),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));let deleted=0;
+    const rows=await resolveChunkedProductSelection(job,input);
+    if(!rows.length){const error=new Error("최신 리서치 결과에서 삭제 대상 ID를 찾지 못했습니다. 최신 목록을 새로 읽고 다시 시도하세요.");error.statusCode=409;error.code="LATEST_RESEARCH_DELETE_TARGET_NOT_FOUND";throw error;}
+    const result=await unmatchPrivateResearchRows(actorId,scope,rows,handled,explicitlyUnstaged),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));let deleted=0;
     // Deleting from the latest-research view is a list-management action. Always
     // hide the administrator-selected research rows from this cycle, even when a
     // downstream candidate/placement is protected. Protected downstream state is
@@ -3073,7 +3080,8 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   const durableLedgerCheckpointFresh=text(runtime.partialQueueLedgerVerifiedVersion)===VERSION;
   if(!hasSelection&&!durableLedgerCheckpointFresh){scanCursor=0;handled.clear();}
   const researchSuppressed=new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean).concat(array(runtime.researchExcludedIdentities).map(text).filter(Boolean)));
-  const queueAccepts=(row)=>{const identity=productQueueIdentity(row);return row&&(!identity||!researchSuppressed.has(identity))&&productResearchStagingQualityReady(row)&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));};
+  const previouslyReserveDeferred=new Set(array(runtime.partialQueueReserveDeferredIdentities).map(text).filter(Boolean));
+  const queueAccepts=(row)=>{const identity=productQueueIdentity(row);return row&&(!identity||!previouslyReserveDeferred.has(identity))&&(!identity||!researchSuppressed.has(identity))&&productResearchStagingQualityReady(row)&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));};
   // An explicit latest-list registration/AI request is an administrator command to
   // re-check the selected product pages now. Product discovery may have produced a
   // provisional row (for example a catalog anchor with an image) before the normal
@@ -3119,13 +3127,22 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
     }
   }
 
-  const summary={created:0,updated:0,preserved:0,skipped:0,failed:0},stagedCandidateIds=new Set();let firstFailed=null;
-  for(let offset=0;offset<batch.length;offset+=PRODUCT_PARTIAL_STAGE_CONCURRENCY){
-    const group=batch.slice(offset,offset+PRODUCT_PARTIAL_STAGE_CONCURRENCY),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product,{allowAdministratorReviewQueue:manualReviewQueue,restoreReviewableExisting:explicitManualQueue})));
-    for(let i=0;i<settled.length;i++){const result=settled[i],entry=group[i];if(result.status!=="fulfilled"){summary.failed+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}const state=text(result.value&&result.value.status),candidateId=text(result.value&&result.value.candidateId),registered=result.value&&result.value.registered===true;if(!registered){summary.skipped+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}if(/created/.test(state))summary.created+=1;else if(/updated/.test(state))summary.updated+=1;else summary.preserved+=1;handled.add(entry.identity);explicitlyUnstaged.delete(entry.identity);if(candidateId)stagedCandidateIds.add(candidateId);}
+  // The administrator's explicit selection is an override.  Automatic and
+  // unselected bulk staging must observe the country/category reserve budget.
+  const reserveManaged=!hasSelection;
+  const reserveRows=reserveManaged&&batch.length?await readResearchReserveRows(scope):null;
+  const reserveDeferred=new Set(array(runtime.partialQueueReserveDeferredIdentities).map(text).filter(Boolean));
+  const summary={created:0,updated:0,preserved:0,skipped:0,failed:0,reserveDeferred:0,reserveReplaced:0},stagedCandidateIds=new Set();let firstFailed=null;
+  for(let offset=0;offset<batch.length;offset+=(reserveManaged?1:PRODUCT_PARTIAL_STAGE_CONCURRENCY)){
+    const group=batch.slice(offset,offset+(reserveManaged?1:PRODUCT_PARTIAL_STAGE_CONCURRENCY)),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product,{allowAdministratorReviewQueue:manualReviewQueue,restoreReviewableExisting:explicitManualQueue,reserveRows})));
+    for(let i=0;i<settled.length;i++){const result=settled[i],entry=group[i];if(result.status!=="fulfilled"){summary.failed+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}const state=text(result.value&&result.value.status),candidateId=text(result.value&&result.value.candidateId),registered=result.value&&result.value.registered===true;if(!registered){summary.skipped+=1;
+        if(state==='research_reserve_deferred'){reserveDeferred.add(entry.identity);summary.reserveDeferred+=1;continue;}
+        if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}if(/created/.test(state))summary.created+=1;else if(/updated/.test(state))summary.updated+=1;else summary.preserved+=1;
+      if(result.value&&result.value.reserveReplacement&&result.value.reserveReplacement.archived===true)summary.reserveReplaced+=1;
+      handled.add(entry.identity);reserveDeferred.delete(entry.identity);explicitlyUnstaged.delete(entry.identity);if(candidateId)stagedCandidateIds.add(candidateId);}
   }
   if(!hasSelection&&firstFailed!=null)scanCursor=Math.min(scanCursor,firstFailed);
-  const globalEligibleTotal=Math.max(0,Number(plain(job.resultStats).queueEligible||0)-Math.min(Number(plain(job.resultStats).queueEligible||0),explicitlyUnstaged.size)),globalDone=Math.min(globalEligibleTotal,handled.size),rawGlobalRemaining=Math.max(0,globalEligibleTotal-globalDone),globalRemaining=!hasSelection&&scanCursor>=total&&summary.failed===0?0:(!hasSelection&&scanCursor<total?Math.max(1,rawGlobalRemaining):rawGlobalRemaining);
+  const globalEligibleTotal=Math.max(0,Number(plain(job.resultStats).queueEligible||0)-Math.min(Number(plain(job.resultStats).queueEligible||0),explicitlyUnstaged.size+reserveDeferred.size)),globalDone=Math.min(globalEligibleTotal,handled.size),rawGlobalRemaining=Math.max(0,globalEligibleTotal-globalDone),globalRemaining=!hasSelection&&scanCursor>=total&&summary.failed===0?0:(!hasSelection&&scanCursor<total?Math.max(1,rawGlobalRemaining):rawGlobalRemaining);
   const selectedEligible=hasSelection?selectedRows.filter(queueAccepts):[],selectedPending=hasSelection?selectedEligible.filter((row)=>{const identity=productQueueIdentity(row);return identity&&!handled.has(identity);}):[],eligibleTotal=hasSelection?selectedEligible.length:globalEligibleTotal,done=hasSelection?Math.max(0,eligibleTotal-selectedPending.length):globalDone,remaining=hasSelection?selectedPending.length+Number(validationRoute.failed||0):globalRemaining,totalFailed=summary.failed+Number(validationRoute.failed||0),complete=hasSelection?(remaining===0&&totalFailed===0):(scanCursor>=total&&summary.failed===0);
   const selectedBlocked=hasSelection?Math.max(0,Number(validationRoute.unresolved||0)+Number(validationRoute.failed||0)):0,blockedReasons=hasSelection?selectedValidationBlockedRows.map((row)=>{const readiness=ProductPipeline.researchReadiness(row),disposition=latestProductValidationDisposition(row);return{productId:text(row&&row.id)||null,title:text(row&&row.productName||row&&row.title)||null,url:productUrl(row)||null,inspectionComplete:row&&row.inspectionComplete===true,researchStatus:text(row&&row.researchStatus)||null,automaticDisposition:disposition.decision,automaticDispositionReason:disposition.reason,blockers:array(readiness&&readiness.blockers),reviewGaps:array(readiness&&readiness.reviewGaps)};}).slice(0,20):[],verifiedCandidateIds=Array.from(new Set(selectionReconcile.actualCandidateIds.concat(Array.from(stagedCandidateIds)))).slice(0,100);
   const candidateTransferredIdentities=new Set(),candidateTransferredKeys=new Set();
@@ -3133,9 +3150,9 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   const validationConsumedIdentities=new Set(array(validationRoute.consumedIdentities).map(text).filter(Boolean)),transferredIdentities=new Set([...candidateTransferredIdentities,...validationConsumedIdentities]);
   const holdTransferredKeys=Array.from(new Set(array(validationRoute.candidateHoldKeys).map(text).filter(Boolean))),rejectTransferredKeys=Array.from(new Set(array(validationRoute.candidateRejectKeys).map(text).filter(Boolean))),protectedTransferredKeys=Array.from(new Set(array(validationRoute.protectedKeys).map(text).filter(Boolean))),allTransferredKeys=Array.from(new Set([...candidateTransferredKeys,...holdTransferredKeys,...rejectTransferredKeys,...protectedTransferredKeys]));
   const movedToCandidate=candidateTransferredIdentities.size,transferred=movedToCandidate+Number(validationRoute.routedHold||0)+Number(validationRoute.routedReject||0)+Number(validationRoute.protectedPreserved||0);
-  const partialQueue={schema:"igdc-product-research-partial-private-queue.v6",operation:"stage",source:lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual"),eligible:eligibleTotal,done,remaining,attempted:batch.length+Number(validationRoute.attempted||0),handled:summary.created+summary.updated+summary.preserved,movedToCandidate,transferred,transferredKeys:allTransferredKeys,candidateTransferredKeys:Array.from(candidateTransferredKeys),holdTransferredKeys,rejectTransferredKeys,protectedTransferredKeys,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,validationBlocked:selectedValidationBlockedRows.length,routedHold:Number(validationRoute.routedHold||0),routedReject:Number(validationRoute.routedReject||0),protectedPreserved:Number(validationRoute.protectedPreserved||0),blocked:selectedBlocked,blockedReasons,failed:totalFailed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),reactivationPending:Number(selectionReconcile.reactivationPending||0),complete,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsTransferred:hasSelection&&manualReviewQueue?transferred:0,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
+  const partialQueue={schema:"igdc-product-research-partial-private-queue.v6",operation:"stage",source:lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual"),eligible:eligibleTotal,done,remaining,attempted:batch.length+Number(validationRoute.attempted||0),handled:summary.created+summary.updated+summary.preserved,movedToCandidate,transferred,transferredKeys:allTransferredKeys,candidateTransferredKeys:Array.from(candidateTransferredKeys),holdTransferredKeys,rejectTransferredKeys,protectedTransferredKeys,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,reserveDeferred:summary.reserveDeferred,reserveReplaced:summary.reserveReplaced,validationBlocked:selectedValidationBlockedRows.length,routedHold:Number(validationRoute.routedHold||0),routedReject:Number(validationRoute.routedReject||0),protectedPreserved:Number(validationRoute.protectedPreserved||0),blocked:selectedBlocked,blockedReasons,failed:totalFailed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),reactivationPending:Number(selectionReconcile.reactivationPending||0),complete,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsTransferred:hasSelection&&manualReviewQueue?transferred:0,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
   const consumedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));if(hasSelection&&manualReviewQueue)transferredIdentities.forEach((identity)=>consumedLatest.add(identity));
-  runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueScanCursor:hasSelection?Number(runtime.partialQueueScanCursor||0):scanCursor,partialQueueLedgerVerifiedVersion:hasSelection?text(runtime.partialQueueLedgerVerifiedVersion):VERSION,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(consumedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
+  runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueScanCursor:hasSelection?Number(runtime.partialQueueScanCursor||0):scanCursor,partialQueueLedgerVerifiedVersion:hasSelection?text(runtime.partialQueueLedgerVerifiedVersion):VERSION,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueReserveDeferredIdentities:Array.from(reserveDeferred).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(consumedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
   return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,onlyValidatedProductsEnterActiveCandidateQueue:true,invalidLatestRowsClassifiedToHoldOrReject:hasSelection&&manualReviewQueue,latestListActsAsTransferInbox:hasSelection&&manualReviewQueue,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
 }
 
@@ -3188,7 +3205,9 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
 
   if (operation === "purge") {
     if (!requestedIds.size) { const error = new Error("영구 제외할 최신 상품을 선택하세요."); error.statusCode = 400; throw error; }
-    const selectedPurgeRows=requestedRows.slice(0,100),deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)),details=[];let excluded=0,failed=0;
+    const selectedPurgeRows=requestedRows.slice(0,100);
+    if(!selectedPurgeRows.length){const error=new Error("기존 리서치 결과에서 영구 제외 대상 ID를 찾지 못했습니다. 최신 목록을 새로 읽고 다시 시도하세요.");error.statusCode=409;error.code="LEGACY_LATEST_PURGE_TARGET_NOT_FOUND";throw error;}
+    const deletedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)),details=[];let excluded=0,failed=0;
     for(const product of selectedPurgeRows){try{const saved=await persistLatestProductPermanentExclusion(actorId,scope,product),identity=saved.identity;if(identity)deletedLatest.add(identity);excluded+=1;details.push(saved);}catch(error){failed+=1;details.push({productId:text(product&&product.id),status:"failed",error:text(error&&error.message||error)});}}
     const deletedKeys=Array.from(new Set(selectedPurgeRows.flatMap(productSelectionAliases))).slice(0,400),partialQueue={schema:"igdc-product-research-partial-private-queue.v3",operation:"purge",source:"latest_list_manual",eligible:selectedPurgeRows.length,done:excluded,remaining:0,attempted:selectedPurgeRows.length,handled:excluded,permanentExcluded:excluded,deletedKeys,blocked:0,failed,complete:true,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsPreserved:false,latestResearchRowsDeleted:excluded,rediscoveryAllowed:false,automaticFullCompletionStaging:false,stagedAt:iso(),stagedBy:text(actorId)||"administrator",details};
     {const permanent=new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean));for(const product of selectedPurgeRows){const identity=ProductRanking.productIdentity(product)||text(product&&product.id)||productUrl(product);if(identity)permanent.add(identity);}runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,latestResearchDeletedIdentities:Array.from(deletedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),permanentExcludedIdentities:Array.from(permanent).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});}
@@ -3197,7 +3216,9 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
 
   if (operation === "delete") {
     if (!requestedIds.size) { const error = new Error("대기열에서 삭제할 최신 상품을 선택하세요."); error.statusCode = 400; throw error; }
-    const selectedDeleteRows = requestedRows.slice(0, 100), result = await unmatchPrivateResearchRows(actorId, scope, selectedDeleteRows, handled, explicitlyUnstaged), deletedLatest = new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)); let deleted = 0;
+    const selectedDeleteRows = requestedRows.slice(0, 100);
+    if(!selectedDeleteRows.length){const error=new Error("기존 리서치 결과에서 삭제 대상 ID를 찾지 못했습니다. 최신 목록을 새로 읽고 다시 시도하세요.");error.statusCode=409;error.code="LEGACY_LATEST_DELETE_TARGET_NOT_FOUND";throw error;}
+    const result = await unmatchPrivateResearchRows(actorId, scope, selectedDeleteRows, handled, explicitlyUnstaged), deletedLatest = new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean)); let deleted = 0;
     for (const row of selectedDeleteRows) { const identity = ProductRanking.productIdentity(row) || text(row && row.id) || productUrl(row); if (identity && !deletedLatest.has(identity)) { deletedLatest.add(identity); deleted += 1; } }
     const deletedKeys = Array.from(new Set(selectedDeleteRows.flatMap(productSelectionAliases))).slice(0,400);
     const partialQueue = { schema:"igdc-product-research-partial-private-queue.v3", operation:"delete", source:"latest_list_manual", eligible:selectedDeleteRows.length, done:deleted, remaining:0, attempted:selectedDeleteRows.length, handled:deleted, deleted, deletedKeys, removed:result.removed, skipped:result.skipped, blocked:result.blocked, failed:result.failed, complete:true, researchStatus:job.status, researchCursorPreserved:true, latestResearchRowsPreserved:false, latestResearchRowsDeleted:deleted, protectedDownstreamPreserved:result.blocked, automaticFullCompletionStaging:false, stagedAt:iso(), stagedBy:text(actorId)||"administrator", details:result.details };
@@ -3691,7 +3712,10 @@ function productCandidatePayload(actorId, scope, product, decision) {
   const productUrlValue = productUrl(product), imageUrlValue = productImageUrl(product), readiness = ProductPipeline.researchReadiness(product), card = ProductPipeline.productCard(product);
   const placementRecord = { page: text(placement.page), section: text(placement.sectionKey || placement.section), country: scope.country, region: scope.region, proposalOnly: !selected, administratorSelected: selected && !aiSelected, aiSelected, publicationPending: selected, publicPublication: false };
   return {
-    id: productCandidateId(scope, product), entityKind: "product_reference", title: card.title, sourceTitle: card.sourceTitle, url: productUrlValue, externalProductUrl: productUrlValue, productUrl: productUrlValue, sourcePageUrl: safeUrl(product.sourcePageUrl) || null, verifiedDetailPageUrl: safeUrl(product.verifiedDetailPageUrl) || productUrlValue || null, image: imageUrlValue, thumb: imageUrlValue, imageUrl: imageUrlValue,
+    id: productCandidateId(scope, product), entityKind: "product_reference",
+    researchIdentity: productQueueIdentity(product), researchOriginalId: text(product&&product.id),
+    productSku: text(first(product&&product.productSku,product&&product.productSKU,product&&product.sku)),
+    title: card.title, sourceTitle: card.sourceTitle, url: productUrlValue, externalProductUrl: productUrlValue, productUrl: productUrlValue, sourcePageUrl: safeUrl(product.sourcePageUrl) || null, verifiedDetailPageUrl: safeUrl(product.verifiedDetailPageUrl) || productUrlValue || null, image: imageUrlValue, thumb: imageUrlValue, imageUrl: imageUrlValue,
     price: text(product.price), priceCurrency: text(product.priceCurrency), availability: text(product.availability), productCard: card,
     page: placementRecord.page, channel: placementRecord.page, section: placementRecord.section, psom_key: placementRecord.section,
     placement: placementRecord, approvedPlacement: selected ? placementRecord : null, proposedPlacements: array(product.sectionAssignments), managementControl,
@@ -3715,6 +3739,48 @@ function administratorReviewQueueEligible(productInput) {
   if(product.productPageLive===false||risk.explicitUnavailable===true||risk.specificProductUrl===false)return false;
   return true;
 }
+// Scan all durable product records for this country/region.  A per-page
+// count would allow a popular category to overrun the private reserve or
+// accidentally compare a Korean candidate with another market's goods.
+// Each market is queried on the server rather than loading all countries.
+// Do not use an arbitrary worldwide 30,000-record scan: 249 country ledgers
+// cannot share a single query/limit, and every reserve decision is market-local.
+async function readResearchReserveRows(scope){
+  const collected=new Map(),batchSize=250,maxPerSchema=25000,cc=encodeURIComponent(scope.country);
+  const fields="id,status,source_ref,source_payload,official_url";
+  const scopeSelectors=[
+    "source_payload->marketScope->>marketCountry=eq."+cc,
+    "source_payload->countrySupply->>country=eq."+cc,
+    "source_payload->countrySupply->>countryCode=eq."+cc,
+    "source_payload->approvedPlacement->>country=eq."+cc,
+    "source_payload->primaryPlacement->>country=eq."+cc,
+    "source_payload->placement->>country=eq."+cc,
+    "source_payload->>countryCode=eq."+cc
+  ];
+  for(const selector of scopeSelectors){
+    let complete=false;
+    for(let offset=0;offset<maxPerSchema;offset+=batchSize){
+      const query="select="+fields+"&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&"+selector+"&order=id.asc&limit="+batchSize+"&offset="+offset;
+      const rows=array(await SlotStore.select("gslot_candidates",query));
+      for(const row of rows)if(ProductReserve.scopeMatches(row,scope))collected.set(text(row.id),row);
+      if(rows.length<batchSize){complete=true;break;}
+    }
+    if(!complete){const error=new Error("국가별 상품 후보 조회가 완료되지 않아 자동 후보 치환을 보류했습니다.");error.statusCode=503;error.code="MARKET_RESERVE_LEDGER_INCOMPLETE";throw error;}
+  }
+  return Array.from(collected.values());
+}
+async function archiveReplacedPrivateResearchCandidate(actorId,olderId,scope){
+  const older=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&id=eq."+encodeURIComponent(olderId)+"&limit=1"))[0];
+  if(!older||!ProductReserve.scopeMatches(older,scope)||!ProductReserve.reserveRowActive(older)||ProductReserve.protectedRow(older))return false;
+  // Any assignment relation is stronger than a possibly stale payload marker.
+  const relations=array(await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(olderId)+"&limit=1"));
+  if(relations.length)return false;
+  const payload=Object.assign({},plain(older.source_payload)),now=iso();
+  payload.slotDecision="removed";payload.researchReserve=Object.assign({},plain(payload.researchReserve),{status:"out_ranked_in_private_reserve",removedAt:now,researchReplacementOnly:true});
+  payload.queueControl=Object.assign({},plain(payload.queueControl),{action:"reserve_replaced",hiddenFromCountryQueue:true,rediscoveryAllowed:true,decidedAt:now,decidedBy:text(actorId)||"product-research-reserve"});
+  const updated=array(await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(olderId),{status:"removed",source_payload:payload,updated_at:now}));
+  return updated.some(row=>text(row&&row.id)===olderId);
+}
 async function syncProductResearchPreview(actorId, scope, productInput, optionsInput) {
   const options=plain(optionsInput),readiness = ProductPipeline.researchReadiness(productInput),manualReviewQueue=options.allowAdministratorReviewQueue===true;
   // A bare sitemap/catalog URL or a text-only discovery is RESEARCH evidence,
@@ -3723,6 +3789,8 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
   if(!productImageUrl(productInput)||ProductRanking.isGenericProductName(first(productInput&&productInput.productName,productInput&&productInput.title))){
     return{status:"product_media_or_title_incomplete",candidateId:null,registered:false,blockers:[!productImageUrl(productInput)?"product_image_missing":"",ProductRanking.isGenericProductName(first(productInput&&productInput.productName,productInput&&productInput.title))?"product_title_generic":""].filter(Boolean)};
   }
+  const detailQuality=ProductDetailQuality.evaluate(productInput);
+  if(!detailQuality.accepted)return{status:"product_detail_quality_rejected",candidateId:null,registered:false,blockers:detailQuality.reasons};
   if (!readiness.queueEligible && !(manualReviewQueue&&administratorReviewQueueEligible(productInput))) return { status: "research_preview_skipped", candidateId: null, registered:false, blockers: readiness.blockers };
   let product=productInput,candidateId=productCandidateId(scope, product);
   let existing=array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,official_url,thumbnail_url,title&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
@@ -3735,12 +3803,13 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
     const currentUrl=productUrl(product);
     if(currentUrl){
       try{
-        const sameUrl=array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,official_url,thumbnail_url,title&source_ref=eq." + encodeURIComponent(PRODUCT_SOURCE_REF) + "&official_url=eq." + encodeURIComponent(currentUrl) + "&limit=1"))[0];
+        const sameUrl=array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,official_url,thumbnail_url,title&source_ref=eq." + encodeURIComponent(PRODUCT_SOURCE_REF) + "&official_url=eq." + encodeURIComponent(currentUrl) + "&limit=300")).find(row=>heldCandidateMatchesScope(row,scope));
         if(sameUrl){existing=sameUrl;candidateId=text(sameUrl.id);product=Object.assign({},product,{candidateId});}
       }catch(_sameUrlLookupError){}
     }
   }
 
+  if(existing&&!heldCandidateMatchesScope(existing,scope))return{status:"cross_market_candidate_id_rejected",candidateId:null,registered:false,reason:"candidate_scope_mismatch"};
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, registered:false, currentStatus: text(existing.status) };
   const existingPayload = plain(existing && existing.source_payload), operatorDecision = lower(existingPayload.slotDecision), permanentExcluded = plain(existingPayload.queueControl).permanentExcluded === true;
   if(existing&&permanentExcluded)return { status: "operator_state_preserved", candidateId, registered:false, currentStatus: text(existing.status), decision: "purge", approvedPlacement: plain(existingPayload.approvedPlacement) };
@@ -3750,6 +3819,17 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
   const previewAssignments=existing?await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1"):[];
   if(existing&&(AdminPlacementGuard.establishedCandidate(existing)||array(previewAssignments).length>0))return {status:"confirmed_candidate_preserved_by_research",candidateId,registered:true,preserved:true,currentStatus:text(existing.status),decision:operatorDecision,approvedPlacement:plain(existingPayload.approvedPlacement)};
 
+  let reservePlan=null;
+  if(!existing&&Array.isArray(options.reserveRows)){
+    reservePlan=ProductReserve.decision(options.reserveRows,product,{frontCapacities:options.frontCapacities});
+    if(reservePlan.action==='defer')return{status:'research_reserve_deferred',candidateId:null,registered:false,reserve:reservePlan};
+    if(reservePlan.action==='replace'){
+      const older=options.reserveRows.find(row=>text(row&&row.id)===reservePlan.replacementId);
+      if(!older||ProductReserve.protectedRow(older))return{status:'research_reserve_deferred',candidateId:null,registered:false,reserve:reservePlan};
+      const assigns=array(await SlotStore.select('gslot_slot_assignments','select=id&candidate_id=eq.'+encodeURIComponent(reservePlan.replacementId)+'&limit=1'));
+      if(assigns.length)return{status:'research_reserve_deferred',candidateId:null,registered:false,reserve:Object.assign({},reservePlan,{reason:'replacement_has_assignment'})};
+    }
+  }
   const payload = productCandidatePayload(actorId, scope, product, "research_pending");
 
   // An explicit administrator queue-registration click means a rediscovered,
@@ -3791,7 +3871,29 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
 
   const row = { id: candidateId, kind: "product", title: payload.title, official_url: payload.externalProductUrl, status: "approval_pending", source_ref: PRODUCT_SOURCE_REF, thumbnail_url: payload.image, description: "Private researched external-seller product card. Administrator selection, market evidence, revenue route and slot assignment remain pending.", owner_note: "Automatically placed in the private research queue only; no publication, checkout or payment.", source_payload: payload, updated_at: iso() };
   if (existing) { await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), row); const durable=await durableProductCandidate(scope,product,candidateId);if(!durable)throw new Error("PRIVATE_PRODUCT_QUEUE_DURABLE_VERIFY_FAILED");candidateId=text(durable.id)||candidateId;return { status: "research_preview_updated", candidateId, registered:true, decision: "undecided", approvedPlacement: null }; }
-  row.created_at = iso(); row.created_by = text(actorId) || "product-research-orchestrator"; await SlotStore.insert("gslot_candidates", row, "return=minimal"); const durable=await durableProductCandidate(scope,product,candidateId);if(!durable)throw new Error("PRIVATE_PRODUCT_QUEUE_DURABLE_VERIFY_FAILED");candidateId=text(durable.id)||candidateId;return { status: "research_preview_created", candidateId, registered:true, decision: "undecided", approvedPlacement: null };
+  row.created_at = iso(); row.created_by = text(actorId) || "product-research-orchestrator"; await SlotStore.insert("gslot_candidates", row, "return=minimal"); const durable=await durableProductCandidate(scope,product,candidateId);if(!durable)throw new Error("PRIVATE_PRODUCT_QUEUE_DURABLE_VERIFY_FAILED");candidateId=text(durable.id)||candidateId;
+  let reserveReplacement={attempted:false,archived:false};
+  if(reservePlan&&reservePlan.action==='replace'){
+    reserveReplacement.attempted=true;
+    try{reserveReplacement.archived=await archiveReplacedPrivateResearchCandidate(actorId,reservePlan.replacementId,scope);}
+    catch(error){reserveReplacement.error=text(error&&error.message)||'reserve_archive_failed';}
+    if(!reserveReplacement.archived){
+      // Never represent an over-capacity insert as a successful substitution.
+      // A newly created row is the only row we may undo; published/placed and
+      // historically approved items are never removed by this code.
+      const assignments=array(await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(candidateId)+"&limit=1"));
+      if(assignments.length){const error=new Error("자동 예비 후보 등록 후 관계가 추가되어 롤백을 중단했습니다. 운영 원장 점검이 필요합니다.");error.statusCode=409;error.code="RESERVE_REPLACEMENT_ROLLBACK_BLOCKED";throw error;}
+      await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(candidateId));
+      const remains=array(await SlotStore.select("gslot_candidates","select=id&id=eq."+encodeURIComponent(candidateId)+"&limit=1"));
+      if(remains.length){const error=new Error("자동 예비 후보 롤백 저장 확인 실패");error.statusCode=409;error.code="RESERVE_REPLACEMENT_ROLLBACK_UNCONFIRMED";throw error;}
+      return{status:"research_reserve_deferred",candidateId:null,registered:false,reserve:Object.assign({},reservePlan,{reason:"replacement_not_archived"})};
+    }
+  }
+  if(Array.isArray(options.reserveRows)){
+    if(reserveReplacement.archived)options.reserveRows.splice(options.reserveRows.findIndex(x=>text(x&&x.id)===reservePlan.replacementId),1);
+    options.reserveRows.push({id:candidateId,status:'approval_pending',source_ref:PRODUCT_SOURCE_REF,source_payload:payload,official_url:row.official_url});
+  }
+  return { status: "research_preview_created", candidateId, registered:true, decision: "undecided", approvedPlacement: null, reserve:reservePlan, reserveReplacement };
 }
 
 async function syncProductCandidateQueue(actorId, scope, product, decision, optionsInput) {
@@ -3801,7 +3903,7 @@ async function syncProductCandidateQueue(actorId, scope, product, decision, opti
   // A stale research identity can refer to an already placed durable product
   // under a DIFFERENT candidate id. Never create a duplicate by URL in AI sync.
   if(!existing&&productUrl(product)){
-    const sameUrl=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(productUrl(product))+"&limit=1"))[0];
+    const sameUrl=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(productUrl(product))+"&limit=300")).find(row=>heldCandidateMatchesScope(row,scope));
     if(sameUrl)return{status:"matching_url_candidate_preserved",candidateId:text(sameUrl.id),preserved:true,currentStatus:text(sameUrl.status)};
   }
   // Durable administrator ledger, not a possibly old research-job copy,
@@ -3949,6 +4051,34 @@ async function syncCandidateManagementResearchVisibility(actorId, scope, candida
     const rows = array(job.products).concat(array(job.rawProducts));
     const matched = rows.filter((row) => productCandidateId(scope,row) === candidateId);
     const identities = Array.from(new Set(matched.map((row) => ProductRanking.productIdentity(row) || text(row&&row.id) || productUrl(row)).filter(Boolean)));
+    // Chunked research jobs do not populate job.products/job.rawProducts.
+    // The prior implementation returned research_identity_not_found for EVERY
+    // HOLD/REJECT/deletion on a chunked cycle, leaving the latest list unchanged
+    // even after the durable management candidate had been updated.
+    if (!identities.length) {
+      const saved=array(await SlotStore.select("gslot_candidates",
+        "select=id,official_url,source_ref,source_payload&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0];
+      if (saved && text(saved.source_ref)===PRODUCT_SOURCE_REF) {
+        const payload=plain(saved.source_payload),supplier=plain(payload.supplier);
+        const stored=text(payload.researchIdentity);
+        if(stored)identities.push(stored);
+        else {
+          // Older candidates have no stored identity. Rebuild it from exactly
+          // the product detail URL/title/supplier saved at queue admission.
+          // Avoid treating a seller homepage as a valid product identity.
+          const detail=safeUrl(first(payload.externalProductUrl,payload.productUrl,saved.official_url));
+          if(detail){
+            const fallback=ProductRanking.productIdentity({
+              productUrl:detail,productName:first(payload.sourceTitle,payload.title),
+              supplierSiteUrl:first(supplier.officialUrl,detail),
+              supplierName:supplier.name,imageUrl:first(payload.image,payload.thumb),
+              productSku:payload.productSku
+            });
+            if(fallback)identities.push(fallback);
+          }
+        }
+      }
+    }
     if (!identities.length) return { ok:true, skipped:true, reason:"research_identity_not_found" };
     const runtime = await productRuntimeRule(scope), permanent = new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean)), researchExcluded = new Set(array(runtime.researchExcludedIdentities).map(text).filter(Boolean)), deleted = new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));
     if (decision === "purge") {
@@ -4512,6 +4642,135 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     withdrawCandidateIds:Array.from(withdrawCandidateIds), withdrawAssignments, results, publicPublication:false, paymentExecution:false
   };
 }
+/**
+ * Operator-selected PSOM rank replacement. All scope/rank/relations are read
+ * from the durable ledger. Preview is strictly read-only. The accepted plan is
+ * rechecked at apply time; a changed victim or section blocks that operation.
+ * Published/manual/assigned candidates are not automatically displaced.
+ */
+async function productCandidatePsomRankedReplace(actorId,input){
+  const scope=researchScope(input), actor=text(actorId)||'administrator', mode=lower(input&&input.previewOnly===true?'preview':'apply');
+  const preferred=validProductSectionKey(input&&input.preferredSectionKey)?text(input.preferredSectionKey):'';
+  const ids=Array.from(new Set(array(input&&input.candidateIds).map(text).filter(Boolean))).slice(0,8);
+  if(!ids.length){const e=new Error('AI 랭킹 비교할 미배치 상품을 선택하세요.');e.statusCode=400;throw e;}
+  if(input&&input.preferredSectionKey&&!preferred){const e=new Error('20개 섹션 중 올바른 섹션을 선택하세요.');e.statusCode=400;throw e;}
+  const selected=await frontSyncSelectCandidates(ids),byId=new Map(selected.map(row=>[text(row.id),row]));
+  // Scope-local across 249 country ledgers. Never use browser-provided counts.
+  const scopedRows=await readResearchReserveRows(scope),bySection=new Map();
+  for(const row of scopedRows){const key=PSOMRankCompare.sectionKey(row);if(!key)continue;if(!bySection.has(key))bySection.set(key,[]);bySection.get(key).push(row);}
+  const replacementCandidates=scopedRows.filter(row=>PSOMRankCompare.sectionKey(row)&&lower(plain(row.source_payload).slotDecision)==='slot_candidate'&&!PSOMRankCompare.isProtected(row,[]));
+  const relationById={};
+  for(let start=0;start<replacementCandidates.length;start+=80){
+    const chunk=replacementCandidates.slice(start,start+80).map(row=>text(row.id)),relations=await frontSyncSelectByCandidate('gslot_slot_assignments','id,candidate_id,publication_status,state,manual_pinned',chunk);
+    for(const relation of relations){const id=text(relation.candidate_id);(relationById[id]||(relationById[id]=[])).push(relation);}
+  }
+  const expected=plain(input&&input.acceptedPlan),results=[],now=iso();let processed=0,failed=0,replaced=0;
+  for(const id of ids){
+    try{
+      const row=plain(byId.get(id)),payload=plain(row.source_payload);
+      if(!text(row.id)||text(row.source_ref)!==PRODUCT_SOURCE_REF||!heldCandidateMatchesScope(row,scope)){results.push({candidateId:id,assigned:false,error:'candidate_not_found_in_selected_market'});failed++;continue;}
+      if(lower(payload.slotDecision)!=='undecided'||plain(payload.queueControl).hiddenFromCountryQueue===true){results.push({candidateId:id,assigned:false,error:'selected_candidate_is_not_unassigned'});failed++;continue;}
+      const product=candidateRuntimeProduct(row,scope);
+      if(!product){results.push({candidateId:id,assigned:false,error:'individual_product_url_missing'});failed++;continue;}
+      const quality=ProductDetailQuality.evaluate(product);
+      if(!quality.accepted){results.push({candidateId:id,assigned:false,error:'product_quality_review_required',reasons:quality.reasons});failed++;continue;}
+      const options=candidateRuntimePlacementOptions(product,payload),counts=normalizeProductSectionCounts(Object.fromEntries(PRODUCT_SECTION_KEYS.map(key=>[key,array(bySection.get(key)).filter(r=>lower(plain(r.source_payload).slotDecision)==='slot_candidate').length])));
+      const candidateOptions=array(options.options);
+      let preferredOption=preferred?candidateOptions.find(option=>productPlacementKey(option)===preferred):null;
+      if(preferred&&!preferredOption){results.push({candidateId:id,assigned:false,error:'selected_section_not_compatible_with_product',requestedSectionKey:preferred});failed++;continue;}
+      if(!preferredOption){preferredOption=automaticBalancedPlacement(product,candidateOptions,counts)||candidateOptions.slice().sort((a,b)=>Number(b.score||0)-Number(a.score||0))[0];}
+      const section=productPlacementKey(preferredOption);
+      if(!validProductSectionKey(section)){results.push({candidateId:id,assigned:false,error:'no_compatible_psom_section'});failed++;continue;}
+      const pool=array(bySection.get(section)),verdict=PSOMRankCompare.choose(row,pool,{sectionKey:section,frontCapacity:section==='tour|tour'?200:100,sectionCapacity:section==='tour|tour'?400:200,relations:relationById,minImprovement:15});
+      const response={candidateId:id,sectionKey:section,action:verdict.action,incomingScore:verdict.incomingScore,replacementScore:verdict.replacementScore||null,replacementId:verdict.replacementId||null,reason:verdict.reason||null,sectionCount:verdict.sectionCount};
+      if(mode==='preview'){
+        results.push(Object.assign({assigned:false,preview:true},response));
+        // Simulate the accepted batch so two selected products do not both
+        // preview against the very same lower-ranked candidate. Mark the
+        // simulated new placement as protected during this preview only.
+        if(verdict.action==='place'||verdict.action==='replace'){
+          const simulated=Object.assign({},row,{_relationProtected:true,source_payload:Object.assign({},payload,{slotDecision:'slot_candidate',approvedPlacement:candidateLedgerPlacementRecord(scope,preferredOption,actor,'ai_psom_ranked_preview')})});
+          bySection.set(section,array(bySection.get(section)).filter(item=>text(item.id)!==text(verdict.replacementId)).concat([simulated]));
+        }
+        continue;
+      }
+      const agreed=plain(expected[id]);
+      if(agreed.action!==verdict.action||text(agreed.sectionKey)!==section||text(agreed.replacementId)!==text(verdict.replacementId)){results.push(Object.assign({assigned:false,error:'rank_replacement_plan_changed_repreview_required'},response));failed++;continue;}
+      if(!['replace','place'].includes(verdict.action)){results.push(Object.assign({assigned:false,error:'no_rank_improvement_or_safe_slot'},response));failed++;continue;}
+      // Reconfirm both candidate and victim just before any write. Relations
+      // cannot be replaced by stale status flags or client-side guesses.
+      const fresh=plain(array(await frontSyncSelectCandidates([id]))[0]);
+      if(!heldCandidateMatchesScope(fresh,scope)||lower(plain(fresh.source_payload).slotDecision)!=='undecided'){results.push(Object.assign({assigned:false,error:'candidate_changed_before_apply'},response));failed++;continue;}
+      let victim=null;
+      if(verdict.action==='replace'){
+        victim=plain(array(await frontSyncSelectCandidates([verdict.replacementId]))[0]);
+        const live=await frontSyncSelectByCandidate('gslot_slot_assignments','id,candidate_id,publication_status,state,manual_pinned',[verdict.replacementId]);
+        if(!heldCandidateMatchesScope(victim,scope)||PSOMRankCompare.sectionKey(victim)!==section||PSOMRankCompare.isProtected(victim,live)||PSOMRankCompare.rank(row)<PSOMRankCompare.rank(victim)+15){results.push(Object.assign({assigned:false,error:'replacement_no_longer_safe'},response));failed++;continue;}
+      }
+      const placement=candidateLedgerPlacementRecord(scope,preferredOption,actor,'ai_psom_ranked_replace');
+      const next=Object.assign({},plain(fresh.source_payload),{slotDecision:'slot_candidate',approvedPlacement:placement,placement,page:placement.page,channel:placement.page,section:placement.sectionKey,psom_key:placement.sectionKey});
+      next.productCategory=options.category.primary;next.productCategoryTags=options.category.tags;
+      next.productRanking=Object.assign({},plain(next.productRanking),{category:options.category.primary,categoryTags:options.category.tags});
+      next.queueControl=Object.assign({},plain(next.queueControl),{action:'section_selected',hiddenFromCountryQueue:false});
+      next.managementControl=Object.assign({},plain(next.managementControl),{source:'ai_psom_ranked_replace',administratorLocked:false,aiReclassificationAllowed:true,automaticPrivatePlacement:true,publicPublication:false,decidedAt:now,decidedBy:actor});
+      next.review=Object.assign({},plain(next.review),{state:'pending',nextGate:'administrator_front_match',psomPlacementAt:now,psomPlacementBy:actor});
+      // Promote first: failure cannot destroy the previous section placement.
+      // CAS protects concurrent admin edits from stale overwrites.
+      const updated=array(await SlotStore.update('gslot_candidates','id=eq.'+encodeURIComponent(id)+'&updated_at=eq.'+encodeURIComponent(text(fresh.updated_at)),{status:'approval_pending',source_payload:next,updated_at:now}));
+      if(!updated.some(r=>text(r.id)===id)){results.push(Object.assign({assigned:false,error:'promotion_cas_failed'},response));failed++;continue;}
+      const confirmed=plain(array(await frontSyncSelectCandidates([id]))[0]);
+      if(PSOMRankCompare.sectionKey(confirmed)!==section||lower(plain(confirmed.source_payload).slotDecision)!=='slot_candidate'){
+        results.push(Object.assign({assigned:false,error:'promotion_readback_failed'},response));failed++;continue;
+      }
+      async function rollbackNewPromotion(){
+        // No cross-row DB transaction is available. If victim retirement is
+        // blocked by a concurrent edit, only revert OUR still-unpublished CAS
+        // promotion; never overwrite a later administrator/front decision.
+        const latest=plain(array(await frontSyncSelectCandidates([id]))[0]);
+        const live=await frontSyncSelectByCandidate('gslot_slot_assignments','id,candidate_id,publication_status,state,manual_pinned',[id]);
+        if(live.length||text(latest.updated_at)!==text(confirmed.updated_at)||
+           PSOMRankCompare.sectionKey(latest)!==section||
+           lower(plain(latest.source_payload).slotDecision)!=='slot_candidate')return false;
+        const rollback=array(await SlotStore.update('gslot_candidates',
+          'id=eq.'+encodeURIComponent(id)+'&updated_at=eq.'+encodeURIComponent(text(latest.updated_at)),
+          {status:text(fresh.status)||'approval_pending',source_payload:fresh.source_payload,updated_at:iso()}));
+        return rollback.some(r=>text(r.id)===id);
+      }
+      if(victim){
+        // Recheck relations before demotion. If concurrent publication/lock
+        // appears, leave the prior card untouched and report partial safety.
+        const freshVictim=plain(array(await frontSyncSelectCandidates([verdict.replacementId]))[0]);
+        const live=await frontSyncSelectByCandidate('gslot_slot_assignments','id,candidate_id,publication_status,state,manual_pinned',[verdict.replacementId]);
+        if(!heldCandidateMatchesScope(freshVictim,scope)||PSOMRankCompare.sectionKey(freshVictim)!==section||PSOMRankCompare.isProtected(freshVictim,live)){
+          const rolledBack=await rollbackNewPromotion();
+          results.push(Object.assign({assigned:!rolledBack,partial:true,error:rolledBack?'replacement_changed_promotion_rolled_back':'old_candidate_changed_no_demotion'},response));if(!rolledBack)processed++;else failed++;continue;
+        }
+        const oldPayload=Object.assign({},plain(freshVictim.source_payload),{slotDecision:'undecided'});
+        oldPayload.previousApprovedPlacement=Object.assign({},plain(oldPayload.approvedPlacement),{removedAt:now,removedReason:'administrator_approved_psom_ranked_replace',rankedReplacementBy:id});
+        for(const field of ['approvedPlacement','selectedPlacement','primaryPlacement','placement','page','channel','section','psom_key','slot'])delete oldPayload[field];
+        oldPayload.queueControl=Object.assign({},plain(oldPayload.queueControl),{action:'ranked_demoted_to_unassigned',hiddenFromCountryQueue:false,rediscoveryAllowed:true});
+        oldPayload.managementControl=Object.assign({},plain(oldPayload.managementControl),{source:'ai_psom_ranked_replace',administratorLocked:false,aiReclassificationAllowed:true,decidedAt:now,decidedBy:actor});
+        const demoted=array(await SlotStore.update('gslot_candidates','id=eq.'+encodeURIComponent(verdict.replacementId)+'&updated_at=eq.'+encodeURIComponent(text(freshVictim.updated_at)),{status:'approval_pending',source_payload:oldPayload,updated_at:now}));
+        if(!demoted.some(r=>text(r.id)===verdict.replacementId)){
+          const rolledBack=await rollbackNewPromotion();
+          results.push(Object.assign({assigned:!rolledBack,partial:true,error:rolledBack?'old_candidate_demote_failed_promotion_rolled_back':'old_candidate_demote_cas_failed_kept_existing'},response));if(!rolledBack)processed++;else failed++;continue;
+        }
+        const verifyVictim=plain(array(await frontSyncSelectCandidates([verdict.replacementId]))[0]);
+        if(lower(plain(verifyVictim.source_payload).slotDecision)!=='undecided'){
+          results.push(Object.assign({assigned:true,partial:true,error:'old_candidate_demote_readback_failed'},response));processed++;continue;
+        }
+        replaced++;
+      }
+      // Keep request-local pool current so one selected batch cannot select
+      // the same losing candidate twice.
+      if(victim){bySection.set(section,array(bySection.get(section)).filter(item=>text(item.id)!==text(victim.id)).concat([confirmed]));}
+      else{bySection.set(section,array(bySection.get(section)).concat([confirmed]));}
+      results.push(Object.assign({assigned:true,replacedExisting:!!victim,ledgerVerified:true},response));processed++;
+    }catch(error){results.push({candidateId:id,assigned:false,error:text(error&&error.message)||'rank_replacement_failed'});failed++;}
+  }
+  return {ok:true,status:mode==='preview'?'preview':(failed?'partial':'complete'),mode:'psom_ranked_compare',preview:mode==='preview',requested:ids.length,processed,failed,replaced,results,publicPublication:false,frontMatchRequired:true,administratorConfirmed:mode==='apply'};
+}
+
 async function productCandidatePsomPlace(actorId, input) {
   const scope = researchScope(input), actor = text(actorId) || "administrator";
   const preferredSectionKey = validProductSectionKey(input && input.preferredSectionKey) ? text(input.preferredSectionKey) : "";
@@ -6852,5 +7111,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
 };

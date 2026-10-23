@@ -50,7 +50,13 @@ function previousFrontPlacement(payload,assignments){
   const front=plain(payload&&payload.frontPublication),placement=plain(payload&&payload.approvedPlacement||payload&&payload.selectedPlacement||payload&&payload.placement||payload&&payload.primaryPlacement);
   const live=array(assignments).find((row)=>frontStateActive(row&&row.publication_status))||array(assignments)[0]||null;
   const page=text(live&&live.hub_key)||text(placement.page),section=text(live&&live.slot_key)||text(placement.sectionKey||placement.section),country=text(live&&live.country_code)||text(placement.country),region=text(live&&live.region_code)||text(placement.region)||"NATIONWIDE";
-  const active=(!!live&&frontStateActive(live.publication_status))||frontStateActive(front.status);
+  // A stale payload publication marker is not public authority when the durable
+  // assignment relation already exists. An inactive historical assignment must
+  // not trap a HOLD/REJECT item forever. When there is no relation at all,
+  // preserve a published payload marker until publication is reconciled.
+  const active=array(assignments).length>0
+    ?array(assignments).some((row)=>frontStateActive(row&&row.publication_status))
+    :frontStateActive(front.status);
   if(!page||!section)return null;
   return{key:page+"|"+section,page,section,sectionKey:section,country:country||null,region:region||"NATIONWIDE",assignmentId:text(live&&live.id)||text(front.assignmentId)||null,publicationStatus:text(live&&live.publication_status)||text(front.status)||null,frontActive:active,priority:Number(live&&live.priority||placement.priority||0)||0,manualPinned:live&&live.manual_pinned===true||placement.manualPinned===true};
 }
@@ -71,8 +77,12 @@ function candidateManagementBucket(row){
   // The most recent authoritative operator state outranks stale review hints.
   // Historically a review.state=hold could mask a completed removal/rejection.
   if(status==="removed"||decision==="removed"||["removed_from_list","deleted_from_management"].includes(review)||["remove_from_list","dismiss"].includes(queueAction))return "removed";
-  if(["reject","rejected","suppressed","purge","excluded"].includes(status)||["reject","purge"].includes(decision)||["reject","rejected","permanent_excluded"].includes(review)||["reject","purge"].includes(queueAction))return "reject";
-  if(status==="hold"||decision==="hold"||review==="hold"||queueAction==="hold")return "hold";
+  // The administrator's saved decision controls the current visible bucket.
+  // Old suppressed/rejected status and review hints can outlive a later HOLD.
+  if(decision==="hold")return "hold";
+  if(decision==="reject"||decision==="purge")return "reject";
+  if(["reject","rejected","suppressed","purge","excluded"].includes(status)||["reject","rejected","permanent_excluded"].includes(review)||["reject","purge"].includes(queueAction))return "reject";
+  if(status==="hold"||review==="hold"||queueAction==="hold")return "hold";
   return "active";
 }
 function candidateAlreadyRestored(row){
@@ -96,6 +106,17 @@ function requireExpectedBucket(row,expectedBucket,action){
   if(expected==="reject" && !["restore","dismiss","remove_from_list","purge"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
   return actual;
 }
+function requireMatchingMarketScope(row,body){
+  // UI controls are country-scoped, but a stale card/selection can carry an ID
+  // from an older market. Verify the actual stored candidate before mutation.
+  const wanted=text(body&& (body.countryCode||body.country)).toUpperCase();
+  if(!wanted)return;
+  const p=plain(row&&row.source_payload),m=plain(p.marketScope),c=plain(p.countrySupply),approved=plain(p.approvedPlacement),main=plain(p.primaryPlacement);
+  const country=text(m.marketCountry||c.country||c.countryCode||approved.country||main.country||p.countryCode).toUpperCase();
+  const wantedRegion=text(body&&(body.subdivisionCode||body.regionCode||body.region)||'NATIONWIDE').toUpperCase();
+  const region=text(m.marketRegion||c.region||c.regionCode||approved.region||main.region||p.regionCode||'NATIONWIDE').toUpperCase();
+  if(country&&wanted!==country||country&&wantedRegion!==region){const error=new Error('candidate_market_scope_mismatch: requested '+wanted+'/'+wantedRegion+', stored '+country+'/'+region);error.statusCode=409;error.code='candidate_market_scope_mismatch';throw error;}
+}
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
   const oldAssignments=await readAssignments(id),priorFront=previousFrontPlacement(payload,oldAssignments);
@@ -105,8 +126,13 @@ async function applyAction(actorId,row,action){
   // They must not permanently block explicit deletion from the private lists.
   // Keep ACTIVE publication and currently approved section cards protected.
   const currentDecision=lower(payload.slotDecision),hasCurrentPlacement=!!(plain(payload.approvedPlacement).sectionKey||plain(payload.approvedPlacement).section);
-  const livePublication=oldAssignments.some((entry)=>frontStateActive(entry&&entry.publication_status))||!!(priorFront&&priorFront.frontActive);
-  if(action!=="restore"&&(livePublication||(currentDecision==="slot_candidate"&&hasCurrentPlacement))){
+  const livePublication=oldAssignments.length>0
+    ?oldAssignments.some((entry)=>frontStateActive(entry&&entry.publication_status))
+    :(frontStateActive(plain(payload.frontPublication).status)||!!(priorFront&&priorFront.frontActive));
+  // Explicit administrator removal of an unPUBLISHED section candidate is
+  // permitted: a PSOM placement is not a front publication. The relation is
+  // removed and read back before the archived candidate state is committed.
+  if(action!=="restore"&&livePublication){
     const error=new Error("assigned_or_published_candidate_protected:"+id);error.statusCode=409;throw error;
   }
   if(action==="restore"){
@@ -200,12 +226,17 @@ exports.handler=async function(event){
         const row=await readCandidate(id);
         if(!row)throw Object.assign(new Error("candidate_not_found"),{candidateId:id});
         if(lower(row&&row.kind)!=="product"||!MANAGEABLE_PRODUCT_SOURCES.has(text(row.source_ref)))throw Object.assign(new Error("unsupported_candidate_source"),{candidateId:id});
+        requireMatchingMarketScope(row,body);
         requireExpectedBucket(row,expectedBucket,action);
         const applied=await applyAction(actorId,row,action);
         // Keep the latest research view aligned with every management decision,
         // not only permanent exclusion. Otherwise hold/reject/list-removal rows
         // can be reloaded from the research job and appear to "come back".
-        applied.researchVisibility=await CommerceAutomation.syncCandidateManagementResearchVisibilityByInput(actorId,body,id,action==="restore"?"undecided":action);
+        try{applied.researchVisibility=await CommerceAutomation.syncCandidateManagementResearchVisibilityByInput(actorId,body,id,action==="restore"?"undecided":action);}
+        catch(syncError){applied.researchVisibility={ok:false,error:text(syncError&&syncError.message||syncError)};}
+        // A secondary research-history sync error cannot invalidate a confirmed
+        // candidate-ledger write. Return the primary result with a warning so the
+        // operator does not retry destructive actions on an already-deleted row.
         if(applied.researchVisibility&&applied.researchVisibility.ok===false)applied.warning="research_visibility_sync_failed:"+text(applied.researchVisibility.error);
         return applied;
       }));

@@ -52,7 +52,9 @@
     lastVisibleRows = [],
     searchBankImportBusy = false,
     previewHydrationBusy = false,
-    previewHydratedIds = new Set();
+    previewHydratedIds = new Set(),
+    firstContentListOpened = false,
+    emptySectionCollectionBusy = false;
   var $ = function (id) {
       return document.getElementById(id);
     },
@@ -1114,7 +1116,10 @@
                     })
                     .join("") +
                   "</div>"
-                : '<div class="empty-section">현재 이 범위에 해당하는 항목이 없습니다.</div>') +
+                : queue === "waiting"
+                  ? '<div class="empty-section">후보 원장에 이 SNS의 최신 게시물이 없습니다. 검색 결과 수는 실제 저장 건수가 아닙니다. 수집 후에도 0건이라면 수집 진행 JSON의 gateway.readback 및 rejectedByReason을 확인해 주세요.' +
+                    '<div class="section-actionbar"><button class="secondary" type="button" data-empty-collect="' + esc(key) + '">이 SNS 실제 콘텐츠 다시 수집</button></div></div>'
+                  : '<div class="empty-section">현재 이 범위에 해당하는 항목이 없습니다.</div>') +
               "</div>"
             : "") +
           "</section>"
@@ -1674,6 +1679,25 @@
       await Promise.all([loadPlacement(), loadPublishedState()]);
       renderSummary(d.summary);
       filters(d.summary);
+      // Open exactly one actual content list on initial load. Previously every
+      // section was collapsed, giving the impression that the queue was empty.
+      // Preserve the administrator's chosen accordion on later refreshes.
+      if (!firstContentListOpened) {
+        firstContentListOpened = true;
+        if (!openDetailSection) {
+          var populatedKey = order.find(function (key) {
+            return rows.some(function (row) {
+              return row.sectionKey === key && assetClass(row) === "latest_content" &&
+                !excluded(row) && !contentHold(row);
+            });
+          });
+          if (populatedKey) {
+            openDetailQueue = "content";
+            openDetailSection = populatedKey;
+            waitingViewMode = "all";
+          }
+        }
+      }
       renderSections();
       renderExclusions();
       setTimeout(hydrateMissingPreviewsAsync, 0);
@@ -2021,7 +2045,7 @@
       renderProviderStatus(d);
       show(
         d.providerReadiness && d.providerReadiness.collectionCanRun
-          ? "PSOM·SearchBank 콘텐츠 우선 경로와 플랫폼별 공개 최신 콘텐츠 검색 경로가 준비되어 있습니다. 인플루언서 등록부는 보조 데이터이며 일반 수집의 전제조건이 아닙니다."
+          ? "검색 공급자 설정 확인 완료. 이것은 키/기본 경로 설정 점검이며, 실제 검색 성공·API 잔여 할당량·DB 신규 저장을 검증하는 버튼은 아닙니다. 실제 검색은 섹션 수집 버튼과 수집 진행 JSON으로 확인하세요."
           : "자동 검색 경로를 사용할 수 없습니다. 제공자 상태를 확인해 주세요.",
         d.providerReadiness && d.providerReadiness.collectionCanRun
           ? "ok"
@@ -2574,6 +2598,40 @@
       setTimeout(function () { panel.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
     }
   }
+  async function collectEmptySection(sectionKey) {
+    var key = text(sectionKey);
+    if (order.indexOf(key) < 0 || emptySectionCollectionBusy) return;
+    emptySectionCollectionBusy = true;
+    var original = text($("collectorSection") && $("collectorSection").value);
+    try {
+      if ($("collectorSection")) $("collectorSection").value = key;
+      show(label(key) + " · 실제 공개 게시물 URL 검색과 후보 DB 저장을 실행합니다.", "warn");
+      // Explicit administrator click: a small bounded real-write collection,
+      // not a dry-run and not an influencer-registry sweep.
+      var job = newJob(key, 0, 1, "section");
+      stopRequested = false;
+      liveReports = [];
+      lockCollection(true);
+      await collectSection(key, false, job, 2, true);
+      var last = liveReports[liveReports.length - 1] || {};
+      var lastLive = last.liveCollection || {};
+      if (!(await refresh())) throw new Error("후보 DB 재조회에 실패했습니다.");
+      openContentSection(key);
+      var count = rows.filter(function (row) {
+        return row.sectionKey === key && assetClass(row) === "latest_content" && !excluded(row);
+      }).length;
+      show(label(key) + " · 현재 원장 " + count + "건, 이번 실행 저장 응답 " + job.saved +
+        "건, 수용 " + job.accepted + "건. " +
+        (!count ? "후보 0건입니다. 수집 진행 JSON에서 실제 URL 수·제외 사유·Gateway 저장 결과를 확인해 주세요." : "아래 후보 목록을 펼쳐 확인하세요.") +
+        (lastLive.gateway && lastLive.gateway.error ? " 저장 오류: " + text(lastLive.gateway.error) : ""), count ? "ok" : "warn");
+    } catch (error) {
+      show(label(key) + " 수집 또는 DB 반영 실패: " + (error && error.message || error), "warn");
+    } finally {
+      emptySectionCollectionBusy = false;
+      lockCollection(false);
+      if ($("collectorSection") && order.indexOf(original) >= 0) $("collectorSection").value = original;
+    }
+  }
   async function importSearchBank(sectionKey) {
     // This function also powers a per-section import action. A raw click Event
     // is NEVER a Social section key (the former onclick binding passed it here).
@@ -2598,9 +2656,18 @@
       // The snapshot can contain thousands of generic search results and zero
       // real social video URLs. Never misreport those as newly imported rows.
       // Do not auto-approve old held content as a side effect of a read/import.
-      var d = await post(PIPELINE, {
-        action: "import_searchbank", limit: 5000, sectionKey: activeKey
-      });
+      var d;
+      try {
+        d = await post(PIPELINE, {
+          action: "import_searchbank", limit: 5000, sectionKey: activeKey
+        });
+      } catch (snapshotError) {
+        // Missing static snapshot must not disable independent live discovery.
+        // Never bypass a permission failure, and never call a failed DB write a success.
+        var errorText = text(snapshotError && snapshotError.message);
+        if (!/search_bank_snapshot_not_found|snapshot_not_found|\b404\b/i.test(errorText)) throw snapshotError;
+        d = { accepted: 0, saved: 0, sourceMode: "static_snapshot_missing", note: errorText };
+      }
       var direct = null;
       var directError = null;
       if (Number(d.accepted || 0) === 0) {
@@ -2610,17 +2677,32 @@
         // The collector uses the regular authorized Candidate Gateway write.
         show(label(activeKey) + " · SearchBank 스냅샷의 실콘텐츠 0건. 공개 SNS 실제 영상 검색으로 보강 중입니다.", "warn");
         try {
-          direct = await post(LIVE, {
-            action: "collect_live", dryRun: false, contentFirst: true,
-            registryOnly: false, registrySweepDone: true,
-            sectionKey: activeKey, limit: 10, batchSize: 10,
-            queryPasses: 1, queryCursor: loadDiscoveryCursor(activeKey),
-            countryCode: selectedCountry(), scopeMode: scopeMode(),
-            regionId: text($("collectorRegion") && $("collectorRegion").value),
-            languages: text($("collectorLanguages") && $("collectorLanguages").value)
-          });
-          var nextCursor = direct.liveCollection && direct.liveCollection.nextQueryCursor;
-          if (Number.isFinite(Number(nextCursor))) saveDiscoveryCursor(activeKey, Number(nextCursor));
+          // SearchBank import is a user-requested real write, NOT a dry-run.
+          // Try up to two distinct query/provider cursors when the static
+          // snapshot has no usable post URLs. Keep attempts bounded.
+          var attempts = [];
+          for (var attempt = 0; attempt < 2; attempt += 1) {
+            var cursor = loadDiscoveryCursor(activeKey);
+            var one = await post(LIVE, {
+              action: "collect_live", dryRun: false, contentFirst: true,
+              registryOnly: false, registrySweepDone: true,
+              sectionKey: activeKey, limit: 10, batchSize: 10,
+              queryPasses: 1, queryCursor: cursor,
+              countryCode: selectedCountry(), scopeMode: scopeMode(),
+              regionId: text($("collectorRegion") && $("collectorRegion").value),
+              languages: text($("collectorLanguages") && $("collectorLanguages").value)
+            });
+            attempts.push(one);
+            var nextCursor = one.liveCollection && one.liveCollection.nextQueryCursor;
+            saveDiscoveryCursor(activeKey, Number.isFinite(Number(nextCursor)) ? Number(nextCursor) : cursor + 1);
+            if (Number(one.saved || 0) || Number(one.accepted || 0)) break;
+          }
+          direct = {
+            accepted: attempts.reduce(function (sum, x) { return sum + Number(x.accepted || 0); }, 0),
+            saved: attempts.reduce(function (sum, x) { return sum + Number(x.saved || 0); }, 0),
+            attempts: attempts.length,
+            gatewayReadbacks: attempts.map(function (x) { return x.liveCollection && x.liveCollection.gateway && x.liveCollection.gateway.readback || null; })
+          };
         } catch (error) {
           directError = text(error && error.message) || "live_discovery_failed";
         }
@@ -2661,8 +2743,9 @@
       state = $("channelIntakeState");
     var section = text($("collectorSection").value);
     if (!raw) {
+      if (state) state.textContent = "입력할 실제 영상·게시물 URL이 없습니다. 이 버튼은 자동 검색 버튼이 아니라 URL 직접 반입용입니다.";
       show(
-        "공개 최신 콘텐츠 URL 직접 반입에는 실제 영상 또는 게시물 URL을 한 줄 이상 입력해 주세요. SearchBank 실후보 반입은 위의 별도 버튼을 사용합니다.",
+        "실제 영상·게시물 URL을 한 줄 이상 입력해야 합니다. 자동 검색은 위쪽 '선택 섹션 120개 후보 수집' 또는 'SearchBank 실후보 반입'을 사용하세요.",
         "warn",
       );
       return null;
@@ -3009,27 +3092,17 @@
     }
   }
   function candidateRegistered(row) {
-    // Use the same content-only publication rule as the Social server.
-    // Creator registry rows are supplemental and never occupy a public slot.
-    if (!row || contentHold(row) || assetClass(row) !== "latest_content") return false;
-    var platform = lower(row.platform).replace(/^social-/, "");
-    var previewOptional = ["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].indexOf(platform) >= 0;
-    var thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url)));
-    var hasRealThumb = /^https:\/\//i.test(thumbUrl) &&
-      !/placeholder|\/assets\/sample\//i.test(thumbUrl) &&
-      !genericProviderPreviewThumb(platform, thumbUrl);
-    // promotable comes from SocialStore.isApprovedForSnapshot on the server.
-    // The publisher accepts validated latest-content posts without a preview
-    // for these six platforms; do not block them in the browser first.
-    if (typeof row.promotable === "boolean")
-      return row.promotable === true && (hasRealThumb || previewOptional);
-    var baseOk = text(row.reviewStatus || row.review_status).toLowerCase() === "approved" &&
-      /^(approved_for_snapshot|verified|approved)$/i.test(text(row.verificationStatus || row.verification_status)) &&
-      row.candidateOnly === false && row.seedContent !== true &&
-      row.publicAccess === true && row.loginRequired !== true &&
-      text(row.riskLevel || row.risk_level).toLowerCase() !== "blocked";
-    return baseOk && /^https:\/\//i.test(text(row.latestContentUrl || row.sourceUrl)) &&
-      (hasRealThumb || previewOptional);
+    if (!row || contentHold(row)) return false;
+    var cls=assetClass(row), isProfileFallback=cls === "influencer_registry" && PROFILE_FALLBACK_SECTIONS.has(row.sectionKey);
+    if (cls !== "latest_content" && !isProfileFallback) return false;
+    var thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url || row.raw.channelThumbnailUrl)));
+    var hasRealThumb = /^https:\/\//i.test(thumbUrl) && !/placeholder|\/assets\/sample\//i.test(thumbUrl) && !genericProviderPreviewThumb(lower(row.platform).replace(/^social-/,""),thumbUrl);
+    var baseOk = text(row.reviewStatus).toLowerCase() === "approved" &&
+      /^(approved_for_snapshot|verified|approved)$/i.test(text(row.verificationStatus)) &&
+      row.candidateOnly === false && row.seedContent !== true && row.publicAccess === true && row.loginRequired !== true;
+    if (isProfileFallback) return baseOk && /^https:\/\//i.test(text(row.channelUrl || row.sourceUrl));
+    if (typeof row.promotable === "boolean") return row.promotable === true && hasRealThumb;
+    return baseOk && /^https:\/\//i.test(text(row.latestContentUrl || row.sourceUrl)) && hasRealThumb;
   }
   function registeredContentIds(sectionKey) {
     return rows
@@ -3705,7 +3778,7 @@
         return '<label class="small" style="display:inline-flex;align-items:center;gap:5px"><input class="aiSectionCheck" type="checkbox" value="' +
           esc(key) + '" /> ' + esc(label(key)) + '</label>';
       }).join("") +
-      '<button id="aiSelectAllSectionsBtn" class="secondary" type="button">6개 전체 선택</button>' +
+      '<button id="aiSelectAllSectionsBtn" class="secondary" type="button">7개 전체 선택</button>' +
       '<button id="aiClearSectionsBtn" class="secondary" type="button">선택 해제</button>';
     $("aiSelectAllSectionsBtn").onclick = function () {
       host.querySelectorAll(".aiSectionCheck").forEach(function (el) { el.checked = true; });
@@ -3880,6 +3953,11 @@
           openDetailSection = requestedSection;
         }
         renderSections();
+        return;
+      }
+      var emptyCollect = event.target.closest("[data-empty-collect]");
+      if (emptyCollect) {
+        collectEmptySection(emptyCollect.dataset.emptyCollect);
         return;
       }
       var preview = event.target.closest(".previewLink");

@@ -21,11 +21,11 @@ assert(frontend.includes("function candidateIdsForLatestRows(rows)"), "latest AI
 assert(frontend.includes("routedHold") && frontend.includes("routedReject"), "frontend must surface automatic hold/reject routing counts");
 assert(frontend.includes("liveLatestExpected>latestProductRows.length"), "open latest-product panel must refresh as newly inspected rows are committed");
 assert(frontend.includes("preserveOnFailure:true"), "pause/live latest refresh must preserve already loaded rows on transient failures");
-assert(backend.includes('research-delta-immutable-ledger'), "backend version must identify current admin20 transfer-routing patch");
+assert(backend.includes('country-scoped-reserve-quality-guard') && backend.includes('async function routeBlockedLatestProducts'), "backend must preserve current latest-list routing while adding category reserve guard");
 assert(backend.includes("async function routeBlockedLatestProducts"), "blocked latest products must be routed into management state");
 assert(backend.includes('schema:"igdc-product-research-partial-private-queue.v6"'), "chunked queue result must use current routing-aware schema");
 assert(html.includes("조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관"), "operator help must describe live latest-list transfer behavior");
-assert(html.includes("v=20261022-distribution-pipeline-repair-v1"), "admin JS cache-bust version must be updated");
+assert(html.includes("v=20261023-psom-ranked-compare-v1"), "admin JS cache-bust version must be updated");
 
 // Load the production backend in-place and export only the private classifier for
 // deterministic regression checks. No production export surface is changed.
