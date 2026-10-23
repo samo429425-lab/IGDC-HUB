@@ -20,7 +20,7 @@ try { SearchBank = require("./search-bank-engine"); } catch (_error) { SearchBan
 let SocialStore = null;
 try { SocialStore = require("./lib/social-candidate-store.v1"); } catch (_error) { SocialStore = null; }
 
-const VERSION = "donation-candidate-admin-v1.18.0-video-first-article-probe";
+const VERSION = "donation-candidate-admin-v1.19.0-official-donation-destination";
 const SOURCE_REF = "donation-candidate-admin-v1";
 const READ_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director","donation_manager","social_manager","media_manager","commerce_manager"]);
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager_director","director","donation_manager"]);
@@ -39,6 +39,15 @@ function roleList(actor){ return Array.from(new Set(array(actor&&actor.roles).ma
 function requireRole(actor,write){ const allow=write?WRITE_ROLES:READ_ROLES;if(!roleList(actor).some(r=>allow.has(r))){const e=new Error(write?"도네이션 후보 변경 권한이 없습니다.":"도네이션 후보 조회 권한이 없습니다.");e.statusCode=403;throw e;} }
 function limitText(value,max){ const v=text(value); return v.length>max?v.slice(0,max):v; }
 function safeHttps(value){ const v=text(value); if(!/^https:\/\//i.test(v)) return ""; try{const u=new URL(v);return u.protocol==="https:"?u.toString():"";}catch(_e){return "";} }
+function countryFromHomepage(value){
+  const v=safeHttps(value);if(!v)return "";
+  try{
+    const host=new URL(v).hostname.toLowerCase().replace(/^www\./,"");
+    const last=(host.split(".").pop()||"").toUpperCase();
+    if(last==="UK")return "GB";
+    return /^[A-Z]{2}$/.test(last)?last:"";
+  }catch(_e){return "";}
+}
 function sourceName(item){ const s=plain(item&&item.source); return limitText(s.name||item&&item.source_name||item&&item.sourceAdapter||item&&item.source_adapter||item&&item.collector&&item.collector.engine||"SearchBank",160); }
 
 const homepagePreviewCache=new Map();
@@ -128,6 +137,108 @@ function homepageImage(html,meta,base){
   }
   return '';
 }
+
+function organizationDomain(host){
+  host=text(host).toLowerCase().replace(/^www\./,'');if(!host)return '';
+  const parts=host.split('.').filter(Boolean);if(parts.length<=2)return host;
+  const multi=new Set(['co.uk','org.uk','ac.uk','co.kr','or.kr','go.kr','ne.kr','com.au','org.au','net.au','co.jp','or.jp','co.nz','org.nz','com.br','com.mx','com.sg','com.my','co.in','org.in','co.za','org.za']);
+  const last2=parts.slice(-2).join('.');
+  return multi.has(last2)&&parts.length>=3?parts.slice(-3).join('.'):last2;
+}
+function sameOrganizationDomain(a,b){
+  try{return organizationDomain(new URL(a).hostname)===organizationDomain(new URL(b).hostname);}catch(_e){return false;}
+}
+function donationIntentScore(label,href){
+  const blob=(text(label)+' '+text(href)).toLowerCase();
+  let score=0;
+  const strong=[/\bdonat(?:e|ion|ions|ing)?\b/i,/\bgiv(?:e|ing)\b/i,/\bsupport(?:-us|_us|\s+us)?\b/i,/\bcontribut(?:e|ion)\b/i,/후원(?:하기|신청|방법|안내)?/i,/기부(?:하기|신청|방법|안내)?/i,/나눔(?:하기|신청)?/i,/募金|寄付|寄贈/i,/捐款|捐赠|捐贈/i,/spenden|donar|donaciones|faire un don|donazione/i];
+  for(const re of strong){if(re.test(blob))score+=35;}
+  if(/(?:\/|^)(?:donate|donation|donations|give|giving|support|contribute|후원|기부)(?:[\/?#_-]|$)/i.test(href))score+=45;
+  if(/(?:news|article|press|blog|shop|store|privacy|terms|login|signup|volunteer)/i.test(blob))score-=35;
+  return score;
+}
+function extractDonationLinks(html,base){
+  const out=[],seen=new Set(),markup=text(html),re=/<a\b[^>]*>[\s\S]*?<\/a>/gi;let m;
+  while((m=re.exec(markup))){
+    const tag=m[0],href=resolveHttps(base,attrValue(tag,'href'));if(!href||seen.has(href))continue;
+    const label=stripTags(tag),score=donationIntentScore(label,href);if(score<35)continue;
+    seen.add(href);out.push({url:href,label:limitText(label,180),score:score+(sameOrganizationDomain(base,href)?30:0),sameDomain:sameOrganizationDomain(base,href)});
+    if(out.length>=30)break;
+  }
+  return out.sort((a,b)=>b.score-a.score).slice(0,8);
+}
+function donationMethodsFromHtml(html){
+  const blob=stripTags(html).toLowerCase(),methods=[];
+  function add(id,re){if(re.test(blob)&&!methods.includes(id))methods.push(id);}
+  add('card',/(?:credit\s*card|debit\s*card|visa|mastercard|american express|신용카드|체크카드|카드결제)/i);
+  add('bank_transfer',/(?:bank\s*transfer|wire\s*transfer|bank\s*account|iban|swift|계좌이체|무통장|후원계좌|기부계좌|입금계좌)/i);
+  add('mobile',/(?:mobile\s*pay|apple\s*pay|google\s*pay|samsung\s*pay|휴대폰\s*결제|모바일\s*결제|카카오페이|네이버페이|토스)/i);
+  add('paypal',/\bpaypal\b/i);
+  add('crypto',/(?:bitcoin|ethereum|cryptocurrency|crypto\s*donation|가상자산|암호화폐|블록체인\s*후원)/i);
+  return methods;
+}
+function extractOfficialBankAccounts(html,sourceUrl){
+  const raw=stripTags(html),out=[],seen=new Set();
+  const bankNames=['국민','KB국민','신한','우리','하나','농협','NH농협','기업','IBK기업','SC제일','씨티','카카오뱅크','토스뱅크','새마을금고','우체국','수협','부산','대구','경남','광주','전북','제주'];
+  const accountRe=/(?:\d{2,6}[\s-]){2,4}\d{2,6}/g;let m;
+  while((m=accountRe.exec(raw))){
+    const account=text(m[0]).replace(/\s+/g,'');if(account.length<8||account.length>32||seen.has(account))continue;
+    const ctx=raw.slice(Math.max(0,m.index-120),Math.min(raw.length,m.index+account.length+140));
+    if(!/(?:후원|기부|계좌|입금|bank\s*transfer|donat|contribut)/i.test(ctx))continue;
+    const bank=bankNames.find(function(name){return ctx.toLowerCase().includes(name.toLowerCase());})||'';
+    if(!bank&&!/(?:bank\s*account|bank\s*transfer)/i.test(ctx))continue;
+    const holderMatch=ctx.match(/(?:예금주|계좌명|account\s*holder|beneficiary)\s*[:：]?\s*([^|,;\n]{2,50})/i);
+    let holder=holderMatch?limitText(holderMatch[1],80):'';
+    holder=holder.replace(/\s+(?:PayPal|카드|계좌|후원|기부|모바일|SWIFT|BIC)\b[\s\S]*$/i,'').replace(/[.。]\s*[\s\S]*$/,'').trim();
+    seen.add(account);out.push({type:'bank',bank:bank||null,account,holder:holder||null,source_url:sourceUrl,official_source:true});
+    if(out.length>=6)break;
+  }
+  const ibanRe=/\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}\b/g;
+  while((m=ibanRe.exec(raw))){
+    const iban=text(m[0]).replace(/\s+/g,'');if(seen.has(iban))continue;
+    const ctx=raw.slice(Math.max(0,m.index-120),Math.min(raw.length,m.index+iban.length+160));
+    if(!/(?:iban|bank\s*transfer|wire\s*transfer|donat|contribut)/i.test(ctx))continue;
+    const swift=(ctx.match(/(?:SWIFT|BIC)\s*[:：]?\s*([A-Z0-9]{8,11})/i)||[])[1]||null;
+    seen.add(iban);out.push({type:'iban',bank:null,account:iban,holder:null,swift:swift,source_url:sourceUrl,official_source:true});if(out.length>=8)break;
+  }
+  return out;
+}
+function extractOfficialCryptoWallets(html,sourceUrl){
+  const raw=stripTags(html),out=[],seen=new Set();
+  const patterns=[
+    ['BTC',/\b(?:bc1[a-zA-HJ-NP-Z0-9]{25,62}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})\b/g],
+    ['ETH',/\b0x[a-fA-F0-9]{40}\b/g]
+  ];
+  for(const pair of patterns){let m;while((m=pair[1].exec(raw))){const addr=m[0];if(seen.has(addr))continue;const ctx=raw.slice(Math.max(0,m.index-140),Math.min(raw.length,m.index+addr.length+160));if(!/(?:donat|support|contribut|기부|후원|crypto|bitcoin|ethereum|암호화폐|가상자산)/i.test(ctx))continue;seen.add(addr);out.push({asset:pair[0],address:addr,source_url:sourceUrl,official_source:true});if(out.length>=6)break;}}
+  return out;
+}
+function sanitizeDonationProfile(value,homepage){
+  const d=plain(value),checkout=safeHttps(d.checkout_url||d.checkoutUrl),source=safeHttps(d.source_url||d.sourceUrl||checkout);
+  const methods=array(d.methods).map(function(v){return lower(v);}).filter(Boolean).slice(0,12);
+  const banks=array(d.bank_accounts||d.bankAccounts).map(plain).map(function(b){return {type:text(b.type)||'bank',bank:limitText(b.bank,80)||null,account:limitText(b.account,80)||null,holder:limitText(b.holder,120)||null,swift:limitText(b.swift,32)||null,source_url:safeHttps(b.source_url||source)||source||null,official_source:b.official_source===true};}).filter(function(b){return !!b.account&&b.official_source===true;}).slice(0,8);
+  const wallets=array(d.crypto_wallets||d.cryptoWallets).map(plain).map(function(w){return {asset:limitText(w.asset,16)||null,address:limitText(w.address,140)||null,source_url:safeHttps(w.source_url||source)||source||null,official_source:w.official_source===true};}).filter(function(w){return !!w.address&&w.official_source===true;}).slice(0,8);
+  return {enabled:!!checkout||banks.length>0||wallets.length>0||d.enabled===true,external:d.external!==false,checkout_url:checkout||null,source_url:source||null,page_title:limitText(d.page_title||d.pageTitle,200)||null,methods,bank_accounts:banks,crypto_wallets:wallets,verified_at:text(d.verified_at||d.verifiedAt)||null,official_domain_verified:d.official_domain_verified===true||(checkout&&homepage?sameOrganizationDomain(homepage,checkout):false),discovered_from_official_homepage:d.discovered_from_official_homepage===true};
+}
+async function fetchDonationProfile(homepage,preview,timeoutMs){
+  const home=safeHttps(homepage),links=array(preview&&preview.donationLinks).map(plain).filter(function(x){return safeHttps(x.url);});
+  if(!home||!links.length)return sanitizeDonationProfile({},home);
+  const best=links.slice().sort(function(a,b){if(!!b.sameDomain!==!!a.sameDomain)return b.sameDomain?1:-1;return Number(b.score||0)-Number(a.score||0);})[0];
+  const checkout=safeHttps(best&&best.url);if(!checkout)return sanitizeDonationProfile({},home);
+  const controller=typeof AbortController==='function'?new AbortController():null;
+  const timer=controller?setTimeout(function(){try{controller.abort();}catch(_e){}},Math.max(1200,Math.min(3400,Number(timeoutMs)||2200))):null;
+  try{
+    const res=await fetch(checkout,{method:'GET',redirect:'follow',headers:{'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0 Safari/537.36','accept':'text/html,application/xhtml+xml,*/*;q=0.8','accept-language':'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7'},signal:controller?controller.signal:undefined});
+    const finalUrl=safeHttps(res&&res.url)||checkout;
+    if(!res||!res.ok)return sanitizeDonationProfile({enabled:true,external:true,checkout_url:checkout,source_url:checkout,methods:array(preview&&preview.donationMethods),verified_at:nowIso(),official_domain_verified:sameOrganizationDomain(home,checkout),discovered_from_official_homepage:true},home);
+    const ctype=lower(res.headers&&res.headers.get&&res.headers.get('content-type'));if(ctype&&ctype.indexOf('html')<0)return sanitizeDonationProfile({enabled:true,external:true,checkout_url:finalUrl,source_url:finalUrl,methods:array(preview&&preview.donationMethods),verified_at:nowIso(),official_domain_verified:sameOrganizationDomain(home,finalUrl),discovered_from_official_homepage:true},home);
+    let html=await res.text();if(html.length>800000)html=html.slice(0,800000);
+    const meta=homepageMeta(html),methods=Array.from(new Set(array(preview&&preview.donationMethods).concat(donationMethodsFromHtml(html))));
+    const banks=extractOfficialBankAccounts(html,finalUrl),wallets=extractOfficialCryptoWallets(html,finalUrl);
+    return sanitizeDonationProfile({enabled:true,external:true,checkout_url:finalUrl,source_url:finalUrl,page_title:homepageTitle(html,meta),methods,bank_accounts:banks,crypto_wallets:wallets,verified_at:nowIso(),official_domain_verified:sameOrganizationDomain(home,finalUrl),discovered_from_official_homepage:true},home);
+  }catch(_e){return sanitizeDonationProfile({enabled:true,external:true,checkout_url:checkout,source_url:checkout,methods:array(preview&&preview.donationMethods),verified_at:nowIso(),official_domain_verified:sameOrganizationDomain(home,checkout),discovered_from_official_homepage:true},home);}
+  finally{if(timer)clearTimeout(timer);}
+}
+
 function contentPlayableVideo(html,meta,base){
   const values=[
     firstMeta(meta,['og:video:secure_url','og:video:url','og:video','twitter:player:stream','twitter:player:stream:url']),
@@ -158,7 +269,7 @@ async function fetchHomepagePreview(homepage,timeoutMs){
       {ms:Math.max(1200,Math.floor(total*0.68)),referer:true,mobile:false},
       {ms:Math.max(800,Math.floor(total*0.32)),referer:false,mobile:true}
     ];
-    let last={homepage:canonical,title:'',description:'',image:'',resolved:false,identityResolved:false,status:0};
+    let last={homepage:canonical,title:'',description:'',image:'',resolved:false,identityResolved:false,status:0,donationLinks:[],donationMethods:[]};
     for(const attempt of attempts){
       const controller=typeof AbortController==='function'?new AbortController():null;
       const timer=controller?setTimeout(function(){try{controller.abort();}catch(_e){}},attempt.ms):null;
@@ -179,7 +290,7 @@ async function fetchHomepagePreview(homepage,timeoutMs){
         let html=await res.text();if(html.length>850000)html=html.slice(0,850000);
         const finalHome=safeHttps(Policy.canonicalOrganizationHomepageUrl?Policy.canonicalOrganizationHomepageUrl(res.url||canonical):canonical)||canonical;
         const meta=homepageMeta(html),title=limitText(homepageTitle(html,meta),300),description=limitText(homepageDescription(meta),1800),image=safeHttps(homepageImage(html,meta,res.url||finalHome));
-        return {homepage:finalHome,title,description,image,resolved:!!image,identityResolved:!!(title||description),status:res.status};
+        return {homepage:finalHome,title,description,image,resolved:!!image,identityResolved:!!(title||description),status:res.status,donationLinks:extractDonationLinks(html,res.url||finalHome),donationMethods:donationMethodsFromHtml(html)};
       }catch(error){last.error=text(error&&error.name||error);}
       finally{if(timer)clearTimeout(timer);}
     }
@@ -569,7 +680,15 @@ function researchQuerySpecs(section,customQuery,singleSection,existingViews,poli
      and discovery terms so capacity grows across repeated runs. */
   {
     const state=researchAnchorState(sec,existingViews);
-    const anchors=(frame.anchors||[]).map(function(a){return {name:text(a&&a.name),query:text(a&&a.query),homepage:safeHttps(a&&a.homepage),searchType:['web','video'].includes(lower(a&&a.searchType))?lower(a.searchType):(sec==='donation-global'?'video':'web')};}).filter(function(a){return a.name&&a.query;});
+    const anchors=(frame.anchors||[]).map(function(a){return {
+      name:text(a&&a.name),
+      query:text(a&&a.query),
+      homepage:safeHttps(a&&a.homepage),
+      searchType:['web','video'].includes(lower(a&&a.searchType))?lower(a.searchType):(sec==='donation-global'?'video':'web'),
+      network:text(a&&a.network),
+      country:text(a&&a.country).toUpperCase(),
+      languages:Array.isArray(a&&a.languages)?a.languages.map(text).filter(Boolean):[]
+    };}).filter(function(a){return a.name&&a.query;});
     function stateRank(name){return !state.found.has(name)?0:(!state.ready.has(name)?1:2);}
     if(sec==='donation-global'){
       const globalAnchorLimit=singleSection?12:4;
@@ -577,7 +696,7 @@ function researchQuerySpecs(section,customQuery,singleSection,existingViews,poli
     }else{
       anchors.sort(function(a,b){const d=stateRank(a.name)-stateRank(b.name);if(d)return d;return (a.homepage?0:1)-(b.homepage?0:1);});
       const anchorLimit=singleSection?14:4;
-      anchors.slice(0,anchorLimit).forEach(function(a){out.push({query:a.query||a.name,kind:'anchor',anchorName:a.name,homepage:a.homepage||'',searchType:'web'});});
+      anchors.slice(0,anchorLimit).forEach(function(a){out.push({query:a.query||a.name,kind:'anchor',anchorName:a.name,homepage:a.homepage||'',searchType:'web',network:a.network||'',country:a.country||'',languages:a.languages||[]});});
     }
     if(Array.isArray(frame.discoveryQueries)){
       const discoveryLimit=singleSection?6:1;
@@ -757,7 +876,8 @@ function normalizeCandidate(item,section,query){
     frontSupplyAllowed:raw.frontSupplyAllowed===true||plain(raw.searchBankContract).frontSupplyAllowed===true,
     snapshotEligible:raw.snapshotEligible===true||plain(raw.searchBankContract).snapshotEligible===true,
     link:plain(raw.link),
-    sitePreview:plain(raw.sitePreview||raw.site_preview)
+    sitePreview:plain(raw.sitePreview||raw.site_preview),
+    donation:sanitizeDonationProfile(raw.donation,homepage)
   };
   const issues=[];
   if(!url) issues.push("https_url_missing");
@@ -1178,6 +1298,7 @@ async function performResearch(event,section,customQuery,limit,options){
       const enriched=await mapLimit(roots,sections.length>1?4:6,async function(entry){
         const preview=await fetchHomepagePreview(entry.homepage,sections.length>1?2800:4800);
         const home=preview.homepage||entry.homepage,raw=plain(entry.item),spec=entry.spec||{kind:'broad',anchorName:'',query};
+        const donationProfile=await fetchDonationProfile(home,preview,sections.length>1?1700:2600);
         const directResult=isDirectHomepageResult(raw,entry.homepage);
         const rawTitle=limitText(raw.title||raw.name||plain(raw.org).name||plain(raw.displayCard).title||'',300);
         const rawSummary=limitText(raw.summary||raw.description||raw.snippet||plain(raw.displayCard).summary||'',1800);
@@ -1196,7 +1317,14 @@ async function performResearch(event,section,customQuery,limit,options){
         if(!identityVerified)return {rejected:true,reason:'homepage_identity_mismatch'};
         const directThumb=directResult?candidateThumb(raw,sec):'';
         const image=safeHttps(preview.image||directThumb);
-        const org=Object.assign({},plain(raw.org),{homepage:home,name:limitText(matchedAnchor||preview.title||(directResult?rawTitle:'')||plain(raw.org).name||home,300)});
+        const anchorMeta=Policy.researchAnchorMeta?Policy.researchAnchorMeta(sec,matchedAnchor||spec.anchorName):{};
+        const org=Object.assign({},plain(raw.org),{
+          homepage:home,
+          name:limitText(matchedAnchor||preview.title||(directResult?rawTitle:'')||plain(raw.org).name||home,300),
+          network:text(anchorMeta.network||spec.network||plain(raw.org).network)||null,
+          country:text(anchorMeta.country||spec.country||plain(raw.org).country||countryFromHomepage(home)).toUpperCase()||null,
+          languages:(Array.isArray(anchorMeta.languages)&&anchorMeta.languages.length?anchorMeta.languages:(Array.isArray(spec.languages)&&spec.languages.length?spec.languages:array(plain(raw.org).languages))).map(function(v){return lower(v).split(/[-_]/)[0];}).filter(Boolean)
+        });
         const media=Object.assign({},plain(raw.media),{kind:'image',src:null,embed_url:null,thumb:image||null,image:image||null});
         const summary=limitText(preview.description||(directResult?rawSummary:'')||(matchedAnchor?'Official organization homepage.':''),1800);
         return Object.assign({},raw,{
@@ -1204,6 +1332,7 @@ async function performResearch(event,section,customQuery,limit,options){
           url:home,homepage:home,website:home,official_url:home,
           thumbnail:image||null,thumb:image||null,image:image||null,og_image:image||null,site_preview_image:image||null,
           org,media,link:Object.assign({},plain(raw.link),{mode:'org-homepage',url:home,target:'_blank'}),
+          donation:donationProfile,
           researchAnchor:matchedAnchor||null,homepageIdentityVerified:true,
           sitePreview:{resolved:!!image,identityVerified:true,kind:'homepage-meta',homepage:home,image:image||null,title:preview.title||(directResult?rawTitle:null)||null,description:preview.description||(directResult?rawSummary:null)||null,researchAnchor:matchedAnchor||null,capturedAt:nowIso()},
           donationResearch:{kind:spec.kind,query:spec.query,anchor:matchedAnchor||spec.anchorName||null,identityVerified:true},
@@ -1233,7 +1362,10 @@ async function performResearch(event,section,customQuery,limit,options){
         const candidate=Object.assign({},previousCandidate,norm.candidate);candidate.id=rowId;candidate.section=sec;candidate.psom_key=sec;candidate.channel='donation';candidate.page='donation';
         /* Current canonical homepage identity always wins. A transient preview
            failure must not erase a previously verified thumbnail from a live card. */
-        candidate.url=norm.candidate.url;candidate.thumbnail=finalThumb||null;candidate.org=norm.candidate.org;candidate.media=Object.assign({},plain(previousCandidate.media),norm.candidate.media,{kind:'image',src:null,embed_url:null,thumb:finalThumb||null,image:finalThumb||null});candidate.link=norm.candidate.link||item.link;candidate.sitePreview=freshThumb?item.sitePreview:(plain(previousCandidate.sitePreview).image?previousCandidate.sitePreview:item.sitePreview);candidate.researchAnchor=item.researchAnchor||previousCandidate.researchAnchor||null;candidate.homepageIdentityVerified=true;candidate.donationResearch=Object.assign({},plain(item.donationResearch),{policyAgendas:policyAuditMeta(policyContext)});
+        candidate.url=norm.candidate.url;candidate.thumbnail=finalThumb||null;candidate.org=norm.candidate.org;candidate.media=Object.assign({},plain(previousCandidate.media),norm.candidate.media,{kind:'image',src:null,embed_url:null,thumb:finalThumb||null,image:finalThumb||null});candidate.link=norm.candidate.link||item.link;candidate.sitePreview=freshThumb?item.sitePreview:(plain(previousCandidate.sitePreview).image?previousCandidate.sitePreview:item.sitePreview);candidate.researchAnchor=item.researchAnchor||previousCandidate.researchAnchor||null;candidate.homepageIdentityVerified=true;
+        const freshDonation=sanitizeDonationProfile(norm.candidate.donation,candidate.org&&candidate.org.homepage),previousDonation=sanitizeDonationProfile(previousCandidate.donation,candidate.org&&candidate.org.homepage);
+        candidate.donation=(freshDonation.checkout_url||freshDonation.bank_accounts.length||freshDonation.crypto_wallets.length)?freshDonation:previousDonation;
+        candidate.donationResearch=Object.assign({},plain(item.donationResearch),{policyAgendas:policyAuditMeta(policyContext)});
         writes.push({id:rowId,kind:'donation',title:candidate.title,official_url:candidate.url,status:statusForStage(stage),source_ref:SOURCE_REF,thumbnail_url:candidate.thumbnail||null,description:candidate.summary||null,owner_note:'Verified official organization homepage + homepage representative preview.',source_payload:{schema:'igdc-donation-candidate.v1',candidate,donationQueue:queue},updated_at:nowIso(),created_at:previous&&previous.created_at||nowIso()});
       }
     }
@@ -1469,5 +1601,5 @@ exports.CAPACITY=CAPACITY;
 exports.normalizeCandidate=normalizeCandidate;
 exports.runScheduledGlobalNewsRefresh=runScheduledGlobalNewsRefresh;
 if(process.env.NODE_ENV==='test'){
-  exports.__test={donationProviderConfig,parseRssItems,buildPolicyContext,policyBlocksCandidate,trustedYoutubeChannel,youtubeOembed,directGoogleCseGlobalVideos,directRssGlobalNews,directSocialSnapshotGlobalVideos,contentPlayableVideo};
+  exports.__test={donationProviderConfig,parseRssItems,buildPolicyContext,policyBlocksCandidate,trustedYoutubeChannel,youtubeOembed,directGoogleCseGlobalVideos,directRssGlobalNews,directSocialSnapshotGlobalVideos,contentPlayableVideo,extractDonationLinks,donationMethodsFromHtml,extractOfficialBankAccounts,extractOfficialCryptoWallets,sanitizeDonationProfile,fetchDonationProfile};
 }

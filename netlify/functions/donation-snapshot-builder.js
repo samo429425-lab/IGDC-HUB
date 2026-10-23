@@ -574,6 +574,8 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
       legal_name: legal_name || null,
       homepage: homepage || null,
       country: rec.org?.country || rec.country || null,
+      network: rec.org?.network || rec.network || null,
+      languages: Array.isArray(rec.org?.languages) ? rec.org.languages : (Array.isArray(rec.languages) ? rec.languages : []),
       verified: (vh.status === "verified"),
 
       registration: rec.org?.registration || {
@@ -608,6 +610,13 @@ function normalizeRecord(rec, sectionKey, semanticCategory, idx, psomInfo){
       currency: rec.donation?.currency || rec.currency || null,
       min_amount: rec.donation?.min_amount || rec.min_amount || null,
       methods: Array.isArray(rec.donation?.methods) ? rec.donation.methods : [],
+      bank_accounts: Array.isArray(rec.donation?.bank_accounts) ? rec.donation.bank_accounts.filter(function(x){return x&&x.official_source===true&&x.account;}).slice(0,8) : [],
+      crypto_wallets: Array.isArray(rec.donation?.crypto_wallets) ? rec.donation.crypto_wallets.filter(function(x){return x&&x.official_source===true&&x.address;}).slice(0,8) : [],
+      source_url: safeUrl(rec.donation?.source_url) || null,
+      page_title: cleanName(rec.donation?.page_title) || null,
+      verified_at: rec.donation?.verified_at || null,
+      official_domain_verified: rec.donation?.official_domain_verified === true,
+      discovered_from_official_homepage: rec.donation?.discovered_from_official_homepage === true,
       campaign_id: rec.donation?.campaign_id || rec.campaign_id || null,
       receipt_supported: rec.donation?.receipt_supported ?? rec.receipt_supported ?? null
     },

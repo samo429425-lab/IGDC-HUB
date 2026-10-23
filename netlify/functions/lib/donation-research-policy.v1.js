@@ -185,7 +185,15 @@ function researchFrameFor(value){
     psomLabel:text(frame.psomLabel),
     psomKeywords:Array.isArray(frame.psomKeywords)?frame.psomKeywords.map(text).filter(Boolean):[],
     policyPurpose:text(frame.policyPurpose),
-    anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({name:text(a&&a.name),query:text(a&&a.query),homepage:httpsUrl(a&&a.homepage),searchType:["web","video"].includes(lower(a&&a.searchType))?lower(a.searchType):""})).filter(a=>a.name||a.query||a.homepage) : [],
+    anchors:Array.isArray(frame.anchors) ? frame.anchors.map(a=>({
+      name:text(a&&a.name),
+      query:text(a&&a.query),
+      homepage:httpsUrl(a&&a.homepage),
+      searchType:["web","video"].includes(lower(a&&a.searchType))?lower(a.searchType):"",
+      network:text(a&&a.network),
+      country:text(a&&a.country).toUpperCase(),
+      languages:Array.isArray(a&&a.languages)?a.languages.map(v=>lower(v).split(/[-_]/)[0]).filter(Boolean):[]
+    })).filter(a=>a.name||a.query||a.homepage) : [],
     discoveryQueries:Array.isArray(frame.discoveryQueries) ? frame.discoveryQueries.map(text).filter(Boolean) : [],
     youtubeQueries:Array.isArray(frame.youtubeQueries) ? frame.youtubeQueries.map(text).filter(Boolean) : [],
     youtubeTrustedChannels:Array.isArray(frame.youtubeTrustedChannels) ? frame.youtubeTrustedChannels.map(text).filter(Boolean) : [],
@@ -442,6 +450,21 @@ function anchorIdentityScore(record,anchorName){
   }
   return best;
 }
+function researchAnchorMeta(sectionValue,anchorName){
+  const section=normalizeSection(sectionValue); if(!section||!text(anchorName)) return {};
+  const wanted=identityText(anchorName);
+  for(const anchor of researchFrameFor(section).anchors||[]){
+    if(identityText(anchor&&anchor.name)!==wanted) continue;
+    return {
+      name:text(anchor&&anchor.name),
+      homepage:httpsUrl(anchor&&anchor.homepage),
+      network:text(anchor&&anchor.network),
+      country:text(anchor&&anchor.country).toUpperCase(),
+      languages:Array.isArray(anchor&&anchor.languages)?anchor.languages.slice():[]
+    };
+  }
+  return {};
+}
 function researchAnchorHomepage(sectionValue,anchorName){
   const section=normalizeSection(sectionValue); if(!section||!text(anchorName)) return "";
   const wanted=identityText(anchorName);
@@ -663,5 +686,5 @@ function youtubeThumbnail(record){
 module.exports={
   VERSION,SECTIONS,SECTION_CAPACITY,SECTION_LABELS,POLICY,normalizeSection,categoryForSection,policyFor,researchFrameFor,researchAnchors,recordText,looksLikeVideo,youtubeId,youtubeThumbnail,globalNewsTopic,hintMatches,
   missionExcluded,sectionRelevance,inferSection,queryTerms,isPlaceholder,usablePublicCandidate,candidateUrls,isAuthoritativeGlobalNewsUrl,isAuthoritativeGlobalNews,globalNewsRelevant,
-  organizationWebsiteUrls,organizationHomepageUrl,canonicalOrganizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isDocumentUrl,isContentAggregatorHost,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection,homepageIdentityText,anchorIdentityScore,researchAnchorHomepage,matchesResearchAnchor,genericAnchorName,matchedResearchAnchorName,sectionIdentityEligible
+  organizationWebsiteUrls,organizationHomepageUrl,canonicalOrganizationHomepageUrl,isSearchLandingUrl,isVideoUrl,isSocialUrl,isDirectMediaAssetUrl,isDocumentUrl,isContentAggregatorHost,isOrganizationWebsiteUrl,candidateUrlForSection,hasVideoDestination,representativeImageForSection,homepageIdentityText,anchorIdentityScore,researchAnchorMeta,researchAnchorHomepage,matchesResearchAnchor,genericAnchorName,matchedResearchAnchorName,sectionIdentityEligible
 };

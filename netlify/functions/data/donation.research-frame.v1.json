@@ -35,22 +35,38 @@
         {
           "name": "UNICEF Emergencies",
           "query": "UNICEF emergencies latest children humanitarian disaster refugee official video",
-          "searchType": "video"
+          "searchType": "video",
+          "network": "unicef",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "UNHCR Emergencies",
           "query": "UNHCR emergencies refugees displacement conflict latest official video",
-          "searchType": "video"
+          "searchType": "video",
+          "network": "unhcr",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "World Food Programme",
           "query": "WFP emergency hunger famine conflict displacement latest official video",
-          "searchType": "video"
+          "searchType": "video",
+          "network": "wfp",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "IFRC",
           "query": "IFRC disaster response earthquake flood wildfire latest official video",
-          "searchType": "video"
+          "searchType": "video",
+          "network": "ifrc",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "BBC News",
@@ -779,82 +795,150 @@
     },
     "donation-ngo": {
       "primaryQuery": "NGO nonprofit humanitarian development children aid public interest organization official website homepage",
-      "localizeByIp": false,
+      "localizeByIp": true,
       "anchors": [
         {
           "name": "World Vision International",
           "query": "World Vision International official website",
-          "homepage": "https://www.wvi.org/"
+          "homepage": "https://www.wvi.org/",
+          "network": "world-vision",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "World Vision Korea / 월드비전",
           "query": "월드비전 공식 홈페이지 World Vision Korea",
-          "homepage": "https://www.worldvision.or.kr/"
+          "homepage": "https://www.worldvision.or.kr/",
+          "network": "world-vision",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Korea Food for the Hungry International / 기아대책",
           "query": "기아대책 공식 홈페이지 Korea Food for the Hungry International",
-          "homepage": "https://www.kfhi.or.kr/"
+          "homepage": "https://www.kfhi.or.kr/",
+          "network": "food-for-the-hungry",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Good Neighbors International",
           "query": "Good Neighbors International official website",
-          "homepage": "https://www.goodneighbors.org/"
+          "homepage": "https://www.goodneighbors.org/",
+          "network": "good-neighbors",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Good Neighbors Korea / 굿네이버스",
           "query": "굿네이버스 공식 홈페이지 Good Neighbors Korea",
-          "homepage": "https://www.goodneighbors.kr/"
+          "homepage": "https://www.goodneighbors.kr/",
+          "network": "good-neighbors",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Habitat for Humanity International",
           "query": "Habitat for Humanity International official website",
-          "homepage": "https://www.habitat.org/"
+          "homepage": "https://www.habitat.org/",
+          "network": "habitat-for-humanity",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Habitat for Humanity Korea / 한국해비타트",
           "query": "한국해비타트 공식 홈페이지 Habitat for Humanity Korea",
-          "homepage": "https://www.habitat.or.kr/"
+          "homepage": "https://www.habitat.or.kr/",
+          "network": "habitat-for-humanity",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "ChildFund Korea / 초록우산",
           "query": "초록우산 어린이재단 공식 홈페이지 ChildFund Korea",
-          "homepage": "https://www.childfund.or.kr/"
+          "homepage": "https://www.childfund.or.kr/",
+          "network": "childfund",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Save the Children",
           "query": "Save the Children official website",
-          "homepage": "https://www.savethechildren.net/"
+          "homepage": "https://www.savethechildren.net/",
+          "network": "save-the-children",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Save the Children Korea / 세이브더칠드런",
           "query": "세이브더칠드런 코리아 공식 홈페이지",
-          "homepage": "https://www.sc.or.kr/"
+          "homepage": "https://www.sc.or.kr/",
+          "network": "save-the-children",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "KOICA",
           "query": "KOICA Korea International Cooperation Agency official website",
-          "homepage": "https://www.koica.go.kr/"
+          "homepage": "https://www.koica.go.kr/",
+          "network": "koica",
+          "country": "KR",
+          "languages": [
+            "ko",
+            "en"
+          ]
         },
         {
           "name": "UNICEF",
           "query": "UNICEF official website international children aid",
-          "homepage": "https://www.unicef.org/"
+          "homepage": "https://www.unicef.org/",
+          "network": "unicef",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "UNHCR",
           "query": "UNHCR official website refugee agency",
-          "homepage": "https://www.unhcr.org/"
+          "homepage": "https://www.unhcr.org/",
+          "network": "unhcr",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "World Food Programme",
           "query": "World Food Programme WFP official website",
-          "homepage": "https://www.wfp.org/"
+          "homepage": "https://www.wfp.org/",
+          "network": "wfp",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "IFRC",
           "query": "International Federation Red Cross Red Crescent IFRC official website",
-          "homepage": "https://www.ifrc.org/"
+          "homepage": "https://www.ifrc.org/",
+          "network": "ifrc",
+          "languages": [
+            "en"
+          ]
         }
       ],
       "psomKey": "donation-ngo",
@@ -880,7 +964,11 @@
         {
           "name": "Lausanne Movement",
           "query": "Lausanne Movement official website evangelical mission",
-          "homepage": "https://lausanne.org/"
+          "homepage": "https://lausanne.org/",
+          "network": "lausanne",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "PAUA",
@@ -889,55 +977,103 @@
         {
           "name": "Child Evangelism Fellowship",
           "query": "Child Evangelism Fellowship official website",
-          "homepage": "https://www.cefonline.com/"
+          "homepage": "https://www.cefonline.com/",
+          "network": "child-evangelism-fellowship",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Child Evangelism Fellowship Korea / 어린이전도협회",
-          "query": "한국 어린이전도협회 공식 홈페이지 CEF Korea"
+          "query": "한국 어린이전도협회 공식 홈페이지 CEF Korea",
+          "network": "child-evangelism-fellowship",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Cru / Campus Crusade for Christ",
           "query": "Cru Campus Crusade for Christ official website",
-          "homepage": "https://www.cru.org/"
+          "homepage": "https://www.cru.org/",
+          "network": "cru",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Korea Campus Crusade for Christ / 한국대학생선교회",
           "query": "한국대학생선교회 CCC 공식 홈페이지",
-          "homepage": "https://kccc.org/"
+          "homepage": "https://kccc.org/",
+          "network": "cru",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "InterVarsity / IVF",
           "query": "InterVarsity Christian Fellowship IVF official website",
-          "homepage": "https://intervarsity.org/"
+          "homepage": "https://intervarsity.org/",
+          "network": "intervarsity",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Korea IVF / 한국기독학생회",
           "query": "한국기독학생회 IVF 공식 홈페이지",
-          "homepage": "https://ivf.or.kr/"
+          "homepage": "https://ivf.or.kr/",
+          "network": "intervarsity",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Youth With A Mission",
           "query": "YWAM Youth With A Mission official website",
-          "homepage": "https://ywam.org/"
+          "homepage": "https://ywam.org/",
+          "network": "ywam",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "YWAM Korea / 예수전도단",
-          "query": "예수전도단 YWAM Korea 공식 홈페이지"
+          "query": "예수전도단 YWAM Korea 공식 홈페이지",
+          "network": "ywam",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Wycliffe Bible Translators",
           "query": "Wycliffe Bible Translators official website",
-          "homepage": "https://www.wycliffe.org/"
+          "homepage": "https://www.wycliffe.org/",
+          "network": "wycliffe",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "OMF International",
           "query": "OMF International official website mission",
-          "homepage": "https://omf.org/"
+          "homepage": "https://omf.org/",
+          "network": "omf",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "SIM International",
           "query": "SIM International Christian mission official website",
-          "homepage": "https://www.sim.org/"
+          "homepage": "https://www.sim.org/",
+          "network": "sim",
+          "languages": [
+            "en"
+          ]
         }
       ],
       "psomKey": "donation-mission",
@@ -969,12 +1105,21 @@
         {
           "name": "Habitat for Humanity International",
           "query": "Habitat for Humanity International official website",
-          "homepage": "https://www.habitat.org/"
+          "homepage": "https://www.habitat.org/",
+          "network": "habitat-for-humanity",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Habitat for Humanity Korea / 한국해비타트",
           "query": "한국해비타트 공식 홈페이지 Habitat for Humanity Korea",
-          "homepage": "https://www.habitat.or.kr/"
+          "homepage": "https://www.habitat.or.kr/",
+          "network": "habitat-for-humanity",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Medical Teams International",
@@ -994,16 +1139,31 @@
         {
           "name": "Good Neighbors Volunteer",
           "query": "굿네이버스 자원봉사 공식 홈페이지",
-          "homepage": "https://www.goodneighbors.kr/"
+          "homepage": "https://www.goodneighbors.kr/",
+          "network": "good-neighbors",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "World Vision Volunteer",
           "query": "월드비전 자원봉사 공식 홈페이지",
-          "homepage": "https://www.worldvision.or.kr/"
+          "homepage": "https://www.worldvision.or.kr/",
+          "network": "world-vision",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Korea Volunteer Center Association / 한국자원봉사센터협회",
-          "query": "한국자원봉사센터협회 공식 홈페이지"
+          "query": "한국자원봉사센터협회 공식 홈페이지",
+          "network": "korea-volunteer-center",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         }
       ],
       "psomKey": "donation-service",
@@ -1023,67 +1183,118 @@
     },
     "donation-relief": {
       "primaryQuery": "humanitarian relief disaster emergency hunger refugee rescue food aid organization official website homepage",
-      "localizeByIp": false,
+      "localizeByIp": true,
       "anchors": [
         {
           "name": "World Vision International",
           "query": "World Vision International official website humanitarian relief",
-          "homepage": "https://www.wvi.org/"
+          "homepage": "https://www.wvi.org/",
+          "network": "world-vision",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "World Vision Korea / 월드비전",
           "query": "월드비전 공식 홈페이지 긴급구호",
-          "homepage": "https://www.worldvision.or.kr/"
+          "homepage": "https://www.worldvision.or.kr/",
+          "network": "world-vision",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Korea Food for the Hungry International / 기아대책",
           "query": "기아대책 공식 홈페이지 긴급구호",
-          "homepage": "https://www.kfhi.or.kr/"
+          "homepage": "https://www.kfhi.or.kr/",
+          "network": "food-for-the-hungry",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Good Neighbors International",
           "query": "Good Neighbors International official website humanitarian relief",
-          "homepage": "https://www.goodneighbors.org/"
+          "homepage": "https://www.goodneighbors.org/",
+          "network": "good-neighbors",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Samaritan's Purse",
           "query": "Samaritan's Purse official website disaster relief",
-          "homepage": "https://www.samaritanspurse.org/"
+          "homepage": "https://www.samaritanspurse.org/",
+          "network": "samaritans-purse",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Tearfund",
           "query": "Tearfund official website humanitarian relief",
-          "homepage": "https://www.tearfund.org/"
+          "homepage": "https://www.tearfund.org/",
+          "network": "tearfund",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "World Relief",
           "query": "World Relief official website humanitarian",
-          "homepage": "https://worldrelief.org/"
+          "homepage": "https://worldrelief.org/",
+          "network": "world-relief",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Compassion International",
           "query": "Compassion International official website",
-          "homepage": "https://www.compassion.com/"
+          "homepage": "https://www.compassion.com/",
+          "network": "compassion",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Save the Children",
           "query": "Save the Children official website emergency response",
-          "homepage": "https://www.savethechildren.net/"
+          "homepage": "https://www.savethechildren.net/",
+          "network": "save-the-children",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Korean Red Cross / 대한적십자사",
           "query": "대한적십자사 공식 홈페이지 긴급구호",
-          "homepage": "https://www.redcross.or.kr/"
+          "homepage": "https://www.redcross.or.kr/",
+          "network": "red-cross",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "UNHCR",
           "query": "UNHCR official website refugee emergency",
-          "homepage": "https://www.unhcr.org/"
+          "homepage": "https://www.unhcr.org/",
+          "network": "unhcr",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "World Food Programme",
           "query": "World Food Programme WFP official website emergency hunger",
-          "homepage": "https://www.wfp.org/"
+          "homepage": "https://www.wfp.org/",
+          "network": "wfp",
+          "languages": [
+            "en"
+          ]
         }
       ],
       "psomKey": "donation-relief",
@@ -1110,12 +1321,20 @@
         {
           "name": "Association of Christian Schools International",
           "query": "ACSI Association of Christian Schools International official website",
-          "homepage": "https://www.acsi.org/"
+          "homepage": "https://www.acsi.org/",
+          "network": "acsi",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "TeachBeyond",
           "query": "TeachBeyond official website Christian education",
-          "homepage": "https://teachbeyond.org/"
+          "homepage": "https://teachbeyond.org/",
+          "network": "teachbeyond",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "4/14 Window Movement",
@@ -1128,32 +1347,56 @@
         {
           "name": "Child Evangelism Fellowship",
           "query": "Child Evangelism Fellowship official website children education",
-          "homepage": "https://www.cefonline.com/"
+          "homepage": "https://www.cefonline.com/",
+          "network": "child-evangelism-fellowship",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Cru Campus Ministry",
           "query": "Cru campus ministry official website students",
-          "homepage": "https://www.cru.org/"
+          "homepage": "https://www.cru.org/",
+          "network": "cru",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "InterVarsity Christian Fellowship",
           "query": "InterVarsity Christian Fellowship official website students campus",
-          "homepage": "https://intervarsity.org/"
+          "homepage": "https://intervarsity.org/",
+          "network": "intervarsity",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Room to Read",
           "query": "Room to Read official website education literacy nonprofit",
-          "homepage": "https://www.roomtoread.org/"
+          "homepage": "https://www.roomtoread.org/",
+          "network": "room-to-read",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Save the Children Education",
           "query": "Save the Children official website education",
-          "homepage": "https://www.savethechildren.net/"
+          "homepage": "https://www.savethechildren.net/",
+          "network": "save-the-children",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "UNICEF Education",
           "query": "UNICEF official website education children",
-          "homepage": "https://www.unicef.org/"
+          "homepage": "https://www.unicef.org/",
+          "network": "unicef",
+          "languages": [
+            "en"
+          ]
         }
       ],
       "psomKey": "donation-education",
@@ -1184,49 +1427,90 @@
     },
     "donation-environment": {
       "primaryQuery": "environment conservation climate reforestation biodiversity clean water nonprofit organization official website homepage",
-      "localizeByIp": false,
+      "localizeByIp": true,
       "anchors": [
         {
           "name": "A Rocha International",
           "query": "A Rocha International official website conservation",
-          "homepage": "https://arocha.org/"
+          "homepage": "https://arocha.org/",
+          "network": "a-rocha",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "A Rocha Korea / 아로차코리아",
-          "query": "아로차코리아 공식 홈페이지 환경 보전"
+          "query": "아로차코리아 공식 홈페이지 환경 보전",
+          "network": "a-rocha",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Plant With Purpose",
           "query": "Plant With Purpose official website environmental restoration",
-          "homepage": "https://plantwithpurpose.org/"
+          "homepage": "https://plantwithpurpose.org/",
+          "network": "plant-with-purpose",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "WWF",
           "query": "WWF official website conservation",
-          "homepage": "https://wwf.panda.org/"
+          "homepage": "https://wwf.panda.org/",
+          "network": "wwf",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "WWF Korea",
           "query": "WWF Korea 공식 홈페이지",
-          "homepage": "https://www.wwfkorea.or.kr/"
+          "homepage": "https://www.wwfkorea.or.kr/",
+          "network": "wwf",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Greenpeace",
-          "query": "Greenpeace official website environment"
+          "query": "Greenpeace official website environment",
+          "network": "greenpeace",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Greenpeace Korea / 그린피스 코리아",
-          "query": "그린피스 코리아 공식 홈페이지"
+          "query": "그린피스 코리아 공식 홈페이지",
+          "network": "greenpeace",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Korea Federation for Environmental Movements / 환경운동연합",
           "query": "환경운동연합 공식 홈페이지",
-          "homepage": "https://kfem.or.kr/"
+          "homepage": "https://kfem.or.kr/",
+          "network": "kfem",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Green Korea United / 녹색연합",
           "query": "녹색연합 공식 홈페이지",
-          "homepage": "https://www.greenkorea.org/"
+          "homepage": "https://www.greenkorea.org/",
+          "network": "green-korea-united",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         }
       ],
       "psomKey": "donation-environment",
@@ -1252,30 +1536,56 @@
         {
           "name": "International Justice Mission",
           "query": "International Justice Mission official website trafficking justice",
-          "homepage": "https://www.ijm.org/"
+          "homepage": "https://www.ijm.org/",
+          "network": "ijm",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Open Doors International",
           "query": "Open Doors International official website",
-          "homepage": "https://www.opendoors.org/"
+          "homepage": "https://www.opendoors.org/",
+          "network": "open-doors",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Open Doors Korea / 오픈도어선교회",
-          "query": "오픈도어선교회 코리아 공식 홈페이지"
+          "query": "오픈도어선교회 코리아 공식 홈페이지",
+          "network": "open-doors",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Prison Fellowship International",
           "query": "Prison Fellowship International official website",
-          "homepage": "https://pfi.org/"
+          "homepage": "https://pfi.org/",
+          "network": "prison-fellowship",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Prison Fellowship Korea / 기독교세진회",
-          "query": "기독교세진회 공식 홈페이지 prison fellowship Korea"
+          "query": "기독교세진회 공식 홈페이지 prison fellowship Korea",
+          "network": "prison-fellowship",
+          "country": "KR",
+          "languages": [
+            "ko"
+          ]
         },
         {
           "name": "Joni and Friends",
           "query": "Joni and Friends official website disability ministry",
-          "homepage": "https://joniandfriends.org/"
+          "homepage": "https://joniandfriends.org/",
+          "network": "joni-and-friends",
+          "languages": [
+            "en"
+          ]
         },
         {
           "name": "Christian anti-trafficking organization",

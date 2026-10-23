@@ -15,6 +15,7 @@
 
   const RENDER_BATCH = 12;
   const sectionRenderJobs = new WeakMap();
+  const donationProfileByUid = new Map();
 
   // The legacy Donation HTML still contains a DOMContentLoaded placeholder
   // generator with data-count=100 on every rail.  Cap only that first shell
@@ -310,6 +311,11 @@ function groupBySection(items){
         if(an !== bn) return an - bn;
       }
 
+      if(!aSeed && !bSeed && String(a?.psom_key||'')!=='donation-global' && String(b?.psom_key||'')!=='donation-global'){
+        if((b.__geoScore||0)!==(a.__geoScore||0)) return (b.__geoScore||0)-(a.__geoScore||0);
+        if((b.__langScore||0)!==(a.__langScore||0)) return (b.__langScore||0)-(a.__langScore||0);
+      }
+
       if(!aSeed && !bSeed && (String(a?.psom_key||'')==='donation-global' || String(b?.psom_key||'')==='donation-global')){
         const av=(String(a?.type||'').toLowerCase()==='video'||String(a?.media?.kind||'').toLowerCase()==='video'||String(a?.link?.mode||'').toLowerCase()==='content-video')?1:0;
         const bv=(String(b?.type||'').toLowerCase()==='video'||String(b?.media?.kind||'').toLowerCase()==='video'||String(b?.link?.mode||'').toLowerCase()==='content-video')?1:0;
@@ -362,6 +368,141 @@ function groupBySection(items){
     }catch(_e){
       return '';
     }
+  }
+
+  const DONATION_GEO_ENDPOINT = '/igdc-country-geo';
+  let donationGeoPromise = null;
+
+  function normalizeCountryCode(value){
+    const code=String(value||'').trim().toUpperCase();
+    if(code==='UK') return 'GB';
+    return /^[A-Z]{2}$/.test(code)?code:'';
+  }
+
+  function normalizeLanguageCode(value){
+    return String(value||'').trim().toLowerCase().replace('_','-').split('-')[0];
+  }
+
+  const COUNTRY_DEFAULT_LANGS = {
+    KR:['ko'],JP:['ja'],CN:['zh'],TW:['zh'],HK:['zh','en'],SG:['en','zh'],PH:['en','tl'],
+    US:['en'],GB:['en'],CA:['en','fr'],AU:['en'],NZ:['en'],DE:['de'],FR:['fr'],ES:['es'],IT:['it'],PT:['pt'],
+    BR:['pt'],MX:['es'],AR:['es'],CO:['es'],PE:['es'],CL:['es'],RU:['ru'],UA:['uk'],TR:['tr'],SA:['ar'],AE:['ar','en'],
+    QA:['ar','en'],IL:['he','en'],IN:['hi','en'],PK:['ur','en'],BD:['bn','en'],ID:['id'],MY:['ms','en'],TH:['th'],VN:['vi']
+  };
+
+  function preferredLanguages(country){
+    const out=[];
+    (COUNTRY_DEFAULT_LANGS[country]||[]).forEach(function(v){if(v&&!out.includes(v))out.push(v);});
+    [document.documentElement&&document.documentElement.lang,navigator.language].forEach(function(v){
+      const lang=normalizeLanguageCode(v);if(lang&&!out.includes(lang))out.push(lang);
+    });
+    return out;
+  }
+
+  function countryFromUrl(value){
+    const url=safeExternalUrl(value);if(!url)return '';
+    try{
+      const host=new URL(url).hostname.toLowerCase().replace(/^www\./,'');
+      const last=(host.split('.').pop()||'').toUpperCase();
+      if(last==='UK')return 'GB';
+      return /^[A-Z]{2}$/.test(last)?last:'';
+    }catch(_e){return '';}
+  }
+
+  function itemCountry(it){
+    const explicit=normalizeCountryCode(it?.org?.country||it?.registration?.country||it?.geo?.country||it?.country);
+    if(explicit)return explicit;
+    const title=String(it?.org?.name||it?.title||'');
+    if(/(?:\bKorea\b|\bKorean\b|대한민국|한국|코리아)/i.test(title))return 'KR';
+    return countryFromUrl(it?.org?.homepage||it?.link?.url||it?.url||'');
+  }
+
+  function itemLanguages(it){
+    const raw=[];
+    if(Array.isArray(it?.org?.languages))raw.push(...it.org.languages);
+    if(Array.isArray(it?.languages))raw.push(...it.languages);
+    if(it?.i18n?.lang)raw.push(it.i18n.lang);
+    const unique=[];
+    raw.forEach(function(v){const lang=normalizeLanguageCode(v);if(lang&&!unique.includes(lang))unique.push(lang);});
+    return unique;
+  }
+
+  function inferredNetworkKey(it){
+    const explicit=String(it?.org?.network||it?.network||'').trim().toLowerCase();
+    if(explicit)return explicit;
+    const blob=String(it?.org?.name||it?.title||'').toLowerCase();
+    const aliases=[
+      [/world\s*vision|월드비전/,'world-vision'],
+      [/good\s*neighbors|굿네이버스/,'good-neighbors'],
+      [/habitat\s*for\s*humanity|해비타트/,'habitat-for-humanity'],
+      [/save\s*the\s*children|세이브더칠드런/,'save-the-children'],
+      [/child\s*evangelism\s*fellowship|어린이전도협회/,'child-evangelism-fellowship'],
+      [/campus\s*crusade|\bcru\b|\bkccc\b|대학생선교회/,'cru'],
+      [/intervarsity|\bivf\b|기독학생회/,'intervarsity'],
+      [/youth\s*with\s*a\s*mission|\bywam\b|예수전도단/,'ywam'],
+      [/a\s*rocha|아로차/,'a-rocha'],
+      [/\bwwf\b/,'wwf'],
+      [/greenpeace|그린피스/,'greenpeace'],
+      [/open\s*doors|오픈도어/,'open-doors'],
+      [/prison\s*fellowship|기독교세진회/,'prison-fellowship']
+    ];
+    for(const pair of aliases){if(pair[0].test(blob))return pair[1];}
+    return '';
+  }
+
+  async function loadDonationGeo(){
+    if(donationGeoPromise)return donationGeoPromise;
+    donationGeoPromise=(async function(){
+      const controller=typeof AbortController==='function'?new AbortController():null;
+      const timer=controller?setTimeout(function(){try{controller.abort();}catch(_e){}},1200):null;
+      try{
+        const res=await fetch(DONATION_GEO_ENDPOINT,{cache:'no-store',credentials:'same-origin',signal:controller?controller.signal:undefined});
+        const data=res&&res.ok?await res.json():null;
+        const country=normalizeCountryCode(data&&(data.country||data.detectedCountry));
+        const geo={country:country,region:String(data&&data.region||'').trim().toUpperCase(),resolved:!!country,excluded:!!(data&&data.excluded)};
+        window.__IGDC_DONATION_GEO__=geo;
+        return geo;
+      }catch(_e){
+        const geo={country:'',region:'',resolved:false,excluded:false};
+        window.__IGDC_DONATION_GEO__=geo;
+        return geo;
+      }finally{if(timer)clearTimeout(timer);}
+    })();
+    return donationGeoPromise;
+  }
+
+  function languageAffinity(it,preferred){
+    const langs=itemLanguages(it);if(!langs.length)return 0;
+    for(let i=0;i<preferred.length;i++){if(langs.includes(preferred[i]))return 100-i;}
+    return 0;
+  }
+
+  function localizeInstitutionItems(items,sectionKey,geo){
+    const list=(Array.isArray(items)?items:[]).slice();
+    if(sectionKey==='donation-global'||!geo||!geo.country)return list;
+    const preferred=preferredLanguages(geo.country);
+    list.forEach(function(it){
+      const country=itemCountry(it);
+      it.__igdcCountry=country;
+      it.__geoScore=country===geo.country?300:(country?0:100);
+      it.__langScore=languageAffinity(it,preferred);
+    });
+    const networks=new Map();
+    list.forEach(function(it){const key=inferredNetworkKey(it);if(!key)return;if(!networks.has(key))networks.set(key,[]);networks.get(key).push(it);});
+    const remove=new Set();
+    networks.forEach(function(group){
+      if(group.length<2)return;
+      const local=group.filter(function(it){return it.__igdcCountry===geo.country;});
+      const globals=group.filter(function(it){return !it.__igdcCountry;});
+      const pool=local.length?local:(globals.length?globals:[]);
+      if(!pool.length)return;
+      const best=pool.slice().sort(function(a,b){
+        if((b.__langScore||0)!==(a.__langScore||0))return (b.__langScore||0)-(a.__langScore||0);
+        return (b.__score||0)-(a.__score||0);
+      })[0];
+      group.forEach(function(it){if(it!==best)remove.add(it);});
+    });
+    return list.filter(function(it){return !remove.has(it);});
   }
 
   const CONTAINED_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20260918-donation-speed-history-v9';
@@ -464,6 +605,83 @@ function groupBySection(items){
     });
   }
 
+  function donationProfileForCard(card){
+    const uid=String(card&&card.dataset&&card.dataset.uid||'');
+    const row=donationProfileByUid.get(uid)||{};
+    return row&&typeof row==='object'?row:{};
+  }
+
+  function supportMethodLabel(method){
+    const key=String(method||'').toLowerCase();
+    return ({card:'카드',bank_transfer:'계좌이체',mobile:'모바일 결제',paypal:'PayPal',crypto:'블록체인/가상자산'})[key]||String(method||'');
+  }
+
+  function ensureDonationSupportPanelStyle(){
+    if(document.getElementById('igdc-donation-support-panel-style'))return;
+    const style=document.createElement('style');style.id='igdc-donation-support-panel-style';
+    style.textContent=[
+      '#igdc-contained-external-viewer .igdc-donation-support-panel{position:absolute;z-index:8;top:58px;right:12px;width:min(360px,calc(100vw - 24px));max-height:calc(100% - 70px);overflow:auto;background:rgba(255,255,255,.98);border:1px solid #b7c9d8;border-radius:12px;box-shadow:0 10px 28px rgba(15,23,42,.20);padding:14px;color:#16365c;font:13px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}',
+      '#igdc-contained-external-viewer .igdc-donation-support-head{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px}',
+      '#igdc-contained-external-viewer .igdc-donation-support-title{font-size:15px;font-weight:900;flex:1}',
+      '#igdc-contained-external-viewer .igdc-donation-support-close{border:0;background:#eef3f7;color:#16365c;border-radius:8px;width:28px;height:28px;cursor:pointer;font-weight:900}',
+      '#igdc-contained-external-viewer .igdc-donation-support-badges{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}',
+      '#igdc-contained-external-viewer .igdc-donation-support-badge{background:#edf6df;border:1px solid #b9cf91;border-radius:999px;padding:3px 7px;font-size:11px;font-weight:700}',
+      '#igdc-contained-external-viewer .igdc-donation-support-block{border-top:1px solid #e1e8ee;padding-top:9px;margin-top:9px}',
+      '#igdc-contained-external-viewer .igdc-donation-support-row{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px;margin:6px 0;word-break:break-word}',
+      '#igdc-contained-external-viewer .igdc-donation-support-copy{margin-left:6px;border:1px solid #a9bfd0;background:#fff;color:#16365c;border-radius:6px;padding:2px 6px;cursor:pointer;font-size:11px}',
+      '#igdc-contained-external-viewer .igdc-donation-support-source{display:inline-block;margin-top:7px;color:#0b5cab;text-decoration:underline;font-weight:700}',
+      '#igdc-contained-external-viewer .igdc-donation-support-note{font-size:11px;color:#607080;margin-top:8px}',
+      '@media(max-width:640px){#igdc-contained-external-viewer .igdc-donation-support-panel{top:auto;right:6px;left:6px;bottom:6px;width:auto;max-height:44%;padding:11px}}'
+    ].join('');
+    (document.head||document.documentElement).appendChild(style);
+  }
+
+  function showDonationSupportPanel(profile,label,homepage){
+    const root=document.getElementById('igdc-contained-external-viewer');if(!root)return;
+    const old=root.querySelector('.igdc-donation-support-panel');if(old)old.remove();
+    profile=profile&&typeof profile==='object'?profile:{};
+    const checkout=safeExternalUrl(profile.checkout_url||'');
+    const source=safeExternalUrl(profile.source_url||checkout||'');
+    const methods=Array.isArray(profile.methods)?profile.methods:[];
+    const banks=(Array.isArray(profile.bank_accounts)?profile.bank_accounts:[]).filter(function(b){return b&&b.official_source===true&&b.account;});
+    const wallets=(Array.isArray(profile.crypto_wallets)?profile.crypto_wallets:[]).filter(function(w){return w&&w.official_source===true&&w.address;});
+    if(!checkout&&!banks.length&&!wallets.length)return;
+    ensureDonationSupportPanelStyle();
+    const panel=document.createElement('aside');panel.className='igdc-donation-support-panel';panel.setAttribute('aria-label','공식 후원 정보');
+    const badges=methods.map(function(m){return '<span class="igdc-donation-support-badge">'+escHtml(supportMethodLabel(m))+'</span>';}).join('');
+    const bankHtml=banks.map(function(b){
+      const bank=escHtml(b.bank||'공식 후원계좌'),holder=escHtml(b.holder||''),account=escHtml(b.account||''),swift=escHtml(b.swift||'');
+      return '<div class="igdc-donation-support-row"><strong>'+bank+'</strong><br>'+ (holder?'예금주/수취인: '+holder+'<br>':'') +'계좌: <span>'+account+'</span><button type="button" class="igdc-donation-support-copy" data-copy="'+escAttr(b.account||'')+'">복사</button>'+(swift?'<br>SWIFT/BIC: '+swift:'')+'</div>';
+    }).join('');
+    const walletHtml=wallets.map(function(w){return '<div class="igdc-donation-support-row"><strong>'+escHtml(w.asset||'Crypto')+'</strong><br><span>'+escHtml(w.address||'')+'</span><button type="button" class="igdc-donation-support-copy" data-copy="'+escAttr(w.address||'')+'">복사</button></div>';}).join('');
+    panel.innerHTML='<div class="igdc-donation-support-head"><div class="igdc-donation-support-title">'+escHtml(label||'후원')+' · 공식 후원 정보</div><button type="button" class="igdc-donation-support-close" aria-label="후원 정보 닫기">×</button></div>'+
+      (checkout?'<div><strong>공식 후원 페이지</strong><br><span style="font-size:11px;color:#52677a">현재 이 페이지를 우선 열었습니다.</span></div>':'')+
+      (badges?'<div class="igdc-donation-support-badges">'+badges+'</div>':'')+
+      (bankHtml?'<div class="igdc-donation-support-block"><strong>공식 계좌이체 정보</strong>'+bankHtml+'</div>':'')+
+      (walletHtml?'<div class="igdc-donation-support-block"><strong>공식 블록체인 후원 정보</strong>'+walletHtml+'</div>':'')+
+      (source?'<a class="igdc-donation-support-source" href="'+escAttr(source)+'" target="_blank" rel="noopener noreferrer">공식 출처 확인</a>':'')+
+      '<div class="igdc-donation-support-note">기관의 공식 홈페이지 또는 그 홈페이지에서 직접 연결된 후원 페이지에서 확인된 정보만 표시합니다. 카드번호 등 결제정보는 IGDC가 입력받거나 저장하지 않습니다.</div>';
+    root.appendChild(panel);
+    panel.querySelector('.igdc-donation-support-close')?.addEventListener('click',function(){panel.remove();});
+    panel.querySelectorAll('.igdc-donation-support-copy').forEach(function(btn){btn.addEventListener('click',function(){const value=String(btn.dataset.copy||'');if(!value)return;navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(value).then(function(){btn.textContent='복사됨';setTimeout(function(){btn.textContent='복사';},1200);}).catch(function(){}):null;});});
+  }
+
+  function openDonationCard(card,options){
+    if(!card)return Promise.resolve(false);
+    options=options||{};
+    const homepage=safeExternalUrl(card.getAttribute('data-url'));
+    if(!homepage)return Promise.resolve(false);
+    if(card.dataset.donationVideo==='1')return openDonationVideo(card);
+    const profile=donationProfileForCard(card);
+    const checkout=safeExternalUrl(profile.checkout_url||'');
+    const url=options.preferDonation&&checkout?checkout:homepage;
+    const label=card.querySelector?.('.card-title')?.textContent||'';
+    return openContainedHomepage(url,label,{kind:options.preferDonation?'donation-support':(card.dataset.section==='donation-global'?'donation-news':'donation')}).then(function(ok){
+      if(ok&&options.preferDonation)window.setTimeout(function(){showDonationSupportPanel(profile,label,homepage);},0);
+      return ok;
+    });
+  }
+
 
   function renderCard(it){
     const rawImg = safeUrl(it?.media?.thumb) || '';
@@ -482,7 +700,9 @@ function groupBySection(items){
     // Organization lanes open the verified homepage. Global News keeps its actual
     // article/video destination and uses the shared MediaHub player for videos.
     const url = globalLane ? (mediaSource || safeExternalUrl(it?.link?.url) || safeExternalUrl(it?.url) || '') : (safeExternalUrl(it?.org?.homepage) || safeExternalUrl(it?.link?.url) || safeExternalUrl(it?.url) || '');
-    const uid = escAttr(it?.uid || it?.id || '');
+    const uidRaw = String(it?.uid || it?.id || '');
+    donationProfileByUid.set(uidRaw, it?.donation && typeof it.donation==='object' ? it.donation : {});
+    const uid = escAttr(uidRaw);
     const sample = isSeedItem(it) || /(?:placeholder|sample)/i.test(rawImg);
     const img = sample ? '' : safeExternalUrl(rawImg);
     const neutralFallback = '<span class="donation-thumb-fallback" aria-hidden="true" style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;background:#e5e7eb;color:#9ca3af;font-size:24px">↗</span>';
@@ -541,8 +761,8 @@ function groupBySection(items){
         if(typeof e.stopImmediatePropagation==='function') e.stopImmediatePropagation();
         const card=a.closest('.donation-card');
         const label=card&&card.querySelector('.card-title')?card.querySelector('.card-title').textContent:'';
-        if(card&&card.dataset.donationVideo==='1') openDonationVideo(card);
-        else openContainedHomepage(url,label,{kind:card&&card.dataset.section==='donation-global'?'donation-news':'donation'});
+        if(card)openDonationCard(card);
+        else openContainedHomepage(url,label,{kind:'donation'});
       });
     });
   }
@@ -660,7 +880,8 @@ function mountSection(key, items, limit){
 }
 
   async function main(){
-    const snapshot = await loadSnapshot();
+    const results = await Promise.all([loadSnapshot(),loadDonationGeo()]);
+    const snapshot = results[0], geo = results[1];
 
     if(!snapshot?.sections || !snapshot?.items){
       console.error('Invalid donation snapshot');
@@ -673,6 +894,7 @@ function mountSection(key, items, limit){
 
     Object.keys(limits).forEach((key)=>{
       let list = groups[key] || [];
+      list = localizeInstitutionItems(list,key,geo);
       list = sortSection(list);
       mountSection(key, list, limits[key]);
     });
@@ -684,7 +906,7 @@ function mountSection(key, items, limit){
       const card = e.target?.closest?.('.donation-card');
       if(!card) return;
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url){ e.preventDefault(); e.stopPropagation(); if(card.dataset.donationVideo==='1')openDonationVideo(card);else openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || '',{kind:card.dataset.section==='donation-global'?'donation-news':'donation'}); }
+      if(url){ e.preventDefault(); e.stopPropagation(); openDonationCard(card); }
     });
 
     document.addEventListener('keydown', (e)=>{
@@ -693,12 +915,34 @@ function mountSection(key, items, limit){
       if(!card) return;
       e.preventDefault();
       const url = safeExternalUrl(card.getAttribute('data-url'));
-      if(url){if(card.dataset.donationVideo==='1')openDonationVideo(card);else openContainedHomepage(url, card.querySelector?.('.card-title')?.textContent || '',{kind:card.dataset.section==='donation-global'?'donation-news':'donation'});}
+      if(url){openDonationCard(card);}
     });
+  }
+
+  function bindDonationMenuNavigation(){
+    const sectionKeys=['donation-ngo','donation-mission','donation-service','donation-relief','donation-education','donation-environment','donation-others'];
+    document.addEventListener('click',function(e){
+      const btn=e.target&&e.target.closest?e.target.closest('#donationSectionMenuBackdrop .donation-section-orgs button'):null;
+      if(!btn)return;
+      const group=btn.closest('.donation-section-group');
+      const groups=Array.from(document.querySelectorAll('#donationSectionMenuBody .donation-section-group'));
+      const key=sectionKeys[Math.max(0,groups.indexOf(group))]||'';
+      const title=String(btn.textContent||'').trim();
+      const track=key?document.querySelector('[data-psom-key="'+key+'"]'):null;
+      const card=track?Array.from(track.querySelectorAll('.donation-card')).find(function(node){
+        return String(node.querySelector('.card-title')?.textContent||'').trim()===title;
+      }):null;
+      if(!card||!safeExternalUrl(card.getAttribute('data-url')))return;
+      e.preventDefault();e.stopPropagation();if(typeof e.stopImmediatePropagation==='function')e.stopImmediatePropagation();
+      const backdrop=document.getElementById('donationSectionMenuBackdrop');
+      if(backdrop){backdrop.style.display='none';backdrop.setAttribute('aria-hidden','true');}
+      openDonationCard(card,{preferDonation:true});
+    },true);
   }
 
   function boot(){
     bindClicks();
+    bindDonationMenuNavigation();
     primeDonationInteractionEngines();
   main();
 

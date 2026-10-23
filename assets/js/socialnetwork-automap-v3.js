@@ -777,6 +777,70 @@
     return box;
   }
 
+  // SOCIAL RIGHT RAIL ONLY: the same contained seller-detail viewer already
+  // used by Distribution/Network. Never navigate the parent/top IGDC page.
+  // Load lazily so the seven SNS content sections and their first paint stay
+  // independent of the commercial right-panel viewer.
+  const SOCIAL_RIGHT_VIEWER_SRC = '/assets/js/igdc-contained-external-viewer.js?v=20261011-commerce-contained-v2';
+  const SOCIAL_RIGHT_VIEWER_ID = 'igdc-social-right-commerce-viewer-loader-v1';
+  let socialRightViewerPromise = null;
+
+  function ensureSocialRightViewer() {
+    if (window.IGDCContainedViewer && Number(window.IGDCContainedViewer.version || 0) >= 10 &&
+        typeof window.IGDCContainedViewer.open === 'function') {
+      return Promise.resolve(window.IGDCContainedViewer);
+    }
+    if (socialRightViewerPromise) return socialRightViewerPromise;
+    socialRightViewerPromise = new Promise(function (resolve, reject) {
+      let script = document.getElementById(SOCIAL_RIGHT_VIEWER_ID);
+      const finish = function () {
+        const viewer = window.IGDCContainedViewer;
+        if (viewer && Number(viewer.version || 0) >= 10 && typeof viewer.open === 'function') resolve(viewer);
+        else reject(new Error('IGDC product detail viewer unavailable'));
+      };
+      if (script) {
+        if (script.dataset.loaded === '1') { finish(); return; }
+        script.addEventListener('load', finish, { once: true });
+        script.addEventListener('error', function () { reject(new Error('IGDC product detail viewer load failed')); }, { once: true });
+        return;
+      }
+      script = document.createElement('script');
+      script.id = SOCIAL_RIGHT_VIEWER_ID;
+      script.src = SOCIAL_RIGHT_VIEWER_SRC;
+      script.async = true;
+      script.addEventListener('load', function () { script.dataset.loaded = '1'; finish(); }, { once: true });
+      script.addEventListener('error', function () { reject(new Error('IGDC product detail viewer load failed')); }, { once: true });
+      (document.head || document.documentElement).appendChild(script);
+    }).catch(function (error) {
+      socialRightViewerPromise = null; // allow a later click to retry
+      throw error;
+    });
+    return socialRightViewerPromise;
+  }
+
+  function openSocialRightProduct(url, label) {
+    return ensureSocialRightViewer().then(function (viewer) {
+      // A failed frame-policy check uses the existing IGDC contained relay;
+      // external checkout sites retain their exact verified product URL.
+      return viewer.open(url, { label: label, kind: 'commerce-product', pushHistory: true });
+    }).catch(function (error) {
+      try { console.warn('[IGDC][Social right] internal product viewer failed:', error); } catch (_) {}
+      // Fail CLOSED for navigation: no _top, location.assign or automatic external tab.
+      // An explicit retry remains possible without losing the IGDC social page.
+      const id = 'igdc-social-right-viewer-notice';
+      let notice = document.getElementById(id);
+      if (!notice) {
+        notice = document.createElement('div');
+        notice.id = id;
+        notice.setAttribute('role', 'alert');
+        notice.style.cssText = 'position:fixed;z-index:2147483201;left:16px;right:16px;bottom:16px;max-width:540px;margin:auto;padding:12px 16px;background:#fff4d2;color:#17324d;border:1px solid #b58b3a;border-radius:8px;box-shadow:0 4px 22px #0003;font:14px system-ui';
+        (document.body || document.documentElement).appendChild(notice);
+      }
+      notice.textContent = '상품 상세 화면을 열지 못했습니다. IGDC 페이지는 유지됩니다. 잠시 후 다시 선택해 주세요.';
+      return false;
+    });
+  }
+
   function paintRightCard(box, it, index) {
     if (!box || !it) return;
     const title = pickTitle(it) || "Item";
@@ -803,10 +867,24 @@
     }
     a.textContent = "";
     a.href = url;
-    a.target = isExternalUrl(url) ? "_top" : "_self";
+    // Both real desktop and mobile right-rail cards must stay in the IGDC page.
+    // The verified product destination is kept as href for accessibility and
+    // intentional Ctrl/Cmd-click, but ordinary clicks open the contained viewer.
+    a.target = "_self";
     a.rel = "noopener";
-    if (isExternalUrl(url)) a.setAttribute("data-igdc-external", "top");
-    else a.removeAttribute("data-igdc-external");
+    a.removeAttribute("data-igdc-external");
+    if (isExternalUrl(url)) {
+      a.setAttribute('data-igdc-contained-product', '1');
+      a.addEventListener('click', function (event) {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey ||
+            event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openSocialRightProduct(url, title);
+      }, false);
+    } else {
+      a.removeAttribute('data-igdc-contained-product');
+    }
     a.dataset.productId = productId;
     a.dataset.productTitle = title;
     a.dataset.productLink = url;
