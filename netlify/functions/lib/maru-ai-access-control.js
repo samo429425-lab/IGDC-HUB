@@ -26,6 +26,7 @@ const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const RATE_STATE = new Map();
 const PLAY_VERIFY_CACHE = new Map();
 let googleAccessTokenCache = { token: '', expiresAt: 0 };
+let googleServiceAccountCache = { value: null, expiresAt: 0 };
 
 function clean(value) { return String(value == null ? '' : value).trim(); }
 function normalizeRole(value) { return clean(value).toLowerCase().replace(/[\s.\-]+/g, '_'); }
@@ -195,23 +196,65 @@ function googlePlayAccountBindingMatches(member, obfuscatedAccountId) {
   if (!supplied) return false;
   return googlePlayAccountBindingCandidates(member).includes(supplied);
 }
-function googleServiceAccount() {
-  let fromJson = clean(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  if (fromJson) {
-    try {
-      if (!fromJson.startsWith('{')) fromJson = Buffer.from(fromJson, 'base64').toString('utf8');
-      const parsed = JSON.parse(fromJson);
-      const clientEmail = clean(parsed.client_email);
-      const privateKey = clean(parsed.private_key).replace(/\\n/g, '\n');
-      if (clientEmail && privateKey) return { clientEmail, privateKey };
-    } catch (_) {}
-  }
+function parseGoogleServiceAccount(value) {
+  let raw = clean(value);
+  if (!raw) return null;
+  try {
+    if (!raw.startsWith('{')) raw = Buffer.from(raw, 'base64').toString('utf8');
+    const parsed = JSON.parse(raw);
+    const clientEmail = clean(parsed.client_email);
+    const privateKey = clean(parsed.private_key).replace(/\\n/g, '\n');
+    return clientEmail && privateKey ? { clientEmail, privateKey } : null;
+  } catch (_) { return null; }
+}
+function googleServiceAccountFromEnv() {
+  const fromJson = parseGoogleServiceAccount(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+  if (fromJson) return fromJson;
   const clientEmail = clean(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
   const privateKey = clean(process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_PRIVATE_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY).replace(/\\n/g, '\n');
   return clientEmail && privateKey ? { clientEmail, privateKey } : null;
 }
+function supabaseSecretStoreConfig() {
+  const url = clean(process.env.SUPABASE_URL).replace(/\/+$/, '');
+  const key = clean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY);
+  return /^https:\/\/[^/]+$/i.test(url) && key ? { url, key } : null;
+}
+async function googleServiceAccountFromSupabase() {
+  const now = Date.now();
+  if (googleServiceAccountCache.value && googleServiceAccountCache.expiresAt > now) return googleServiceAccountCache.value;
+  const config = supabaseSecretStoreConfig();
+  if (!config) return null;
+  const endpoint = `${config.url}/rest/v1/igdc_server_secrets?secret_name=eq.google_play_service_account_json&select=secret_value&limit=1`;
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        apikey: config.key,
+        Authorization: `Bearer ${config.key}`,
+        Accept: 'application/json'
+      }
+    });
+  } catch (_) {
+    throw accessError(503, 'google_play_secret_store_unavailable', 'Google Play credential storage is temporarily unavailable.');
+  }
+  let rows = null;
+  try { rows = await response.json(); } catch (_) { rows = null; }
+  if (!response.ok) {
+    throw accessError(503, 'google_play_secret_store_misconfigured', 'Google Play credential storage is not configured correctly.');
+  }
+  const raw = Array.isArray(rows) && rows[0] ? rows[0].secret_value : '';
+  const account = parseGoogleServiceAccount(raw);
+  if (!account) return null;
+  googleServiceAccountCache = { value: account, expiresAt: now + 5 * 60 * 1000 };
+  return account;
+}
+async function googleServiceAccount() {
+  return googleServiceAccountFromEnv() || await googleServiceAccountFromSupabase();
+}
 function googlePlayBillingConfigured() {
-  return envTrue('MARU_GOOGLE_PLAY_BILLING_ENABLED') && Boolean(googleServiceAccount());
+  if (!envTrue('MARU_GOOGLE_PLAY_BILLING_ENABLED')) return false;
+  return Boolean(googleServiceAccountFromEnv() || supabaseSecretStoreConfig());
 }
 function base64Url(value) {
   const buffer = Buffer.isBuffer(value) ? value : Buffer.from(String(value), 'utf8');
@@ -222,7 +265,7 @@ async function googleAccessToken() {
   if (googleAccessTokenCache.token && googleAccessTokenCache.expiresAt - now > 60 * 1000) {
     return googleAccessTokenCache.token;
   }
-  const service = googleServiceAccount();
+  const service = await googleServiceAccount();
   if (!service) throw accessError(503, 'google_play_verifier_misconfigured', 'Google Play server verification credentials are not configured.');
   const nowSec = Math.floor(now / 1000);
   const header = base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
