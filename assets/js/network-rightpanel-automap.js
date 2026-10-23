@@ -395,6 +395,9 @@
     renderRail(panel,items,false);
   }
 
+  // Start the same country-scoped fetch while the rest of the page parses.
+  // Never cache across visits/IPs; only share this page load's one request.
+  let networkSnapshotPromise = fetchJson(SNAPSHOT_URL);
   let railBootPromise = null;
   function run(){
     // DOMContentLoaded and window.load may both fire; only one of them may
@@ -403,7 +406,7 @@
     railBootPromise = (async function(){
       disablePsomThumbGrid();
       installExternalTopNavigation();
-      const snap = await fetchJson(SNAPSHOT_URL);
+      const snap = await networkSnapshotPromise;
 
       const items = snap && Array.isArray(snap.items)
         ? normalizeItems(snap.items)

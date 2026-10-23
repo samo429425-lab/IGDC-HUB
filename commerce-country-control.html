@@ -91,7 +91,7 @@
   </style>
 <link rel="stylesheet" href="/assets/css/admin-checkbox-accessibility.css?v=20260925-1">
 <style id="latest-overview-inline-css">
-/* Large product inspection cards; scope and operator actions remain in the JS ledger. */
+/* Large product inspection cards; section, history and operator actions remain JS-ledger controlled. */
 .latest-overview{background:#08192b;border:1px solid #365579;border-radius:10px;margin:12px 0;padding:12px;color:#deedff}
 .latest-overview-header{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
 .latest-overview-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:8px 0}
@@ -364,7 +364,7 @@
           <div class="latest-overview-controls"><label>상태 <select id="latestOverviewFilter"><option value="all">모두 보기</option><option value="new">미등록</option><option value="undecided">미배치</option><option value="slot_candidate">섹션 배치</option><option value="hold">보류</option><option value="excluded">일반·영구 제외</option><option value="duplicate">중복 확인</option></select></label><label>상품 검색 <input type="search" id="latestOverviewSearch" placeholder="상품명·URL·섹션"></label><button type="button" class="ghost" id="latestOverviewReload">원장 새로고침</button></div>
           <div class="small">원본 기록은 유지하고 현재 저장 위치를 보여줍니다. 미배치 이동은 실제 후보 ID로 처리합니다. 목록 삭제는 재수집 가능, 영구 제외는 재수집 차단입니다. 공개 중인 상품은 먼저 매칭 해제가 필요합니다.</div>
           <div class="latest-overview-bulk" role="group" aria-label="리서치 상품 선택 일괄관리"><label class="latest-overview-page-select"><input id="latestOverviewSelectPage" type="checkbox"> 이 페이지 전체 선택 (작업 가능한 상품)</label><strong id="latestOverviewSelectedCount">선택 0건</strong><button type="button" id="latestOverviewBulkMove" disabled>선택 상품 일괄 미배치 이동</button><button type="button" id="latestOverviewBulkDelete" class="secondary" disabled>선택 상품 일괄 목록 삭제</button><button type="button" id="latestOverviewClearSelection" class="ghost" disabled>선택 해제</button></div>
-          <div class="small">체크한 항목은 페이지를 바꿔도 유지됩니다. 미등록 상품은 개별 검증·이관, 중복 URL은 정확한 후보 ID 지정 후 일괄 작업할 수 있습니다. 상품 사진·이름을 클릭하면 실제 판매처 상세페이지가 새 탭에서 열립니다.</div>
+          <div class="small">체크한 항목은 페이지를 바꿔도 유지됩니다. 미등록 상품은 개별 검증·이관, 중복 URL은 정확한 후보 ID 지정 후 일괄 작업할 수 있습니다. 상품 사진·이름을 클릭하면 <strong>현재 브라우저 탭</strong>에서 실제 판매처 상세페이지가 열리며, 브라우저 뒤로가기로 관리자 목록에 복귀할 수 있습니다. 판매처의 접속 제한은 IGDC가 해제할 수 없습니다.</div>
           <div id="latestOverviewOperationStatus" class="small" role="status" aria-live="polite"></div>
           <div id="latestOverviewRows" class="latest-overview-rows"><div class="small">상품 위치를 확인 중입니다.</div></div>
           <div class="latest-overview-pager"><button type="button" id="latestOverviewPrev">이전</button><span id="latestOverviewPageState" class="small"></span><button type="button" id="latestOverviewNext">다음</button></div>
@@ -615,7 +615,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20261024-latest-bulk-cards-v3"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261024-admin-product-native-back-v4"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
