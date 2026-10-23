@@ -1140,7 +1140,7 @@ function boot(){
     (function(){
       function isMobile(){ return window.matchMedia('(max-width:1023px)').matches; }
       function getPanel(){ return isMobile() ? document.getElementById('rpMobileGrid') : document.getElementById('rightAutoPanel'); }
-      function getCount(){ return 100; }
+      function getCount(){ return 6; } // Only initial placeholders; real snapshot capacity is unchanged
       function resetHeight(panel){ if(panel) panel.style.minHeight = ''; }
       function applyMobileHeight(panel){ if(panel && isMobile()) panel.style.minHeight = '280px'; }
       function build(){
@@ -1168,16 +1168,14 @@ function boot(){
       var __rpResizeTimer = null;
 
 window.addEventListener('resize', function(){
-  clearTimeout(__rpResizeTimer);
-
-  __rpResizeTimer = setTimeout(function(){
-    build();
-
-    try{
-      window.dispatchEvent(new Event('igdc:rightpanel:refresh'));
-    }catch(_){}
-  }, 80);
-});
+    clearTimeout(__rpResizeTimer);
+    __rpResizeTimer = setTimeout(function(){
+      // Both panels are already hydrated from the SAME Edge-routed IP snapshot.
+      // Resizing never deletes live items and never restarts a large snapshot fetch.
+      var panel = getPanel();
+      if(panel && panel.querySelector('[data-dummy="1"]')) applyMobileHeight(panel);
+    }, 120);
+  }, {passive:true});
       window.__IGDC_RIGHTPANEL_RENDER = function(items){
        var panel = getPanel();
        if(!panel) return;
