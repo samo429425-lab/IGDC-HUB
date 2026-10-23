@@ -126,13 +126,14 @@ async function applyAction(actorId,row,action){
   // They must not permanently block explicit deletion from the private lists.
   // Keep ACTIVE publication and currently approved section cards protected.
   const currentDecision=lower(payload.slotDecision),hasCurrentPlacement=!!(plain(payload.approvedPlacement).sectionKey||plain(payload.approvedPlacement).section);
-  const livePublication=oldAssignments.length>0
+  const livePublication=(oldAssignments.length>0
     ?oldAssignments.some((entry)=>frontStateActive(entry&&entry.publication_status))
-    :(frontStateActive(plain(payload.frontPublication).status)||!!(priorFront&&priorFront.frontActive));
+    :(frontStateActive(plain(payload.frontPublication).status)||!!(priorFront&&priorFront.frontActive)))
+    || ["unpublish_requested","unpublish_failed"].includes(lower(plain(payload.frontPublication).status));
   // Explicit administrator removal of an unPUBLISHED section candidate is
   // permitted: a PSOM placement is not a front publication. The relation is
   // removed and read back before the archived candidate state is committed.
-  if(action!=="restore"&&livePublication){
+  if(livePublication){
     const error=new Error("assigned_or_published_candidate_protected:"+id);error.statusCode=409;throw error;
   }
   if(action==="restore"){
@@ -161,7 +162,7 @@ async function applyAction(actorId,row,action){
     const assignmentCleanup=await releaseSectionAssignment(id);
     const previousStatus=text(row&&row.status)||"approval_pending";
     const queueControl=Object.assign({},plain(payload.queueControl),{
-      schema:"igdc-private-product-queue-control.v1",action:"dismiss",previousStatus,hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,decidedAt:now,decidedBy:text(actorId)||"administrator"
+      schema:"igdc-private-product-queue-control.v1",action:"dismiss",previousStatus,hiddenFromCountryQueue:true,permanentExcluded:false,researchExcluded:false,permanentExclusionUrl:null,rediscoveryAllowed:true,decidedAt:now,decidedBy:text(actorId)||"administrator"
     });
     payload.queueControl=queueControl;payload.slotDecision="removed";
     delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;

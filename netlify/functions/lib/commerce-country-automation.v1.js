@@ -4086,8 +4086,12 @@ async function syncCandidateManagementResearchVisibility(actorId, scope, candida
     } else if (decision === "reject") {
       // Reversible research exclusion, separate from URL/domain permanent blocking.
       identities.forEach((identity) => { researchExcluded.add(identity); deleted.add(identity); });
-    } else if (["hold","dismiss","remove_from_list","removed"].includes(decision)) {
+    } else if (decision === "hold") {
       identities.forEach((identity) => deleted.add(identity));
+    } else if (["dismiss","remove_from_list","removed"].includes(decision)) {
+      // An explicit delete with rediscovery allowed must also clear any prior
+      // permanent/research suppression left by a previous PURGE/REJECT action.
+      identities.forEach((identity) => { permanent.delete(identity); researchExcluded.delete(identity); deleted.add(identity); });
     } else if (decision === "undecided" || decision === "restore" || decision === "ai_reclassify") {
       identities.forEach((identity) => { permanent.delete(identity); researchExcluded.delete(identity); });
     }

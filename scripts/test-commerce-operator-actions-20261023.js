@@ -71,7 +71,7 @@ async function testChunkedVisibility(){
   productCandidateId:()=>"",
   ProductRanking:{productIdentity:x=>x.productIdentity},
   SlotStore:{select:async()=>{lookupCount++;return [{id:"candidate_99",source_ref:"country-product-ranking-review",official_url:"https://shop.example.com/item/99",source_payload:{researchIdentity:"shop.example.com|id:99"}}];}},
-  productRuntimeRule:async()=>({jobId:"current",latestResearchDeletedIdentities:[],permanentExcludedIdentities:[],researchExcludedIdentities:[]}),
+  productRuntimeRule:async()=>({jobId:"current",latestResearchDeletedIdentities:[],permanentExcludedIdentities:["shop.example.com|id:99"],researchExcludedIdentities:["shop.example.com|id:99"]}),
   saveProductRuntime:async(_scope,_actor,value)=>{savedRuntime=value;},
   safeUrl:x=>x,first:(...args)=>args.find(x=>x!==undefined&&x!==null&&x!=="")||"",
   text:x=>x==null?"":String(x).trim(),lower:x=>x==null?"":String(x).trim().toLowerCase(),
@@ -83,6 +83,8 @@ async function testChunkedVisibility(){
  assert.equal(outcome.ok,true);
  assert.equal(lookupCount,1);
  assert.ok(savedRuntime.latestResearchDeletedIdentities.includes("shop.example.com|id:99"));
+ assert.equal(savedRuntime.permanentExcludedIdentities.includes("shop.example.com|id:99"),false);
+ assert.equal(savedRuntime.researchExcludedIdentities.includes("shop.example.com|id:99"),false);
  console.log("PASS chunked research deletion visibility checkpoint");
 }
 function testAdminReadbackFallback(){
@@ -92,7 +94,7 @@ function testAdminReadbackFallback(){
  assert.match(ui,/var stageRows=allMode\?latestVisibleResearchRows\(\)\.slice\(\):selectedRows\.slice\(\)/,
    "whole latest-list registration must exclude already transferred or held items");
  const html=fs.readFileSync(path.join(root,"commerce-country-control.html"),"utf8");
- assert.match(html,/admin-commerce-country-control\.js\?v=20261023-psom-ranked-compare-v1/);
+ assert.match(html,/admin-commerce-country-control\.js\?v=20261023-latest-inventory-actions-v2/);
  console.log("PASS committed management actions survive slow full-ledger reload; browser cache revision");
 }
 (async()=>{await testStalePublicationVersusDurableAssignment();await testChunkedVisibility();testAdminReadbackFallback();console.log("PASS operator actions regression suite");})().catch(error=>{console.error(error);process.exitCode=1;});

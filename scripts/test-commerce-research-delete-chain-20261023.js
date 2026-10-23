@@ -23,6 +23,7 @@ async function testCandidateAfterTransfer(){
  async function call(id,bucket){return module.handler({httpMethod:'POST',body:JSON.stringify({decision:'dismiss',expectedBucket:bucket||'',candidateIds:[id],countryCode:'KR',subdivisionCode:'NATIONWIDE'})});}
  let r=await call('unpublished_slot','');assert.equal(r.statusCode,200,r.body);let result=JSON.parse(r.body);assert.equal(result.processed,1);assert.match(result.results[0].warning,/research_visibility_sync_failed/);assert.equal(rows.get('unpublished_slot').status,'removed');assert.equal(relations.get('unpublished_slot').length,0);
  r=await call('live_slot','');assert.equal(r.statusCode,409,'published item is protected');assert.equal(rows.get('live_slot').status,'approval_pending');assert.equal(relations.get('live_slot').length,1);
+ r=await module.handler({httpMethod:'POST',body:JSON.stringify({decision:'restore',candidateIds:['live_slot'],countryCode:'KR',subdivisionCode:'NATIONWIDE'})});assert.equal(r.statusCode,409,'published item cannot silently restore/unpublish');
  r=await call('stale_bucket','hold');assert.equal(r.statusCode,200,'saved slotDecision=hold overrides stale suppressed status');assert.equal(rows.get('stale_bucket').status,'removed');
  r=await call('foreign_scope','hold');assert.equal(r.statusCode,409,'different country product cannot be deleted from KR scope');assert.equal(rows.get('foreign_scope').status,'hold');
  console.log('PASS candidate ID deletion after staging/PSOM, public item protected, stale hold state and secondary sync failure');
@@ -30,7 +31,7 @@ async function testCandidateAfterTransfer(){
 function testDirectResearchUi(){const js=fs.readFileSync(path.join(root,'assets/js/admin-commerce-country-control.js'),'utf8'),html=fs.readFileSync(path.join(root,'commerce-country-control.html'),'utf8'),backend=fs.readFileSync(path.join(root,'netlify/functions/lib/commerce-country-automation.v1.js'),'utf8');
  for(let key of ['data-latest-delete-one','data-latest-purge-one','data-candidate-delete-one','removeSinglePrivateCandidate','idsOverride:[id]'])assert.ok(js.includes(key),'missing card action or routing: '+key);
  for(let key of ['LATEST_RESEARCH_DELETE_TARGET_NOT_FOUND','LATEST_RESEARCH_PURGE_TARGET_NOT_FOUND','LEGACY_LATEST_DELETE_TARGET_NOT_FOUND','LEGACY_LATEST_PURGE_TARGET_NOT_FOUND'])assert.ok(backend.includes(key),'missing missing-target failure: '+key);
- assert.ok(html.includes('20261023-psom-ranked-compare-v1'),'browser cache bust missing');
+ assert.ok(html.includes('20261023-latest-inventory-actions-v2'),'browser cache bust missing');
  console.log('PASS direct card delete actions, stable delegation, failed selection readback and cache revision');
 }
 (async()=>{await testCandidateAfterTransfer();testDirectResearchUi();console.log('PASS research-to-candidate deletion chain');})().catch(e=>{console.error(e);process.exitCode=1;});

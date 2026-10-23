@@ -90,6 +90,29 @@
     @media(max-width:760px){.product-group-grid{grid-template-columns:1fr}.section-board-head{display:block}.section-board-head>.pill{margin-top:8px}}
   </style>
 <link rel="stylesheet" href="/assets/css/admin-checkbox-accessibility.css?v=20260925-1">
+<style id="latest-overview-inline-css">
+.latest-overview{background:#08192b;border:1px solid #365579;border-radius:10px;margin:12px 0;padding:12px;color:#deedff}
+.latest-overview-header{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.latest-overview-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:8px 0}
+.latest-overview-controls label{display:flex;flex-direction:column;font-size:12px;gap:4px;color:#c5d9f3}
+.latest-overview-controls select,.latest-overview-controls input{border:1px solid #466387;background:#0c243b;color:#fff;border-radius:6px;padding:7px;min-width:125px;max-width:270px}
+.latest-overview-rows{margin:10px 0;border-top:1px solid #2b435e}
+.latest-overview-row{display:grid;grid-template-columns:68px minmax(150px,1fr) minmax(220px,300px);gap:10px;align-items:center;padding:9px 2px;border-bottom:1px solid #2b435e}
+.latest-overview-thumb{height:68px;width:68px;background:#1b3145;border-radius:6px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.latest-overview-thumb img{width:100%;height:100%;object-fit:cover}
+.latest-overview-no-image{font-size:11px;color:#b1bfd0}
+.latest-overview-info{min-width:0;display:flex;flex-direction:column;gap:3px;font-size:13px}
+.latest-overview-info a{overflow-wrap:anywhere;color:#b7d8ff;font-weight:650}
+.latest-overview-url{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:block;opacity:.8;font-size:11px}
+.latest-overview-status{color:#a7e5c2;font-weight:600;font-size:12px}
+.latest-overview-status[data-status="purge"],.latest-overview-status[data-status="reject"]{color:#ffc4a7}
+.latest-overview-status[data-status="duplicate"]{color:#ffe1a3}
+.latest-overview-actions{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.latest-overview-actions button{font-size:11px;line-height:1.25;padding:6px 8px;min-height:28px;white-space:normal}
+.latest-overview-actions button:disabled{opacity:.45}
+.latest-overview-pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:9px}
+@media(max-width:770px){.latest-overview-row{grid-template-columns:54px minmax(0,1fr);gap:8px}.latest-overview-thumb{width:54px;height:54px}.latest-overview-actions{grid-column:1 / -1;margin-left:2px}.latest-overview-controls label{flex:1}}
+</style>
 </head>
 <body>
 <main>
@@ -323,6 +346,15 @@
       <summary class="heavy-panel-summary"><span><strong>최신 상품 리서치 목록</strong> <span id="latestProductSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="latest_product_research" data-policy-workspace-label="최신 상품 리서치 목록" data-policy-scope="country">AI 운영·정책 대화</button><span id="latestProductToggleLabel" class="pill info">목록 펼치기</span></span></summary>
       <div class="heavy-panel-content">
         <div class="small">현재 선택 국가·지역의 이번 상품 리서치 사이클에서 발견·점검되어 저장된 최신 상품을 표시합니다. 조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관할 수 있습니다. AI 검증에서 정상 상품임이 확인된 것만 전체 상품 후보·배치 관리 목록으로 이관하고 PSOM 기준 섹션을 배치합니다. 접속 제한·검증 미완료 상품은 최신 목록에 남겨 다음 검증에서 재시도합니다. 확인된 부정확한 상품 URL은 별도 검토하며 기존 확정 상품은 변경하지 않습니다. 상품 조사를 일시정지하면 그 시점까지 저장된 최신 상품 목록을 다시 읽습니다.</div>
+        <section id="latestResearchOverview" class="latest-overview" aria-label="최신 상품 전체 위치·삭제·미배치 관리">
+          <div class="latest-overview-header"><strong>현재 리서치 상품 전체 위치 · 간편 관리</strong><span id="latestOverviewSummary" class="small">원장 확인 중</span></div>
+          <div class="latest-overview-controls"><label>상태 <select id="latestOverviewFilter"><option value="all">모두 보기</option><option value="new">미등록</option><option value="undecided">미배치</option><option value="slot_candidate">섹션 배치</option><option value="hold">보류</option><option value="excluded">일반·영구 제외</option><option value="duplicate">중복 확인</option></select></label><label>상품 검색 <input type="search" id="latestOverviewSearch" placeholder="상품명·URL·섹션"></label><button type="button" class="ghost" id="latestOverviewReload">원장 새로고침</button></div>
+          <div class="small">원본 기록은 유지하고 현재 저장 위치를 보여줍니다. 미배치 이동은 실제 후보 ID로 처리합니다. 목록 삭제는 재수집 가능, 영구 제외는 재수집 차단입니다. 공개 중인 상품은 먼저 매칭 해제가 필요합니다.</div>
+          <div id="latestOverviewOperationStatus" class="small" role="status" aria-live="polite"></div>
+          <div id="latestOverviewRows" class="latest-overview-rows"><div class="small">상품 위치를 확인 중입니다.</div></div>
+          <div class="latest-overview-pager"><button type="button" id="latestOverviewPrev">이전</button><span id="latestOverviewPageState" class="small"></span><button type="button" id="latestOverviewNext">다음</button></div>
+          <div class="small">아래 기존 버튼과 카드 목록은 아직 후보 원장에 등록되지 않은 상품을 검증·이관하는 용도입니다.</div>
+        </section>
         <div id="latestProductGrid" class="product-grid latest-product-grid"><div class="small">아직 최신 리서치 상품을 불러오지 않았습니다.</div></div>
       </div>
     </details>
@@ -568,7 +600,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20261023-psom-ranked-compare-v1"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261023-latest-inventory-actions-v2"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
