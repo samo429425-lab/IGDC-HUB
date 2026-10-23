@@ -15,6 +15,8 @@
 
   const STATIC_SNAPSHOT_URL='/data/distribution.snapshot.json';
   const STATIC_INITIAL_URL=STATIC_SNAPSHOT_URL+'?view=initial';
+  // Same IP-selected, SHA-verified cards; preserve phase-one render optimizations.
+  const STATIC_CARDS_URL=STATIC_SNAPSHOT_URL+'?view=cards';
   const REGIONAL_SNAPSHOT_URL=''; // Edge-routed canonical snapshot is the only source.
   const LIMIT_MAIN=100, LIMIT_RIGHT=100;
   const RENDER_BATCH=12;
@@ -492,7 +494,7 @@
   let fullSnapshotUpgradePromise=null;
   function upgradeInitialToFullSnapshot(){
     if(fullSnapshotUpgradePromise)return fullSnapshotUpgradePromise;
-    fullSnapshotUpgradePromise=fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache').then(function(result){
+    fullSnapshotUpgradePromise=fetchJson(STATIC_CARDS_URL,STATIC_TIMEOUT,'no-cache').then(function(result){
       if(result.empty||!result.payload)return false;
       const compact=compactSnapshot(result.payload,{etag:result.etag});if(!compact)return false;
       baseSnapshot=compact;setCached('static',compact);lastStaticRefreshAt=Date.now();
@@ -516,7 +518,7 @@
     const now=Date.now();
     if(staticRefreshPromise) return staticRefreshPromise;
     if(force!==true&&lastStaticRefreshAt&&now-lastStaticRefreshAt<STATIC_VISIBLE_RECHECK_TTL) return Promise.resolve(false);
-    staticRefreshPromise=(lastStaticRefreshAt?fetchJson(STATIC_SNAPSHOT_URL,STATIC_TIMEOUT,'no-cache'):getInitialStaticFetchPromise()).then(function(result){
+    staticRefreshPromise=(lastStaticRefreshAt?fetchJson(STATIC_CARDS_URL,STATIC_TIMEOUT,'no-cache'):getInitialStaticFetchPromise()).then(function(result){
       if(result.empty||!result.payload) return false;
       const compact=compactSnapshot(result.payload,{etag:result.etag}); if(!compact) return false;
       baseSnapshot=compact;

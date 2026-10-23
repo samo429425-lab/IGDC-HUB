@@ -1732,12 +1732,15 @@
       if(keyword&&[item.research.productName,item.research.title,item.research.productUrl,item.research.url,item.candidateId,item.section].map(text).join(' ').toLowerCase().indexOf(keyword)<0)return false;
       return true;
     });
-    var limit=25,maxPage=Math.max(0,Math.ceil(filtered.length/limit)-1);latestOverviewPage=Math.min(Math.max(0,latestOverviewPage),maxPage);
+    // Large thumbnail cards: render 20 per page to keep first-paint/image load
+    // bounded while preserving page navigation across all research records.
+    var limit=20,maxPage=Math.max(0,Math.ceil(filtered.length/limit)-1);latestOverviewPage=Math.min(Math.max(0,latestOverviewPage),maxPage);
     var pageItems=filtered.slice(latestOverviewPage*limit,(latestOverviewPage+1)*limit),busy=latestOverviewBusy||latestQueueActionActive||productVerifiedFlowBusy||!latestProductRowsComplete||!latestOverviewLedgerComplete;
     var filterEl=$('latestOverviewFilter'),searchEl=$('latestOverviewSearch');if(filterEl&&filterEl.value!==selected)filterEl.value=selected;if(searchEl&&searchEl.value!==latestOverviewSearch)searchEl.value=latestOverviewSearch;
-    body.innerHTML=pageItems.map(function(item){
+    body.innerHTML=pageItems.map(function(item,cardIndex){
       var row=item.research,title=text(row.productName||row.title)||'상품명 미확인',url=safeProductDetailUrl(row.productUrl||row.url),image=safeExternalImageUrl(row.imageUrl||row.imageOriginalUrl||row.image),status=latestOverviewKindLabel(item),disabled=busy||item.kind==='removed'||(item.duplicateCount>1&&!item.candidate),blocked=item.protected,actionDisabled=disabled||blocked,at=item.index;
-      var thumb=image?'<img src="'+esc(image)+'" alt="" loading="lazy" referrerpolicy="no-referrer">':'<span class="latest-overview-no-image">사진 없음</span>';
+      var firstVisible=cardIndex<4;
+      var thumb=image?'<img src="'+esc(image)+'" alt="" loading="'+(firstVisible?'eager':'lazy')+'" decoding="async" referrerpolicy="no-referrer">':'<span class="latest-overview-no-image">사진 없음</span>';
       var link=url?'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(title)+'</a>':'<strong>'+esc(title)+'</strong>';
       var restoreText=item.kind==='new'?'검증 후 미배치 이관':'미배치로 이동',canRestore=item.kind!=='undecided'&&item.kind!=='other'&&item.kind!=='duplicate'&&item.kind!=='removed';
       var why=blocked?'프론트 공개·해제 대기 중인 상품은 먼저 Front Match에서 해제하세요.':item.duplicateCount>1&&!item.candidate?'동일 URL 후보 ID가 중복되어 있습니다. 아래 목록에서 관리할 원장 ID를 직접 선택하세요.':(!latestOverviewLedgerComplete?'후보 원장 전체 조회 후 조작할 수 있습니다.':'');
@@ -1747,7 +1750,11 @@
         '<button type="button" class="secondary" data-latest-overview-action="delete" data-latest-overview-index="'+at+'" '+(actionDisabled?'disabled ':'')+'>목록 삭제</button>'+
         (['purge','removed'].includes(item.kind)?'':'<button type="button" class="ghost" data-latest-overview-action="purge" data-latest-overview-index="'+at+'" '+(actionDisabled?'disabled ':'')+'>영구 제외</button>')+'</div>';
       var choose=item.duplicateCount>1?'<label class="small">중복 후보 '+item.duplicateCount+'건 중 작업 대상 <select data-latest-overview-choose="'+at+'"><option value="">후보 ID를 선택하세요</option>'+item.matches.map(function(match){var id=frontCandidateLedgerId(match),label=productDecision(match)+' / '+(assignedSectionKey(match)||'미배치')+' / '+id;return'<option value="'+esc(id)+'" '+(item.candidateId===id?'selected':'')+'>'+esc(label)+'</option>';}).join('')+'</select></label>':'';
-      return'<div class="latest-overview-row" data-latest-overview-row="'+at+'"><div class="latest-overview-thumb">'+thumb+'</div><div class="latest-overview-info">'+link+'<span class="latest-overview-url">'+esc(url||text(row.productUrl||row.url)||'상품 주소 없음')+'</span><span class="latest-overview-status" data-status="'+esc(item.kind)+'">'+esc(status)+(blocked?' · 프론트 보호':'')+'</span>'+choose+(why?'<span class="small">'+esc(why)+'</span>':'')+'</div>'+buttons+'</div>';
+      var price=text(row.priceDisplay||row.displayPrice||row.price||item.candidate&&item.candidate.price||'');
+      var currency=text(row.priceCurrency||row.currency||item.candidate&&item.candidate.priceCurrency||'');
+      var seller=text(row.supplierName||row.sellerName||item.candidate&&item.candidate.supplierName||'');
+      var meta='<span class="latest-overview-meta">'+(price?'가격 '+esc(price)+(currency?' '+esc(currency):''):'가격: 판매처 확인')+(seller?' · '+esc(seller):'')+'</span>';
+      return'<article class="latest-overview-row" data-latest-overview-row="'+at+'" aria-label="'+esc(title)+'"><div class="latest-overview-thumb">'+thumb+'</div><div class="latest-overview-info">'+link+meta+'<span class="latest-overview-url" title="'+esc(url||text(row.productUrl||row.url)||'상품 주소 없음')+'">'+esc(url||text(row.productUrl||row.url)||'상품 주소 없음')+'</span><span class="latest-overview-status" data-status="'+esc(item.kind)+'">'+esc(status)+(blocked?' · 프론트 보호':'')+'</span>'+choose+(why?'<span class="small">'+esc(why)+'</span>':'')+'</div>'+buttons+'</article>';
     }).join('')||'<div class="small" style="padding:12px">해당 조건의 상품이 없습니다.</div>';
     var pageState=$('latestOverviewPageState');if(pageState)pageState.textContent=filtered.length+'건 중 '+(filtered.length?latestOverviewPage*limit+1:0)+'–'+Math.min(filtered.length,(latestOverviewPage+1)*limit)+'건 · '+(latestOverviewPage+1)+'/'+(maxPage+1)+'페이지';
     var prev=$('latestOverviewPrev'),next=$('latestOverviewNext');if(prev)prev.disabled=latestOverviewPage<=0;if(next)next.disabled=latestOverviewPage>=maxPage;

@@ -31,6 +31,50 @@ const FILE_TO_PAGE = Object.freeze({
 // navigation does not re-parse and re-hash multi-megabyte JSON on every hit.
 // The cache key binds origin + release + policy + scope + path + exact SHA-256,
 // so a new build/release/policy/file automatically misses this cache.
+// The manifest is still loaded on every distinct request: never retain an old
+// release across deploys. Only coalesce truly concurrent reads in this isolate.
+const manifestReadsInFlight = new Map();
+const snapshotVerificationsInFlight = new Map();
+
+// View projections are bound to the fully verified snapshot's immutable release,
+// policy, country, region, source path and exact SHA-256 (verifiedCacheKey).
+// In-memory only: never allow a CDN/public browser cache to reuse one country's
+// product list in another country. Bounded storage is important for 249 markets.
+const PROJECTION_CACHE_TTL_MS = 60 * 1000;
+const PROJECTION_CACHE_MAX_ENTRIES = 24;
+const PROJECTION_CACHE_MAX_BYTES = 8 * 1024 * 1024;
+const projectionCache = new Map();
+let projectionCacheBytes = 0;
+function getProjection(key) {
+  const row = projectionCache.get(key);
+  if (!row) return null;
+  if (Date.now() >= row.expiresAt) {
+    projectionCache.delete(key);
+    projectionCacheBytes = Math.max(0, projectionCacheBytes - row.bytes.byteLength);
+    return null;
+  }
+  projectionCache.delete(key);
+  projectionCache.set(key, row);
+  return row.bytes;
+}
+function putProjection(key, bytes) {
+  if (!bytes || !bytes.byteLength || bytes.byteLength > PROJECTION_CACHE_MAX_BYTES) return;
+  const existing = projectionCache.get(key);
+  if (existing) {
+    projectionCache.delete(key);
+    projectionCacheBytes = Math.max(0, projectionCacheBytes - existing.bytes.byteLength);
+  }
+  const data = new Uint8Array(bytes);
+  projectionCache.set(key, {bytes:data, expiresAt:Date.now()+PROJECTION_CACHE_TTL_MS});
+  projectionCacheBytes += data.byteLength;
+  while (projectionCache.size > PROJECTION_CACHE_MAX_ENTRIES || projectionCacheBytes > PROJECTION_CACHE_MAX_BYTES) {
+    const first = projectionCache.entries().next().value;
+    if (!first) break;
+    projectionCache.delete(first[0]);
+    projectionCacheBytes = Math.max(0, projectionCacheBytes - first[1].bytes.byteLength);
+  }
+}
+
 const VERIFIED_CACHE_TTL_MS = 60 * 1000;
 const VERIFIED_CACHE_MAX_ENTRIES = 12;
 const VERIFIED_CACHE_MAX_BYTES = 16 * 1024 * 1024;
@@ -187,17 +231,23 @@ async function sha256Hex(bytes) {
   return Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, "0")).join("");
 }
 async function loadManifest(url) {
-  try {
-    const target = new URL(MANIFEST_PATH, url);
-    // This is a deploy artifact. Do not force an origin revalidation on every
-    // front request; the deployment URL/content cache remains the authority.
-    const response = await fetch(target.toString(), { method: "GET", headers: { Accept: "application/json" } });
-    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-    if (!response.ok || !contentType.includes("application/json")) return null;
-    const manifest = await response.json();
-    if (!manifest || manifest.schema !== "canonical-ip-slot-release-manifest-v1" || !Array.isArray(manifest.snapshots)) return null;
-    return manifest;
-  } catch (_e) { return null; }
+  const target = new URL(MANIFEST_PATH, url).toString();
+  if (manifestReadsInFlight.has(target)) return manifestReadsInFlight.get(target);
+  const operation = (async () => {
+    try {
+      // Fresh on each distinct call, but concurrent page rails share a single
+      // origin read. No TTL here: a deploy must take effect without waiting.
+      const response = await fetch(target, { method: "GET", headers: { Accept: "application/json" } });
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (!response.ok || !contentType.includes("application/json")) return null;
+      const manifest = await response.json();
+      if (!manifest || manifest.schema !== "canonical-ip-slot-release-manifest-v1" || !Array.isArray(manifest.snapshots)) return null;
+      return manifest;
+    } catch (_e) { return null; }
+  })();
+  manifestReadsInFlight.set(target, operation);
+  try { return await operation; }
+  finally { if (manifestReadsInFlight.get(target) === operation) manifestReadsInFlight.delete(target); }
 }
 function matchingSnapshot(manifest, file, country, region) {
   const page = FILE_TO_PAGE[file];
@@ -271,6 +321,8 @@ async function documentMatchesPublishedScope(doc, selected, manifest) {
   const cards = cardRows(doc, page);
   if (!cards.length) return false;
   const slots = new Set();
+  const evidenceDigests = new Map();
+  const encoder = new TextEncoder();
   let realCount = 0;
   for (const card of cards) {
     if (isSampleCard(card)) {
@@ -305,7 +357,15 @@ async function documentMatchesPublishedScope(doc, selected, manifest) {
       const seller = record.sellerResponsibility;
       if (!seller || seller.verified !== true || !seller.legalEntity || !seller.supportUrl) return false;
     }
-    const digest = await evidenceDigest(record);
+    // Multiple cards can share an identical signed market-evidence envelope.
+    // Only dedupe when the EXACT stable payload matches, never by a claimed
+    // digest or merely by seller host. All three original integrity gates stay.
+    const evidencePayload = stable(marketEvidenceDigest(record));
+    let digest = evidenceDigests.get(evidencePayload);
+    if (!digest) {
+      digest = await sha256Hex(encoder.encode(evidencePayload));
+      evidenceDigests.set(evidencePayload, digest);
+    }
     if (record.evidenceDigest !== digest || scope.marketEvidenceDigest !== digest || ipSlot.marketEvidenceDigest !== digest) return false;
   }
   return realCount > 0;
@@ -314,23 +374,24 @@ function initialDistributionCard(card) {
   if (!card || typeof card !== "object") return card;
   const keep = [
     "id","uid","productId","contentId","title","name","text","meta","subtitle","summary","description",
-    "thumb","thumbnail","image","imageUrl","thumbnailUrl",
+    "thumb","thumbnail","thumbnail_url","image","imageUrl","imageOriginalUrl","thumbnailUrl",
     "affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url",
     "externalProductUrl","officialProductUrl","productUrl","product_url","productPageUrl","detailUrl",
-    "checkoutUrl","purchaseUrl","orderUrl","productLink","displayUrl","url","href","link",
-    "affiliate","trackId","track_id","revenueLine","revenue_line","price","salePrice","amount","currency",
+    "checkoutUrl","purchaseUrl","orderUrl","productLink","displayUrl",
+    "sourceUrl","source_url","targetUrl","target_url","outboundUrl","outbound_url","url","href","link",
+    "affiliate","trackId","track_id","revenueLine","revenue_line","price","salePrice","amount","currency","ccy",
     "section","psom_key","type","sample","placeholder","isSample","realProduct","monetization"
   ];
   const out = {};
   for (const key of keep) if (card[key] !== undefined) out[key] = card[key];
   return out;
 }
-function initialDistributionView(bytes, limit) {
+function initialDistributionView(bytes, limit, view = "initial") {
   try {
     const doc = JSON.parse(new TextDecoder().decode(bytes));
     const sections = doc && doc.pages && doc.pages.distribution && doc.pages.distribution.sections;
     if (!sections || typeof sections !== "object") return null;
-    const max = Math.max(1, Math.min(40, Number(limit) || 20));
+    const max = Math.max(1, Math.min(100, Number(limit) || 20));
     const nextSections = {};
     for (const [key, value] of Object.entries(sections)) {
       if (Array.isArray(value)) nextSections[key] = value.slice(0, max).map(initialDistributionCard);
@@ -340,7 +401,7 @@ function initialDistributionView(bytes, limit) {
     const out = {
       pages: { distribution: Object.assign({}, doc.pages.distribution, { sections: nextSections }) },
       meta: Object.assign({}, doc.meta || {}, {
-        deliveryView: "initial",
+        deliveryView: view,
         deliveryLimitPerSection: max,
         deliveryProjection: "front-card-minimal-v1"
       })
@@ -354,11 +415,11 @@ function projectedFrontCard(card) {
   const keep = [
     "id","uid","productId","product_id","contentId","content_id","itemId","item_id","sku","code","pid",
     "title","name","text","label","caption",
-    "thumb","image","image_url","thumbnail","img","photo","cover","coverUrl","thumbnailUrl","imageUrl",
+    "thumb","image","image_url","imageOriginalUrl","thumbnail","thumbnail_url","img","photo","cover","coverUrl","thumbnailUrl","imageUrl",
     "affiliateOutboundUrl","affiliate_outbound_url","externalOutboundUrl","external_outbound_url",
     "checkoutUrl","paymentUrl","purchaseUrl","orderUrl","externalProductUrl","officialProductUrl",
     "productUrl","product_url","productPageUrl","detailUrl","productLink","displayUrl",
-    "contentUrl","pageUrl","internalUrl","path","url","href","link",
+    "sourceUrl","source_url","targetUrl","target_url", "contentUrl","pageUrl","internalUrl","path","url","href","link",
     "priority","order","rank","weight","enabled","lang","page","section","psom_key",
     "type","sample","placeholder","isSample","realProduct","monetization",
     "productCard","researchReadiness","directCommerceListing","brokerageContract"
@@ -460,38 +521,59 @@ export default async function canonicalIpSlotSnapshotRouter(request, context) {
   let verificationCacheState = cached ? "hit" : "miss";
 
   if (!published) {
-    published = await fetchPublishedSnapshot(url, selected.row.path);
+    let inFlight = snapshotVerificationsInFlight.get(cacheKey);
+    if (!inFlight) {
+      inFlight = (async () => {
+        const candidate = await fetchPublishedSnapshot(url, selected.row.path);
+        if (!candidate) return null;
+        if (await sha256Hex(candidate.bytes) !== selected.row.sha256) return null;
+        if (!(await documentMatchesPublishedScope(candidate.doc, selected, manifest))) return null;
+        putVerifiedCacheEntry(cacheKey, candidate);
+        return candidate;
+      })();
+      snapshotVerificationsInFlight.set(cacheKey, inFlight);
+    } else {
+      verificationCacheState = "coalesced";
+    }
+    try { published = await inFlight; }
+    catch (_error) { published = null; }
+    finally { if (snapshotVerificationsInFlight.get(cacheKey) === inFlight) snapshotVerificationsInFlight.delete(cacheKey); }
     if (!published) return context.next();
-    if (await sha256Hex(published.bytes) !== selected.row.sha256) return context.next();
-    if (!(await documentMatchesPublishedScope(published.doc, selected, manifest))) return context.next();
-    putVerifiedCacheEntry(cacheKey, published);
-    verificationCacheState = "fill";
+    if (verificationCacheState === "miss") verificationCacheState = "fill";
   }
 
   const headers = new Headers(published.response.headers);
   let responseBytes = published.bytes;
   const requestedView = url.searchParams.get("view") || "";
-  const wantsInitialDistribution = FILE_TO_PAGE[file] === "distribution" && requestedView === "initial";
-  const wantsSocialRightPanel = FILE_TO_PAGE[file] === "social" && requestedView === "right-panel";
-  const wantsFrontProjection = ["home","network","tour"].includes(FILE_TO_PAGE[file]) && requestedView === "front";
-  if (wantsInitialDistribution) {
-    const compact = initialDistributionView(published.bytes, 20);
+  const page = FILE_TO_PAGE[file];
+  const wantsInitialDistribution = page === "distribution" && requestedView === "initial";
+  const wantsDistributionCards = page === "distribution" && requestedView === "cards";
+  const wantsSocialRightPanel = page === "social" && requestedView === "right-panel";
+  const wantsFrontProjection = ["home","network","tour"].includes(page) && requestedView === "front";
+  const projectionType = wantsInitialDistribution ? "initial-20-v1"
+    : wantsDistributionCards ? "cards-100-v1"
+    : wantsSocialRightPanel ? "social-right-v1"
+    : wantsFrontProjection ? "front-"+page+"-v1" : "";
+  if (projectionType) {
+    const projectionKey = cacheKey + "|" + projectionType;
+    const existing = getProjection(projectionKey);
+    let compact = existing;
+    if (!compact) {
+      if (wantsInitialDistribution) compact = initialDistributionView(published.bytes, 20);
+      else if (wantsDistributionCards) compact = initialDistributionView(published.bytes, 100, "cards");
+      else if (wantsSocialRightPanel) compact = socialRightPanelView(published.bytes);
+      else compact = frontPageView(published.bytes, page);
+      if (compact) putProjection(projectionKey, compact);
+    }
     if (compact) responseBytes = compact;
+    // Projections have different bytes from the verified full static artifact.
     headers.delete("Content-Length");
     headers.delete("ETag");
-    headers.set("X-IGDC-Snapshot-View", "initial");
-  } else if (wantsSocialRightPanel) {
-    const compact = socialRightPanelView(published.bytes);
-    if (compact) responseBytes = compact;
-    headers.delete("Content-Length");
-    headers.delete("ETag");
-    headers.set("X-IGDC-Snapshot-View", "right-panel");
-  } else if (wantsFrontProjection) {
-    const compact = frontPageView(published.bytes, FILE_TO_PAGE[file]);
-    if (compact) responseBytes = compact;
-    headers.delete("Content-Length");
-    headers.delete("ETag");
-    headers.set("X-IGDC-Snapshot-View", "front");
+    headers.delete("Content-Encoding");
+    headers.delete("Content-MD5");
+    headers.delete("Digest");
+    headers.set("X-IGDC-Snapshot-View", wantsInitialDistribution ? "initial" : wantsDistributionCards ? "cards" : wantsSocialRightPanel ? "right-panel" : "front");
+    headers.set("X-IGDC-Projection-Cache", existing ? "hit" : compact ? "fill" : "unavailable");
   } else {
     headers.set("X-IGDC-Snapshot-View", "full");
   }

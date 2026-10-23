@@ -10,7 +10,7 @@
   if (window.__NETWORK_AUTOMAP_V6__) return;
   window.__NETWORK_AUTOMAP_V6__ = true;
 
-  const SNAPSHOT_URL = '/data/networkhub-snapshot.json';
+  const SNAPSHOT_URL = '/data/networkhub-snapshot.json?view=front'; // Same country-scoped verified product list, compact front projection.
   const FEED_URL = ''; // IP-scoped network market slots never fall back to a generic feed.
   const LIMIT = 100;
   const RENDER_BATCH = 12;
