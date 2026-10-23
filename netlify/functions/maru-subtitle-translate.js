@@ -1,6 +1,7 @@
 'use strict';
 
 const { authorizeAiAccess, publicServiceState } = require('./lib/maru-ai-access-control');
+const { refundUsageByHash } = require('./lib/maru-ai-credit-store');
 
 /*
  * MARU subtitle translation — SAFE53
@@ -19,6 +20,7 @@ const OPENAI_PATH = '/v1/chat/completions';
 const MODEL = process.env.OPENAI_SUBTITLE_MODEL || 'gpt-4o-mini';
 const OPENAI_TIMEOUT_MS = Math.max(15000, Math.min(75000, Number(process.env.MARU_TRANSLATE_TIMEOUT_MS || 60000) || 60000));
 const MAX_SUBTITLE_CHARS = Math.max(1000, Math.min(9000, Number(process.env.MARU_TRANSLATE_MAX_CHARS || 5200) || 5200));
+const MAX_FALLBACK_CHARS = Math.max(MAX_SUBTITLE_CHARS, Math.min(500000, Number(process.env.MARU_TRANSLATE_FALLBACK_MAX_CHARS || 180000) || 180000));
 const DEFAULT_ALLOWED_ROLES = Object.freeze(['owner', 'admin', 'super_admin']);
 const LANG_NAMES = Object.freeze({
   ko: 'Korean', en: 'English', zh: 'Simplified Chinese', zht: 'Traditional Chinese', ja: 'Japanese', es: 'Spanish', fr: 'French', de: 'German', ru: 'Russian', pt: 'Portuguese', it: 'Italian', ar: 'Arabic', vi: 'Vietnamese', th: 'Thai', id: 'Indonesian', hi: 'Hindi', tr: 'Turkish', ta: 'Tamil', sw: 'Swahili', ur: 'Urdu', bn: 'Bengali', fa: 'Persian', hu: 'Hungarian', ms: 'Malay', nl: 'Dutch', pl: 'Polish', sv: 'Swedish', tl: 'Filipino', uk: 'Ukrainian', uz: 'Uzbek'
@@ -72,7 +74,7 @@ function authVerifyUrl() {
 async function verifyPaidAccess(event) {
   return authorizeAiAccess(event, {
     purpose: 'translate-subtitle',
-    maximumBytes: Math.max(64 * 1024, MAX_SUBTITLE_CHARS * 4)
+    maximumBytes: Math.max(256 * 1024, MAX_FALLBACK_CHARS * 4 + 64 * 1024)
   });
 }
 function parseBody(event) { try { const raw = event?.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString('utf8') : String(event?.body || ''); return raw.trim() ? JSON.parse(raw) : {}; } catch (error) { const e = new Error('invalid_json'); e.statusCode = 400; throw e; } }
@@ -114,10 +116,85 @@ async function translateOnce(apiKey, subtitle, targetLang, targetName, fileName)
   const result = await postOpenAI(apiKey, { model: MODEL, temperature: 0, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] });
   return String(result?.choices?.[0]?.message?.content || '').trim();
 }
+
+function splitSrtIntoGroups(subtitle, maxChars = MAX_SUBTITLE_CHARS) {
+  const source = String(subtitle || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim();
+  if (!source) return [];
+  // Split only on blank lines between complete SRT cue blocks. A single cue that
+  // exceeds the configured group size is rejected instead of being cut in half.
+  const blocks = source.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  const groups = [];
+  let current = '';
+  for (const block of blocks) {
+    if (block.length > maxChars) {
+      const error = new Error('translation_cue_too_large');
+      error.statusCode = 413;
+      error.code = 'translation_cue_too_large';
+      throw error;
+    }
+    const candidate = current ? `${current}\n\n${block}` : block;
+    if (candidate.length > maxChars && current) {
+      groups.push(current);
+      current = block;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) groups.push(current);
+  return groups;
+}
+
+async function translateValidatedGroup(apiKey, group, targetLang, fileName) {
+  const sourceTimes = normalizeCueTimes(group);
+  if (!sourceTimes.length) {
+    const error = new Error('Timed SRT subtitle cues are required.');
+    error.statusCode = 422;
+    error.code = 'timed_subtitle_required';
+    throw error;
+  }
+  let translated = '';
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      translated = await translateOnce(apiKey, group, targetLang, LANG_NAMES[targetLang], fileName);
+      break;
+    } catch (error) {
+      lastError = error;
+      if (!isRecoverable(error) || attempt === 1) throw error;
+      await delay(900);
+    }
+  }
+  if (!translated) throw lastError || new Error('empty_translation');
+  if (isInstructionLeak(translated)) {
+    const error = new Error('Translation contained non-dialogue instruction text and was rejected.');
+    error.statusCode = 422;
+    error.code = 'translation_instruction_leak';
+    throw error;
+  }
+  const translatedTimes = normalizeCueTimes(translated);
+  if (translatedTimes.length !== sourceTimes.length || translatedTimes.some((x, i) => x !== sourceTimes[i]) || cueCount(translated) !== cueCount(group)) {
+    const error = new Error('Translation did not preserve the original SRT cue structure. Retry this group.');
+    error.statusCode = 422;
+    error.code = 'translation_structure_invalid';
+    throw error;
+  }
+  return translated.trim();
+}
+
+async function refundFreshCharge(access, reason) {
+  const usage = access && access.creditUsage;
+  if (!usage || usage.charged !== true || !usage.eventHash || !access.userId) return;
+  try {
+    await refundUsageByHash(access, usage.eventHash);
+  } catch (error) {
+    console.error('[MARU:TRANSLATE_REFUND_FAILED]', error && (error.code || error.message) || error);
+  }
+}
+
 function classifyError(error) {
   const status = Number(error?.statusCode || 500); const msg = String(error?.message || error || 'translate_failed');
   if (error?.serverCode) return { statusCode: status, code: String(error.serverCode), error: msg.slice(0, 700) };
-  if (error?.code && /^(authentication_|account_forbidden|authorization_|auth_verifier_|privileged_role_required|ai_public_service_preparing|ai_membership_required|ai_rate_limited|ai_request_too_large)/.test(String(error.code))) {
+  if (error?.code && /^(authentication_|account_forbidden|authorization_|auth_verifier_|privileged_role_required|ai_public_service_preparing|ai_membership_required|ai_rate_limited|ai_request_too_large|ai_credit_required|google_play_|feature_not_available|translation_)/.test(String(error.code))) {
     return { statusCode: status, code: String(error.code), error: msg.slice(0, 700) };
   }
   if (status === 429) return { statusCode: 429, code: 'openai_rate_limit', error: 'Translation service rate limit reached. Retry this subtitle group after a short delay.' };
@@ -128,27 +205,63 @@ function classifyError(error) {
 }
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: headers(), body: '' };
-  if (event.httpMethod === 'GET') return json(200, Object.assign({ ok: true, service: 'maru-subtitle-translate', version: 'safe54-role-and-paid-membership-gate', maxSubtitleChars: MAX_SUBTITLE_CHARS, method: 'POST_REQUIRED', authentication: 'signed-bearer-required' }, publicServiceState()));
+  if (event.httpMethod === 'GET') return json(200, Object.assign({
+    ok: true,
+    service: 'maru-subtitle-translate',
+    version: 'safe55-v190-google-play-credit',
+    maxSubtitleChars: MAX_SUBTITLE_CHARS,
+    maxFallbackChars: MAX_FALLBACK_CHARS,
+    method: 'POST_REQUIRED',
+    authentication: 'signed-bearer-required'
+  }, publicServiceState()));
   if (event.httpMethod !== 'POST') return json(405, { ok: false, code: 'method_not_allowed', error: 'method_not_allowed' });
+
+  let access = null;
   try {
-    await verifyPaidAccess(event);
-    const apiKey = process.env.OPENAI_API_KEY; if (!apiKey) return json(500, { ok: false, code: 'openai_key_missing', error: 'OPENAI_API_KEY_missing' });
-    const body = parseBody(event); const subtitle = String(body.subtitle || ''); const targetLang = normalizeLanguage(body.targetLang || body.targetLanguage || ''); const fileName = String(body.fileName || 'subtitle.srt').slice(0, 200);
+    // Validate user-controlled structure before entitlement/credit metering so an
+    // obviously invalid request cannot consume credit.
+    const body = parseBody(event);
+    const subtitle = String(body.subtitle || '');
+    const targetLang = normalizeLanguage(body.targetLang || body.targetLanguage || '');
+    const fileName = String(body.fileName || 'subtitle.srt').slice(0, 200);
     if (!subtitle.trim()) return json(400, { ok: false, code: 'empty_subtitle', error: 'empty_subtitle' });
     if (!targetLang) return json(400, { ok: false, code: 'unsupported_target_language', error: 'Unsupported target language.' });
-    if (subtitle.length > MAX_SUBTITLE_CHARS) return json(413, { ok: false, code: 'translation_group_too_large', error: `Subtitle group exceeds ${MAX_SUBTITLE_CHARS} characters.` });
-    const sourceTimes = normalizeCueTimes(subtitle); if (!sourceTimes.length) return json(422, { ok: false, code: 'timed_subtitle_required', error: 'Timed SRT subtitle cues are required.' });
-    let translated = ''; let lastError = null;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try { translated = await translateOnce(apiKey, subtitle, targetLang, LANG_NAMES[targetLang], fileName); break; }
-      catch (error) { lastError = error; if (!isRecoverable(error) || attempt === 1) throw error; await delay(900); }
+    if (subtitle.length > MAX_FALLBACK_CHARS) return json(413, { ok: false, code: 'translation_file_too_large', error: `Subtitle file exceeds ${MAX_FALLBACK_CHARS} characters.` });
+    const allSourceTimes = normalizeCueTimes(subtitle);
+    if (!allSourceTimes.length) return json(422, { ok: false, code: 'timed_subtitle_required', error: 'Timed SRT subtitle cues are required.' });
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return json(500, { ok: false, code: 'openai_key_missing', error: 'OPENAI_API_KEY_missing' });
+
+    access = await verifyPaidAccess(event);
+    const groups = splitSrtIntoGroups(subtitle, MAX_SUBTITLE_CHARS);
+    if (!groups.length) return json(422, { ok: false, code: 'timed_subtitle_required', error: 'Timed SRT subtitle cues are required.' });
+
+    const translatedGroups = [];
+    for (let index = 0; index < groups.length; index += 1) {
+      translatedGroups.push(await translateValidatedGroup(apiKey, groups[index], targetLang, `${fileName} [${index + 1}/${groups.length}]`));
     }
-    if (!translated) throw lastError || new Error('empty_translation');
-    if (isInstructionLeak(translated)) return json(422, { ok: false, code: 'translation_instruction_leak', error: 'Translation contained non-dialogue instruction text and was rejected.' });
+    const translated = translatedGroups.join('\n\n').trim();
     const translatedTimes = normalizeCueTimes(translated);
-    if (translatedTimes.length !== sourceTimes.length || translatedTimes.some((x, i) => x !== sourceTimes[i]) || cueCount(translated) !== cueCount(subtitle)) {
-      return json(422, { ok: false, code: 'translation_structure_invalid', error: 'Translation did not preserve the original SRT cue structure. Retry this group.' });
+    if (translatedTimes.length !== allSourceTimes.length || translatedTimes.some((x, i) => x !== allSourceTimes[i]) || cueCount(translated) !== cueCount(subtitle)) {
+      const error = new Error('Final translated subtitle did not preserve the original SRT cue structure.');
+      error.statusCode = 422;
+      error.code = 'translation_structure_invalid';
+      throw error;
     }
-    return json(200, { ok: true, targetLang, targetLanguage: targetLang, targetLanguageVerified: targetLang, targetName: LANG_NAMES[targetLang], translatedSubtitle: translated });
-  } catch (error) { const out = classifyError(error); return json(out.statusCode, { ok: false, code: out.code, error: out.error }); }
+
+    return json(200, {
+      ok: true,
+      targetLang,
+      targetLanguage: targetLang,
+      targetLanguageVerified: targetLang,
+      targetName: LANG_NAMES[targetLang],
+      translatedSubtitle: translated,
+      groupCount: groups.length
+    });
+  } catch (error) {
+    await refundFreshCharge(access, String(error && (error.code || error.message) || 'translation_failed').slice(0, 120));
+    const out = classifyError(error);
+    return json(out.statusCode, { ok: false, code: out.code, error: out.error });
+  }
 };

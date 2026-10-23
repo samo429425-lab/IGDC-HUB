@@ -1,11 +1,12 @@
 'use strict';
 
 const { authorizeAiAccess, publicServiceState } = require('./lib/maru-ai-access-control');
+const { refundUsageByHash } = require('./lib/maru-ai-credit-store');
 
 /*
  * MARU AI Media Netlify Function
  * - Keeps existing JSON subtitle generation contract used by MARU Media Player.
- * - Adds generate-dubbing / generate-speech / text-to-speech / tts action support.
+ * - Preserves dormant dubbing/TTS engine code, but public dubbing access is disabled by the server gate in V190.
  * - No external npm dependencies required. Node 18+ fetch/Buffer only.
  * - Final exact sentence-cue timeline patch: local-only after transcription.
  */
@@ -692,7 +693,8 @@ async function handleStatus(id) {
     subtitleGenerationMode: 'direct-selected-target-language',
     translationActions: ['translate-subtitle'],
     reviewActions: ['review-subtitle'],
-    dubbingActions: ['generate-dubbing', 'generate-speech', 'text-to-speech', 'tts', 'dubbing', 'ai-dubbing'],
+    dubbingActions: [],
+    dubbingAvailable: false,
     requestId: id
   }, publicServiceState()));
 }
@@ -2041,7 +2043,7 @@ async function handleGenerateDubbing(id, action, body) {
 function classifyOpenAiError(error) {
   const status = Number(error?.statusCode || error?.openAiStatus || 500);
   const msg = String(error?.message || error || 'Unknown server error');
-  if (error?.code && /^(authentication_|account_forbidden|authorization_|auth_verifier_|privileged_role_required|ai_public_service_preparing|ai_membership_required|ai_rate_limited|ai_request_too_large)/.test(String(error.code))) {
+  if (error?.code && /^(authentication_|account_forbidden|authorization_|auth_verifier_|privileged_role_required|ai_public_service_preparing|ai_membership_required|ai_rate_limited|ai_request_too_large|ai_credit_required|google_play_|feature_not_available|billing_store_)/.test(String(error.code))) {
     return { statusCode: status || 403, code: String(error.code), message: msg.slice(0, 1000) };
   }
   if (/insufficient_quota|quota|billing|payment/i.test(msg)) return { statusCode: status || 402, code: 'openai_billing_or_quota', message: 'OpenAI API quota/billing limit reached. Check OpenAI Platform billing and project limits.' };
@@ -2050,9 +2052,24 @@ function classifyOpenAiError(error) {
   return { statusCode: status || 500, code: 'server_error', message: msg.slice(0, 1000) };
 }
 
+async function refundChargedUsage(access, id, reason) {
+  const usage = access && access.creditUsage;
+  // Never refund an idempotent retry: that marker may represent a prior successful
+  // server response that the client simply did not receive. Refund only a debit that
+  // was created by this exact invocation.
+  if (!usage || usage.charged !== true || !usage.eventHash) return;
+  try {
+    const refunded = await refundUsageByHash(access, usage.eventHash);
+    log(id, 'credit-refund=', refunded && refunded.refunded === true, 'reason=', reason || 'request-failed');
+  } catch (refundError) {
+    log(id, 'credit-refund-error=', String(refundError && refundError.message || refundError));
+  }
+}
+
 exports.handler = async (event) => {
   const id = requestId(event);
   const started = Date.now();
+  let access = null;
   try {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS_HEADERS, body: '' };
     if (event.httpMethod === 'GET') return handleStatus(id);
@@ -2073,22 +2090,43 @@ exports.handler = async (event) => {
 
     // Every OpenAI-backed operation is authorized on the server. Client-supplied
     // identity, role, paid, subscription and license fields are intentionally ignored.
-    const access = await authorizeAiAccess(event, { purpose: action, maximumBytes: 48 * 1024 * 1024 });
+    // V190 access-control also meters Google Play subtitle/translation usage and blocks
+    // the dormant dubbing/TTS feature before any OpenAI request is made.
+    access = await authorizeAiAccess(event, { purpose: action, maximumBytes: 48 * 1024 * 1024 });
     log(id, 'access=', access.accessClass, 'plan=', access.plan, 'roles=', access.roles.join(','));
 
-    if (action === 'generate-subtitle' || action === 'subtitle' || action === 'transcribe') return await handleGenerateSubtitle(id, body);
-    if (action === 'review-subtitle' || action === 'subtitle-review' || action === 'final-review') return await handleReviewSubtitle(id, body);
-    if (['translate-subtitle', 'subtitle-translate', 'translate'].includes(action)) return await handleTranslateSubtitle(id, body);
-    if (action === 'analyze-dubbing' || action === 'dubbing-analysis' || action === 'plan-dubbing') return await handleAnalyzeDubbing(id, action, body);
-    if (isDubbingAction(action)) return await handleGenerateDubbing(id, action, body);
+    let response;
+    if (action === 'generate-subtitle' || action === 'subtitle' || action === 'transcribe') {
+      response = await handleGenerateSubtitle(id, body);
+    } else if (action === 'review-subtitle' || action === 'subtitle-review' || action === 'final-review') {
+      response = await handleReviewSubtitle(id, body);
+    } else if (['translate-subtitle', 'subtitle-translate', 'translate'].includes(action)) {
+      response = await handleTranslateSubtitle(id, body);
+    } else if (action === 'analyze-dubbing' || action === 'dubbing-analysis' || action === 'plan-dubbing' || isDubbingAction(action)) {
+      // Normally unreachable because access-control denies these actions first. Keep a
+      // second explicit barrier here so a future access-control edit cannot accidentally
+      // expose the dormant engine.
+      response = json(403, {
+        ok: false,
+        code: 'feature_not_available',
+        error: 'AI dubbing is currently disabled in MARU Media Player.',
+        requestId: id
+      });
+    } else {
+      response = json(400, {
+        ok: false,
+        error: `Unsupported action: ${action}`,
+        supportedActions: ['status', 'generate-subtitle', 'translate-subtitle', 'review-subtitle'],
+        requestId: id
+      });
+    }
 
-    return json(400, {
-      ok: false,
-      error: `Unsupported action: ${action}`,
-      supportedActions: ['status', 'generate-subtitle', 'translate-subtitle', 'analyze-dubbing', 'generate-dubbing', 'generate-speech', 'text-to-speech', 'tts'],
-      requestId: id
-    });
+    if (response && Number(response.statusCode) >= 400) {
+      await refundChargedUsage(access, id, `http-${response.statusCode}`);
+    }
+    return response;
   } catch (error) {
+    await refundChargedUsage(access, id, 'exception');
     const classified = classifyOpenAiError(error);
     log(id, 'ERROR', classified.code, classified.message, 'elapsedMs=', Date.now() - started);
     return json(classified.statusCode, {

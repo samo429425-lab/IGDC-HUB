@@ -1,16 +1,11 @@
 'use strict';
 
-/*
- * MARU AI license/status gate.
- *
- * This endpoint never trusts identity, email, role, license, paid or subscription
- * values supplied by the player. Access is derived only from a signed bearer
- * session and current server-side role state.
- */
+/* MARU AI license/status gate — V190 Google Play Billing aware. */
 const {
   accessErrorResponse,
   authorizeAiAccess,
   bearerToken,
+  googlePlayBillingConfigured,
   pgExecutionReady,
   publicServiceState
 } = require('./lib/maru-ai-access-control');
@@ -44,7 +39,7 @@ function preparingResponse() {
     plan: 'PREPARING',
     role: 'guest_or_member',
     roles: [],
-    message: 'AI 자막·번역·더빙 유료 서비스는 PG 승인 및 운영 연결을 준비 중입니다.',
+    message: 'MARU AI 유료 서비스의 결제 검증 연결을 준비 중입니다.',
     paymentUrl: ''
   }, publicServiceState());
 }
@@ -55,8 +50,6 @@ exports.handler = async (event) => {
     return json(405, { ok: false, error: 'method_not_allowed' });
   }
 
-  // Public/legacy identity checks never grant access. They receive only the
-  // non-sensitive preparing state until the player supplies a signed session.
   if (!bearerToken(event)) return json(200, preparingResponse());
 
   try {
@@ -70,6 +63,11 @@ exports.handler = async (event) => {
       role: access.role,
       roles: access.roles,
       accessClass: access.accessClass,
+      googlePlayProductId: access.googlePlayProductId || '',
+      googlePlayBasePlanId: access.googlePlayBasePlanId || '',
+      monthlyCreditUnits: access.monthlyCreditUnits || 0,
+      googlePlaySubscriptionState: access.googlePlaySubscriptionState || '',
+      googlePlayExpiryTime: access.googlePlayExpiryTime || '',
       message: '',
       paymentUrl: ''
     }, publicServiceState()));
@@ -82,10 +80,13 @@ exports.handler = async (event) => {
         active: false,
         allowed: false,
         status: 'membership_required',
+        code: 'ai_membership_required',
         plan: 'PAID_MEMBERSHIP_REQUIRED',
         role: 'member',
         roles: [],
-        message: 'MARU AI 월 회원권 또는 유효한 유료 이용권이 필요합니다.',
+        message: googlePlayBillingConfigured()
+          ? 'Google Play에서 활성화된 MARU AI 월 구독이 필요합니다.'
+          : 'MARU AI 월 회원권 또는 유효한 유료 이용권이 필요합니다.',
         paymentUrl: paymentUrl()
       }, publicServiceState()));
     }
