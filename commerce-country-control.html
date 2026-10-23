@@ -91,8 +91,7 @@
   </style>
 <link rel="stylesheet" href="/assets/css/admin-checkbox-accessibility.css?v=20260925-1">
 <style id="latest-overview-inline-css">
-/* Current research location board: readable product cards, not tiny list rows.
-   All action attributes and candidate IDs remain owned by the existing JS. */
+/* Large product inspection cards; scope and operator actions remain in the JS ledger. */
 .latest-overview{background:#08192b;border:1px solid #365579;border-radius:10px;margin:12px 0;padding:12px;color:#deedff}
 .latest-overview-header{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
 .latest-overview-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:8px 0}
@@ -116,11 +115,6 @@
 .latest-overview-actions button{font-size:12px;line-height:1.35;padding:8px 5px;min-height:38px;min-width:0;white-space:normal;word-break:keep-all}
 .latest-overview-actions button:disabled{opacity:.45}
 .latest-overview-pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:12px}
-@media(max-width:1260px){.latest-overview-rows{grid-template-columns:repeat(3,minmax(0,1fr))}}
-@media(max-width:900px){.latest-overview-rows{grid-template-columns:repeat(2,minmax(0,1fr))}.latest-overview-thumb{height:190px}}
-@media(max-width:520px){.latest-overview-rows{grid-template-columns:minmax(0,1fr)}.latest-overview-thumb{height:215px}.latest-overview-controls label{flex:1}}
-</style>
-<style id="igdc-latest-overview-bulk-v2">
 .latest-overview-bulk{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:11px;margin:10px 0;background:#10314b;border:1px solid #416d90;border-radius:9px}
 .latest-overview-bulk label{display:flex;align-items:center;gap:7px;font-weight:700;color:#deefff}
 .latest-overview-bulk strong{color:#b9e8ff;font-size:12px}
@@ -128,6 +122,9 @@
 .latest-overview-thumb-link{display:flex;width:100%;height:100%;align-items:center;justify-content:center;cursor:pointer}
 .latest-overview-check{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:#cceaff;cursor:pointer}
 .latest-overview-check input,.latest-overview-page-select input{width:17px;height:17px;flex-shrink:0}
+@media(max-width:1260px){.latest-overview-rows{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.latest-overview-rows{grid-template-columns:repeat(2,minmax(0,1fr))}.latest-overview-thumb{height:190px}}
+@media(max-width:520px){.latest-overview-rows{grid-template-columns:minmax(0,1fr)}.latest-overview-thumb{height:215px}.latest-overview-controls label{flex:1}}
 </style>
 </head>
 <body>
@@ -364,10 +361,10 @@
         <div class="small">현재 선택 국가·지역의 이번 상품 리서치 사이클에서 발견·점검되어 저장된 최신 상품을 표시합니다. 조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관할 수 있습니다. AI 검증에서 정상 상품임이 확인된 것만 전체 상품 후보·배치 관리 목록으로 이관하고 PSOM 기준 섹션을 배치합니다. 접속 제한·검증 미완료 상품은 최신 목록에 남겨 다음 검증에서 재시도합니다. 확인된 부정확한 상품 URL은 별도 검토하며 기존 확정 상품은 변경하지 않습니다. 상품 조사를 일시정지하면 그 시점까지 저장된 최신 상품 목록을 다시 읽습니다.</div>
         <section id="latestResearchOverview" class="latest-overview" aria-label="최신 상품 전체 위치·삭제·미배치 관리">
           <div class="latest-overview-header"><strong>현재 리서치 상품 전체 위치 · 간편 관리</strong><span id="latestOverviewSummary" class="small">원장 확인 중</span></div>
-          <div class="latest-overview-controls"><label>상태 <select id="latestOverviewFilter"><option value="all">모두 보기</option><option value="new">미등록</option><option value="undecided">미배치</option><option value="slot_candidate">섹션 배치</option><option value="hold">보류</option><option value="excluded">일반·영구 제외</option><option value="duplicate">중복 확인</option><option value="removed">삭제 기록</option></select></label><label>상품 검색 <input type="search" id="latestOverviewSearch" placeholder="상품명·URL·섹션"></label><button type="button" class="ghost" id="latestOverviewReload">원장 새로고침</button></div>
+          <div class="latest-overview-controls"><label>상태 <select id="latestOverviewFilter"><option value="all">모두 보기</option><option value="new">미등록</option><option value="undecided">미배치</option><option value="slot_candidate">섹션 배치</option><option value="hold">보류</option><option value="excluded">일반·영구 제외</option><option value="duplicate">중복 확인</option></select></label><label>상품 검색 <input type="search" id="latestOverviewSearch" placeholder="상품명·URL·섹션"></label><button type="button" class="ghost" id="latestOverviewReload">원장 새로고침</button></div>
           <div class="small">원본 기록은 유지하고 현재 저장 위치를 보여줍니다. 미배치 이동은 실제 후보 ID로 처리합니다. 목록 삭제는 재수집 가능, 영구 제외는 재수집 차단입니다. 공개 중인 상품은 먼저 매칭 해제가 필요합니다.</div>
-          <div class="latest-overview-bulk" role="group" aria-label="리서치 상품 선택 일괄관리"><label class="latest-overview-page-select"><input id="latestOverviewSelectPage" type="checkbox"> 이 페이지 전체 선택 (작업 가능 후보)</label><strong id="latestOverviewSelectedCount">선택 0건</strong><button type="button" id="latestOverviewBulkMove" disabled>선택 상품 일괄 미배치 이동</button><button type="button" id="latestOverviewBulkDelete" class="secondary" disabled>선택 상품 일괄 목록 삭제</button><button type="button" id="latestOverviewClearSelection" class="ghost" disabled>선택 해제</button></div>
-          <div class="small">체크한 항목은 페이지를 옮겨도 유지됩니다. 아직 후보 원장에 등록되지 않은 상품은 각 카드의 ‘검증 후 미배치 이관’을 사용하세요. 중복 URL은 먼저 실제 후보 ID를 선택해야 일괄 작업이 가능합니다.</div>
+          <div class="latest-overview-bulk" role="group" aria-label="리서치 상품 선택 일괄관리"><label class="latest-overview-page-select"><input id="latestOverviewSelectPage" type="checkbox"> 이 페이지 전체 선택 (작업 가능한 상품)</label><strong id="latestOverviewSelectedCount">선택 0건</strong><button type="button" id="latestOverviewBulkMove" disabled>선택 상품 일괄 미배치 이동</button><button type="button" id="latestOverviewBulkDelete" class="secondary" disabled>선택 상품 일괄 목록 삭제</button><button type="button" id="latestOverviewClearSelection" class="ghost" disabled>선택 해제</button></div>
+          <div class="small">체크한 항목은 페이지를 바꿔도 유지됩니다. 미등록 상품은 개별 검증·이관, 중복 URL은 정확한 후보 ID 지정 후 일괄 작업할 수 있습니다. 상품 사진·이름을 클릭하면 실제 판매처 상세페이지가 새 탭에서 열립니다.</div>
           <div id="latestOverviewOperationStatus" class="small" role="status" aria-live="polite"></div>
           <div id="latestOverviewRows" class="latest-overview-rows"><div class="small">상품 위치를 확인 중입니다.</div></div>
           <div class="latest-overview-pager"><button type="button" id="latestOverviewPrev">이전</button><span id="latestOverviewPageState" class="small"></span><button type="button" id="latestOverviewNext">다음</button></div>
@@ -618,7 +615,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20261023-latest-inventory-actions-v2"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261024-latest-bulk-cards-v3"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

@@ -1051,18 +1051,15 @@ function bindIncremental(target, items) {
 
       const preserveSnapshotOrder = loaded.source === 'snapshot';
 
-      // First-paint priority: the first Home main rail and all three Home
-      // right rails use the *same* verified country snapshot. Render their
-      // visible first batches before the remaining five main rails. Previously
-      // middle/bottom waited until after all five main sections. No card is
-      // skipped and the canonical 100-slot order is not changed.
+      // First paint: render the first Home main rail and all three Home
+      // right rails from the exact same country-verified snapshot. Preserve
+      // the real item order and all 100 slots in every section.
       renderSlot(KEYS_MAIN[0], resolveSectionItems(sections, KEYS_MAIN[0]), preserveSnapshotOrder);
       for (const key of KEYS_RIGHT) {
         renderSlot(key, resolveSectionItems(sections, key), preserveSnapshotOrder);
       }
-      // Yield one frame after above-the-fold panels so images can paint.
       await new Promise(function(resolve){
-        if(typeof window.requestAnimationFrame==='function')window.requestAnimationFrame(function(){resolve();});
+        if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(function(){resolve();});
         else setTimeout(resolve, 0);
       });
       for (const key of KEYS_MAIN.slice(1)) {
