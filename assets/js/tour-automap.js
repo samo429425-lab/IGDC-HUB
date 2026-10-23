@@ -510,7 +510,7 @@
     }
   }
 
-  function createRightBox(item, index, mobile) {
+  function createRightBox(item) {
     const box = document.createElement("div");
     box.className = "ad-box";
 
@@ -521,15 +521,8 @@
     if(item && item.thumb) img.src = item.thumb;
     img.alt = item.title || "";
     if(item && item.__igdcReserve===true){ box.classList.add('dummy-card'); box.setAttribute('data-dummy','1'); }
-    // Prioritize images actually visible above the fold. Hidden desktop/mobile
-    // rails must not compete for bandwidth, and reserve items stay lazy.
-    const visibleRail = mobile
-      ? window.matchMedia('(max-width:1024px)').matches
-      : window.matchMedia('(min-width:1025px)').matches;
-    const aboveFold = visibleRail && item && item.__igdcReserve !== true && index < (mobile ? 3 : 5);
-    img.loading = aboveFold ? "eager" : "lazy";
+    img.loading = "lazy";
     img.decoding = "async";
-    if (aboveFold && index < 2) { try { img.fetchPriority = "high"; } catch (_e) {} }
     try { img.referrerPolicy = "no-referrer"; } catch (_e) {}
     img.setAttribute("referrerpolicy","no-referrer");
 
@@ -548,8 +541,6 @@
   function renderRailBatch(container, items, limit, mobile) {
     if (!container) return;
     const list = (items || []).slice(0, limit);
-    const oldJob = railRenderJobs.get(container);
-    if (oldJob && oldJob.observer) oldJob.observer.disconnect();
     container.innerHTML = "";
     if (!list.length) return;
     const job = { container: container, items: list, offset: 0, mobile: mobile, observer: null };
@@ -573,7 +564,7 @@
       const end = Math.min(current.offset + RENDER_BATCH, current.items.length);
       const frag = document.createDocumentFragment();
       for (let i=current.offset;i<end;i++) {
-        const card = createRightBox(current.items[i], i, current.mobile);
+        const card = createRightBox(current.items[i]);
         if (current.mobile) card.classList.add("card");
         frag.appendChild(card);
       }
@@ -614,15 +605,7 @@
     renderRailBatch(list, items, MOBILE_LIMIT, true);
   }
 
-  let tourRunPromise = null;
-  let tourRunCompleted = false;
   async function run() {
-    if (tourRunCompleted) return;
-    if (tourRunPromise) return tourRunPromise;
-    tourRunPromise = runOnce().finally(function(){ tourRunPromise = null; });
-    return tourRunPromise;
-  }
-  async function runOnce() {
     disablePsomThumbGrid();
     installExternalTopNavigation();
 
@@ -641,16 +624,12 @@
 
     // No generic feed fallback: only the Edge-routed canonical IP snapshot is
     // allowed to populate the tour right panel and mobile rail.
-    if (!snap) return; // Allow a future trigger to retry after network failure.
     disablePsomThumbGrid();
     renderedItems = items;
     const visible = filteredRenderableItems(items);
     renderMobileRail(visible);
     renderRightPanel(visible);
-    // The contained viewer handles frame compatibility when the visitor clicks.
-    // Background host probes formerly re-rendered both rails without changing
-    // their item lists, consuming network/DOM work on high-volume sections.
-    tourRunCompleted = true;
+    deferFramePreflight(items);
   }
 
   disablePsomThumbGrid();
