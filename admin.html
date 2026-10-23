@@ -911,6 +911,13 @@
     card.appendChild(line);
     return line;
   }
+  // Avoid writing back into the observed subtree when nothing changed.
+  function updateLine(line, text, color){
+    if(line.textContent!==text){
+      line.textContent=text;
+      line.style.color=color;
+    }
+  }
   function sync(){
     var line=ensureLine();
     if(!line)return false;
@@ -919,14 +926,11 @@
     var state=clean(mainStatus&&mainStatus.textContent);
     var total=clean(totalCell&&totalCell.textContent)||'$0.00';
     if(/연결됨/.test(state)){
-      line.textContent='🎬 MARU Media Player 순수익 · 누적 '+total;
-      line.style.color='#176b45';
+      updateLine(line,'🎬 MARU Media Player 순수익 · 누적 '+total,'#176b45');
     }else if(/대기/.test(state)){
-      line.textContent='🎬 MARU Media Player 순수익 · 데이터 연결 대기';
-      line.style.color='#6b7280';
+      updateLine(line,'🎬 MARU Media Player 순수익 · 데이터 연결 대기','#6b7280');
     }else{
-      line.textContent='🎬 MARU Media Player 순수익 · '+(state||'집계 대기');
-      line.style.color='#315f7f';
+      updateLine(line,'🎬 MARU Media Player 순수익 · '+(state||'집계 대기'),'#315f7f');
     }
     return true;
   }
