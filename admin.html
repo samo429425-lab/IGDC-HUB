@@ -773,6 +773,183 @@
   </script>
 </div>
 
+<!-- MARU Media Player net-profit dashboard: isolated, read-only, non-destructive -->
+<section id="maru-player-net-profit-section" aria-label="MARU Media Player 순수익"
+  style="background-color:#e9f4ff;border:1px solid #b0d4f0;border-radius:8px;padding:20px;margin-top:20px;box-sizing:border-box;text-align:left;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+    <div>
+      <h3 style="margin:0;color:#004080;font-size:1.05rem;">🎬 MARU Media Player 순수익</h3>
+      <div style="margin-top:4px;font-size:12px;color:#5f6f7f;">Google Play 정산 기준 · 수수료·환불·조정 반영 후 순수익만 표시</div>
+    </div>
+    <span id="maru-player-net-profit-status" style="font-size:12px;color:#64748b;">집계 대기</span>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table id="maru-player-net-profit-table" style="width:100%;border-collapse:collapse;min-width:640px;background:#fff;">
+      <thead>
+        <tr>
+          <th style="border:1px solid #c9d9e8;padding:10px;text-align:center;background:#f2f8fd;">항목</th>
+          <th style="border:1px solid #c9d9e8;padding:10px;text-align:center;background:#f2f8fd;">일별</th>
+          <th style="border:1px solid #c9d9e8;padding:10px;text-align:center;background:#f2f8fd;">주별</th>
+          <th style="border:1px solid #c9d9e8;padding:10px;text-align:center;background:#f2f8fd;">월별</th>
+          <th style="border:1px solid #c9d9e8;padding:10px;text-align:center;background:#f2f8fd;">연별</th>
+          <th style="border:1px solid #c9d9e8;padding:10px;text-align:center;background:#f2f8fd;">누적합계</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-maru-profit-key="pro">
+          <td style="border:1px solid #c9d9e8;padding:10px;text-align:center;">Pro 구독 순수익</td>
+          <td data-col="day" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="week" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="month" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="year" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="total" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+        </tr>
+        <tr data-maru-profit-key="premium">
+          <td style="border:1px solid #c9d9e8;padding:10px;text-align:center;">Premium 구독 순수익</td>
+          <td data-col="day" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="week" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="month" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="year" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="total" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+        </tr>
+        <tr data-maru-profit-key="credit">
+          <td style="border:1px solid #c9d9e8;padding:10px;text-align:center;">추가 AI 크레딧 순수익</td>
+          <td data-col="day" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="week" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="month" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="year" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+          <td data-col="total" style="border:1px solid #c9d9e8;padding:10px;text-align:center;">$0.00</td>
+        </tr>
+        <tr data-maru-profit-key="total">
+          <td style="border:1px solid #c9d9e8;padding:10px;text-align:center;font-weight:800;">MARU 총 순수익</td>
+          <td data-col="day" style="border:1px solid #c9d9e8;padding:10px;text-align:center;font-weight:800;">$0.00</td>
+          <td data-col="week" style="border:1px solid #c9d9e8;padding:10px;text-align:center;font-weight:800;">$0.00</td>
+          <td data-col="month" style="border:1px solid #c9d9e8;padding:10px;text-align:center;font-weight:800;">$0.00</td>
+          <td data-col="year" style="border:1px solid #c9d9e8;padding:10px;text-align:center;font-weight:800;">$0.00</td>
+          <td data-col="total" style="border:1px solid #c9d9e8;padding:10px;text-align:center;font-weight:800;">$0.00</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<script id="maru-player-net-profit-script">
+(function(){
+  'use strict';
+  var COLS=['day','week','month','year','total'];
+  var KEYS=['pro','premium','credit'];
+  function money(v){ var n=Number(v); if(!isFinite(n)) n=0; try{return '$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}catch(_){return '$'+n.toFixed(2);} }
+  function row(key){ return document.querySelector('#maru-player-net-profit-table tr[data-maru-profit-key="'+key+'"]'); }
+  function setCell(key,col,value){ var r=row(key); if(!r)return; var c=r.querySelector('[data-col="'+col+'"]'); if(c)c.textContent=money(value); }
+  function status(text,error){ var el=document.getElementById('maru-player-net-profit-status'); if(!el)return; el.textContent=text; el.style.color=error?'#9b2c2c':'#64748b'; }
+  function normalize(raw){
+    raw=raw&&typeof raw==='object'?raw:{};
+    var source=raw.maruPlayerNet||raw.maru_player_net||raw.maruMediaPlayer||raw.maru_media_player||raw.maruPlayer||raw.maru_player||raw;
+    return source&&typeof source==='object'?source:{};
+  }
+  function apply(raw){
+    var data=normalize(raw), totals={day:0,week:0,month:0,year:0,total:0};
+    KEYS.forEach(function(key){
+      var aliases=key==='credit'?['credit','extraCredit','extra_credit','topup','top_up']:[key];
+      var item={};
+      for(var i=0;i<aliases.length;i++){ if(data[aliases[i]]&&typeof data[aliases[i]]==='object'){ item=data[aliases[i]]; break; } }
+      COLS.forEach(function(col){ var v=Number(item[col]||0); if(!isFinite(v))v=0; totals[col]+=v; setCell(key,col,v); });
+    });
+    COLS.forEach(function(col){ setCell('total',col,totals[col]); });
+    status('순수익 집계 연결됨',false);
+  }
+  function refresh(){
+    if(!window.fetch){ status('집계 대기',false); return; }
+    fetch('/api/igdc/income/summary',{credentials:'same-origin',cache:'no-store'})
+      .then(function(res){ if(!res.ok) throw new Error('http '+res.status); return res.json(); })
+      .then(function(data){
+        var raw=(data&&(data.summary||data.items||data))||{};
+        var candidate=raw.maruPlayerNet||raw.maru_player_net||raw.maruMediaPlayer||raw.maru_media_player||raw.maruPlayer||raw.maru_player;
+        if(candidate&&typeof candidate==='object'){ apply(candidate); }
+        else { status('순수익 데이터 연결 대기',false); }
+      })
+      .catch(function(){ status('순수익 데이터 연결 대기',false); });
+  }
+  document.addEventListener('DOMContentLoaded',refresh);
+  window.addEventListener('maru-player-net-profit-summary',function(ev){ if(ev&&ev.detail) apply(ev.detail); });
+  window.MARUPlayerNetProfit={refresh:refresh,applySummary:apply};
+})();
+</script>
+
+<!-- MARU Media Player net-profit mirror for the existing right-panel revenue settlement audit card -->
+<script id="maru-player-net-profit-right-panel-sync">
+(function(){
+  'use strict';
+  var STATUS_ID='maru-player-net-profit-right-status';
+  function clean(v){return String(v==null?'':v).replace(/\s+/g,' ').trim();}
+  function findSettlementCard(){
+    var panel=document.getElementById('igdc-site-control');
+    if(!panel)return null;
+    var cards=Array.prototype.slice.call(panel.querySelectorAll('.igdc-sc-card'));
+    for(var i=0;i<cards.length;i++){
+      var t=clean(cards[i].textContent);
+      if(/수익\s*정산\s*정밀\s*점검/i.test(t)||/정산\s*정밀\s*점검/i.test(t)||/수익.*정산.*점검/i.test(t))return cards[i];
+    }
+    return null;
+  }
+  function ensureLine(){
+    var card=findSettlementCard();
+    if(!card)return null;
+    var line=card.querySelector('#'+STATUS_ID);
+    if(line)return line;
+    line=document.createElement('div');
+    line.id=STATUS_ID;
+    line.setAttribute('data-maru-player-net-profit-mirror','1');
+    line.style.marginTop='5px';
+    line.style.paddingTop='5px';
+    line.style.borderTop='1px dashed rgba(0,64,128,.20)';
+    line.style.fontSize='10px';
+    line.style.lineHeight='1.35';
+    line.style.color='#315f7f';
+    line.style.pointerEvents='none';
+    line.textContent='🎬 MARU Media Player 순수익 · 집계 대기';
+    card.appendChild(line);
+    return line;
+  }
+  function sync(){
+    var line=ensureLine();
+    if(!line)return false;
+    var mainStatus=document.getElementById('maru-player-net-profit-status');
+    var totalCell=document.querySelector('#maru-player-net-profit-table tr[data-maru-profit-key="total"] [data-col="total"]');
+    var state=clean(mainStatus&&mainStatus.textContent);
+    var total=clean(totalCell&&totalCell.textContent)||'$0.00';
+    if(/연결됨/.test(state)){
+      line.textContent='🎬 MARU Media Player 순수익 · 누적 '+total;
+      line.style.color='#176b45';
+    }else if(/대기/.test(state)){
+      line.textContent='🎬 MARU Media Player 순수익 · 데이터 연결 대기';
+      line.style.color='#6b7280';
+    }else{
+      line.textContent='🎬 MARU Media Player 순수익 · '+(state||'집계 대기');
+      line.style.color='#315f7f';
+    }
+    return true;
+  }
+  function observeMain(){
+    var s=document.getElementById('maru-player-net-profit-status');
+    var t=document.querySelector('#maru-player-net-profit-table tr[data-maru-profit-key="total"] [data-col="total"]');
+    if(window.MutationObserver){
+      var o=new MutationObserver(sync);
+      if(s)o.observe(s,{childList:true,characterData:true,subtree:true});
+      if(t)o.observe(t,{childList:true,characterData:true,subtree:true});
+    }
+  }
+  function arm(){
+    var tries=0,timer=setInterval(function(){tries+=1;sync();if(tries>120)clearInterval(timer);},250);
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){sync();observeMain();});
+    else{sync();observeMain();}
+    var panel=document.getElementById('igdc-site-control');
+    if(panel&&window.MutationObserver){var pobs=new MutationObserver(sync);pobs.observe(panel,{childList:true,subtree:true});}
+  }
+  arm();
+})();
+</script>
+
 <div style="background-color: #fff4e0; border: 1px solid #f3d9b0; border-radius: 8px; padding: 10px 20px; margin: 20px auto; text-align: left; display: flex; justify-content: flex-start; align-items: center; gap: 30px; color: #804000; font-weight: bold; max-width: 760px;">
   <span>💠 블록체인<br/>/ Web3 연동 </span>
   <!-- 버튼: 이제 connectWallet / __openIG 대신 IGDC_WEB3_OPEN 전용 -->
