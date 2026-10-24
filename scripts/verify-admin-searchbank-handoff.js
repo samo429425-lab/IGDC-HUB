@@ -49,14 +49,26 @@ if(!bank){
   process.exit(86);
 }
 
-const bankIds=new Set();
+// A base candidate ID alone is not a public identity in a 249-country market.
+// Require exact country/subdivision from the canonical publication placement.
+function marketIdentity(id,country,region){
+  const c=t(country).toUpperCase(),r=t(region||"NATIONWIDE").toUpperCase();
+  return baseId(id)&&/^[A-Z]{2}$/.test(c)&&r ? baseId(id)+"|"+c+"|"+r : "";
+}
+function requestedIdentity(row){
+  const r=o(row&&row.publicationRequest),as=o(row&&row.assignment);
+  return marketIdentity(o(row&&row.candidate).id,r.country||as.country,r.region||as.region);
+}
+const bankMarketIds=new Set();
 for(const item of a(bank.items)){
-  const publication=o(item&&item.canonicalPublication);
+  const publication=o(item&&item.canonicalPublication),placement=o(item&&item.placement);
+  const country=placement.country,region=placement.region;
   for(const value of [publication.candidateId,item&&item.candidateId,item&&item.id,item&&item.productId,item&&item.contentId]){
-    const id=baseId(value);if(id)bankIds.add(id);
+    const key=marketIdentity(value,country,region);
+    if(key)bankMarketIds.add(key);
   }
 }
-const missing=structurallyValid.filter(x=>{const id=baseId(o(x&&x.candidate).id);return id&&!bankIds.has(id)});
+const missing=structurallyValid.filter(row=>!bankMarketIds.has(requestedIdentity(row)));
 
 // Canonical may deliberately HOLD a Front-Matched item whose country/region
 // market-sale verification has expired.  That is not identity loss: publishing
@@ -77,7 +89,8 @@ function reconcileMarketEvidenceHolds(missingRows, bankDocument){
     !Array.isArray(manifest.mapping)||!Array.isArray(audit.accepted)){
     return{held:[],unexplained:missingRows,reason:"canonical_same_release_audit_missing_or_incomplete"};
   }
-  const acceptedIds=new Set(a(manifest.mapping).concat(a(audit.accepted)).map(row=>baseId(o(row).candidateId)).filter(Boolean));
+  const acceptedIds=new Set(a(manifest.mapping).concat(a(audit.accepted)).map(row=>
+    marketIdentity(o(row).candidateId,o(row).country,o(row).region)).filter(Boolean));
   const rejected=new Map();
   for(const row of audit.rejected){
     const id=baseId(o(row).candidateId);if(!id)continue;
@@ -103,7 +116,7 @@ function reconcileMarketEvidenceHolds(missingRows, bankDocument){
     const known=reasons.length>0&&marketError&&reasons.every(reason=>
       reason.startsWith("PUBLISHED_MARKET_SCOPE_EVIDENCE_INVALID:")||
       reason==="PUBLISHED_MARKET_EVIDENCE_DIGEST_MISMATCH");
-    if(!acceptedIds.has(id)&&known)held.push({candidateId:id,reasons:Array.from(new Set(reasons))});
+    if(!acceptedIds.has(marketIdentity(id,country,region))&&known)held.push({candidateId:id,reasons:Array.from(new Set(reasons))});
     else unexplained.push(row);
   }
   return{held,unexplained,reason:unexplained.length?"unexplained_canonical_handoff_loss":null,release};

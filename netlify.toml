@@ -8,8 +8,94 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  included_files = ["netlify/functions/**", "netlify/functions/data/**", "netlify/functions/search-bank.snapshot.json", "netlify/functions/data/search-bank.snapshot.json", "data/search-bank.snapshot.json", "netlify/functions/api-key.json"]
+  # Bundle JS runtime dependencies but not all large product/media snapshot data
+  # into every function. Large, read-only JSON assets are scoped below.
+  # Media catalog and payout-vault files are included only by their consumers.
+  # If new runtime fs.readFileSync assets are added, update per-function lists.
+  included_files = [
+    "netlify/functions/*.js",
+    "netlify/functions/lib/*.js",
+    "netlify/functions/data/affiliate-program-registry.v1.json",
+    "netlify/functions/data/commerce-candidate-policy.v1.json",
+    "netlify/functions/data/commerce-candidate-review-queue.v1.json",
+    "netlify/functions/data/country-policy.json",
+    "netlify/functions/data/country-region-registry.v1.json",
+    "netlify/functions/data/country-subdivision-registry.v1.json",
+    "netlify/functions/data/distribution-priority-listings.json",
+    "netlify/functions/data/donation.research-frame.v1.json",
+    "netlify/functions/data/igdc-support-knowledge.json",
+    "netlify/functions/data/igdc.platform.profile.json",
+    "netlify/functions/data/ip-slot-policy.v1.json",
+    "netlify/functions/data/psom.json",
+    "netlify/functions/data/regional-brokerage-policy.json",
+    "netlify/functions/data/social.candidates.snapshot.json",
+    "netlify/functions/data/tour.snapshot.json",
+    "netlify/functions/data/trust.allowlist.json",
+    "netlify/functions/data/trust.blocklist.json",
+    "netlify/functions/lib/igdc-historical-private-placement-20261013.json",
+    "netlify/functions/api-key.json",
+  ]
 
+[functions.media-access]
+included_files = [
+    "netlify/functions/secure/media-access-products.json",
+    "netlify/functions/secure/media-catalog.json",
+    "netlify/functions/secure/media-delivery-profiles.json",
+]
+
+[functions.media-access-order]
+included_files = [
+    "netlify/functions/secure/media-access-products.json",
+    "netlify/functions/secure/media-catalog.json",
+    "netlify/functions/secure/media-delivery-profiles.json",
+]
+
+[functions.media-playback]
+included_files = [
+    "netlify/functions/secure/media-access-products.json",
+    "netlify/functions/secure/media-catalog.json",
+    "netlify/functions/secure/media-delivery-profiles.json",
+]
+
+[functions.media-ad-decision]
+included_files = [
+    "netlify/functions/secure/media-access-products.json",
+    "netlify/functions/secure/media-catalog.json",
+    "netlify/functions/secure/media-delivery-profiles.json",
+]
+
+[functions.media-pilot-audit]
+included_files = [
+    "netlify/functions/secure/media-access-products.json",
+    "netlify/functions/secure/media-catalog.json",
+    "netlify/functions/secure/media-delivery-profiles.json",
+]
+
+[functions.media-access-audit]
+included_files = [
+    "netlify/functions/secure/media-access-products.json",
+    "netlify/functions/secure/media-catalog.json",
+    "netlify/functions/secure/media-delivery-profiles.json",
+]
+
+[functions.media-access-lifecycle]
+included_files = [
+    "netlify/functions/secure/media-access-products.json",
+    "netlify/functions/secure/media-catalog.json",
+    "netlify/functions/secure/media-delivery-profiles.json",
+]
+
+[functions.media-viewing-state]
+included_files = [
+    "netlify/functions/secure/media-access-products.json",
+    "netlify/functions/secure/media-catalog.json",
+    "netlify/functions/secure/media-delivery-profiles.json",
+]
+
+[functions.revenue-reconciliation]
+included_files = [
+    "netlify/functions/secure/revenue-policy.v1.json",
+]
 [build.environment]
   NODE_VERSION = "20"
   
@@ -20,13 +106,578 @@
 # The function itself keeps the master switch OFF by default and only processes
 # country/subdivision scopes whose configured 1-30 day interval is due.
 [functions."commerce-country-ai-scheduler"]
+  included_files = [
+      "data/search-bank.snapshot.json",
+      "netlify/functions/data/distribution.snapshot.json",
+      "netlify/functions/data/donation.snapshot.json",
+      "netlify/functions/data/front.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+      "netlify/functions/data/networkhub-snapshot.json",
+      "netlify/functions/data/search-bank.snapshot.json",
+      "netlify/functions/data/social.snapshot.json",
+      "netlify/functions/data/tour-snapshot.json",
+      "netlify/functions/lib/commerce-product-job-recovery.kr-nationwide.20260801.json",
+      "netlify/functions/lib/igdc-original-product-url-evidence-20261013-all-safe.json",
+      "netlify/functions/search-bank.snapshot.json",
+  ]
   schedule = "@hourly"
 
 # Apply only the latest administrator-stored, policy-gated media snapshot
 # release inside the Netlify build workspace before production deployment.
+[functions."social-content-rotation-scheduler"]
+  included_files = ["data/search-bank.snapshot.json","netlify/functions/data/distribution.snapshot.json","netlify/functions/data/donation.snapshot.json","netlify/functions/data/front.snapshot.json","netlify/functions/data/media.snapshot.json","netlify/functions/data/networkhub-snapshot.json","netlify/functions/data/search-bank.snapshot.json","netlify/functions/data/social.snapshot.json","netlify/functions/data/tour-snapshot.json","netlify/functions/search-bank.snapshot.json"]
+  schedule = "20 18 * * 1,3,6"
+
+[functions."affiliate-outbound"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."ai-adapters"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."collector"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."commerce-admin-product-url-rescue"]
+  included_files = [
+      "netlify/functions/lib/igdc-original-product-url-evidence-20261013.json",
+  ]
+
+[functions."commerce-candidate-queue-control"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/lib/igdc-original-product-url-evidence-20261013-all-safe.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."commerce-country-control"]
+  included_files = [
+      "data/search-bank.snapshot.json",
+      "netlify/functions/data/distribution.snapshot.json",
+      "netlify/functions/data/donation.snapshot.json",
+      "netlify/functions/data/front.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+      "netlify/functions/data/networkhub-snapshot.json",
+      "netlify/functions/data/search-bank.snapshot.json",
+      "netlify/functions/data/social.snapshot.json",
+      "netlify/functions/data/tour-snapshot.json",
+      "netlify/functions/lib/commerce-product-job-recovery.kr-nationwide.20260801.json",
+      "netlify/functions/lib/igdc-original-product-url-evidence-20261013-all-safe.json",
+      "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."commerce-hold-original-link-inspect"]
+  included_files = [
+    "netlify/functions/lib/igdc-original-product-url-evidence-20261013-all-safe.json",
+  ]
+
+[functions."commerce-product-sitemap"]
+  included_files = [
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+  ]
+
+[functions."donation-automap"]
+  included_files = [
+    "netlify/functions/data/donation.snapshot.json",
+  ]
+
+[functions."donation-candidate-admin"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."donation-feed"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."donation-global-news-scheduler"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."donation-snapshot-builder"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."feedback"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."igdc-deploy-audit-report"]
+  included_files = [
+      "data/search-bank.snapshot.json",
+      "netlify/functions/data/distribution.snapshot.json",
+      "netlify/functions/data/donation.snapshot.json",
+      "netlify/functions/data/front.snapshot.json",
+      "netlify/functions/data/media.candidates.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+      "netlify/functions/data/networkhub-snapshot.json",
+      "netlify/functions/data/search-bank.snapshot.json",
+      "netlify/functions/data/social.snapshot.json",
+      "netlify/functions/data/tour-snapshot.json",
+      "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."maru-commerce-engine"]
+  included_files = [
+      "data/search-bank.snapshot.json",
+      "netlify/functions/data/distribution.snapshot.json",
+      "netlify/functions/data/donation.snapshot.json",
+      "netlify/functions/data/front.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+      "netlify/functions/data/networkhub-snapshot.json",
+      "netlify/functions/data/search-bank.snapshot.json",
+      "netlify/functions/data/social.snapshot.json",
+      "netlify/functions/data/tour-snapshot.json",
+      "netlify/functions/search-bank.snapshot.json",
+      "netlify/functions/secure/payout.vault.json",
+      "netlify/functions/secure/revenue-policy.v1.json",
+  ]
+
+[functions."maru-global-insight-engine"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."maru-media-adapter"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."maru-media-engine"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."maru-revenue-engine"]
+  included_files = [
+      "data/search-bank.snapshot.json",
+      "netlify/functions/data/distribution.snapshot.json",
+      "netlify/functions/data/donation.snapshot.json",
+      "netlify/functions/data/front.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+      "netlify/functions/data/networkhub-snapshot.json",
+      "netlify/functions/data/search-bank.snapshot.json",
+      "netlify/functions/data/social.snapshot.json",
+      "netlify/functions/data/tour-snapshot.json",
+      "netlify/functions/search-bank.snapshot.json",
+      "netlify/functions/secure/revenue-policy.v1.json",
+  ]
+
+[functions."maru-revenue-track-bridge"]
+  included_files = [
+      "data/search-bank.snapshot.json",
+      "netlify/functions/data/distribution.snapshot.json",
+      "netlify/functions/data/donation.snapshot.json",
+      "netlify/functions/data/front.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+      "netlify/functions/data/networkhub-snapshot.json",
+      "netlify/functions/data/search-bank.snapshot.json",
+      "netlify/functions/data/social.snapshot.json",
+      "netlify/functions/data/tour-snapshot.json",
+      "netlify/functions/search-bank.snapshot.json",
+      "netlify/functions/secure/revenue-policy.v1.json",
+  ]
+
+[functions."maru-search"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."maru-searchbank-sync"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."media-candidate-action"]
+  included_files = [
+      "netlify/functions/data/media.candidates.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+  ]
+
+[functions."media-candidate-auto-curate"]
+  included_files = [
+      "netlify/functions/data/media.candidates.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+  ]
+
+[functions."media-candidate-pool-manager"]
+  included_files = [
+      "netlify/functions/data/media.candidates.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+  ]
+
+[functions."media-candidate-review"]
+  included_files = [
+      "netlify/functions/data/media.candidates.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+  ]
+
+[functions."media-candidate-thumbnail"]
+  included_files = [
+      "netlify/functions/data/media.candidates.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+  ]
+
+[functions."media-content-supplier-admin"]
+  included_files = [
+    "netlify/functions/data/media.snapshot.json",
+  ]
+
+[functions."media-snapshot-publish"]
+  included_files = [
+      "data/search-bank.snapshot.json",
+      "netlify/functions/data/distribution.snapshot.json",
+      "netlify/functions/data/donation.snapshot.json",
+      "netlify/functions/data/front.snapshot.json",
+      "netlify/functions/data/media.candidates.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+      "netlify/functions/data/networkhub-snapshot.json",
+      "netlify/functions/data/search-bank.snapshot.json",
+      "netlify/functions/data/social.snapshot.json",
+      "netlify/functions/data/tour-snapshot.json",
+      "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."planetary-data-connector"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."product-go-live-audit"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."regional-brokerage-autoselector"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."regional-brokerage-snapshot"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."revenue-engine"]
+  included_files = [
+      "data/search-bank.snapshot.json",
+      "netlify/functions/data/distribution.snapshot.json",
+      "netlify/functions/data/donation.snapshot.json",
+      "netlify/functions/data/front.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+      "netlify/functions/data/networkhub-snapshot.json",
+      "netlify/functions/data/search-bank.snapshot.json",
+      "netlify/functions/data/social.snapshot.json",
+      "netlify/functions/data/tour-snapshot.json",
+      "netlify/functions/search-bank.snapshot.json",
+      "netlify/functions/secure/payout.vault.json",
+      "netlify/functions/secure/revenue-policy.v1.json",
+  ]
+
+[functions."revenue-settlement-diagnostic"]
+  included_files = [
+      "data/search-bank.snapshot.json",
+      "netlify/functions/data/distribution.snapshot.json",
+      "netlify/functions/data/donation.snapshot.json",
+      "netlify/functions/data/front.snapshot.json",
+      "netlify/functions/data/media.snapshot.json",
+      "netlify/functions/data/networkhub-snapshot.json",
+      "netlify/functions/data/search-bank.snapshot.json",
+      "netlify/functions/data/social.snapshot.json",
+      "netlify/functions/data/tour-snapshot.json",
+      "netlify/functions/search-bank.snapshot.json",
+      "netlify/functions/secure/revenue-policy.v1.json",
+  ]
+
+[functions."sanmaru-media-candidate-sync"]
+  included_files = [
+    "netlify/functions/data/media.snapshot.json",
+  ]
+
+[functions."sanmaru-media-collector"]
+  included_files = [
+    "netlify/functions/data/media.snapshot.json",
+  ]
+
+[functions."sanmaru-social-candidate-gateway"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."sanmaru-social-live-collector"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."sanmaru-social-pipeline-trigger"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."sanmaru_engine_v2"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."search-bank-engine"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."search-bank-index-engine"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."snapshot-engine"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."snapshot_core_engine"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
+
+[functions."social-ai-dialog"]
+  included_files = [
+    "netlify/functions/data/social.snapshot.json",
+  ]
+
+[functions."social-candidate-action"]
+  included_files = [
+    "netlify/functions/data/social.snapshot.json",
+  ]
+
+[functions."social-candidate-auto-curator"]
+  included_files = [
+    "netlify/functions/data/social.snapshot.json",
+  ]
+
+[functions."social-candidate-review"]
+  included_files = [
+    "netlify/functions/data/social.snapshot.json",
+  ]
+
+[functions."social-rotation-selector"]
+  included_files = [
+    "netlify/functions/data/social.snapshot.json",
+  ]
+
+[functions."social-snapshot-current"]
+  included_files = [
+    "netlify/functions/data/social.snapshot.json",
+  ]
+
+[functions."social-snapshot-publish"]
+  included_files = [
+    "data/search-bank.snapshot.json",
+    "netlify/functions/data/distribution.snapshot.json",
+    "netlify/functions/data/donation.snapshot.json",
+    "netlify/functions/data/front.snapshot.json",
+    "netlify/functions/data/media.snapshot.json",
+    "netlify/functions/data/networkhub-snapshot.json",
+    "netlify/functions/data/search-bank.snapshot.json",
+    "netlify/functions/data/social.snapshot.json",
+    "netlify/functions/data/tour-snapshot.json",
+    "netlify/functions/search-bank.snapshot.json",
+  ]
 [[plugins]]
   package = "./netlify/plugins/media-snapshot-release"
 
 # Social content refresh: registered creators are priority seeds, while broad discovery remains active.
-[functions."social-content-rotation-scheduler"]
-  schedule = "20 18 * * 1,3,6"

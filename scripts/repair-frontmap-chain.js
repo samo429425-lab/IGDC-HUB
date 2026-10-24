@@ -23,6 +23,7 @@ const DIST_AUTOMAP = path.join(ROOT, "assets", "js", "distribution-products-auto
 const DIST_HTML = path.join(ROOT, "distributionhub.html");
 const SEARCHBANK_ENGINE = path.join(ROOT, "netlify", "functions", "search-bank-engine.js");
 const CANONICAL_PUBLISHER = path.join(ROOT, "netlify", "functions", "lib", "canonical-snapshot-publisher.v1.js");
+const ADMIN_COMMERCE_JS = path.join(ROOT, "assets", "js", "admin-commerce-country-control.js");
 
 function read(file) {
   if (!fs.existsSync(file)) throw new Error("required file missing: " + path.relative(ROOT, file));
@@ -224,6 +225,78 @@ function patchReviewApi() {
   return changed;
 }
 
+// Keep the live administrator JS as the source of truth: patch only the
+// synchronous Front-Match command lock while preserving all newer code.
+function patchFrontMatchControl() {
+  let source = read(ADMIN_COMMERCE_JS);
+  if (source.includes("frontMatchCommandBusy=true;") && source.includes("maxAttempts=16")) return false;
+  function replace(before, after, label) {
+    const r = replaceOnceOrAlready(source, before, after, label);
+    source = r.source;
+  }
+  replace("productAutomationActive||productFrontSyncActive||productSectionCleanupActive,matchBusy=busy",
+    "productAutomationActive||productFrontSyncActive||productFrontSyncPreflightActive||frontMatchCommandBusy||frontMatchDeploymentBusy||productSectionCleanupActive,matchBusy=busy",
+    "Front Match global busy lock");
+  replace("productAutomationActive||productFrontSyncActive||productSectionCleanupActive,matchBusy=controlsBusy",
+    "productAutomationActive||productFrontSyncActive||productFrontSyncPreflightActive||frontMatchCommandBusy||frontMatchDeploymentBusy||productSectionCleanupActive,matchBusy=controlsBusy",
+    "Front Match section render lock");
+  replace("    PRODUCT_SECTIONS.forEach(function(section){var ids=selectedProductIds(section.key)",
+    "    // Lock section buttons already rendered on the page without a rerender.\n" +
+    "    if(busy)Array.prototype.forEach.call(document.querySelectorAll('[data-section-front-match],[data-section-front-unmatch],[data-selected-products-front]'),function(button){button.disabled=true;});\n" +
+    "    PRODUCT_SECTIONS.forEach(function(section){var ids=selectedProductIds(section.key)",
+    "Front Match section button sync");
+  // The passive snapshot verifier must hold the lock across asynchronous Netlify builds.
+  const start = source.indexOf("  function startAutomaticFrontSnapshotCheck(");
+  const end = source.indexOf("  var productFrontSyncPreflightActive=false;",start);
+  if(start<0||end<=start)throw new Error("front match snapshot checker signature missing");
+  let checker=source.slice(start,end);
+  function once(before,after,label){
+    if(!checker.includes(before))throw new Error("front match checker signature missing: "+label);
+    checker=checker.replace(before,after);
+  }
+  once("    var attempt=0,maxAttempts=4;\n    async function check(){",
+    "    var attempt=0,maxAttempts=16;\n" +
+    "    function unlockDeployment(){\n" +
+    "      if(token!==frontMatchSnapshotCheckEpoch)return;\n" +
+    "      frontMatchDeploymentBusy=false;\n" +
+    "      renderProducts(productRows);syncFrontSelectionControls();\n" +
+    "    }\n" +
+    "    async function check(){", "snapshot polling lock/release");
+  checker=checker.replaceAll("if(token!==frontMatchSnapshotCheckEpoch||scopeKey()!==frozenScope)return;",
+    "if(token!==frontMatchSnapshotCheckEpoch||scopeKey()!==frozenScope){unlockDeployment();return;}");
+  once("          renderProducts(productRows);\n          return;",
+    "          renderProducts(productRows);\n          unlockDeployment();return;", "empty target release");
+  once("if(state)state.textContent=originalLabel+' · 매칭 해제 서버 저장 확인됨 · 프론트 상태 자동 조회 완료 (배포 완료 여부는 비동기)';\n          return;",
+    "if(state)state.textContent=originalLabel+' · 매칭 해제 서버 저장 확인됨 · 프론트 상태 자동 조회 완료 (배포 완료 여부는 비동기)';\n          unlockDeployment();return;", "unmatch release");
+  once("if(state){state.className='front-sync-state complete';state.textContent=originalLabel+' · 프론트 스냅샷 자동 확인 '+verified+'/'+ids.length+'건 · 추가 새로고침 불필요';}\n          return;",
+    "if(state){state.className='front-sync-state complete';state.textContent=originalLabel+' · 프론트 스냅샷 자동 확인 '+verified+'/'+ids.length+'건 · 추가 새로고침 불필요';}\n          unlockDeployment();return;", "verified release");
+  once("if(state)state.textContent=originalLabel+' · 자동 확인 '+verified+'/'+ids.length+'건 · 나머지는 배포/스냅샷 확인 대기 (추가 버튼 조작 불필요)';\n          return;",
+    "if(state)state.textContent=originalLabel+' · 자동 확인 '+verified+'/'+ids.length+'건 · 나머지는 배포/스냅샷 확인 대기 (추가 버튼 조작 불필요)';\n          unlockDeployment();return;", "timeout release");
+  once("if(attempt>=maxAttempts){if(state)state.textContent=originalLabel+' · 공개 요청 저장 확인됨 · 자동 스냅샷 조회 지연: '+text(error&&error.message);return;}",
+    "if(attempt>=maxAttempts){if(state)state.textContent=originalLabel+' · 공개 요청 저장 확인됨 · 자동 스냅샷 조회 지연: '+text(error&&error.message);unlockDeployment();return;}", "failure release");
+  source=source.slice(0,start)+checker+source.slice(end);
+  replace("  var productFrontSyncPreflightActive=false;\n  async function runProductFrontSync(operation,mode,sectionKey,productId,selection){",
+    "  var productFrontSyncPreflightActive=false;\n" +
+    "  var frontMatchCommandBusy=false,frontMatchDeploymentBusy=false;\n" +
+    "  async function runProductFrontSync(operation,mode,sectionKey,productId,selection){\n" +
+    "    if(!selectedCountry||frontMatchCommandBusy||frontMatchDeploymentBusy||productFrontSyncActive||productFrontSyncPreflightActive)return;\n" +
+    "    frontMatchCommandBusy=true;\n" +
+    "    syncFrontSelectionControls();\n" +
+    "    try{return await runProductFrontSyncCore(operation,mode,sectionKey,productId,selection);}\n" +
+    "    finally{frontMatchCommandBusy=false;if(!frontMatchDeploymentBusy)renderProducts(productRows);syncFrontSelectionControls();}\n" +
+    "  }\n" +
+    "  async function runProductFrontSyncCore(operation,mode,sectionKey,productId,selection){",
+    "click synchronously locks entire Front Match board");
+  replace("      if(queued){\n        // Passive checking occurs after the current command has completed;",
+    "      if(queued){\n        frontMatchDeploymentBusy=true;syncFrontSelectionControls();\n" +
+    "        // Passive checking occurs after the current command has completed;",
+    "lock while waiting for Netlify deploy");
+  mustContain(source,"frontMatchCommandBusy=true", "Front Match synchronous lock");
+  mustContain(source,"frontMatchDeploymentBusy=true", "Front Match deploy lock");
+  atomicWrite(ADMIN_COMMERCE_JS,source);
+  return true;
+}
+
 function validateExistingChain() {
   const home = read(HOME_AUTOMAP);
   mustContain(home, `const KEYS_MAIN = ['home_1', 'home_2', 'home_3', 'home_4', 'home_5', 'home_6'];`, "Home AutoMap main keys");
@@ -250,11 +323,13 @@ try {
   const snapshotChanged = patchSnapshotEngine();
   const reviewChanged = patchReviewApi();
   validateExistingChain();
+  const frontControlChanged=patchFrontMatchControl();
   console.log(
     "IGDC FrontMap repair OK" +
     " · snapshotEngine=" + (snapshotChanged ? "patched" : "ready") +
     " · adminReview=" + (reviewChanged ? "patched" : "ready") +
     " · routes=home_3,home_right_top,distribution-extra" +
+    " · FrontMatchLock="+(frontControlChanged?"patched":"ready")+
     " · mode=structural-transport-only"
   );
 } catch (error) {
