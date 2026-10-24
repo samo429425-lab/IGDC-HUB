@@ -363,7 +363,7 @@
           <div class="latest-overview-header"><strong>현재 리서치 상품 전체 위치 · 간편 관리</strong><span id="latestOverviewSummary" class="small">원장 확인 중</span></div>
           <div class="latest-overview-controls"><label>상태 <select id="latestOverviewFilter"><option value="all">모두 보기</option><option value="new">미등록</option><option value="undecided">미배치</option><option value="slot_candidate">섹션 배치</option><option value="hold">보류</option><option value="excluded">일반·영구 제외</option><option value="duplicate">중복 확인</option></select></label><label>상품 검색 <input type="search" id="latestOverviewSearch" placeholder="상품명·URL·섹션"></label><button type="button" class="ghost" id="latestOverviewReload">원장 새로고침</button></div>
           <div class="small">원본 기록은 유지하고 현재 저장 위치를 보여줍니다. 미배치 이동은 실제 후보 ID로 처리합니다. 목록 삭제는 재수집 가능, 영구 제외는 재수집 차단입니다. 공개 중인 상품은 먼저 매칭 해제가 필요합니다.</div>
-          <div class="latest-overview-bulk" role="group" aria-label="리서치 상품 선택 일괄관리"><label class="latest-overview-page-select"><input id="latestOverviewSelectPage" type="checkbox"> 이 페이지 전체 선택 (작업 가능한 상품)</label><strong id="latestOverviewSelectedCount">선택 0건</strong><button type="button" id="latestOverviewBulkMove" disabled>선택 상품 일괄 미배치 이동</button><button type="button" id="latestOverviewBulkDelete" class="secondary" disabled>선택 상품 일괄 목록 삭제</button><button type="button" id="latestOverviewClearSelection" class="ghost" disabled>선택 해제</button></div>
+          <div class="latest-overview-bulk" role="group" aria-label="리서치 상품 선택 일괄관리"><label class="latest-overview-page-select"><input id="latestOverviewSelectPage" type="checkbox"> 이 페이지 전체 선택 (작업 가능한 상품)</label><label class="latest-overview-page-select"><input id="latestOverviewSelectFiltered" type="checkbox"> 검색·필터 결과 전체 선택 (모든 페이지의 작업 가능 상품)</label><strong id="latestOverviewSelectedCount">선택 0건</strong><button type="button" id="latestOverviewBulkMove" disabled>선택 상품 일괄 미배치 이동</button><button type="button" id="latestOverviewBulkDelete" class="secondary" disabled>선택 상품 일괄 목록 삭제</button><button type="button" id="latestOverviewBulkPurge" class="ghost" disabled>선택 상품 일괄 영구 제외</button><button type="button" id="latestOverviewClearSelection" class="ghost" disabled>선택 해제</button></div>
           <div class="small">체크한 항목은 페이지를 바꿔도 유지됩니다. 미등록 상품은 개별 검증·이관, 중복 URL은 정확한 후보 ID 지정 후 일괄 작업할 수 있습니다. 상품 사진·이름을 클릭하면 <strong>현재 브라우저 탭</strong>에서 실제 판매처 상세페이지가 열리며, 브라우저 뒤로가기로 관리자 목록에 복귀할 수 있습니다. 판매처의 접속 제한은 IGDC가 해제할 수 없습니다.</div>
           <div id="latestOverviewOperationStatus" class="small" role="status" aria-live="polite"></div>
           <div id="latestOverviewRows" class="latest-overview-rows"><div class="small">상품 위치를 확인 중입니다.</div></div>
@@ -468,7 +468,7 @@
           </div>
         </details>
         <details id="productRejectQueue" class="supplier-control-queue">
-          <summary><span id="productRejectToggleLabel">연구 제외 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
+          <summary><span id="productRejectToggleLabel">연구 제외·영구 제외 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
           <div class="supplier-control-content">
             <div class="supplier-queue-toolbar">
               <label class="supplier-select-label"><input id="productRejectSelectAll" type="checkbox" data-product-exclusion-select-all="reject"> 목록 전체 선택(모든 페이지)</label>
@@ -477,6 +477,8 @@
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="reject" disabled>선택 영구 제외</button>
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="reject" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="reject" disabled>선택 목록에서만 제거</button>
+              <button type="button" class="danger" data-product-exclusion-bulk="hard_delete" data-product-exclusion-scope="reject" disabled>선택 상품 원장 완전 삭제(되돌릴 수 없음)</button>
+              <span class="small">일반 제외·영구 제외 항목을 후보 ID로 구분합니다. 원장 완전 삭제 시 연결된 관리 관계도 삭제하며, 기존 연구 차단 정책은 별도로 남을 수 있습니다.</span>
             </div>
             <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>썸네일·상품·원본 확인</th><th>업체</th><th>연구 제외 상태</th></tr></thead><tbody id="productRejectRows"></tbody></table></div>
           </div>
@@ -615,7 +617,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?v=20261024-admin-product-native-back-v4"></script>
+<script src="/assets/js/admin-commerce-country-control.js?v=20261024-excluded-hard-delete-v1"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

@@ -10,9 +10,9 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 const CommerceAutomation = require("./lib/commerce-country-automation.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.10.0-research-exclusion-ledger";
+const VERSION = "commerce-candidate-queue-control-v1.12.0-excluded-hard-delete-readback";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
-const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore"]);
+const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore","hard_delete"]);
 const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce-candidate-review-api"]);
 
 
@@ -30,7 +30,7 @@ function candidateIds(value){
   return out;
 }
 async function readCandidate(id){
-  const rows=await SlotStore.select("gslot_candidates","select=id,kind,status,source_ref,official_url,source_payload,owner_note&limit=1&id=eq."+encodeURIComponent(id));
+  const rows=await SlotStore.select("gslot_candidates","select=id,kind,status,source_ref,official_url,source_payload,owner_note,updated_at&limit=1&id=eq."+encodeURIComponent(id));
   return Array.isArray(rows)?rows[0]||null:null;
 }
 async function readAssignments(candidateId){
@@ -103,7 +103,7 @@ function requireExpectedBucket(row,expectedBucket,action){
     const error=new Error("candidate_state_mismatch: expected "+expected+", actual "+actual);error.code="candidate_state_mismatch";throw error;
   }
   if(expected==="hold" && !["restore","dismiss","remove_from_list","reject","purge"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
-  if(expected==="reject" && !["restore","dismiss","remove_from_list","purge"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
+  if(expected==="reject" && !["restore","dismiss","remove_from_list","purge","hard_delete"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
   return actual;
 }
 function requireMatchingMarketScope(row,body){
@@ -211,6 +211,83 @@ async function applyAction(actorId,row,action){
   return {id,action,status,assignmentCleanup,frontBuildDispatched:false};
 }
 
+
+/* Physical removal is an intentionally separate, explicitly confirmed action.
+   The ordinary dismiss/purge actions must continue preserving their audit rows.
+   Only an already-excluded private product can use this pathway. */
+const RELATED_CANDIDATE_TABLES=[
+  "gslot_slot_assignments","gslot_candidate_availability",
+  "gslot_candidate_revenue","gslot_candidate_evidence"
+];
+function hardDeleteGuard(row,assignments,expectedBucket,body){
+  const id=text(row&&row.id),payload=plain(row&&row.source_payload),front=plain(payload.frontPublication);
+  const current=lower(payload.slotDecision),bucket=candidateManagementBucket(row),statusValue=lower(row&&row.status),queueAction=lower(plain(payload.queueControl).action);
+  // Older excluded candidates may have only suppressed/rejected durable status
+  // rather than slotDecision; these must remain manageable by exact candidate ID.
+  const recordedExclusion=current?["reject","purge"].includes(current):
+    (["reject","purge"].includes(queueAction)||["rejected","suppressed"].includes(statusValue));
+  if(expectedBucket!=="reject"||bucket!=="reject"||!recordedExclusion){
+    const e=new Error("hard_delete_requires_confirmed_excluded_candidate:"+id);e.statusCode=409;throw e;
+  }
+  if(body.hardDeleteConfirmed!==true||text(body.confirmation)!=="PERMANENT_DELETE_EXCLUDED_CANDIDATES"){
+    const e=new Error("hard_delete_explicit_confirmation_required");e.statusCode=400;throw e;
+  }
+  const status=lower(front.status||front.publicationStatus);
+  const publicationPending=["unpublish_requested","unpublish_failed","unmatch_requested","unmatch_pending"].includes(status)
+    ||front.publicSnapshotConfirmed===true||front.pendingBuild===true||front.buildVerificationRequired===true;
+  const placement=plain(payload.approvedPlacement),selected=plain(payload.selectedPlacement);
+  const assigned=!!(placement.sectionKey||placement.section||selected.sectionKey||selected.section);
+  const publicFlag=payload.publicPublication===true||plain(payload.publication).public===true;
+  const relationPublished=array(assignments).some(r=>frontStateActive(r.publication_status)||lower(r.state)==="published");
+  if(publicationPending||frontStateActive(status)||publicFlag||relationPublished||assigned){
+    const e=new Error("hard_delete_blocked_front_or_approved_candidate:"+id);e.statusCode=409;throw e;
+  }
+  if(array(assignments).length>=100){const e=new Error("hard_delete_assignment_scan_limit:"+id);e.statusCode=409;throw e;}
+  if(!text(row.updated_at)){const e=new Error("hard_delete_missing_concurrency_version:"+id);e.statusCode=409;throw e;}
+}
+async function hardDeleteCandidate(actorId,row,body,expectedBucket){
+  const id=text(row.id),assignments=await readAssignments(id);
+  hardDeleteGuard(row,assignments,expectedBucket,body);
+  // Preflight every known FK relation, failing closed before any destructive call
+  // on an unavailable or unexpectedly oversized relation.
+  const before=[];
+  for(const table of RELATED_CANDIDATE_TABLES){
+    const rows=await SlotStore.select(table,"select=candidate_id&candidate_id=eq."+encodeURIComponent(id)+"&limit=1001");
+    if(!Array.isArray(rows)||rows.length>1000)throw new Error("hard_delete_relation_preflight_failed:"+table);
+    before.push({table,count:rows.length});
+  }
+  const fresh=await readCandidate(id);
+  if(!fresh||text(fresh.updated_at)!==text(row.updated_at)){
+    const e=new Error("hard_delete_candidate_changed_since_preflight:"+id);e.statusCode=409;throw e;
+  }
+  // REST operations are not a DB transaction: delete only this exact candidate's
+  // relations, verify each, then conditionally delete the master last.
+  const cleanup=[];
+  for(const record of before){
+    const query="candidate_id=eq."+encodeURIComponent(id);
+    const deleted=await SlotStore.remove(record.table,query);
+    if(!Array.isArray(deleted))throw new Error("hard_delete_relation_delete_unconfirmed:"+record.table);
+    const remaining=await SlotStore.select(record.table,"select=candidate_id&"+query+"&limit=1");
+    if(!Array.isArray(remaining)||remaining.length)throw new Error("hard_delete_relation_still_exists:"+record.table);
+    cleanup.push({table:record.table,deleted:deleted.length});
+  }
+  const latest=await readCandidate(id);
+  if(!latest||text(latest.updated_at)!==text(row.updated_at)){
+    const e=new Error("hard_delete_candidate_changed_after_relation_cleanup:"+id);e.statusCode=409;throw e;
+  }
+  const result=await SlotStore.remove("gslot_candidates","id=eq."+encodeURIComponent(id)+"&updated_at=eq."+encodeURIComponent(text(row.updated_at)));
+  if(!Array.isArray(result)||!result.some(x=>text(x&&x.id)===id))throw new Error("hard_delete_master_delete_unconfirmed:"+id);
+  const after=await readCandidate(id);
+  if(after)throw new Error("hard_delete_master_readback_still_exists:"+id);
+  for(const record of before){
+    const remaining=await SlotStore.select(record.table,"select=candidate_id&candidate_id=eq."+encodeURIComponent(id)+"&limit=1");
+    if(!Array.isArray(remaining)||remaining.length)throw new Error("hard_delete_final_relation_readback_failed:"+record.table);
+  }
+  return{id,action:"hard_delete",deleted:true,masterLedgerDeleted:true,ledgerVerified:true,relationCleanup:cleanup,
+    // Independent runtime research identity/suppression is reconciled separately.
+    researchPolicy:"existing_research_runtime_policy_not_automatically_reset",actor:!!actorId};
+}
+
 exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();
@@ -220,16 +297,34 @@ exports.handler=async function(event){
     if(!ACTIONS.has(action)){const error=new Error("지원하지 않는 상품 후보 대기열 작업입니다.");error.statusCode=400;throw error;}
     if(!ids.length){const error=new Error("처리할 상품 후보를 선택해 주세요.");error.statusCode=400;throw error;}
     const actor=await AdminSession.resolveUser(event);requireWriteRole(actor);const actorId=text(actor&&actor.sub);
+    if(action==="hard_delete"&&ids.length>100){const e=new Error("hard_delete_batch_limit_100");e.statusCode=400;throw e;}
     const processed=[],failures=[];
-    for(let offset=0;offset<ids.length;offset+=8){
-      const chunk=ids.slice(offset,offset+8);
+    for(let offset=0;offset<ids.length;offset+=(action==="hard_delete"?1:8)){
+      const chunk=ids.slice(offset,offset+(action==="hard_delete"?1:8));
       const settled=await Promise.allSettled(chunk.map(async(id)=>{
         const row=await readCandidate(id);
         if(!row)throw Object.assign(new Error("candidate_not_found"),{candidateId:id});
         if(lower(row&&row.kind)!=="product"||!MANAGEABLE_PRODUCT_SOURCES.has(text(row.source_ref)))throw Object.assign(new Error("unsupported_candidate_source"),{candidateId:id});
         requireMatchingMarketScope(row,body);
         requireExpectedBucket(row,expectedBucket,action);
+        if(action==="hard_delete")return await hardDeleteCandidate(actorId,row,body,expectedBucket);
         const applied=await applyAction(actorId,row,action);
+        // Persisted candidate state is the authority, not PATCH return or UI state.
+        // A removed candidate intentionally remains in gslot_candidates: this
+        // guarantees rediscovery and an auditable operator history.
+        const verified=await readCandidate(id);
+        const actual=lower(plain(verified&&verified.source_payload).slotDecision);
+        const expected=action==="restore"?"undecided":(["dismiss","remove_from_list"].includes(action)?"removed":action);
+        if(!verified||actual!==expected){
+          const error=new Error("candidate_write_readback_mismatch:"+id+":"+(actual||"missing")+":"+expected);
+          error.statusCode=409;throw error;
+        }
+        const remainingAssignments=await readAssignments(id);
+        if(remainingAssignments.length){
+          const error=new Error("candidate_assignment_cleanup_readback_mismatch:"+id);
+          error.statusCode=409;throw error;
+        }
+        applied.ledgerVerified=true;
         // Keep the latest research view aligned with every management decision,
         // not only permanent exclusion. Otherwise hold/reject/list-removal rows
         // can be reloaded from the research job and appear to "come back".
