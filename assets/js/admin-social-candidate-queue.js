@@ -20,9 +20,9 @@
     ["social-bilibili", "Bilibili / 哔哩哔哩", "bilibili"],
     ["social-douyin", "Douyin / 抖音", "douyin"],
   ];
-  var COLLECTOR_JOB_VERSION = 11,
-    FULL_RESEARCH_ROUNDS = 3,
-    SECTION_BATCHES_PER_ROUND = 2,
+  var COLLECTOR_JOB_VERSION = 13,
+    FULL_RESEARCH_ROUNDS = 12,
+    SECTION_BATCHES_PER_ROUND = 1,
     STANDARD_EMPTY_BATCH_LIMIT = 8,
     LOW_YIELD_EMPTY_BATCH_LIMIT = 8,
     COLLECTOR_CURSOR_KEY = "igdc.socialCollector.discoveryCursors.v2";
@@ -54,7 +54,8 @@
     previewHydrationBusy = false,
     previewHydratedIds = new Set(),
     firstContentListOpened = false,
-    emptySectionCollectionBusy = false;
+    emptySectionCollectionBusy = false,
+    activeParallelCollectionJob = null;
   var $ = function (id) {
       return document.getElementById(id);
     },
@@ -1717,7 +1718,7 @@
     }
   }
   function jobKey() {
-    return "igdc.socialCollector.job.v7.seven-section-multi-round";
+    return "igdc.socialCollector.job.v8.parallel-seven-waves";
   }
   function loadJob() {
     try {
@@ -2085,7 +2086,45 @@
     });
     return added;
   }
+  function renderParallelCollectionProgress() {
+    var job = activeParallelCollectionJob;
+    if (!job) return;
+    var sectionJobs = job.sectionJobs || {},
+      finished = Number(job.round || 0) * order.length + (job.completedInRound || []).length,
+      total = order.length * FULL_RESEARCH_ROUNDS,
+      overall = order.reduce(function (sum, key) {
+        return sum + Math.min(120, Math.max(0, Number(sectionJobs[key] && sectionJobs[key].sectionCount || 0)));
+      }, 0),
+      fresh = order.reduce(function (sum, key) {
+        return sum + Number(sectionJobs[key] && sectionJobs[key].verifiedInserted || 0);
+      }, 0),
+      updated = order.reduce(function (sum, key) {
+        return sum + Number(sectionJobs[key] && sectionJobs[key].updated || 0);
+      }, 0);
+    var details = order.map(function (key) {
+      var row = sectionJobs[key] || {}, flag = (job.completedInRound || []).includes(key) ? "완료" : "진행/대기";
+      return label(key) + " " + Number(row.sectionCount || 0) + "/120 (신규 " +
+        Number(row.verifiedInserted || 0) + ", " + flag + ")";
+    });
+    if ($("collectorProgress")) $("collectorProgress").classList.remove("hidden");
+    if ($("collectorProgressText")) $("collectorProgressText").textContent =
+      "병렬 " + (Math.min(FULL_RESEARCH_ROUNDS, Number(job.round || 0) + 1)) +
+      "/" + FULL_RESEARCH_ROUNDS + "차 · 완료 " + finished + "/" + total +
+      " · 후보 " + overall + "/" + (order.length * 120) + " · " + details.join(" | ");
+    if ($("collectorRejectText")) $("collectorRejectText").textContent =
+      "DB 검증 신규 " + fresh + "건 · 기존 갱신 " + updated + "건 · 실패 " +
+      (job.sectionFailures || []).length + "건 · SNS별 검색 커서 독립 유지";
+    if ($("collectorProgressBar")) $("collectorProgressBar").style.width =
+      Math.min(100, Math.round(finished * 100 / Math.max(1, total))) + "%";
+    if ($("collectorState")) $("collectorState").textContent =
+      "7개 SNS 동시 수집 " + (Number(job.round || 0) + 1) + "차" +
+      (stopRequested ? " · 현재 진행 중인 묶음 종료 후 일시정지" : " · 각 10개 내외 검색 중");
+  }
   function progress(j) {
+    if (j && j.parallelManaged) {
+      renderParallelCollectionProgress();
+      return;
+    }
     var pct = Math.min(
       100,
       Math.round(
@@ -2127,6 +2166,8 @@
       j.saved +
       "건 · 제외·보존 " +
       j.skipped +
+      "건 · DB 신규 " + Number(j.verifiedInserted || 0) +
+      "건 · 기존 갱신 " + Number(j.updated || 0) +
       "건 · 연속 신규없음 " +
       j.emptyBatches +
       "회" +
@@ -2141,6 +2182,14 @@
           : j.batchSize + "개 단위 조사 중");
   }
   async function collectOne(section, dryRun, j) {
+    // When a SNS has zero actual contents, validate the stable baseline query
+    // on its first real-write pass. A rotating local cursor can otherwise
+    // skip a proven Bilibili/Douyin content query for weeks. Subsequent rounds
+    // continue the original rotating cursor (never seed fake candidates).
+    var baselineRescue = !dryRun && Number(j.sectionCount || 0) === 0 &&
+      Number(j.batch || 0) === 1 && Number(j.round || 0) === 0 &&
+      /^(social-snapchat|social-bilibili|social-douyin)$/.test(section);
+    var requestedCursor = baselineRescue ? 0 : (j.queryCursor || 0);
     var d = await post(LIVE, {
       action: "collect_live",
       dryRun: !!dryRun,
@@ -2157,7 +2206,7 @@
       // advances every batch, so breadth is accumulated across bounded calls
       // instead of multiplying external-provider work inside one request.
       queryPasses: 1,
-      queryCursor: j.queryCursor || 0,
+      queryCursor: requestedCursor,
       countryCode: j.countryCode || "",
       regionId: j.regionId || "",
       scopeMode: j.scopeMode || (j.countryCode ? "country" : (j.regionId ? "region" : "auto")),
@@ -2194,11 +2243,10 @@
         (live.rejectedByReason && Object.keys(live.rejectedByReason)[0]) ||
         "",
     );
-    j.queryCursor = Number(
-      live.nextQueryCursor == null
-        ? (j.queryCursor || 0) + 1
-        : live.nextQueryCursor,
-    );
+    // A baseline rescue must not roll back the persistent research cursor.
+    j.queryCursor = baselineRescue
+      ? Math.max(Number(j.queryCursor || 0) + 1, Number(live.nextQueryCursor || 1))
+      : Number(live.nextQueryCursor == null ? requestedCursor + 1 : live.nextQueryCursor);
     if (!dryRun) saveDiscoveryCursor(section, j.queryCursor);
     // The server may return 200 while a downstream gateway reports an error.
     // Do not count that as a successful batch or silently progress the job.
@@ -2231,7 +2279,9 @@
         .filter(Boolean),
     );
     j.section = section;
-    j.sectionCount = sectionCount(section);
+    j.sectionCount = j.parallelManaged
+      ? Math.max(Number(j.sectionCount || 0), sectionCount(section))
+      : sectionCount(section);
     j.qualitySweepBatches = Number(j.qualitySweepBatches || 0);
     j.registrySweepBatches = Number(j.registrySweepBatches || 0);
     j.registryCursor = Number(j.registryCursor || 0);
@@ -2253,13 +2303,19 @@
       progress(j);
       var d = await collectOne(section, dryRun, j);
       maxEmpty = sectionEmptyBatchLimit(section, j);
-      var newly = newIds(d, known);
+      var previewNew = newIds(d, known);
+      // Prefer verified new rows, not accepted records or existing-row upserts.
+      var newly = !dryRun && d.verifiedInsertedLatestContent != null
+        ? Math.max(0, Number(d.verifiedInsertedLatestContent) || 0)
+        : (!dryRun && d.insertedLatestContent != null
+          ? Math.max(0, Number(d.insertedLatestContent) || 0)
+          : previewNew);
       j.newlyFound += newly;
       j.sectionCount += newly;
       if (newly) j.emptyBatches = 0;
       else j.emptyBatches += 1;
       progress(j);
-      if (!dryRun) saveJob(j);
+      if (!dryRun && !j.parallelManaged) saveJob(j);
       if (dryRun) break;
       if (!stopRequested && j.sectionCount < j.target) await wait(650);
     }
@@ -2294,20 +2350,25 @@
         j.qualitySweepBatches += 1;
         progress(j);
         var q = await collectOne(section, false, j),
-          qualityNew = newIds(q, known);
+          qualityPreview = newIds(q, known),
+          qualityNew = q.verifiedInsertedLatestContent != null
+            ? Math.max(0, Number(q.verifiedInsertedLatestContent) || 0)
+            : (q.insertedLatestContent != null
+              ? Math.max(0, Number(q.insertedLatestContent) || 0)
+              : qualityPreview);
         maxEmpty = sectionEmptyBatchLimit(section, j);
         j.newlyFound += qualityNew;
         j.sectionCount += qualityNew;
         if (qualityNew) j.qualityEmptyBatches = 0;
         else j.qualityEmptyBatches += 1;
         progress(j);
-        saveJob(j);
+        if (!j.parallelManaged) saveJob(j);
         if (sweep < j.qualitySweepTarget - 1 && !stopRequested)
           await wait(650);
       }
       j.qualitySweepDone = true;
       j.qualitySweepActive = false;
-      saveJob(j);
+      if (!j.parallelManaged) saveJob(j);
     }
     return j.sectionCount;
   }
@@ -2345,6 +2406,9 @@
       direct: 0,
       accepted: 0,
       saved: 0,
+      inserted: 0,
+      updated: 0,
+      verifiedInserted: 0,
       skipped: 0,
       newlyFound: 0,
       emptyBatches: 0,
@@ -2431,139 +2495,180 @@
   }
   async function collectAll(skipConfirm) {
     if (!skipConfirm && !confirm(
-      "Social 7개 섹션을 " + FULL_RESEARCH_ROUNDS + "차례 순환하면서 각 섹션을 " +
-      SECTION_BATCHES_PER_ROUND + "묶음씩 검색합니다. 기존 후보는 삭제하지 않고, " +
-      "각 섹션의 미달 수량을 보충하며 실패한 SNS는 기록한 후 다음 SNS로 진행합니다. 계속할까요?"
+      "Social 7개 SNS를 동시에 검색합니다. 매 차례 각 SNS에서 약 10개씩 독립적으로 " +
+      "수집·저장하고 결과를 확인한 뒤 다음 차례를 시작합니다 (최대 " + FULL_RESEARCH_ROUNDS +
+      "차, 섹션당 후보 120개 목표). 외부 API 제한이 발생할 수 있으며 " +
+      "기존 후보·관리자 보류/차단 기록은 보존합니다. 계속할까요?"
     )) return false;
     hide();
     stopRequested = false;
     liveReports = [];
     lockCollection(true);
-    var j = loadJob();
-    var resume = !!(j && j.paused && j.runMode === "all" &&
-      Number(j.schemaVersion) === COLLECTOR_JOB_VERSION &&
-      Number(j.round) >= 0 && Number(j.round) < FULL_RESEARCH_ROUNDS &&
-      Number(j.index) >= 0 && Number(j.index) < order.length &&
-      order.indexOf(text(j.section)) >= 0);
-    if (!resume) {
-      j = newJob(order[0], 0, order.length * FULL_RESEARCH_ROUNDS, "all");
-      j.round = 0;
-    } else {
-      j.paused = false;
-    }
-    j.total = order.length * FULL_RESEARCH_ROUNDS;
-    j.totalRounds = FULL_RESEARCH_ROUNDS;
+    var saved = loadJob();
+    var resume = !!(saved && saved.paused && saved.runMode === "all" &&
+      Number(saved.schemaVersion) === COLLECTOR_JOB_VERSION &&
+      Array.isArray(saved.completedInRound) && saved.sectionJobs &&
+      Number(saved.round) >= 0 && Number(saved.round) < FULL_RESEARCH_ROUNDS);
+    var j = resume ? saved : {
+      schemaVersion: COLLECTOR_JOB_VERSION,
+      runMode: "all",
+      section: order[0],
+      index: 0,
+      round: 0,
+      done: 0,
+      total: order.length * FULL_RESEARCH_ROUNDS,
+      totalRounds: FULL_RESEARCH_ROUNDS,
+      completedInRound: [],
+      sectionJobs: {},
+      sectionFailures: [],
+      paused: false,
+    };
+    j.completedInRound = Array.isArray(j.completedInRound) ? j.completedInRound : [];
     j.sectionFailures = Array.isArray(j.sectionFailures) ? j.sectionFailures : [];
-    var failed = false;
-    var completedWithErrors = false;
-    try {
-      for (; j.round < FULL_RESEARCH_ROUNDS && !stopRequested; j.round++) {
-        for (; j.index < order.length && !stopRequested; j.index++) {
-          var sectionKey = order[j.index];
-          var continuing = resume && j.section === sectionKey;
-          j.section = sectionKey;
-          if (!continuing) {
-            j.target = 120;
-            j.batchSize = Math.max(8, Math.min(12, Number($("collectorBatchSize").value) || 10));
-            j.countryCode = selectedCountry();
-            j.regionId = text($("collectorRegion").value);
-            j.scopeMode = scopeMode();
-            j.languages = text($("collectorLanguages").value);
-            j.sectionCount = sectionCount(sectionKey);
-            j.batch = 0;
-            j.queryCursor = loadDiscoveryCursor(sectionKey);
-            j.discoveryCatalogSize = 12;
-            j.emptyBatches = 0;
-            j.newlyFound = 0;
-            j.qualitySweepBatches = 0;
-            j.qualityEmptyBatches = 0;
-            j.qualitySweepTarget = 2;
-            j.qualitySweepDone = false;
-            j.qualitySweepActive = false;
-            j.lastReason = "";
-          }
-          $("collectorState").textContent =
-            (j.round + 1) + "/" + FULL_RESEARCH_ROUNDS + "차 순환 · " +
-            (j.index + 1) + "/" + order.length + " · " + label(sectionKey) + " 검색 중";
-          try {
-            // Each round advances a different section's saved query cursor. An
-            // empty result in one round never prevents subsequent passes.
-            await collectSection(sectionKey, false, j, SECTION_BATCHES_PER_ROUND,
-              j.round === FULL_RESEARCH_ROUNDS - 1);
-          } catch (sectionError) {
-            if (fatalCollectionError(sectionError)) throw sectionError;
-            completedWithErrors = true;
-            j.sectionFailures.push({
-              round: j.round + 1,
-              sectionKey: sectionKey,
-              platform: label(sectionKey),
-              message: text(sectionError && sectionError.message) || "section_collection_failed",
-              status: Number(sectionError && sectionError.status) || null,
-              at: new Date().toISOString()
-            });
-            // Avoid retrying the same failed query in the next round.
-            j.queryCursor = Number(j.queryCursor || 0) + 1;
-            saveDiscoveryCursor(sectionKey, j.queryCursor);
-            j.lastReason = "section_error_continue_next_round";
-          }
-          j.done = j.round * order.length + j.index + 1;
-          resume = false;
-          saveJob(j);
-          if (stopRequested) break;
-          await wait(450);
-        }
-        if (stopRequested) break;
-        if (!stopRequested) {
-          j.index = 0;
-          // Re-read actual DB rows between passes so the next round sees all
-          // successful inserts/upserts, not only the limited itemsPreview.
-          try { await refresh(); } catch (_refreshError) {}
-          saveJob(j);
-        }
+    j.sectionJobs = j.sectionJobs || {};
+    order.forEach(function (key, i) {
+      if (!j.sectionJobs[key]) {
+        j.sectionJobs[key] = newJob(key, i, j.total, "all");
+        j.sectionJobs[key].queryCursor = loadDiscoveryCursor(key);
       }
-      j.paused = stopRequested || j.round < FULL_RESEARCH_ROUNDS;
-      if (j.paused) {
-        // A completed section must resume at the next one, not repeat the
-        // same query batch. Persist this exact section/round cursor.
-        if (j.index >= order.length) j.index = 0;
-        j.section = order[j.index] || order[0];
+      j.sectionJobs[key].parallelManaged = true;
+      j.sectionJobs[key].target = 120;
+      j.sectionJobs[key].batchSize = Math.max(8, Math.min(12, Number($("collectorBatchSize").value) || 10));
+      j.sectionJobs[key].countryCode = selectedCountry();
+      j.sectionJobs[key].scopeMode = scopeMode();
+      j.sectionJobs[key].regionId = text($("collectorRegion").value);
+      j.sectionJobs[key].languages = text($("collectorLanguages").value);
+    });
+    activeParallelCollectionJob = j;
+    var fatalError = null;
+    try {
+      saveJob(j);
+      renderParallelCollectionProgress();
+      // Concurrency is bounded to seven: exactly one request per SNS in each
+      // wave. No two requests for the same SNS can race their DB upserts or
+      // saved query cursor. All workers settle before the next wave starts.
+      for (; j.round < FULL_RESEARCH_ROUNDS && !stopRequested; ) {
+        var roundNumber = j.round;
+        var pending = order.filter(function (key) {
+          return !j.completedInRound.includes(key);
+        });
+        var results = await Promise.allSettled(pending.map(async function (sectionKey) {
+          var sectionJob = j.sectionJobs[sectionKey];
+          sectionJob.round = roundNumber;
+          // Reset the per-wave empty guard. Otherwise eight empty waves can
+          // silently stop researching a low-yield SNS in subsequent waves.
+          sectionJob.emptyBatches = 0;
+          sectionJob.qualitySweepActive = false;
+          // Fresh DB totals are read at wave boundaries, never shared between
+          // parallel requests. Each section owns its cursor and counters.
+          sectionJob.sectionCount = Math.max(sectionCount(sectionKey), Number(sectionJob.sectionCount || 0));
+          if (sectionJob.sectionCount >= sectionJob.target) return { sectionKey: sectionKey, alreadyFull: true };
+          await collectSection(sectionKey, false, sectionJob, 1, false);
+          return { sectionKey: sectionKey, alreadyFull: false };
+        }));
+        results.forEach(function (result, index) {
+          var key = pending[index];
+          if (result.status === "rejected") {
+            var err = result.reason;
+            var failure = {
+              round: roundNumber + 1,
+              sectionKey: key,
+              platform: label(key),
+              message: text(err && err.message) || "section_collection_failed",
+              status: Number(err && err.status) || null,
+              at: new Date().toISOString(),
+            };
+            j.sectionFailures.push(failure);
+            if (fatalCollectionError(err)) {
+              fatalError = fatalError || err;
+              return; // Retry only this failed section on resume.
+            }
+            // Keep failed-platform retries on a later, different cursor.
+            j.sectionJobs[key].queryCursor = Math.max(
+              Number(j.sectionJobs[key].queryCursor || 0), loadDiscoveryCursor(key) + 1
+            );
+            saveDiscoveryCursor(key, j.sectionJobs[key].queryCursor);
+          }
+          if (!j.completedInRound.includes(key)) j.completedInRound.push(key);
+        });
+        j.done = roundNumber * order.length + j.completedInRound.length;
+        renderParallelCollectionProgress();
         saveJob(j);
-        show("7개 SNS 반복 수집을 일시정지했습니다. 다시 누르면 현재 차례부터 재개합니다.", "ok");
+        if (stopRequested || fatalError) break;
+        // Refresh counts only after all seven writes settle. Never let a
+        // concurrent refresh overwrite another section's progress.
+        try { await refresh(); } catch (_refreshError) {}
+        order.forEach(function (key) {
+          var sj = j.sectionJobs[key];
+          sj.sectionCount = Math.max(Number(sj.sectionCount || 0), sectionCount(key));
+        });
+        j.round += 1;
+        j.index = 0;
+        j.completedInRound = [];
+        saveJob(j);
+        renderParallelCollectionProgress();
+        if (j.round < FULL_RESEARCH_ROUNDS && !stopRequested) await wait(900);
+      }
+      j.paused = !!(stopRequested || fatalError || j.round < FULL_RESEARCH_ROUNDS);
+      if (j.paused) {
+        saveJob(j);
+        show(fatalError
+          ? "인증 오류로 병렬 검색을 중지했습니다. 다른 SNS 결과는 보존했으며 재실행 시 미완료 섹션부터 이어갑니다. " + text(fatalError.message)
+          : "7개 SNS 동시 검색을 일시정지했습니다. 다시 누르면 완료되지 않은 단계부터 재개합니다.",
+          fatalError ? "warn" : "ok");
       } else {
         clearJob();
         waitingViewMode = "new";
         openDetailQueue = "content";
         openDetailSection = order[0] || "";
-        await refresh();
-        diagnostic({
-          reportType: "igdc-social-seven-section-multi-round-report",
-          generatedAt: new Date().toISOString(),
-          summary: j,
-          totalRounds: FULL_RESEARCH_ROUNDS,
-          sectionFailures: j.sectionFailures,
-          sections: liveReports.map(function (x) { return x.liveCollection || x; })
+        try { await refresh(); } catch (_refreshError) {}
+        var perSection = order.map(function (key) {
+          var sj = j.sectionJobs[key];
+          return {
+            sectionKey: key,
+            platform: label(key),
+            candidateCount: sj.sectionCount,
+            searched: sj.searched,
+            accepted: sj.accepted,
+            inserted: sj.inserted,
+            verifiedInserted: sj.verifiedInserted,
+            updated: sj.updated,
+            queryCursor: sj.queryCursor,
+            batches: sj.batch,
+          };
         });
-        show("7개 SNS " + FULL_RESEARCH_ROUNDS + "차 순환 완료: 검색 " +
-          j.searched + "건, 실제 콘텐츠 후보 " + j.direct +
-          "건, 신규 저장 " + Number(j.verifiedInserted || 0) +
-          "건, 기존 갱신 " + Number(j.updated || 0) + "건, 저장 응답 " + j.saved + "건" +
-          (j.sectionFailures.length ? ". 오류 " + j.sectionFailures.length +
-           "건은 기록하고 다음 섹션으로 계속 진행했습니다." : "."),
-          completedWithErrors || j.sectionFailures.length ? "warn" : "ok");
+        diagnostic({
+          ok: true,
+          reportType: "igdc-social-seven-section-parallel-waves-report",
+          generatedAt: new Date().toISOString(),
+          totalRounds: FULL_RESEARCH_ROUNDS,
+          parallelSections: 7,
+          completedStages: j.done,
+          requestCount: perSection.reduce(function (sum, item) { return sum + Number(item.batches || 0); }, 0),
+          failures: j.sectionFailures,
+          sectionSummary: perSection,
+          collectionBatches: liveReports.map(function (x) { return x.liveCollection || x; }),
+        });
+        show("7개 SNS 동시 수집 " + FULL_RESEARCH_ROUNDS + "차 완료. 실제 신규 저장 " +
+          perSection.reduce(function (sum, item) { return sum + Number(item.verifiedInserted || 0); }, 0) +
+          "건, 기존 갱신 " +
+          perSection.reduce(function (sum, item) { return sum + Number(item.updated || 0); }, 0) +
+          "건. SNS별 상세 결과는 수집 진행 JSON에서 확인할 수 있습니다." +
+          (j.sectionFailures.length ? " 오류 " + j.sectionFailures.length + "건은 별도 기록했습니다." : ""),
+          j.sectionFailures.length ? "warn" : "ok");
       }
     } catch (error) {
-      failed = true;
+      fatalError = error;
       j.paused = true;
-      j.section = order[j.index] || order[0];
       saveJob(j);
-      $("collectorState").textContent = collectionErrorState(error);
-      show((error.message || "수집 오류") + " · 인증 또는 공통 경로 오류로 작업 위치를 보존했습니다.", "warn");
+      show("병렬 수집 중단: " + (error.message || "오류") + " · 현재 완료 상태를 보존했습니다.", "warn");
     } finally {
+      activeParallelCollectionJob = null;
       lockCollection(false);
       stopRequested = false;
-      if (!failed) $("collectorState").textContent = j.paused ? "일시정지됨" : "수집 대기";
+      $("collectorState").textContent = j.paused ? "일시정지됨" : "수집 대기";
     }
-    return !failed && !j.paused;
+    return !j.paused && !fatalError;
   }
   function legacyFrontUnpublishHoldIds(sectionKey) {
     return rows
@@ -2698,8 +2803,14 @@
           // Try up to two distinct query/provider cursors when the static
           // snapshot has no usable post URLs. Keep attempts bounded.
           var attempts = [];
+          var baselineSessionKey = "igdc.social.importBaseline." + activeKey;
+          var baselineSeen = false;
+          try { baselineSeen = window.sessionStorage.getItem(baselineSessionKey) === "1"; } catch (_storageError) {}
+          var initialImportBaseline = before === 0 && !baselineSeen &&
+            /^(social-snapchat|social-bilibili|social-douyin)$/.test(activeKey);
           for (var attempt = 0; attempt < 2; attempt += 1) {
-            var cursor = loadDiscoveryCursor(activeKey);
+            var storedCursor = loadDiscoveryCursor(activeKey);
+            var cursor = initialImportBaseline && attempt === 0 ? 0 : storedCursor;
             var one = await post(LIVE, {
               action: "collect_live", dryRun: false, contentFirst: true,
               registryOnly: false, registrySweepDone: true,
@@ -2711,7 +2822,13 @@
             });
             attempts.push(one);
             var nextCursor = one.liveCollection && one.liveCollection.nextQueryCursor;
-            saveDiscoveryCursor(activeKey, Number.isFinite(Number(nextCursor)) ? Number(nextCursor) : cursor + 1);
+            var advanced = Number.isFinite(Number(nextCursor)) ? Number(nextCursor) : cursor + 1;
+            saveDiscoveryCursor(activeKey, initialImportBaseline && attempt === 0
+              ? Math.max(storedCursor + 1, advanced)
+              : advanced);
+            if (initialImportBaseline && attempt === 0) {
+              try { window.sessionStorage.setItem(baselineSessionKey, "1"); } catch (_storageError) {}
+            }
             if (Number(one.saved || 0) || Number(one.accepted || 0)) break;
           }
           direct = {
@@ -4336,7 +4453,7 @@
     $("collectorStopBtn").onclick = function () {
       stopRequested = true;
       this.disabled = true;
-      $("collectorState").textContent = "현재 섹션 완료 후 일시정지";
+      $("collectorState").textContent = "진행 중인 7개 SNS 검색 묶음 완료 후 일시정지";
     };
     if ($("rotationBtn")) $("rotationBtn").onclick = rotate;
     if ($("publishPreviewBtn")) $("publishPreviewBtn").onclick = publish;

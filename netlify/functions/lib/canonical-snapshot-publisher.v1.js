@@ -557,6 +557,28 @@ function validateCandidate(raw, index, context) {
     }
   }
 
+  // The post-write verifier requires a fresh, country+region-specific market
+  // evidence envelope on every IP-owned product.  Administrator Front Match
+  // may skip re-ranking a manually approved candidate, but it cannot waive
+  // the public snapshot's market-integrity contract.  Previously that waiver
+  // removed the IP policy errors, letting expired records be written before
+  // verifyPublished rejected the *entire* Netlify build.  Reject only the bad
+  // candidate here, during the pre-publication audit, and allow valid ones on
+  // the same release to proceed.  Never synthesize/refresh verification dates.
+  if (ipSlot.scoped) {
+    const publishedMarketCheck = MarketSaleScope.validateMarketScope(item.marketScope, country, region, {
+      maxVerificationAgeDays: Number(context.ipPolicy.policy && context.ipPolicy.policy.validation &&
+        context.ipPolicy.policy.validation.maxAvailabilityVerificationAgeDays || 30),
+      requireFresh: true
+    });
+    if (!publishedMarketCheck.ok) {
+      reasons.push("PUBLISHED_MARKET_SCOPE_EVIDENCE_INVALID:" + publishedMarketCheck.reasons.join(","));
+    }
+    if (!ipSlot.mapping || ipSlot.mapping.marketEvidenceDigest !== publishedMarketCheck.evidenceDigest) {
+      reasons.push("PUBLISHED_MARKET_EVIDENCE_DIGEST_MISMATCH");
+    }
+  }
+
   const fingerprint = sha256({
     candidateId, destination, page, section, country, region,
     source: { name: source.name, url: source.url },

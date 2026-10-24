@@ -1,0 +1,20 @@
+# IGDC / MARU public organic search surfaces
+# The same private-path rules apply to Google, Naver Yeti and Bingbot.
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /admin.html
+Disallow: /admin-deploy-check.html
+Disallow: /callback.html
+Disallow: /commerce-admin-ledger-rescue.html
+Disallow: /commerce-admin-product-url-rescue.html
+Disallow: /commerce-candidate-pipeline.html
+Disallow: /commerce-country-control.html
+Disallow: /commerce-candidate-queue.html
+Disallow: /media-candidate-queue.html
+Disallow: /social-candidate-queue.html
+Disallow: /donation-candidate-queue.html
+Disallow: /product-go-live-audit.html
+Disallow: /sw-nuke.html
+
+Sitemap: https://igdcglobal.com/sitemap.xml

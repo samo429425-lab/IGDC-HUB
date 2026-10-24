@@ -1,0 +1,587 @@
+{
+  "engine": "IGDC_MARU_ORGANIC_SEARCH_AMPLIFIER",
+  "version": "1.1.0",
+  "baseUrl": "https://igdcglobal.com",
+  "mode": "organic-only",
+  "principles": {
+    "paidAds": false,
+    "fakeTraffic": false,
+    "autoClick": false,
+    "keywordStuffing": false,
+    "sanmaruCoreMutation": false,
+    "searchBankCoreMutation": false,
+    "readOnlySanmaruAdapter": true
+  },
+  "brands": [
+    {
+      "id": "maru-media-player",
+      "name": "MARU Media Player",
+      "aliases": [
+        "MARU Media",
+        "MARU Player",
+        "마루 미디어 플레이어",
+        "마루미디어플레이어",
+        "마루 미디어"
+      ],
+      "path": "/maru-download.html",
+      "vertical": "media_player",
+      "keywords": [
+        "media player",
+        "video player",
+        "all format media player",
+        "subtitle player",
+        "AI subtitle player",
+        "subtitle translation",
+        "offline video player",
+        "미디어 플레이어",
+        "동영상 플레이어",
+        "영상 플레이어",
+        "자막 플레이어",
+        "AI 자막",
+        "자막 번역",
+        "MKV player",
+        "MP4 player"
+      ]
+    },
+    {
+      "id": "igdc-global-hub",
+      "name": "IGDC Global Hub",
+      "aliases": [
+        "IGDC",
+        "IGDC Global",
+        "IGDC Platform",
+        "IGDC 플랫폼",
+        "IGDC 글로벌 허브"
+      ],
+      "path": "/home.html",
+      "vertical": "platform",
+      "keywords": [
+        "global platform",
+        "global hub",
+        "global media platform",
+        "global distribution platform",
+        "글로벌 플랫폼",
+        "글로벌 허브",
+        "글로벌 유통",
+        "글로벌 미디어"
+      ]
+    },
+    {
+      "id": "maru-platform",
+      "name": "MARU Platform",
+      "aliases": [
+        "MARU",
+        "MARU Global",
+        "마루 플랫폼",
+        "마루"
+      ],
+      "path": "/home.html",
+      "vertical": "platform",
+      "keywords": [
+        "MARU platform",
+        "media platform",
+        "global platform",
+        "마루 플랫폼",
+        "미디어 플랫폼"
+      ]
+    }
+  ],
+  "routes": {
+    "home": {
+      "file": "home.html",
+      "title": "IGDC Global Hub | Global Platform & MARU Ecosystem",
+      "description": "IGDC Global Hub connects global media, distribution, social, travel and MARU platform services.",
+      "keywords": [
+        "IGDC",
+        "IGDC Global",
+        "IGDC Global Hub",
+        "IGDC platform",
+        "MARU platform",
+        "global platform"
+      ]
+    },
+    "distributionhub": {
+      "file": "distributionhub.html",
+      "title": "IGDC Distribution Hub | Global Distribution Platform",
+      "description": "Global distribution and product discovery hub from IGDC Global.",
+      "keywords": [
+        "global distribution",
+        "distribution platform",
+        "global distribution platform",
+        "유통 플랫폼",
+        "글로벌 유통",
+        "IGDC Distribution Hub"
+      ]
+    },
+    "mediahub": {
+      "file": "mediahub.html",
+      "title": "IGDC Media Hub | Global Media & MARU",
+      "description": "Global media discovery hub connected with the MARU media ecosystem.",
+      "keywords": [
+        "media hub",
+        "global media platform",
+        "media platform",
+        "미디어 허브",
+        "글로벌 미디어",
+        "MARU Media"
+      ]
+    },
+    "networkhub": {
+      "file": "networkhub.html",
+      "title": "IGDC Network Hub | Global Market & Network",
+      "description": "IGDC global market and network hub for products, services and discovery.",
+      "keywords": [
+        "global market hub",
+        "network hub",
+        "global network platform",
+        "글로벌 마켓",
+        "IGDC Network Hub"
+      ]
+    },
+    "socialnetwork": {
+      "file": "socialnetwork.html",
+      "title": "IGDC Social Network | Global Social Discovery",
+      "description": "Global social content discovery and network hub from IGDC Global.",
+      "keywords": [
+        "social network hub",
+        "social discovery",
+        "global social platform",
+        "소셜 네트워크",
+        "IGDC Social Network"
+      ]
+    },
+    "tour": {
+      "file": "tour.html",
+      "title": "IGDC Tour | Global Travel, Tourism & Accommodation",
+      "description": "Global travel, tourism and accommodation discovery through IGDC Global.",
+      "keywords": [
+        "global travel",
+        "tourism platform",
+        "travel hub",
+        "관광 플랫폼",
+        "여행 플랫폼",
+        "IGDC Tour"
+      ]
+    },
+    "donation": {
+      "file": "donation.html",
+      "title": "IGDC Global Donation & Support",
+      "description": "Donation and support information for the IGDC Global ecosystem.",
+      "keywords": [
+        "IGDC donation",
+        "global support",
+        "후원",
+        "기부"
+      ]
+    }
+  },
+  "locales": {
+    "ko": {
+      "dir": "",
+      "suffix": "",
+      "label": "Korean"
+    },
+    "ar": {
+      "dir": "ar",
+      "suffix": "_ar",
+      "label": "Arabic"
+    },
+    "bn": {
+      "dir": "bn",
+      "suffix": "_bn",
+      "label": "Bengali"
+    },
+    "de": {
+      "dir": "de",
+      "suffix": "_de",
+      "label": "German"
+    },
+    "en": {
+      "dir": "en",
+      "suffix": "_en",
+      "label": "English"
+    },
+    "es": {
+      "dir": "es",
+      "suffix": "_es",
+      "label": "Spanish"
+    },
+    "fa": {
+      "dir": "fa",
+      "suffix": "_fa",
+      "label": "Persian"
+    },
+    "fr": {
+      "dir": "fr",
+      "suffix": "_fr",
+      "label": "French"
+    },
+    "hi": {
+      "dir": "hi",
+      "suffix": "_hi",
+      "label": "Hindi"
+    },
+    "hu": {
+      "dir": "hu",
+      "suffix": "_hu",
+      "label": "Hungarian"
+    },
+    "id": {
+      "dir": "id",
+      "suffix": "_id",
+      "label": "Indonesian"
+    },
+    "it": {
+      "dir": "it",
+      "suffix": "_it",
+      "label": "Italian"
+    },
+    "ja": {
+      "dir": "ja",
+      "suffix": "_ja",
+      "label": "Japanese"
+    },
+    "ms": {
+      "dir": "ms",
+      "suffix": "_ms",
+      "label": "Malay"
+    },
+    "nl": {
+      "dir": "nl",
+      "suffix": "_nl",
+      "label": "Dutch"
+    },
+    "pl": {
+      "dir": "pl",
+      "suffix": "_pl",
+      "label": "Polish"
+    },
+    "pt": {
+      "dir": "pt",
+      "suffix": "_pt",
+      "label": "Portuguese"
+    },
+    "ru": {
+      "dir": "ru",
+      "suffix": "_ru",
+      "label": "Russian"
+    },
+    "sv": {
+      "dir": "sv",
+      "suffix": "_sv",
+      "label": "Swedish"
+    },
+    "sw": {
+      "dir": "sw",
+      "suffix": "_sw",
+      "label": "Swahili"
+    },
+    "ta": {
+      "dir": "ta",
+      "suffix": "_ta",
+      "label": "Tamil"
+    },
+    "th": {
+      "dir": "th",
+      "suffix": "_th",
+      "label": "Thai"
+    },
+    "tl": {
+      "dir": "tl",
+      "suffix": "_tl",
+      "label": "Filipino"
+    },
+    "tr": {
+      "dir": "tr",
+      "suffix": "_tr",
+      "label": "Turkish"
+    },
+    "uk": {
+      "dir": "uk",
+      "suffix": "_uk",
+      "label": "Ukrainian"
+    },
+    "ur": {
+      "dir": "ur",
+      "suffix": "_ur",
+      "label": "Urdu"
+    },
+    "uz": {
+      "dir": "uz",
+      "suffix": "_uz",
+      "label": "Uzbek"
+    },
+    "vi": {
+      "dir": "vi",
+      "suffix": "_vi",
+      "label": "Vietnamese"
+    },
+    "zh": {
+      "dir": "zh",
+      "suffix": "_zh",
+      "label": "Chinese Simplified"
+    },
+    "zht": {
+      "dir": "zht",
+      "suffix": "_zht",
+      "label": "Chinese Traditional"
+    }
+  },
+  "extraPages": [
+    "/index.html",
+    "/maru-download.html",
+    "/privacy-policy.html",
+    "/support.html",
+    "/maru-windows-privacy.html",
+    "/maru-windows-refund.html",
+    "/maru-windows-terms.html",
+    "/organic-search/index.html"
+  ],
+  "localizedTerms": {
+    "ko": [
+      "미디어 플레이어",
+      "동영상 플레이어",
+      "영상 플레이어",
+      "글로벌 유통",
+      "유통 플랫폼",
+      "미디어 플랫폼",
+      "글로벌 플랫폼",
+      "마루 미디어 플레이어",
+      "IGDC 글로벌 허브"
+    ],
+    "en": [
+      "media player",
+      "video player",
+      "global distribution",
+      "distribution platform",
+      "media platform",
+      "global platform",
+      "MARU Media Player",
+      "IGDC Global Hub"
+    ],
+    "ja": [
+      "メディアプレーヤー",
+      "動画プレーヤー",
+      "グローバル流通",
+      "流通プラットフォーム",
+      "メディアプラットフォーム",
+      "グローバルプラットフォーム"
+    ],
+    "zh": [
+      "媒体播放器",
+      "视频播放器",
+      "全球分销",
+      "分销平台",
+      "媒体平台",
+      "全球平台"
+    ],
+    "zht": [
+      "媒體播放器",
+      "影片播放器",
+      "全球分銷",
+      "分銷平台",
+      "媒體平台",
+      "全球平台"
+    ],
+    "de": [
+      "Mediaplayer",
+      "Videoplayer",
+      "globale Distribution",
+      "Vertriebsplattform",
+      "Medienplattform",
+      "globale Plattform"
+    ],
+    "fr": [
+      "lecteur multimédia",
+      "lecteur vidéo",
+      "distribution mondiale",
+      "plateforme de distribution",
+      "plateforme média",
+      "plateforme mondiale"
+    ],
+    "es": [
+      "reproductor multimedia",
+      "reproductor de video",
+      "distribución global",
+      "plataforma de distribución",
+      "plataforma de medios",
+      "plataforma global"
+    ],
+    "pt": [
+      "reprodutor de mídia",
+      "reprodutor de vídeo",
+      "distribuição global",
+      "plataforma de distribuição",
+      "plataforma de mídia",
+      "plataforma global"
+    ],
+    "it": [
+      "lettore multimediale",
+      "lettore video",
+      "distribuzione globale",
+      "piattaforma di distribuzione",
+      "piattaforma media",
+      "piattaforma globale"
+    ],
+    "ru": [
+      "медиаплеер",
+      "видеоплеер",
+      "глобальная дистрибуция",
+      "платформа дистрибуции",
+      "медиаплатформа",
+      "глобальная платформа"
+    ],
+    "ar": [
+      "مشغل وسائط",
+      "مشغل فيديو",
+      "توزيع عالمي",
+      "منصة توزيع",
+      "منصة إعلامية",
+      "منصة عالمية"
+    ],
+    "hi": [
+      "मीडिया प्लेयर",
+      "वीडियो प्लेयर",
+      "वैश्विक वितरण",
+      "वितरण प्लेटफ़ॉर्म",
+      "मीडिया प्लेटफ़ॉर्म",
+      "वैश्विक प्लेटफ़ॉर्म"
+    ],
+    "id": [
+      "pemutar media",
+      "pemutar video",
+      "distribusi global",
+      "platform distribusi",
+      "platform media",
+      "platform global"
+    ],
+    "ms": [
+      "pemain media",
+      "pemain video",
+      "pengedaran global",
+      "platform pengedaran",
+      "platform media",
+      "platform global"
+    ],
+    "vi": [
+      "trình phát đa phương tiện",
+      "trình phát video",
+      "phân phối toàn cầu",
+      "nền tảng phân phối",
+      "nền tảng truyền thông",
+      "nền tảng toàn cầu"
+    ],
+    "th": [
+      "เครื่องเล่นสื่อ",
+      "เครื่องเล่นวิดีโอ",
+      "การจัดจำหน่ายทั่วโลก",
+      "แพลตฟอร์มการจัดจำหน่าย",
+      "แพลตฟอร์มสื่อ",
+      "แพลตฟอร์มระดับโลก"
+    ],
+    "tr": [
+      "medya oynatıcı",
+      "video oynatıcı",
+      "küresel dağıtım",
+      "dağıtım platformu",
+      "medya platformu",
+      "küresel platform"
+    ],
+    "nl": [
+      "mediaspeler",
+      "videospeler",
+      "wereldwijde distributie",
+      "distributieplatform",
+      "mediaplatform",
+      "wereldwijd platform"
+    ],
+    "pl": [
+      "odtwarzacz multimedialny",
+      "odtwarzacz wideo",
+      "globalna dystrybucja",
+      "platforma dystrybucyjna",
+      "platforma medialna",
+      "globalna platforma"
+    ],
+    "sv": [
+      "mediaspelare",
+      "videospelare",
+      "global distribution",
+      "distributionsplattform",
+      "medieplattform",
+      "global plattform"
+    ],
+    "uk": [
+      "медіаплеєр",
+      "відеоплеєр",
+      "глобальна дистрибуція",
+      "платформа дистрибуції",
+      "медіаплатформа",
+      "глобальна платформа"
+    ],
+    "hu": [
+      "médialejátszó",
+      "videólejátszó",
+      "globális terjesztés",
+      "terjesztési platform",
+      "médiaplatform",
+      "globális platform"
+    ],
+    "fa": [
+      "پخش‌کننده رسانه",
+      "پخش‌کننده ویدئو",
+      "توزیع جهانی",
+      "پلتفرم توزیع",
+      "پلتفرم رسانه",
+      "پلتفرم جهانی"
+    ],
+    "bn": [
+      "মিডিয়া প্লেয়ার",
+      "ভিডিও প্লেয়ার",
+      "বিশ্বব্যাপী বিতরণ",
+      "বিতরণ প্ল্যাটফর্ম",
+      "মিডিয়া প্ল্যাটফর্ম",
+      "গ্লোবাল প্ল্যাটফর্ম"
+    ],
+    "ta": [
+      "மீடியா பிளேயர்",
+      "வீடியோ பிளேயர்",
+      "உலகளாவிய விநியோகம்",
+      "விநியோக தளம்",
+      "ஊடக தளம்",
+      "உலகளாவிய தளம்"
+    ],
+    "ur": [
+      "میڈیا پلیئر",
+      "ویڈیو پلیئر",
+      "عالمی تقسیم",
+      "تقسیمی پلیٹ فارم",
+      "میڈیا پلیٹ فارم",
+      "عالمی پلیٹ فارم"
+    ],
+    "sw": [
+      "kicheza media",
+      "kicheza video",
+      "usambazaji wa kimataifa",
+      "jukwaa la usambazaji",
+      "jukwaa la media",
+      "jukwaa la kimataifa"
+    ],
+    "tl": [
+      "media player",
+      "video player",
+      "pandaigdigang distribusyon",
+      "distribution platform",
+      "media platform",
+      "global platform"
+    ],
+    "uz": [
+      "media pleyer",
+      "video pleyer",
+      "global tarqatish",
+      "tarqatish platformasi",
+      "media platforma",
+      "global platforma"
+    ]
+  }
+}
