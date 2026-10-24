@@ -119,6 +119,28 @@
     else schedule();
   }
   warmFrontProductViewer();
+  // Product intent warmup: the existing viewer starts loading BEFORE the
+  // eventual click, but the real seller URL and navigation policy remain unchanged.
+  // Hover/focus/touch are passive; do not block image fetches or open pages.
+  (function warmViewerOnProductIntent(){
+    var selector='a[data-igdc-source-url]';
+    var pending=false, ready=false, lastFailure=0;
+    function onIntent(event){
+      if(ready || pending || Date.now()-lastFailure<2500)return;
+      var target=event && event.target;
+      if(!target || !target.closest || !target.closest(selector))return;
+      pending=true;
+      ensureContainedViewer().then(function(){
+        ready=true;
+        document.removeEventListener('pointerover',onIntent);
+        document.removeEventListener('focusin',onIntent);
+        document.removeEventListener('touchstart',onIntent);
+      }).catch(function(){lastFailure=Date.now();}).then(function(){pending=false;});
+    }
+    document.addEventListener('pointerover',onIntent,{passive:true});
+    document.addEventListener('focusin',onIntent,{passive:true});
+    document.addEventListener('touchstart',onIntent,{passive:true});
+  })();
 
   function $(sel, root = document) { return root.querySelector(sel); }
   function byId(id) { return document.getElementById(id); }

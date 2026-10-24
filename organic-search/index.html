@@ -22,7 +22,16 @@
  {"@type":"CollectionPage","name":"IGDC / MARU Platform Directory","url":"https://igdcglobal.com/organic-search/index.html","isPartOf":{"@id":"https://igdcglobal.com/#website"}}
 ]}</script>
 <style>
-:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f6f8fc;color:#152a40;font:16px/1.75 system-ui,-apple-system,BlinkMacSystemFont,"Malgun Gothic",sans-serif}main{max-width:970px;margin:auto;padding:32px 20px 60px}h1{font-size:clamp(1.7rem,4vw,2.65rem);line-height:1.25;margin:0 0 20px}h2{font-size:1.3rem}a{color:#124d92;text-decoration:underline;text-underline-offset:3px}section,nav{background:#fff;border:1px solid #d9e3ed;border-radius:13px;padding:20px 25px;margin:18px 0}ul{padding-left:21px}.muted{color:#536579}small{font-size:.88rem}</style>
+:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f6f8fc;color:#152a40;font:16px/1.75 system-ui,-apple-system,BlinkMacSystemFont,"Malgun Gothic",sans-serif}main{max-width:970px;margin:auto;padding:32px 20px 60px}h1{font-size:clamp(1.7rem,4vw,2.65rem);line-height:1.25;margin:0 0 20px}h2{font-size:1.3rem}a{color:#124d92;text-decoration:underline;text-underline-offset:3px}section,nav{background:#fff;border:1px solid #d9e3ed;border-radius:13px;padding:20px 25px;margin:18px 0}ul{padding-left:21px}.muted{color:#536579}small{font-size:.88rem}
+/* Responsive 30-language directory. RTL only for native RTL language labels. */
+.language-nav h2{margin:0 0 10px}
+.language-nav .muted{margin:8px 0 13px}
+.language-nav .languages{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:9px;margin:10px 0 14px;padding:0}
+.language-nav .languages li{margin:0;min-width:0}
+.language-nav .languages a{display:block;width:100%;height:100%;padding:8px 10px;border:1px solid #d9e3ed;border-radius:8px;background:#fbfcfe;text-decoration:none;line-height:1.5;overflow-wrap:anywhere}
+.language-nav .languages a:hover,.language-nav .languages a:focus-visible{background:#eaf3ff;border-color:#5795db;text-decoration:underline}
+.language-nav .languages a[dir="rtl"]{direction:rtl;text-align:right;unicode-bidi:isolate}
+</style>
 </head>
 <body><main>
 <h1>MARU Media Player · IGDC 글로벌 플랫폼</h1>
@@ -34,5 +43,41 @@
 <ul><li><a href="/mediahub.html">IGDC Media Hub — 미디어 허브</a></li><li><a href="/distributionhub.html">IGDC Distribution Hub — 글로벌 유통 플랫폼</a></li><li><a href="/networkhub.html">IGDC Network Hub — 글로벌 네트워크</a></li><li><a href="/socialnetwork.html">IGDC Social Network — 글로벌 소셜 허브</a></li><li><a href="/tour.html">IGDC Tour — 글로벌 관광 안내</a></li></ul>
 </template></section>
 <section lang="en"><h2>Global media player and distribution services</h2><p>Find the official MARU Media Player download page and the IGDC Global Hub network of media discovery, global distribution, social and travel services. For the English-language platform pages, use the links below.</p><ul><li><a href="/maru-download.html">MARU Media Player — official software information</a></li><li><a href="/en/home_en.html">IGDC Global Hub / MARU Platform (English)</a></li><li><a href="/en/mediahub_en.html">Global Media Hub (English)</a></li><li><a href="/en/distributionhub_en.html">Global Distribution Hub (English)</a></li></ul></section>
-<nav aria-label="Other languages"><p class="muted"><small>다국어 안내 / Multilingual pages: <a href="/ja/home_ja.html">日本語</a> · <a href="/zh/home_zh.html">简体中文</a> · <a href="/es/home_es.html">Español</a> · <a href="/fr/home_fr.html">Français</a> · <a href="/de/home_de.html">Deutsch</a> · <a href="/ar/home_ar.html">العربية</a>. Additional official language variants are listed in the <a href="/sitemap.xml">XML sitemap</a>.</small></p></nav>
+<nav aria-labelledby="lang-nav-title" class="language-nav">
+<h2 id="lang-nav-title">다국어 안내 · 30 Languages</h2>
+<p class="muted">언어를 선택하면 해당 언어의 IGDC Global Hub 공식 페이지로 이동합니다. / Select a language to visit the official IGDC Global Hub page.</p>
+<ul class="languages">
+  <li><a href="/home.html" lang="ko">한국어</a></li>
+  <li><a href="/ar/home_ar.html" lang="ar" dir="rtl">العربية</a></li>
+  <li><a href="/bn/home_bn.html" lang="bn">বাংলা</a></li>
+  <li><a href="/de/home_de.html" lang="de">Deutsch</a></li>
+  <li><a href="/en/home_en.html" lang="en">English</a></li>
+  <li><a href="/es/home_es.html" lang="es">Español</a></li>
+  <li><a href="/fa/home_fa.html" lang="fa" dir="rtl">فارسی</a></li>
+  <li><a href="/fr/home_fr.html" lang="fr">Français</a></li>
+  <li><a href="/hi/home_hi.html" lang="hi">हिन्दी</a></li>
+  <li><a href="/hu/home_hu.html" lang="hu">Magyar</a></li>
+  <li><a href="/id/home_id.html" lang="id">Bahasa Indonesia</a></li>
+  <li><a href="/it/home_it.html" lang="it">Italiano</a></li>
+  <li><a href="/ja/home_ja.html" lang="ja">日本語</a></li>
+  <li><a href="/ms/home_ms.html" lang="ms">Bahasa Melayu</a></li>
+  <li><a href="/nl/home_nl.html" lang="nl">Nederlands</a></li>
+  <li><a href="/pl/home_pl.html" lang="pl">Polski</a></li>
+  <li><a href="/pt/home_pt.html" lang="pt">Português</a></li>
+  <li><a href="/ru/home_ru.html" lang="ru">Русский</a></li>
+  <li><a href="/sv/home_sv.html" lang="sv">Svenska</a></li>
+  <li><a href="/sw/home_sw.html" lang="sw">Kiswahili</a></li>
+  <li><a href="/ta/home_ta.html" lang="ta">தமிழ்</a></li>
+  <li><a href="/th/home_th.html" lang="th">ไทย</a></li>
+  <li><a href="/tl/home_tl.html" lang="tl">Filipino</a></li>
+  <li><a href="/tr/home_tr.html" lang="tr">Türkçe</a></li>
+  <li><a href="/uk/home_uk.html" lang="uk">Українська</a></li>
+  <li><a href="/ur/home_ur.html" lang="ur" dir="rtl">اردو</a></li>
+  <li><a href="/uz/home_uz.html" lang="uz">O‘zbekcha</a></li>
+  <li><a href="/vi/home_vi.html" lang="vi">Tiếng Việt</a></li>
+  <li><a href="/zh/home_zh.html" lang="zh">简体中文</a></li>
+  <li><a href="/zht/home_zht.html" lang="zht">繁體中文</a></li>
+</ul>
+<p class="muted"><small>30개 언어 페이지 주소는 <a href="/sitemap.xml">XML sitemap</a>에도 등록되어 있습니다.</small></p>
+</nav>
 </main></body></html>

@@ -168,66 +168,57 @@
     }
   }
 
-  function addCandidate(out, item, ctx, index){
-    if (!item || typeof item !== 'object') return;
-    const ids = new Set();
-    const explicit = pick(item, ['id','contentId','productId','itemId','sku','code','pid']);
-    if (explicit) ids.add(explicit);
-    ids.add(stableIdForItem(item, ctx, index));
-
-    for (const id of ids){
-      if (!id) continue;
-      out.push({ id:String(id), item, ctx, index });
-    }
-  }
-
-  function collectCandidates(data, sourceName){
-    const out = [];
-
-    function walk(value, ctx){
-      if (!value) return;
-
-      if (Array.isArray(value)){
-        value.forEach((item, idx) => {
-          if (item && typeof item === 'object') addCandidate(out, item, ctx || {}, idx);
-        });
-        return;
+  // Indexed one-item lookup without building a full candidate array for every
+  // snapshot. Traversal order and accepted ID aliases match the previous walk;
+  // the first matching item still wins. No country, section, or URL changes.
+  function collectCandidates(data, sourceName, target){
+    let found=null;
+    function scanArray(value, ctx){
+      for(let index=0;index<value.length;index++){
+        const item=value[index];
+        if(!item || typeof item!=='object')continue;
+        const explicit=pick(item,['id','contentId','productId','itemId','sku','code','pid']);
+        // stableIdForItem was also accepted by the original two-ID expansion.
+        if(explicit===target || String(stableIdForItem(item,ctx,index))===target){
+          found={id:target,item,ctx,index};
+          return true;
+        }
       }
-
-      if (typeof value !== 'object') return;
-
-      if (value.pages && typeof value.pages === 'object'){
-        for (const [pageName, pageObj] of Object.entries(value.pages)){
-          const sections = pageObj && pageObj.sections;
-          if (sections && typeof sections === 'object'){
-            for (const [sectionName, list] of Object.entries(sections)){
-              walk(list, { source:sourceName, page:pageName, section:sectionName });
+      return false;
+    }
+    function walk(value,ctx){
+      if(!value)return false;
+      if(Array.isArray(value))return scanArray(value,ctx||{});
+      if(typeof value!=='object')return false;
+      if(value.pages && typeof value.pages==='object'){
+        for(const [pageName,pageObj] of Object.entries(value.pages)){
+          const sections=pageObj && pageObj.sections;
+          if(sections && typeof sections==='object'){
+            for(const [sectionName,list] of Object.entries(sections)){
+              if(walk(list,{source:sourceName,page:pageName,section:sectionName}))return true;
             }
           }
         }
       }
-
-      if (Array.isArray(value.items)) walk(value.items, { source:sourceName, page:value.page || sourceName, section:value.key || 'items' });
-      if (Array.isArray(value.slots)) walk(value.slots, { source:sourceName, page:value.page || sourceName, section:'slots' });
-
-      if (value.sections && typeof value.sections === 'object'){
-        for (const [sectionName, list] of Object.entries(value.sections)){
-          walk(list, { source:sourceName, page:value.page || sourceName, section:sectionName });
+      if(Array.isArray(value.items) && walk(value.items,{source:sourceName,page:value.page||sourceName,section:value.key||'items'}))return true;
+      if(Array.isArray(value.slots) && walk(value.slots,{source:sourceName,page:value.page||sourceName,section:'slots'}))return true;
+      if(value.sections && typeof value.sections==='object'){
+        for(const [sectionName,list] of Object.entries(value.sections)){
+          if(walk(list,{source:sourceName,page:value.page||sourceName,section:sectionName}))return true;
         }
       }
-
-      if (value.layers && typeof value.layers === 'object'){
-        for (const [layerName, layerVal] of Object.entries(value.layers)){
-          if (layerVal && typeof layerVal === 'object'){
-            if (Array.isArray(layerVal.items)) walk(layerVal.items, { source:sourceName, page:value.page || sourceName, section:layerName });
-            if (Array.isArray(layerVal.slots)) walk(layerVal.slots, { source:sourceName, page:value.page || sourceName, section:layerName });
+      if(value.layers && typeof value.layers==='object'){
+        for(const [layerName,layerVal] of Object.entries(value.layers)){
+          if(layerVal && typeof layerVal==='object'){
+            if(Array.isArray(layerVal.items) && walk(layerVal.items,{source:sourceName,page:value.page||sourceName,section:layerName}))return true;
+            if(Array.isArray(layerVal.slots) && walk(layerVal.slots,{source:sourceName,page:value.page||sourceName,section:layerName}))return true;
           }
         }
       }
+      return false;
     }
-
-    walk(data, { source:sourceName, page:sourceName, section:'' });
-    return out;
+    walk(data,{source:sourceName,page:sourceName,section:''});
+    return found;
   }
 
   function inferType(item, ctx, fallback){
@@ -375,13 +366,11 @@
     for (const source of preferredSnapshotSources()){
       try {
         const data = await fetchJson(source.url);
-        const candidates = collectCandidates(data, source.name);
-        for (const c of candidates){
-          if (String(c.id) === target){
-            c.ctx = c.ctx || {};
-            c.ctx.matchedId = target;
-            return normalizeContent(c.item, c.ctx, c.index, source.defaultType);
-          }
+        const match = collectCandidates(data, source.name, target);
+        if(match){
+          match.ctx = match.ctx || {};
+          match.ctx.matchedId = target;
+          return normalizeContent(match.item, match.ctx, match.index, source.defaultType);
         }
       } catch(e){
         // Continue to next snapshot. Missing optional snapshots must not break content page.
