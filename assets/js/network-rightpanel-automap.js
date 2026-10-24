@@ -134,6 +134,22 @@
     return window.__IGDC_NETWORK_COMMERCE_VIEWER_PROMISE__;
   }
 
+  // Prime the existing viewer AFTER the first paint, never ahead of product images.
+  // A first click then reuses the same loader promise and preserves its navigation policy.
+  function warmFrontProductViewer(){
+    function start(){
+      if(document.hidden)return;
+      ensureCommerceContainedViewer().catch(function(){});
+    }
+    function schedule(){
+      if(typeof window.requestIdleCallback==='function')window.requestIdleCallback(start,{timeout:2000});
+      else window.setTimeout(start,450);
+    }
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});
+    else schedule();
+  }
+  warmFrontProductViewer();
+
   function $(id){ return document.getElementById(id); }
 
   function pick(it, keys){
@@ -302,15 +318,15 @@
     applyAnchor(a, item);
 
     const img = document.createElement('img');
-    img.src = item.thumb;
     img.alt = item.title || '';
-    // The first visible rail items should not wait for a lazy-load threshold.
+    // Set priority and referrer rules BEFORE starting the image request.
     const firstView = index < 3;
     img.loading = firstView ? 'eager' : 'lazy';
     img.decoding = 'async';
     if (firstView) { try { img.fetchPriority = 'high'; } catch (_e) {} }
     try { img.referrerPolicy = 'no-referrer'; } catch (_e) {}
     img.setAttribute('referrerpolicy','no-referrer');
+    img.src = item.thumb;
 
     a.appendChild(img);
     card.appendChild(a);

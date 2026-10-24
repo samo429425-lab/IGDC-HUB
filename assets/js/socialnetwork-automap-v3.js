@@ -818,6 +818,22 @@
     return socialRightViewerPromise;
   }
 
+  // Prime the existing viewer AFTER the first paint, never ahead of product images.
+  // A first click then reuses the same loader promise and preserves its navigation policy.
+  function warmFrontProductViewer(){
+    function start(){
+      if(document.hidden)return;
+      ensureSocialRightViewer().catch(function(){});
+    }
+    function schedule(){
+      if(typeof window.requestIdleCallback==='function')window.requestIdleCallback(start,{timeout:2000});
+      else window.setTimeout(start,450);
+    }
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});
+    else schedule();
+  }
+  warmFrontProductViewer();
+
   function openSocialRightProduct(url, label) {
     return ensureSocialRightViewer().then(function (viewer) {
       // A failed frame-policy check uses the existing IGDC contained relay;
@@ -891,7 +907,6 @@
 
     const img = document.createElement("img");
     img.className = "social-right-card-thumb";
-    img.src = thumb;
     img.alt = title;
     const firstView = Number(index) >= 0 && Number(index) < 8;
     img.loading = firstView ? "eager" : "lazy";
@@ -899,6 +914,7 @@
     if (firstView) {
       try { img.fetchPriority = "high"; } catch (_e) {}
     }
+    img.src = thumb;
     a.appendChild(img);
 
     const cap = document.createElement("div");

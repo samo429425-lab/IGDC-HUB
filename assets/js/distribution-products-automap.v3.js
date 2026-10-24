@@ -105,6 +105,22 @@
     }).catch(function(error){window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__=null;throw error;});
     return window.__IGDC_COMMERCE_CONTAINED_VIEWER_PROMISE__;
   }
+  // Prime the existing viewer AFTER the first paint, never ahead of product images.
+  // A first click then reuses the same loader promise and preserves its navigation policy.
+  function warmFrontProductViewer(){
+    function start(){
+      if(document.hidden)return;
+      ensureCommerceContainedViewer().catch(function(){});
+    }
+    function schedule(){
+      if(typeof window.requestIdleCallback==='function')window.requestIdleCallback(start,{timeout:2000});
+      else window.setTimeout(start,450);
+    }
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});
+    else schedule();
+  }
+  warmFrontProductViewer();
+
   function openCommerceContained(url,label){
     return ensureCommerceContainedViewer().then(function(viewer){
       return viewer.open(url,{label:String(label||'').trim(),kind:'commerce-product',pushHistory:true});

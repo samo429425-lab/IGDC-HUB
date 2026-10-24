@@ -104,6 +104,22 @@
   }
 
 
+  // Prime the existing viewer AFTER the first paint, never ahead of product images.
+  // A first click then reuses the same loader promise and preserves its navigation policy.
+  function warmFrontProductViewer(){
+    function start(){
+      if(document.hidden)return;
+      ensureContainedViewer().catch(function(){});
+    }
+    function schedule(){
+      if(typeof window.requestIdleCallback==='function')window.requestIdleCallback(start,{timeout:2000});
+      else window.setTimeout(start,450);
+    }
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});
+    else schedule();
+  }
+  warmFrontProductViewer();
+
   function $(sel, root = document) { return root.querySelector(sel); }
   function byId(id) { return document.getElementById(id); }
 
@@ -518,7 +534,6 @@
     applyAnchor(a, item);
 
     const img = document.createElement("img");
-    if(item && item.thumb) img.src = item.thumb;
     img.alt = item.title || "";
     if(item && item.__igdcReserve===true){ box.classList.add('dummy-card'); box.setAttribute('data-dummy','1'); }
     // Prioritize images actually visible above the fold. Hidden desktop/mobile
@@ -532,6 +547,7 @@
     if (aboveFold && index < 2) { try { img.fetchPriority = "high"; } catch (_e) {} }
     try { img.referrerPolicy = "no-referrer"; } catch (_e) {}
     img.setAttribute("referrerpolicy","no-referrer");
+    if(item && item.thumb) img.src = item.thumb;
 
     const cap = document.createElement("div");
     cap.className = "tour-card-title";

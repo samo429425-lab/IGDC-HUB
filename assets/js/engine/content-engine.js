@@ -154,7 +154,7 @@
   }
 
   async function fetchJson(url){
-    const res = await fetch(url, { cache:'no-store' });
+    const res = await fetch(url, { cache:'default' });
     if (!res.ok) throw new Error('HTTP ' + res.status + ' @ ' + url);
     return await res.json();
   }
@@ -344,11 +344,35 @@
     };
   }
 
+  // Resolve product links against the hub that originated the click first.
+  // All existing snapshots stay eligible as fallback; no item URL or scope is rewritten.
+  function preferredSnapshotSources(){
+    let origin = '';
+    try{
+      const ref = new URL(document.referrer || '', window.location.href);
+      // Only the same-site referring hub may change lookup priority.
+      if(ref.origin === window.location.origin) origin = ref.pathname.toLowerCase();
+    }catch(_e){}
+    const aliases = [
+      ['networkhub',/(?:^|\/|_)networkhub(?:_|\.|\/|$)/],
+      ['tour',/(?:^|\/|_)tour(?:_|\.|\/|$)/],
+      ['distribution',/(?:^|\/|_)distribution(?:hub)?(?:_|\.|\/|$)/],
+      ['social',/(?:^|\/|_)social(?:network)?(?:_|\.|\/|$)/],
+      ['media',/(?:^|\/|_)media(?:hub)?(?:_|\.|\/|$)/],
+      ['front',/(?:^|\/|_)home(?:_|\.|\/|$)/]
+    ];
+    let preferred = '';
+    for(const row of aliases){if(row[1].test(origin)){preferred=row[0];break;}}
+    if(!preferred)return SNAPSHOT_SOURCES;
+    return SNAPSHOT_SOURCES.filter(source=>source.name===preferred)
+      .concat(SNAPSHOT_SOURCES.filter(source=>source.name!==preferred));
+  }
+
   async function findInSnapshots(id){
     const target = String(id || '').trim();
     if (!target) return null;
 
-    for (const source of SNAPSHOT_SOURCES){
+    for (const source of preferredSnapshotSources()){
       try {
         const data = await fetchJson(source.url);
         const candidates = collectCandidates(data, source.name);
