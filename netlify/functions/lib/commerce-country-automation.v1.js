@@ -4865,33 +4865,25 @@ async function productCandidatePsomPlace(actorId, input) {
       } else {
         picked = automaticBalancedPlacement(product, plan.options, counts);
       }
-      if (!picked) { results.push({candidateId:id,assigned:false,error:"no_compatible_psom_section"}); continue; }
+      if (!picked) { const review=productPrivateReviewAssessment(product),semantic=ProductRanking.strictPlacementSectionKeys(product);
+        results.push({candidateId:id,assigned:false,error:"no_compatible_psom_section",semanticFamily:text(semantic.family),reviewReason:text(review.reason),strictSectionCount:array(semantic.keys).length,possibleSections:array(plan.options).map(productPlacementKey)}); continue; }
       const placement = candidateLedgerPlacementRecord(scope, picked, actor, "ai_psom_bulk"), key = productPlacementKey(placement);
       if (!placement || !validProductSectionKey(key)) { results.push({candidateId:id,assigned:false,error:"invalid_psom_section"}); continue; }
-      payload.slotDecision = "slot_candidate";
-      payload.approvedPlacement = placement; payload.placement = placement;
-      payload.page = placement.page; payload.channel = placement.page; payload.section = placement.sectionKey; payload.psom_key = placement.sectionKey;
-      payload.productCategory = plan.category.primary; payload.productCategoryTags = plan.category.tags;
-      payload.productRanking = Object.assign({}, plain(payload.productRanking), {category:plan.category.primary,categoryTags:plan.category.tags});
-      payload.queueControl = Object.assign({}, plain(payload.queueControl), {schema:"igdc-private-product-queue-control.v1",action:"section_selected",hiddenFromCountryQueue:false,permanentExcluded:false,rediscoveryAllowed:true,restoredAt:now,restoredBy:actor});
-      payload.managementControl = Object.assign({}, plain(payload.managementControl), {schema:"igdc-product-management-control.v1",source:"ai_psom_bulk",administratorLocked:false,aiReclassificationAllowed:true,automaticPrivatePlacement:true,publicPublication:false,productImport:false,checkout:false,paymentExecution:false,decidedAt:now,decidedBy:actor});
-      payload.review = Object.assign({}, plain(payload.review), {state:"pending",nextGate:"administrator_front_match",psomPlacementAt:now,psomPlacementBy:actor});
-      await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(id), {status:"approval_pending",source_payload:payload,updated_at:now});
-      // A successful HTTP PATCH alone is not evidence that any candidate row
-      // changed. Check the durable C-stage decision before counting a transfer.
-      // This is read-only verification; it never alters existing assignments.
-      const confirmedRows=await frontSyncSelectCandidates([id]);
-      const confirmed=plain(array(confirmedRows).find((item)=>text(item&&item.id)===id));
-      const savedPayload=plain(confirmed.source_payload);
-      const savedKey=productPlacementKey(savedPayload.approvedPlacement||savedPayload.selectedPlacement||savedPayload.placement);
-      if(!text(confirmed.id)||text(confirmed.source_ref)!==PRODUCT_SOURCE_REF||
-         lower(confirmed.status)!=="approval_pending"||lower(savedPayload.slotDecision)!=="slot_candidate"||
-         savedKey!==key||!heldCandidateMatchesScope(confirmed,scope)){
-        results.push({candidateId:id,assigned:false,error:"psom_candidate_write_not_confirmed",expectedSectionKey:key,actualSectionKey:savedKey||null});
+      // Use exactly the same canonical C-stage candidate+assignment authority as
+      // the working manual candidate manager. Legacy PSOM only patched JSON
+      // and created no gslot_slot_assignments relation; that split was the bug.
+      const authority=require("../commerce-candidate-admin-authority");
+      const linked=await authority.applyVerifiedPsomPlacement(actor,id,scope,key,{
+        category:plan.category.primary,
+        categoryTags:plan.category.tags,
+        reason:text(picked.reason||"verified_psom_semantic_placement")
+      });
+      if(!linked||linked.ledgerVerified!==true||Number(linked.assignmentCount)!==1){
+        results.push({candidateId:id,assigned:false,error:"psom_canonical_authority_not_confirmed",expectedSectionKey:key});
         continue;
       }
       counts[key] = Number(counts[key] || 0) + 1;
-      results.push({candidateId:id,assigned:true,sectionKey:key,category:plan.category.primary,score:Number(picked.score||0),source:preferredSectionKey?"psom_group_preserved":"psom_saved_research",requestedSectionKey:preferredSectionKey||null,ledgerVerified:true});
+      results.push({candidateId:id,assigned:true,sectionKey:key,category:plan.category.primary,score:Number(picked.score||0),source:preferredSectionKey?"psom_group_preserved":"canonical_candidate_assignment_authority",requestedSectionKey:preferredSectionKey||null,ledgerVerified:true,assignmentVerified:true});
     } catch (error) {
       // One damaged/slow row must never invalidate already-durable placements in
       // the same Netlify invocation. Return the exact failed candidate so the

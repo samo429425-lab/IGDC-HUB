@@ -5,7 +5,7 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const MarketSaleScope = require("./lib/market-sale-scope.v1");
 
-const VERSION = "commerce-candidate-admin-authority-v1.5.0-admin-ledger-oneway";
+const VERSION = "commerce-candidate-admin-authority-v1.6.0-canonical-candidate-assignment-consistency";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ALLOWED_SOURCE_REFS = new Set(["country-product-ranking-review","commerce-candidate-review-api"]);
 const SECTION_KEYS = new Set([
@@ -71,14 +71,46 @@ function currentPlacement(payload,scope,oldRows){
   if(!old)return null;
   return{key:text(old.hub_key)+"|"+text(old.slot_key),page:text(old.hub_key),section:text(old.slot_key),sectionKey:text(old.slot_key),country:scope.country,region:scope.region};
 }
-async function applyOne(actor,candidateId,scope,decision,key,source){
+function candidateScopeMatches(row, scope){
+  const payload=plain(row&&row.source_payload),market=plain(payload.marketScope),supply=plain(payload.countrySupply),placement=plain(payload.approvedPlacement);
+  const country=MarketSaleScope.normalizeCountry(text(market.marketCountry||supply.country||placement.country).toUpperCase());
+  if(!country||country!==scope.country)return false;
+  const region=MarketSaleScope.normalizeRegion(text(market.marketRegion||supply.region||placement.region||"NATIONWIDE"),country)||"NATIONWIDE";
+  return region===scope.region;
+}
+function publiclyProtected(payload,relations){
+  const status=lower(plain(payload.frontPublication).status);
+  if(["queued","publish_requested","published","matched","active","unpublish_requested","unpublish_failed"].includes(status))return true;
+  if(payload.publicPublication===true)return true;
+  return array(relations).some(row=>["publish_requested","published","matched","active","unpublish_requested","unpublish_failed"].includes(lower(row&&row.publication_status)));
+}
+async function verifyAuthorityWrite(candidateId,scope,expected,expectedSectionKey){
+  const row=await candidateRow(candidateId),payload=plain(row.source_payload),decision=lower(payload.slotDecision);
+  if(!text(row.id)||!candidateScopeMatches(row,scope)||decision!==expected){
+    throw Object.assign(new Error("candidate_ledger_write_not_confirmed:"+candidateId+":"+decision),{statusCode:409});
+  }
+  const relations=(await assignments(candidateId)).filter(item=>sameScope(item,scope)),keys=relations.map(item=>text(item.hub_key)+"|"+text(item.slot_key));
+  if(expectedSectionKey){
+    const chosen=plain(payload.approvedPlacement),key=text(chosen.key||((chosen.page||"")+"|"+(chosen.sectionKey||chosen.section||"")));
+    if(key!==expectedSectionKey||keys.length!==1||keys[0]!==expectedSectionKey){
+      throw Object.assign(new Error("candidate_assignment_mismatch:"+candidateId+":"+keys.join(",")),{statusCode:409});
+    }
+  }else if(expected!=="front_unmatch"&&relations.length){
+    throw Object.assign(new Error("candidate_assignment_not_removed:"+candidateId),{statusCode:409});
+  }
+  return {candidateId,decision,sectionKey:expectedSectionKey||null,assignmentCount:relations.length,verified:true};
+}
+async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMetadata){
   const row=await candidateRow(candidateId);
   if(!Object.keys(row).length)throw Object.assign(new Error("선택 상품 후보 원장을 찾을 수 없습니다."),{statusCode:404});
   if(!ALLOWED_SOURCE_REFS.has(text(row.source_ref)))throw Object.assign(new Error("이 상품 후보는 관리자 배치 원장 대상이 아닙니다."),{statusCode:409});
+  if(!candidateScopeMatches(row,scope))throw Object.assign(new Error("candidate_outside_selected_country_region"),{statusCode:403});
   const oldRows=await assignments(candidateId),oldPayload=Object.assign({},plain(row.source_payload)),payload=Object.assign({},oldPayload),now=new Date().toISOString();
   const actorId=text(actor&&actor.sub)||"administrator",prior=currentPlacement(payload,scope,oldRows);
   let status=text(row.status)||"approval_pending",effective=decision,assignment=null;
   const oldQueue=plain(oldPayload.queueControl),oldDecision=lower(oldPayload.slotDecision);
+  // A queue transfer must not silently unpublish products or detach active public relations.
+  if(decision!=="front_unmatch"&&publiclyProtected(oldPayload,oldRows))throw Object.assign(new Error("published_or_unpublish_pending_candidate_protected"),{statusCode:409});
 
   if((decision==="slot_candidate"||decision==="sync_ai")&&(oldQueue.permanentExcluded===true||oldDecision==="purge"||lower(row.status)==="suppressed"&&lower(oldQueue.action)==="purge")){
     throw Object.assign(new Error("영구 제외된 상품은 배치할 수 없습니다. 먼저 제외 목록에서 후보로 복원해 주세요."),{statusCode:409,code:"candidate_permanently_excluded"});
@@ -96,7 +128,13 @@ async function applyOne(actor,candidateId,scope,decision,key,source){
     payload.managementControl={schema:"igdc-product-management-control.v1",source:ai?"ai_automation":"administrator",administratorLocked:!ai,aiReclassificationAllowed:ai,decidedAt:now,decidedBy:actorId};
     payload.queueControl=Object.assign({},plain(payload.queueControl),{hiddenFromCountryQueue:false,permanentExcluded:false,action:ai?"ai_section_selected":"section_selected",restoredAt:now,restoredBy:actorId});
     payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"match",status:"ready",queued:false,persisted:true,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:true,authority:"administrator_candidate_ledger",assignmentId:assignment.id,sectionKey:target,country:scope.country,region:scope.region,preparedAt:now,preparedBy:actorId});
-    status="approval_pending";
+    // Keep the DB lifecycle status unchanged; only the private workflow decision changes.
+    if(source==="ai_automation"&&verifiedMetadata){
+      const category=text(verifiedMetadata.category).slice(0,80),tags=array(verifiedMetadata.categoryTags).map(text).filter(Boolean).slice(0,20);
+      if(category){payload.productCategory=category;payload.productCategoryTags=tags;
+        payload.productRanking=Object.assign({},plain(payload.productRanking),{category,categoryTags:tags});}
+      payload.review=Object.assign({},plain(payload.review),{nextGate:"administrator_front_match",psomPlacementAt:now,psomPlacementBy:actorId,psomPolicyReason:text(verifiedMetadata.reason).slice(0,200)});
+    }
     effective="slot_candidate";
   } else if(decision==="front_unmatch"){
     if(prior)payload.previousApprovedPlacement=Object.assign({},prior,{removedAt:now,removedReason:"administrator_front_unmatch"});
@@ -110,12 +148,12 @@ async function applyOne(actor,candidateId,scope,decision,key,source){
     if(prior)payload.previousApprovedPlacement=Object.assign({},prior,{removedAt:now,removedReason:"administrator_"+decision});
     await removeScopeAssignments(oldRows,scope);
     delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.primaryPlacement;
-    if(decision==="hold"){payload.slotDecision="hold";status="hold";effective="hold";}
-    else if(decision==="dismiss"){payload.slotDecision="removed";status="removed";effective="removed";}
-    else if(decision==="remove_from_list"){payload.slotDecision="removed_from_list";status="removed";effective="removed_from_list";}
-    else if(decision==="reject"){payload.slotDecision="reject";status="rejected";effective="reject";}
-    else if(decision==="purge"){payload.slotDecision="purge";status="suppressed";effective="purge";}
-    else {payload.slotDecision="undecided";status="research_pending";effective="undecided";}
+    if(decision==="hold"){payload.slotDecision="hold";effective="hold";}
+    else if(decision==="dismiss"){payload.slotDecision="removed";effective="removed";}
+    else if(decision==="remove_from_list"){payload.slotDecision="removed_from_list";effective="removed_from_list";}
+    else if(decision==="reject"){payload.slotDecision="reject";effective="reject";}
+    else if(decision==="purge"){payload.slotDecision="purge";effective="purge";}
+    else {payload.slotDecision="undecided";effective="undecided";}
     payload.queueControl=Object.assign({},plain(payload.queueControl),{
       schema:"igdc-private-product-queue-control.v1",
       action:decision==="dismiss"?"dismiss":(decision==="remove_from_list"?"remove_from_list":effective),
@@ -125,14 +163,20 @@ async function applyOne(actor,candidateId,scope,decision,key,source){
       decidedAt:now,decidedBy:actorId
     });
     payload.managementControl={schema:"igdc-product-management-control.v1",source:"administrator",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:actorId};
-    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"unmatch",status:"unpublish_requested",queued:false,persisted:true,pendingBuild:true,publicSnapshotConfirmed:false,buildVerificationRequired:true,reason:"administrator_section_release",page:prior&&prior.page||null,section:prior&&prior.sectionKey||prior&&prior.section||null,sectionKey:prior&&prior.sectionKey||prior&&prior.section||null,country:scope.country,region:scope.region,requestedAt:now,requestedBy:actorId});
+    // These rows passed the public-protection guard: they were NOT published.
+    // Mark private placement as unmatched, never unpublish_requested (which
+    // makes later verified-PSOM re-placement incorrectly look public/locked).
+    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"unmatch",status:"unmatched",queued:false,persisted:true,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:false,reason:"administrator_private_section_release",page:prior&&prior.page||null,section:prior&&prior.sectionKey||prior&&prior.section||null,sectionKey:prior&&prior.sectionKey||prior&&prior.section||null,country:scope.country,region:scope.region,requestedAt:now,requestedBy:actorId});
   }
 
   payload.decisionAt=now;payload.decisionBy=actorId;payload.decisionSource=source==="ai_automation"?"ai_automation":"administrator_candidate_authority";payload.publicPublication=false;payload.automaticImport=false;
   const reviewState=decision==="dismiss"?"deleted_from_management":(decision==="remove_from_list"?"removed_from_list":(effective==="slot_candidate"?"pending":effective));
   payload.review=Object.assign({},plain(payload.review),{state:reviewState,decidedAt:now,decidedBy:actorId});
-  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{status,source_payload:payload,updated_at:now});
-  return{candidateId,decision,effectiveDecision:effective,placement:payload.approvedPlacement||null,status,assignmentId:assignment&&assignment.id||null,ok:true};
+  // Existing row.status already satisfies the database CHECK. It must not be
+  // rewritten with queue-control terms such as research_pending/hold/suppressed.
+  await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{source_payload:payload,updated_at:now});
+  const verified=await verifyAuthorityWrite(candidateId,scope,effective, effective==="slot_candidate"?placementKey(payload.approvedPlacement&&payload.approvedPlacement.key):null);
+  return{candidateId,decision,effectiveDecision:effective,placement:payload.approvedPlacement||null,status,assignmentId:assignment&&assignment.id||null,ok:true,ledgerVerified:verified.verified,assignmentCount:verified.assignmentCount};
 }
 
 exports.handler=async function(event){
@@ -167,4 +211,13 @@ exports.handler=async function(event){
   }catch(error){
     return json(Number(error&&error.statusCode)||500,{ok:false,version:VERSION,error:text(error&&error.message)||"candidate_admin_authority_failed"});
   }
+};
+
+// Server-internal bridge for already-verified PSOM placements. The public handler
+// cannot call this function directly; /commerce-country-control authorizes the
+// administrator and verifies exact product evidence before invoking it.
+exports.applyVerifiedPsomPlacement=async function(actorId,candidateId,inputScope,sectionKey,metadata){
+  const scope=scopeFrom({countryCode:inputScope&&inputScope.country,subdivisionCode:inputScope&&inputScope.region});
+  if(!placementKey(sectionKey))throw Object.assign(new Error("invalid_psom_section"),{statusCode:400});
+  return applyOne({sub:text(actorId)||"administrator"},text(candidateId),scope,"sync_ai",sectionKey,"ai_automation",plain(metadata));
 };

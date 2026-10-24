@@ -568,7 +568,7 @@ function strictPlacementFamily(rowInput) {
 
   // Beauty must be a real beauty/personal-care product.  Automotive shampoo is
   // already captured above and can therefore never fall into Beauty.
-  if (/(화장품|뷰티|스킨케어|세럼|앰플|에센스|토너|페이스\s*크림|보습크림|로션|선크림|자외선차단|클렌징|클렌저|메이크업|파운데이션|쿠션|립스틱|립틴트|립밤|마스카라|아이라이너|아이브로우|아이섀도|블러셔|컨실러|향수|마스크팩|바디워시|헤어케어|샴푸|컨디셔너|트리트먼트|네일|미용기기|beauty|cosmetic|skincare|serum|ampoule|toner|moisturizer|sunscreen|cleanser|makeup|foundation|lipstick|perfume|shampoo|conditioner|body\s*wash|beauty\s*device)/i.test(hay)) return { family:"beauty", premiumBrand, trending, confidence:96 };
+  if (/(화장품|뷰티|스킨케어|세럼|앰플|에센스|토너|페이스\s*크림|보습크림|로션|선크림|자외선차단|클렌징|클렌저|메이크업|파운데이션|쿠션|립스틱|립틴트|립밤|마스카라|아이라이너|아이브로우|아이섀도|블러셔|치크|프라이머|메이크업\s*실러|픽서|립글로스|하이라이터|컨실러|향수|마스크팩|바디워시|헤어케어|샴푸|컨디셔너|트리트먼트|네일|미용기기|beauty|cosmetic|skincare|serum|ampoule|toner|moisturizer|sunscreen|cleanser|makeup|foundation|lipstick|perfume|shampoo|conditioner|body\s*wash|beauty\s*device)/i.test(hay)) return { family:"beauty", premiumBrand, trending, confidence:96 };
 
   if (/(패션|의류|옷|자켓|재킷|코트|셔츠|블라우스|원피스|팬츠|청바지|정장|캐주얼|빈티지|스니커즈|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|등산복|아웃도어\s*의류|fashion|apparel|clothing|jacket|coat|shirt|blouse|dress|pants|jeans|suit|casual|vintage|sneaker|shoes|bag|jewelry|outdoor\s*wear|hiking\s*wear)/i.test(hay)) return { family:"fashion", premiumBrand, trending, confidence:95 };
 
