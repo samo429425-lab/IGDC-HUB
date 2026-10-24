@@ -1375,6 +1375,15 @@
   // cards, selection state, toolbar, and event handlers. Only never-staged rows
   // have a separate registration control (they have no candidate ID yet).
   var latestInCandidateSelections={},latestInCandidatePage=0,latestInCandidateBusy=false,latestInCandidateMessage='';
+  // Never create a second candidate ledger. After a verified initial registration
+  // this UI remembers its REAL candidate IDs only for the currently selected
+  // country/region, and passes them into the already working candidate manager.
+  var latestInCandidateRecentlyRegistered={};
+  function latestInCandidateRememberIds(ids,scope){
+    if(!latestInCandidateRecentlyRegistered[scope])latestInCandidateRecentlyRegistered[scope]={};
+    (Array.isArray(ids)?ids:[]).forEach(function(id){id=text(id);if(id)latestInCandidateRecentlyRegistered[scope][id]=true;});
+  }
+
   function latestInCandidateRows(){
     if(!latestProductRowsComplete||!latestOverviewLedgerComplete)return [];
     return latestOverviewRows().filter(function(item){return item.kind!=='removed';});
@@ -1394,8 +1403,11 @@
     });
     // No cloned ledger objects and no duplicate writes. Reuse the same source
     // row and ID as the existing administrator unassigned management group.
+    var recentlyRegistered=latestInCandidateRecentlyRegistered[scopeKey()]||{};
     return productRows.filter(function(row){
-      return row&&row.ledgerSource==='candidate'&&candidatePoolRow(row)&&validIds[frontCandidateLedgerId(row)]===true;
+      var id=frontCandidateLedgerId(row);
+      return row&&row.ledgerSource==='candidate'&&candidatePoolRow(row)&&
+        (validIds[id]===true||recentlyRegistered[id]===true);
     });
   }
   var latestResearchDuplicateCounts={};
@@ -1455,7 +1467,7 @@
       '<details id="latestInCandidateNew" '+(wasNewOpen?'open ':'')+'style="margin-top:10px;border:1px solid #426784;border-radius:10px;padding:10px">'+
         '<summary style="cursor:pointer">미등록 리서치 상품 · 실상품 검증 후 후보 원장 최초 등록 ('+fresh.length+'건)</summary>'+
         '<div class="small" style="margin:8px 0">이 상품들은 아직 후보 ID가 없습니다. 검증에 통과해 ID가 발급되면 위 후보군과 기존 미배치 목록에 같은 원장 ID로 나타납니다. 검증 보류 상품은 원본 리서치에 남습니다.</div>'+
-        '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span id="latestInCandidateSelected">선택 '+selected.length+'건</span><button type="button" data-latest-candidate-new-action="stage" '+(!selected.length||!complete||latestInCandidateBusy?'disabled':'')+'>선택 신규 상품 검증·후보 원장 등록</button><button type="button" data-latest-candidate-new-action="clear" '+(!selected.length?'disabled':'')+'>선택 해제</button><button type="button" data-latest-candidate-new-action="refresh">리서치·후보 원장 재조회</button><button type="button" data-pipeline-diagnostic="download-latest">점검 JSON 다운로드</button></div>'+
+        '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span id="latestInCandidateSelected">선택 '+selected.length+'건</span><button type="button" data-latest-candidate-new-action="stage" '+(!selected.length||!complete||latestInCandidateBusy?'disabled':'')+'>선택 신규 상품 검증·후보 원장 등록</button><button type="button" data-latest-candidate-new-action="stage_all" '+(!fresh.length||!complete||latestInCandidateBusy?'disabled':'')+'>미등록 전체 순차 검증·후보 원장 등록</button><button type="button" data-latest-candidate-new-action="clear" '+(!selected.length?'disabled':'')+'>선택 해제</button><button type="button" data-latest-candidate-new-action="refresh" '+(latestInCandidateBusy?'disabled':'')+'>리서치·후보 원장 재조회</button><button type="button" data-pipeline-diagnostic="download-latest">점검 JSON 다운로드</button></div>'+
         '<div id="latestInCandidateStatus" class="small" aria-live="polite" style="margin:8px 0">'+esc(latestInCandidateMessage||'국가·지역 원장 연결 준비')+'</div>'+
         '<div class="product-grid">'+(wasNewOpen?visible.map(function(item){var r=item.research||{},id=latestProductKey(r),url=safeProductDetailUrl(r.productUrl||r.url),image=safeExternalImageUrl(r.imageUrl||r.imageOriginalUrl||r.image||r.thumbnailUrl),title=text(r.productName||r.title||id),marked=!!latestInCandidateSelections[id];
           return '<article class="product-card" style="padding:10px"><label><input type="checkbox" data-latest-candidate-new-select="'+esc(id)+'" '+(marked?'checked ':'')+(latestInCandidateBusy?'disabled ':'')+'> 이 상품 선택</label>'+
@@ -1479,33 +1491,70 @@
       event.preventDefault();if(btn.hasAttribute('data-latest-candidate-new-page')){latestInCandidatePage+=Number(btn.getAttribute('data-latest-candidate-new-page'))||0;renderLatestResearchCandidateGroup();return;}
       var action=btn.getAttribute('data-latest-candidate-new-action');if(action==='clear'){latestInCandidateSelections={};renderLatestResearchCandidateGroup();return;}
       if(action==='refresh'){Promise.all([refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true}),refreshLatestResearchRows(selectedCountry,selectedSubdivision||'NATIONWIDE',{throwOnFailure:true})]).then(renderLatestResearchCandidateGroup).catch(function(error){show('원장 재조회 오류: '+text(error.message),'warn');});return;}
-      if(action==='stage')runLatestInCandidateAction();
+      if(action==='stage'||action==='stage_all')runLatestInCandidateAction(action);
     });
   }
-  async function runLatestInCandidateAction(){
-    if(latestInCandidateBusy)return;
+  async function runLatestInCandidateAction(action){
+    if(latestInCandidateBusy||latestQueueActionActive)return;
     if(!selectedCountry||selectedCountry==='GLOBAL'){show('관리할 국가·지역을 먼저 선택하세요.','warn');return;}
-    if(!latestProductRowsComplete||!latestOverviewLedgerComplete){show('리서치와 후보 원장 조회가 완료된 뒤 등록하세요.','warn');return;}
-    var frozen=scopeKey(),chosen=latestInCandidateFresh().filter(function(item){var id=latestProductKey(item.research),choice=latestInCandidateSelections[id];return choice&&choice.scope===frozen;});
-    if(!chosen.length){show('실제 미등록 상품을 선택해 주세요.','warn');return;}
-    if(!window.confirm('선택 국가·지역 '+frozen+'에 미등록 '+chosen.length+'건의 실상품 상세주소를 검증하고, 통과한 상품만 기존 후보 원장에 등록하시겠습니까?'))return;
-    latestInCandidateBusy=true;latestInCandidateMessage='실상품 검증 및 최초 후보 등록 중';renderLatestResearchCandidateGroup();
-    var ids=[],failed=[],registered=0;
+    if(!latestProductRowsComplete||!latestOverviewLedgerComplete){show('리서치와 후보 원장 전체 조회가 완료된 뒤 등록하세요.','warn');return;}
+    var frozen=scopeKey(),allMode=action==='stage_all';
+    var chosen=latestInCandidateFresh().filter(function(item){
+      if(allMode)return true;
+      var id=latestProductKey(item.research),choice=latestInCandidateSelections[id];
+      return !!(choice&&choice.scope===frozen);
+    });
+    if(!chosen.length){show('현재 국가·지역에서 최초 등록할 미등록 상품이 없습니다.','warn');return;}
+    if(!window.confirm('선택 국가·지역 '+frozen+' · '+(allMode?'미등록 전체 ':'선택 미등록 ')+chosen.length+'건을 상품별로 검증합니다. 검증된 실상품만 현재 후보 원장에 등록하며, 등록된 상품은 기존 미배치 관리 기능을 그대로 사용합니다. 진행할까요?'))return;
+    latestInCandidateBusy=true;
+    latestInCandidateMessage='상품 상세 검증·기존 후보 원장 최초 등록 0/'+chosen.length+'건';
+    renderLatestResearchCandidateGroup();
+    var registeredIds=[],failed=[],held=0,alreadyFound=0,confirmed=[];
     try{
+      // Existing research-source stage is the only authorized creator of real
+      // candidate IDs.  The working candidate manager only accepts those IDs.
+      // Process one research product at a time, never invent a local ID.
       for(var i=0;i<chosen.length;i++){
         if(scopeKey()!==frozen)throw new Error('관리 국가·지역 변경으로 나머지 등록을 중단했습니다.');
-        var researchId=chosen[i].id,staged=await runLatestProductQueueAction('stage','selected',{idsOverride:[researchId],skipConfirm:true});
-        if(staged&&Array.isArray(staged.candidateIds)&&staged.candidateIds.length){registered++;staged.candidateIds.forEach(function(id){if(ids.indexOf(text(id))<0)ids.push(text(id));});delete latestInCandidateSelections[researchId];}
-        else failed.push(researchId+' · '+text(staged&&staged.error&&staged.error.message||'검증 보류 또는 후보 ID 미발급'));
-        latestInCandidateMessage='국가별 실상품 검증·등록 '+(i+1)+'/'+chosen.length+' · 후보 발급 '+registered+' · 확인 필요 '+failed.length;
+        var item=chosen[i],researchId=latestProductKey(item.research),staged=null;
+        try{
+          staged=await runLatestProductQueueAction('stage','selected',{idsOverride:[researchId],skipConfirm:true});
+          var returnedIds=Array.isArray(staged&&staged.candidateIds)?staged.candidateIds.map(text).filter(Boolean):[];
+          returnedIds.forEach(function(id){if(registeredIds.indexOf(id)<0)registeredIds.push(id);});
+          if(!returnedIds.length){
+            if(Number(staged&&staged.routedHold||0)>0||Number(staged&&staged.routedReject||0)>0)held++;
+            else failed.push(researchId+' · '+text(staged&&staged.error&&staged.error.message||'상세상품 검증 보류·후보 ID 미발급'));
+          }
+        }catch(error){failed.push(researchId+' · '+text(error&&error.message||'등록 서버 호출 실패'));}
+        latestInCandidateMessage='선택 국가 '+frozen+' · 미등록 상품 검증 '+(i+1)+'/'+chosen.length+' · 후보 ID 발급 '+registeredIds.length+'건 · 보류·제외 '+held+'건 · 확인 필요 '+failed.length+'건';
         var state=$('latestInCandidateStatus');if(state)state.textContent=latestInCandidateMessage;
       }
-      if(scopeKey()!==frozen)throw new Error('관리 국가·지역 변경으로 결과 조회 중단');
-      await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});
-      var confirmed=ids.filter(function(id){return productRows.some(function(row){return frontCandidateLedgerId(row)===id&&row.ledgerSource==='candidate';});});
-      latestInCandidateMessage='신규 리서치 등록 · 서버 ID 발급 '+ids.length+'건 · 실제 후보 원장 확인 '+confirmed.length+'건 · 검증 보류/실패 '+failed.length+'건'+(failed.length?' · '+failed.slice(0,2).join(' / '):'');
-      show(latestInCandidateMessage,failed.length||confirmed.length!==ids.length?'warn':'ok');
-    }catch(error){latestInCandidateMessage='최신 리서치 원장 등록 실패: '+text(error&&error.message);show(latestInCandidateMessage,'fail');}
+      if(scopeKey()!==frozen)throw new Error('국가·지역이 바뀌어 신규 등록 결과 반영을 중단했습니다.');
+      // Server acknowledgement is NOT enough. Read the canonical management
+      // ledger and allow operations only on candidates found there.
+      var current=await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});
+      if(!(current&&current.pipeline&&current.pipeline.ledgerLoadComplete===true))
+        throw new Error('등록 후 실제 후보 원장 전체 재조회가 완료되지 않았습니다.');
+      var map={};productRows.filter(function(row){return row&&row.ledgerSource==='candidate';}).forEach(function(row){
+        var id=frontCandidateLedgerId(row);if(id)map[id]=row;
+      });
+      confirmed=registeredIds.filter(function(id){return !!map[id];});
+      if(confirmed.length<registeredIds.length)failed.push('서버가 반환한 후보 '+(registeredIds.length-confirmed.length)+'건을 실제 후보 원장에서 확인하지 못했습니다.');
+      // The legacy source stage can stop listing a transferred research row.
+      // Retain verified candidate IDs for this *scope* so the new management
+      // group still displays them and uses normal candidate bulk actions.
+      latestInCandidateRememberIds(confirmed,frozen);
+      confirmed.forEach(function(id){candidateSelectedProducts[id]=true;});
+      chosen.forEach(function(item){var key=latestProductKey(item.research);if(key)delete latestInCandidateSelections[key];});
+      var registeredRows=latestResearchCanonicalCandidateRows(),first=registeredRows.findIndex(function(row){return confirmed.indexOf(frontCandidateLedgerId(row))>=0;});
+      if(first>=0)candidateGroupPages['candidate:latest_research']=Math.floor(first/MANAGEMENT_PAGE_SIZE);
+      latestInCandidateMessage='신규 리서치 검증 '+chosen.length+'건 · 후보 원장 등록 확인 '+confirmed.length+'건 · 보류·제외 '+held+'건 · 추가 확인 '+failed.length+'건'+(failed.length?' · '+failed.slice(0,2).join(' / '):'');
+      saveReviewSnapshot();
+      renderLatestResearchCandidateGroup();
+      var mount=$('latestCandidateResearchMount'),group=mount&&mount.querySelector('[data-product-group="latest_research"]');
+      if(group&&confirmed.length){group.open=true;try{group.scrollIntoView({block:'start',behavior:'smooth'});}catch(_e){}}
+      show(latestInCandidateMessage+(confirmed.length?' · 등록된 후보를 같은 카드·선택·일괄 배치 기능에서 바로 관리할 수 있습니다.':''),failed.length?'warn':'ok');
+    }catch(error){latestInCandidateMessage='리서치 최초 등록 중단: '+text(error&&error.message);show(latestInCandidateMessage,'warn');}
     finally{latestInCandidateBusy=false;renderLatestResearchCandidateGroup();}
   }
 
