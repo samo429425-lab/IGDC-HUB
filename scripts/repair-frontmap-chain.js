@@ -297,6 +297,64 @@ function patchFrontMatchControl() {
   return true;
 }
 
+// Keep the existing administrator JS and HTML as the sources of truth.
+// This paint-only follow-up runs after the established Front Match lock patch.
+// It never changes business policy, country scopes, Supabase writes or build hooks.
+function patchFrontMatchImmediatePaint() {
+  let source=read(ADMIN_COMMERCE_JS);
+  const helperName='function frontMatchImmediateLockV2()';
+  if(!source.includes(helperName)){
+    const helper=`  // Synchronously lock EVERY front command before costly ledger/DOM work.\n`+
+      `  function frontMatchImmediateLockV2(){\n`+
+      `    var selector='#productFrontMatchBtn,#productFrontUnmatchBtn,#selectedSectionsMatchBtn,#allSectionsMatchBtn,#selectedSectionsUnmatchBtn,#allSectionsUnmatchBtn,[data-section-front-match],[data-section-front-unmatch],[data-selected-products-front]';\n`+
+      `    Array.prototype.forEach.call(document.querySelectorAll(selector),function(button){button.disabled=true;});\n`+
+      `    var state=$('productFrontSyncState');\n`+
+      `    if(state){state.className='front-sync-state running';state.textContent='프론트 매칭 준비 중 · 모든 프론트 매칭 버튼 잠금';}\n`+
+      `  }\n`;
+    const before='  var productFrontSyncPreflightActive=false;';
+    if(!source.includes(before))throw new Error('Front Match preflight boundary not found for immediate lock');
+    source=source.replace(before,helper+before);
+  }
+  const before=`    frontMatchCommandBusy=true;\n`+
+    `    syncFrontSelectionControls();\n`+
+    `    try{return await runProductFrontSyncCore(operation,mode,sectionKey,productId,selection);}`;
+  const after=`    frontMatchCommandBusy=true;\n`+
+    `    // Set disabled properties within the click event itself.  Yield one\n`+
+    `    // browser paint opportunity before scanning the 249-market ledger.\n`+
+    `    frontMatchImmediateLockV2();\n`+
+    `    await new Promise(function(resolve){setTimeout(resolve,20);});\n`+
+    `    syncFrontSelectionControls();\n`+
+    `    try{return await runProductFrontSyncCore(operation,mode,sectionKey,productId,selection);}`;
+  if(source.includes(before))source=source.replace(before,after);
+  else if(!source.includes(after))throw new Error('Front Match click wrapper missing or conflicting');
+  mustContain(source,'frontMatchImmediateLockV2();','Front Match immediate click lock');
+  if(source!==read(ADMIN_COMMERCE_JS)){
+    atomicWrite(ADMIN_COMMERCE_JS,source);
+    return true;
+  }
+  return false;
+}
+
+// HTML must request the fingerprint of the exact built JS, not a static old
+// ?build= value which can leave operators running a stale cached script.
+function patchFrontMatchAssetFingerprint(){
+  const htmlPath=path.join(ROOT,'commerce-country-control.html');
+  const original=read(htmlPath);
+  const digest=require('crypto').createHash('sha256').update(read(ADMIN_COMMERCE_JS)).digest('hex').slice(0,12);
+  const asset='/assets/js/admin-commerce-country-control.js';
+  const pattern=/(\/assets\/js\/admin-commerce-country-control\.js)\?(?:build|v)=[^"'\s<>]+/g;
+  if(!original.includes(asset))throw new Error('Admin JS script src not found for fingerprint');
+  const next=original.replace(pattern,asset+'?build=igdc-'+digest);
+  if(next===original){
+    // The HTML must already carry this exact fingerprint; a bare src or an
+    // unknown loader form requires inspection rather than silent cache bugs.
+    if(!original.includes(asset+'?build=igdc-'+digest))throw new Error('Admin JS build query not updated');
+    return false;
+  }
+  atomicWrite(htmlPath,next);
+  return true;
+}
+
 function validateExistingChain() {
   const home = read(HOME_AUTOMAP);
   mustContain(home, `const KEYS_MAIN = ['home_1', 'home_2', 'home_3', 'home_4', 'home_5', 'home_6'];`, "Home AutoMap main keys");
@@ -324,12 +382,16 @@ try {
   const reviewChanged = patchReviewApi();
   validateExistingChain();
   const frontControlChanged=patchFrontMatchControl();
+  const paintChanged=patchFrontMatchImmediatePaint();
+  const cacheChanged=patchFrontMatchAssetFingerprint();
   console.log(
     "IGDC FrontMap repair OK" +
     " · snapshotEngine=" + (snapshotChanged ? "patched" : "ready") +
     " · adminReview=" + (reviewChanged ? "patched" : "ready") +
     " · routes=home_3,home_right_top,distribution-extra" +
     " · FrontMatchLock="+(frontControlChanged?"patched":"ready")+
+    " · FrontMatchPaint="+(paintChanged?"patched":"ready")+
+    " · AdminJsFingerprint="+(cacheChanged?"updated":"current")+
     " · mode=structural-transport-only"
   );
 } catch (error) {
