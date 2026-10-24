@@ -174,9 +174,14 @@ exports.handler = async function (event) {
       query,
     );
     const countryCode = text(route.countryCode).toUpperCase();
+    const regionId = text(route.worldRegion || route.regionId);
+    // Public read precedence mirrors the Social country-routing contract:
+    // country-specific publication, then its regional publication, then GLOBAL.
+    // A regional release must not be invisible merely because a GLOBAL release exists.
     let exact = countryCode ? await latestForToken(countryCode) : null;
-    let global = exact ? null : await latestForToken("GLOBAL");
-    let release = exact || global;
+    let regional = !exact && regionId ? await latestForToken("REGION:" + regionId) : null;
+    let global = !exact && !regional ? await latestForToken("GLOBAL") : null;
+    let release = exact || regional || global;
     if (!release) {
       const rows = await SocialStore.selectReleases(
         "select=release_id,status,snapshot_hash,snapshot,created_at,notes&status=eq.stored&order=created_at.desc&limit=25",
@@ -185,11 +190,16 @@ exports.handler = async function (event) {
       exact = countryCode
         ? list.find((row) => releaseCountry(row) === countryCode)
         : null;
-      global = list.find((row) => !releaseCountry(row));
-      // A stored release is a durable publication record. If routing metadata
-      // changed after publication, do not blank the public Social main page:
-      // use the newest valid stored release as a last-resort Social-only read.
-      release = exact || global || list.find((row) => row && row.snapshot) || null;
+      regional = !exact && regionId ? list.find((row) => {
+        const scope = row && row.snapshot && row.snapshot.meta && row.snapshot.meta.applicationScope || {};
+        return text(scope.worldRegion || scope.regionId) === regionId &&
+          !text(scope.countryCode);
+      }) : null;
+      global = list.find((row) => !releaseCountry(row) &&
+        !text(row && row.snapshot && row.snapshot.meta && row.snapshot.meta.applicationScope &&
+          row.snapshot.meta.applicationScope.worldRegion));
+      // Preserve the last usable stored Social release on legacy metadata.
+      release = exact || regional || global || list.find((row) => row && row.snapshot) || null;
     }
     if (!release || !release.snapshot) {
       return SocialStore.response(
@@ -220,7 +230,8 @@ exports.handler = async function (event) {
           countryCode: route.countryCode,
           worldRegion: route.worldRegion,
           matchedCountryApplication: !!exact,
-          usedGlobalFallback: !exact && !!global,
+          usedRegionFallback: !exact && !!regional,
+          usedGlobalFallback: !exact && !regional && !!global,
           rawIpStored: false,
         },
         pipeline: {
@@ -228,9 +239,11 @@ exports.handler = async function (event) {
           releaseScope:
             exact && countryCode
               ? "country_exact"
-              : global
-                ? "global_fallback"
-                : "latest_stored_fallback",
+              : regional
+                ? "region_fallback"
+                : global
+                  ? "global_fallback"
+                  : "latest_stored_fallback",
           storedHashVerification:
             release.snapshot_hash === documentHash ? "passed" : "failed",
           frontPayloadReady: publicSlots.total > 0 ? "passed" : "empty",

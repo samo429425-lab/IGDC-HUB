@@ -22,7 +22,7 @@
   ];
   var COLLECTOR_JOB_VERSION = 11,
     FULL_RESEARCH_ROUNDS = 3,
-    SECTION_BATCHES_PER_ROUND = 4,
+    SECTION_BATCHES_PER_ROUND = 2,
     STANDARD_EMPTY_BATCH_LIMIT = 8,
     LOW_YIELD_EMPTY_BATCH_LIMIT = 8,
     COLLECTOR_CURSOR_KEY = "igdc.socialCollector.discoveryCursors.v2";
@@ -2066,6 +2066,12 @@
     }).length;
   }
   function newIds(data, known) {
+    var gateway = data && data.liveCollection && data.liveCollection.gateway || {};
+    // Count DB-verified new content, not creator rows or returned upserts.
+    // A transport failure/readback failure must never be displayed as growth.
+    if (gateway.verifiedInsertedLatestContent != null) {
+      return Math.max(0, Number(gateway.verifiedInsertedLatestContent) || 0);
+    }
     var list = (data && data.itemsPreview) || [],
       added = 0;
     list.forEach(function (row) {
@@ -2163,6 +2169,9 @@
     j.direct += Number(live.directCandidates || 0);
     j.accepted += Number(d.accepted || 0);
     j.saved += Number(d.saved || 0);
+    j.inserted = Number(j.inserted || 0) + Number(d.insertedLatestContent || 0);
+    j.updated = Number(j.updated || 0) + Number(d.updatedLatestContent || 0);
+    j.verifiedInserted = Number(j.verifiedInserted || 0) + Number(d.verifiedInsertedLatestContent || 0);
     j.skipped += Number(d.excludedSkipped || 0);
     var traces = (live.providerTrace || []).reduce(function (all, row) {
       return all.concat((row && row.providers) || []);
@@ -2191,6 +2200,13 @@
         : live.nextQueryCursor,
     );
     if (!dryRun) saveDiscoveryCursor(section, j.queryCursor);
+    // The server may return 200 while a downstream gateway reports an error.
+    // Do not count that as a successful batch or silently progress the job.
+    if (d.ok === false || (live.gateway && live.gateway.ok === false)) {
+      var gatewayError = new Error(text(d.message || (live.gateway && live.gateway.message) || d.error || "candidate_gateway_failed"));
+      gatewayError.status = Number(live.gateway && live.gateway.statusCode) || 500;
+      throw gatewayError;
+    }
     j.catalogSize = Number(live.queryCatalogSize || j.catalogSize || 5);
     j.discoveryCatalogSize = Number(
       live.discoveryCatalogSize || j.discoveryCatalogSize || j.catalogSize || 5,
@@ -2529,7 +2545,8 @@
         });
         show("7개 SNS " + FULL_RESEARCH_ROUNDS + "차 순환 완료: 검색 " +
           j.searched + "건, 실제 콘텐츠 후보 " + j.direct +
-          "건, 저장 응답 " + j.saved + "건" +
+          "건, 신규 저장 " + Number(j.verifiedInserted || 0) +
+          "건, 기존 갱신 " + Number(j.updated || 0) + "건, 저장 응답 " + j.saved + "건" +
           (j.sectionFailures.length ? ". 오류 " + j.sectionFailures.length +
            "건은 기록하고 다음 섹션으로 계속 진행했습니다." : "."),
           completedWithErrors || j.sectionFailures.length ? "warn" : "ok");
@@ -3092,17 +3109,27 @@
     }
   }
   function candidateRegistered(row) {
-    if (!row || contentHold(row)) return false;
-    var cls=assetClass(row), isProfileFallback=cls === "influencer_registry" && PROFILE_FALLBACK_SECTIONS.has(row.sectionKey);
-    if (cls !== "latest_content" && !isProfileFallback) return false;
-    var thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url || row.raw.channelThumbnailUrl)));
-    var hasRealThumb = /^https:\/\//i.test(thumbUrl) && !/placeholder|\/assets\/sample\//i.test(thumbUrl) && !genericProviderPreviewThumb(lower(row.platform).replace(/^social-/,""),thumbUrl);
-    var baseOk = text(row.reviewStatus).toLowerCase() === "approved" &&
-      /^(approved_for_snapshot|verified|approved)$/i.test(text(row.verificationStatus)) &&
-      row.candidateOnly === false && row.seedContent !== true && row.publicAccess === true && row.loginRequired !== true;
-    if (isProfileFallback) return baseOk && /^https:\/\//i.test(text(row.channelUrl || row.sourceUrl));
-    if (typeof row.promotable === "boolean") return row.promotable === true && hasRealThumb;
-    return baseOk && /^https:\/\//i.test(text(row.latestContentUrl || row.sourceUrl)) && hasRealThumb;
+    // Use the same content-only publication rule as the Social server.
+    // Creator registry rows are supplemental and never occupy a public slot.
+    if (!row || contentHold(row) || assetClass(row) !== "latest_content") return false;
+    var platform = lower(row.platform).replace(/^social-/, "");
+    var previewOptional = ["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].indexOf(platform) >= 0;
+    var thumbUrl = text(row.thumbnailUrl || row.thumbnail_url || (row.raw && (row.raw.thumbnailUrl || row.raw.thumbnail_url)));
+    var hasRealThumb = /^https:\/\//i.test(thumbUrl) &&
+      !/placeholder|\/assets\/sample\//i.test(thumbUrl) &&
+      !genericProviderPreviewThumb(platform, thumbUrl);
+    // promotable comes from SocialStore.isApprovedForSnapshot on the server.
+    // The publisher accepts validated latest-content posts without a preview
+    // for these six platforms; do not block them in the browser first.
+    if (typeof row.promotable === "boolean")
+      return row.promotable === true && (hasRealThumb || previewOptional);
+    var baseOk = text(row.reviewStatus || row.review_status).toLowerCase() === "approved" &&
+      /^(approved_for_snapshot|verified|approved)$/i.test(text(row.verificationStatus || row.verification_status)) &&
+      row.candidateOnly === false && row.seedContent !== true &&
+      row.publicAccess === true && row.loginRequired !== true &&
+      text(row.riskLevel || row.risk_level).toLowerCase() !== "blocked";
+    return baseOk && /^https:\/\//i.test(text(row.latestContentUrl || row.sourceUrl)) &&
+      (hasRealThumb || previewOptional);
   }
   function registeredContentIds(sectionKey) {
     return rows
@@ -3537,16 +3564,26 @@
 
       var verify = null;
       if (runtimeDirect && d.releaseId) {
+        // Read back the exact publication scope. Without these parameters a
+        // GLOBAL publish is verified against the visitor's country-specific
+        // release (when it exists), resulting in a false mismatch.
+        var verifyParams = new URLSearchParams({
+          view: "front",
+          scopeMode: scope.scopeMode || "auto",
+          countryCode: scope.countryCode || "",
+          regionId: scope.regionId || "",
+          _: String(Date.now()),
+        });
         for (var verifyTry = 0; verifyTry < 4; verifyTry++) {
           try {
-            verify = await getReport(CURRENT_SOCIAL + "?view=front&_=" + Date.now());
-            if (verify && verify.ok && text(verify.releaseId) === text(d.releaseId) && verify.hashVerified !== false) break;
+            verify = await getReport(CURRENT_SOCIAL + "?" + verifyParams.toString());
+            if (verify && verify.ok && text(verify.releaseId) === text(d.releaseId) && verify.hashVerified === true) break;
           } catch (_verifyError) {}
           await new Promise(function (resolve) { setTimeout(resolve, 450); });
         }
         diagnostic({ actualApply: d, runtimeFront: verify });
-        if (!verify || !verify.ok || text(verify.releaseId) !== text(d.releaseId)) {
-          throw new Error("승인 Release는 저장됐지만 프론트 실시간 readback이 아직 같은 Release를 반환하지 않습니다. 잠시 후 다시 확인해 주세요.");
+        if (!verify || !verify.ok || text(verify.releaseId) !== text(d.releaseId) || verify.hashVerified !== true) {
+          throw new Error("승인 Release는 저장됐지만 지정한 게시 범위의 프론트 조회에서 동일한 Release·해시를 확인하지 못했습니다. 대상 국가와 게시 범위를 확인해 주세요.");
         }
       } else {
         var verifyQ = new URLSearchParams({

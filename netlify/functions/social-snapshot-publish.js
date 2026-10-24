@@ -139,6 +139,14 @@ async function latestStoredBase(route) {
         "&order=created_at.desc&limit=1",
     );
     let latest = Array.isArray(exactRows) && exactRows[0];
+    if (!latest && countryCode && regionId) {
+      const regionRows = await SocialStore.selectReleases(
+        "select=release_id,snapshot,created_at,notes&status=eq.stored&notes=like." +
+          encodeURIComponent("scope=REGION:" + regionId + ";%") +
+          "&order=created_at.desc&limit=1",
+      );
+      latest = Array.isArray(regionRows) && regionRows[0];
+    }
     if (!latest && (countryCode || regionId)) {
       const globalRows = await SocialStore.selectReleases(
         "select=release_id,snapshot,created_at,notes&status=eq.stored&notes=like." +
@@ -152,9 +160,16 @@ async function latestStoredBase(route) {
         "select=release_id,snapshot,created_at,notes&status=eq.stored&order=created_at.desc&limit=25",
       );
       const list = Array.isArray(legacyRows) ? legacyRows : [];
-      const exact = list.find((row) => releaseCountry(row) === countryCode);
-      const global = list.find((row) => !releaseCountry(row));
-      latest = exact || ((countryCode || regionId) ? global : null);
+      const exact = countryCode ? list.find((row) => releaseCountry(row) === countryCode) : null;
+      const regional = regionId ? list.find((row) => {
+        const scope = row && row.snapshot && row.snapshot.meta && row.snapshot.meta.applicationScope || {};
+        return !text(scope.countryCode) && text(scope.worldRegion || scope.regionId) === regionId;
+      }) : null;
+      const global = list.find((row) => {
+        const scope = row && row.snapshot && row.snapshot.meta && row.snapshot.meta.applicationScope || {};
+        return !text(scope.countryCode) && !text(scope.worldRegion || scope.regionId);
+      });
+      latest = exact || regional || ((countryCode || regionId) ? global : null);
     }
     if (latest && latest.snapshot) {
       const structural = fullStructuralBase(latest.snapshot);
@@ -538,6 +553,16 @@ async function latestStoredReleaseForRoute(route) {
       "&order=created_at.desc&limit=1",
   );
   let latest = Array.isArray(exactRows) && exactRows[0];
+  const regionId = text(route && (route.worldRegion || route.regionId));
+  const countryCode = text(route && route.countryCode).toUpperCase();
+  if (!latest && countryCode && regionId) {
+    const regionRows = await SocialStore.selectReleases(
+      "select=release_id,status,snapshot_hash,snapshot,created_at,notes&status=eq.stored&notes=like." +
+        encodeURIComponent("scope=REGION:" + regionId + ";%") +
+        "&order=created_at.desc&limit=1",
+    );
+    latest = Array.isArray(regionRows) && regionRows[0];
+  }
   if (!latest && token !== "GLOBAL") {
     const globalRows = await SocialStore.selectReleases(
       "select=release_id,status,snapshot_hash,snapshot,created_at,notes&status=eq.stored&notes=like." +
