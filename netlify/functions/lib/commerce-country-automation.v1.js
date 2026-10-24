@@ -4109,6 +4109,7 @@ async function productCandidateLedgerAction(actorId, input) {
   if (!candidateId) { const error = new Error("관리할 상품 후보를 선택하세요."); error.statusCode = 400; throw error; }
   const rows = await frontSyncSelectCandidates([candidateId]), row = plain(rows[0]);
   if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { const error = new Error("선택 상품 후보 원장을 찾을 수 없습니다."); error.statusCode = 404; throw error; }
+  if (!heldCandidateMatchesScope(row,scope)) { const error = new Error("선택 상품이 현재 관리 국가·지역 원장에 속하지 않습니다."); error.statusCode=403; throw error; }
   const payload = Object.assign({}, plain(row.source_payload)), now = iso(), actor = text(actorId) || "administrator";
   const priorPlacement = plain(payload.approvedPlacement || payload.selectedPlacement || payload.placement), priorStructuredKey = productPlacementKey(priorPlacement), priorLegacyKey = text(payload.page) && text(payload.section) ? text(payload.page) + "|" + text(payload.section) : "", priorKey = validProductSectionKey(priorStructuredKey) ? priorStructuredKey : (validProductSectionKey(priorLegacyKey) ? priorLegacyKey : "");
   let status = text(row.status) || "approval_pending", placement = null, effectiveDecision = decision, releaseAssignment = false;
@@ -4143,10 +4144,15 @@ async function productCandidateLedgerAction(actorId, input) {
   let assignmentCleanup={ok:true,count:0,deferred:false};
   if (releaseAssignment) {
     let assignmentRows=[];
-    try{assignmentRows=array(await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at",[candidateId]));}catch(_assignmentReadError){}
+    try{assignmentRows=array(await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,updated_at",[candidateId]));}
+    catch(assignmentReadError){const error=new Error("상품 배치 관계 조회 실패 · 상태 변경 중단: "+text(assignmentReadError&&assignmentReadError.message));error.statusCode=503;throw error;}
     const scopedAssignments=assignmentRows.filter((assignment)=>normalizeCountry(assignment&&assignment.country_code)===scope.country&&frontSyncExpectedRegion(assignment,scope.country)===scope.region);
     const liveAssignment=scopedAssignments.find((assignment)=>["queued","publish_requested","published","matched","active"].includes(lower(assignment&&assignment.publication_status)))||null;
     const priorAssignment=liveAssignment||scopedAssignments[0]||null;
+    const priorFrontStatus=lower(plain(payload.frontPublication).status);
+    if(liveAssignment||["queued","publish_requested","published","matched","active","unpublish_requested"].includes(priorFrontStatus)){
+      const error=new Error("프론트 공개 또는 공개 해제 대기 상품입니다. Front Match 공개 해제 완료 후 배치·삭제할 수 있습니다.");error.statusCode=409;throw error;
+    }
     const assignmentKey=priorAssignment&&validProductSectionKey(text(priorAssignment.hub_key)+"|"+text(priorAssignment.slot_key))?text(priorAssignment.hub_key)+"|"+text(priorAssignment.slot_key):"";
     const effectivePriorKey=validProductSectionKey(priorKey)?priorKey:assignmentKey;
     const priorSplit = validProductSectionKey(effectivePriorKey) ? splitProductSectionKey(effectivePriorKey) : null;
@@ -4160,11 +4166,19 @@ async function productCandidateLedgerAction(actorId, input) {
       try{await SlotStore.remove("gslot_slot_assignments","id=eq."+encodeURIComponent(text(assignment.id)));removed+=1;}
       catch(error){removeFailed.push({id:text(assignment.id),error:text(error&&error.message)||"assignment_remove_failed"});}
     }
-    assignmentCleanup={ok:removeFailed.length===0,count:removed,failed:removeFailed.length,failures:removeFailed,deferredFrontBuild:frontWasActive};
+    if(removeFailed.length){const error=new Error("섹션 배치 관계 삭제 실패 · 후보 상태 변경 중단: "+removeFailed.map(x=>x.id).join(","));error.statusCode=503;throw error;}
+    const remainingRelations=array(await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,country_code,region_code",[candidateId]))
+      .filter((assignment)=>normalizeCountry(assignment&&assignment.country_code)===scope.country&&frontSyncExpectedRegion(assignment,scope.country)===scope.region);
+    if(remainingRelations.length){const error=new Error("섹션 배치 관계가 남아 있어 상품 이동·삭제를 중단했습니다.");error.statusCode=409;throw error;}
+    assignmentCleanup={ok:true,count:removed,failed:0,failures:[],deferredFrontBuild:false};
   }
   payload.decisionAt = now; payload.decisionBy = actor; payload.decisionSource = "candidate_ledger_control"; payload.publicPublication = false; payload.automaticImport = false;
   if (decision !== "affiliate_settlement") payload.review = Object.assign({}, plain(payload.review), { state: decision === "remove_from_list" ? "removed_from_list" : (effectiveDecision === "slot_candidate" ? "pending" : effectiveDecision), decidedAt: now, decidedBy: actor });
   await SlotStore.update("gslot_candidates", "id=eq." + encodeURIComponent(candidateId), { status, source_payload: payload, updated_at: now });
+  const written=array(await frontSyncSelectCandidates([candidateId])).find((item)=>text(item&&item.id)===candidateId);
+  if(!written||!heldCandidateMatchesScope(written,scope)||lower(written.status)!==lower(status)||lower(plain(written.source_payload).slotDecision)!==lower(payload.slotDecision)){
+    const error=new Error("상품 후보 저장 후 상태 재조회 불일치");error.statusCode=503;throw error;
+  }
   const researchVisibility = await syncCandidateManagementResearchVisibility(actorId,scope,candidateId,effectiveDecision);
   return { ok: true, candidateLedger: true, candidateId, actionResult: { candidateId, decision, effectiveDecision, placement, status, assignmentCleanup, researchVisibility, deferredFrontBuild:assignmentCleanup.deferredFrontBuild===true, publicPublication: false, paymentExecution: false } };
 }
@@ -4786,8 +4800,9 @@ async function productCandidatePsomPlace(actorId, input) {
     try {
       const row = plain(rowById.get(id));
       if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { results.push({candidateId:id,assigned:false,error:"candidate_not_found"}); continue; }
+      if (!heldCandidateMatchesScope(row,scope)) { results.push({candidateId:id,assigned:false,error:"candidate_outside_selected_country_region"}); continue; }
       const payload = Object.assign({}, plain(row.source_payload)), current = lower(payload.slotDecision || "undecided");
-      if (["reject","purge","removed"].includes(current) || plain(payload.queueControl).permanentExcluded === true) { results.push({candidateId:id,assigned:false,error:"candidate_excluded"}); continue; }
+      if (["hold","reject","purge","removed"].includes(current) || plain(payload.queueControl).permanentExcluded === true) { results.push({candidateId:id,assigned:false,error:"candidate_excluded"}); continue; }
       // Administrator/manual decisions always outrank automatic PSOM placement.
       // A bulk AI click must never silently rewrite a manually fixed section or
       // a manually held/undecided candidate.
@@ -4875,6 +4890,52 @@ async function productCandidatePsomPlace(actorId, input) {
   // ok:false made the browser discard successful writes and retry/mark the whole
   // chunk failed, which left the unassigned screen visually stale.
   return {ok:true,status:failed?(assigned?"partial":"review_required"):"complete",complete:failed===0,candidateLedger:true,mode:"psom_private_pre_front",requested:ids.length,processed:assigned,assigned,failed,unassigned:failed,processedIds:results.filter((row)=>row.assigned===true).map((row)=>row.candidateId),results,balanceCounts:counts,publicPublication:false,frontMatchRequired:true,runtimeValidationDeferredToFrontMatch:true};
+}
+
+async function productCandidateVerifiedPsomPlace(actorId,input){
+  const scope=researchScope(input),actor=text(actorId)||"administrator",
+    ids=Array.from(new Set(array(input&&input.candidateIds).map(text).filter(Boolean))).slice(0,8);
+  if(!ids.length){const error=new Error("검증·자동 배치할 실제 후보 ID를 선택하세요.");error.statusCode=400;throw error;}
+  const rows=await frontSyncSelectCandidates(ids),byId=new Map(array(rows).map(r=>[text(r&&r.id),r])),eligible=[],results=[];
+  for(const id of ids){
+    const row=plain(byId.get(id)),payload=plain(row.source_payload),priorFront=lower(plain(payload.frontPublication).status);
+    if(!text(row.id)||text(row.source_ref)!==PRODUCT_SOURCE_REF||!heldCandidateMatchesScope(row,scope)){
+      results.push({candidateId:id,assigned:false,reason:"candidate_not_in_selected_market"});continue;
+    }
+    if(lower(payload.slotDecision)!=="undecided"||plain(payload.queueControl).permanentExcluded===true||
+      ["queued","publish_requested","published","matched","active","unpublish_requested"].includes(priorFront)){
+      results.push({candidateId:id,assigned:false,reason:"candidate_not_private_unassigned"});continue;
+    }
+    eligible.push(id);
+  }
+  if(!eligible.length)return{ok:true,requested:ids.length,assigned:0,held:0,inconclusive:0,failed:results.length,results,publicPublication:false};
+  const inspection=await revalidateCandidateLedgerRows(actorId,{countryCode:scope.country,subdivisionCode:scope.region},eligible,
+    {source:"explicit_verified_psom_inspection",reassign:false,reuseFreshValidation:true,freshValidationMinutes:720});
+  const verified=[],hardInvalid=[];
+  for(const id of eligible){
+    const item=array(inspection.results).find(r=>text(r&&r.candidateId)===id);
+    if(item&&item.live===true&&item.invalid!==true&&item.inconclusive!==true)verified.push(id);
+    else if(item&&item.invalid===true&&item.inconclusive!==true)hardInvalid.push(id);
+    else results.push({candidateId:id,assigned:false,inconclusive:true,reason:text(item&&item.reason)||"exact_product_validation_inconclusive"});
+  }
+  for(const id of hardInvalid){
+    try{
+      await productCandidateLedgerAction(actorId,{countryCode:scope.country,subdivisionCode:scope.region,candidateId:id,decision:"hold"});
+      results.push({candidateId:id,assigned:false,held:true,reason:"verified_invalid_detail_moved_to_hold"});
+    }catch(error){results.push({candidateId:id,assigned:false,reason:"hold_transition_failed: "+text(error&&error.message)});}
+  }
+  let finalCounts=normalizeProductSectionCounts(plain(input&&input.balanceCounts));
+  if(verified.length){
+    const placement=await productCandidatePsomPlace(actorId,{countryCode:scope.country,subdivisionCode:scope.region,
+      candidateIds:verified,balanceCounts:finalCounts});
+    if(placement.balanceCounts)finalCounts=placement.balanceCounts;
+    for(const item of array(placement.results))results.push(Object.assign({reason:item&&item.error||null},item));
+  }
+  const assigned=results.filter(r=>r.assigned===true).length,held=results.filter(r=>r.held===true).length,
+    inconclusive=results.filter(r=>r.inconclusive===true).length;
+  return{ok:true,complete:assigned===ids.length,requested:ids.length,assigned,held,inconclusive,
+    failed:results.length-assigned-held-inconclusive,results,publicPublication:false,frontMatchRequired:true,
+    country:scope.country,region:scope.region,balanceCounts:finalCounts};
 }
 
 async function productCandidateAiRecover(actorId, input) {
@@ -7115,5 +7176,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
 };
