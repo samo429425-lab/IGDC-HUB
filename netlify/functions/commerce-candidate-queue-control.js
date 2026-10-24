@@ -72,17 +72,28 @@ function stageFrontWithdrawal(payload,candidateId,prior,actorId,now,reason){
   });
   return shouldWithdraw;
 }
+function queuePersistedStatus(row){
+  // Product life-cycle buckets are authoritative in source_payload. Prior
+  // private workflow labels may be present in older rows; normalize those to
+  // the known private-queue SQL value instead of recycling a stale DB label.
+  const previous=text(row&&row.status),value=lower(previous);
+  if(!previous||["research_pending","hold","rejected","removed","suppressed"].includes(value))return "approval_pending";
+  return previous;
+}
 function candidateManagementBucket(row){
   const payload=plain(row&&row.source_payload),status=lower(row&&row.status),decision=lower(payload.slotDecision),review=lower(plain(payload.review).state),queueAction=lower(plain(payload.queueControl).action);
-  // The most recent authoritative operator state outranks stale review hints.
-  // Historically a review.state=hold could mask a completed removal/rejection.
-  if(status==="removed"||decision==="removed"||["removed_from_list","deleted_from_management"].includes(review)||["remove_from_list","dismiss"].includes(queueAction))return "removed";
-  // The administrator's saved decision controls the current visible bucket.
-  // Old suppressed/rejected status and review hints can outlive a later HOLD.
+  // The administrator's latest slotDecision is authoritative. The SQL status
+  // is an independent, restricted column and may legitimately remain unchanged.
+  if(["removed","remove_from_list","dismiss"].includes(decision))return "removed";
   if(decision==="hold")return "hold";
   if(decision==="reject"||decision==="purge")return "reject";
-  if(["reject","rejected","suppressed","purge","excluded"].includes(status)||["reject","rejected","permanent_excluded"].includes(review)||["reject","purge"].includes(queueAction))return "reject";
-  if(status==="hold"||review==="hold"||queueAction==="hold")return "hold";
+  if(decision==="undecided"||decision==="slot_candidate")return "active";
+  if(["remove_from_list","dismiss"].includes(queueAction)||["removed_from_list","deleted_from_management"].includes(review))return "removed";
+  if(["reject","purge"].includes(queueAction)||["rejected","permanent_excluded"].includes(review))return "reject";
+  if(queueAction==="hold"||review==="hold")return "hold";
+  if(status==="removed")return "removed";
+  if(["rejected","suppressed"].includes(status))return "reject";
+  if(status==="hold")return "hold";
   return "active";
 }
 function candidateAlreadyRestored(row){
@@ -168,9 +179,9 @@ async function applyAction(actorId,row,action){
     delete payload.approvedPlacement;delete payload.selectedPlacement;delete payload.placement;delete payload.page;delete payload.channel;delete payload.section;delete payload.psom_key;delete payload.slot;
     payload.review=Object.assign({},plain(payload.review),{state:"deleted_from_management",decidedAt:now,decidedBy:text(actorId)||"administrator"});
     stageFrontWithdrawal(payload,id,priorFront,actorId,now,"administrator_management_dismiss");
-    const confirmedUpdate=await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:"removed",source_payload:payload,owner_note:"관리자가 보류·제외 관리 목록에서 삭제했습니다. 공유 후보 원장은 보존하며 재수집을 허용합니다.",updated_at:now});
+    const confirmedUpdate=await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:queuePersistedStatus(row),source_payload:payload,owner_note:"관리자가 보류·제외 관리 목록에서 삭제했습니다. 공유 후보 원장은 보존하며 재수집을 허용합니다.",updated_at:now});
     if(!array(confirmedUpdate).some((item)=>text(item&&item.id)===id))throw new Error("candidate_update_not_confirmed:"+id);
-    return {id,action,status:"removed",deletedFromManagement:true,masterLedgerPreserved:true,rediscoveryAllowed:true,assignmentCleanup};
+    return{id,action,status:queuePersistedStatus(row),managementStatus:"removed",deletedFromManagement:true,masterLedgerPreserved:true,rediscoveryAllowed:true,assignmentCleanup};
   }
   const previousStatus=text(row&&row.status)||"approval_pending";
   const queueControl=Object.assign({},plain(payload.queueControl),{
@@ -206,9 +217,9 @@ async function applyAction(actorId,row,action){
       :action==="remove_from_list"
         ?"관리자가 이 상품 후보 원장은 보존하고 현재 후보 관리 목록에서만 제거했습니다. 이후 리서치 재발견은 허용됩니다."
         :"관리자가 이 상품 후보를 보류했습니다. 원장과 기존 검토 기록은 보존합니다.";
-  const confirmedUpdate=await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status,source_payload:payload,owner_note:note,updated_at:now});
+  const confirmedUpdate=await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(id),{status:queuePersistedStatus(row),source_payload:payload,owner_note:note,updated_at:now});
   if(!array(confirmedUpdate).some((item)=>text(item&&item.id)===id))throw new Error("candidate_update_not_confirmed:"+id);
-  return {id,action,status,assignmentCleanup,frontBuildDispatched:false};
+  return {id,action,status:queuePersistedStatus(row),managementStatus:status,assignmentCleanup,frontBuildDispatched:false};
 }
 
 
