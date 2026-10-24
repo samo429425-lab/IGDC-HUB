@@ -185,6 +185,15 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
     payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"unmatch",status:"unmatched",queued:false,persisted:true,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:false,reason:"administrator_private_section_release",page:prior&&prior.page||null,section:prior&&prior.sectionKey||prior&&prior.section||null,sectionKey:prior&&prior.sectionKey||prior&&prior.section||null,country:scope.country,region:scope.region,requestedAt:now,requestedBy:actorId});
   }
 
+  // A research candidate already exists in the canonical master. The explicit
+  // administrator handoff to UNASSIGNED is a durable move of the worklist,
+  // not a cloned candidate. Scope is verified above, and the normal 20-section
+  // manager continues to read this SAME candidate ID.
+  if(effective==="undecided" && (source==="latest_research_group"||source==="administrator")){
+    payload.managementControl=Object.assign({},plain(payload.managementControl),{
+      latestResearchHandoff:{completed:true,destination:"unassigned",country:scope.country,region:scope.region,completedAt:now,completedBy:actorId}
+    });
+  }
   payload.decisionAt=now;payload.decisionBy=actorId;payload.decisionSource=source==="ai_automation"?"ai_automation":"administrator_candidate_authority";payload.publicPublication=false;payload.automaticImport=false;
   const reviewState=decision==="dismiss"?"deleted_from_management":(decision==="remove_from_list"?"removed_from_list":(effective==="slot_candidate"?"pending":effective));
   payload.review=Object.assign({},plain(payload.review),{state:reviewState,decidedAt:now,decidedBy:actorId});
@@ -192,6 +201,12 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
   // rewritten with queue-control terms such as research_pending/hold/suppressed.
   await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{source_payload:payload,updated_at:now});
   const verified=await verifyAuthorityWrite(candidateId,scope,effective, effective==="slot_candidate"?placementKey(payload.approvedPlacement&&payload.approvedPlacement.key):null);
+  if(effective==="undecided"&&(source==="latest_research_group"||source==="administrator")){
+    const saved=await candidateRow(candidateId),handoff=plain(plain(plain(saved.source_payload).managementControl).latestResearchHandoff);
+    if(handoff.completed!==true||handoff.destination!=="unassigned"||handoff.country!==scope.country||handoff.region!==scope.region){
+      throw Object.assign(new Error("latest_research_handoff_not_confirmed:"+candidateId),{statusCode:409});
+    }
+  }
   return{candidateId,decision,effectiveDecision:effective,placement:payload.approvedPlacement||null,status,assignmentId:assignment&&assignment.id||null,ok:true,ledgerVerified:verified.verified,assignmentCount:verified.assignmentCount};
 }
 
