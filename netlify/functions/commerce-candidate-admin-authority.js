@@ -25,7 +25,9 @@ function requireWrite(actor){const roles=array(actor&&actor.roles).map(lower);if
 function scopeFrom(input){
   const country=MarketSaleScope.normalizeCountry(text(input&&input.countryCode||input&&input.country).toUpperCase());
   if(!country){const error=new Error("국가 범위를 확인하세요.");error.statusCode=400;throw error;}
-  const region=MarketSaleScope.normalizeRegion(text(input&&input.subdivisionCode||input&&input.regionCode||input&&input.region||"NATIONWIDE"),country)||"NATIONWIDE";
+  const requestedRegion=text(input&&input.subdivisionCode||input&&input.regionCode||input&&input.region||"NATIONWIDE");
+  const region=MarketSaleScope.normalizeRegion(requestedRegion,country);
+  if(!region){const error=new Error("선택한 국가의 지역 코드가 올바르지 않습니다.");error.statusCode=400;throw error;}
   return{country,region};
 }
 function placementKey(value){const key=text(value);return SECTION_KEYS.has(key)?key:"";}
@@ -72,12 +74,20 @@ function currentPlacement(payload,scope,oldRows){
   return{key:text(old.hub_key)+"|"+text(old.slot_key),page:text(old.hub_key),section:text(old.slot_key),sectionKey:text(old.slot_key),country:scope.country,region:scope.region};
 }
 function candidateScopeMatches(row, scope){
-  const payload=plain(row&&row.source_payload),market=plain(payload.marketScope),supply=plain(payload.countrySupply),placement=plain(payload.approvedPlacement);
-  const country=MarketSaleScope.normalizeCountry(text(market.marketCountry||supply.country||placement.country).toUpperCase());
-  if(!country||country!==scope.country)return false;
-  const region=MarketSaleScope.normalizeRegion(text(market.marketRegion||supply.region||placement.region||"NATIONWIDE"),country)||"NATIONWIDE";
-  return region===scope.region;
+  // Candidate metadata can contain legacy placement snapshots. A conflicting
+  // country/subdivision MUST stop the write rather than using the first field.
+  const payload=plain(row&&row.source_payload),market=plain(payload.marketScope),
+    supply=plain(payload.countrySupply),placement=plain(payload.approvedPlacement),
+    primary=plain(payload.primaryPlacement);
+  const countries=[market.marketCountry,supply.country,supply.countryCode,placement.country,primary.country,payload.countryCode]
+    .map(v=>text(v).toUpperCase()).filter(Boolean);
+  const regions=[market.marketRegion,supply.region,supply.regionCode,placement.region,primary.region,payload.regionCode]
+    .map(v=>text(v).toUpperCase()).filter(Boolean);
+  if(!countries.length||countries.some(c=>MarketSaleScope.normalizeCountry(c)!==scope.country))return false;
+  if(!regions.length)return scope.region==='NATIONWIDE';
+  return regions.every(region=>MarketSaleScope.normalizeRegion(region,scope.country)===scope.region);
 }
+
 function publiclyProtected(payload,relations){
   const status=lower(plain(payload.frontPublication).status);
   if(["queued","publish_requested","published","matched","active","unpublish_requested","unpublish_failed"].includes(status))return true;
@@ -106,6 +116,12 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
   if(!ALLOWED_SOURCE_REFS.has(text(row.source_ref)))throw Object.assign(new Error("이 상품 후보는 관리자 배치 원장 대상이 아닙니다."),{statusCode:409});
   if(!candidateScopeMatches(row,scope))throw Object.assign(new Error("candidate_outside_selected_country_region"),{statusCode:403});
   const oldRows=await assignments(candidateId),oldPayload=Object.assign({},plain(row.source_payload)),payload=Object.assign({},oldPayload),now=new Date().toISOString();
+  if(oldRows.length>=100)throw Object.assign(new Error('candidate_assignment_scan_limit'),{statusCode:409});
+  // This authority writes the candidate master as well as relations. Refuse
+  // shared candidate IDs with assignments from another country/subdivision.
+  if(oldRows.some(assignment=>!sameScope(assignment,scope))){
+    throw Object.assign(new Error('candidate_has_other_market_assignment_no_cross_scope_mutation'),{statusCode:409});
+  }
   const actorId=text(actor&&actor.sub)||"administrator",prior=currentPlacement(payload,scope,oldRows);
   let status=text(row.status)||"approval_pending",effective=decision,assignment=null;
   const oldQueue=plain(oldPayload.queueControl),oldDecision=lower(oldPayload.slotDecision);

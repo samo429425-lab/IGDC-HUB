@@ -358,8 +358,8 @@
     <details id="latestProductPanel" class="product-management-details heavy-data-panel" data-heavy-panel="latest-products">
       <summary class="heavy-panel-summary"><span><strong>최신 상품 리서치 목록</strong> <span id="latestProductSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="latest_product_research" data-policy-workspace-label="최신 상품 리서치 목록" data-policy-scope="country">AI 운영·정책 대화</button><span id="latestProductToggleLabel" class="pill info">목록 펼치기</span></span></summary>
       <div class="heavy-panel-content">
-        <div class="small">현재 선택 국가·지역의 이번 상품 리서치 사이클에서 발견·점검되어 저장된 최신 상품을 표시합니다. 조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관할 수 있습니다. AI 검증에서 정상 상품임이 확인된 것만 전체 상품 후보·배치 관리 목록으로 이관하고 PSOM 기준 섹션을 배치합니다. 접속 제한·검증 미완료 상품은 최신 목록에 남겨 다음 검증에서 재시도합니다. 확인된 부정확한 상품 URL은 별도 검토하며 기존 확정 상품은 변경하지 않습니다. 상품 조사를 일시정지하면 그 시점까지 저장된 최신 상품 목록을 다시 읽습니다.</div>
-        <section id="latestResearchOverview" class="latest-overview" aria-label="최신 상품 전체 위치·삭제·미배치 관리">
+        <div class="small">최신 리서치 결과 관리는 아래 <strong>전체 상품 후보·배치 관리 목록 → 미배치 상품 목록 아래의 최신 리서치 전용 섹션</strong>에서 진행합니다. 기존 상단 간편 관리 UI만 사용 중지하며 상품 조사·검증 기능은 유지합니다. 기존 안내: 조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관할 수 있습니다. AI 검증에서 정상 상품임이 확인된 것만 전체 상품 후보·배치 관리 목록으로 이관하고 PSOM 기준 섹션을 배치합니다. 접속 제한·검증 미완료 상품은 최신 목록에 남겨 다음 검증에서 재시도합니다. 확인된 부정확한 상품 URL은 별도 검토하며 기존 확정 상품은 변경하지 않습니다. 상품 조사를 일시정지하면 그 시점까지 저장된 최신 상품 목록을 다시 읽습니다.</div>
+        <section id="latestResearchOverview" class="latest-overview" aria-label="기존 리서치 간편 관리 · 사용 중지" aria-disabled="true" hidden style="display:none!important;pointer-events:none">
           <div class="latest-overview-header"><strong>현재 리서치 상품 전체 위치 · 간편 관리</strong><span id="latestOverviewSummary" class="small">원장 확인 중</span></div>
           <div class="latest-overview-controls"><label>상태 <select id="latestOverviewFilter"><option value="all">모두 보기</option><option value="new">미등록</option><option value="undecided">미배치</option><option value="slot_candidate">섹션 배치</option><option value="hold">보류</option><option value="excluded">일반·영구 제외</option><option value="duplicate">중복 확인</option></select></label><label>상품 검색 <input type="search" id="latestOverviewSearch" placeholder="상품명·URL·섹션"></label><button type="button" class="ghost" id="latestOverviewReload">원장 새로고침</button></div>
           <div class="small">원본 기록은 유지하고 현재 저장 위치를 보여줍니다. 미배치 이동은 실제 후보 ID로 처리합니다. 목록 삭제는 재수집 가능, 영구 제외는 재수집 차단입니다. 공개 중인 상품은 먼저 매칭 해제가 필요합니다.</div>
@@ -371,7 +371,7 @@
           <div class="latest-overview-pager"><button type="button" id="latestOverviewPrev">이전</button><span id="latestOverviewPageState" class="small"></span><button type="button" id="latestOverviewNext">다음</button></div>
           <div class="small">아래 기존 버튼과 카드 목록은 아직 후보 원장에 등록되지 않은 상품을 검증·이관하는 용도입니다.</div>
         </section>
-        <div id="latestProductGrid" class="product-grid latest-product-grid"><div class="small">아직 최신 리서치 상품을 불러오지 않았습니다.</div></div>
+        <div id="latestProductGrid" class="product-grid latest-product-grid" hidden style="display:none!important"><div class="small">아직 최신 리서치 상품을 불러오지 않았습니다.</div></div>
       </div>
     </details>
 
@@ -385,7 +385,7 @@
           <div id="sectionRevenueRankingState" class="small" aria-live="polite" style="width:100%">미리보기는 원장을 변경하지 않습니다. 실제 프론트 반영은 기존 Front Match에서 별도로 실행합니다.</div>
         </div>
         <div class="small">이 목록이 상품 배치의 유일한 관리자 기준입니다. 미배정·복구 필요·20개 섹션 배치 상품을 여기서만 수정합니다. 개별/선택/전체 프론트 매칭을 실행하면 현재 이 목록을 기준으로 Supabase 공개 배정 원장을 동기화하고 Netlify Snapshot 빌드를 요청합니다. 프론트·과거 Snapshot 상태가 이 관리자 목록을 역으로 변경하는 것은 금지됩니다.</div>
-        <div id="productGrid" class="product-candidate-groups"><div class="small">아직 리서치된 상품 후보가 없습니다.</div></div>
+        <div id="productGrid" class="product-candidate-groups"><div class="small">아직 리서치된 상품 후보가 없습니다.</div></div><div id="latestCandidateResearchMount" class="product-candidate-groups" aria-label="최신 상품 리서치 전용 후보 관리 섹션"></div>
       </div>
     </details>
 
@@ -402,7 +402,7 @@
                 <label class="supplier-select-label"><input id="supplierHoldSelectAll" type="checkbox" data-supplier-select-all="hold"> 전체 선택</label>
                 <span id="supplierHoldSelectedCount" class="supplier-selection-count">선택 0건</span>
                 <button type="button" data-supplier-bulk="restore" data-supplier-bulk-scope="hold" disabled>선택 본 후보로 복원</button>
-                <button type="button" class="secondary" data-supplier-bulk="dismiss" data-supplier-bulk-scope="hold" disabled>선택 삭제·재수집 허용</button>
+                <button type="button" class="danger" data-supplier-bulk="dismiss" data-supplier-bulk-scope="hold" disabled>선택 업체 후보 원장 삭제</button>
                 <button type="button" class="danger" data-supplier-bulk="purge" data-supplier-bulk-scope="hold" disabled>선택 URL 영구 제외</button>
                 <button type="button" class="danger" data-supplier-bulk="block" data-supplier-bulk-scope="hold" disabled>선택 도메인 차단</button>
                 <button type="button" class="ghost" data-supplier-bulk="remove_from_list" data-supplier-bulk-scope="hold" disabled>선택 목록에서만 제거</button>
@@ -415,7 +415,7 @@
                 <label class="supplier-select-label"><input id="supplierBlockedSelectAll" type="checkbox" data-supplier-select-all="blocked"> 전체 선택</label>
                 <span id="supplierBlockedSelectedCount" class="supplier-selection-count">선택 0건</span>
                 <button type="button" class="secondary" data-supplier-bulk="unblock" data-supplier-bulk-scope="blocked" disabled>선택 차단 해제·보류 이동</button>
-                <button type="button" class="danger" data-supplier-bulk="dismiss" data-supplier-bulk-scope="blocked" disabled>선택 차단 해제·삭제·재수집 허용</button>
+                <button type="button" class="danger" data-supplier-bulk="dismiss" data-supplier-bulk-scope="blocked" disabled>선택 차단 해제·업체 후보 원장 삭제</button>
                 <button type="button" class="ghost" data-supplier-bulk="remove_from_list" data-supplier-bulk-scope="blocked" disabled>선택 목록에서만 제거</button>
               </div>
               <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>차단 대상</th><th>도메인</th><th>차단 사유</th></tr></thead><tbody id="supplierBlockedRows"></tbody></table></div>
@@ -437,7 +437,7 @@
               <button type="button" class="danger" data-product-exclusion-bulk="reject" data-product-exclusion-scope="hold" disabled>선택 제외로 이동</button>
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="hold" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="hold" disabled>선택 상품 영구 제외</button>
-              <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="hold" disabled>선택 목록에서만 제거</button>
+              <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="hold" disabled>선택 목록에서만 제거</button><button type="button" class="danger" data-product-exclusion-bulk="hard_delete" data-product-exclusion-scope="hold" disabled>선택 보류상품 원장 완전 삭제</button>
             </div>
             <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>썸네일·상품·원본 확인</th><th>업체</th><th>현재 상태</th></tr></thead><tbody id="productHoldRows"></tbody></table></div>
           </div>
@@ -478,7 +478,7 @@
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="reject" disabled>선택 영구 제외</button>
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="reject" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="reject" disabled>선택 목록에서만 제거</button>
-              <button type="button" class="danger" data-product-exclusion-bulk="hard_delete" data-product-exclusion-scope="reject" disabled>선택 상품 원장 완전 삭제(되돌릴 수 없음)</button>
+              <button type="button" class="danger" data-product-exclusion-bulk="hard_delete" data-product-exclusion-scope="reject" disabled>선택 상품 원장 완전 삭제(확인 후 즉시 실행)</button>
               <span class="small">일반 제외·영구 제외 항목을 후보 ID로 구분합니다. 원장 완전 삭제 시 연결된 관리 관계도 삭제하며, 기존 연구 차단 정책은 별도로 남을 수 있습니다.</span>
             </div>
             <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>썸네일·상품·원본 확인</th><th>업체</th><th>연구 제외 상태</th></tr></thead><tbody id="productRejectRows"></tbody></table></div>
@@ -618,7 +618,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=20261024_trace_diag_v1"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=20261024_reuse_native_candidate_duplicate_v4"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

@@ -113,21 +113,48 @@ function requireExpectedBucket(row,expectedBucket,action){
     if(actual==="removed" && ["dismiss","remove_from_list"].includes(action))return actual;
     const error=new Error("candidate_state_mismatch: expected "+expected+", actual "+actual);error.code="candidate_state_mismatch";throw error;
   }
-  if(expected==="hold" && !["restore","dismiss","remove_from_list","reject","purge"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
+  if(expected==="hold" && !["restore","dismiss","remove_from_list","reject","purge","hard_delete"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
   if(expected==="reject" && !["restore","dismiss","remove_from_list","purge","hard_delete"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
   return actual;
 }
 function requireMatchingMarketScope(row,body){
-  // UI controls are country-scoped, but a stale card/selection can carry an ID
-  // from an older market. Verify the actual stored candidate before mutation.
-  const wanted=text(body&& (body.countryCode||body.country)).toUpperCase();
-  if(!wanted)return;
-  const p=plain(row&&row.source_payload),m=plain(p.marketScope),c=plain(p.countrySupply),approved=plain(p.approvedPlacement),main=plain(p.primaryPlacement);
-  const country=text(m.marketCountry||c.country||c.countryCode||approved.country||main.country||p.countryCode).toUpperCase();
-  const wantedRegion=text(body&&(body.subdivisionCode||body.regionCode||body.region)||'NATIONWIDE').toUpperCase();
-  const region=text(m.marketRegion||c.region||c.regionCode||approved.region||main.region||p.regionCode||'NATIONWIDE').toUpperCase();
-  if(country&&wanted!==country||country&&wantedRegion!==region){const error=new Error('candidate_market_scope_mismatch: requested '+wanted+'/'+wantedRegion+', stored '+country+'/'+region);error.statusCode=409;error.code='candidate_market_scope_mismatch';throw error;}
+  // Administrative mutations, including physical deletion, are restricted to
+  // the EXPLICITLY resolved country/subdivision. Never infer a target from the
+  // candidate or IP during the write; IP may only initialize UI selection.
+  const wanted=text(body&&(body.countryCode||body.country)).toUpperCase(),
+    wantedRegion=text(body&&(body.subdivisionCode||body.regionCode||body.region)).toUpperCase();
+  if(!/^[A-Z]{2}$/.test(wanted)||!wantedRegion){
+    const error=new Error('explicit_country_and_region_required');error.statusCode=400;throw error;
+  }
+  const p=plain(row&&row.source_payload),m=plain(p.marketScope),c=plain(p.countrySupply),
+    approved=plain(p.approvedPlacement),main=plain(p.primaryPlacement);
+  const countries=[m.marketCountry,c.country,c.countryCode,approved.country,main.country,p.countryCode]
+    .map(v=>text(v).toUpperCase()).filter(Boolean);
+  const regions=[m.marketRegion,c.region,c.regionCode,approved.region,main.region,p.regionCode]
+    .map(v=>text(v).toUpperCase()).filter(Boolean);
+  if(!countries.length||countries.some(v=>v!==wanted)||regions.some(v=>v!==wantedRegion)){
+    const error=new Error('candidate_market_scope_mismatch: requested '+wanted+'/'+wantedRegion+', stored '+
+      (countries.join(',')||'unknown')+'/'+(regions.join(',')||'NATIONWIDE'));
+    error.statusCode=409;error.code='candidate_market_scope_mismatch';throw error;
+  }
+  // Missing explicit candidate region is compatible only with an explicitly
+  // selected nationwide scope. Never silently equate a subdivision to nationwide.
+  if(!regions.length&&wantedRegion!=='NATIONWIDE'){
+    const error=new Error('candidate_subdivision_scope_unverified');error.statusCode=409;throw error;
+  }
 }
+function requireNoForeignCandidateAssignments(assignments,body){
+  const wanted=text(body&&(body.countryCode||body.country)).toUpperCase(),
+    region=text(body&&(body.subdivisionCode||body.regionCode||body.region)).toUpperCase();
+  for(const assignment of array(assignments)){
+    if(text(assignment.country_code).toUpperCase()!==wanted||
+       text(assignment.region_code||'NATIONWIDE').toUpperCase()!==region){
+      const error=new Error('candidate_has_other_market_assignment_no_cross_scope_mutation');
+      error.statusCode=409;throw error;
+    }
+  }
+}
+
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
   const oldAssignments=await readAssignments(id),priorFront=previousFrontPlacement(payload,oldAssignments);
@@ -237,8 +264,8 @@ function hardDeleteGuard(row,assignments,expectedBucket,body){
   // rather than slotDecision; these must remain manageable by exact candidate ID.
   const recordedExclusion=current?["reject","purge"].includes(current):
     (["reject","purge"].includes(queueAction)||["rejected","suppressed"].includes(statusValue));
-  if(expectedBucket!=="reject"||bucket!=="reject"||!recordedExclusion){
-    const e=new Error("hard_delete_requires_confirmed_excluded_candidate:"+id);e.statusCode=409;throw e;
+  if(!["reject","hold"].includes(expectedBucket)||bucket!==expectedBucket||!(expectedBucket==="hold"?current==="hold"||queueAction==="hold"||statusValue==="hold":recordedExclusion)){
+    const e=new Error("hard_delete_requires_confirmed_private_hold_or_excluded_candidate:"+id);e.statusCode=409;throw e;
   }
   if(body.hardDeleteConfirmed!==true||text(body.confirmation)!=="PERMANENT_DELETE_EXCLUDED_CANDIDATES"){
     const e=new Error("hard_delete_explicit_confirmation_required");e.statusCode=400;throw e;
@@ -317,6 +344,9 @@ exports.handler=async function(event){
         if(!row)throw Object.assign(new Error("candidate_not_found"),{candidateId:id});
         if(lower(row&&row.kind)!=="product"||!MANAGEABLE_PRODUCT_SOURCES.has(text(row.source_ref)))throw Object.assign(new Error("unsupported_candidate_source"),{candidateId:id});
         requireMatchingMarketScope(row,body);
+        const existingAssignments=await readAssignments(id);
+        if(existingAssignments.length>=100)throw Object.assign(new Error('candidate_assignment_scan_limit'),{statusCode:409});
+        requireNoForeignCandidateAssignments(existingAssignments,body);
         requireExpectedBucket(row,expectedBucket,action);
         if(action==="hard_delete")return await hardDeleteCandidate(actorId,row,body,expectedBucket);
         const applied=await applyAction(actorId,row,action);
