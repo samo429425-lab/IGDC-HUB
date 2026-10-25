@@ -122,12 +122,10 @@ included_files = [
       "netlify/functions/data/front.snapshot.json",
       "netlify/functions/data/media.snapshot.json",
       "netlify/functions/data/networkhub-snapshot.json",
-      "netlify/functions/data/search-bank.snapshot.json",
       "netlify/functions/data/social.snapshot.json",
       "netlify/functions/data/tour-snapshot.json",
       "netlify/functions/lib/commerce-product-job-recovery.kr-nationwide.20260801.json",
       "netlify/functions/lib/igdc-original-product-url-evidence-20261013-all-safe.json",
-      "netlify/functions/search-bank.snapshot.json",
   ]
   schedule = "@hourly"
 
@@ -143,10 +141,8 @@ included_files = [
     "netlify/functions/data/distribution.snapshot.json",
     "netlify/functions/data/front.snapshot.json",
     "netlify/functions/data/networkhub-snapshot.json",
-    "netlify/functions/data/search-bank.snapshot.json",
     "netlify/functions/data/social.snapshot.json",
     "netlify/functions/data/tour-snapshot.json",
-    "netlify/functions/search-bank.snapshot.json",
   ]
 
 [functions."ai-adapters"]
@@ -157,10 +153,8 @@ included_files = [
     "netlify/functions/data/front.snapshot.json",
     "netlify/functions/data/media.snapshot.json",
     "netlify/functions/data/networkhub-snapshot.json",
-    "netlify/functions/data/search-bank.snapshot.json",
     "netlify/functions/data/social.snapshot.json",
     "netlify/functions/data/tour-snapshot.json",
-    "netlify/functions/search-bank.snapshot.json",
   ]
 
 [functions."collector"]
@@ -171,10 +165,8 @@ included_files = [
     "netlify/functions/data/front.snapshot.json",
     "netlify/functions/data/media.snapshot.json",
     "netlify/functions/data/networkhub-snapshot.json",
-    "netlify/functions/data/search-bank.snapshot.json",
     "netlify/functions/data/social.snapshot.json",
     "netlify/functions/data/tour-snapshot.json",
-    "netlify/functions/search-bank.snapshot.json",
   ]
 
 [functions."commerce-admin-product-url-rescue"]
@@ -190,11 +182,9 @@ included_files = [
     "netlify/functions/data/front.snapshot.json",
     "netlify/functions/data/media.snapshot.json",
     "netlify/functions/data/networkhub-snapshot.json",
-    "netlify/functions/data/search-bank.snapshot.json",
     "netlify/functions/data/social.snapshot.json",
     "netlify/functions/data/tour-snapshot.json",
     "netlify/functions/lib/igdc-original-product-url-evidence-20261013-all-safe.json",
-    "netlify/functions/search-bank.snapshot.json",
   ]
 
 [functions."commerce-country-control"]
