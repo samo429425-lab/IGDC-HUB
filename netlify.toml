@@ -13,8 +13,17 @@
   # Media catalog and payout-vault files are included only by their consumers.
   # If new runtime fs.readFileSync assets are added, update per-function lists.
   included_files = [
-    "netlify/functions/*.js",
-    "netlify/functions/lib/*.js",
+    # Static JS dependencies are traced by esbuild. Never copy all 217 Function
+    # entrypoints and 68 libraries into EVERY Lambda bundle: those inclusive
+    # globs inflate archives and can exceed AWS Lambda 250 MB unzipped limit.
+    # Only dynamic/optional require() targets need an explicit inclusion.
+    "netlify/functions/collector.js",
+    "netlify/functions/planetary-data-connector.js",
+    "netlify/functions/search-bank-engine.js",
+    "netlify/functions/maru-search.js",
+    "netlify/functions/maru-intelligence-engine.js",
+    "netlify/functions/lib/trustFilter.core.v1.js",
+    "netlify/functions/lib/trustFilter.v1.js",
     "netlify/functions/data/affiliate-program-registry.v1.json",
     "netlify/functions/data/commerce-candidate-policy.v1.json",
     "netlify/functions/data/commerce-candidate-review-queue.v1.json",
