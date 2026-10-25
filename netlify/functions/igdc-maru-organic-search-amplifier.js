@@ -123,12 +123,12 @@ function scoreTarget(q,target,lang){
     if(!normalized || !(isPlayer || isPlatform)) continue;
     // First two seeds are player terms; later explicit player aliases also belong to the player.
     const index=local.indexOf(term);
-    const playerTerm=index<2 || /플레이어|media player/i.test(normalized);
+    const playerTerm=index<3 || /플레이어|media player|video player|audio player/i.test(normalized);
     if((isPlayer && !playerTerm) || (isPlatform && playerTerm)) continue;
     if(query===normalized) score+=4;
     else if(query.includes(normalized) && normalized.length>=3) score+=2;
   }
-  if(target.id==="maru-media-player" && /media|video|player|플레이어|미디어|영상|동영상|播放器|プレーヤー|lecteur|reproductor|spieler|плеер/i.test(q)) score+=8;
+  if(target.id==="maru-media-player" && /media|video|audio|player|플레이어|미디어|영상|동영상|오디오|음악|播放器|播放|プレーヤー|オーディオ|lecteur|reproductor|spieler|плеер|плеер|صوت/i.test(q)) score+=8;
   if(target.id==="distributionhub" && /distribution|distrib|유통|배급|流通|分销|분배|distribución|distribution/i.test(q)) score+=8;
   if(target.id==="mediahub" && /media|미디어|媒体|メディア/i.test(q)) score+=6;
   return score;

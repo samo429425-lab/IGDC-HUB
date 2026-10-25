@@ -339,7 +339,7 @@
 
   <section id="productResearchPanel" class="panel">
     <div class="panel-heading"><h2>공식 상품 리서치·후보 심사·20개 섹션 배치 관리</h2><div class="actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="policy" data-policy-workspace-label="상품 리서치 적용 정책" data-policy-scope="country">AI 운영·정책 대화</button></div></div>
-    <div class="small">현재 책임 공급업체 비공개 후보 목록의 활성 업체를 모두 조사합니다. 새로 등록된 업체도 다음 실행부터 자동 포함됩니다. 조사 도중 일시정지하면 그 시점까지 발견·점검되어 저장된 상품을 최신 상품 리서치 목록에서 즉시 다시 확인할 수 있으므로 전체 업체 조사가 끝날 때까지 기다릴 필요가 없습니다. 최신 목록에서 선택 상품 또는 현재 목록 전체를 후보 관리목록 등록·AI 검증 자동 배치할 수 있으며, 검증 실패 상품은 보류·제외 목록으로 분류됩니다.</div>
+    <div class="small">현재 책임 공급업체 비공개 후보 목록의 활성 업체를 모두 조사합니다. 새로 등록된 업체도 다음 실행부터 자동 포함됩니다. 조사 도중 일시정지하면 그 시점까지 발견·점검되어 저장된 상품을 아래 전체 상품 후보·배치 관리 목록의 최신 리서치 공동 관리에서 즉시 다시 확인할 수 있으므로 전체 업체 조사가 끝날 때까지 기다릴 필요가 없습니다. 해당 공동 관리에서 선택 상품 또는 현재 목록 전체를 후보 관리목록 등록·AI 검증 자동 배치할 수 있으며, 검증 실패 상품은 보류·제외 목록으로 분류됩니다.</div>
     <div class="review-return-note">상품·업체 링크는 현재 탭에서 열립니다. 뒤로가기를 누르면 이 관리 화면의 기존 국가·목록 위치로 돌아옵니다.</div>
     <div class="operation-actions">
       <button id="productResearchBtn" type="button" class="ghost" disabled>상품 리서치 시작·후보목록 자동 반영</button>
@@ -354,26 +354,6 @@
     <div id="productResearchState" class="policy-state">상품 조사 상태를 불러오는 중입니다.</div>
     <div id="productAiAutomationState" class="product-auto-state">AI 자동 배치: 대기</div>
     <div id="productFrontSyncState" class="front-sync-state">프론트 실상품 매칭: 대기</div>
-
-    <details id="latestProductPanel" class="product-management-details heavy-data-panel" data-heavy-panel="latest-products">
-      <summary class="heavy-panel-summary"><span><strong>최신 상품 리서치 목록</strong> <span id="latestProductSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="latest_product_research" data-policy-workspace-label="최신 상품 리서치 목록" data-policy-scope="country">AI 운영·정책 대화</button><span id="latestProductToggleLabel" class="pill info">목록 펼치기</span></span></summary>
-      <div class="heavy-panel-content">
-        <div class="small">최신 리서치 결과 관리는 아래 <strong>전체 상품 후보·배치 관리 목록 → 미배치 상품 목록 아래의 최신 리서치 전용 섹션</strong>에서 진행합니다. 기존 상단 간편 관리 UI만 사용 중지하며 상품 조사·검증 기능은 유지합니다. 기존 안내: 조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관할 수 있습니다. AI 검증에서 정상 상품임이 확인된 것만 전체 상품 후보·배치 관리 목록으로 이관하고 PSOM 기준 섹션을 배치합니다. 접속 제한·검증 미완료 상품은 최신 목록에 남겨 다음 검증에서 재시도합니다. 확인된 부정확한 상품 URL은 별도 검토하며 기존 확정 상품은 변경하지 않습니다. 상품 조사를 일시정지하면 그 시점까지 저장된 최신 상품 목록을 다시 읽습니다.</div>
-        <section id="latestResearchOverview" class="latest-overview" aria-label="기존 리서치 간편 관리 · 사용 중지" aria-disabled="true" hidden style="display:none!important;pointer-events:none">
-          <div class="latest-overview-header"><strong>현재 리서치 상품 전체 위치 · 간편 관리</strong><span id="latestOverviewSummary" class="small">원장 확인 중</span></div>
-          <div class="latest-overview-controls"><label>상태 <select id="latestOverviewFilter"><option value="all">모두 보기</option><option value="new">미등록</option><option value="undecided">미배치</option><option value="slot_candidate">섹션 배치</option><option value="hold">보류</option><option value="excluded">일반·영구 제외</option><option value="duplicate">중복 확인</option></select></label><label>상품 검색 <input type="search" id="latestOverviewSearch" placeholder="상품명·URL·섹션"></label><button type="button" class="ghost" id="latestOverviewReload">원장 새로고침</button></div>
-          <div class="small">원본 기록은 유지하고 현재 저장 위치를 보여줍니다. 미배치 이동은 실제 후보 ID로 처리합니다. 목록 삭제는 재수집 가능, 영구 제외는 재수집 차단입니다. 공개 중인 상품은 먼저 매칭 해제가 필요합니다.</div>
-          <div class="latest-overview-bulk" role="group" aria-label="리서치 상품 선택 일괄관리"><label class="latest-overview-page-select"><input id="latestOverviewSelectPage" type="checkbox"> 이 페이지 전체 선택 (작업 가능한 상품)</label><label class="latest-overview-page-select"><input id="latestOverviewSelectFiltered" type="checkbox"> 검색·필터 결과 전체 선택 (모든 페이지의 작업 가능 상품)</label><strong id="latestOverviewSelectedCount">선택 0건</strong><button type="button" id="latestOverviewBulkMove" disabled>선택 상품 후보 목록 이관·미배치 이동</button><button type="button" id="latestOverviewBulkAiPlace" class="product-section-ai-button" disabled>선택 상품 AI 검증·20개 섹션 자동배치</button><button type="button" id="latestOverviewOpenHold" class="secondary">검증 보류·제외 상품 재검토·삭제 목록 열기</button><button type="button" id="latestOverviewBulkDelete" class="secondary" disabled>선택 상품 일괄 목록 삭제</button><button type="button" id="latestOverviewBulkPurge" class="ghost" disabled>선택 상품 일괄 영구 제외</button><button type="button" id="latestOverviewClearSelection" class="ghost" disabled>선택 해제</button><button type="button" class="secondary" data-pipeline-diagnostic="download-latest">점검 JSON 다운로드</button></div>
-          <div class="small">체크한 항목은 페이지를 바꿔도 유지됩니다. 미등록 상품도 선택 후 AI 검증을 거쳐 후보 원장 이관·PSOM 자동배치할 수 있습니다. 이미 미배치 후보인 상품은 원장에서 위치 확인 후 AI 자동배치할 수 있습니다. 중복 URL은 정확한 후보 ID 지정 후 일괄 작업할 수 있습니다. 상품 사진·이름을 클릭하면 <strong>현재 브라우저 탭</strong>에서 실제 판매처 상세페이지가 열리며, 브라우저 뒤로가기로 관리자 목록에 복귀할 수 있습니다. 판매처의 접속 제한은 IGDC가 해제할 수 없습니다.</div>
-          <details id="pipelineTracePanel" style="margin:10px 0;padding:10px;border:1px solid #2d79a3;border-radius:8px;background:#071c33"><summary style="cursor:pointer;font-weight:700">이관·AI 배치 오류 진단 (읽기 전용 · 249개국 공통)</summary><div id="pipelineTraceState" class="small" role="status" aria-live="polite">현재 국가의 요청 기록을 확인 중입니다.</div><div class="small">이관·삭제·검증 버튼을 누르면 요청 단계·후보 ID·실패 사유가 자동 기록됩니다. 이후 점검 JSON을 내려받아 분석에 사용하세요. 원장 재조회는 저장하거나 삭제하지 않습니다. 로그인 토큰은 기록하지 않습니다.</div><button type="button" class="secondary" data-pipeline-diagnostic="download-latest">진단 JSON 다운로드</button> <button type="button" class="ghost" data-pipeline-diagnostic="refresh">후보·리서치 원장 재조회 점검</button> <button type="button" class="ghost" data-pipeline-diagnostic="clear">진단 기록 지우기</button><div id="pipelineTraceDownloadState" class="small"></div></details>
-          <div id="latestOverviewOperationStatus" class="small" role="status" aria-live="polite"></div>
-          <div id="latestOverviewRows" class="latest-overview-rows"><div class="small">상품 위치를 확인 중입니다.</div></div>
-          <div class="latest-overview-pager"><button type="button" id="latestOverviewPrev">이전</button><span id="latestOverviewPageState" class="small"></span><button type="button" id="latestOverviewNext">다음</button></div>
-          <div class="small">아래 기존 버튼과 카드 목록은 아직 후보 원장에 등록되지 않은 상품을 검증·이관하는 용도입니다.</div>
-        </section>
-        <div id="latestProductGrid" class="product-grid latest-product-grid" hidden style="display:none!important"><div class="small">아직 최신 리서치 상품을 불러오지 않았습니다.</div></div>
-      </div>
-    </details>
 
     <details id="productCandidatePanel" class="product-management-details heavy-data-panel" data-heavy-panel="product-candidates">
       <summary class="heavy-panel-summary"><span><strong>전체 상품 후보·배치 관리 목록</strong> <span id="productCandidateSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="product_candidate_management" data-policy-workspace-label="전체 상품 후보·배치 관리" data-policy-scope="country">AI 운영·정책 대화</button><button id="productCandidateSmartAutoPlaceBtn" type="button" class="product-section-ai-button">전체 후보 AI 카테고리 자동 배치</button><button type="button" class="product-section-ai-button" data-section-ai-auto="__all__">미배정·빈 배정정보 AI 자동 복구</button><label class="section-select-label"><input id="allSectionsSelect" type="checkbox"> 20개 전체 선택</label><span id="selectedSectionCount" class="pill info">선택 섹션 0개</span><button id="selectedSectionsMatchBtn" type="button" class="product-section-front-button" disabled>선택 섹션 프론트 매칭</button><button id="allSectionsMatchBtn" type="button" class="product-section-front-button" disabled>전체 섹션 프론트 매칭</button><span id="productCandidateToggleLabel" class="pill info">목록 펼치기</span></span></summary>
@@ -427,7 +407,7 @@
           <summary><span id="productHoldToggleLabel">보류 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
           <div class="supplier-control-content">
             <div class="supplier-queue-toolbar">
-              <label class="supplier-select-label"><input id="productHoldSelectAll" type="checkbox" data-product-exclusion-select-all="hold"> 목록 전체 선택(모든 페이지)</label>
+              <label class="supplier-select-label"><input id="productHoldSelectAll" type="checkbox" data-product-exclusion-select-all="hold"> 현재 페이지 전체 선택(최대 100건)</label>
               <span id="productHoldSelectedCount" class="supplier-selection-count">선택 0건</span>
               <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="hold" disabled>선택 후보 복원(수동 관리)</button>
               <button type="button" id="productHoldAiVerifyBtn" class="publish">AI 검증·3분류(원장 자동 변경 없음)</button>
@@ -447,7 +427,7 @@
           <summary><span id="holdVerifiedToggle">AI 검증 완료 정상상품 · 0건</span><span class="pill info">별도 목록</span></summary>
           <div class="supplier-control-content">
             <div class="supplier-queue-toolbar">
-              <label class="supplier-select-label"><input id="holdVerifiedSelectAll" type="checkbox" data-hold-class-all="verified"> 모든 페이지 전체 선택</label>
+              <label class="supplier-select-label"><input id="holdVerifiedSelectAll" type="checkbox" data-hold-class-all="verified"> 현재 페이지 전체 선택(최대 100건)</label>
               <span id="holdVerifiedSelectedCount" class="small">선택 0건</span>
               <button type="button" id="productHoldVerifiedRestoreBtn" class="publish">선택 정상상품 원장 복귀(별도 실행)</button>
               <span class="small">복귀 위치는 위 보류상품 블록의 ‘복귀 위치’ 설정 적용 · 기존 확정 배치와 프론트 매칭 보존</span>
@@ -459,7 +439,7 @@
           <summary><span id="holdIncompleteToggle">불완전상품 별도 관리 · 0건</span><span class="pill info">원장 보존 · 관리자가 확정</span></summary>
           <div class="supplier-control-content">
             <div class="supplier-queue-toolbar">
-              <label class="supplier-select-label"><input id="holdIncompleteSelectAll" type="checkbox" data-hold-class-all="incomplete"> 모든 페이지 전체 선택</label>
+              <label class="supplier-select-label"><input id="holdIncompleteSelectAll" type="checkbox" data-hold-class-all="incomplete"> 현재 페이지 전체 선택(최대 100건)</label>
               <span id="holdIncompleteSelectedCount" class="small">선택 0건</span>
               <button type="button" data-hold-review-action="return_hold" class="ghost">선택 보류상품으로 되돌리기</button>
               <button type="button" data-hold-review-action="delete_url" class="danger">선택 상품 원장 URL 삭제(최종 확인)</button>
@@ -472,7 +452,7 @@
           <summary><span id="productRejectToggleLabel">연구 제외·영구 제외 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
           <div class="supplier-control-content">
             <div class="supplier-queue-toolbar">
-              <label class="supplier-select-label"><input id="productRejectSelectAll" type="checkbox" data-product-exclusion-select-all="reject"> 목록 전체 선택(모든 페이지)</label>
+              <label class="supplier-select-label"><input id="productRejectSelectAll" type="checkbox" data-product-exclusion-select-all="reject"> 현재 페이지 전체 선택(최대 100건)</label>
               <span id="productRejectSelectedCount" class="supplier-selection-count">선택 0건</span>
               <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="reject" disabled>선택 후보 목록으로 복원</button>
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="reject" disabled>선택 영구 제외</button>
@@ -493,10 +473,6 @@
       <div id="productTransitionAuditState" class="product-transition-audit-state">대기열 등록 또는 후보 정리 후 검증 버튼을 누르면 현재 국가·지역의 리서치 상태와 상품 후보 원장을 다시 읽어 연결 수량을 확인합니다.</div>
     </section>
 
-    <section id="productSectionBoard" class="product-section-board" aria-label="20개 섹션 배치 예정 상품 목록" aria-disabled="true" style="pointer-events:none;opacity:.55">
-      <div class="section-board-head"><div><h3>20개 섹션 배치 예정 상품 목록 · 사용 중지</h3><div class="small">이 블록은 역방향 관리자 원장 변경 위험을 제거하기 위해 작동을 중지했습니다. 삭제하지 않고 보존만 합니다. 모든 섹션 배치·수동 수정·개별/선택/전체 프론트 매칭은 위의 ‘전체 상품 후보·배치 관리 목록’에서만 실행합니다.</div></div><span class="pill warn">작동 차단</span></div>
-      <div id="productSectionList" class="product-section-list hidden" aria-hidden="true"></div>
-    </section>
   </section>
 
   <section id="jsonPanel" class="panel hidden"><div class="panel-heading"><h2>점검·실행 JSON</h2><div class="actions"><button id="runCurrentDiagnosticBtn" type="button">점검 실행 JSON</button><button id="downloadCurrentJsonBtn" type="button" class="secondary" disabled>전체 JSON 다운로드</button></div></div><pre id="jsonOutput" class="json"></pre></section>
@@ -618,8 +594,8 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=20261025_native_research_stage_bridge_v5"></script>
-<script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20260923-v12"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=igdc-afe29c05f325"></script>
+<script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20261025-paged-exclusion-v1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
 <script src="/assets/js/admin-checkbox-accessibility.js?v=20260925-1" defer></script>

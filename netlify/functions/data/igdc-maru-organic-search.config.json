@@ -21,7 +21,14 @@
         "MARU Player",
         "마루 미디어 플레이어",
         "마루미디어플레이어",
-        "마루 미디어"
+        "마루 미디어",
+        "마루 비디오",
+        "마루 오디오",
+        "마루미디어",
+        "마루비디오",
+        "마루오디오",
+        "MARU Video",
+        "MARU Audio"
       ],
       "path": "/maru-download.html",
       "vertical": "media_player",
@@ -40,7 +47,17 @@
         "AI 자막",
         "자막 번역",
         "MKV player",
-        "MP4 player"
+        "MP4 player",
+        "audio player",
+        "music player",
+        "video playback software",
+        "audio playback software",
+        "비디오 플레이어",
+        "오디오 플레이어",
+        "음악 플레이어",
+        "마루 미디어",
+        "마루 비디오",
+        "마루 오디오"
       ]
     },
     {
@@ -63,7 +80,15 @@
         "글로벌 플랫폼",
         "글로벌 허브",
         "글로벌 유통",
-        "글로벌 미디어"
+        "글로벌 미디어",
+        "global network platform",
+        "global marketplace",
+        "global business platform",
+        "글로벌 유통 플랫폼",
+        "글로벌 네트워크",
+        "글로벌 비즈니스 플랫폼",
+        "마루 플랫폼",
+        "IGDC 글로벌 플랫폼"
       ]
     },
     {
@@ -82,7 +107,16 @@
         "media platform",
         "global platform",
         "마루 플랫폼",
-        "미디어 플랫폼"
+        "미디어 플랫폼",
+        "global distribution platform",
+        "global network platform",
+        "global marketplace",
+        "global business platform",
+        "글로벌 플랫폼",
+        "글로벌 유통 플랫폼",
+        "글로벌 네트워크",
+        "글로벌 비즈니스 플랫폼",
+        "IGDC 글로벌 플랫폼"
       ]
     }
   ],
@@ -97,7 +131,14 @@
         "IGDC Global Hub",
         "IGDC platform",
         "MARU platform",
-        "global platform"
+        "global platform",
+        "global distribution platform",
+        "global network platform",
+        "global marketplace",
+        "글로벌 플랫폼",
+        "글로벌 유통 플랫폼",
+        "글로벌 네트워크",
+        "마루 플랫폼"
       ]
     },
     "distributionhub": {
@@ -341,6 +382,7 @@
     "ko": [
       "미디어 플레이어",
       "동영상 플레이어",
+      "오디오 플레이어",
       "영상 플레이어",
       "글로벌 유통",
       "유통 플랫폼",
@@ -352,6 +394,7 @@
     "en": [
       "media player",
       "video player",
+      "audio player",
       "global distribution",
       "distribution platform",
       "media platform",
@@ -362,6 +405,7 @@
     "ja": [
       "メディアプレーヤー",
       "動画プレーヤー",
+      "オーディオプレーヤー",
       "グローバル流通",
       "流通プラットフォーム",
       "メディアプラットフォーム",
@@ -370,6 +414,7 @@
     "zh": [
       "媒体播放器",
       "视频播放器",
+      "音频播放器",
       "全球分销",
       "分销平台",
       "媒体平台",
@@ -378,6 +423,7 @@
     "zht": [
       "媒體播放器",
       "影片播放器",
+      "音訊播放器",
       "全球分銷",
       "分銷平台",
       "媒體平台",
@@ -386,6 +432,7 @@
     "de": [
       "Mediaplayer",
       "Videoplayer",
+      "Audioplayer",
       "globale Distribution",
       "Vertriebsplattform",
       "Medienplattform",
@@ -394,6 +441,7 @@
     "fr": [
       "lecteur multimédia",
       "lecteur vidéo",
+      "lecteur audio",
       "distribution mondiale",
       "plateforme de distribution",
       "plateforme média",
@@ -402,6 +450,7 @@
     "es": [
       "reproductor multimedia",
       "reproductor de video",
+      "reproductor de audio",
       "distribución global",
       "plataforma de distribución",
       "plataforma de medios",
@@ -410,6 +459,7 @@
     "pt": [
       "reprodutor de mídia",
       "reprodutor de vídeo",
+      "reprodutor de áudio",
       "distribuição global",
       "plataforma de distribuição",
       "plataforma de mídia",
@@ -418,6 +468,7 @@
     "it": [
       "lettore multimediale",
       "lettore video",
+      "lettore audio",
       "distribuzione globale",
       "piattaforma di distribuzione",
       "piattaforma media",
@@ -426,6 +477,7 @@
     "ru": [
       "медиаплеер",
       "видеоплеер",
+      "аудиоплеер",
       "глобальная дистрибуция",
       "платформа дистрибуции",
       "медиаплатформа",
@@ -434,6 +486,7 @@
     "ar": [
       "مشغل وسائط",
       "مشغل فيديو",
+      "مشغل صوت",
       "توزيع عالمي",
       "منصة توزيع",
       "منصة إعلامية",
@@ -442,6 +495,7 @@
     "hi": [
       "मीडिया प्लेयर",
       "वीडियो प्लेयर",
+      "ऑडियो प्लेयर",
       "वैश्विक वितरण",
       "वितरण प्लेटफ़ॉर्म",
       "मीडिया प्लेटफ़ॉर्म",
@@ -450,6 +504,7 @@
     "id": [
       "pemutar media",
       "pemutar video",
+      "pemutar audio",
       "distribusi global",
       "platform distribusi",
       "platform media",
@@ -458,6 +513,7 @@
     "ms": [
       "pemain media",
       "pemain video",
+      "pemain audio",
       "pengedaran global",
       "platform pengedaran",
       "platform media",
@@ -466,6 +522,7 @@
     "vi": [
       "trình phát đa phương tiện",
       "trình phát video",
+      "trình phát âm thanh",
       "phân phối toàn cầu",
       "nền tảng phân phối",
       "nền tảng truyền thông",
@@ -474,6 +531,7 @@
     "th": [
       "เครื่องเล่นสื่อ",
       "เครื่องเล่นวิดีโอ",
+      "เครื่องเล่นเสียง",
       "การจัดจำหน่ายทั่วโลก",
       "แพลตฟอร์มการจัดจำหน่าย",
       "แพลตฟอร์มสื่อ",
@@ -482,6 +540,7 @@
     "tr": [
       "medya oynatıcı",
       "video oynatıcı",
+      "ses oynatıcı",
       "küresel dağıtım",
       "dağıtım platformu",
       "medya platformu",
@@ -490,6 +549,7 @@
     "nl": [
       "mediaspeler",
       "videospeler",
+      "audiospeler",
       "wereldwijde distributie",
       "distributieplatform",
       "mediaplatform",
@@ -498,6 +558,7 @@
     "pl": [
       "odtwarzacz multimedialny",
       "odtwarzacz wideo",
+      "odtwarzacz audio",
       "globalna dystrybucja",
       "platforma dystrybucyjna",
       "platforma medialna",
@@ -506,6 +567,7 @@
     "sv": [
       "mediaspelare",
       "videospelare",
+      "ljudspelare",
       "global distribution",
       "distributionsplattform",
       "medieplattform",
@@ -514,6 +576,7 @@
     "uk": [
       "медіаплеєр",
       "відеоплеєр",
+      "аудіоплеєр",
       "глобальна дистрибуція",
       "платформа дистрибуції",
       "медіаплатформа",
@@ -522,6 +585,7 @@
     "hu": [
       "médialejátszó",
       "videólejátszó",
+      "audiolejátszó",
       "globális terjesztés",
       "terjesztési platform",
       "médiaplatform",
@@ -530,6 +594,7 @@
     "fa": [
       "پخش‌کننده رسانه",
       "پخش‌کننده ویدئو",
+      "پخش‌کننده صوتی",
       "توزیع جهانی",
       "پلتفرم توزیع",
       "پلتفرم رسانه",
@@ -538,6 +603,7 @@
     "bn": [
       "মিডিয়া প্লেয়ার",
       "ভিডিও প্লেয়ার",
+      "অডিও প্লেয়ার",
       "বিশ্বব্যাপী বিতরণ",
       "বিতরণ প্ল্যাটফর্ম",
       "মিডিয়া প্ল্যাটফর্ম",
@@ -546,6 +612,7 @@
     "ta": [
       "மீடியா பிளேயர்",
       "வீடியோ பிளேயர்",
+      "ஆடியோ பிளேயர்",
       "உலகளாவிய விநியோகம்",
       "விநியோக தளம்",
       "ஊடக தளம்",
@@ -554,6 +621,7 @@
     "ur": [
       "میڈیا پلیئر",
       "ویڈیو پلیئر",
+      "آڈیو پلیئر",
       "عالمی تقسیم",
       "تقسیمی پلیٹ فارم",
       "میڈیا پلیٹ فارم",
@@ -562,6 +630,7 @@
     "sw": [
       "kicheza media",
       "kicheza video",
+      "kicheza sauti",
       "usambazaji wa kimataifa",
       "jukwaa la usambazaji",
       "jukwaa la media",
@@ -570,6 +639,7 @@
     "tl": [
       "media player",
       "video player",
+      "audio player",
       "pandaigdigang distribusyon",
       "distribution platform",
       "media platform",
@@ -578,6 +648,7 @@
     "uz": [
       "media pleyer",
       "video pleyer",
+      "audio pleyer",
       "global tarqatish",
       "tarqatish platformasi",
       "media platforma",

@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20260923-six-main-sections-v1
+// build: 20261026-seven-main-instant-sample-slots-v1
 // 목적:
 // 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -19,7 +19,7 @@
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
   const MAIN_ROWS = 7;
   const MAIN_LIMIT = 100;
-  const MAIN_BATCH = 12;
+  const MAIN_BATCH = 12; // first-screen content first; remaining slots are painted without geometry changes
   const RIGHT_LIMIT = 100;
   const RIGHT_BATCH = 12;
   const MANAGED_MAIN_KEYS = new Set([
@@ -33,6 +33,7 @@
   ]);
   const mainRenderTokens = new WeakMap();
   const rightRenderTokens = new WeakMap();
+  let mainSampleSlotsReady = false;
 
   function qs(sel, root) {
     return (root || document).querySelector(sel);
@@ -501,6 +502,11 @@
   }
 
   function snapshotSampleNumber(it, card) {
+    // The 700 prebuilt cards already have stable numbers; avoid a full-grid
+    // query + indexOf on every SAMPLE repaint (quadratic work on slow phones).
+    if (card && card.dataset && card.dataset.socialSlotNo) {
+      return card.dataset.socialSlotNo;
+    }
     const id = pickProductId(it);
     const m = String(id || "").match(/(?:_|:)(\d{1,3})$/);
     if (m) return String(Number(m[1]) || 1).padStart(3, "0");
@@ -660,88 +666,133 @@
   }
 
 
-  function mountMainRow(gridEl, items) {
-    if (!gridEl) return;
-
-    const raw = Array.isArray(items) ? items.filter(Boolean) : [];
-    const displayItems = raw.slice(0, MAIN_LIMIT);
-
-    // Snapshot is the sole owner of both real rows and SAMPLE rows. Trim stale
-    // DOM cards to the exact snapshot length; never pad missing rows locally.
-    let cards = getMainSlots(gridEl);
-    for (let i = displayItems.length; i < cards.length; i++) {
-      if (cards[i].parentNode) cards[i].parentNode.removeChild(cards[i]);
-    }
-    cards = getMainSlots(gridEl);
-
-    function ensureCards(required) {
-      cards = getMainSlots(gridEl);
-      if (cards.length >= required) return cards;
-      const frag = document.createDocumentFragment();
-      for (let i = cards.length; i < required; i++) {
-        const a = document.createElement("a");
-        a.className = "card";
-        a.href = "#";
-
-        a.innerHTML = mainCardMarkup(gridEl);
-        frag.appendChild(a);
+  // The main seven rows are permanent: 100 inexpensive SAMPLE cards per SNS.
+  // This runs before any public Release/network/thumbnail response. Cards never
+  // appear/disappear as the user scrolls: only their visible contents change.
+  // The Distribution-owned right panel is not accessed by this code.
+  function ensureMainSampleSlots() {
+    if (mainSampleSlotsReady) return;
+    const grids = qsa('.thumb-grid[data-psom-key^="social-"]');
+    if (!grids.length) return;
+    grids.forEach(function (grid) {
+      const key = grid.getAttribute('data-psom-key');
+      if (!MANAGED_MAIN_KEYS.has(key)) return;
+      const label = sampleLabelForSection(key);
+      const existing = getMainSlots(grid);
+      if (existing.length >= MAIN_LIMIT) return;
+      const fragment = document.createDocumentFragment();
+      const cardMarkup = mainCardMarkup(grid);
+      for (let i = existing.length; i < MAIN_LIMIT; i++) {
+        const card = document.createElement('a');
+        card.className = 'card';
+        card.href = '#';
+        card.dataset.sample = '1';
+        card.dataset.snapshotSample = '1';
+        card.dataset.socialSlotNo = String(i + 1).padStart(3, '0');
+        card.dataset.socialRenderSignature = 'sample';
+        card.setAttribute('aria-label', label + ' SAMPLE ' + card.dataset.socialSlotNo);
+        card.innerHTML = cardMarkup;
+        const pic = qs('.pic', card);
+        if (pic) pic.textContent = label + ' · SAMPLE';
+        const title = qs('.title', card);
+        if (title) title.textContent = label + ' · SAMPLE ' + card.dataset.socialSlotNo;
+        const desc = qs('.desc', card);
+        if (desc) desc.style.display = 'none';
+        fragment.appendChild(card);
       }
-      gridEl.appendChild(frag);
-      return getMainSlots(gridEl);
-    }
-
-    const scrollHost = gridEl.closest(".row-scroller") || gridEl;
-    const job = { grid: gridEl, items: displayItems, offset: 0 };
-    mainRenderTokens.set(scrollHost, job);
-
-    function renderMore() {
-      if (mainRenderTokens.get(scrollHost) !== job) return;
-      const end = Math.min(job.offset + MAIN_BATCH, MAIN_LIMIT, job.items.length);
-      cards = ensureCards(end);
-      for (let i = job.offset; i < end; i++) {
-        const it = job.items[i] || null;
-        if (it) paintMainCard(cards[i], it);
-      }
-      job.offset = end;
-      normalizeMainCardLayout(gridEl);
-    }
-
-    renderMore();
-    if (scrollHost.dataset.igdcSocialBatchBound === "1") return;
-    scrollHost.dataset.igdcSocialBatchBound = "1";
-    scrollHost.addEventListener("scroll", function () {
-      const current = mainRenderTokens.get(scrollHost);
-      if (!current || current.offset >= Math.min(MAIN_LIMIT, current.items.length)) return;
-      if (scrollHost.scrollLeft + scrollHost.clientWidth >= scrollHost.scrollWidth - 40) {
-        const activeGrid = current.grid;
-        const activeItems = current.items;
-        mountMainRowContinue(activeGrid, activeItems, current, scrollHost);
-      }
-    }, { passive: true });
+      // Existing slot and scroll-button geometry is preserved unchanged.
+      grid.appendChild(fragment);
+    });
+    mainSampleSlotsReady = grids.filter(function (g) {
+      return MANAGED_MAIN_KEYS.has(g.getAttribute('data-psom-key'));
+    }).every(function (g) { return getMainSlots(g).length >= MAIN_LIMIT; });
   }
 
-  function mountMainRowContinue(gridEl, displayItems, job, scrollHost) {
-    if (mainRenderTokens.get(scrollHost) !== job) return;
-    const end = Math.min(job.offset + MAIN_BATCH, MAIN_LIMIT, displayItems.length);
-    let cards = getMainSlots(gridEl);
-    if (cards.length < end) {
-      const frag = document.createDocumentFragment();
-      for (let i = cards.length; i < end; i++) {
-        const a = document.createElement("a");
-        a.className = "card";
-        a.href = "#";
-        a.innerHTML = mainCardMarkup(gridEl);
-        frag.appendChild(a);
+  function mountMainRow(gridEl, items) {
+    if (!gridEl) return;
+    ensureMainSampleSlots();
+    const displayItems = (Array.isArray(items) ? items.filter(Boolean) : []).slice(0, MAIN_LIMIT);
+    const cards = getMainSlots(gridEl);
+    const scrollHost = gridEl.closest('.row-scroller') || gridEl;
+    const key = gridEl.getAttribute('data-psom-key');
+    const label = sampleLabelForSection(key);
+    const job = { grid: gridEl, cards: cards, items: displayItems, painted: new Set(), offset: 0 };
+    mainRenderTokens.set(scrollHost, job);
+
+    function repaint(index) {
+      if (index < 0 || index >= MAIN_LIMIT || job.painted.has(index)) return;
+      const card = cards[index];
+      if (!card) return;
+      const item = displayItems[index];
+      if (!item || isPlaceholderItem(item)) {
+        if (card.dataset.sample !== '1') {
+          paintSnapshotSampleCard(card, item || {
+            type: 'placeholder', id: 'ph_' + (index + 1), title: label + ' SAMPLE',
+            source: { platform: 'placeholder' }
+          });
+          card.dataset.socialRenderSignature = 'sample';
+          card.removeAttribute('data-content-url');
+          card.removeAttribute('data-social-url');
+          card.removeAttribute('data-latest-content-url');
+          card.removeAttribute('data-viewer-url');
+          card.removeAttribute('data-thumbnail-url');
+          card.removeAttribute('data-embed-url');
+          card.setAttribute('aria-label', label + ' SAMPLE ' + (index + 1));
+        }
+      } else {
+        // ID alone is insufficient: published thumbnail/title changes must paint.
+        const signature = [pickProductId(item), pickUrl(item), pickTitle(item),
+          pickThumb(item), pickDesc(item), pickCreator(item),
+          safeText(item.embedUrl || item.embed_url)].join('\u001f');
+        if (card.dataset.socialRenderSignature !== signature || card.dataset.sample === '1') {
+          paintMainCard(card, item);
+          card.dataset.socialRenderSignature = signature;
+          card.setAttribute('aria-label', pickTitle(item) || label);
+        }
       }
-      gridEl.appendChild(frag);
-      cards = getMainSlots(gridEl);
+      job.painted.add(index);
     }
-    for (let i = job.offset; i < end; i++) {
-      const it = displayItems[i] || null;
-      if (it) paintMainCard(cards[i], it);
+
+    function visiblePriority() {
+      const width = cards[0] && cards[0].offsetWidth || scrollHost.clientWidth || 240;
+      const gap = 14;
+      const first = Math.max(0, Math.floor(scrollHost.scrollLeft / (width + gap)) - 2);
+      const count = Math.min(16, Math.ceil((scrollHost.clientWidth || width) / (width + gap)) + 5);
+      for (let i = first; i < Math.min(MAIN_LIMIT, first + count); i++) repaint(i);
     }
-    job.offset = end;
-    normalizeMainCardLayout(gridEl);
+    // Paint only the first visible contents synchronously; all 100 card slots
+    // already exist, so deferred work cannot open/collapse an SNS section.
+    visiblePriority();
+    for (let i = 0; i < Math.min(MAIN_BATCH, MAIN_LIMIT); i++) repaint(i);
+
+    function paintRest(deadline) {
+      if (mainRenderTokens.get(scrollHost) !== job) return;
+      let count = 0;
+      while (job.offset < MAIN_LIMIT && count < 16) {
+        repaint(job.offset++);
+        count++;
+        if (deadline && typeof deadline.timeRemaining === 'function' &&
+            deadline.timeRemaining() < 2) break;
+      }
+      if (job.offset < MAIN_LIMIT) scheduleMore();
+    }
+    function scheduleMore() {
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(paintRest, { timeout: 600 });
+      } else {
+        setTimeout(paintRest, 0);
+      }
+    }
+    scheduleMore();
+
+    if (scrollHost.dataset.igdcSocialBatchBound !== '1') {
+      scrollHost.dataset.igdcSocialBatchBound = '1';
+      scrollHost.addEventListener('scroll', function () {
+        const active = mainRenderTokens.get(scrollHost);
+        if (active && typeof active.paintVisible === 'function') active.paintVisible();
+      }, { passive: true });
+    }
+    job.paintVisible = visiblePriority;
   }
 
   function ensureRightCardCss() {
@@ -818,44 +869,6 @@
     return socialRightViewerPromise;
   }
 
-  // Prime the existing viewer AFTER the first paint, never ahead of product images.
-  // A first click then reuses the same loader promise and preserves its navigation policy.
-  function warmFrontProductViewer(){
-    function start(){
-      if(document.hidden)return;
-      ensureSocialRightViewer().catch(function(){});
-    }
-    function schedule(){
-      if(typeof window.requestIdleCallback==='function')window.requestIdleCallback(start,{timeout:2000});
-      else window.setTimeout(start,450);
-    }
-    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule,{once:true});
-    else schedule();
-  }
-  warmFrontProductViewer();
-  // Product intent warmup: the existing viewer starts loading BEFORE the
-  // eventual click, but the real seller URL and navigation policy remain unchanged.
-  // Hover/focus/touch are passive; do not block image fetches or open pages.
-  (function warmViewerOnProductIntent(){
-    var selector='a[data-igdc-contained-product]';
-    var pending=false, ready=false, lastFailure=0;
-    function onIntent(event){
-      if(ready || pending || Date.now()-lastFailure<2500)return;
-      var target=event && event.target;
-      if(!target || !target.closest || !target.closest(selector))return;
-      pending=true;
-      ensureSocialRightViewer().then(function(){
-        ready=true;
-        document.removeEventListener('pointerover',onIntent);
-        document.removeEventListener('focusin',onIntent);
-        document.removeEventListener('touchstart',onIntent);
-      }).catch(function(){lastFailure=Date.now();}).then(function(){pending=false;});
-    }
-    document.addEventListener('pointerover',onIntent,{passive:true});
-    document.addEventListener('focusin',onIntent,{passive:true});
-    document.addEventListener('touchstart',onIntent,{passive:true});
-  })();
-
   function openSocialRightProduct(url, label) {
     return ensureSocialRightViewer().then(function (viewer) {
       // A failed frame-policy check uses the existing IGDC contained relay;
@@ -929,6 +942,7 @@
 
     const img = document.createElement("img");
     img.className = "social-right-card-thumb";
+    img.src = thumb;
     img.alt = title;
     const firstView = Number(index) >= 0 && Number(index) < 8;
     img.loading = firstView ? "eager" : "lazy";
@@ -936,7 +950,6 @@
     if (firstView) {
       try { img.fetchPriority = "high"; } catch (_e) {}
     }
-    img.src = thumb;
     a.appendChild(img);
 
     const cap = document.createElement("div");
@@ -1091,6 +1104,7 @@
   }
 
   function runMain() {
+    ensureMainSampleSlots(); // independent of DB, country routing, and snapshots
     if (mainRunInFlight) return mainRunInFlight;
 
     // One front read is enough. social-snapshot-current already resolves the
@@ -1122,25 +1136,15 @@
         // Distribution-owned right panel already started. Never start a duplicate
         // multi-megabyte snapshot fetch from the Social main path.
         if (!(current && current.snapshot)) {
-          if (warm && warm.snapshot) return true;
-          return getInitialRightSnapshotPromise().then(function (canonicalSnapshot) {
-            if (!canonicalSnapshot) {
-              window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-                source: "stored_release_current+canonical_snapshot_engine_output",
-                status: "both_readbacks_unavailable_preserve_existing_slots",
-                loadedAt: new Date().toISOString(),
-              };
-              return false;
-            }
-            lastMainSnapshot = canonicalSnapshot;
-            window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
-              source: "canonical_snapshot_engine_output_reused",
-              status: "front_readback_recovered",
-              url: RIGHT_SNAPSHOT_URL,
-              loadedAt: new Date().toISOString(),
-            };
-            return renderMainSnapshot(lastMainSnapshot, lastRoute);
-          });
+          // No Social Release: keep the 700 visible SAMPLE slots (or verified
+          // session cache). Never wait for, or render Social main from, the
+          // Distribution-owned right-panel request.
+          window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = {
+            source: warm && warm.snapshot ? 'session_public_release_fast_path' : 'main_sample_slots',
+            status: 'front_release_unavailable_preserve_slots',
+            loadedAt: new Date().toISOString()
+          };
+          return !!(warm && warm.snapshot);
         }
 
         lastMainSnapshot = current.snapshot;
@@ -1166,6 +1170,12 @@
     runRightPanel();
     runMain();
   }
+
+  document.addEventListener('click', function (event) {
+    const card = event.target && event.target.closest &&
+      event.target.closest('.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"]');
+    if (card) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
 
   window.addEventListener("igdc:rightpanel:refresh", function () {
     rightApplied = false;

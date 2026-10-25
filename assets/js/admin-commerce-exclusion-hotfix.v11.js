@@ -20,7 +20,8 @@
   function observeList(id,sync){var root=document.getElementById(id);if(!root||root.dataset.v12Observer==='1')return;root.dataset.v12Observer='1';var queued=false,observer=new MutationObserver(function(){if(queued)return;queued=true;(window.requestAnimationFrame||function(fn){return setTimeout(fn,0);})(function(){queued=false;sync();});});observer.observe(root,{subtree:true,childList:true});}
   function wire(){
     ['supplierControlQueue','productHoldQueue','productRejectQueue'].forEach(function(id){var d=document.getElementById(id);if(d&&!d.dataset.v12Exclusive){d.dataset.v12Exclusive='1';d.addEventListener('toggle',function(){exclusive(d);});}});
-    observeList('supplierHoldRows',function(){syncSupplier('hold');});observeList('supplierBlockedRows',function(){syncSupplier('blocked');});observeList('productHoldRows',function(){syncProduct('hold');});observeList('productRejectRows',function(){syncProduct('reject');});
+    observeList('supplierHoldRows',function(){syncSupplier('hold');});observeList('supplierBlockedRows',function(){syncSupplier('blocked');});/* Product selection is exclusively synchronized by the canonical manager;
+       do not overwrite its across-page selection counters from visible DOM. */
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire,{once:true});else wire();
 })();
