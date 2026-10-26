@@ -42,18 +42,28 @@ async function fetchImage(platform, value) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(safe, {
-      method: "GET",
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36",
-        referer: platform === "bilibili" ? "https://www.bilibili.com/" : (platform === "douyin" ? "https://www.douyin.com/" : "https://igdcglobal.com/"),
-      },
-    });
-    if (!response.ok) return null;
-    const finalUrl = validatedThumb(platform, response.url || safe);
+    let current = safe;
+    let response = null;
+    for (let hop = 0; hop < 3; hop += 1) {
+      response = await fetch(current, {
+        method: "GET",
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36",
+          referer: platform === "bilibili" ? "https://www.bilibili.com/" : (platform === "douyin" ? "https://www.douyin.com/" : "https://igdcglobal.com/"),
+        },
+      });
+      if (response.status < 300 || response.status >= 400) break;
+      const location = response.headers && response.headers.get("location");
+      const next = location && validatedThumb(platform, new URL(location, current).toString());
+      if (!next) return null;
+      current = next;
+      if (hop === 2) return null;
+    }
+    if (!response || !response.ok) return null;
+    const finalUrl = validatedThumb(platform, response.url || current);
     if (!finalUrl) return null;
     const type = text(response.headers.get("content-type")).toLowerCase().split(";")[0];
     if (!/^image\//.test(type)) return null;

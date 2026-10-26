@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20261026-seven-main-fast-first-paint-v3
+// build: 20261026-seven-main-refined-samples-fast-paint-v2
 // 목적:
 // 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -32,7 +32,6 @@
     "social-douyin",
   ]);
   const mainRenderTokens = new WeakMap();
-  const mainSlotCache = new WeakMap();
   const rightRenderTokens = new WeakMap();
   let mainSampleSlotsReady = false;
 
@@ -425,8 +424,7 @@
       sessionStorage.setItem(MAIN_FAST_CACHE, JSON.stringify({
         at: Date.now(), snapshot: current.snapshot,
         route: current.pipeline.route || {},
-        releaseId: current.pipeline.releaseId || null,
-        hash: current.pipeline.hash || null
+        releaseId: current.pipeline.releaseId || null
       }));
     } catch (_) { /* storage disabled or quota: online flow remains intact */ }
   }
@@ -434,8 +432,8 @@
   async function loadCurrentSnapshot() {
     try {
       const res = await fetch(
-        CURRENT_SNAPSHOT_URL + "?view=front&_=" + Date.now(),
-        { cache: "no-store", credentials: "same-origin" },
+        CURRENT_SNAPSHOT_URL + "?view=front",
+        { cache: "default", credentials: "same-origin" },
       );
       if (!res.ok) return null;
       const payload = await res.json();
@@ -460,11 +458,7 @@
 
   function getMainSlots(gridEl) {
     if (!gridEl) return [];
-    const cached = mainSlotCache.get(gridEl);
-    if (cached && cached.length === MAIN_LIMIT && cached[0].isConnected) return cached;
-    const cards = qsa("a.card", gridEl);
-    if (cards.length >= MAIN_LIMIT) mainSlotCache.set(gridEl, cards);
-    return cards;
+    return qsa("a.card", gridEl);
   }
 
   function mainCtaLabel(gridEl) {
@@ -518,9 +512,6 @@
 .thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-loading="1"]{position:relative;background:linear-gradient(120deg,#e8eef7,#f4f7fb,#e8eef7)!important;overflow:hidden}
 .thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-loading="1"]::after{content:"";position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);border:1px solid #c8d5e6;border-radius:50%;background:rgba(255,255,255,.8);pointer-events:none}
 .thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-failed="1"]{font-size:12px!important;color:#718198;background:#f0f4f9!important}
-.thumb-grid[data-psom-key="social-tiktok"] a.card:not([data-sample="1"]) .pic[data-social-thumb-failed="1"]{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;flex-direction:column!important;gap:7px!important;padding:28px 8px 8px!important;box-sizing:border-box!important;font-size:11px!important;letter-spacing:.02em!important;line-height:1.3!important;color:#d9e7ee!important;background:linear-gradient(125deg,#17212f 0%,#173642 50%,#20273c 100%)!important;position:relative;overflow:hidden}
-.thumb-grid[data-psom-key="social-tiktok"] a.card:not([data-sample="1"]) .pic[data-social-thumb-failed="1"]::before{content:"▶";position:absolute;top:22%;left:50%;transform:translateX(-50%);display:grid;place-items:center;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.10);color:#f3f8fc;font-size:13px;padding-left:2px;box-sizing:border-box}
-
 `;
     document.head.appendChild(style);
   }
@@ -603,32 +594,19 @@
     return title.replace(/\s+/g, " ").trim();
   }
 
-  function invalidTikTokCover(value) {
-    if (!value) return true;
-    try {
-      const uri = new URL(value);
-      return /(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/)/i.test(uri.pathname);
-    } catch (_) { return true; }
-  }
-
-  function publicTikTokVideoUrl(value) {
-    try {
-      const uri = new URL(value);
-      if (uri.protocol !== "https:") return false;
-      const host = uri.hostname.toLowerCase();
-      if (host === "vm.tiktok.com" || host === "vt.tiktok.com") return true;
-      if (!/(^|\.)tiktok\.com$/i.test(host)) return false;
-      return /^\/@[^/]+\/video\/\d+\/?$/i.test(uri.pathname) ||
-        /^\/(?:video|v|t)\/[^/]+/i.test(uri.pathname);
-    } catch (_) { return false; }
+  function isProviderUiThumbnail(platform, thumb) {
+    if (!thumb) return false;
+    if (platform === "tiktok" && /(?:sf-i18n-resources\.|tiktok-webarch-solution-i18n)/i.test(thumb)) return true;
+    if (platform === "facebook" && /(?:static\.[^/]*fbcdn\.net\/|\/rsrc\.php)/i.test(thumb)) return true;
+    return false;
   }
 
   function thumbnailRenderUrl(platform, contentUrl, thumb) {
-    // Existing relay can resolve the original TikTok video by oEmbed/public
-    // metadata even when a legacy Release has no usable thumbnail URL.
-    if (!thumb && !(platform === "tiktok" && publicTikTokVideoUrl(contentUrl))) return "";
-    if (["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].indexOf(platform) < 0) return thumb;
-    var q = new URLSearchParams({ platform: platform, url: contentUrl || "", thumb: thumb || "" });
+    if (["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].indexOf(platform) < 0) return thumb || "";
+    // A stored blank/expired/brand image must not prevent runtime lookup of
+    // a real cover from the exact, already-published post URL.
+    if (!contentUrl || !/^https:\/\//i.test(contentUrl)) return "";
+    var q = new URLSearchParams({ platform: platform, url: contentUrl, thumb: isProviderUiThumbnail(platform, thumb) ? "" : (thumb || "") });
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }
 
@@ -638,18 +616,14 @@
     pic.style.backgroundSize = "";
     pic.style.backgroundPosition = "";
     while (pic.firstChild) pic.removeChild(pic.firstChild);
-    const sourceThumb = platform === "tiktok" && invalidTikTokCover(thumb) ? "" : thumb;
-    const proxied = thumbnailRenderUrl(platform, contentUrl, sourceThumb);
-    function unavailable() {
+    var safeThumb = isProviderUiThumbnail(platform, thumb) ? "" : thumb;
+    var proxied = thumbnailRenderUrl(platform, contentUrl, safeThumb);
+    if (!proxied) {
       delete pic.dataset.socialThumbLoading;
-      pic.dataset.socialThumbFailed = "1";
-      // A clearly labelled graphic placeholder remains if the provider denies
-      // preview metadata. Do not invent video artwork or block a valid link.
-      pic.textContent = platform === "tiktok"
-        ? "TikTok · 미리보기 준비 중"
-        : platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
+      pic.dataset.socialThumbFailed = '1';
+      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
+      return;
     }
-    if (!sourceThumb && !proxied) { unavailable(); return; }
     pic.dataset.socialThumbLoading = '1';
     delete pic.dataset.socialThumbFailed;
     var img = document.createElement("img");
@@ -671,22 +645,23 @@
     img.style.display = "block";
     img.style.objectFit = "cover";
     img.style.objectPosition = "center";
+    img.dataset.directThumb = safeThumb;
     img.addEventListener("error", function () {
-      // Retry only a genuine image URL. Never fall back to the TikTok telemetry
-      // SDK/plugin file or to an empty URL (which can reload the page itself).
-      if (sourceThumb && img.dataset.triedDirect !== "1" && proxied !== sourceThumb) {
+      if (safeThumb && img.dataset.triedDirect !== "1" && proxied !== safeThumb) {
         img.dataset.triedDirect = "1";
-        img.src = sourceThumb;
+        img.src = safeThumb;
         return;
       }
       if (img.parentNode === pic) pic.removeChild(img);
-      unavailable();
+      delete pic.dataset.socialThumbLoading;
+      pic.dataset.socialThumbFailed = '1';
+      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
     });
     pic.appendChild(img);
-    img.src = proxied || sourceThumb;
+    img.src = proxied;
   }
 
-  function paintMainCard(card, it, eagerThumb) {
+  function paintMainCard(card, it) {
     if (!card || !it) return;
 
     // SAMPLE ownership is upstream. Automap never creates sample rows; it only
@@ -703,8 +678,7 @@
     const platform = safeText(it && (it.platform || (it.social && it.social.platform) || (it.source && it.source.platform))).toLowerCase().replace(/^social-/, "");
     const title = cleanCardTitle(it, platform);
     const desc = cardIdentity(it) || " ";
-    const rawThumb = pickThumb(it);
-    const thumb = platform === "tiktok" && invalidTikTokCover(rawThumb) ? "" : rawThumb;
+    const thumb = pickThumb(it);
 
     const latestContentUrl = safeText(it && (it.latestContentUrl || it.latest_content_url || (it.social && it.social.latestContentUrl)));
     const viewerUrl = safeText(it && (it.viewerUrl || it.permalink || it.href || it.link));
@@ -715,7 +689,9 @@
     card.dataset.socialUrl = url || "#";
     card.dataset.latestContentUrl = latestContentUrl || url || "";
     card.dataset.viewerUrl = viewerUrl || url || "";
-    card.dataset.thumbnailUrl = thumb || "";
+    // The contained SNS viewer must not reuse a poisoned provider UI image.
+    // If the relay recovers a cover, it can read the rendered <img> instead.
+    card.dataset.thumbnailUrl = isProviderUiThumbnail(platform, thumb) ? "" : (thumb || "");
     card.dataset.embedUrl = embedUrl;
     card.dataset.profileFallback = it && it.social && it.social.profileFallback ? "1" : "0";
     // Viewer bridge intercepts normal clicks. _blank remains only as a fail-safe
@@ -744,8 +720,10 @@
       metaDesc.style.display = "none";
     }
 
-    // First-screen visibility is measured once per row in mountMainRow.
-    // Reading getBoundingClientRect() for every real card caused forced reflows.
+    const slotIndex = Number(card.dataset.socialSlotNo || 0);
+    const rowRect = card.getBoundingClientRect && card.getBoundingClientRect();
+    const eagerThumb = slotIndex > 0 && slotIndex <= 4 && rowRect &&
+      rowRect.bottom > -80 && rowRect.top < (window.innerHeight || 800) + 360;
     paintThumb(pic, platform, url, thumb, !!eagerThumb);
   }
 
@@ -765,31 +743,28 @@
       const label = sampleLabelForSection(key);
       const existing = getMainSlots(grid);
       if (existing.length >= MAIN_LIMIT) return;
-      // Parse one static fragment per row instead of creating/querying and
-      // mutating each of the 700 cards individually on the critical first paint.
-      const escapeSample = function (value) {
-        return safeText(value).replace(/[&<>"']/g, function (ch) {
-          return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
-        });
-      };
-      const safeLabel = escapeSample(label);
+      const fragment = document.createDocumentFragment();
       const cardMarkup = mainCardMarkup(grid);
-      const html = [];
       for (let i = existing.length; i < MAIN_LIMIT; i++) {
-        const number = String(i + 1).padStart(3, '0');
-        html.push('<a class="card" href="#" data-sample="1" data-snapshot-sample="1" ' +
-          'data-social-slot-no="' + number + '" data-social-render-signature="sample" ' +
-          'aria-label="' + safeLabel + ' SAMPLE ' + number + '">' +
-          cardMarkup.replace('<div class="pic"></div>',
-            '<div class="pic" data-sample-slot="' + number + '">' + safeLabel + '</div>')
-          .replace('<div class="title"></div>',
-            '<div class="title">' + safeLabel + ' · ' + number + '</div>')
-          .replace('<div class="desc"></div>',
-            '<div class="desc" style="display:none"></div>') + '</a>');
+        const card = document.createElement('a');
+        card.className = 'card';
+        card.href = '#';
+        card.dataset.sample = '1';
+        card.dataset.snapshotSample = '1';
+        card.dataset.socialSlotNo = String(i + 1).padStart(3, '0');
+        card.dataset.socialRenderSignature = 'sample';
+        card.setAttribute('aria-label', label + ' SAMPLE ' + card.dataset.socialSlotNo);
+        card.innerHTML = cardMarkup;
+        const pic = qs('.pic', card);
+        if (pic) { pic.dataset.sampleSlot = card.dataset.socialSlotNo; pic.textContent = label; }
+        const title = qs('.title', card);
+        if (title) title.textContent = label + ' · ' + card.dataset.socialSlotNo;
+        const desc = qs('.desc', card);
+        if (desc) desc.style.display = 'none';
+        fragment.appendChild(card);
       }
       // Existing slot and scroll-button geometry is preserved unchanged.
-      grid.insertAdjacentHTML('beforeend', html.join(''));
-      mainSlotCache.set(grid, qsa('a.card', grid));
+      grid.appendChild(fragment);
     });
     mainSampleSlotsReady = grids.filter(function (g) {
       return MANAGED_MAIN_KEYS.has(g.getAttribute('data-psom-key'));
@@ -804,10 +779,6 @@
     const scrollHost = gridEl.closest('.row-scroller') || gridEl;
     const key = gridEl.getAttribute('data-psom-key');
     const label = sampleLabelForSection(key);
-    // One geometry read per row instead of a layout read for every content card.
-    const rowRect = scrollHost.getBoundingClientRect && scrollHost.getBoundingClientRect();
-    const rowNearScreen = !!(rowRect && rowRect.bottom > -80 &&
-      rowRect.top < (window.innerHeight || 800) + 360);
     const job = { grid: gridEl, cards: cards, items: displayItems, painted: new Set(), offset: 0 };
     mainRenderTokens.set(scrollHost, job);
 
@@ -837,7 +808,7 @@
           pickThumb(item), pickDesc(item), pickCreator(item),
           safeText(item.embedUrl || item.embed_url)].join('\u001f');
         if (card.dataset.socialRenderSignature !== signature || card.dataset.sample === '1') {
-          paintMainCard(card, item, rowNearScreen && index < 4);
+          paintMainCard(card, item);
           card.dataset.socialRenderSignature = signature;
           card.setAttribute('aria-label', pickTitle(item) || label);
         }
@@ -1239,20 +1210,9 @@
         }
 
         lastMainSnapshot = current.snapshot;
+        saveFastMain(current);
         window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
-        // If the verified stored release is identical to the session-painted
-        // release in the same route, skip a second 700-card reconciliation.
-        const releaseUnchanged = !!(warm && warm.hash && current.pipeline.hash &&
-          warm.hash === current.pipeline.hash &&
-          warm.releaseId === current.pipeline.releaseId &&
-          safeText(warm.route && warm.route.countryCode) === safeText(releaseRoute.countryCode) &&
-          safeText(warm.route && warm.route.worldRegion) === safeText(releaseRoute.worldRegion));
-        if (releaseUnchanged) return true;
-        const applied = renderMainSnapshot(lastMainSnapshot, lastRoute);
-        // Persist after the visible card update; large JSON serialization before
-        // painting used to block the browser main thread on each fresh release.
-        if (applied) setTimeout(function () { saveFastMain(current); }, 0);
-        return applied;
+        return renderMainSnapshot(lastMainSnapshot, lastRoute);
       })
       .catch(function (e) {
         console.error("[social-main-automap] fail", e);
@@ -1278,29 +1238,6 @@
       event.target.closest('.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"]');
     if (card) { event.preventDefault(); event.stopImmediatePropagation(); }
   }, true);
-
-  // A Social publication is a live Supabase Release, not a new HTML build.
-  // Keep an already-open Social main page current when the administrator
-  // publishes in another same-origin tab. This never refreshes the right panel.
-  const SOCIAL_RELEASE_SIGNAL = "igdc.social.frontReleasePublished";
-  let lastMainVisibilityCheck = 0;
-  function refreshVisibleSocialMain(force) {
-    if (document.visibilityState === "hidden") return;
-    const now = Date.now();
-    if (!force && now - lastMainVisibilityCheck < 15000) return;
-    lastMainVisibilityCheck = now;
-    runMain();
-  }
-  window.addEventListener("storage", function (event) {
-    if (event.key === SOCIAL_RELEASE_SIGNAL && event.newValue) {
-      lastMainVisibilityCheck = 0;
-      refreshVisibleSocialMain(true);
-    }
-  });
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") refreshVisibleSocialMain(false);
-  });
-  window.addEventListener("focus", function () { refreshVisibleSocialMain(false); });
 
   window.addEventListener("igdc:rightpanel:refresh", function () {
     rightApplied = false;

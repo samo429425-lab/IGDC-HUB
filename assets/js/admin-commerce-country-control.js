@@ -491,7 +491,13 @@
   function pageCount(total,size){return Math.max(1,Math.ceil(Math.max(0,Number(total)||0)/Math.max(1,Number(size)||MANAGEMENT_PAGE_SIZE)));}
   function clampPage(page,total,size){return Math.max(0,Math.min(Math.max(0,Number(page)||0),pageCount(total,size)-1));}
   function pagerMarkup(kind,key,page,total,size){size=Math.max(1,Number(size)||MANAGEMENT_PAGE_SIZE);page=clampPage(page,total,size);var pages=pageCount(total,size),start=total?page*size+1:0,end=Math.min(total,(page+1)*size);if(pages<=1)return'<div class="management-pager"><span class="small">'+start+'-'+end+' / '+total+'건</span></div>';return'<div class="management-pager" data-management-pager="'+esc(kind)+'" data-management-pager-key="'+esc(key||'')+'"><button type="button" class="secondary" data-page-delta="-1" '+(page<=0?'disabled':'')+'>이전</button><span class="small">'+(page+1)+' / '+pages+' 페이지 · '+start+'-'+end+' / '+total+'건</span><button type="button" class="secondary" data-page-delta="1" '+(page>=pages-1?'disabled':'')+'>다음</button></div>'; }
-  function wireProductImages(root){Array.prototype.forEach.call((root||document).querySelectorAll('[data-product-image]:not([data-image-wired])'),function(img){img.setAttribute('data-image-wired','1');img.addEventListener('error',function(){img.classList.add('hidden');var fallback=img.parentNode&&img.parentNode.nextElementSibling;if(fallback)fallback.classList.remove('hidden');});});}
+  function wireProductImages(root){Array.prototype.forEach.call((root||document).querySelectorAll('[data-product-image]:not([data-image-wired])'),function(img){img.setAttribute('data-image-wired','1');img.addEventListener('error',function(){
+    // Retry a different verified-looking IMAGE URL, never a different product
+    // identity. No external proxy and no invented thumbnail are used.
+    var alternatives=[];try{alternatives=JSON.parse(img.getAttribute('data-image-alternates')||'[]');}catch(_e){}
+    var next=Number(img.getAttribute('data-image-attempt')||0);if(next<alternatives.length){var url=safeExternalImageUrl(alternatives[next]);img.setAttribute('data-image-attempt',String(next+1));if(url&&url!==img.src){img.src=url;return;}}
+    img.classList.add('hidden');var parent=img.parentNode,frame=img.closest&&img.closest('.product-image-frame');var fallback=frame&&frame.querySelector('.product-image-missing');if(!fallback&&parent)fallback=parent.nextElementSibling;if(fallback)fallback.classList.remove('hidden');
+  });});}
   function queueCandidateId(row){return text(row&&(row.candidateId||row.id));}
   function queueVisibleRows(rows){
     return (Array.isArray(rows)?rows:[]).filter(function(row){var stage=text(row&&row.stageStatus).toLowerCase(),status=text(row&&row.status).toLowerCase();return !['held','hold','rejected','reject','suppressed','deleted','removed'].includes(stage)&&!['held','hold','rejected','reject','suppressed','deleted','removed'].includes(status);});
@@ -796,9 +802,47 @@
       return /(?:^|\/)(?:challenge|captcha|access[-_]denied|bot[-_]check|security[-_]check)(?:\/|$)/.test(path)||/\/cdn-cgi\/challenge-platform(?:\/|$)/.test(path)||((u.hostname.toLowerCase()==="verify.trip.com")&&/\/static\/tripverify\.html$/i.test(path));
     }catch(_e){return false;}
   }
-  function safeProductDetailUrl(value){var url=safeExternalUrl(value);return url&&!productAccessChallengeUrl(url)?url:'';}
+  // A seller/home/verification link must never be advertised as an individual
+  // product page. Conservative exclusions; uncertain deep URLs stay REVIEWABLE
+  // through their original source but are not auto-promoted to the front.
+  function productCollectionOrProviderUrl(value){
+    var url=safeExternalUrl(value);if(!url)return true;
+    try{var u=new URL(url),path=u.pathname.toLowerCase().replace(/\/+$/,'')||'/',host=u.hostname.toLowerCase();
+      if(path==='/'||/(?:^|\/)(?:login|signin|signup|register|account|captcha|verify|verification|challenge)(?:\/|$)/.test(path))return true;
+      if(/(?:^|\/)(?:category|categories|collections?|catalog|search|results|goods_list|products_list|all-cities|all-hotels|all-activities|host|hosts)(?:\/|$)/.test(path))return true;
+      if(/(?:^|\/)(?:hotel|hotels|tour|tours|activity|activities|product|products|goods)(?:\/(?:all|all-cities|all-hotels|search|list|deals|offers|best|featured|index))?$/.test(path))return true;
+      // Travel inventory may have a generic landing link with product-looking
+      // query parameters. Host directories are not bookable product detail URLs.
+      if(/(?:^|\/)hosts?\/[^/]+$/.test(path) || /(?:^|\/)hotels?\/all-[^/]+$/.test(path))return true;
+      if(/(?:^|\/)(?:insurance|flight|flights|deals|offers)$/.test(path))return true;
+      if(/trip\.com$/.test(host)&&/(?:^|\/)(?:all-cities|all-hotels|hotels?\/all-cities)(?:\/|$)/.test(path))return true;
+      return false;
+    }catch(_e){return true;}
+  }
+  function safeProductDetailUrl(value){var url=safeExternalUrl(value);return url&&!productAccessChallengeUrl(url)&&!productCollectionOrProviderUrl(url)?url:'';}
   function safeExternalImageUrl(value){var url=safeExternalUrl(value);return /^https:\/\//i.test(url)?url:'';}
+  function researchCardImageSources(row){
+    var r=row||{},card=r.productCard||{},candidates=[r.imageUrl,r.imageOriginalUrl,r.productImageUrl,r.productImage,r.thumbnailUrl,r.thumbnail_url,r.image,card.imageUrl,card.thumbnailUrl,card.image,card.thumb,r.ogImage,r.ogImageUrl],out=[],seen={};
+    if(Array.isArray(r.images))candidates=candidates.concat(r.images.map(function(v){return typeof v==='string'?v:(v&&(v.url||v.src||v.imageUrl));}));
+    candidates.forEach(function(v){var url=safeExternalImageUrl(v);if(!url||seen[url])return;try{var u=new URL(url),name=(u.pathname||'').toLowerCase();
+      if(/(?:^|[\/_\-.])(?:favicon|logo|logotype|placeholder|no[_-]?image|spinner|loading|icon|sprite|banner|site[_-]?header|profile|avatar)(?:[\/_\-.]|$)/.test(name)||/\.(?:svg|ico|pdf|css|js)(?:$|\?)/.test(name))return;
+      if(/(?:captcha|tripverify|challenge-platform)/.test(name))return;
+    }catch(_e){return;}seen[url]=true;out.push(url);});return out.slice(0,8);
+  }
   function researchCardImage(row){var r=row||{},candidates=[r.imageUrl,r.imageOriginalUrl,r.image,r.thumbnailUrl,r.thumbnail_url,r.productImageUrl,r.productImage,r.ogImage,r.ogImageUrl];if(Array.isArray(r.images))candidates=candidates.concat(r.images.map(function(v){return typeof v==='string'?v:(v&& (v.url||v.src));}));for(var i=0;i<candidates.length;i++){var url=safeExternalImageUrl(candidates[i]);if(url)return url;}return ''; }
+  function genericOrChallengeResearchTitle(value){
+    var label=text(value).toLowerCase().replace(/\s+/g,' ').trim();
+    return !label||/^(?:상품명 확인 중|상품 확인 중|all hotels|all activities|all cities|keep shopping|trip\.com[- ]verification|captcha|verification required|are you human|access denied|쇼핑몰|상품 목록|로그인|회원가입)$/i.test(label)||/(?:^|\s)(?:captcha|robot check|security verification)(?:\s|$)/i.test(label);
+  }
+  function confirmedRemovedProductEvidence(row){
+    var r=row||{},status=text(r.researchStatus||r.verificationStatus).toLowerCase(),risk=r.riskAssessment||{};
+    // An image failure, unavailable price, HTTP 403/429, seller bot challenge,
+    // and generic seller redirect alone are NOT proof that the product vanished.
+    return r.inspectionComplete===true&&(status==='http_404'||status==='http_410'||status==='product_page_explicit_invalid_message')&&
+      (r.productPageLive===false||risk.explicitUnavailable===true||status==='http_410');
+  }
+  function reviewUrlLabel(value){var url=safeExternalUrl(value);if(!url)return '원본 상품 URL 미확보';try{var u=new URL(url);Array.from(u.searchParams.keys()).forEach(function(k){if(/^(?:access[_-]?token|refresh[_-]?token|token|auth|session(?:id)?|sid|signature|sig|api[_-]?key|jwt)$/i.test(k))u.searchParams.set(k,'[redacted]');});return u.toString().slice(0,420);}catch(_e){return '원본 상품 URL 확인 필요';}}
+
   function safeExternalVideoUrl(value){var url=safeExternalUrl(value);return /^https:\/\//i.test(url)?url:'';}
   function externalReviewAnchor(url,label,className){var safe=safeExternalUrl(url);if(!safe)return'';return'<a href="'+esc(safe)+'" target="_top" class="'+esc(className||'')+'" data-review-link="1" rel="noreferrer external nofollow">'+esc(label)+'</a>';}
   function reviewAnchorToken(value,index){var token=text(value).replace(/[^0-9A-Za-z가-힣_-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,72);return token||('row-'+String(Number(index)||0));}
@@ -1009,7 +1053,10 @@
 
   function productCardHtml(row,index,mode,groupKey){
     var productUrl=safeProductDetailUrl(row.productUrl||row.url),imageUrl=researchCardImage(row),supplierUrl=safeExternalUrl(row.supplierSiteUrl),videoUrl=safeExternalVideoUrl(row.videoUrl||row.videoContentUrl||row.videoEmbedUrl),title=text(row.productName||row.title||'상품명 확인 필요'),decision=productDecision(row),researchStatus=text(row.researchStatus).toLowerCase(),risk=row.riskAssessment||{},ready=researchStatus==='ready_for_admin_review',actionable=row.inspectionComplete===true||ready||researchStatus==='needs_manual_review'||row.privatePlacementReviewEligible===true,hardInvalid=['http_404','http_410','non_html','blocked','unavailable','invalid_product_url','product_page_explicit_invalid_message','product_page_redirected_to_seller_home'].indexOf(researchStatus)>=0||row.productPageLive===false||risk.explicitUnavailable===true||risk.specificProductUrl===false,slotAllowed=(!!row.id&&!!productUrl&&!hardInvalid)||decision==='slot_candidate',price=text(row.price||''),currency=text(row.priceCurrency||''),priceDisplay=price?(currency==='KRW'?price.replace(/\s*KRW\s*/ig,'').replace(/원\s*$/,'')+'원':price+(currency?' '+currency:'')):'판매처에서 현재 가격 확인';
-    var image=imageUrl?(productUrl?'<a href="'+esc(productUrl)+'" target="_top" data-review-link="1" rel="noreferrer external nofollow" referrerpolicy="no-referrer">':'')+'<img data-product-image="1" src="'+esc(imageUrl)+'" alt="'+esc(title)+'" loading="lazy" decoding="async" fetchpriority="low">'+(productUrl?'</a>':'')+'<div class="product-image-missing hidden">상품 이미지 원본을 불러오지 못했습니다.</div>':'<div class="product-image-missing">상품 이미지 확인 필요</div>';
+    if(groupKey==='latest_research'&&(hardInvalid||genericOrChallengeResearchTitle(title)))productUrl='';
+    var groupImages=groupKey==='latest_research'?researchCardImageSources(row):[],activeImage=groupImages.length?groupImages[0]:imageUrl,imageAlts=groupImages.slice(1);
+    if(groupKey==='latest_research'&&genericOrChallengeResearchTitle(title)){activeImage='';imageAlts=[];}
+    var image=activeImage?(productUrl?'<a href="'+esc(productUrl)+'" target="_top" data-review-link="1" rel="noreferrer external nofollow" referrerpolicy="no-referrer">':'')+'<img data-product-image="1" '+(imageAlts.length?'data-image-alternates="'+esc(JSON.stringify(imageAlts))+'" ':'')+'src="'+esc(activeImage)+'" alt="'+esc(title)+'" loading="lazy" decoding="async" fetchpriority="low">'+(productUrl?'</a>':'')+'<div class="product-image-missing hidden">상품 이미지 원본을 불러오지 못했습니다 · 상품 URL 확인 필요</div>':'<div class="product-image-missing">상품 이미지 확인 필요 · 이미지 없다고 상품이 없는 것은 아닙니다</div>';
     var revenueRank=mode==='candidate'&&PRODUCT_SECTION_MAP[groupKey]&&sectionRevenueViewScope===scopeKey()?sectionRevenueView[text(row.candidateId||row.id)]:null;
     var revenueRankControl=revenueRank?'<div class="small">수익 우선 순번 <strong>'+esc(revenueRank.rank)+'위</strong> · '+esc(revenueRank.className||'ORDINARY')+(revenueRank.override==='demote'?' · 관리자 후순위 지정':'')+'</div><button type="button" class="ghost" data-section-revenue-action="'+(revenueRank.override==='demote'?'restore':'demote')+'" data-section-revenue-section="'+esc(groupKey)+'" data-section-revenue-id="'+esc(row.candidateId||row.id)+'">'+(revenueRank.override==='demote'?'관리자 후순위 해제':'관리자 판단으로 뒤로 보내기')+'</button>':'';
     var links=[];if(productUrl)links.push(externalReviewAnchor(productUrl,'상품 원본·판매처 열기',''));if(supplierUrl)links.push(externalReviewAnchor(supplierUrl,'업체 사이트 확인',''));var placementHtml='',actions='';
@@ -1025,7 +1072,8 @@
     var frontSelect=mode==='section'&&row.id?'<div class="product-card-front-select"><label class="product-front-select-label"><input type="checkbox" data-product-front-select="1" data-product-front-section="'+esc(groupKey)+'" value="'+esc(row.id)+'" '+(frontSelectedProducts[text(row.id)]===true?'checked ':'')+'> 이 상품 선택</label></div>':'',candidateSelect=mode==='candidate'&&row.id?'<div class="product-card-front-select"><label class="product-front-select-label"><input type="checkbox" data-candidate-select="'+esc(groupKey)+'" value="'+esc(row.id)+'" '+(candidateSelectedProducts[text(row.id)]===true?'checked ':'')+'> 이 후보 선택</label></div>':'',latestKey=latestProductKey(row),latestSelect=mode==='latest'&&latestKey?'<div class="product-card-front-select"><label class="product-front-select-label"><input type="checkbox" data-latest-queue-select="1" value="'+esc(latestKey)+'" '+(latestSelectedProducts[latestKey]===true?'checked ':'')+'> 이 상품 선택</label></div>':'';
     var directDelete=mode==='latest'&&latestKey?'<button type="button" class="secondary" data-latest-delete-one="'+esc(latestKey)+'">이 상품 목록에서 삭제</button> <button type="button" class="danger" data-latest-purge-one="'+esc(latestKey)+'">이 상품 영구 제외</button>':((mode==='candidate'||mode==='section')&&row.id?'<button type="button" class="secondary" data-candidate-delete-one="'+esc(frontCandidateLedgerId(row))+'">이 후보 목록에서 삭제</button>':'');
     if(directDelete)actions+=(actions?' ':'')+directDelete;
-    return'<article class="product-card" data-review-anchor="product-'+esc(row.id||productUrl||title)+'">'+candidateSelect+frontSelect+latestSelect+latestDuplicateNote+'<div class="product-image-frame">'+image+'</div><div class="product-body"><strong class="product-title">'+(productUrl?externalReviewAnchor(productUrl,title,'product-title-link'):esc(title))+'</strong><div class="product-price"><strong>'+esc(priceDisplay)+'</strong></div><div class="small">판매·결제·배송 책임 업체: '+esc(row.supplierName||'-')+'</div><div class="small"><span class="pill '+(ready?'good':'warn')+'">'+esc(row.researchStatus||'미확인')+'</span> <span class="pill info">'+esc(decisionLabel)+'</span>'+(mode==='latest'&&verifiedReviewUi.latest[latestKey]==='verified'?' <span class="pill good">정상 검증 완료 · 복귀 대기</span>':'')+(priority?' <span class="pill good">'+esc(priority)+'</span>':'')+(row.productEvidenceReviewRequired===true?' <span class="pill warn">상세상품 확인 필요 · 기존 섹션 보존</span>':'')+'</div>'+settlementHtml+frontPublicationSummary(row)+revenueRankControl+placementHtml+'<div class="product-links">'+(links.join('')||'<span class="small">확인 가능한 외부 링크가 없습니다.</span>')+'</div><div class="small mono">'+esc(productUrl||(productAccessChallengeUrl(row.productUrl||row.url)?'접근 제한 인증 주소 격리 · 원본 상세주소 복구 필요':'상품 원본 주소 확인 필요'))+'</div><div class="product-actions">'+actions+singleFront+'</div></div></article>';
+    var researchReferenceNote=groupKey==='latest_research'?'<div class="small mono" style="overflow-wrap:anywhere">원본 조사 URL: '+esc(reviewUrlLabel(row.productUrl||row.url||row.originalOfficialProductUrl))+'</div>'+(productUrl?'':'<div class="small">상품 상세 URL 검증 필요 · 업체/목록 페이지는 상품 링크로 연결하지 않습니다.</div>'):'';
+    return'<article class="product-card" data-review-anchor="product-'+esc(row.id||productUrl||title)+'">'+candidateSelect+frontSelect+latestSelect+latestDuplicateNote+'<div class="product-image-frame">'+image+'</div><div class="product-body"><strong class="product-title">'+(productUrl?externalReviewAnchor(productUrl,title,'product-title-link'):esc(title))+'</strong><div class="product-price"><strong>'+esc(priceDisplay)+'</strong></div><div class="small">판매·결제·배송 책임 업체: '+esc(row.supplierName||'-')+'</div><div class="small"><span class="pill '+(ready?'good':'warn')+'">'+esc(row.researchStatus||'미확인')+'</span> <span class="pill info">'+esc(decisionLabel)+'</span>'+(mode==='latest'&&verifiedReviewUi.latest[latestKey]==='verified'?' <span class="pill good">정상 검증 완료 · 복귀 대기</span>':'')+(priority?' <span class="pill good">'+esc(priority)+'</span>':'')+(row.productEvidenceReviewRequired===true?' <span class="pill warn">상세상품 확인 필요 · 기존 섹션 보존</span>':'')+'</div>'+settlementHtml+frontPublicationSummary(row)+revenueRankControl+placementHtml+'<div class="product-links">'+(links.join('')||'<span class="small">확인 가능한 외부 링크가 없습니다.</span>')+'</div><div class="small mono" style="overflow-wrap:anywhere">'+esc(productUrl||(productAccessChallengeUrl(row.productUrl||row.url)?'접근 제한 인증 주소 격리 · 원본 상세주소 복구 필요':'상품 원본 주소 확인 필요'))+'</div>'+researchReferenceNote+'<div class="product-actions">'+actions+singleFront+'</div></div></article>';
   }
   function productGroupDetails(key,label,rows,kind){
     var count=rows.length,validSection=!!PRODUCT_SECTION_MAP[key],frontCount=validSection?currentFrontCount(key):0,occupancy=count,frontCapacity=frontSlotCapacity(key),capacity=validSection?'<span class="product-section-capacity '+(occupancy>frontCapacity?'warn':'')+'">'+esc(sectionOccupancyText(key,count))+'</span>':'<span class="small">'+count+'건'+(frontCount>0?' · 실상품 '+frontCount+'건':'')+'</span>';
@@ -1524,15 +1572,19 @@
     // manufacture an ID or offer section/approval operations before staging.
     var r=item.research||{},id=item.researchId,title=text(r.productName||r.title||'상품명 확인 필요'),
       original=text(r.productUrl||r.url),url=[r.verifiedDetailPageUrl,r.productUrl,r.productDetailUrl,r.originalOfficialProductUrl,r.url].map(safeProductDetailUrl).filter(Boolean)[0]||'',
-      image=researchCardImage(r),supplierUrl=safeExternalUrl(r.supplierSiteUrl||r.supplierOfficialUrl||r.officialSupplierUrl),
+      imageSources=researchCardImageSources(r),image=imageSources[0]||'',imageAlts=imageSources.slice(1),supplierUrl=safeExternalUrl(r.supplierSiteUrl||r.supplierOfficialUrl||r.officialSupplierUrl),
       supplier=text(r.supplierName||r.sellerName||r.supplier||r.merchantName||'판매처 확인 필요'),
       scope=scopeKey(),marked=!!(latestInCandidateSelections[id]&&latestInCandidateSelections[id].scope===scope),
       price=text(r.price||r.priceText||''),currency=text(r.priceCurrency||''),
       displayPrice=price?(currency==='KRW'?price.replace(/\s*KRW\s*/ig,'').replace(/원\s*$/,'')+'원':price+(currency?' '+currency:'')):'판매처에서 현재 가격 확인',
       researchState=text(r.researchStatus||r.verificationStatus||'실상품 검증 필요'),
       links=(url?externalReviewAnchor(url,'상품 원본·판매처 열기',''):'')+(supplierUrl?externalReviewAnchor(supplierUrl,'업체 사이트 확인',''):'');
+    if(genericOrChallengeResearchTitle(title)||confirmedRemovedProductEvidence(r)){
+      url='';links=supplierUrl?externalReviewAnchor(supplierUrl,'업체 사이트 확인',''):'';
+      if(genericOrChallengeResearchTitle(title)){image='';imageAlts=[];}
+    }
     var img=image?((url?'<a href="'+esc(url)+'" target="_top" data-review-link="1" rel="noreferrer external nofollow" referrerpolicy="no-referrer" aria-label="'+esc(title)+' 상품 페이지 열기">':'')+
-      '<img data-product-image="1" src="'+esc(image)+'" alt="'+esc(title)+'" loading="lazy" decoding="async" fetchpriority="low" referrerpolicy="no-referrer">'+
+      '<img data-product-image="1" '+(imageAlts.length?'data-image-alternates="'+esc(JSON.stringify(imageAlts))+'" ':'')+'src="'+esc(image)+'" alt="'+esc(title)+'" loading="lazy" decoding="async" fetchpriority="low" referrerpolicy="no-referrer">'+
       (url?'</a>':'')+'<div class="product-image-missing hidden">이미지 원본을 불러오지 못했습니다 · 추가 검증</div>'):
       '<div class="product-image-missing">상품 이미지 미확보 · 추가 검증 필요</div>';
     return '<article class="product-card" data-review-anchor="research-'+esc(id)+'">'+
@@ -1549,7 +1601,8 @@
       '<button type="button" class="product-management-apply" data-latest-research-single-apply="'+esc(id)+'" '+(latestInCandidateBusy?'disabled':'')+'>적용</button></div>'+ 
       '<div class="product-ai-recommendation">원본 상품 검증 전 · 후보 ID 없음 · 프론트 공개 불가</div></div>'+
       '<div class="product-links">'+(links||'<span class="small">검증된 상품 페이지 링크 없음</span>')+'</div>'+
-      '<div class="small mono">'+esc(url||(productAccessChallengeUrl(original)?'접근 제한·인증 페이지 격리 · 상품 원본 URL 복구 필요':'실제 상품 상세 URL 검증 필요'))+'</div>'+
+      '<div class="small mono" style="overflow-wrap:anywhere">원본 조사 URL: '+esc(reviewUrlLabel(original||r.productDetailUrl||r.originalOfficialProductUrl))+'</div>'+
+      '<div class="small">'+(productAccessChallengeUrl(original)?'접근 제한·인증 페이지 격리 · 상품이 삭제된 증거는 아닙니다':(url?'상품 상세주소 후보 · 실제 상품 여부 검증 필요':'업체·목록 페이지 또는 미확인 주소 · 상품으로 공개하지 않음'))+'</div>'+
       '<div class="product-actions"><span class="product-verification-note">실제 상품을 검증하여 후보 원장에 등록한 뒤 미배치 또는 20개 섹션으로 이동합니다.</span></div></div></article>';
   }
   function syncLatestResearchUnifiedSelection(){
@@ -1565,7 +1618,11 @@
     var selectedRegistered=selectedCandidateIds('latest_research').length,canWrite=!latestInCandidateBusy&&!latestQueueActionActive&&!productAutomationActive&&!productFrontSyncActive&&latestProductRowsComplete&&latestOverviewLedgerComplete;
     Array.prototype.forEach.call(mount.querySelectorAll('[data-latest-unified-action]'),function(button){
       var action=button.getAttribute('data-latest-unified-action');
-      button.disabled=!canWrite||(!selectedNew.length&&!selectedRegistered)||((action==='register'||action==='hold'||action==='reject')&&!(action==='register'?selectedNew.length:selectedRegistered));
+      if(action==='select_missing'){
+        var pageNumber=clampPage(candidateGroupPages['candidate:latest_research']||0,entries.length,MANAGEMENT_PAGE_SIZE);
+        var pageRows=entries.slice(pageNumber*MANAGEMENT_PAGE_SIZE,(pageNumber+1)*MANAGEMENT_PAGE_SIZE);
+        button.disabled=!canWrite||!pageRows.some(function(x){return x.kind==='unregistered'&&confirmedRemovedProductEvidence(x.research);});
+      }else button.disabled=!canWrite||(!selectedNew.length&&!selectedRegistered)||((action==='register'||action==='hold'||action==='reject'||action==='prune_confirmed_missing')&&!(action==='register'||action==='prune_confirmed_missing'?selectedNew.length:selectedRegistered));
     });
   }
   function latestResearchSelectedEntries(){
@@ -1601,6 +1658,14 @@
     if(latestInCandidateBusy||latestQueueActionActive)return;
     if(!selectedCountry||selectedCountry==='GLOBAL'||!latestProductRowsComplete||!latestOverviewLedgerComplete){show('국가·지역의 리서치·후보 원장을 모두 조회한 뒤 작업하세요.','warn');return;}
     var selected=Array.isArray(override)?override:latestResearchSelectedEntries(),frozen=scopeKey();
+    if(action==='select_missing'){
+      var entries=latestResearchUnifiedEntries(),pageNumber=clampPage(candidateGroupPages['candidate:latest_research']||0,entries.length,MANAGEMENT_PAGE_SIZE),visible=entries.slice(pageNumber*MANAGEMENT_PAGE_SIZE,(pageNumber+1)*MANAGEMENT_PAGE_SIZE),matched=0;
+      visible.forEach(function(item){
+        if(item.kind==='registered'){var candidateId=text(item.candidate&&item.candidate.id);if(candidateId)delete candidateSelectedProducts[candidateId];}
+        else if(item.researchId){delete latestInCandidateSelections[item.researchId];if(confirmedRemovedProductEvidence(item.research)){latestInCandidateSelections[item.researchId]={scope:frozen,candidateId:''};matched++;}}
+      });
+      syncLatestResearchUnifiedSelection();show('현재 페이지에서 실상품 삭제가 확인된 미등록 '+matched+'건만 선택했습니다. 삭제 전에 해당 상품의 기록을 확인하십시오.','ok');return;
+    }
     if(!selected.length){show('현재 리서치 관리 영역에서 상품을 선택하세요.','warn');return;}
     var fresh=selected.filter(function(x){return x.kind==='unregistered';}),registered=selected.filter(function(x){return x.kind==='registered';}),
       registeredIds=Array.from(new Set(registered.map(function(x){return frontCandidateLedgerId(x.candidate);}).filter(Boolean)));
@@ -1611,6 +1676,16 @@
       }
       if(fresh.length)await runLatestInCandidateAction('stage',{researchIds:fresh.map(function(x){return x.researchId;})});
       else show('선택된 미등록 상품이 없습니다. 기존 후보는 미배치 이동 버튼을 사용하세요.','warn');
+      return;
+    }
+    if(action==='prune_confirmed_missing'){
+      var verifiedMissing=fresh.filter(function(x){return confirmedRemovedProductEvidence(x.research);});
+      if(registered.length||verifiedMissing.length!==selected.length){show('삭제하지 않았습니다. 최근 리서치에서 HTTP 404·410 또는 명시적인 상품 삭제가 확인된 미등록 상품만 정리할 수 있습니다. 이미지 누락·CAPTCHA·403·429·업체 페이지 이동은 삭제 근거가 아닙니다.','warn');return;}
+      if(!window.confirm('선택한 미등록 상품 '+verifiedMissing.length+'건의 저장된 실상품 검증 기록에 삭제/존재하지 않음이 명시되어 있습니다. 현재 리서치 작업 목록에서만 제거합니까? 원본 감사 이력은 보존되고 다음 조사에서 다시 발견할 수 있습니다.'))return;
+      var ids=verifiedMissing.map(function(x){return x.researchId;});
+      var response=await runLatestProductQueueAction('delete','selected',{idsOverride:ids,skipConfirm:true});
+      if(response&&response.ok===true){await refreshLatestResearchRows(selectedCountry,selectedSubdivision||'NATIONWIDE',{throwOnFailure:true});renderLatestResearchCandidateGroup();}
+      else show('목록 삭제 결과 확인이 필요합니다. 원장 재조회 후 다시 확인하세요.','warn');
       return;
     }
     if(action==='permanent'){
@@ -1686,13 +1761,13 @@
       '<button type="button" data-latest-unified-action="register" disabled>선택 미등록 검증·최초 등록</button>'+
       '<button type="button" class="secondary" data-latest-unified-action="hold" disabled>선택 후보 보류</button>'+
       '<button type="button" class="danger" data-latest-unified-action="reject" disabled>선택 후보 제외</button>'+
-      '<button type="button" class="secondary" data-latest-unified-action="delete" disabled>선택 상품 목록 삭제</button>'+
+      '<button type="button" class="secondary" data-latest-unified-action="delete" disabled>선택 상품 목록 삭제</button>'+      '<button type="button" class="secondary" data-latest-unified-action="select_missing" disabled>현재 페이지 검증된 부재만 선택</button>'+      '<button type="button" class="secondary" data-latest-unified-action="prune_confirmed_missing" disabled>선택한 확정 부재 상품 목록 정리</button>'+
       '<button type="button" class="danger" data-latest-unified-action="permanent" disabled>선택 상품 영구 삭제</button>'+
       '<button type="button" data-latest-candidate-new-action="refresh" '+(latestInCandidateBusy?'disabled ':'')+'>리서치·후보 원장 재조회</button>'+
       '<button type="button" data-pipeline-diagnostic="download-latest">점검 JSON 다운로드</button>'+
       '<span id="latestInCandidateStatus" class="small" aria-live="polite">'+esc(latestInCandidateMessage||'국가·지역 원장 연결 준비')+'</span></div>';
     canonical=canonical.replace('<div class="product-group-grid"></div>',controls+'<div class="product-group-grid"></div>');
-    mount.innerHTML='<div class="small" style="margin:10px 0">관리 국가·지역 <strong>'+esc(countryKey)+'</strong> · 현재 리서치 원본 '+all.length+'건 · 등록 관리 '+registered.length+'건 · 미등록 '+fresh.length+'건 · 중복 후보 '+duplicateInfo.extra+'건 · 원본 중복 '+originalDuplicates.extra+'건. <strong>하나의 목록·하나의 페이지</strong>에서 확인하고, 등록 후 기존 ID로 미배치/20개 섹션에 이관합니다.</div>'+canonical;
+    mount.innerHTML='<div class="small" style="margin:10px 0">관리 국가·지역 <strong>'+esc(countryKey)+'</strong> · 현재 리서치 원본 '+all.length+'건 · 등록 관리 '+registered.length+'건 · 미등록 '+fresh.length+'건 · 중복 후보 '+duplicateInfo.extra+'건 · 원본 중복 '+originalDuplicates.extra+'건. <strong>하나의 목록·하나의 페이지</strong>에서 확인하고, 등록 후 기존 ID로 미배치/20개 섹션에 이관합니다. 이미지 누락만으로 삭제하지 않습니다. 확정 부재 선택은 저장된 검사 증거가 있는 상품에만 적용합니다.</div>'+canonical;
     var group=mount.querySelector('[data-product-group="latest_research"]');
     wireProductGroupDetails(mount,{latest_research:registered},'candidate');
     if(group&&wasOpen)group.open=true;

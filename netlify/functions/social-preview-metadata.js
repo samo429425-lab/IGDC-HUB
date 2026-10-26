@@ -100,8 +100,17 @@ function previewImageUrl(platform, value) {
     if (/\.(?:js|mjs|css|map|json|html?|xml|woff2?|ttf|otf|eot)(?:$|[?#])/i.test(raw)) return "";
     if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(full)) return "";
 
-    if (platform === "tiktok" &&
-        /(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/)/i.test(path)) return "";
+    // A deployed TikTok release contained the *same* web UI resource URL in
+    // 67 of 68 video slots. These files are not per-post cover art. Reject
+    // them before both preview harvesting and the same-origin image relay.
+    if (platform === "tiktok") {
+      if (/^(?:sf-i18n-resources|sf-webcast|sf-static|sf16-website-login)\./i.test(host)) return "";
+      if (/\/(?:obj\/)?tiktok-webarch-solution-i18n(?:-|\/|$)/i.test(path)) return "";
+      // Only TikTok-owned media hosts are safe proxy destinations. A random
+      // search-engine illustration is not an authenticated TikTok video cover.
+      if (!/(^|\.)(?:tiktokcdn(?:-[a-z0-9]+)?\.com|tiktokcdn\.us|tiktokcdn\.com|tiktok\.com|byteimg\.com|ibyteimg\.com|muscdn\.com)$/i.test(host)) return "";
+      if (/(^|\.)tiktok\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path + url.search)) return "";
+    }
 
     if (platform === "instagram") {
       if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return "";
@@ -114,6 +123,10 @@ function previewImageUrl(platform, value) {
     }
 
     if (platform === "facebook") {
+      // The generic Facebook UI resource is not a post cover; only provider
+      // image origins may be fetched by the same-origin thumbnail relay.
+      if (/(?:^|\.)static\.[^.]*fbcdn\.net$/i.test(host) || /\/rsrc\.php(?:$|[/?#])/i.test(path)) return "";
+      if (!/(^|\.)(?:fbcdn\.net|facebook\.com|cdninstagram\.com)$/i.test(host)) return "";
       // facebook.com post/watch URLs are pages, not image previews.
       if (/(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path + url.search)) return "";
     }

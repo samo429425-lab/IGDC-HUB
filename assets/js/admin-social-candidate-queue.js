@@ -41,6 +41,7 @@
     countryCatalog = [],
     regionCatalog = [],
     detectedCountry = null,
+    previewWindow = null,
     selectedInfluencers = new Set(),
     selectedContents = new Set(),
     selectedHoldContents = new Set(),
@@ -1617,8 +1618,6 @@
       if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(path)) return true;
       if (platform === "instagram" && (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host) || /\/rsrc\.php(?:$|[/?#])/i.test(u.pathname))) return true;
       if (platform === "facebook" && /(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path)) return true;
-      if (platform === "tiktok" &&
-          /(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/)/i.test(path)) return true;
       return signedPreviewExpired(platform, raw);
     } catch (_e) { return false; }
   }
@@ -1646,50 +1645,28 @@
       var id = text(updated && updated.id);
       if (!id) return;
       var index = rows.findIndex(function (row) { return text(row && row.id) === id; });
-      if (index >= 0) {
-        rows[index] = Object.assign({}, rows[index], updated);
-        // A metadata-only update is not proof that a video cover was found.
-        if (!realPreviewMissing(rows[index])) previewHydratedIds.add(id);
-      }
+      if (index >= 0) rows[index] = Object.assign({}, rows[index], updated);
+      previewHydratedIds.add(id);
     });
   }
-  // A previous 40-ID background request could exceed Netlify's execution
-  // budget. Failed IDs were marked attempted anyway and never repaired again.
-  // Keep each request bounded, prefer published TikTok videos, and allow one
-  // controlled retry rather than flooding providers with the full ledger.
-  var previewRepairAttempts = new Map();
   async function hydrateMissingPreviewsAsync() {
     if (previewHydrationBusy) return;
-    var eligible = rows.filter(realPreviewMissing).filter(function (row) {
-      var id = text(row && row.id);
-      if (!id || previewHydratedIds.has(id) || Number(previewRepairAttempts.get(id) || 0) >= 2) return false;
-      return !excluded(row) && !contentHold(row);
-    });
-    eligible.sort(function (a, b) {
-      var priority = function (row) {
-        return lower(row.platform).replace(/^social-/, "") === "tiktok" ? 0 : 1;
-      };
-      return priority(a) - priority(b);
-    });
-    var ids = eligible.slice(0, 4).map(function (row) { return text(row.id); });
+    var ids = rows.filter(realPreviewMissing).map(function (row) { return text(row.id); })
+      .filter(function (id) { return id && !previewHydratedIds.has(id); }).slice(0, 40);
     if (!ids.length) return;
     previewHydrationBusy = true;
-    ids.forEach(function (id) { previewRepairAttempts.set(id, Number(previewRepairAttempts.get(id) || 0) + 1); });
+    ids.forEach(function (id) { previewHydratedIds.add(id); });
     try {
       var d = await post(ACTION, { action: "hydrate_preview", ids: ids });
-      if (!d || d.ok === false) throw new Error(text(d && d.error) || "preview_hydration_failed");
       mergeHydratedRows(d.items || []);
       rebuildLatestContentIndex(rows);
       renderSections();
     } catch (_error) {
-      // Retain one retry per ID. This is a non-critical background operation.
+      // Preview hydration is best-effort and must never block the administrator queue.
     } finally {
       previewHydrationBusy = false;
-      var more = rows.some(function (row) {
-        return realPreviewMissing(row) && !excluded(row) && !contentHold(row) &&
-          !previewHydratedIds.has(text(row.id)) && Number(previewRepairAttempts.get(text(row.id)) || 0) < 2;
-      });
-      if (more) setTimeout(hydrateMissingPreviewsAsync, 900);
+      var more = rows.some(function (row) { return realPreviewMissing(row) && !previewHydratedIds.has(text(row.id)); });
+      if (more) setTimeout(hydrateMissingPreviewsAsync, 250);
     }
   }
 
@@ -2210,11 +2187,9 @@
     // skip a proven Bilibili/Douyin content query for weeks. Subsequent rounds
     // continue the original rotating cursor (never seed fake candidates).
     var baselineRescue = !dryRun && Number(j.sectionCount || 0) === 0 &&
-      Number(j.round || 0) < 3 &&
+      Number(j.batch || 0) === 1 && Number(j.round || 0) === 0 &&
       /^(social-snapchat|social-bilibili|social-douyin)$/.test(section);
-    // Search known productive topic 0 first, then two adjacent broad topics
-    // before resuming the stored cursor. The original cursor never decreases.
-    var requestedCursor = baselineRescue ? Number(j.round || 0) : (j.queryCursor || 0);
+    var requestedCursor = baselineRescue ? 0 : (j.queryCursor || 0);
     var d = await post(LIVE, {
       action: "collect_live",
       dryRun: !!dryRun,
@@ -2268,18 +2243,20 @@
         (live.rejectedByReason && Object.keys(live.rejectedByReason)[0]) ||
         "",
     );
-    // A baseline rescue must not roll back the persistent research cursor.
-    j.queryCursor = baselineRescue
-      ? Math.max(Number(j.queryCursor || 0) + 1, Number(live.nextQueryCursor || 1))
-      : Number(live.nextQueryCursor == null ? requestedCursor + 1 : live.nextQueryCursor);
-    if (!dryRun) saveDiscoveryCursor(section, j.queryCursor);
     // The server may return 200 while a downstream gateway reports an error.
-    // Do not count that as a successful batch or silently progress the job.
+    // In that case preserve the old cursor: an unsuccessful DB write must
+    // never make the next attempt silently skip the discovered post URLs.
     if (d.ok === false || (live.gateway && live.gateway.ok === false)) {
       var gatewayError = new Error(text(d.message || (live.gateway && live.gateway.message) || d.error || "candidate_gateway_failed"));
       gatewayError.status = Number(live.gateway && live.gateway.statusCode) || 500;
       throw gatewayError;
     }
+    // Advance the discovery cursor only after downstream success.
+    j.queryCursor = baselineRescue
+      ? Math.max(Number(j.queryCursor || 0) + 1, Number(live.nextQueryCursor || 1))
+      : Number(live.nextQueryCursor == null ? requestedCursor + 1 : live.nextQueryCursor);
+    if (!dryRun) saveDiscoveryCursor(section, j.queryCursor);
+    j.lastError = null;
     j.catalogSize = Number(live.queryCatalogSize || j.catalogSize || 5);
     j.discoveryCatalogSize = Number(
       live.discoveryCatalogSize || j.discoveryCatalogSize || j.catalogSize || 5,
@@ -2503,6 +2480,15 @@
     } catch (e) {
       failed = true;
       j.paused = true;
+      // Persist a safe, inspectable reason alongside the exact retry cursor.
+      // Existing job JSON is never erased and no tokens or credentials are stored.
+      j.lastError = {
+        status: Number(e && (e.status || e.statusCode) || 0) || null,
+        message: text(e && e.message).slice(0, 400),
+        section: key,
+        queryCursor: Number(j.queryCursor || 0),
+        at: new Date().toISOString()
+      };
       if (!dry) saveJob(j);
       $("collectorState").textContent = collectionErrorState(e);
       show(
@@ -3244,7 +3230,7 @@
           "개. 아직 실제 화면에는 적용하지 않았습니다.",
         "ok",
       );
-      return d;
+      return true;
     } catch (e) {
       show(e.message || "자동 정리를 완료하지 못했습니다.", "warn");
       return false;
@@ -3738,19 +3724,6 @@
         diagnostic({ actualApply: d, searchBankHandoff: verify });
       }
 
-      // Release readback succeeded. Notify already-open Social front tabs;
-      // no Netlify build/GitHub source rewrite is needed for data publication.
-      if (runtimeDirect && d.releaseId) {
-        try {
-          localStorage.setItem("igdc.social.frontReleasePublished", JSON.stringify({
-            releaseId: text(d.releaseId),
-            countryCode: text(scope.countryCode),
-            scopeMode: text(scope.scopeMode),
-            at: Date.now()
-          }));
-        } catch (_signalError) { /* storage unavailable: regular page read still works */ }
-      }
-
       if ($("frontApplyState"))
         $("frontApplyState").textContent = d.noChange === true
           ? "변경 없음"
@@ -3983,40 +3956,12 @@
     var host = $("aiSectionSelector");
     return host ? Array.from(host.querySelectorAll(".aiSectionCheck:checked")).map(function (el) { return text(el.value); }).filter(Boolean) : [];
   }
-  // This is part of the explicit AI collection/replacement workflow only.
-  // The Social candidate ledger is retained even when a preview cannot be
-  // recovered. Curator decides final publication eligibility server-side.
-  async function recoverAiSectionPreviews(sectionKey, statusEl) {
-    var candidates = rows.filter(function (row) {
-      return row && row.sectionKey === sectionKey && assetClass(row) === "latest_content" &&
-        !excluded(row) && !contentHold(row) && realPreviewMissing(row);
-    });
-    var ids = Array.from(new Set(candidates.map(function (row) { return text(row.id); }).filter(Boolean)));
-    var repaired = 0, failed = 0;
-    // Existing API performs up to four provider lookups in one bounded request.
-    // Two requests per wave avoid the previous large-batch Netlify timeout.
-    for (var start = 0; start < ids.length && !stopRequested; start += 8) {
-      var groups = [ids.slice(start, start + 4), ids.slice(start + 4, start + 8)].filter(function (part) { return part.length; });
-      if (statusEl) statusEl.textContent = label(sectionKey) + " · 썸네일 복구 " + Math.min(ids.length, start + 8) + "/" + ids.length;
-      var replies = await Promise.all(groups.map(async function (batch) {
-        try { return await post(ACTION, { action: "hydrate_preview", ids: batch }); }
-        catch (error) { return { ok: false, error: text(error && error.message) }; }
-      }));
-      replies.forEach(function (reply, index) {
-        if (!reply || reply.ok === false) { failed += groups[index].length; return; }
-        mergeHydratedRows(reply.items || []);
-        repaired += Number(reply.updated || 0);
-      });
-    }
-    return { requested: ids.length, updated: repaired, requestFailures: failed, interrupted: !!stopRequested };
-  }
-
   async function aiCycleSections(keys, skipConfirm) {
     keys = Array.from(new Set((keys || []).filter(function (key) { return order.indexOf(key) >= 0; })));
     if (!keys.length) return show("AI 자동화할 SNS 섹션을 선택해 주세요.", "warn");
     if (!skipConfirm && !confirm(keys.map(label).join(", ") + " 섹션의 최신 콘텐츠 수집 → AI 평가 → 공개/예비 후보 재정리를 실행할까요? 한 SNS 검색 오류는 기록하고 다음 SNS를 계속 진행합니다.")) return false;
     var statusEl = $("aiAutomationState"), oldCollector = $("collectorSection").value,
-      collectionFailures = [], curatedKeys = [], curateFailures = [], thumbnailDeferredIds = [];
+      collectionFailures = [], curatedKeys = [], curateFailures = [];
     liveReports = [];
     try {
       stopRequested = false;
@@ -4049,20 +3994,11 @@
       $("collectorSection").value = oldCollector;
     }
     try {
-      // Collection has written new candidates to Supabase; reload the ledger
-      // before attempting video-level thumbnail recovery for these SNS rows.
-      await refresh();
-      var previewReports = [];
       for (var n = 0; n < keys.length; n++) {
         if (statusEl) statusEl.textContent = "AI 정리 " + (n + 1) + "/" + keys.length + " · " + label(keys[n]);
         try {
-          var recovered = await recoverAiSectionPreviews(keys[n], statusEl);
-          previewReports.push(Object.assign({ sectionKey: keys[n] }, recovered));
-          // Never approve or publish an item solely because a preview request
-          // returned 200. The curator re-reads the ledger and checks its real image.
           var curated = await autoCurate(keys[n], true);
           if (!curated) throw new Error(label(keys[n]) + " AI 후보 정리를 완료하지 못했습니다.");
-          thumbnailDeferredIds = thumbnailDeferredIds.concat(Array.isArray(curated.thumbnailMissingIds) ? curated.thumbnailMissingIds : []);
           curatedKeys.push(keys[n]);
         } catch (curateError) {
           curateFailures.push({ sectionKey: keys[n], platform: label(keys[n]), message: text(curateError && curateError.message) || "ai_curate_failed" });
@@ -4086,25 +4022,6 @@
               : "selected_sections_front_publish";
           var applied = await actualApply(curatedKeys.length === 1 ? curatedKeys[0] : "", true, null, autoMode, curatedKeys);
           if (!applied) throw new Error("AI 자동 운영 프론트 실제 적용을 완료하지 못했습니다.");
-        } else if (thumbnailDeferredIds.length) {
-          // No eligible preview remains. The normal publisher refuses an empty
-          // Release by design. Use its existing explicit selective-unpublish
-          // operation for exactly the AI-deferred candidate IDs; keep all
-          // unrelated SNS slots and the private candidate ledger unchanged.
-          var aiScope = currentScope();
-          var cleanup = await post(PUBLISH, {
-            operation: "selected_front_unpublish",
-            storeRelease: true,
-            confirmUnpublish: true,
-            candidateIds: Array.from(new Set(thumbnailDeferredIds.map(text).filter(Boolean))),
-            sectionKey: curatedKeys.length === 1 ? curatedKeys[0] : "",
-            countryCode: aiScope.countryCode || "",
-            scopeMode: scopeMode(),
-            regionId: text($("collectorRegion").value),
-          });
-          if (!cleanup || cleanup.ok === false || cleanup.releaseStoredVerified === false) {
-            throw new Error("미리보기 없는 콘텐츠의 프론트 선택 해제를 확인하지 못했습니다.");
-          }
         }
       }
       clearJob();
@@ -4112,17 +4029,10 @@
       if (statusEl) statusEl.textContent = issueCount
         ? "완료 · " + keys.length + "개 SNS · 오류 기록 " + issueCount + "건"
         : "완료 · " + keys.length + "개 SNS";
-      var previewTotals = previewReports.reduce(function (sum, result) {
-        sum.requested += Number(result.requested || 0);
-        sum.failed += Number(result.requestFailures || 0);
-        return sum;
-      }, { requested: 0, failed: 0 });
       show(
-        keys.map(label).join(", ") + " AI 자동 운영을 끝까지 진행했습니다. 썸네일 복구 요청 " +
-          previewTotals.requested + "건" + (previewTotals.failed ? "(요청 실패 " + previewTotals.failed + "건)" : "") +
-          ". 미확보 콘텐츠는 원장에 보관하되 자동 프론트 후보에서 제외합니다." +
+        keys.map(label).join(", ") + " AI 자동 운영을 끝까지 진행했습니다." +
           (issueCount ? " 개별 SNS 오류 " + issueCount + "건은 건너뛰고 다음 SNS를 계속 처리했습니다." : ""),
-        issueCount || previewTotals.failed ? "warn" : "ok",
+        issueCount ? "warn" : "ok",
       );
       return true;
     } catch (e) {
@@ -4137,10 +4047,16 @@
   function openPreview(url) {
     var safeUrl = text(url);
     if (!/^https:\/\//i.test(safeUrl)) return;
-    // Navigate in the same tab with an ordinary history entry. The old named
-    // popup + location.replace() did not leave a usable browser Back history.
-    // The browser Back button now returns to the Social administrator page.
-    window.location.assign(safeUrl);
+    try {
+      if (previewWindow && !previewWindow.closed) {
+        previewWindow.location.replace(safeUrl);
+        previewWindow.focus();
+      } else {
+        previewWindow = window.open(safeUrl, "igdcSocialChannelPreview");
+      }
+    } catch (_e) {
+      previewWindow = window.open(safeUrl, "igdcSocialChannelPreview");
+    }
   }
   function sourceAlert(candidateId) {
     var row = rows.filter(function (r) {
@@ -4211,11 +4127,6 @@
       }
       var preview = event.target.closest(".previewLink");
       if (preview) {
-        // Do not allow non-HTTPS URLs even with a modified click.
-        if (!/^https:\/\//i.test(text(preview.href))) { event.preventDefault(); return; }
-        // Keep Ctrl/Meta/Shift-click native so administrators can explicitly
-        // open a new tab. A normal click stays in this tab with Back history.
-        if (event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) return;
         event.preventDefault();
         openPreview(preview.href);
         return;
@@ -4443,47 +4354,6 @@
     return d;
   }
 
-  // Export actual influencer records, not the summary-only registry diagnostic.
-  // Read from the same authenticated, paginated candidate source as the table,
-  // keeping registry data supplementary and never publishing it to Social slots.
-  async function downloadInfluencerRegistryRows() {
-    try {
-      var response = await get(REVIEW + "?action=candidates&_=" + Date.now());
-      var sourceRows = response && response.queue && response.queue.rows;
-      if (!Array.isArray(sourceRows)) sourceRows = response && response.candidates;
-      if (!Array.isArray(sourceRows)) throw new Error("등록부 원장 목록 응답이 없습니다.");
-      var registry = sourceRows.filter(function (row) {
-        return assetClass(row) === "influencer_registry";
-      }).map(function (row) {
-        var item = contentDiagnosticRow(row);
-        item.verificationStatus = text(row.verificationStatus || row.verification_status);
-        item.publicAccess = row.publicAccess == null ? null : row.publicAccess === true;
-        item.countryScopes = Array.isArray(row.countryScopes) ? row.countryScopes : [];
-        item.languageScopes = Array.isArray(row.languageScopes) ? row.languageScopes : [];
-        return item;
-      });
-      var bySection = {};
-      order.forEach(function (key) { bySection[key] = 0; });
-      registry.forEach(function (row) {
-        bySection[row.sectionKey] = (bySection[row.sectionKey] || 0) + 1;
-      });
-      download("igdc-social-influencer-registry-" + new Date().toISOString().slice(0,10) + ".json", {
-        ok: true,
-        reportType: "igdc-social-influencer-registry-list",
-        generatedAt: new Date().toISOString(),
-        readOnly: true,
-        scope: currentScope(),
-        count: registry.length,
-        bySection: bySection,
-        rows: registry
-      });
-      show("인플루언서 등록부 실제 목록 " + registry.length + "건을 JSON으로 다운로드했습니다.", "ok");
-    } catch (error) {
-      show("등록부 원장 조회에 실패해 불완전한 JSON은 내려받지 않았습니다: " +
-        (error && error.message || String(error)), "warn");
-    }
-  }
-
   function toggleHoldPanel(forceOpen) {
     var body = $("holdPanelBody"), btn = $("toggleHoldPanelBtn");
     if (!body || !btn) return;
@@ -4538,7 +4408,7 @@
     if ($("toggleRegistryPanelBtn")) $("toggleRegistryPanelBtn").onclick = function () { toggleRegistryPanel(); };
     if ($("registryDiagnosticBtn"))
       $("registryDiagnosticBtn").onclick = function () {
-        downloadInfluencerRegistryRows();
+        runQueueDiagnostic("registry_diagnostic", "인플루언서 등록부 점검 JSON을 읽었습니다.", "igdc-social-influencer-registry-diagnostic.json");
       };
     if ($("latestContentDiagnosticBtn"))
       $("latestContentDiagnosticBtn").onclick = function () {
@@ -4757,7 +4627,7 @@
     if ($("researchPipelineDiagnosticBtn")) $("researchPipelineDiagnosticBtn").onclick = downloadResearchPipelineDiagnostic;
     if ($("channelIntakeDiagnosticJsonBtn")) $("channelIntakeDiagnosticJsonBtn").onclick = downloadDirectIntakeDiagnostic;
     if ($("registryDiagnosticBtn")) $("registryDiagnosticBtn").onclick = function () {
-      return downloadInfluencerRegistryRows();
+      return runQueueDiagnostic("registry_diagnostic", "인플루언서 등록부 점검 JSON을 읽었습니다.", "igdc-social-influencer-registry-diagnostic.json");
     };
     if ($("latestContentDiagnosticBtn")) $("latestContentDiagnosticBtn").onclick = function () {
       return runQueueDiagnostic("latest_content_diagnostic", "최신 콘텐츠 후보·교체 대기열 요약 점검 JSON을 읽었습니다.", "igdc-social-latest-content-diagnostic.json");
