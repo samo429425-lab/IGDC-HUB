@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.44.1-searchbank-query-result-integrity";
+const VERSION = "sanmaru-social-live-collector-v1.45.0-spotlight-direct-discovery";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -419,7 +419,8 @@ function contentKind(platform, value) {
     if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
     if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[a-z0-9_-]+/i.test(path) || /^(?:vm|vt)\.tiktok\.com$/i.test(url.hostname))) return "latest_video";
     if (platform === "facebook" && (/^fb\.watch$/i.test(url.hostname) || /^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (/^\/watch\/?$/i.test(path) && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
-    if (platform === "snapchat" && /^\/spotlight\/[^/]+\/?$/i.test(path)) return "latest_video";
+    if (platform === "snapchat" && /^\/spotlight\/([A-Za-z0-9_-]{8,})\/?$/i.test(path) &&
+      !/^(?:discover|trending|explore|search|popular|latest|home)$/i.test(path.split("/")[2] || "")) return "latest_video";
     if (platform === "bilibili" && (/^b23\.tv$/i.test(url.hostname) || /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path))) return "latest_video";
     if (platform === "douyin" && (/^\/(?:share\/)?(video|note)\/\d+/i.test(path) || /^v\.douyin\.com$/i.test(url.hostname))) return /\/note\//i.test(path) ? "latest_post" : "latest_video";
   } catch (_error) {}
@@ -1710,12 +1711,20 @@ async function nativeHtmlDiscoveryPage(platform, provider, url, baseUrl, limit, 
 }
 async function genericNativeHtmlSearch(platform, queryText, limit, pageIndex) {
   const clean = sparseSearchTerms(queryText, platform) || {
+    snapchat: "music travel culture public spotlight",
     tiktok: "music travel culture food education creator",
     facebook: "creator reel music travel culture education",
     douyin: "旅游 音乐 文化 美食 教育 艺术",
   }[platform] || "popular public creator";
   const page = Math.max(1, Math.min(50, Number(pageIndex || 1) || 1));
-  const specs = platform === "tiktok"
+  const specs = platform === "snapchat"
+    ? [
+        // Public landing page first. If Snapchat blocks anonymous access, the
+        // other public-index providers remain independent fallbacks.
+        ["snapchat-native-spotlight", "https://www.snapchat.com/spotlight", "https://www.snapchat.com/", "en-US,en;q=0.8"],
+        ["snapchat-native-topic", "https://www.snapchat.com/spotlight?query=" + encodeURIComponent(clean), "https://www.snapchat.com/", "en-US,en;q=0.8"]
+      ]
+    : platform === "tiktok"
     ? [
         ["tiktok-native-search", "https://www.tiktok.com/search/video?q=" + encodeURIComponent(clean) + "&page=" + page, "https://www.tiktok.com/", "en-US,en;q=0.8"],
         ["tiktok-native-search-fallback", "https://www.tiktok.com/search?q=" + encodeURIComponent(clean) + "&page=" + page, "https://www.tiktok.com/", "en-US,en;q=0.8"]
@@ -2040,6 +2049,12 @@ function providerRelativePostUrls(platform, html, baseUrl, limit) {
   if (platform === "bilibili" && out.length < max) {
     const rel = /(?:^|["'\s])\/video\/(BV[0-9A-Za-z]+|av\d+)(?=[?"'\s/]|$)/gi;
     while ((match = rel.exec(source)) && out.length < max) accept("https://www.bilibili.com/video/" + match[1]);
+  }
+  if (platform === "snapchat" && out.length < max) {
+    // Snapchat may hydrate Spotlight links as JSON-escaped relative paths.
+    // Accept only concrete video IDs; never invent a Spotlight video URL.
+    const rel = /(?:^|["'\s])\/spotlight\/([A-Za-z0-9_-]{8,})(?=[?"'\s/]|$)/gi;
+    while ((match = rel.exec(source)) && out.length < max) accept("https://www.snapchat.com/spotlight/" + match[1]);
   }
   return out.slice(0, max);
 }
@@ -3639,6 +3654,8 @@ exports.__test = {
   searchBankContentResearchOne,
   googleChannelSearch,
   searchOne,
+  contentKind,
+  providerRelativePostUrls,
   genericNativeHtmlSearch,
   nativeDiscoveryItem,
   resolveSearchCandidates,

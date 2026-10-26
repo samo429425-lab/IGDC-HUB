@@ -13,7 +13,7 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const Policy = require("./lib/social-candidate-policy.v1");
 const AdminAuth = require("./lib/commerce-candidate-auth.v1");
 
-const VERSION = "sanmaru-social-candidate-gateway-v1.5.1-content-readback-diagnostics";
+const VERSION = "sanmaru-social-candidate-gateway-v1.6.0-safe-ledger-readback";
 const INTERNAL_GATEWAY_EVENT = Symbol("igdc-social-candidate-gateway-internal");
 
 function internalAuthorized(event) {
@@ -76,6 +76,14 @@ function bySection(rows) {
   (rows || []).forEach((r) => { const key = r.section_key || "unknown"; out[key] = (out[key] || 0) + 1; });
   return out;
 }
+// Never interpret a failed ledger read as an empty ledger. Doing so can
+// accidentally overwrite approved/held/blocked review state during an upsert.
+function ledgerReadFailure(error) {
+  const wrapped = new Error("social_candidate_ledger_preflight_unavailable: " + SocialStore.text(error && error.message || error));
+  wrapped.statusCode = 503;
+  wrapped.code = "social_candidate_ledger_preflight_unavailable";
+  return wrapped;
+}
 async function excludedIdSet() {
   try {
     const rows = typeof SocialStore.selectCandidatesBySections === "function"
@@ -84,25 +92,27 @@ async function excludedIdSet() {
           1000,
         )
       : await SocialStore.selectCandidates("select=id,review_status&review_status=in.(search_excluded,permanent_blocked,blocked)&limit=10000");
-    return new Set((Array.isArray(rows) ? rows : []).map((row) => SocialStore.text(row && row.id)).filter(Boolean));
-  } catch (_error) {
-    return new Set();
+    if (!Array.isArray(rows)) throw new Error("non_array_exclusion_read");
+    return new Set(rows.map((row) => SocialStore.text(row && row.id)).filter(Boolean));
+  } catch (error) {
+    throw ledgerReadFailure(error);
   }
 }
 async function existingRowsById(ids) {
   const list = Array.from(new Set((ids || []).map(SocialStore.text).filter(Boolean)));
-  if (!list.length) return new Map();
+  const map = new Map();
   try {
-    const rows = await SocialStore.selectCandidates(
-      "select=*&id=" + SocialStore.encodeIn(list)
-    );
-    return new Map(
-      (Array.isArray(rows) ? rows : [])
-        .filter((row) => row && row.id)
-        .map((row) => [SocialStore.text(row.id), row])
-    );
-  } catch (_error) {
-    return new Map();
+    // Supabase PostgREST URLs can exceed gateway limits with thousands of IDs.
+    // Bound each query while retaining exact exclusion/review-state protection.
+    for (let i = 0; i < list.length; i += 60) {
+      const part = list.slice(i, i + 60);
+      const rows = await SocialStore.selectCandidates("select=*&id=" + SocialStore.encodeIn(part));
+      if (!Array.isArray(rows)) throw new Error("non_array_existing_row_read");
+      rows.forEach((row) => { if (row && row.id) map.set(SocialStore.text(row.id), row); });
+    }
+    return map;
+  } catch (error) {
+    throw ledgerReadFailure(error);
   }
 }
 function preserveReviewState(next, previous) {
@@ -209,13 +219,15 @@ exports.handler = async function(event) {
         preserveReviewState(row, existing.get(SocialStore.text(row && row.id)))
       );
     const excludedSkipped = capped.length - normalized.length;
+    const latestSubmitted = normalized.filter((row) =>
+      SocialStore.assetClassOf(row) === "latest_content"
+    );
+    const insertedIds = latestSubmitted.filter((row) => !existing.has(SocialStore.text(row.id))).map((row) => SocialStore.text(row.id));
+    const updatedIds = latestSubmitted.filter((row) => existing.has(SocialStore.text(row.id))).map((row) => SocialStore.text(row.id));
     const saved = dryRun ? [] : await SocialStore.upsertCandidates(normalized);
     // A 200/upsert count is not proof that a *new latest-content* row can be
     // read from the administrator ledger. Validate a bounded sample from live
     // small batches. Never delete/rewrite rows if the readback is unavailable.
-    const latestSubmitted = normalized.filter((row) =>
-      SocialStore.assetClassOf(row) === "latest_content"
-    );
     let readback = { checked: false, submittedContent: latestSubmitted.length,
       verifiedContent: null, missingIds: [], error: null };
     if (!dryRun && latestSubmitted.length && latestSubmitted.length <= 24) {
@@ -232,6 +244,33 @@ exports.handler = async function(event) {
         readback.error = SocialStore.text(error && error.message || error);
       }
     }
+    const verifiedInsertedLatestContent = !dryRun && readback.checked && !readback.error
+      ? insertedIds.filter((id) => !readback.missingIds.includes(id)).length
+      : null;
+    const verifiedUpdatedLatestContent = !dryRun && readback.checked && !readback.error
+      ? updatedIds.filter((id) => !readback.missingIds.includes(id)).length
+      : null;
+    // A missing/failed readback is not evidence of completed persistence.
+    // The write may have succeeded; the caller can retry this idempotent UPSERT.
+    if (!dryRun && readback.error) {
+      return SocialStore.response(502, {
+        ok: false, version: VERSION, error: "social_candidate_postwrite_readback_unavailable",
+        submittedLatestContent: latestSubmitted.length, readback,
+        verifiedInsertedLatestContent: null, verifiedUpdatedLatestContent: null,
+        retrySafe: true, message: "후보 저장 후 원장 재조회 실패: 확인되지 않은 저장을 성공으로 표시하지 않습니다."
+      });
+    }
+    // A partial readback is not a fully successful collection, even if an
+    // upstream UPSERT returned 200. Previously this looked like a saved batch.
+    if (!dryRun && readback.checked && readback.missingIds.length) {
+      return SocialStore.response(502, {
+        ok: false, version: VERSION, error: "social_candidate_postwrite_readback_incomplete",
+        submittedLatestContent: latestSubmitted.length,
+        insertedLatestContent: insertedIds.length, updatedLatestContent: updatedIds.length,
+        verifiedInsertedLatestContent, verifiedUpdatedLatestContent, readback,
+        retrySafe: true, message: "일부 후보가 저장 후 원장에서 확인되지 않았습니다. 기존 승인 상태는 보호됩니다."
+      });
+    }
     return SocialStore.response(200, {
       ok: true,
       version: VERSION,
@@ -245,6 +284,10 @@ exports.handler = async function(event) {
       acceptedBySection: bySection(normalized),
       saved: dryRun ? 0 : (Array.isArray(saved) ? saved.length : normalized.length),
       submittedLatestContent: latestSubmitted.length,
+      insertedLatestContent: dryRun ? 0 : insertedIds.length,
+      updatedLatestContent: dryRun ? 0 : updatedIds.length,
+      verifiedInsertedLatestContent,
+      verifiedUpdatedLatestContent,
       readback,
       excludedSkipped,
       rejectedCount: rejected.length,

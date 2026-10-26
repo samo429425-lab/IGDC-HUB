@@ -9,8 +9,9 @@ const AdminSession = require("./lib/global-slot-console-auth");
 const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 const CommerceAutomation = require("./lib/commerce-country-automation.v1");
+const crypto = require("node:crypto");
 
-const VERSION = "commerce-candidate-queue-control-v1.12.1-excluded-delete-scope-and-readback";
+const VERSION = "commerce-candidate-queue-control-v1.13.0-verified-canonical-unpublication-delete";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore","hard_delete"]);
 const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce-candidate-review-api"]);
@@ -250,6 +251,87 @@ async function applyAction(actorId,row,action){
 }
 
 
+/*
+ * Read-only verification of the CURRENT deployed Canonical release. Historical
+ * candidate.frontPublication flags are not reliable proof of a still-live card.
+ * Conversely, missing assignment rows alone do not establish unpublication.
+ * Only a release after the candidate's last administrative change, together
+ * with SHA-256 verified public snapshot bytes, can reconcile old pending flags.
+ * Never infer success from an unavailable manifest, an old deployment, a
+ * failed fetch, a partial/corrupted snapshot, or a client-supplied URL.
+ */
+let canonicalReleaseCache = {until:0, task:null};
+async function fetchPublishedAsset(origin,pathname,maxBytes){
+  const url = new URL(pathname,origin);
+  if(url.origin!==origin)throw new Error("canonical_asset_origin_mismatch");
+  const response=await fetch(url.href,{method:"GET",redirect:"error",cache:"no-store",headers:{Accept:"application/json"},signal:AbortSignal.timeout(4500)});
+  if(!response||!response.ok)throw new Error("canonical_asset_http_"+Number(response&&response.status||0));
+  const length=Number(response.headers&&response.headers.get("content-length")||0);
+  if(length>maxBytes)throw new Error("canonical_asset_too_large");
+  const bytes=Buffer.from(await response.arrayBuffer());
+  if(!bytes.length||bytes.length>maxBytes)throw new Error("canonical_asset_size_invalid");
+  let data;try{data=JSON.parse(bytes.toString("utf8"));}catch(_e){throw new Error("canonical_asset_json_invalid");}
+  return {data,sha256:crypto.createHash("sha256").update(bytes).digest("hex")};
+}
+async function loadCanonicalRelease(){
+  const base=text(process.env.URL);
+  let origin;
+  try{const parsed=new URL(base);if(parsed.protocol!=="https:"||parsed.username||parsed.password||!parsed.hostname)throw new Error("not_https");origin=parsed.origin;}
+  catch(_e){return {ok:false,reason:"canonical_production_url_unavailable"};}
+  const now=Date.now();
+  if(canonicalReleaseCache.task&&now<canonicalReleaseCache.until)return canonicalReleaseCache.task;
+  canonicalReleaseCache.until=now+12000;
+  canonicalReleaseCache.task=(async()=>{
+    try{
+      const manifestAsset=await fetchPublishedAsset(origin,"/data/canonical-snapshot/current-manifest.json",4*1024*1024);
+      const m=plain(manifestAsset.data),verification=plain(m.verification),mapping=m.mapping,outputs=array(m.outputs);
+      if(m.schema!=="canonical-snapshot-release-manifest-v1"||m.status!=="published"||!text(m.releaseId)||
+          verification.publicMirrorConsensus!==true||verification.noImplicitPromotion!==true||
+          !Array.isArray(mapping)||!Number.isInteger(Number(m.input&&m.input.accepted))||
+          Number(m.input.accepted)!==mapping.length||outputs.length!==3)throw new Error("canonical_manifest_unverified");
+      const output=outputs.find(item=>text(item&&item.path)==="data/search-bank.snapshot.json");
+      if(!output||!/^[a-f0-9]{64}$/.test(text(output.sha256))||Number(output.count)!==mapping.length)throw new Error("canonical_manifest_mirror_invalid");
+      const snapshotAsset=await fetchPublishedAsset(origin,"/data/search-bank.snapshot.json",32*1024*1024);
+      const doc=plain(snapshotAsset.data),meta=plain(doc.meta),items=doc.items;
+      if(snapshotAsset.sha256!==output.sha256||meta.schema!=="search-bank.snapshot.canonical.v1"||
+          meta.releaseId!==m.releaseId||meta.publicOnlyVerified!==true||!Array.isArray(items)||items.length!==mapping.length){
+        throw new Error("canonical_snapshot_manifest_mismatch");
+      }
+      const publishedIds=new Set(),manifestIds=new Set();
+      for(const entry of mapping){const id=text(entry&&entry.candidateId);if(!id)throw new Error("canonical_manifest_identity_invalid");manifestIds.add(id);}
+      for(const item of items){const p=plain(item&&item.canonicalPublication),id=text(p.candidateId);
+        if(p.status!=="published"||p.releaseId!==m.releaseId||!manifestIds.has(id))throw new Error("canonical_snapshot_identity_invalid");
+        publishedIds.add(id);
+      }
+      if(publishedIds.size!==manifestIds.size)throw new Error("canonical_snapshot_identity_count_mismatch");
+      const generatedAt=Date.parse(text(m.generatedAt));
+      if(!Number.isFinite(generatedAt)||generatedAt>Date.now()+120000)throw new Error("canonical_release_time_invalid");
+      return {ok:true,releaseId:text(m.releaseId),generatedAt,publishedIds};
+    }catch(error){return {ok:false,reason:text(error&&error.message)||"canonical_release_check_failed"};}
+  })();
+  const result=await canonicalReleaseCache.task;
+  if(!result.ok)canonicalReleaseCache.until=Date.now()+1200;
+  return result;
+}
+async function verifiedFrontWithdrawal(row,assignments){
+  const payload=plain(row&&row.source_payload),front=plain(payload.frontPublication);
+  const status=lower(front.status||front.publicationStatus),id=text(row&&row.id);
+  if(!["unpublish_requested","unpublish_failed","unmatch_requested","unmatch_pending","deferred_section_release"].includes(status))return {ok:false,reason:"candidate_not_in_unpublication_state"};
+  if(array(assignments).length||payload.publicPublication!==false||plain(payload.publication).public===true||
+      front.queued===true||plain(payload.approvedPlacement).sectionKey||plain(payload.approvedPlacement).section||
+      plain(payload.selectedPlacement).sectionKey||plain(payload.selectedPlacement).section)return {ok:false,reason:"candidate_has_live_or_unverified_placement"};
+  const changedAt=Date.parse(text(row&&row.updated_at));
+  const requestedAt=front.requestedAt?Date.parse(text(front.requestedAt)):changedAt;
+  if(!Number.isFinite(changedAt)||!Number.isFinite(requestedAt))return {ok:false,reason:"withdrawal_time_unverified"};
+  const release=await loadCanonicalRelease();
+  if(!release.ok)return release;
+  // A later published release supersedes old pending flags, not vice versa.
+  if(release.generatedAt<=Math.max(changedAt,requestedAt))return {ok:false,reason:"canonical_release_predates_withdrawal"};
+  if(release.publishedIds.has(id)||[...release.publishedIds].some(key=>key.startsWith(id+"::")))
+    return {ok:false,reason:"candidate_present_in_public_canonical_release"};
+  return {ok:true,releaseId:release.releaseId,verifiedAt:new Date(release.generatedAt).toISOString()};
+}
+
 /* Physical removal is an intentionally separate, explicitly confirmed action.
    The ordinary dismiss/purge actions must continue preserving their audit rows.
    Only an already-excluded private product can use this pathway. */
@@ -257,7 +339,7 @@ const RELATED_CANDIDATE_TABLES=[
   "gslot_slot_assignments","gslot_candidate_availability",
   "gslot_candidate_revenue","gslot_candidate_evidence"
 ];
-function hardDeleteGuard(row,assignments,expectedBucket,body){
+function hardDeleteGuard(row,assignments,expectedBucket,body,canonicalReleaseEvidence){
   const id=text(row&&row.id),payload=plain(row&&row.source_payload),front=plain(payload.frontPublication);
   const current=lower(payload.slotDecision),bucket=candidateManagementBucket(row),statusValue=lower(row&&row.status),queueAction=lower(plain(payload.queueControl).action);
   // Older excluded candidates may have only suppressed/rejected durable status
@@ -282,9 +364,10 @@ function hardDeleteGuard(row,assignments,expectedBucket,body){
     &&front.publicSnapshotConfirmed===false
     &&front.buildVerificationRequired!==true
     &&payload.publicPublication===false&&publicFlag===false;
-  const publicationPending=(["unpublish_requested","unpublish_failed","unmatch_requested","unmatch_pending"].includes(status)
-    &&!confirmedNeverQueuedWithdrawal)
-    ||front.publicSnapshotConfirmed===true||front.pendingBuild===true||front.buildVerificationRequired===true;
+  const canonicallyUnpublished=canonicalReleaseEvidence&&canonicalReleaseEvidence.ok===true;
+  const publicationPending=(["unpublish_requested","unpublish_failed","unmatch_requested","unmatch_pending","deferred_section_release"].includes(status)
+    &&!confirmedNeverQueuedWithdrawal&&!canonicallyUnpublished)
+    ||(!canonicallyUnpublished&&(front.publicSnapshotConfirmed===true||front.pendingBuild===true||front.buildVerificationRequired===true));
   const placement=plain(payload.approvedPlacement),selected=plain(payload.selectedPlacement);
   const assigned=!!(placement.sectionKey||placement.section||selected.sectionKey||selected.section);
   const relationPublished=array(assignments).some(r=>frontStateActive(r.publication_status)||lower(r.state)==="published");
@@ -299,9 +382,15 @@ function hardDeleteGuard(row,assignments,expectedBucket,body){
 async function hardDeleteCandidate(actorId,row,body,expectedBucket,knownAssignments){
   // The handler already queried/validated these exact candidate assignments.
   const id=text(row.id),assignments=Array.isArray(knownAssignments)?knownAssignments:await readAssignments(id);
-  hardDeleteGuard(row,assignments,expectedBucket,body);
-  // Preflight every known FK relation, failing closed before any destructive call
-  // on an unavailable or unexpectedly oversized relation.
+  let releaseEvidence=null;
+  try{hardDeleteGuard(row,assignments,expectedBucket,body);}
+  catch(error){
+    if(!text(error&&error.message).includes(":front_unpublish_not_verified:"))throw error;
+    releaseEvidence=await verifiedFrontWithdrawal(row,assignments);
+    if(!releaseEvidence.ok){error.message+="; canonical_recheck="+text(releaseEvidence.reason);throw error;}
+    hardDeleteGuard(row,assignments,expectedBucket,body,releaseEvidence);
+  }
+  // Preflight FK relations, failing closed before any destructive call.
   // Independent SELECT-only preflights can run concurrently. Destructive
   // writes below are still sequential and every table is read back.
   const before=await Promise.all(RELATED_CANDIDATE_TABLES.map(async(table)=>{
@@ -313,6 +402,7 @@ async function hardDeleteCandidate(actorId,row,body,expectedBucket,knownAssignme
   if(!fresh||text(fresh.updated_at)!==text(row.updated_at)){
     const e=new Error("hard_delete_candidate_changed_since_preflight:"+id);e.statusCode=409;throw e;
   }
+  hardDeleteGuard(fresh,assignments,expectedBucket,body,releaseEvidence);
   // REST operations are not a DB transaction: delete only this exact candidate's
   // relations, verify each, then conditionally delete the master last.
   const cleanup=[];
@@ -337,6 +427,7 @@ async function hardDeleteCandidate(actorId,row,body,expectedBucket,knownAssignme
     if(!Array.isArray(remaining)||remaining.length)throw new Error("hard_delete_final_relation_readback_failed:"+record.table);
   }));
   return{id,action:"hard_delete",deleted:true,masterLedgerDeleted:true,ledgerVerified:true,relationCleanup:cleanup,
+    canonicalUnpublicationVerification:releaseEvidence&&releaseEvidence.ok?{releaseId:releaseEvidence.releaseId,verifiedAt:releaseEvidence.verifiedAt}:null,
     // Independent runtime research identity/suppression is reconciled separately.
     researchPolicy:"existing_research_runtime_policy_not_automatically_reset",actor:!!actorId};
 }

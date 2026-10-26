@@ -14,7 +14,7 @@ const ChannelLink = require("./social-channel-link.v1");
 const AIPolicy = require("./social-ai-policy-runtime.v1");
 
 const VERSION =
-  "social-candidate-store-v1.15.0-selective-front-replacement";
+  "social-candidate-store-v1.16.0-bounded-quality-promotion";
 const DEFAULT_TIMEOUT_MS = 12000;
 const CANDIDATE_TABLE =
   process.env.SOCIAL_CANDIDATE_TABLE || "social_candidates";
@@ -1810,6 +1810,22 @@ function replacementNeed(slot, currentRow, alternativeRow, sectionKey) {
       scoreGain: Math.round(scoreGain),
     };
   }
+  // Permit exceptional newer, substantially higher-ranked approved content
+  // to displace an older card, but never rotate healthy slots on tiny score
+  // differences or freshness alone. buildSelectiveSection enforces a strict
+  // per-section promotion cap so a scheduled run cannot churn the whole front.
+  if (
+    currentAgeDays != null && currentAgeDays >= 21 &&
+    alternativeAgeDays != null && alternativeAgeDays <= 60 &&
+    newerByDays >= 14 && scoreGain >= 110
+  ) {
+    return {
+      needed: true, hard: false, reason: "exceptional_ranked_fresh_promotion",
+      currentAgeDays: Math.round(currentAgeDays),
+      alternativeAgeDays: Math.round(alternativeAgeDays),
+      scoreGain: Math.round(scoreGain),
+    };
+  }
   if (
     !slotHasRealPreview(value) && rowHasRealPreview(alternativeRow) &&
     scoreGain >= -20
@@ -1857,6 +1873,7 @@ function buildSelectiveSection(current, seedSections, sectionKey, approvedRows, 
     hardRemovedToSample: 0,
     reasons: {},
     replacements: [],
+    rankedPromotions: 0,
   };
 
   function addReason(reason) {
@@ -1896,6 +1913,13 @@ function buildSelectiveSection(current, seedSections, sectionKey, approvedRows, 
     const currentRow = byId.get(currentId) || null;
     const alternative = candidateForSlot(currentId);
     const assessment = replacementNeed(slot, currentRow, alternative, sectionKey);
+    // At most 3 exceptional score-driven promotions per SNS and release.
+    // Stale/invalid/blocked removals and SAMPLE fills are not throttled.
+    if (assessment.reason === "exceptional_ranked_fresh_promotion" && report.rankedPromotions >= 3) {
+      report.preserved += 1;
+      addReason("ranked_promotion_budget_exhausted_preserve");
+      continue;
+    }
     if (!assessment.needed) {
       // Keep the same content/slot, but refresh its title/thumbnail/metadata from
       // the latest verified candidate row when it still qualifies.
@@ -1918,6 +1942,7 @@ function buildSelectiveSection(current, seedSections, sectionKey, approvedRows, 
       existingIds.delete(currentId);
       existingIds.add(replacementId);
       report.replaced += 1;
+      if (assessment.reason === "exceptional_ranked_fresh_promotion") report.rankedPromotions += 1;
       addReason(assessment.reason || "selective_replacement");
       report.replacements.push({
         slotId: index + 1,
@@ -2139,6 +2164,7 @@ function buildSnapshot(baseSnapshot, rows, options) {
         hardStaleAgeDays: 365,
         minimumFreshnessGainDays: 90,
         minimumScoreGainForStale: 20,
+        exceptionalRankedPromotion: { minimumScoreGain: 110, minOldAgeDays: 21, maxNewAgeDays: 60, minNewerDays: 14, maxPerSectionPerRelease: 3 },
         preserveWhenNoVerifiedAlternative: true,
       } : null,
       bySection: selectiveReplacementReport,
