@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20261026-seven-main-instant-sample-slots-v1
+// build: 20261026-seven-main-refined-samples-fast-paint-v2
 // 목적:
 // 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -488,6 +488,34 @@
     // all six SNS rows and delays first paint on slower devices.
   }
 
+  // Scoped to Social MAIN only. This never styles Distribution's rightPanel.
+  // Cards keep the same number, dimensions and scroll positions as before.
+  function ensureMainSampleCss() {
+    const styleId = "igdc-social-main-sample-refined-v2";
+    if (document.getElementById(styleId)) return;
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"]{border-color:#e1e7ef;background:#fff;cursor:default;box-shadow:0 1px 4px rgba(20,35,60,.04)}
+.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .pic{position:relative;isolation:isolate;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:8px;background:linear-gradient(135deg,#e9f1fa 0%,#f4f7fb 54%,#e8edf6 100%)!important;color:#586981!important;font-size:12px!important;font-weight:650;line-height:1.2!important;letter-spacing:.015em;text-align:center;overflow:hidden}
+.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .pic::before{content:"▶";display:grid;place-items:center;width:39px;height:39px;border-radius:50%;font-size:13px;line-height:1;color:#718aa7;background:rgba(255,255,255,.82);border:1px solid rgba(130,155,188,.25);box-shadow:0 3px 12px rgba(35,62,98,.07);padding-left:2px;box-sizing:border-box}
+.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .pic::after{content:"PREVIEW  ·  " attr(data-sample-slot);position:absolute;top:8px;left:10px;white-space:nowrap;color:#8390a2;letter-spacing:.10em;font-size:9px;font-weight:600}
+.thumb-grid[data-psom-key="social-youtube"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#f8ecec,#fbf7f7 60%,#f4e9ed)!important}
+.thumb-grid[data-psom-key="social-instagram"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#f5edf9,#f9f4f9 60%,#f4edf0)!important}
+.thumb-grid[data-psom-key="social-tiktok"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#e7f3f3,#f2f6f8 60%,#e9eef5)!important}
+.thumb-grid[data-psom-key="social-snapchat"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#f9f6e8,#fbfaf4 60%,#f4f1e5)!important}
+.thumb-grid[data-psom-key="social-bilibili"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#eaf3f9,#f4f8fb 60%,#e9f0f7)!important}
+.thumb-grid[data-psom-key="social-douyin"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#e9edf4,#f5f6f9 60%,#e9edf2)!important}
+.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .meta{min-height:0;color:#6a7585}
+.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .title{display:block!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap!important;color:#66778d;font-size:11px!important;font-weight:550!important;line-height:1.4!important}
+.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .cta{background:#e9eff7!important;color:#647996!important;font-weight:600!important;font-size:11px!important;letter-spacing:.01em}
+.thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-loading="1"]{position:relative;background:linear-gradient(120deg,#e8eef7,#f4f7fb,#e8eef7)!important;overflow:hidden}
+.thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-loading="1"]::after{content:"";position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);border:1px solid #c8d5e6;border-radius:50%;background:rgba(255,255,255,.8);pointer-events:none}
+.thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-failed="1"]{font-size:12px!important;color:#718198;background:#f0f4f9!important}
+`;
+    document.head.appendChild(style);
+  }
+
   function sampleLabelForSection(key) {
     const labels = {
       "social-youtube": "YouTube",
@@ -542,10 +570,13 @@
       metaDesc.style.display = "none";
     }
     if (pic) {
+      delete pic.dataset.socialThumbLoading;
+      delete pic.dataset.socialThumbFailed;
       pic.style.backgroundImage = "";
       pic.style.backgroundSize = "";
       pic.style.backgroundPosition = "";
       while (pic.firstChild) pic.removeChild(pic.firstChild);
+      pic.dataset.sampleSlot = number;
       pic.textContent = label;
     }
   }
@@ -570,19 +601,32 @@
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }
 
-  function paintThumb(pic, platform, contentUrl, thumb) {
+  function paintThumb(pic, platform, contentUrl, thumb, eager) {
     if (!pic) return;
     pic.style.backgroundImage = "";
     pic.style.backgroundSize = "";
     pic.style.backgroundPosition = "";
     while (pic.firstChild) pic.removeChild(pic.firstChild);
     if (!thumb) {
+      delete pic.dataset.socialThumbLoading;
+      pic.dataset.socialThumbFailed = '1';
       pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
       return;
     }
+    pic.dataset.socialThumbLoading = '1';
+    delete pic.dataset.socialThumbFailed;
     var img = document.createElement("img");
     img.alt = "";
-    img.loading = "lazy";
+    img.style.opacity = "0";
+    img.addEventListener("load", function () {
+      if (img.parentNode !== pic) return;
+      delete pic.dataset.socialThumbLoading;
+      img.style.opacity = "1";
+    });
+    // Only first on-screen cards receive eager network priority. Every other
+    // thumbnail remains lazy, avoiding a 700-image request storm.
+    img.loading = eager ? "eager" : "lazy";
+    if (eager) { try { img.fetchPriority = "high"; } catch (_e) {} }
     img.decoding = "async";
     img.referrerPolicy = "no-referrer";
     img.style.width = "100%";
@@ -600,6 +644,8 @@
         return;
       }
       if (img.parentNode === pic) pic.removeChild(img);
+      delete pic.dataset.socialThumbLoading;
+      pic.dataset.socialThumbFailed = '1';
       pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
     });
     pic.appendChild(img);
@@ -662,7 +708,11 @@
       metaDesc.style.display = "none";
     }
 
-    paintThumb(pic, platform, url, thumb);
+    const slotIndex = Number(card.dataset.socialSlotNo || 0);
+    const rowRect = card.getBoundingClientRect && card.getBoundingClientRect();
+    const eagerThumb = slotIndex > 0 && slotIndex <= 4 && rowRect &&
+      rowRect.bottom > -80 && rowRect.top < (window.innerHeight || 800) + 360;
+    paintThumb(pic, platform, url, thumb, !!eagerThumb);
   }
 
 
@@ -672,6 +722,7 @@
   // The Distribution-owned right panel is not accessed by this code.
   function ensureMainSampleSlots() {
     if (mainSampleSlotsReady) return;
+    ensureMainSampleCss();
     const grids = qsa('.thumb-grid[data-psom-key^="social-"]');
     if (!grids.length) return;
     grids.forEach(function (grid) {
@@ -693,9 +744,9 @@
         card.setAttribute('aria-label', label + ' SAMPLE ' + card.dataset.socialSlotNo);
         card.innerHTML = cardMarkup;
         const pic = qs('.pic', card);
-        if (pic) pic.textContent = label + ' · SAMPLE';
+        if (pic) { pic.dataset.sampleSlot = card.dataset.socialSlotNo; pic.textContent = label; }
         const title = qs('.title', card);
-        if (title) title.textContent = label + ' · SAMPLE ' + card.dataset.socialSlotNo;
+        if (title) title.textContent = label + ' · ' + card.dataset.socialSlotNo;
         const desc = qs('.desc', card);
         if (desc) desc.style.display = 'none';
         fragment.appendChild(card);
@@ -765,20 +816,16 @@
     visiblePriority();
     for (let i = 0; i < Math.min(MAIN_BATCH, MAIN_LIMIT); i++) repaint(i);
 
-    function paintRest(deadline) {
+    function paintRest() {
       if (mainRenderTokens.get(scrollHost) !== job) return;
-      let count = 0;
-      while (job.offset < MAIN_LIMIT && count < 16) {
-        repaint(job.offset++);
-        count++;
-        if (deadline && typeof deadline.timeRemaining === 'function' &&
-            deadline.timeRemaining() < 2) break;
-      }
+      // The 100 slot nodes already exist, so this pass only changes content.
+      // Do not defer to requestIdleCallback (which may wait hundreds of ms).
+      for (let n = 0; n < 20 && job.offset < MAIN_LIMIT; n++) repaint(job.offset++);
       if (job.offset < MAIN_LIMIT) scheduleMore();
     }
     function scheduleMore() {
-      if (typeof window.requestIdleCallback === 'function') {
-        window.requestIdleCallback(paintRest, { timeout: 600 });
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(paintRest);
       } else {
         setTimeout(paintRest, 0);
       }
@@ -1104,8 +1151,11 @@
   }
 
   function runMain() {
-    ensureMainSampleSlots(); // independent of DB, country routing, and snapshots
     if (mainRunInFlight) return mainRunInFlight;
+    // Start the live Release fetch immediately, overlapping its network latency
+    // with the initial 700 SAMPLE nodes and session-cache painting.
+    const liveReleasePromise = loadCurrentSnapshot();
+    ensureMainSampleSlots(); // independent of DB, country routing, and snapshots
 
     // One front read is enough. social-snapshot-current already resolves the
     // request country, so waiting for social-country-route as a second serverless
@@ -1121,7 +1171,7 @@
       };
       renderMainSnapshot(warm.snapshot, lastRoute);
     }
-    mainRunInFlight = loadCurrentSnapshot()
+    mainRunInFlight = liveReleasePromise
       .then(function (current) {
         const fallbackRoute = routeFallback();
         const releaseRoute = current && current.pipeline && current.pipeline.route || {};

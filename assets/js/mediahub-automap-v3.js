@@ -1479,12 +1479,16 @@
   async function main(){
     const lines = qa('.thumb-line[data-psom-key]');
     if(lines.length === 0) return;
+    // Start the canonical 2+ MB snapshot request before building/inspecting
+    // the 500 fixed placeholders. Network transfer now overlaps DOM bootstrap;
+    // URL precedence, fallback, thumbnail policy and hero remain unchanged.
+    const snapshotPromise = loadSnapshotAny();
     installReadyFirstCompactionWatch();
 
     // stabilize layout first
     lines.forEach(ensurePlaceholders);
 
-    const snapshot = await loadSnapshotAny();
+    const snapshot = await snapshotPromise;
     const sectionMap = normalizeSectionMap(snapshot);
 	
 // ===== MEDIA TRENDING BALANCED AUTO-COMBINE =====
