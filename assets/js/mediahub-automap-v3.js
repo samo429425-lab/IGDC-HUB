@@ -447,7 +447,7 @@
       // First-screen cards should start immediately instead of waiting for the
       // next IntersectionObserver turn. This improves perceived front render
       // without waking every off-screen thumbnail request.
-      if(typeof requestAnimationFrame==='function') requestAnimationFrame(beginLoad); else setTimeout(beginLoad,0);
+      beginLoad();
     }else if('IntersectionObserver' in window){
       // Pre-warm only cards that are close vertically AND horizontally. The
       // larger vertical margin prepares the next rows while horizontal margin
@@ -970,7 +970,14 @@
     }).map((row)=>row.card);
     let changed=false;for(let i=0;i<cards.length;i++){if(cards[i]!==ranked[i]){changed=true;break;}}
     if(!changed)return;
-    ranked.forEach((card)=>container.appendChild(card));
+    // Move only out-of-order cards. Appending all 50 cards for a single change
+    // triggered excessive DOM mutations and observer-driven re-compactions.
+    let next = cards[cards.length-1].nextElementSibling;
+    for (let i = ranked.length-1; i >= 0; i--) {
+      const card = ranked[i];
+      if (card.nextElementSibling !== next) container.insertBefore(card, next);
+      next = card;
+    }
   }
   function scheduleCompactLine(line){
     if(!line||line.__igdcCompactQueued)return;
@@ -1001,7 +1008,12 @@
       }
       lines.forEach(scheduleCompactLine);
     });
-    observer.observe(D.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['data-placeholder','data-thumb-pending','data-thumb-pending-kind','data-thumb-recovery','data-front-priority','data-front-order']});
+    // Observe only the ten Media main rails, not every mutation in the page.
+    // Other hubs, headers and the player are outside this renderer's scope.
+    qa('.thumb-line[data-psom-key^="media-"]').forEach((line)=>{
+      observer.observe(line,{subtree:true,childList:true,attributes:true,
+        attributeFilter:['data-placeholder','data-thumb-pending','data-thumb-pending-kind','data-thumb-recovery','data-front-priority','data-front-order']});
+    });
     window.__IGDC_MEDIA_READY_FIRST_OBSERVER__=observer;
   }
 
@@ -1577,13 +1589,15 @@
     // Async image decode/recovery and any later renderer must not be allowed to
     // reintroduce Sample/real interleaving. Re-compact a few times after the
     // initial mapping as an additional deterministic safety net.
-    [0,120,420,1100,2600].forEach((delay)=>setTimeout(()=>compactMappedLines(lines),delay));
+    // The mutation observer already schedules compaction on thumbnail-ready.
+    // Two safety sweeps cover late changes without repeatedly re-sorting 500 slots.
+    [150,1200].forEach((delay)=>setTimeout(()=>compactMappedLines(lines),delay));
   }
 
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.6-deferred-rail-performance';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.7-first-paint-reduced-dom-work';
 })();
 
 

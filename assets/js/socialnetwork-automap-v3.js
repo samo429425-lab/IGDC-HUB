@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20261026-seven-main-refined-samples-fast-paint-v2
+// build: 20261026-seven-main-fast-first-paint-v3
 // 목적:
 // 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -32,6 +32,7 @@
     "social-douyin",
   ]);
   const mainRenderTokens = new WeakMap();
+  const mainSlotCache = new WeakMap();
   const rightRenderTokens = new WeakMap();
   let mainSampleSlotsReady = false;
 
@@ -424,7 +425,8 @@
       sessionStorage.setItem(MAIN_FAST_CACHE, JSON.stringify({
         at: Date.now(), snapshot: current.snapshot,
         route: current.pipeline.route || {},
-        releaseId: current.pipeline.releaseId || null
+        releaseId: current.pipeline.releaseId || null,
+        hash: current.pipeline.hash || null
       }));
     } catch (_) { /* storage disabled or quota: online flow remains intact */ }
   }
@@ -458,7 +460,11 @@
 
   function getMainSlots(gridEl) {
     if (!gridEl) return [];
-    return qsa("a.card", gridEl);
+    const cached = mainSlotCache.get(gridEl);
+    if (cached && cached.length === MAIN_LIMIT && cached[0].isConnected) return cached;
+    const cards = qsa("a.card", gridEl);
+    if (cards.length >= MAIN_LIMIT) mainSlotCache.set(gridEl, cards);
+    return cards;
   }
 
   function mainCtaLabel(gridEl) {
@@ -651,7 +657,7 @@
     pic.appendChild(img);
   }
 
-  function paintMainCard(card, it) {
+  function paintMainCard(card, it, eagerThumb) {
     if (!card || !it) return;
 
     // SAMPLE ownership is upstream. Automap never creates sample rows; it only
@@ -708,10 +714,8 @@
       metaDesc.style.display = "none";
     }
 
-    const slotIndex = Number(card.dataset.socialSlotNo || 0);
-    const rowRect = card.getBoundingClientRect && card.getBoundingClientRect();
-    const eagerThumb = slotIndex > 0 && slotIndex <= 4 && rowRect &&
-      rowRect.bottom > -80 && rowRect.top < (window.innerHeight || 800) + 360;
+    // First-screen visibility is measured once per row in mountMainRow.
+    // Reading getBoundingClientRect() for every real card caused forced reflows.
     paintThumb(pic, platform, url, thumb, !!eagerThumb);
   }
 
@@ -731,28 +735,31 @@
       const label = sampleLabelForSection(key);
       const existing = getMainSlots(grid);
       if (existing.length >= MAIN_LIMIT) return;
-      const fragment = document.createDocumentFragment();
+      // Parse one static fragment per row instead of creating/querying and
+      // mutating each of the 700 cards individually on the critical first paint.
+      const escapeSample = function (value) {
+        return safeText(value).replace(/[&<>"']/g, function (ch) {
+          return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+        });
+      };
+      const safeLabel = escapeSample(label);
       const cardMarkup = mainCardMarkup(grid);
+      const html = [];
       for (let i = existing.length; i < MAIN_LIMIT; i++) {
-        const card = document.createElement('a');
-        card.className = 'card';
-        card.href = '#';
-        card.dataset.sample = '1';
-        card.dataset.snapshotSample = '1';
-        card.dataset.socialSlotNo = String(i + 1).padStart(3, '0');
-        card.dataset.socialRenderSignature = 'sample';
-        card.setAttribute('aria-label', label + ' SAMPLE ' + card.dataset.socialSlotNo);
-        card.innerHTML = cardMarkup;
-        const pic = qs('.pic', card);
-        if (pic) { pic.dataset.sampleSlot = card.dataset.socialSlotNo; pic.textContent = label; }
-        const title = qs('.title', card);
-        if (title) title.textContent = label + ' · ' + card.dataset.socialSlotNo;
-        const desc = qs('.desc', card);
-        if (desc) desc.style.display = 'none';
-        fragment.appendChild(card);
+        const number = String(i + 1).padStart(3, '0');
+        html.push('<a class="card" href="#" data-sample="1" data-snapshot-sample="1" ' +
+          'data-social-slot-no="' + number + '" data-social-render-signature="sample" ' +
+          'aria-label="' + safeLabel + ' SAMPLE ' + number + '">' +
+          cardMarkup.replace('<div class="pic"></div>',
+            '<div class="pic" data-sample-slot="' + number + '">' + safeLabel + '</div>')
+          .replace('<div class="title"></div>',
+            '<div class="title">' + safeLabel + ' · ' + number + '</div>')
+          .replace('<div class="desc"></div>',
+            '<div class="desc" style="display:none"></div>') + '</a>');
       }
       // Existing slot and scroll-button geometry is preserved unchanged.
-      grid.appendChild(fragment);
+      grid.insertAdjacentHTML('beforeend', html.join(''));
+      mainSlotCache.set(grid, qsa('a.card', grid));
     });
     mainSampleSlotsReady = grids.filter(function (g) {
       return MANAGED_MAIN_KEYS.has(g.getAttribute('data-psom-key'));
@@ -767,6 +774,10 @@
     const scrollHost = gridEl.closest('.row-scroller') || gridEl;
     const key = gridEl.getAttribute('data-psom-key');
     const label = sampleLabelForSection(key);
+    // One geometry read per row instead of a layout read for every content card.
+    const rowRect = scrollHost.getBoundingClientRect && scrollHost.getBoundingClientRect();
+    const rowNearScreen = !!(rowRect && rowRect.bottom > -80 &&
+      rowRect.top < (window.innerHeight || 800) + 360);
     const job = { grid: gridEl, cards: cards, items: displayItems, painted: new Set(), offset: 0 };
     mainRenderTokens.set(scrollHost, job);
 
@@ -796,7 +807,7 @@
           pickThumb(item), pickDesc(item), pickCreator(item),
           safeText(item.embedUrl || item.embed_url)].join('\u001f');
         if (card.dataset.socialRenderSignature !== signature || card.dataset.sample === '1') {
-          paintMainCard(card, item);
+          paintMainCard(card, item, rowNearScreen && index < 4);
           card.dataset.socialRenderSignature = signature;
           card.setAttribute('aria-label', pickTitle(item) || label);
         }
@@ -1198,9 +1209,20 @@
         }
 
         lastMainSnapshot = current.snapshot;
-        saveFastMain(current);
         window.__IGDC_SOCIAL_SNAPSHOT_PIPELINE__ = current.pipeline;
-        return renderMainSnapshot(lastMainSnapshot, lastRoute);
+        // If the verified stored release is identical to the session-painted
+        // release in the same route, skip a second 700-card reconciliation.
+        const releaseUnchanged = !!(warm && warm.hash && current.pipeline.hash &&
+          warm.hash === current.pipeline.hash &&
+          warm.releaseId === current.pipeline.releaseId &&
+          safeText(warm.route && warm.route.countryCode) === safeText(releaseRoute.countryCode) &&
+          safeText(warm.route && warm.route.worldRegion) === safeText(releaseRoute.worldRegion));
+        if (releaseUnchanged) return true;
+        const applied = renderMainSnapshot(lastMainSnapshot, lastRoute);
+        // Persist after the visible card update; large JSON serialization before
+        // painting used to block the browser main thread on each fresh release.
+        if (applied) setTimeout(function () { saveFastMain(current); }, 0);
+        return applied;
       })
       .catch(function (e) {
         console.error("[social-main-automap] fail", e);
