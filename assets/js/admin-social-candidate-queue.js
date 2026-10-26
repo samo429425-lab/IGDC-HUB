@@ -3713,6 +3713,19 @@
         diagnostic({ actualApply: d, searchBankHandoff: verify });
       }
 
+      // Release readback succeeded. Notify already-open Social front tabs;
+      // no Netlify build/GitHub source rewrite is needed for data publication.
+      if (runtimeDirect && d.releaseId) {
+        try {
+          localStorage.setItem("igdc.social.frontReleasePublished", JSON.stringify({
+            releaseId: text(d.releaseId),
+            countryCode: text(scope.countryCode),
+            scopeMode: text(scope.scopeMode),
+            at: Date.now()
+          }));
+        } catch (_signalError) { /* storage unavailable: regular page read still works */ }
+      }
+
       if ($("frontApplyState"))
         $("frontApplyState").textContent = d.noChange === true
           ? "변경 없음"
@@ -4343,6 +4356,47 @@
     return d;
   }
 
+  // Export actual influencer records, not the summary-only registry diagnostic.
+  // Read from the same authenticated, paginated candidate source as the table,
+  // keeping registry data supplementary and never publishing it to Social slots.
+  async function downloadInfluencerRegistryRows() {
+    try {
+      var response = await get(REVIEW + "?action=candidates&_=" + Date.now());
+      var sourceRows = response && response.queue && response.queue.rows;
+      if (!Array.isArray(sourceRows)) sourceRows = response && response.candidates;
+      if (!Array.isArray(sourceRows)) throw new Error("등록부 원장 목록 응답이 없습니다.");
+      var registry = sourceRows.filter(function (row) {
+        return assetClass(row) === "influencer_registry";
+      }).map(function (row) {
+        var item = contentDiagnosticRow(row);
+        item.verificationStatus = text(row.verificationStatus || row.verification_status);
+        item.publicAccess = row.publicAccess == null ? null : row.publicAccess === true;
+        item.countryScopes = Array.isArray(row.countryScopes) ? row.countryScopes : [];
+        item.languageScopes = Array.isArray(row.languageScopes) ? row.languageScopes : [];
+        return item;
+      });
+      var bySection = {};
+      order.forEach(function (key) { bySection[key] = 0; });
+      registry.forEach(function (row) {
+        bySection[row.sectionKey] = (bySection[row.sectionKey] || 0) + 1;
+      });
+      download("igdc-social-influencer-registry-" + new Date().toISOString().slice(0,10) + ".json", {
+        ok: true,
+        reportType: "igdc-social-influencer-registry-list",
+        generatedAt: new Date().toISOString(),
+        readOnly: true,
+        scope: currentScope(),
+        count: registry.length,
+        bySection: bySection,
+        rows: registry
+      });
+      show("인플루언서 등록부 실제 목록 " + registry.length + "건을 JSON으로 다운로드했습니다.", "ok");
+    } catch (error) {
+      show("등록부 원장 조회에 실패해 불완전한 JSON은 내려받지 않았습니다: " +
+        (error && error.message || String(error)), "warn");
+    }
+  }
+
   function toggleHoldPanel(forceOpen) {
     var body = $("holdPanelBody"), btn = $("toggleHoldPanelBtn");
     if (!body || !btn) return;
@@ -4397,7 +4451,7 @@
     if ($("toggleRegistryPanelBtn")) $("toggleRegistryPanelBtn").onclick = function () { toggleRegistryPanel(); };
     if ($("registryDiagnosticBtn"))
       $("registryDiagnosticBtn").onclick = function () {
-        runQueueDiagnostic("registry_diagnostic", "인플루언서 등록부 점검 JSON을 읽었습니다.", "igdc-social-influencer-registry-diagnostic.json");
+        downloadInfluencerRegistryRows();
       };
     if ($("latestContentDiagnosticBtn"))
       $("latestContentDiagnosticBtn").onclick = function () {
@@ -4616,7 +4670,7 @@
     if ($("researchPipelineDiagnosticBtn")) $("researchPipelineDiagnosticBtn").onclick = downloadResearchPipelineDiagnostic;
     if ($("channelIntakeDiagnosticJsonBtn")) $("channelIntakeDiagnosticJsonBtn").onclick = downloadDirectIntakeDiagnostic;
     if ($("registryDiagnosticBtn")) $("registryDiagnosticBtn").onclick = function () {
-      return runQueueDiagnostic("registry_diagnostic", "인플루언서 등록부 점검 JSON을 읽었습니다.", "igdc-social-influencer-registry-diagnostic.json");
+      return downloadInfluencerRegistryRows();
     };
     if ($("latestContentDiagnosticBtn")) $("latestContentDiagnosticBtn").onclick = function () {
       return runQueueDiagnostic("latest_content_diagnostic", "최신 콘텐츠 후보·교체 대기열 요약 점검 JSON을 읽었습니다.", "igdc-social-latest-content-diagnostic.json");

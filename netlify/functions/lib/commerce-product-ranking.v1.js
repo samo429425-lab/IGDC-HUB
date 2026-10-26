@@ -341,6 +341,13 @@ function isListOrCampaignUrl(value) {
   if (!url) return true;
   try {
     const parsed = new URL(url), path = lower(parsed.pathname), query = lower(parsed.search);
+    // A discovered /login or /register URL is not a product detail even when
+    // it contains a product ID in a returnUrl query. Do not inspect query
+    // text here: a genuine product detail can legitimately link to checkout.
+    let decodedPath = path;
+    try { decodedPath = decodeURIComponent(path); } catch (_error) {}
+    if (/(?:^|\/)(?:login|log-in|sign-?in|sign-?up|register|registration|join|회원가입|로그인)(?:\.(?:html?|php|aspx?|jsp))?(?:\/|$)/i.test(decodedPath)
+      || /(?:^|\/)(?:account|member|members|user|users|auth|authentication)\/(?:login|sign-?in|sign-?up|register|join)(?:\/|\.|$)/i.test(decodedPath)) return true;
     const detailContext = productDetailPathHint(parsed.pathname);
     const queryProductId = Array.from(parsed.searchParams.entries()).some(([rawKey, rawValue]) => {
       const key = lower(rawKey);

@@ -1811,6 +1811,13 @@
           },60000);
         }catch(error){
           lastError=error;
+          // A 409 with a per-candidate failure array is a confirmed refusal,
+          // not a network retry candidate. Retain the exact reason for each ID.
+          var responseFailures=error&&error.payload&&error.payload.failures;
+          if(Array.isArray(responseFailures)&&responseFailures.length){
+            lastError.exclusionFailures=responseFailures;
+            break;
+          }
           if(options.hardDelete||!transientResearchRequestError(error)||attempt>=2)break;
           await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});
         }
@@ -1820,7 +1827,11 @@
         (data.processedIds||[]).forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});
         (data.failures||[]).forEach(function(row){failures.push(row);});
       }else{
-        chunk.forEach(function(id){failures.push({id:id,error:text(lastError&&lastError.message)||'queue_control_request_failed'});});
+        var detailed=lastError&&lastError.exclusionFailures||[];
+        chunk.forEach(function(id){
+          var exact=detailed.find(function(entry){return text(entry&&entry.id)===id;});
+          failures.push({id:id,error:exact?text(exact.error):text(lastError&&lastError.message)||'queue_control_request_failed',code:exact?text(exact.code):text(lastError&&lastError.code)});
+        });
       }
       if(typeof onProgress==='function')onProgress(Math.min(ids.length,offset+chunk.length),ids.length,failures.length);
     }
@@ -2081,7 +2092,7 @@
       var suffix=decision==='hard_delete'?' · 실제 원장·관련 관계 삭제(재수집 차단 정책은 별도)' :decision==='undecided'?' · 전체 상품 후보·배치 관리 목록의 미배정 후보로 복원':decision==='reject'?' · 제외 상품 목록으로 이동':decision==='purge'?' · 영구 제외·재수집 차단 저장':decision==='dismiss'?' · 현재 관리 목록 삭제·재수집 허용':decision==='remove_from_list'?' · 현재 관리 목록에서만 제거':'';
       var notice='요청 '+ids.length+'건 · '+(decision==='hard_delete'&&!refreshError?'원장 삭제 재조회 확인 ':'서버 저장 확인 ')+processed+'건 · 실패 '+failures.length+'건'+suffix;
       if(refreshError)notice+=decision==='hard_delete'?' · 전체 원장 재검증 실패(완료 확정 아님, 새로고침 필요)':' · 전체 원장 새로고침 지연(저장 성공 건만 화면 반영, 다음 새로고침에서 재검증)';
-      if(failures.length)notice+=' · '+failures.slice(0,2).map(function(f){return text(f&&f.error||'처리 실패');}).join(' / ');
+      if(failures.length)notice+=' · '+failures.slice(0,2).map(function(f){return '['+text(f&&f.id).slice(0,42)+'] '+text(f&&f.error||'처리 실패');}).join(' / ');
       show(notice,failures.length||refreshError?'warn':'ok');
       excludedOperationStatus(notice,!!(failures.length||refreshError));
       if(decision==='hard_delete'&&!failures.length&&!refreshError)ids.forEach(function(id){delete productExclusionSelections[kind][id];});

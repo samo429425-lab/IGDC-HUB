@@ -2636,7 +2636,7 @@ async function beginProductResearchJob(actorId, input) {
   // 48, 100 or more new suppliers are present, all unresearched suppliers enter
   // this job. advanceProductResearchJob still processes them incrementally so
   // serverless request duration stays bounded without dropping any supplier.
-  function focusedProductResearchPriority(source){return ["beauty_focus","electronics_focus","small_appliance_focus"].includes(lower(source&&source.supplyLane))?1:0;}
+  function focusedProductResearchPriority(source){return ["beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","food_focus","agri_food_focus"].includes(lower(source&&source.supplyLane))?1:0;}
   const allSupplierSources=ProductReserve.interleaveSuppliers(sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||focusedProductResearchPriority(b)-focusedProductResearchPriority(a)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))));
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
 

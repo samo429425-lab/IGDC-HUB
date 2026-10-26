@@ -55,7 +55,23 @@ function decision(activeRows,input,options){
  if(incomingScore<=score(worst)+15)return {action:'defer',category,bucket,limit,used:pool.length,protected:protectedCount,reason:'reserve_full_no_rank_improvement',incomingScore,threshold:score(worst)+15};
  return {action:'replace',category,bucket,limit,used:pool.length,protected:protectedCount,replacementId:text(worst.id),incomingScore,priorScore:score(worst)};
 }
-function laneKey(source){let key=low(source&&source.supplyLane).replace(/[-\s]+/g,'_');if(!key||key==='general')return 'general';if(/beauty|cosmetic|skincare/.test(key))return'beauty_personal_care';if(/fashion|apparel|cloth/.test(key))return'fashion';if(/food|household|daily/.test(key))return'food_household_essentials';if(/furniture|living|appliance/.test(key))return'home_appliances_living';if(/tour|travel|hotel/.test(key))return'travel_local_services';if(/electronics|phone|computer/.test(key))return'electronics_accessories';return key;}
+function laneKey(source){
+ // Product discovery fairness operates only WITHIN the same explicit priority
+ // tier. Preserve every supplier and the existing admin/affiliate ordering.
+ // Separate household/food and small-appliance/electronics so one abundant
+ // supplier category cannot crowd out the other's early research turns.
+ let key=low(source&&source.supplyLane).replace(/[-\s]+/g,'_');
+ if(!key||key==='general')return 'general';
+ if(/beauty|cosmetic|skincare/.test(key))return 'beauty_personal_care';
+ if(/fashion|apparel|cloth/.test(key))return 'fashion';
+ if(/small_appliance|kitchen_appliance|home_appliance|household_appliance/.test(key))return 'small_home_appliances';
+ if(/electronics|phone|computer|audio|bluetooth|speaker|microphone/.test(key))return 'electronics_accessories';
+ if(/household|daily|essentials|living/.test(key))return 'household_essentials';
+ if(/food|grocery|agri/.test(key))return 'food_essentials';
+ if(/furniture|appliance/.test(key))return 'home_appliances_living';
+ if(/tour|travel|hotel/.test(key))return 'travel_local_services';
+ return key;
+}
 function interleaveSuppliers(sources){
  // Fairness is applied within the same explicit operator/affiliate priority
  // tier. Do not allow one category to consume the entire discovery prefix.

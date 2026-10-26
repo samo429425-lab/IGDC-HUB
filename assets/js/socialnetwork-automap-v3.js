@@ -434,8 +434,8 @@
   async function loadCurrentSnapshot() {
     try {
       const res = await fetch(
-        CURRENT_SNAPSHOT_URL + "?view=front",
-        { cache: "default", credentials: "same-origin" },
+        CURRENT_SNAPSHOT_URL + "?view=front&_=" + Date.now(),
+        { cache: "no-store", credentials: "same-origin" },
       );
       if (!res.ok) return null;
       const payload = await res.json();
@@ -1248,6 +1248,29 @@
       event.target.closest('.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"]');
     if (card) { event.preventDefault(); event.stopImmediatePropagation(); }
   }, true);
+
+  // A Social publication is a live Supabase Release, not a new HTML build.
+  // Keep an already-open Social main page current when the administrator
+  // publishes in another same-origin tab. This never refreshes the right panel.
+  const SOCIAL_RELEASE_SIGNAL = "igdc.social.frontReleasePublished";
+  let lastMainVisibilityCheck = 0;
+  function refreshVisibleSocialMain(force) {
+    if (document.visibilityState === "hidden") return;
+    const now = Date.now();
+    if (!force && now - lastMainVisibilityCheck < 15000) return;
+    lastMainVisibilityCheck = now;
+    runMain();
+  }
+  window.addEventListener("storage", function (event) {
+    if (event.key === SOCIAL_RELEASE_SIGNAL && event.newValue) {
+      lastMainVisibilityCheck = 0;
+      refreshVisibleSocialMain(true);
+    }
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") refreshVisibleSocialMain(false);
+  });
+  window.addEventListener("focus", function () { refreshVisibleSocialMain(false); });
 
   window.addEventListener("igdc:rightpanel:refresh", function () {
     rightApplied = false;

@@ -251,9 +251,7 @@ exports.handler = async function (event) {
         snapshot: frontView ? projection.snapshot : release.snapshot,
       },
       {
-        "cache-control": frontView
-          ? "private, max-age=30, stale-while-revalidate=120"
-          : "no-store, max-age=0",
+        "cache-control": "no-store, max-age=0",
         "access-control-allow-origin": "*",
         vary: "x-country-code, x-nf-country, cf-ipcountry",
       },

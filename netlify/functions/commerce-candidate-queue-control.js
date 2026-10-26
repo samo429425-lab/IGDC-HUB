@@ -10,7 +10,7 @@ const SlotStore = require("./lib/global-slot-console-supabase");
 const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 const CommerceAutomation = require("./lib/commerce-country-automation.v1");
 
-const VERSION = "commerce-candidate-queue-control-v1.12.0-excluded-hard-delete-readback";
+const VERSION = "commerce-candidate-queue-control-v1.12.1-excluded-delete-scope-and-readback";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore","hard_delete"]);
 const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce-candidate-review-api"]);
@@ -271,29 +271,44 @@ function hardDeleteGuard(row,assignments,expectedBucket,body){
     const e=new Error("hard_delete_explicit_confirmation_required");e.statusCode=400;throw e;
   }
   const status=lower(front.status||front.publicationStatus);
-  const publicationPending=["unpublish_requested","unpublish_failed","unmatch_requested","unmatch_pending"].includes(status)
+  const publicFlag=payload.publicPublication===true||plain(payload.publication).public===true;
+  // Old HOLD/REJECT rows may retain an unpublish_requested marker even though
+  // every private publication flag is explicitly false and no assignment row
+  // remains. Do NOT infer this from an absent field: require explicit false
+  // evidence. Live/pending relations and any active/public status still block.
+  const confirmedNeverQueuedWithdrawal=status==="unpublish_requested"
+    &&array(assignments).length===0
+    &&front.queued===false&&front.pendingBuild===false
+    &&front.publicSnapshotConfirmed===false
+    &&front.buildVerificationRequired!==true
+    &&payload.publicPublication===false&&publicFlag===false;
+  const publicationPending=(["unpublish_requested","unpublish_failed","unmatch_requested","unmatch_pending"].includes(status)
+    &&!confirmedNeverQueuedWithdrawal)
     ||front.publicSnapshotConfirmed===true||front.pendingBuild===true||front.buildVerificationRequired===true;
   const placement=plain(payload.approvedPlacement),selected=plain(payload.selectedPlacement);
   const assigned=!!(placement.sectionKey||placement.section||selected.sectionKey||selected.section);
-  const publicFlag=payload.publicPublication===true||plain(payload.publication).public===true;
   const relationPublished=array(assignments).some(r=>frontStateActive(r.publication_status)||lower(r.state)==="published");
   if(publicationPending||frontStateActive(status)||publicFlag||relationPublished||assigned){
-    const e=new Error("hard_delete_blocked_front_or_approved_candidate:"+id);e.statusCode=409;throw e;
+    const reason=relationPublished?"active_assignment":assigned?"approved_placement":
+      publicationPending?"front_unpublish_not_verified":frontStateActive(status)?"front_publication_active":"public_flag";
+    const e=new Error("hard_delete_blocked_front_or_approved_candidate:"+reason+":"+id);e.statusCode=409;throw e;
   }
   if(array(assignments).length>=100){const e=new Error("hard_delete_assignment_scan_limit:"+id);e.statusCode=409;throw e;}
   if(!text(row.updated_at)){const e=new Error("hard_delete_missing_concurrency_version:"+id);e.statusCode=409;throw e;}
 }
-async function hardDeleteCandidate(actorId,row,body,expectedBucket){
-  const id=text(row.id),assignments=await readAssignments(id);
+async function hardDeleteCandidate(actorId,row,body,expectedBucket,knownAssignments){
+  // The handler already queried/validated these exact candidate assignments.
+  const id=text(row.id),assignments=Array.isArray(knownAssignments)?knownAssignments:await readAssignments(id);
   hardDeleteGuard(row,assignments,expectedBucket,body);
   // Preflight every known FK relation, failing closed before any destructive call
   // on an unavailable or unexpectedly oversized relation.
-  const before=[];
-  for(const table of RELATED_CANDIDATE_TABLES){
+  // Independent SELECT-only preflights can run concurrently. Destructive
+  // writes below are still sequential and every table is read back.
+  const before=await Promise.all(RELATED_CANDIDATE_TABLES.map(async(table)=>{
     const rows=await SlotStore.select(table,"select=candidate_id&candidate_id=eq."+encodeURIComponent(id)+"&limit=1001");
     if(!Array.isArray(rows)||rows.length>1000)throw new Error("hard_delete_relation_preflight_failed:"+table);
-    before.push({table,count:rows.length});
-  }
+    return {table,count:rows.length};
+  }));
   const fresh=await readCandidate(id);
   if(!fresh||text(fresh.updated_at)!==text(row.updated_at)){
     const e=new Error("hard_delete_candidate_changed_since_preflight:"+id);e.statusCode=409;throw e;
@@ -317,10 +332,10 @@ async function hardDeleteCandidate(actorId,row,body,expectedBucket){
   if(!Array.isArray(result)||!result.some(x=>text(x&&x.id)===id))throw new Error("hard_delete_master_delete_unconfirmed:"+id);
   const after=await readCandidate(id);
   if(after)throw new Error("hard_delete_master_readback_still_exists:"+id);
-  for(const record of before){
+  await Promise.all(before.map(async(record)=>{
     const remaining=await SlotStore.select(record.table,"select=candidate_id&candidate_id=eq."+encodeURIComponent(id)+"&limit=1");
     if(!Array.isArray(remaining)||remaining.length)throw new Error("hard_delete_final_relation_readback_failed:"+record.table);
-  }
+  }));
   return{id,action:"hard_delete",deleted:true,masterLedgerDeleted:true,ledgerVerified:true,relationCleanup:cleanup,
     // Independent runtime research identity/suppression is reconciled separately.
     researchPolicy:"existing_research_runtime_policy_not_automatically_reset",actor:!!actorId};
@@ -348,7 +363,7 @@ exports.handler=async function(event){
         if(existingAssignments.length>=100)throw Object.assign(new Error('candidate_assignment_scan_limit'),{statusCode:409});
         requireNoForeignCandidateAssignments(existingAssignments,body);
         requireExpectedBucket(row,expectedBucket,action);
-        if(action==="hard_delete")return await hardDeleteCandidate(actorId,row,body,expectedBucket);
+        if(action==="hard_delete")return await hardDeleteCandidate(actorId,row,body,expectedBucket,existingAssignments);
         const applied=await applyAction(actorId,row,action);
         // Persisted candidate state is the authority, not PATCH return or UI state.
         // A removed candidate intentionally remains in gslot_candidates: this
@@ -377,7 +392,7 @@ exports.handler=async function(event){
         if(applied.researchVisibility&&applied.researchVisibility.ok===false)applied.warning="research_visibility_sync_failed:"+text(applied.researchVisibility.error);
         return applied;
       }));
-      settled.forEach((entry,index)=>{const id=chunk[index];if(entry.status==="fulfilled")processed.push(entry.value);else failures.push({id,error:text(entry.reason&&entry.reason.message||entry.reason)});});
+      settled.forEach((entry,index)=>{const id=chunk[index];if(entry.status==="fulfilled")processed.push(entry.value);else failures.push({id,error:text(entry.reason&&entry.reason.message||entry.reason),code:text(entry.reason&&entry.reason.code||entry.reason&&entry.reason.statusCode||"")});});
     }
     if(!processed.length){const firstFailure=text(failures[0]&&failures[0].error),error=new Error("선택 항목을 처리하지 못했습니다. "+(firstFailure?"원인: "+firstFailure+" · ":"")+"현재 원장 상태를 확인해 주세요.");error.statusCode=409;error.failures=failures;throw error;}
     return json(200,{ok:true,version:VERSION,decision:action,requested:ids.length,processed:processed.length,processedIds:processed.map((row)=>row.id),results:processed,failures,publicPublication:false,paymentExecution:false});
