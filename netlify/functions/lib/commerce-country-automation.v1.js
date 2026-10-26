@@ -1337,7 +1337,13 @@ function reindexCandidateRows(rows){return array(rows).map((row,index)=>Object.a
 function preservePinnedReviewPool(pool,sources){const out=[],seen=new Set();for(const row of array(sources).filter((item)=>item&&item.adminPinned===true).concat(array(pool))){const url=researchCandidateUrl(row),key=text(url).toLowerCase();if(!key||seen.has(key))continue;seen.add(key);out.push(row);}return out.slice(0,SUPPLIER_REVIEW_LIMIT);}
 function supplierFocusLane(item){
   const payload=plain(item&&item.payload),evidence=plain(item&&item.evidence),lane=lower(first(payload.supplyLane,evidence.supplyLane,item&&item.supplyLane));
-  return ["beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"].includes(lane)?lane:(lane==="food_essentials"?"food_focus":lane==="agri_cooperative"?"agri_food_focus":"");
+  if(lane==="digital_books_focus"||lane==="books_focus")return "digital_books_focus";
+  if(["beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"].includes(lane))return lane;
+  // Only recognize clear digital-publishing supplier evidence; do not classify notebooks,
+  // generic marketplaces, or unrelated sellers as ebook/webtoon sources.
+  const title=text(first(item&&item.title,item&&item.name,payload&&payload.name,evidence&&evidence.supplierName));
+  if(/(?:웹툰|전자책|웹소설|디지털\s*만화|e[ -]?books?|webtoon|webcomic|digital\s*comics?|online\s*bookstore)/i.test(title))return "digital_books_focus";
+  return lane==="food_essentials"?"food_focus":lane==="agri_cooperative"?"agri_food_focus":"";
 }
 function supplierRankEntries(reviewPool,maxCandidates,policyHintsInput){
   const hints=plain(policyHintsInput);
@@ -1349,7 +1355,7 @@ function supplierRankEntries(reviewPool,maxCandidates,policyHintsInput){
   // crowded out by a single high-volume category. This does NOT bypass hard
   // trust, approval or public-release gates; it only decides which private
   // candidates receive the next detailed assessment.
-  const focusLanes=["beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"],reserveEach=capacity>=16?2:1,selected=[],used=new Set();
+  const focusLanes=["digital_books_focus","beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"],reserveEach=capacity>=16?2:1,selected=[],used=new Set();
   for(const lane of focusLanes){
     let taken=0;
     for(const row of normal){
