@@ -767,19 +767,20 @@
   }
   function thumb(r, mode) {
     var url = thumbnailOf(r, mode);
-    var isTikTok = lower(r && r.platform).replace(/^social-/, '') === 'tiktok';
-    // A generated *labelled* preview card protects the layout when TikTok does
-    // not permit an actual cover. Never save it as real artwork or use it to
-    // satisfy AI publication quality checks.
-    var fallback = isTikTok
-      ? '<span class="candidate-thumb-fallback" style="display:grid;align-content:center;justify-items:center;gap:5px;padding:12px 8px;text-align:center;background:linear-gradient(145deg,#0a1f2c,#153949 50%,#24182f);color:#e7f4fb;min-height:110px;box-sizing:border-box"><span style="font-size:22px;color:#7fe2ec">&#9654;</span><strong style="font-size:11px;letter-spacing:.10em">TIKTOK</strong><span style="font-size:11px;line-height:1.35;overflow-wrap:anywhere">' + esc(r.title || r.creatorName || '공개 영상') + '</span><span style="font-size:9px;opacity:.74">실제 영상 이미지 확인 중</span></span>'
-      : '<span class="candidate-thumb-fallback">' + esc(r.platform || 'SNS') + '<br>' + esc(r.creatorName || r.title || '공개 미리보기') + '</span>';
     return /^https:\/\//i.test(url)
       ? '<img loading="lazy" referrerpolicy="no-referrer" src="' +
           esc(url) +
           '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'grid\'">' +
-          fallback.replace('style="display:grid;', 'style="display:none;').replace('class="candidate-thumb-fallback">', 'class="candidate-thumb-fallback" style="display:none">')
-      : fallback;
+          '<span class="candidate-thumb-fallback" style="display:none">' +
+          esc(r.platform || "SNS") +
+          "<br>" +
+          esc(r.creatorName || r.title || "공개 미리보기") +
+          "</span>"
+      : '<span class="candidate-thumb-fallback">' +
+          esc(r.platform || "SNS") +
+          "<br>" +
+          esc(r.creatorName || r.title || "공개 미리보기") +
+          "</span>";
   }
   function rebuildLatestContentIndex(sourceRows) {
     latestContentIndex = new Map();

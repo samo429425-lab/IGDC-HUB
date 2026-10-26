@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.11.0-tiktok-video-cover-fallback";
+const VERSION = "social-preview-metadata-v1.10.0-bilibili-douyin";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -100,14 +100,8 @@ function previewImageUrl(platform, value) {
     if (/\.(?:js|mjs|css|map|json|html?|xml|woff2?|ttf|otf|eot)(?:$|[?#])/i.test(raw)) return "";
     if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(full)) return "";
 
-    if (platform === "tiktok") {
-      if (/(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/|\/obj\/tiktok-web-common|\/gando_libs\/)/i.test(path)) return "";
-      // The contentUrl itself is HTML, never a thumbnail. Provider image CDN
-      // origins are checked before a server-side relay is allowed to fetch.
-      const tikCdn = /(?:^|\.)(?:tiktokcdn(?:-[a-z0-9-]+)?\.com|tiktokcdn-us\.com|ibytedtos\.com|byteimg\.com|muscdn\.com|tiktokcdn\.net)$/i.test(host);
-      if (!tikCdn && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path + url.search)) return "";
-      if (/(?:^|\.)tiktok\.com$/i.test(host)) return "";
-    }
+    if (platform === "tiktok" &&
+        /(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/)/i.test(path)) return "";
 
     if (platform === "instagram") {
       if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return "";
@@ -264,30 +258,7 @@ function htmlTitle(html) {
   return match ? stripTags(match[1]) : "";
 }
 
-// Only a video-associated public cover is eligible. Never treat TikTok's
-// telemetry SDK, UI icon, or shared website asset as a video thumbnail.
-function tiktokVideoCoverFromHtml(html) {
-  const raw = text(html).slice(0, MAX_HTML_BYTES);
-  const matchers = [
-    /["'](?:originCover|dynamicCover|cover|coverLarger|coverMedium|coverThumb|videoCover|thumbnailUrl|thumbnail_url)["']\s*:\s*["'](https?:[^"'<>\s]{12,2000})["']/gi,
-    /["'](?:origin_cover|dynamic_cover|cover_larger|cover_medium|cover_thumb)["']\s*:\s*["'](https?:[^"'<>\s]{12,2000})["']/gi,
-  ];
-  for (const regex of matchers) {
-    let match;
-    while ((match = regex.exec(raw))) {
-      const decoded = decodeHtml(match[1]).replace(/\\u002F/gi, '/').replace(/\\\//g, '/').replace(/\\u0026/gi, '&');
-      const safe = previewImageUrl('tiktok', decoded);
-      if (safe) return safe;
-    }
-  }
-  return '';
-}
 function htmlImage(html, platform) {
-  // A video cover field beats generic og:image (often the website logo).
-  if (platform === 'tiktok') {
-    const actualCover = tiktokVideoCoverFromHtml(html);
-    if (actualCover) return actualCover;
-  }
   const meta = metaMap(html);
   const metaKeys = [
     "og:image:secure_url", "og:image", "twitter:image", "twitter:image:src",
@@ -447,10 +418,6 @@ function facebookIsVideo(url) {
 function providerEmbedPreviewUrl(platform, contentUrl) {
   try {
     const parsed = new URL(contentUrl);
-    if (platform === "tiktok") {
-      const matched = parsed.pathname.match(/^\/@[^/]+\/video\/(\d{12,})(?:\/|$)/i);
-      return matched ? 'https://www.tiktok.com/embed/v2/' + matched[1] : '';
-    }
     if (platform === "facebook") {
       const base = facebookIsVideo(contentUrl)
         ? "https://www.facebook.com/plugins/video.php"

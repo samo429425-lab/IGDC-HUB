@@ -645,23 +645,9 @@
       pic.dataset.socialThumbFailed = "1";
       // A clearly labelled graphic placeholder remains if the provider denies
       // preview metadata. Do not invent video artwork or block a valid link.
-      if (platform === "tiktok") {
-        const card = pic.closest('a.card');
-        const titleText = safeText(card && card.querySelector('.title') && card.querySelector('.title').textContent).trim();
-        pic.textContent = '';
-        const play = document.createElement('span');
-        play.textContent = '▶';
-        play.style.cssText = 'font-size:20px;color:#a6ecf2;line-height:1';
-        const cap = document.createElement('span');
-        cap.textContent = (titleText || '공개 동영상').slice(0, 65);
-        cap.style.cssText = 'font-size:11px;line-height:1.45;max-width:92%;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden';
-        const note = document.createElement('span');
-        note.textContent = 'TikTok · 영상 미리보기 확인 중';
-        note.style.cssText = 'font-size:9px;opacity:.70';
-        pic.append(play,cap,note);
-      } else {
-        pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : '•';
-      }
+      pic.textContent = platform === "tiktok"
+        ? "TikTok · 미리보기 준비 중"
+        : platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
     }
     if (!sourceThumb && !proxied) { unavailable(); return; }
     pic.dataset.socialThumbLoading = '1';
