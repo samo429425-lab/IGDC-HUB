@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.45.0-spotlight-direct-discovery";
+const VERSION = "sanmaru-social-live-collector-v1.46.0-three-sns-content-first";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -1990,6 +1990,8 @@ function providerRelativePostUrls(platform, html, baseUrl, limit) {
   let source = String(html || "").slice(0, 2000000)
     .replace(/\\u002f/gi, "/")
     .replace(/\\\//g, "/")
+    .replace(/\\u003a/gi, ":")
+    .replace(/\\u0026/gi, "&")
     .replace(/&amp;/gi, "&");
   // TikTok/Douyin may keep content ids inside percent-encoded hydration JSON
   // instead of href attributes. Decode only bounded script payloads; the strict
@@ -2051,10 +2053,12 @@ function providerRelativePostUrls(platform, html, baseUrl, limit) {
     while ((match = rel.exec(source)) && out.length < max) accept("https://www.bilibili.com/video/" + match[1]);
   }
   if (platform === "snapchat" && out.length < max) {
-    // Snapchat may hydrate Spotlight links as JSON-escaped relative paths.
-    // Accept only concrete video IDs; never invent a Spotlight video URL.
-    const rel = /(?:^|["'\s])\/spotlight\/([A-Za-z0-9_-]{8,})(?=[?"'\s/]|$)/gi;
+    // Snapchat may hydrate Spotlight permalinks as JSON-escaped relative paths.
+    // Require a real permalink in the returned HTML; never invent a video ID.
+    const rel = /\/spotlight\/([A-Za-z0-9_-]{8,})(?=[?"'\s/\\}]|$)/gi;
     while ((match = rel.exec(source)) && out.length < max) accept("https://www.snapchat.com/spotlight/" + match[1]);
+    const encoded = /(?:https?%3A%2F%2F)?(?:www\.)?snapchat\.com%2Fspotlight%2F([A-Za-z0-9_-]{8,})/gi;
+    while ((match = encoded.exec(source)) && out.length < max) accept("https://www.snapchat.com/spotlight/" + match[1]);
   }
   return out.slice(0, max);
 }
@@ -2847,8 +2851,35 @@ function registryOnlyFromItem(item, sectionKey, platform, queryText, route) {
 }
 
 async function candidateFromItem(item, sectionKey, platform, queryText, route, registrySeed) {
-  let resolved = await resolveChannelAsset(item, platform, registrySeed);
   const directLatestContentUrl = candidateUrls(item).find((url) => contentKind(platform, url)) || "";
+  // These three providers often block anonymous profile lookups, even after
+  // returning a genuine post/video URL. Do not spend the Netlify request's
+  // entire resolution budget on a *supplementary creator profile* before the
+  // already validated content can reach the candidate ledger. Never fabricate
+  // a post ID or approve it automatically. Other SNS retain their old path.
+  const contentFirst = directLatestContentUrl &&
+    (platform === "snapchat" || platform === "bilibili" || platform === "douyin");
+  let resolved;
+  if (contentFirst) {
+    const channelUrl = Policy.normalizeUrl(item && (item.channelUrl || item.channel_url || ""));
+    const channel = channelUrl && Policy.platformFromHost(channelUrl) === platform &&
+      ChannelLink.resolve(channelUrl, { platform, title: firstText([item && item.creatorName, item && item.title]) });
+    const registryChannel = registrySeed && registrySeed.url &&
+      ChannelLink.resolve(registrySeed.url, { platform, title: firstText([registrySeed.title, registrySeed.handle]) });
+    const verifiedChannel = channel && channel.ok ? channel :
+      (registryChannel && registryChannel.ok ? registryChannel : null);
+    resolved = {
+      ok: true, platform, entityKind: verifiedChannel && verifiedChannel.entityKind || "public_content",
+      channelUrl: verifiedChannel && verifiedChannel.channelUrl || "",
+      evidenceUrl: directLatestContentUrl, promotedFromContent: false,
+      needsEnrichment: "", suggestedTitle: "",
+      latestContentUrl: directLatestContentUrl,
+      latestContentKind: contentKind(platform, directLatestContentUrl),
+      latest: {}, enrichment: {}, contentOnly: true
+    };
+  } else {
+    resolved = await resolveChannelAsset(item, platform, registrySeed);
+  }
   // Non-YouTube platforms frequently expose a real public post/video URL while
   // hiding the creator/profile identity from anonymous metadata. Keep that real
   // content candidate instead of collapsing the entire section to zero. YouTube
@@ -3086,8 +3117,20 @@ async function resolveSearchCandidates(searchResults, sectionKey, platform, rout
     latestContentPriority(left.item, platform) - latestContentPriority(right.item, platform) ||
     left.order - right.order
   );
+  // Deduplicate *before* applying the resolution cap. SearchBank and native
+  // providers frequently return the same video 20+ times, leaving every new
+  // Bilibili/Douyin hit beyond the old slice(0, 40) cap.
+  const uniqueInputs = [];
+  const seenInputUrls = new Set();
+  for (const entry of inputs) {
+    const actual = candidateUrls(entry.item).find((url) => contentKind(platform, url));
+    const key = actual && actual.toLowerCase();
+    if (key && seenInputUrls.has(key)) continue;
+    if (key) seenInputUrls.add(key);
+    uniqueInputs.push(entry);
+  }
   const limit = Math.max(target, Math.min(48, target * 4));
-  const selectedInputs = inputs.slice(0, limit);
+  const selectedInputs = uniqueInputs.slice(0, limit);
   const converted = new Array(selectedInputs.length);
   const deadline = Date.now() + (platform === "tiktok" ? TIKTOK_CHANNEL_RESOLUTION_BUDGET_MS : CHANNEL_RESOLUTION_BUDGET_MS);
   let cursor = 0;
@@ -3663,6 +3706,7 @@ exports.__test = {
   genericNativeHtmlSearch,
   nativeDiscoveryItem,
   resolveSearchCandidates,
+  candidateFromItem,
   decodeSearchRedirectTarget,
   decodeXml
 };
