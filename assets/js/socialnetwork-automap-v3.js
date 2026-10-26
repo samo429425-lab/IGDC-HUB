@@ -518,6 +518,9 @@
 .thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-loading="1"]{position:relative;background:linear-gradient(120deg,#e8eef7,#f4f7fb,#e8eef7)!important;overflow:hidden}
 .thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-loading="1"]::after{content:"";position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);border:1px solid #c8d5e6;border-radius:50%;background:rgba(255,255,255,.8);pointer-events:none}
 .thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-failed="1"]{font-size:12px!important;color:#718198;background:#f0f4f9!important}
+.thumb-grid[data-psom-key="social-tiktok"] a.card:not([data-sample="1"]) .pic[data-social-thumb-failed="1"]{display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;flex-direction:column!important;gap:7px!important;padding:28px 8px 8px!important;box-sizing:border-box!important;font-size:11px!important;letter-spacing:.02em!important;line-height:1.3!important;color:#d9e7ee!important;background:linear-gradient(125deg,#17212f 0%,#173642 50%,#20273c 100%)!important;position:relative;overflow:hidden}
+.thumb-grid[data-psom-key="social-tiktok"] a.card:not([data-sample="1"]) .pic[data-social-thumb-failed="1"]::before{content:"▶";position:absolute;top:22%;left:50%;transform:translateX(-50%);display:grid;place-items:center;width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.10);color:#f3f8fc;font-size:13px;padding-left:2px;box-sizing:border-box}
+
 `;
     document.head.appendChild(style);
   }
@@ -604,9 +607,7 @@
     if (!value) return true;
     try {
       const uri = new URL(value);
-      const host = uri.hostname.toLowerCase();
-      return /(^|\.)(?:tiktokcdn(?:-us)?\.com|tiktokv\.com)$/i.test(host) &&
-        /(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/)/i.test(uri.pathname);
+      return /(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/)/i.test(uri.pathname);
     } catch (_) { return true; }
   }
 
@@ -642,8 +643,10 @@
     function unavailable() {
       delete pic.dataset.socialThumbLoading;
       pic.dataset.socialThumbFailed = "1";
+      // A clearly labelled graphic placeholder remains if the provider denies
+      // preview metadata. Do not invent video artwork or block a valid link.
       pic.textContent = platform === "tiktok"
-        ? "TikTok · Preview unavailable"
+        ? "TikTok · 미리보기 준비 중"
         : platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
     }
     if (!sourceThumb && !proxied) { unavailable(); return; }

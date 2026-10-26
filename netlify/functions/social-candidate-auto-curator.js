@@ -11,6 +11,7 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
+const SocialPreview = require("./social-preview-metadata");
 
 const VERSION =
   "social-candidate-auto-curator-v1.5.2-section-complete-read";
@@ -53,31 +54,18 @@ function rowSourceUrl(row) {
   return text(row && (row.source_url || row.sourceUrl));
 }
 function realThumbnail(row) {
-  const value = rowThumbnail(row);
-  if (!/^https:\/\//i.test(value)) return false;
-  if (value === rowSourceUrl(row)) return false;
-  try {
-    const url = new URL(value);
-    const host = url.hostname.toLowerCase();
-    const platform = text(row && row.platform).toLowerCase();
-    const pageHosts = {
-      facebook: /(^|\.)facebook\.com$/i,
-      instagram: /(^|\.)instagram\.com$/i,
-      tiktok: /(^|\.)tiktok\.com$/i,
-      bilibili: /(^|\.)bilibili\.com$|^b23\.tv$/i,
-      douyin: /(^|\.)douyin\.com$/i,
-    };
-    const imagePath = /\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(url.pathname + url.search);
-    if (pageHosts[platform] && pageHosts[platform].test(host) && !imagePath) return false;
-    if (/(?:^|\.)fbcdn\.net$/i.test(host)) {
-      const token = url.searchParams.get("oe");
-      if (token && /^[0-9a-f]+$/i.test(token)) {
-        const expiry = parseInt(token, 16) * 1000;
-        if (Number.isFinite(expiry) && expiry <= Date.now() + 24 * 60 * 60 * 1000) return false;
-      }
-    }
-    return true;
-  } catch (_error) { return false; }
+  // Use the exact published-image validity gate rather than merely checking
+  // whether an HTTPS string exists. TikTok program/static SDK assets must not
+  // be mistaken for a real video's cover image.
+  const platform = text(row && row.platform).toLowerCase().replace(/^social-/, "");
+  const published = typeof SocialStore.publishableThumbnail === "function"
+    ? text(SocialStore.publishableThumbnail(row)) : "";
+  if (!published) return false;
+  if (platform === "tiktok" && SocialPreview &&
+      typeof SocialPreview.previewImageUrl === "function") {
+    return !!SocialPreview.previewImageUrl(platform, published);
+  }
+  return true;
 }
 
 function eligible(row, route, aiPolicy) {
@@ -115,9 +103,11 @@ function eligible(row, route, aiPolicy) {
     raw.channelAsset !== true
   )
     return { ok: false, reason: "channel_asset_required" };
-  // Do not reject a verified latest-content row only because a platform
-  // temporarily withholds anonymous thumbnail metadata. The collector keeps
-  // the row retryable and later passes can enrich the preview image.
+  // AI replacement is a public-thumbnail-gated workflow. Discovery may keep
+  // content with a missing image in the private candidate ledger, but the AI
+  // must never consume a visible front slot with an unresolved preview.
+  if (SocialStore.assetClassOf(row) === "latest_content" && !realThumbnail(row))
+    return { ok: false, reason: "real_content_thumbnail_unavailable" };
   const aiVerdict = AIPolicy.evaluate(row, normalizedAI);
   if (!aiVerdict.ok) return { ok: false, reason: aiVerdict.reason };
   // Country/IP is a ranking preference, never a hard creator-origin filter.
@@ -241,6 +231,39 @@ exports.handler = async function (event) {
       selected.forEach((row) => approvedIds.push(text(row.id)));
     });
 
+    // Previously approved but image-less latest-content rows cannot remain
+    // published just because they were approved before today's AI run.
+    // Return ONLY those unresolved rows to the ordinary retryable candidate
+    // pool; never delete a ledger record or override a manual hold/block.
+    const approvedSet = new Set(approvedIds.filter(Boolean));
+    const previewUnavailableIds = (Array.isArray(rows) ? rows : [])
+      .filter((row) => {
+        const section = text(row && row.section_key);
+        if (requestedSection && section !== requestedSection) return false;
+        if (!SocialStore.Policy.ALLOWED_SECTIONS.has(section)) return false;
+        const raw = SocialStore.plain(row && row.raw);
+        if (SocialStore.assetClassOf(row) !== "latest_content") return false;
+        if (reviewKey(row) !== "approved" || row.candidate_only !== false) return false;
+        if (approvedSet.has(text(row.id))) return false;
+        if (/^(hold|held|content_hold|replacement_requested|replacement_waiting|rejected|delete_waiting)$/.test(reviewKey(row)) ||
+            /^(hold|replacement_waiting|manual_exclude)$/.test(text(raw.placementOverride).toLowerCase())) return false;
+        return !realThumbnail(row);
+      })
+      .map((row) => text(row && row.id))
+      .filter(Boolean);
+    let previewDeferred = 0;
+    for (const group of chunks(previewUnavailableIds, 100)) {
+      const changed = await SocialStore.updateCandidates(group, {
+        review_status: "pending",
+        candidate_only: true,
+        rotation_eligible: false,
+        review_note: "ai_thumbnail_unavailable_retryable_candidate",
+        updated_by: by,
+        updated_at: now,
+      });
+      previewDeferred += Array.isArray(changed) ? changed.length : group.length;
+    }
+
     const patch = {
       review_status: "approved",
       verification_status: "approved_for_snapshot",
@@ -284,6 +307,8 @@ exports.handler = async function (event) {
       scanned: Array.isArray(rows) ? rows.length : 0,
       autoRegistered: approvedIds.length,
       updated,
+      thumbnailMissingDeferred: previewDeferred,
+      thumbnailMissingIds: previewUnavailableIds.slice(0, 100),
       bySection,
       placement,
       rejectedCount: rejected.length,

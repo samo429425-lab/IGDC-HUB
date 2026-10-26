@@ -1221,6 +1221,8 @@ function providerBrandThumbnail(platform, value) {
       if (/instagram[^/]*(?:logo|glyph)|(?:logo|glyph)[^/]*instagram/i.test(path)) return true;
     }
     if (platform === "facebook" && /(^|\.)facebook\.com$/i.test(host) && !/\.(?:avif|webp|jpe?g|png|gif)(?:$|[?#])/i.test(path)) return true;
+    if (platform === "tiktok" &&
+        /(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/)/i.test(path)) return true;
     return false;
   } catch (_error) { return true; }
 }
