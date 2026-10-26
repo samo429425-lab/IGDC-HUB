@@ -100,6 +100,9 @@ function previewImageUrl(platform, value) {
     if (/\.(?:js|mjs|css|map|json|html?|xml|woff2?|ttf|otf|eot)(?:$|[?#])/i.test(raw)) return "";
     if (/(?:^|[\/_-])(?:logo|favicon|sprite|glyph|appicon|app-icon|brandmark|wordmark|icon|badge|spinner|loading|default[-_]?image|placeholder|blank)(?:[\/_\-.]|$)/i.test(full)) return "";
 
+    if (platform === "tiktok" && /(^|\.)(?:tiktokcdn(?:-us)?\.com|tiktokv\.com)$/i.test(host) &&
+        /(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/)/i.test(path)) return "";
+
     if (platform === "instagram") {
       if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return "";
       if (/\/rsrc\.php(?:$|[/?#])/i.test(path)) return "";

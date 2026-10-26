@@ -600,10 +600,34 @@
     return title.replace(/\s+/g, " ").trim();
   }
 
+  function invalidTikTokCover(value) {
+    if (!value) return true;
+    try {
+      const uri = new URL(value);
+      const host = uri.hostname.toLowerCase();
+      return /(^|\.)(?:tiktokcdn(?:-us)?\.com|tiktokv\.com)$/i.test(host) &&
+        /(?:\/slardar(?:-web)?\/|\/sdk-web\/|\/plugins?(?:\/|$)|\/tiktok-web-common[^/]*\/)/i.test(uri.pathname);
+    } catch (_) { return true; }
+  }
+
+  function publicTikTokVideoUrl(value) {
+    try {
+      const uri = new URL(value);
+      if (uri.protocol !== "https:") return false;
+      const host = uri.hostname.toLowerCase();
+      if (host === "vm.tiktok.com" || host === "vt.tiktok.com") return true;
+      if (!/(^|\.)tiktok\.com$/i.test(host)) return false;
+      return /^\/@[^/]+\/video\/\d+\/?$/i.test(uri.pathname) ||
+        /^\/(?:video|v|t)\/[^/]+/i.test(uri.pathname);
+    } catch (_) { return false; }
+  }
+
   function thumbnailRenderUrl(platform, contentUrl, thumb) {
-    if (!thumb) return "";
+    // Existing relay can resolve the original TikTok video by oEmbed/public
+    // metadata even when a legacy Release has no usable thumbnail URL.
+    if (!thumb && !(platform === "tiktok" && publicTikTokVideoUrl(contentUrl))) return "";
     if (["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].indexOf(platform) < 0) return thumb;
-    var q = new URLSearchParams({ platform: platform, url: contentUrl || "", thumb: thumb });
+    var q = new URLSearchParams({ platform: platform, url: contentUrl || "", thumb: thumb || "" });
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }
 
@@ -613,12 +637,16 @@
     pic.style.backgroundSize = "";
     pic.style.backgroundPosition = "";
     while (pic.firstChild) pic.removeChild(pic.firstChild);
-    if (!thumb) {
+    const sourceThumb = platform === "tiktok" && invalidTikTokCover(thumb) ? "" : thumb;
+    const proxied = thumbnailRenderUrl(platform, contentUrl, sourceThumb);
+    function unavailable() {
       delete pic.dataset.socialThumbLoading;
-      pic.dataset.socialThumbFailed = '1';
-      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
-      return;
+      pic.dataset.socialThumbFailed = "1";
+      pic.textContent = platform === "tiktok"
+        ? "TikTok · Preview unavailable"
+        : platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
     }
+    if (!sourceThumb && !proxied) { unavailable(); return; }
     pic.dataset.socialThumbLoading = '1';
     delete pic.dataset.socialThumbFailed;
     var img = document.createElement("img");
@@ -640,21 +668,19 @@
     img.style.display = "block";
     img.style.objectFit = "cover";
     img.style.objectPosition = "center";
-    var proxied = thumbnailRenderUrl(platform, contentUrl, thumb);
-    img.dataset.directThumb = thumb;
-    img.src = proxied;
     img.addEventListener("error", function () {
-      if (img.dataset.triedDirect !== "1" && proxied !== thumb) {
+      // Retry only a genuine image URL. Never fall back to the TikTok telemetry
+      // SDK/plugin file or to an empty URL (which can reload the page itself).
+      if (sourceThumb && img.dataset.triedDirect !== "1" && proxied !== sourceThumb) {
         img.dataset.triedDirect = "1";
-        img.src = thumb;
+        img.src = sourceThumb;
         return;
       }
       if (img.parentNode === pic) pic.removeChild(img);
-      delete pic.dataset.socialThumbLoading;
-      pic.dataset.socialThumbFailed = '1';
-      pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
+      unavailable();
     });
     pic.appendChild(img);
+    img.src = proxied || sourceThumb;
   }
 
   function paintMainCard(card, it, eagerThumb) {
@@ -674,7 +700,8 @@
     const platform = safeText(it && (it.platform || (it.social && it.social.platform) || (it.source && it.source.platform))).toLowerCase().replace(/^social-/, "");
     const title = cleanCardTitle(it, platform);
     const desc = cardIdentity(it) || " ";
-    const thumb = pickThumb(it);
+    const rawThumb = pickThumb(it);
+    const thumb = platform === "tiktok" && invalidTikTokCover(rawThumb) ? "" : rawThumb;
 
     const latestContentUrl = safeText(it && (it.latestContentUrl || it.latest_content_url || (it.social && it.social.latestContentUrl)));
     const viewerUrl = safeText(it && (it.viewerUrl || it.permalink || it.href || it.link));
