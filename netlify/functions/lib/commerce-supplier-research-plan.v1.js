@@ -11,7 +11,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const VERSION = "commerce-supplier-research-plan-v1.7.0-balanced-consumer-supplier-lanes";
+const VERSION = "commerce-supplier-research-plan-v1.7.1-global-paid-digital-mobile-appliance-focus";
 
 function text(value){ return String(value == null ? "" : value).trim(); }
 function lower(value){ return text(value).toLowerCase(); }
@@ -98,9 +98,10 @@ const KR_PRIORITY_QUERIES = Object.freeze([
 ]);
 const KR_BALANCED_PRIORITY_QUERIES = Object.freeze([
   // Guaranteed discovery slots within the existing 30-query per-cycle budget.
-  "대한민국 유료 전자책 eBook ePub 디지털도서 전자책 단권 상세 상품 판매 서점 공식 구매 다운로드 ISBN",
-  "대한민국 유료 웹툰 디지털만화 만화 단행본 회차 구매 대여 이용권 공식 콘텐츠 플랫폼 출판사",
+  "대한민국 유료 전자책 eBook ePub 디지털도서 유료 웹툰 디지털만화 개별 작품 판매 대여 서점 출판사 공식 구매 다운로드 ISBN",
+  "대한민국 소형가전 휴대용 선풍기 가습기 공기청정기 미니 청소기 전기포트 블렌더 토스터 에어프라이어 개별 상품 상세 구매 제조사 직영몰",
   "대한민국 스마트폰 모바일 액세서리 케이스 맥세이프 무선충전기 GaN 충전기 보조배터리 USB-C 멀티허브 모바일 마이크 공식몰",
+  "대한민국 유료 웹툰 디지털만화 웹소설 회차 개별 구매 대여 이용권 공식 출판사 작가 저작권자 판매 페이지",
   "대한민국 화장품 스킨케어 메이크업 헤어 바디 뷰티 브랜드 책임판매업자 제조사 공식몰 직영몰 배송 반품 환불 고객센터",
   "대한민국 블루투스 이어폰 이어버드 헤드폰 스피커 마이크 태블릿 충전기 보조배터리 액션카메라 스마트워치 미니프로젝터 소형전자 제조사 브랜드 공식몰",
   "대한민국 소형가전 선풍기 써큘레이터 가습기 제습기 공기청정기 청소기 전기포트 블렌더 커피메이커 제조사 브랜드 공식몰",
@@ -486,9 +487,9 @@ function restoredKrRows(geo, sourceTerms, maxQueries){
     if(/지자체|농업기술센터|생산자 명단|기업 제품/.test(query)) return "public_directory_bridge";
     if(/화장품|스킨케어|색조화장품|메이크업|뷰티기기|LED마스크|갈바닉/.test(query)) return "beauty_focus";
     if(/스마트폰|휴대폰|맥세이프|모바일 액세서리|GaN 충전기/i.test(query)) return "mobile_accessories_focus";
-    if(/블루투스|이어폰|이어버드|헤드폰|스피커|마이크|태블릿|USB|충전기|보조배터리|웹캠/.test(query)) return "electronics_focus";
-    if(/전자책|디지털도서|웹툰|디지털만화|eBook|ePub|ISBN/i.test(query)) return "digital_books_focus";
+    if(/전자책|디지털도서|웹툰|웹소설|디지털만화|eBook|ePub|ISBN/i.test(query)) return "digital_books_focus";
     if(/소형가전|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피메이커|커피머신|에어프라이어/.test(query)) return "small_appliance_focus";
+    if(/블루투스|이어폰|이어버드|헤드폰|스피커|마이크|태블릿|USB|충전기|보조배터리|웹캠/.test(query)) return "electronics_focus";
     if(/건강식품|건강식재료|영양식|곡물|견과|약초|꿀|발효식품/.test(query)) return "health_food_focus";
     if(/김치|장류|고추장|된장|쌈장|간장|젓갈|양념|소스|식용유|식초|가공식품|전통식품|반찬/.test(query)) return "food_focus";
     if(/쌀|잡곡|콩|참깨|들깨|고춧가루|마늘|양파|버섯|농산물|수산물|임산물|농가|농장|농협|수협|산림조합/.test(query)) return "agri_food_focus";
@@ -528,11 +529,12 @@ function buildCountryRows(geo, locales, sourceTerms, maxQueries){
   };
   const focusLocale=localeRows[0]||"en",focusPack=packForLocale(focusLocale),focusName=localCountryName(country,focusLocale,first(geo&&geo.countryName,country));
   const focusedCommerceQueries=[
-    ["digital_books_focus","paid ebooks EPUB digital books ISBN individual book purchase publisher ebook store digital comics paid webtoon episodes licensed official platform"],
+    ["digital_books_focus","paid ebooks EPUB digital books and paid webtoon digital comics licensed individual work purchase rental publisher official product store"],
+    ["small_appliance_focus","small home appliances portable fan desk fan humidifier dehumidifier air purifier mini vacuum electric kettle toaster blender manufacturer direct online store product buy"],
     ["mobile_accessories_focus","mobile phone accessories cases USB-C power bank MagSafe Qi wireless charger GaN charger tablet pen stylus mobile microphone gimbal manufacturer brand official store"],
+    ["digital_books_focus","paid webtoon digital comics licensed episodes individual chapters purchase rental publisher creator official shop"],
     ["beauty_focus","beauty skincare makeup foundation cushion BB CC lipstick lip tint mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance nail hair body grooming beauty device electric shaver hair styler LED mask galvanic facial massager scalp care manufacturer brand official store"],
     ["electronics_focus","small electronics bluetooth earbuds earphones headphones speakers microphone tablet USB hub flash drive cable charger power bank webcam manufacturer brand official store"],
-    ["small_appliance_focus","small home appliances portable fan desk fan handheld fan circulator humidifier dehumidifier air purifier vacuum electric kettle toaster blender coffee maker manufacturer brand official store"],
     ["household_essentials_focus","household essentials tissue wet wipes detergent cleaner hygiene bathroom cleaning storage kitchen bedding daily consumables manufacturer brand official store"],
     ["health_food_focus","health foods healthy ingredients grains nuts mushrooms herbs honey tea fermented foods producer manufacturer official store"],
     ["fashion_focus","apparel clothing shoes bags fashion accessories brand manufacturer factory official store"],
