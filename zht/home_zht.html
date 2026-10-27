@@ -1094,29 +1094,6 @@ body.show-right .right-panel,body.show-right .ad-panel{transform:none}
 }
 </style>
 <style>
-/* === OUR SITES (between news links and hot items) === */
-.our-sites-wrap{margin:24px 0 22px 0;padding:12px 14px;border-radius:12px;background:rgba(0,0,0,0.02)}
-.our-sites-title{margin:8px 4px 16px 4px;font-size:1.5rem;color:#0b3a6f;font-weight:700}
-.our-sites-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.our-site-btn{
-  display:flex;align-items:center;justify-content:center;
-  min-height:75px;border-radius:10px;text-decoration:none;
-  font-weight:900;letter-spacing:.2px;color:#fff; font-size:20px;
-  background: linear-gradient(90deg, #6A5AE0 0%, #12B28C 50%, #E0A21B 100%);
-  box-shadow: 0 6px 14px rgba(0,0,0,.08);
-  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
-}
-.our-site-btn:hover{transform:translateY(-2px);box-shadow:5 8px 18px rgba(0,0,0,.12);opacity:.96}
-@media (max-width: 992px){
-  .our-sites-grid{grid-template-columns:repeat(2,1fr)}
-  .our-site-btn{min-height:60px;border-radius:12px}
-}
-@media (max-width: 600px){
-  .our-sites-grid{grid-template-columns:repeat(2,1fr)}
-  .our-site-btn{min-height:54px;border-radius:12px}
-  .our-sites-title{font-size:1.05rem}
-}
-</style><style>
 /* === GHOST-PROOF NEWS ARROWS ================================================= */
 #newsRow1, #newsRow2, #newsRow3, #newsRow4, .news-row { position: relative; }
 #newsRow1 .row-arrow, #newsRow2 .row-arrow, #newsRow3 .row-arrow, #newsRow4 .row-arrow, .news-row .row-arrow {
@@ -2624,17 +2601,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </div>
 </section>
 <!-- ========== SHOPPING (Bottom) ========== -->
-<section aria-label="本站連結" class="our-sites-wrap">
-<div class="section-title-row ph-row"><h2 class="our-sites-title ph-title">前往平台中心</h2><div class="bc-row"><a class="bc-btn" href="https://metamask.io" rel="noopener" target="_blank">MetaMask</a><a class="bc-btn" href="https://opensea.io" rel="noopener" target="_blank">OpenSea</a><a class="bc-btn" href="https://app.uniswap.org" rel="noopener" target="_blank">Uniswap</a><a class="bc-btn" href="https://phantom.app" rel="noopener" target="_blank">Phantom</a></div></div>
-<div class="our-sites-grid">
-<a class="our-site-btn" href="networkhub_zht.html">市場中心</a>
-<a class="our-site-btn" href="distributionhub_zht.html">分銷中心</a>
-<a class="our-site-btn" href="socialnetwork_zht.html">社交中心</a>
-<a class="our-site-btn" href="mediahub_zht.html">媒體中心</a>
-<a class="our-site-btn" href="tour_zht.html">旅遊·觀光</a>
-<a class="our-site-btn center-donation-disabled"> </a>
-</div>
-</section>
 <section aria-label="熱門購物精選" class="shopping-section">
 <h3 class="shopping-title">🔥 熱門購物精選</h3>
 <div class="shopping-rows">
