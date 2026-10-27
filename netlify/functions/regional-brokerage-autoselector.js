@@ -980,8 +980,13 @@ function travelDetailEvidence(html,pageUrl,exact){
     if(!name)continue;
     const explicit=first(node&&node.url,node&&node["@id"],plain(node&&node.mainEntityOfPage)["@id"]),resolved=ProductRanking.canonicalProductUrl(absoluteHttpUrl(pageUrl,explicit)||canonical);
     if(resolved&&canonical&&resolved!==canonical)continue;
-    const offer=productOffer(node),image=imageFromValue(node&&node.image,pageUrl);
-    if(image||node&&node.offers||offer.price){structured=true;break;}
+    const offer=productOffer(node),actions=array(node&&node.potentialAction);
+    // A listing, travel blog, tourist attraction or hotel information record
+    // may all have schema.org names and photos. Only offers/reservation action
+    // *on the specific detail record* are proof of bookable inventory.
+    const actionTypes=actions.concat(node&&node.potentialAction&&!Array.isArray(node.potentialAction)?[node.potentialAction]:[])
+      .map(value=>nodeType(value)).join(' ');
+    if(node&&node.offers||offer.price||/\b(?:ReserveAction|BuyAction|OrderAction)\b/i.test(actionTypes)){structured=true;break;}
   }
   const visible=stripHtml(source.slice(0,700000));
   const bookingAction=/(?:book\s*now|reserve\s*now|check\s*availability|select\s*(?:a\s*)?room|choose\s*(?:a\s*)?room|buy\s*(?:a\s*)?ticket|tickets?\s*(?:from|available)|예약하기|예약\s*가능|객실\s*선택|객실\s*예약|예매하기|티켓\s*구매|입장권\s*구매)/i.test(visible);
@@ -1530,6 +1535,15 @@ async function inspectProductCandidate(item,params){
   if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
   const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,6000,3500,8000),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
     const page=await fetchProductHtml(productUrl,controller);if(!page.ok){const retryable=retryableProviderStatus(page.status);return Object.assign({},row,{researchStatus:retryable?"inspection_deferred":page.status,productPageLive:false,inspectionComplete:!retryable,inspectionDeferred:retryable,inspectedAt:new Date().toISOString(),inspectionError:retryable?{code:text(page.status)||"TRANSIENT_FETCH",message:page.detail||"temporary product-page fetch failure"}:row.inspectionError});}
+    // A successful HTTP 200 can still be a publisher/news directory, a tour
+    // provider's book/catalog, or a redirect to a merchant homepage. Neither
+    // site-wide OG art nor a listing of products makes this *individual* item.
+    // Quarantine it without deleting the supplier or the original research ID.
+    if(!ProductRanking.isSpecificProductUrl(productUrl)||!ProductRanking.isSpecificProductUrl(page.url))return Object.assign({},row,{
+      researchStatus:'non_product_collection_page',productPageLive:false,inspectionComplete:true,
+      productEvidenceReviewRequired:true,productMediaReviewReasons:['individual_product_detail_required'],
+      inspectedAt:new Date().toISOString(),publicPublication:false,automaticImport:false
+    });
     if(isNonCommercialReferencePage(page.html,page.url))return Object.assign({},row,{
       researchStatus:'non_commercial_reference',productPageLive:false,inspectionComplete:true,
       productEvidenceReviewRequired:true,productMediaReviewReasons:['non_commercial_reference_not_retail_product'],

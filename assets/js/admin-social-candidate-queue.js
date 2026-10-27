@@ -797,6 +797,31 @@
     }
     return "";
   }
+  function tiktokVideoPlayerUrlForAdmin(link) {
+    try {
+      var u = new URL(link);
+      if (!/(^|\.)tiktok\.com$/i.test(u.hostname)) return "";
+      var m = u.pathname.match(/\/video\/(\d{12,24})(?:\/|$)/);
+      return m ? "https://www.tiktok.com/player/v1/" + m[1] + "?autoplay=0&controls=0&description=0&music_info=0" : "";
+    } catch (_error) { return ""; }
+  }
+  // The same real video plays in a browser even when the signed thumbnail CDN
+  // is expired. Load its first-party preview ONLY if image recovery failed.
+  window.igdcSocialThumbError = function (img) {
+    if (!img) return;
+    if (img.dataset.directThumb && img.dataset.triedDirect !== "1") {
+      img.dataset.triedDirect = "1";
+      img.src = img.dataset.directThumb;
+      return;
+    }
+    img.style.display = "none";
+    var fallback = img.nextElementSibling;
+    if (!fallback) return;
+    fallback.style.display = "grid";
+    var frame = fallback.querySelector("iframe[data-preview-src]");
+    if (frame && !frame.src) frame.src = frame.dataset.previewSrc;
+    if (frame) frame.style.display = "block";
+  };
   function thumb(r, mode) {
     var url = thumbnailOf(r, mode);
     var platform = lower(r.platform || r.sectionKey).replace(/^social-/, "");
@@ -813,12 +838,20 @@
         : "";
     var initial = relay || url;
     var backup = relay && /^https:\/\//i.test(url) && !genericProviderPreviewThumb(platform, url) ? url : "";
-    var fallback = '<span class="candidate-thumb-fallback"' + (initial ? ' style="display:none"' : "") + '>' +
-      esc(r.platform || "SNS") + "<br>" + esc(r.creatorName || r.title || "공개 미리보기") + '</span>';
-    if (!initial || !/^(?:https:\/\/|\/\.netlify\/functions\/)/i.test(initial)) return fallback;
+    var playerUrl = platform === "tiktok" && mode !== "registry" ? tiktokVideoPlayerUrlForAdmin(postUrl) : "";
+    var player = playerUrl
+      ? '<iframe title="TikTok real video preview" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation" allow="encrypted-media; fullscreen" style="display:none;width:100%;height:100%;border:0;pointer-events:none" data-preview-src="' + esc(playerUrl) + '"></iframe>'
+      : "";
+    var fallback = '<span class="candidate-thumb-fallback" style="' +
+      (initial ? "display:none;" : "display:grid;") +
+      (player ? "padding:0;" : "") + '">' + player +
+      (player ? "" : (esc(r.platform || "SNS") + "<br>" + esc(r.creatorName || r.title || "공개 미리보기"))) + '</span>';
+    if (!initial || !/^(?:https:\/\/|\/\.netlify\/functions\/)/i.test(initial)) {
+      return player ? fallback.replace('data-preview-src="' + esc(playerUrl) + '"', 'src="' + esc(playerUrl) + '"').replace('display:none;width:100%', 'display:block;width:100%') : fallback;
+    }
     return '<img loading="lazy" referrerpolicy="no-referrer" src="' + esc(initial) +
       '" data-direct-thumb="' + esc(backup) +
-      '" alt="" onerror="if(this.dataset.directThumb &amp;&amp; this.dataset.triedDirect!==\'1\'){this.dataset.triedDirect=\'1\';this.src=this.dataset.directThumb;}else{this.style.display=\'none\';this.nextElementSibling.style.display=\'grid\';}">' + fallback;
+      '" alt="" onerror="window.igdcSocialThumbError(this)">' + fallback;
   }
   function rebuildLatestContentIndex(sourceRows) {
     latestContentIndex = new Map();
@@ -3498,8 +3531,74 @@
     }
     return updated;
   }
+  // Publication is not research. Explicitly run a fresh public-content search
+  // before curation, even when a section already has 120 candidates. A full
+  // candidate pool must never block discovery of newly uploaded TikTok videos.
+  // The final publish button is not itself a collector. Perform bounded,
+  // independent *live* discovery first. An unsuccessful search must never
+  // delete already-published videos or silently claim they were refreshed.
+  async function refreshLiveCandidatesForPublish(sectionKeys) {
+    var target = Array.from(new Set((sectionKeys || []).filter(function (key) {
+      return order.indexOf(key) >= 0;
+    })));
+    var report = { at: new Date().toISOString(), sections: {}, failed: [] };
+    // No influencer registry seeds: real content discovery comes first.
+    // Two independent TikTok policy searches help overcome a stale first page.
+    // Other SNS get one bounded batch to avoid overwhelming Netlify functions.
+    await Promise.all(target.map(async function (key) {
+      var passes = key === "social-tiktok" ? [0, 1] : [0];
+      var state = { ok: true, requests: 0, searched: 0, submitted: 0, saved: 0, failures: [] };
+      for (var i = 0; i < passes.length; i++) {
+        try {
+          var response = await post(LIVE, {
+            action: "collect_live", dryRun: false,
+            sectionKey: key, contentFirst: true, registryOnly: false,
+            registrySweepDone: true, qualitySweep: true,
+            queryPasses: 1, queryCursor: passes[i],
+            batchSize: 10, limit: 10,
+            countryCode: selectedCountry(), scopeMode: scopeMode(),
+            regionId: text($("collectorRegion") && $("collectorRegion").value),
+            languages: text($("collectorLanguages") && $("collectorLanguages").value)
+          });
+          var live = response && response.liveCollection || {};
+          var gateway = live.gateway || {};
+          if (response.ok !== true || gateway.ok !== true) {
+            var problem = new Error(text(response.message || response.error || gateway.message || gateway.error || "후보 DB 저장 응답 실패"));
+            problem.status = Number(gateway.statusCode || 0) || null;
+            problem.stage = "candidate_storage";
+            throw problem;
+          }
+          state.requests++;
+          state.searched += Number(live.searchedRows || 0);
+          state.submitted += Number(live.submittedCandidates || 0);
+          state.saved += Number(gateway.saved || 0);
+        } catch (error) {
+          state.ok = false;
+          state.failures.push(collectorFailureRecord(error, key, "pre_publish_live_search"));
+          break;
+        }
+      }
+      report.sections[key] = state;
+      if (!state.ok) report.failed.push(key);
+    }));
+    // Keep this report in the administrator diagnostics rather than adding
+    // new files or overwriting the normal full research resume cursor.
+    diagnostic({ ok: report.failed.length === 0, reportType: "social-pre-publish-live-refresh", report: report });
+    var tiktok = report.sections["social-tiktok"];
+    if (tiktok && !tiktok.ok) {
+      show("TikTok 최신 리서치 또는 DB 저장 실패: 기존 프론트 영상을 유지하고 게시를 중단합니다. 수집 단계 오류를 관리자 진단에서 확인하세요.", "warn");
+      return false;
+    }
+    var saved = target.reduce(function (sum, key) { return sum + Number((report.sections[key] || {}).saved || 0); }, 0);
+    show("최신 영상 검색·저장 점검 완료: DB 저장 " + saved + "개" +
+      (report.failed.length ? "; 실패 " + report.failed.map(label).join(", ") + "(기존 영상은 유지)" : "") +
+      (saved === 0 ? ". 신규 후보가 없으므로 기존 정상 영상을 유지합니다." : ". 신규 후보를 재평가합니다."), "warn");
+    return true;
+  }
   async function prepareFrontPublication(sectionKeys) {
     var keys = Array.isArray(sectionKeys) && sectionKeys.length ? sectionKeys.slice() : order.slice();
+    show(keys.map(label).join(", ") + " 최신 공개 콘텐츠를 먼저 재검색하고 있습니다.", "warn");
+    if (!(await refreshLiveCandidatesForPublish(keys))) return false;
     show(keys.map(label).join(", ") + " 실제 콘텐츠 썸네일을 최종 점검하고 있습니다.", "warn");
     await hydrateFrontPublicationPreviews(keys);
     // Pull back server-side preview repairs before AI registration. This makes
@@ -4118,16 +4217,9 @@
   function openPreview(url) {
     var safeUrl = text(url);
     if (!/^https:\/\//i.test(safeUrl)) return;
-    try {
-      if (previewWindow && !previewWindow.closed) {
-        previewWindow.location.replace(safeUrl);
-        previewWindow.focus();
-      } else {
-        previewWindow = window.open(safeUrl, "igdcSocialChannelPreview");
-      }
-    } catch (_e) {
-      previewWindow = window.open(safeUrl, "igdcSocialChannelPreview");
-    }
+    // Preserve the native browser Back history when opening the real SNS post.
+    // location.replace previously discarded the return route.
+    window.location.assign(safeUrl);
   }
   function sourceAlert(candidateId) {
     var row = rows.filter(function (r) {

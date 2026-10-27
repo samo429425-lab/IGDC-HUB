@@ -348,6 +348,13 @@ function isListOrCampaignUrl(value) {
     try { decodedPath = decodeURIComponent(path); } catch (_error) {}
     if (/(?:^|\/)(?:login|log-in|sign-?in|sign-?up|register|registration|join|회원가입|로그인)(?:\.(?:html?|php|aspx?|jsp))?(?:\/|$)/i.test(decodedPath)
       || /(?:^|\/)(?:account|member|members|user|users|auth|authentication)\/(?:login|sign-?in|sign-?up|register|join)(?:\/|\.|$)/i.test(decodedPath)) return true;
+    // Worldwide commercial-item gate: a publisher, tour operator, news site or
+    // merchant may use a category/listing page with a path that looks like an
+    // individual product. A catalog is NOT a saleable item merely because the
+    // URL is nested below /tour, /book or /news.
+    const genericProviderCollection = /^(?:\/(?:[a-z]{2}(?:-[a-z]{2})?))?\/(?:tour|travel|trips?|vacations?|agency|services?|discover|magazine|blog)\/(?:books?|guides?|articles?|posts?|news|info|information|destinations?|catalog|categories?|search|lists?|index|packages?|offers?|promotions?|hotels?|tickets?|activities)(?:\/)?$/i.test(path) ||
+      /^\/(?:news|press|blog|journal|editorial|articles?)(?:\/|$)/i.test(path) || /^\/media\/(?:news|press|articles?|blog|stories|events)(?:\/|$)/i.test(path);
+    if (genericProviderCollection) return true;
     const detailContext = productDetailPathHint(parsed.pathname);
     const queryProductId = Array.from(parsed.searchParams.entries()).some(([rawKey, rawValue]) => {
       const key = lower(rawKey);
@@ -400,6 +407,9 @@ function isSpecificProductUrl(value) {
   if (productIdFromUrl(url)) return true;
   try {
     const path = lower(new URL(url).pathname);
+    // Localized travel inventory often uses a numeric item ID; the inspected
+    // page must still prove a real booking, so this is discovery-only.
+    if(/\/(?:activit(?:y|ies)|attractions?|experiences?|tours?|tickets?|hotels?|rooms?|properties)\/\d{3,}(?:\/|$)/i.test(path))return true;
     // Travel inventory uses detail URL shapes that differ from retail goods.
     // The service-family path is necessary but not sufficient: generic provider,
     // guide, search, campaign, deal and year/page routes are explicitly rejected.

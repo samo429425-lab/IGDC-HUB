@@ -28,7 +28,7 @@
   var incompleteReviewUi={};
   var reviewClassSelections={verified:{},incomplete:{}};
   var reviewInventoryBusy=false,reviewInventoryKey="";
-  var selectedRegion='',selectedCountry='',selectedSubdivision='NATIONWIDE',regionOnly=true,lastJson=null,lastGlobalJson=null,lastRegionalJson=null,lastCountryJson=null,lastDiagnosticJson=null,lastGlobalControlJson=null,lastProductJson=null,lastProductTransitionAuditJson=null,lastRuntimeDiagnostic=null,lastScopeCache=null,lastScopeAuditJson=null,activeScopeAudit='',selectionSource='initial',lastSignalReport=null,lastCountryPreview=null,researchStopRequested=false,researchLoopActive=false,productStopRequested=false,productLoopActive=false,productPausedForQueue=false,productQueueStageActive=false,productPauseAutoQueue=false,productPausePersistPromise=null,productPauseServerConfirmed=false,signalLoopActive=false,returnRestoreActive=false,returnRestoreRow=null,returnRestoreTimer=null,lastPassiveRestoreAt=0,supplierControlScopeKey='',queueControlScopeKey='',queueCandidateRows=[],queueFocusedCandidateIds=[],queuePage=0,supplierActiveRows=[],supplierHoldingRows=[],supplierBlockedRows=[],productRows=[],latestProductRows=[],latestProductPage=0,latestSelectedProducts={},latestProductRowsComplete=true,latestOverviewLedgerComplete=false,latestOverviewCanonicalById={},latestOverviewFilter="all",latestOverviewSearch="",latestOverviewPage=0,latestOverviewBusy=false,latestOverviewChosenCandidates={},latestOverviewSelected={},latestOverviewPageItems=[],latestOverviewFilteredItems=[],productExclusionSelections={hold:{},reject:{}},latestQueueActionActive=false,latestRefreshActive=false,productPlacementSelections={},candidateSelectedProducts={},candidateGroupPages={},frontSelectedSections={},frontSelectedProducts={},frontSnapshotCounts={},frontSnapshotSource={},frontSnapshotItems={},frontSnapshotLoadedAt=0,frontRestoreAttempted={},candidateBulkActionActive={},productExclusionActionActive=false,supplierActionActive=false,productSectionCleanupActive=false,productRenderEpoch=0,heavyPanelWired=false,productAutomationActive=false,productFrontSyncActive=false,affiliateSettlementProductId="",sessionResumeActive=false,sessionUiResume=null,sessionDataResumeAvailable=false;
+  var selectedRegion='',selectedCountry='',selectedSubdivision='NATIONWIDE',regionOnly=true,lastJson=null,lastGlobalJson=null,lastRegionalJson=null,lastCountryJson=null,lastDiagnosticJson=null,lastGlobalControlJson=null,lastProductJson=null,lastProductTransitionAuditJson=null,lastRuntimeDiagnostic=null,lastScopeCache=null,lastScopeAuditJson=null,activeScopeAudit='',selectionSource='initial',lastSignalReport=null,lastCountryPreview=null,researchStopRequested=false,researchLoopActive=false,productStopRequested=false,productLoopActive=false,productPausedForQueue=false,productQueueStageActive=false,productPauseAutoQueue=false,productPausePersistPromise=null,productPauseServerConfirmed=false,signalLoopActive=false,returnRestoreActive=false,returnRestoreRow=null,returnRestoreTimer=null,lastPassiveRestoreAt=0,supplierControlScopeKey='',queueControlScopeKey='',queueCandidateRows=[],queueFocusedCandidateIds=[],queuePage=0,supplierActiveRows=[],supplierHoldingRows=[],supplierBlockedRows=[],productRows=[],latestProductRows=[],latestProductPage=0,latestSelectedProducts={},latestProductRowsComplete=false,latestOverviewLedgerComplete=false,latestOverviewCanonicalById={},latestOverviewFilter="all",latestOverviewSearch="",latestOverviewPage=0,latestOverviewBusy=false,latestOverviewChosenCandidates={},latestOverviewSelected={},latestOverviewPageItems=[],latestOverviewFilteredItems=[],productExclusionSelections={hold:{},reject:{}},latestQueueActionActive=false,latestRefreshActive=false,productPlacementSelections={},candidateSelectedProducts={},candidateGroupPages={},frontSelectedSections={},frontSelectedProducts={},frontSnapshotCounts={},frontSnapshotSource={},frontSnapshotItems={},frontSnapshotLoadedAt=0,frontRestoreAttempted={},candidateBulkActionActive={},productExclusionActionActive=false,supplierActionActive=false,productSectionCleanupActive=false,productRenderEpoch=0,heavyPanelWired=false,productAutomationActive=false,productFrontSyncActive=false,affiliateSettlementProductId="",sessionResumeActive=false,sessionUiResume=null,sessionDataResumeAvailable=false;
   var PRODUCT_PAUSE_AUTO_QUEUE_KEY='igdc_product_pause_auto_queue_v1';
   var MANAGEMENT_PAGE_SIZE=100;
   var LATEST_OVERVIEW_PAGE_SIZE=100; // Latest research overview only; does not change research or server batch sizes.
@@ -287,7 +287,7 @@
   function rememberReport(kind,data){if(!data)return;if(kind==='global'){lastGlobalJson=data;setButtonEnabled('globalSignalDownloadBtn',true);}else if(kind==='regional'){lastRegionalJson=data;setButtonEnabled('regionalSignalDownloadBtn',true);}else if(kind==='country'){lastCountryJson=data;setButtonEnabled('countryRunDownloadBtn',true);}else if(kind==='diagnostic'){lastDiagnosticJson=data;presentLargeReportSummary(data);setButtonEnabled('diagnosticDownloadBtn',true);}else if(kind==='globalControl'){lastGlobalControlJson=data;presentLargeReportSummary(data);setButtonEnabled('globalControlDownloadBtn',true);}else if(kind==='product'){lastProductJson=data;setButtonEnabled('productResearchDownloadBtn',true);}if(kind==='global'||kind==='regional')setButtonEnabled('downloadSignalJsonBtn',true);}
   function downloadRemembered(kind){var data=kind==='global'?lastGlobalJson:kind==='regional'?lastRegionalJson:kind==='country'?lastCountryJson:kind==='diagnostic'?lastDiagnosticJson:kind==='globalControl'?lastGlobalControlJson:kind==='product'?lastProductJson:lastJson;if(!data){show('해당 범위에서 다운로드할 JSON이 없습니다. 먼저 점검 또는 실행을 완료해 주세요.','warn');return;}lastJson=data;setDownloadEnabled(true);download();}
 
-  function invalidateJson(){verifiedReviewUi={hold:{},latest:{}};verifiedReviewDetailsUi={hold:{},latest:{}};unresolvedReviewDetailsUi={hold:{},latest:{}};incompleteReviewUi={};reviewClassSelections={verified:{},incomplete:{}};reviewInventoryKey="";reviewInventoryBusy=false;closeManagementPanels();closeSupplierControlQueue();supplierControlScopeKey='';closeQueuePanel();queueControlScopeKey='';queueCandidateRows=[];queueFocusedCandidateIds=[];queuePage=0;candidateGroupPages={};latestProductPage=0;supplierActiveRows=[];supplierHoldingRows=[];supplierBlockedRows=[];productRows=[];latestProductRows=[];latestSelectedProducts={};latestProductRowsComplete=true;latestOverviewLedgerComplete=false;latestOverviewCanonicalById={};latestOverviewFilter="all";latestOverviewSearch="";latestOverviewPage=0;latestOverviewBusy=false;latestOverviewChosenCandidates={};latestOverviewSelected={};latestOverviewPageItems=[];latestOverviewFilteredItems=[];productExclusionSelections={hold:{},reject:{}};latestInCandidateSelections={};latestInCandidatePage=0;latestQueueActionActive=false;latestRefreshActive=false;productPlacementSelections={};frontSelectedSections={};frontSelectedProducts={};researchStopRequested=true;productStopRequested=true;productPausedForQueue=false;productPauseServerConfirmed=false;lastCountryJson=null;lastCountryPreview=null;lastProductJson=null;lastProductTransitionAuditJson=null;lastScopeCache=null;lastScopeAuditJson=null;activeScopeAudit='';if($('productTransitionAuditDownloadBtn'))$('productTransitionAuditDownloadBtn').disabled=true;if($('scopeAuditPanel'))$('scopeAuditPanel').classList.add('hidden');setButtonEnabled('countryRunDownloadBtn',false);setButtonEnabled('runNowBtn',false);setButtonEnabled('productResearchDownloadBtn',false);resetJsonPanelForScope();if($('countryResearchProgress'))$('countryResearchProgress').textContent='선택 범위가 바뀌었습니다. 새 범위의 저장 작업 상태를 읽어 주세요.';if($('productResearchState'))$('productResearchState').textContent='선택 범위가 바뀌었습니다. 이 범위의 상품 리서치 상태를 다시 읽어 주세요.';}
+  function invalidateJson(){verifiedReviewUi={hold:{},latest:{}};verifiedReviewDetailsUi={hold:{},latest:{}};unresolvedReviewDetailsUi={hold:{},latest:{}};incompleteReviewUi={};reviewClassSelections={verified:{},incomplete:{}};reviewInventoryKey="";reviewInventoryBusy=false;closeManagementPanels();closeSupplierControlQueue();supplierControlScopeKey='';closeQueuePanel();queueControlScopeKey='';queueCandidateRows=[];queueFocusedCandidateIds=[];queuePage=0;candidateGroupPages={};latestProductPage=0;supplierActiveRows=[];supplierHoldingRows=[];supplierBlockedRows=[];productRows=[];latestProductRows=[];latestSelectedProducts={};latestProductRowsComplete=false;latestOverviewLedgerComplete=false;latestOverviewCanonicalById={};latestOverviewFilter="all";latestOverviewSearch="";latestOverviewPage=0;latestOverviewBusy=false;latestOverviewChosenCandidates={};latestOverviewSelected={};latestOverviewPageItems=[];latestOverviewFilteredItems=[];productExclusionSelections={hold:{},reject:{}};latestInCandidateSelections={};latestInCandidatePage=0;latestQueueActionActive=false;latestRefreshActive=false;latestBootHydrationScope='';productPlacementSelections={};frontSelectedSections={};frontSelectedProducts={};researchStopRequested=true;productStopRequested=true;productPausedForQueue=false;productPauseServerConfirmed=false;lastCountryJson=null;lastCountryPreview=null;lastProductJson=null;lastProductTransitionAuditJson=null;lastScopeCache=null;lastScopeAuditJson=null;activeScopeAudit='';if($('productTransitionAuditDownloadBtn'))$('productTransitionAuditDownloadBtn').disabled=true;if($('scopeAuditPanel'))$('scopeAuditPanel').classList.add('hidden');setButtonEnabled('countryRunDownloadBtn',false);setButtonEnabled('runNowBtn',false);setButtonEnabled('productResearchDownloadBtn',false);resetJsonPanelForScope();if($('countryResearchProgress'))$('countryResearchProgress').textContent='선택 범위가 바뀌었습니다. 새 범위의 저장 작업 상태를 읽어 주세요.';if($('productResearchState'))$('productResearchState').textContent='선택 범위가 바뀌었습니다. 이 범위의 상품 리서치 상태를 다시 읽어 주세요.';}
   function savedScope(){
     var query=new URLSearchParams(location.search),stored={},queryCountry=text(query.get('country')).toUpperCase();
     try{stored=JSON.parse(sessionStorage.getItem('igdc_admin_country_scope_v1')||'{}')||{};}catch(_e){}
@@ -834,6 +834,11 @@
       if(/(?:^|\/)hosts?\/[^/]+$/.test(path) || /(?:^|\/)hotels?\/all-[^/]+$/.test(path))return true;
       if(/(?:^|\/)(?:insurance|flight|flights|deals|offers)$/.test(path))return true;
       if(/trip\.com$/.test(host)&&/(?:^|\/)(?:all-cities|all-hotels|hotels?\/all-cities)(?:\/|$)/.test(path))return true;
+      // Globally exclude provider catalog/news/reference records: they may
+      // show photos or document covers but are not individual checkout items.
+      if(/(?:^|\.)(?:openknowledge\.fao\.org|knowledge\.un\.org|openknowledge\.worldbank\.org)$/.test(host))return true;
+      if(/^(?:\/(?:[a-z]{2}(?:-[a-z]{2})?))?\/(?:tour|travel|trips?|vacations?|agency|services?)\/(?:book|books|catalog|index|lists?|offers?|guides?|destinations?|packages?|news|info)(?:\/)?$/.test(path))return true;
+      if(/^\/(?:news|press|blog|journal|editorial)(?:\/|$)/.test(path))return true;
       return false;
     }catch(_e){return true;}
   }
@@ -919,9 +924,12 @@
     var truncated=!reachedEnd;return{rows:rows,pages:pages,partial:!!partialError||truncated,error:partialError?text(partialError&&partialError.message):(truncated?"latest_research_page_limit_reached":null),status:lastPage||null,complete:!partialError&&reachedEnd,visibleLoaded:rows.length,rawResearchTotal:Number(lastPage&&lastPage.pagination&&lastPage.pagination.rawTotal||0)};
   }
   async function refreshLatestResearchRows(country,region,options){
-    options=options||{};var previous=latestProductRows.slice(),loaded=null;
+    // Page-scoped read: a slow request must never write the previous country's
+    // research data into the newly selected country after a scope switch.
+    options=options||{};var frozenScope=scopeKey(),previous=latestProductRows.slice(),loaded=null;
     try{loaded=await loadLatestResearchPaged(country,region,Object.assign({preserveOnFailure:true},options));}
     catch(error){if(options.throwOnFailure===true)throw error;return{rows:previous,partial:true,error:text(error&&error.message),complete:false};}
+    if(scopeKey()!==frozenScope)return{rows:[],partial:true,error:'management_scope_changed',complete:false};
     if(loaded)latestProductRowsComplete=loaded.complete===true;
     if(loaded&&Array.isArray(loaded.rows)&&(loaded.rows.length||loaded.complete===true||!previous.length))latestProductRows=loaded.rows;
     var status=loaded&&loaded.status||{};lastProductJson=Object.assign({},lastProductJson||{},status,{products:productRows,latestProducts:latestProductRows});
@@ -1775,7 +1783,7 @@
       countryKey=scopeKey(),complete=latestProductRowsComplete&&latestOverviewLedgerComplete;
     var selected=fresh.filter(function(item){var id=latestProductKey(item.research),entry=latestInCandidateSelections[id];return !!(entry&&entry.scope===countryKey);});
     latestResearchDuplicateCounts=duplicateInfo.perId;
-    var canonical=productGroupDetails('latest_research','최신 리서치 상품 · 기존 후보 원장 공동 관리 · 총 '+(registered.length+fresh.length)+'건',registered.concat(fresh.map(function(item){return item.research;})),'candidate');
+    var canonical=productGroupDetails('latest_research','최신 리서치 상품 · 기존 후보 원장 공동 관리 · '+(complete?'총 '+(registered.length+fresh.length)+'건':'원장 조회 중 · 현재 확인 '+(registered.length+fresh.length)+'건'),registered.concat(fresh.map(function(item){return item.research;})),'candidate');
     // Remove the old secondary candidate-only toolbar: one visible action bar
     // serves both unregistered research and candidates with durable IDs.
     canonical=canonical.replace(/<div class="section-product-toolbar candidate-bulk-toolbar">[\s\S]*?<\/div>/,'');
@@ -1794,7 +1802,7 @@
       '<button type="button" data-pipeline-diagnostic="download-latest">점검 JSON 다운로드</button>'+
       '<span id="latestInCandidateStatus" class="small" aria-live="polite">'+esc(latestInCandidateMessage||'국가·지역 원장 연결 준비')+'</span></div>';
     canonical=canonical.replace('<div class="product-group-grid"></div>',controls+'<div class="product-group-grid"></div>');
-    mount.innerHTML='<div class="small" style="margin:10px 0">관리 국가·지역 <strong>'+esc(countryKey)+'</strong> · 현재 리서치 원본 '+all.length+'건 · 등록 관리 '+registered.length+'건 · 미등록 '+fresh.length+'건 · 중복 후보 '+duplicateInfo.extra+'건 · 원본 중복 '+originalDuplicates.extra+'건. <strong>하나의 목록·하나의 페이지</strong>에서 확인하고, 등록 후 기존 ID로 미배치/20개 섹션에 이관합니다. 이미지 누락만으로 삭제하지 않습니다. 확정 부재 선택은 저장된 검사 증거가 있는 상품에만 적용합니다.</div>'+canonical;
+    mount.innerHTML='<div class="small" style="margin:10px 0">'+(complete?'':'<strong>리서치 원장 조회 진행 중 · 조회 완료 전 건수와 작업 버튼은 확정되지 않습니다.</strong><br>')+'관리 국가·지역 <strong>'+esc(countryKey)+'</strong> · 현재 리서치 원본 '+all.length+'건 · 등록 관리 '+registered.length+'건 · 미등록 '+fresh.length+'건 · 중복 후보 '+duplicateInfo.extra+'건 · 원본 중복 '+originalDuplicates.extra+'건. <strong>하나의 목록·하나의 페이지</strong>에서 확인하고, 등록 후 기존 ID로 미배치/20개 섹션에 이관합니다. 이미지 누락만으로 삭제하지 않습니다. 확정 부재 선택은 저장된 검사 증거가 있는 상품에만 적용합니다.</div>'+canonical;
     var group=mount.querySelector('[data-product-group="latest_research"]');
     wireProductGroupDetails(mount,{latest_research:registered},'candidate');
     if(group&&wasOpen)group.open=true;
@@ -1844,6 +1852,14 @@
       var id=latestProductKey(item.research),choice=latestInCandidateSelections[id];
       return !!(choice&&choice.scope===frozen);
     });
+    // URL-only promotion is unsafe. Catalog/news/repository links remain in the
+    // research audit for correction, but never enter the candidate staging API.
+    var disqualified=chosen.filter(function(item){return !safeProductDetailUrl(item.research&&(
+      item.research.productUrl||item.research.url));});
+    if(disqualified.length){
+      show('선택 상품 중 '+disqualified.length+'건이 공급업체 목록·자료실·뉴스 또는 원본 미확인 주소입니다. 개별 판매·예약 상품 상세주소를 확보한 뒤 등록하세요. 해당 연구 기록은 보존됩니다.','warn');
+      return;
+    }
     if(!chosen.length){show('현재 국가·지역에서 최초 등록할 미등록 상품이 없습니다.','warn');return;}
     if(!window.confirm('선택 국가·지역 '+frozen+' · '+(allMode?'미등록 전체 ':'선택 미등록 ')+chosen.length+'건을 상품별로 검증합니다. 검증된 실상품만 현재 후보 원장에 등록하며, 등록된 상품은 기존 미배치 관리 기능을 그대로 사용합니다. 진행할까요?'))return;
     latestInCandidateBusy=true;
@@ -3816,6 +3832,28 @@
     }
     return{ok:false,label:label,data:fallback,error:lastError};
   }
+  var latestBootHydrationScope='';
+  function ensureLatestResearchOnScopeOpen(country,region,requestedKey){
+    // The compact job status contains counts only, NOT latestProducts rows.
+    // The candidate ledger contains durable IDs only. A page reload therefore
+    // needs one read-only paged research hydration as well as the ledger read.
+    // Do not require an operator to press "현재 조사분 등록" or AI automation.
+    if(!country||country==='GLOBAL'||latestRefreshActive||latestBootHydrationScope===requestedKey)return;
+    latestBootHydrationScope=requestedKey;latestRefreshActive=true;
+    latestProductRowsComplete=false;
+    if($('productCandidatePanel')&&$('productCandidatePanel').open)renderLatestResearchCandidateGroup();
+    refreshLatestResearchRows(country,region,{throwOnFailure:true,preserveOnFailure:true,label:'최신 리서치 원장 자동 조회',state:$('productResearchState')})
+      .then(function(result){if(scopeKey()===requestedKey&&result&&result.complete!==true){
+        latestBootHydrationScope='';
+        show('최신 리서치 원장 일부만 조회됐습니다. 현재 조사분 등록이나 AI 자동화 대신 원장 재조회로 누락된 페이지를 복구하세요.','warn');
+      }})
+      .catch(function(error){
+        if(scopeKey()===requestedKey){latestBootHydrationScope='';latestProductRowsComplete=false;
+          if($('productCandidatePanel')&&$('productCandidatePanel').open)renderLatestResearchCandidateGroup();
+          show('최신 리서치 원장 자동 조회가 지연됐습니다. 등록/AI 실행 대신 원장 재조회를 눌러 주세요: '+conciseRequestError(error&&error.message,error&&error.status),'warn');}
+      })
+      .finally(function(){if(scopeKey()===requestedKey)latestRefreshActive=false;});
+  }
   async function loadScope(reason){
     if(!selectedCountry)return;var passive=reason==='restore-passive';if(!passive)hide();$('refreshScopeBtn').disabled=true;
     var requested=scopeParams(),requestedKey=scopeKey(requested),failures=[];
@@ -3853,6 +3891,10 @@
       if(productStatus&&productStatus.status&&productStatus.status!=='not_started')lastProductJson=Object.assign({},productStatus,{products:productRows,latestProducts:latestProductRows});else lastProductJson=productData;renderProductProgress(lastProductJson);setButtonEnabled('productResearchBtn',researchData.status==='complete'||researchData.status==='committed'||productData.products.length>0||text(lastProductJson.status)!=='not_started');if(productData.products.length||text(lastProductJson.status)!=='not_started')setButtonEnabled('productResearchDownloadBtn',true);
       lastScopeCache={scope:requested,scopeData:scopeData,summaryData:queueData&&queueData.summary||sameCachedScope&&lastScopeCache.summaryData||{},queueData:queueData||queueFallback,researchData:researchData,productData:lastProductJson};
       saveReviewSnapshot();
+      // The last compact status cannot populate the unified research cards.
+      // Start a bounded, read-only page hydration without blocking the rest of
+      // the admin page. No registration, AI classification or data writes.
+      ensureLatestResearchOnScopeOpen(requested.country,requested.region,requestedKey);
 
       if(failures.length){
         var delayed=failures.map(function(row){return row.label;}).join(' · '),prefix=reason==='ip'?'현재 접속 IP 범위 적용은 정상입니다. ':' ';

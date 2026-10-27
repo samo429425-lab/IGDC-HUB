@@ -1775,6 +1775,24 @@ function replacementNeed(slot, currentRow, alternativeRow, sectionKey) {
   // a transient Supabase/pagination miss from replacing dozens of videos with
   // SAMPLE cards in a single front-match operation.
   if (!currentRow) {
+    // A bounded candidate query may exclude an old, otherwise valid live row.
+    // Missing is NOT evidence for deletion. However a genuinely newer,
+    // approved TikTok video may still replace one old slot. Without this,
+    // surviving legacy videos could never rotate after new discovery.
+    if (platform === "tiktok" && alternativeRow && isPublishEligibleContentRow(alternativeRow)) {
+      const previousPublished = slotPublishedValue(value);
+      const candidatePublished = contentPublishedValue(alternativeRow);
+      const now = Date.now();
+      if (candidatePublished > 0 && candidatePublished <= now + 86400000 &&
+          now - candidatePublished <= 30 * 86400000 &&
+          (previousPublished > 0
+            ? candidatePublished - previousPublished >= 14 * 86400000
+            : now - candidatePublished <= 7 * 86400000)) {
+        return { needed: true, hard: false, reason: "tiktok_new_video_replaces_legacy_slot",
+          currentAgeDays: previousPublished > 0 ? Math.round((now - previousPublished) / 86400000) : null,
+          alternativeAgeDays: Math.round((now - candidatePublished) / 86400000) };
+      }
+    }
     return { needed: false, hard: false, reason: "missing_candidate_read_preserve_live" };
   }
   if (!isPublishEligibleContentRow(currentRow)) {
@@ -1799,6 +1817,19 @@ function replacementNeed(slot, currentRow, alternativeRow, sectionKey) {
   const alternativeScore = rowScore(alternativeRow);
   const scoreGain = alternativeScore - currentScore;
 
+  if (
+    platform === "tiktok" &&
+    alternativeAgeDays != null && alternativeAgeDays <= 30 &&
+    ((currentAgeDays != null && currentAgeDays >= 21 && newerByDays >= 14) ||
+     (currentAgeDays == null && alternativeAgeDays <= 7))
+  ) {
+    return {
+      needed: true, hard: false, reason: "tiktok_verified_recent_video_upgrade",
+      currentAgeDays: currentAgeDays == null ? null : Math.round(currentAgeDays),
+      alternativeAgeDays: Math.round(alternativeAgeDays),
+      scoreGain: Math.round(scoreGain),
+    };
+  }
   if (
     currentAgeDays != null && currentAgeDays >= 365 &&
     alternativeAgeDays != null && alternativeAgeDays <= 120 &&
@@ -1860,6 +1891,16 @@ function buildSelectiveSection(current, seedSections, sectionKey, approvedRows, 
     .filter((row) => lowerKey(row.section_key || row.sectionKey) === sectionKey)
     .slice()
     .sort(byRouteRank(route || {}, salt));
+  if (sectionKey === "social-tiktok") {
+    ranked.sort((a, b) => {
+      const aDate = contentPublishedValue(a), bDate = contentPublishedValue(b);
+      // Genuine video publish date, never the collection/approval timestamp.
+      // Unknown-date candidates cannot outrank recent verified videos.
+      const aRecent = aDate > 0 && aDate <= Date.now() + 86400000 ? aDate : 0;
+      const bRecent = bDate > 0 && bDate <= Date.now() + 86400000 ? bDate : 0;
+      return bRecent - aRecent || rowScore(b) - rowScore(a);
+    });
+  }
   const byId = new Map(ranked.map((row) => [text(row.id), row]));
   const existingIds = new Set(
     next.filter(isPublishedSocialCandidateSlot).map(slotCandidateId).filter(Boolean),

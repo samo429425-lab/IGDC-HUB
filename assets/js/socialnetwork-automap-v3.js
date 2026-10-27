@@ -610,6 +610,34 @@
     return "/.netlify/functions/social-thumbnail-proxy?" + q.toString();
   }
 
+  // TikTok covers can expire even while their underlying videos remain public.
+  // In that case use the first-party video player as a visual fallback for the
+  // SAME real video; never substitute another creator's image or a sample card.
+  function tiktokPlayerUrl(url) {
+    try {
+      const u = new URL(url);
+      if (!/(^|\.)tiktok\.com$/i.test(u.hostname)) return "";
+      const m = u.pathname.match(/\/video\/(\d{12,24})(?:\/|$)/);
+      return m ? "https://www.tiktok.com/player/v1/" + m[1] + "?autoplay=0&controls=0&description=0&music_info=0" : "";
+    } catch (_error) { return ""; }
+  }
+  function paintTikTokPlayerFallback(pic, contentUrl) {
+    const playerUrl = tiktokPlayerUrl(contentUrl);
+    if (!playerUrl) return false;
+    const iframe = document.createElement("iframe");
+    iframe.title = "TikTok video preview";
+    iframe.loading = "lazy";
+    iframe.referrerPolicy = "strict-origin-when-cross-origin";
+    iframe.setAttribute("allow", "encrypted-media; fullscreen");
+    iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-presentation");
+    iframe.tabIndex = -1;
+    iframe.style.cssText = "display:block;width:100%;height:100%;border:0;pointer-events:none;";
+    iframe.src = playerUrl;
+    pic.appendChild(iframe);
+    // If the provider blocks embeds, the real video's clickable card URL
+    // remains unchanged, and the card retains its text title.
+    return true;
+  }
   function paintThumb(pic, platform, contentUrl, thumb, eager) {
     if (!pic) return;
     pic.style.backgroundImage = "";
@@ -621,6 +649,7 @@
     if (!proxied) {
       delete pic.dataset.socialThumbLoading;
       pic.dataset.socialThumbFailed = '1';
+      if (platform === "tiktok" && paintTikTokPlayerFallback(pic, contentUrl)) return;
       pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
       return;
     }
@@ -655,6 +684,7 @@
       if (img.parentNode === pic) pic.removeChild(img);
       delete pic.dataset.socialThumbLoading;
       pic.dataset.socialThumbFailed = '1';
+      if (platform === "tiktok" && paintTikTokPlayerFallback(pic, contentUrl)) return;
       pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
     });
     pic.appendChild(img);
