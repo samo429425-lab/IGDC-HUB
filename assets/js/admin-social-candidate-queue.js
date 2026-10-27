@@ -1,4 +1,4 @@
-/* IGDC Social Hub Content Operations v4.8.0 - complete content lanes + verified storage bridge */
+/* IGDC Social Hub Content Operations v4.8.1 - complete content lanes + verified storage bridge */
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
@@ -310,6 +310,8 @@
       );
       e.status = r.status;
       e.payload = d || null;
+      e.code = text(d && d.error) || "";
+      e.stage = text(d && d.stage) || "";
       throw e;
     }
     return d;
@@ -384,10 +386,39 @@
   }
   function collectionErrorState(error) {
     var message = text(error && error.message);
-    return Number(error && error.status) === 401 ||
+    var status = Number(error && error.status) || 0;
+    var reason = text(error && (error.code || (error.payload && error.payload.error)));
+    var stage = text(error && (error.stage || (error.payload && error.payload.stage)));
+    var kind = status === 401 || status === 403 ||
       /(로그인|인증|세션|token|issuer|audience)/i.test(message)
-      ? "관리자 인증 실패"
-      : "수집 실패";
+      ? "관리자 인증 실패" : "수집 실패";
+    return kind + (status ? " HTTP " + status : "") +
+      (reason ? " · " + reason : "") + (stage ? " · " + stage : "");
+  }
+  function collectorFailureRecord(error, sectionKey, action) {
+    var payload = error && error.payload && typeof error.payload === "object" ? error.payload : {};
+    return {
+      at: new Date().toISOString(),
+      sectionKey: text(sectionKey),
+      action: text(action),
+      status: Number(error && (error.status || error.statusCode) || 0) || null,
+      code: text(error && error.code || payload.error).slice(0, 120),
+      stage: text(error && error.stage || payload.stage).slice(0, 100),
+      message: text(error && error.message).slice(0, 400),
+      requestId: text(payload.requestId).slice(0, 100)
+    };
+  }
+  function showCollectorFailure(error, sectionKey, action) {
+    var failure = collectorFailureRecord(error, sectionKey, action);
+    diagnostic({
+      ok:false, reportType:"igdc-social-collection-failure", generatedAt: failure.at,
+      failure:failure, savedJob:loadJob(), discoveryCursors:discoveryCursors(),
+      recentBatches:liveReports.slice(-4).map(function (r) {return r.liveCollection || r;})
+    });
+    if ($("collectorState")) $("collectorState").textContent = collectionErrorState(error);
+    show(label(sectionKey) + " · " + collectionErrorState(error) +
+      " · " + (failure.message || "서버 요청 실패") +
+      " · [진단 JSON]에서 실패 단계 확인 가능. 검색 커서는 유지합니다.", "warn");
   }
   function show(msg, kind) {
     var n = $("notice");
@@ -2190,7 +2221,9 @@
       Number(j.batch || 0) === 1 && Number(j.round || 0) === 0 &&
       /^(social-snapchat|social-bilibili|social-douyin)$/.test(section);
     var requestedCursor = baselineRescue ? 0 : (j.queryCursor || 0);
-    var d = await post(LIVE, {
+    var d;
+    try {
+      d = await post(LIVE, {
       action: "collect_live",
       dryRun: !!dryRun,
       qualitySweep: !!j.qualitySweepActive,
@@ -2211,7 +2244,14 @@
       regionId: j.regionId || "",
       scopeMode: j.scopeMode || (j.countryCode ? "country" : (j.regionId ? "region" : "auto")),
       languages: j.languages || "",
-    });
+      });
+    } catch (error) {
+      liveReports.push({
+        ok:false, sectionKey:section, queryCursor:requestedCursor,
+        error:collectorFailureRecord(error, section, "collect_live")
+      });
+      throw error;
+    }
     liveReports.push(d);
     var live = d.liveCollection || {};
     j.searched += Number(live.searchedRows || 0);
@@ -2249,7 +2289,20 @@
     if (d.ok === false || (live.gateway && live.gateway.ok === false)) {
       var gatewayError = new Error(text(d.message || (live.gateway && live.gateway.message) || d.error || "candidate_gateway_failed"));
       gatewayError.status = Number(live.gateway && live.gateway.statusCode) || 500;
+      gatewayError.code = text(live.gateway && live.gateway.error || d.error);
+      gatewayError.stage = "candidate_storage";
       throw gatewayError;
+    }
+    // A successful HTTP 200 is not sufficient if the DB immediately reports
+    // missing rows after an acknowledged write. Preserve exact retry cursor.
+    var readback = live.gateway && live.gateway.readback;
+    if (!dryRun && readback && readback.checked === true &&
+        Array.isArray(readback.missingIds) && readback.missingIds.length > 0) {
+      var missingError = new Error("후보 저장 후 DB 재조회 불일치: " + readback.missingIds.length + "건 미확인");
+      missingError.status = 503;
+      missingError.code = "social_candidate_readback_mismatch";
+      missingError.stage = "candidate_storage_readback";
+      throw missingError;
     }
     // Advance the discovery cursor only after downstream success.
     j.queryCursor = baselineRescue
@@ -2482,19 +2535,11 @@
       j.paused = true;
       // Persist a safe, inspectable reason alongside the exact retry cursor.
       // Existing job JSON is never erased and no tokens or credentials are stored.
-      j.lastError = {
-        status: Number(e && (e.status || e.statusCode) || 0) || null,
-        message: text(e && e.message).slice(0, 400),
-        section: key,
-        queryCursor: Number(j.queryCursor || 0),
-        at: new Date().toISOString()
-      };
+      j.lastError = Object.assign(collectorFailureRecord(e, key, "section_collect"), {
+        queryCursor: Number(j.queryCursor || 0)
+      });
       if (!dry) saveJob(j);
-      $("collectorState").textContent = collectionErrorState(e);
-      show(
-        (e.message || "수집 오류") + " · 현재 지점은 저장되었습니다.",
-        "warn",
-      );
+      showCollectorFailure(e, key, "section_collect");
     } finally {
       lockCollection(false);
       stopRequested = false;
@@ -2590,22 +2635,27 @@
               at: new Date().toISOString(),
             };
             j.sectionFailures.push(failure);
-            if (fatalCollectionError(err)) {
-              fatalError = fatalError || err;
-              return; // Retry only this failed section on resume.
-            }
-            // Keep failed-platform retries on a later, different cursor.
-            j.sectionJobs[key].queryCursor = Math.max(
-              Number(j.sectionJobs[key].queryCursor || 0), loadDiscoveryCursor(key) + 1
+            // Every rejected collect promise means that the requested search
+            // or its candidate store did NOT complete. Do not silently advance
+            // the cursor or mark the wave successful (even on HTTP 500/503).
+            fatalError = fatalError || err;
+            j.sectionJobs[key].lastError = Object.assign(
+              collectorFailureRecord(err, key, "all_sections_collect"),
+              { queryCursor: Number(j.sectionJobs[key].queryCursor || 0) }
             );
-            saveDiscoveryCursor(key, j.sectionJobs[key].queryCursor);
+            return; // Resume the same failed query after fixing the cause.
           }
-          if (!j.completedInRound.includes(key)) j.completedInRound.push(key);
+          // A failed search must remain pending on the next resume.
+          if (result.status !== "rejected" && !j.completedInRound.includes(key))
+            j.completedInRound.push(key);
         });
         j.done = roundNumber * order.length + j.completedInRound.length;
         renderParallelCollectionProgress();
         saveJob(j);
-        if (stopRequested || fatalError) break;
+        if (stopRequested || fatalError) {
+          if (fatalError) showCollectorFailure(fatalError, text(j.sectionFailures[j.sectionFailures.length - 1] && j.sectionFailures[j.sectionFailures.length - 1].sectionKey) || order[0], "all_sections_collect");
+          break;
+        }
         // Refresh counts only after all seven writes settle. Never let a
         // concurrent refresh overwrite another section's progress.
         try { await refresh(); } catch (_refreshError) {}
@@ -2624,7 +2674,7 @@
       if (j.paused) {
         saveJob(j);
         show(fatalError
-          ? "인증 오류로 병렬 검색을 중지했습니다. 다른 SNS 결과는 보존했으며 재실행 시 미완료 섹션부터 이어갑니다. " + text(fatalError.message)
+          ? "수집 또는 저장 오류로 병렬 검색을 중지했습니다. 실패한 검색 커서를 보존했습니다. " + collectionErrorState(fatalError) + " · " + text(fatalError.message)
           : "7개 SNS 동시 검색을 일시정지했습니다. 다시 누르면 완료되지 않은 단계부터 재개합니다.",
           fatalError ? "warn" : "ok");
       } else {
@@ -2758,7 +2808,11 @@
         (!count ? "후보 0건입니다. 수집 진행 JSON에서 실제 URL 수·제외 사유·Gateway 저장 결과를 확인해 주세요." : "아래 후보 목록을 펼쳐 확인하세요.") +
         (lastLive.gateway && lastLive.gateway.error ? " 저장 오류: " + text(lastLive.gateway.error) : ""), count ? "ok" : "warn");
     } catch (error) {
-      show(label(key) + " 수집 또는 DB 반영 실패: " + (error && error.message || error), "warn");
+      if (job) {
+        job.lastError = Object.assign(collectorFailureRecord(error, key, "empty_section_collect"), {queryCursor:Number(job.queryCursor || 0)});
+        saveJob(job);
+      }
+      showCollectorFailure(error, key, "empty_section_collect");
     } finally {
       emptySectionCollectionBusy = false;
       lockCollection(false);
@@ -3961,7 +4015,7 @@
     if (!keys.length) return show("AI 자동화할 SNS 섹션을 선택해 주세요.", "warn");
     if (!skipConfirm && !confirm(keys.map(label).join(", ") + " 섹션의 최신 콘텐츠 수집 → AI 평가 → 공개/예비 후보 재정리를 실행할까요? 한 SNS 검색 오류는 기록하고 다음 SNS를 계속 진행합니다.")) return false;
     var statusEl = $("aiAutomationState"), oldCollector = $("collectorSection").value,
-      collectionFailures = [], curatedKeys = [], curateFailures = [];
+      collectionFailures = [], collectedKeys = [], curatedKeys = [], curateFailures = [];
     liveReports = [];
     try {
       stopRequested = false;
@@ -3971,7 +4025,11 @@
         if (statusEl) statusEl.textContent = "수집 " + (i + 1) + "/" + keys.length + " · " + label(key);
         try {
           await collectSection(key, false, j);
+          collectedKeys.push(key);
         } catch (sectionError) {
+          j.lastError = Object.assign(collectorFailureRecord(sectionError, key, "ai_collect"), {queryCursor:Number(j.queryCursor || 0)});
+          saveJob(j);
+          showCollectorFailure(sectionError, key, "ai_collect");
           if (fatalCollectionError(sectionError)) throw sectionError;
           collectionFailures.push({
             sectionKey: key,
@@ -3985,23 +4043,30 @@
         saveJob(j);
       }
     } catch (e) {
-      if (statusEl) statusEl.textContent = "수집 중단 · " + (e.message || "오류");
-      show(e.message || "AI 자동 수집을 완료하지 못했습니다.", "warn");
+      if (statusEl) statusEl.textContent = "수집 중단 · " + collectionErrorState(e);
+      showCollectorFailure(e, keys[collectionFailures.length] || keys[0], "ai_collect");
       return false;
     } finally {
       lockCollection(false);
       stopRequested = false;
       $("collectorSection").value = oldCollector;
     }
+    if (!collectedKeys.length) {
+      if (statusEl) statusEl.textContent = "수집 실패 · 저장 성공 섹션 0개";
+      show("모든 선택 SNS의 수집이 실패했습니다. AI 정리와 프론트 게시를 실행하지 않았습니다. 관리자 진단 JSON에서 HTTP 상태와 실패 단계를 확인하세요.", "warn");
+      return false;
+    }
     try {
       for (var n = 0; n < keys.length; n++) {
-        if (statusEl) statusEl.textContent = "AI 정리 " + (n + 1) + "/" + keys.length + " · " + label(keys[n]);
+        var curateKey = keys[n];
+        if (collectedKeys.indexOf(curateKey) < 0) continue; // Never curate/publish a failed collection.
+        if (statusEl) statusEl.textContent = "AI 정리 " + (n + 1) + "/" + keys.length + " · " + label(curateKey);
         try {
-          var curated = await autoCurate(keys[n], true);
-          if (!curated) throw new Error(label(keys[n]) + " AI 후보 정리를 완료하지 못했습니다.");
-          curatedKeys.push(keys[n]);
+          var curated = await autoCurate(curateKey, true);
+          if (!curated) throw new Error(label(curateKey) + " AI 후보 정리를 완료하지 못했습니다.");
+          curatedKeys.push(curateKey);
         } catch (curateError) {
-          curateFailures.push({ sectionKey: keys[n], platform: label(keys[n]), message: text(curateError && curateError.message) || "ai_curate_failed" });
+          curateFailures.push({ sectionKey: curateKey, platform: label(curateKey), message: text(curateError && curateError.message) || "ai_curate_failed" });
           if (fatalCollectionError(curateError)) throw curateError;
         }
       }

@@ -14,10 +14,38 @@ const SocialStore = require("./lib/social-candidate-store.v1");
 const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
+const InfluencerFrontSync = require("./lib/social-influencer-front-sync.v1");
 
 const VERSION =
   "social-snapshot-publish-v1.19.0-selective-needed-only-replacement";
 const INTERNAL_SCHEDULE_EVENT = Symbol("igdc-social-publish-scheduled-internal");
+// A failed auxiliary registry synchronization must never roll back a verified
+// front release or create a second deployment. Return its exact status instead.
+async function syncSupplementalInfluencers(snapshot, hash, releaseId, route, verified) {
+  if (!verified) return { ok: false, reason: "stored_front_not_verified", created: 0, deleted: 0 };
+  try {
+    // An older, slower publish must not prune a creator that was just published
+    // in a newer release for this same scope.
+    const newest = await latestStoredReleaseForRoute(route);
+    if (!newest || text(newest.release_id) !== releaseId ||
+        text(newest.snapshot_hash) !== hash) {
+      return {ok:false, reason:"newer_front_release_exists_or_not_readable", created:0, deleted:0};
+    }
+    return await InfluencerFrontSync.reconcile({
+      snapshot, snapshotHash: hash, releaseId, route,
+      verifiedStoredRelease: true
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "auxiliary_registry_sync_failed",
+      code: error && error.code || null,
+      message: text(error && error.message) || "Registry sync failed",
+      created: null, deleted: null
+    };
+  }
+}
+
 function text(value) {
   return value == null ? "" : String(value).trim();
 }
@@ -1066,8 +1094,22 @@ exports.handler = async function (event) {
       publicationPlanHash === previousPublicationPlanHash &&
       frontVisiblePayloadSignature(snapshot) === frontVisiblePayloadSignature(base.doc)
     ) {
+      // Refresh auxiliary registry even if the publish plan is unchanged;
+      // this also reconciles existing installations on their first post-patch run.
+      const previousStored = await latestStoredReleaseForRoute(route).catch(() => null);
+      const priorHash = SocialStore.sha256(base.doc);
+      const registrySync = await syncSupplementalInfluencers(
+        base.doc,
+        priorHash,
+        text(previousStored && previousStored.release_id),
+        route,
+        !!(previousStored && previousStored.snapshot &&
+          priorHash === text(previousStored.snapshot_hash) &&
+          SocialStore.sha256(previousStored.snapshot) === text(previousStored.snapshot_hash))
+      );
       return SocialStore.response(200, {
         ok: true,
+        registrySync,
         version: VERSION,
         reportType,
         actionType: publishMode,
@@ -1182,6 +1224,12 @@ exports.handler = async function (event) {
       }
     }
 
+    // Perform the final registry add/update/prune only after durable release
+    // write AND readback/hash verification, never for dryRun or failed publish.
+    const registrySync = await syncSupplementalInfluencers(
+      snapshot, hash, text(release.release_id), route,
+      !!(storeRelease && storedVerified)
+    );
     let buildTrigger = null;
     const forceStaticBuild = params.forceBuild === true || params.forceBuild === "true" || params.forceBuild === "1" || process.env.SOCIAL_FORCE_STATIC_BUILD === "1";
     if (storeRelease && storedVerified) {
@@ -1273,6 +1321,7 @@ exports.handler = async function (event) {
       releaseStoredVerified: storedVerified,
       runtimeFrontReady,
       releaseStoreWarning,
+      registrySync,
       previousPublicationPlanHash,
       deployedPublicationPlanHash,
       publicationPlanHash,

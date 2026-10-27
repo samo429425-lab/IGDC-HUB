@@ -23,7 +23,7 @@ const CountryRouting = require("./lib/social-country-routing.v1");
 const AIPolicy = require("./lib/social-ai-policy-runtime.v1");
 const SocialPreview = require("./social-preview-metadata");
 
-const VERSION = "sanmaru-social-live-collector-v1.44.1-searchbank-query-result-integrity";
+const VERSION = "sanmaru-social-live-collector-v1.44.2-stage-diagnostics";
 const DEFAULT_QUERY_PASSES = 1;
 const MAX_QUERY_PASSES = 3;
 const DEFAULT_BATCH_SIZE = 10;
@@ -3225,6 +3225,8 @@ async function intakeCandidates(body, plan, route) {
 
 exports.handler = async function(event) {
   if (event && event.httpMethod === "OPTIONS") return SocialStore.response(204, {});
+  let stage = "initialization";
+  let activeSection = "";
   try {
     const cfg = providerConfig();
     if (!event || event.httpMethod === "GET") {
@@ -3248,9 +3250,12 @@ exports.handler = async function(event) {
     }
     if (event.httpMethod !== "POST") return SocialStore.response(405, { ok: false, version: VERSION, error: "method_not_allowed" });
 
+    stage = "administrator_authorization";
     const actor = await requireCollectorActor(event);
+    stage = "request_validation";
     const body = SocialStore.parseBody(event);
     const sectionKey = Policy.normalizeSectionKey(body.sectionKey || body.section || body.targetSection);
+    activeSection = sectionKey;
     const route = CountryRouting.resolve(event, body);
     const plan = sectionPlan(sectionKey, route);
     if (!plan) return SocialStore.response(400, { ok: false, version: VERSION, error: "invalid_social_section", allowedSections: Policy.SECTION_KEYS });
@@ -3314,6 +3319,7 @@ exports.handler = async function(event) {
     const contentFirst = body.contentFirst == null && body.content_first == null
       ? !registrySweepMode
       : flag(body.contentFirst || body.content_first);
+    stage = "psom_section_contract";
     const psomContract = psomSocialContract(plan);
     if (!psomContract.ok) {
       const error = new Error("PSOM Social section mapping does not match the requested content platform.");
@@ -3403,6 +3409,7 @@ exports.handler = async function(event) {
     // #3 to page 3, etc., skipping the highest-ranked results for most topics.
     const providerPageCycle = Math.max(1, baseCatalogSize);
     const providerPageIndex = Math.floor(Math.max(0, researchCursor) / providerPageCycle);
+    stage = "provider_content_discovery";
     const searchResults = await Promise.all(queries.map(async (queryText, queryIndex) => {
       const directoryOffset = Math.max(0, ((providerPageIndex * directoryStride) + queryIndex) * perQueryLimit);
       const searchResult = await searchOne(
@@ -3417,6 +3424,7 @@ exports.handler = async function(event) {
       return searchResult;
     }));
 
+    stage = "public_post_resolution";
     const resolved = await resolveSearchCandidates(
       searchResults,
       sectionKey,
@@ -3478,12 +3486,16 @@ exports.handler = async function(event) {
     // live run could still fail before storage. External callers cannot forge
     // this path because storeInternal() is an in-process export guarded by a
     // module-local Symbol inside the gateway.
+    stage = "candidate_storage";
     const gatewayResponse = typeof CandidateGateway.storeInternal === "function"
       ? await CandidateGateway.storeInternal(gatewayBody, actor)
       : await CandidateGateway.handler(
           gatewayEvent(event, submitted, sectionKey, dryRun, submitted.length || 1)
         );
     const payload = jsonBody(gatewayResponse);
+    // Preserve storage-stage information when a gateway response is 4xx/5xx;
+    // the browser otherwise knows only that a one-second request failed.
+    if (payload.ok !== true) payload.stage = "candidate_storage";
     payload.itemsPreview = previewItems(payload);
     delete payload.items;
     payload.liveCollection = {
@@ -3594,6 +3606,8 @@ exports.handler = async function(event) {
       version: VERSION,
       error: error.code || "sanmaru_social_live_collection_failed",
       message: error.message || String(error),
+      stage,
+      sectionKey: activeSection || null,
       publicSnapshotMutation: false,
       searchBankCoreMutation: false,
       sampleSlotMutation: false

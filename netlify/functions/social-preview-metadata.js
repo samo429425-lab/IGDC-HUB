@@ -9,7 +9,7 @@
  * when the provider/search result did not persist a usable preview image.
  */
 
-const VERSION = "social-preview-metadata-v1.10.0-bilibili-douyin";
+const VERSION = "social-preview-metadata-v1.10.1-json-media-cover-unescape";
 const TIMEOUT_MS = 2200;
 const MAX_HTML_BYTES = 900000;
 
@@ -282,7 +282,13 @@ function htmlImage(html, platform) {
     if (image) return image;
   }
 
-  const raw = text(html);
+  // Providers (notably TikTok) often serialize real post covers using
+  // JSON unicode-escaped slashes. Scan a decoded copy without accepting
+  // unaffiliated images or the known shared UI resource as cover art.
+  const raw = text(html)
+    .replace(/\\u002f/gi, "/")
+    .replace(/\\u0026/gi, "&")
+    .replace(/\\\//g, "/");
   const patterns = [
     /"(?:thumbnail_url|thumbnailUrl|display_url|displayUrl|image_url|imageUrl|preferred_thumbnail)"\s*:\s*"(https:[^"<>]+)"/ig,
     /"(?:uri|src)"\s*:\s*"(https:\\?\/\\?\/[^"<>]+(?:fbcdn\.net|cdninstagram\.com|tiktokcdn[^/]*\.com|hdslb\.com|biliimg\.com|douyincdn[^/]*\.com|douyinpic\.com|byteimg\.com|pstatp\.com)[^"<>]*)"/ig,
