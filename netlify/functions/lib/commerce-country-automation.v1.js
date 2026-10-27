@@ -1338,7 +1338,7 @@ function preservePinnedReviewPool(pool,sources){const out=[],seen=new Set();for(
 function supplierFocusLane(item){
   const payload=plain(item&&item.payload),evidence=plain(item&&item.evidence),lane=lower(first(payload.supplyLane,evidence.supplyLane,item&&item.supplyLane));
   if(lane==="digital_books_focus"||lane==="books_focus")return "digital_books_focus";
-  if(["beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"].includes(lane))return lane;
+  if(["mobile_accessories_focus","beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"].includes(lane))return lane;
   // Only recognize clear digital-publishing supplier evidence; do not classify notebooks,
   // generic marketplaces, or unrelated sellers as ebook/webtoon sources.
   const title=text(first(item&&item.title,item&&item.name,payload&&payload.name,evidence&&evidence.supplierName));
@@ -1355,7 +1355,7 @@ function supplierRankEntries(reviewPool,maxCandidates,policyHintsInput){
   // crowded out by a single high-volume category. This does NOT bypass hard
   // trust, approval or public-release gates; it only decides which private
   // candidates receive the next detailed assessment.
-  const focusLanes=["digital_books_focus","beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"],reserveEach=capacity>=16?2:1,selected=[],used=new Set();
+  const focusLanes=["digital_books_focus","mobile_accessories_focus","beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","fashion_focus","food_focus","agri_food_focus"],reserveEach=capacity>=16?2:1,selected=[],used=new Set();
   for(const lane of focusLanes){
     let taken=0;
     for(const row of normal){
@@ -2642,7 +2642,7 @@ async function beginProductResearchJob(actorId, input) {
   // 48, 100 or more new suppliers are present, all unresearched suppliers enter
   // this job. advanceProductResearchJob still processes them incrementally so
   // serverless request duration stays bounded without dropping any supplier.
-  function focusedProductResearchPriority(source){return ["beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","food_focus","agri_food_focus"].includes(lower(source&&source.supplyLane))?1:0;}
+  function focusedProductResearchPriority(source){return ["digital_books_focus","mobile_accessories_focus","beauty_focus","electronics_focus","small_appliance_focus","household_essentials_focus","health_food_focus","food_focus","agri_food_focus"].includes(lower(source&&source.supplyLane))?1:0;}
   const allSupplierSources=ProductReserve.interleaveSuppliers(sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||focusedProductResearchPriority(b)-focusedProductResearchPriority(a)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))));
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
 

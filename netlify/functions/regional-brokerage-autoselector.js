@@ -892,18 +892,53 @@ function isProductImageUrl(url){
   return true;
 }
 function imageAttrFromHtml(fragment,baseUrl){
-  const source=String(fragment||""),patterns=[
-    /(?:data-original|data-lazy-src|data-lazy|data-echo|data-image|data-thumb|data-src|src)\s*=\s*["']([^"']+)["']/i,
-    /(?:data-srcset|srcset)\s*=\s*["']([^"']+)["']/i,
-    /(?:background-image\s*:\s*url\(|data-background(?:-image)?\s*=\s*["']?)(["']?)([^"')\s]+)\1/i
-  ];
-  for(const rx of patterns){
-    const match=source.match(rx);if(!match)continue;
-    const raw=match[2]||match[1];if(!raw||/^data:/i.test(raw))continue;
-    const firstCandidate=String(raw).split(",")[0].trim().split(/\s+/)[0],url=absoluteHttpUrl(baseUrl,firstCandidate);
-    if(url&&isProductImageUrl(url))return url;
+  const source=String(fragment||"");
+  // Check real merchandise image attributes before the ordinary `src` field:
+  // many storefronts keep a loader/spacer in src and the actual photo in
+  // data-original, data-zoom-image, srcset, or a gallery-specific attribute.
+  const attrs=["data-product-image","data-zoom-image","data-large-image","data-big-image",
+    "data-gallery-image","data-original","data-lazy-src","data-lazy","data-echo",
+    "data-image","data-thumb","data-src","data-srcset","srcset","src"];
+  for(const attr of attrs){
+    const escaped=attr; // Attribute names above contain no regex metacharacters.
+    const rx=new RegExp("(?:^|[\\s<])"+escaped+"\\s*=\\s*[\\\"']([^\\\"']+)[\\\"']","gi");
+    let m;
+    while((m=rx.exec(source))){
+      const values=attr.endsWith("srcset")?String(m[1]).split(",").map(v=>v.trim().split(/\s+/)[0]):[m[1]];
+      for(const value of values){if(!value||/^data:/i.test(value))continue;
+        const url=absoluteHttpUrl(baseUrl,value);if(url&&isProductImageUrl(url))return url;
+      }
+    }
   }
+  const css=source.match(/background-image\s*:\s*url\(\s*[\"']?([^\"')\s]+)[\"']?\s*\)/i);
+  if(css){const url=absoluteHttpUrl(baseUrl,css[1]);if(url&&isProductImageUrl(url))return url;}
   return"";
+}
+
+// Detail images may be lazy-loaded or represented by zoom/gallery fields.
+// Only inspect the actual product-detail region and never borrow a site logo,
+// navigation graphic, generic category banner, or unrelated gallery image.
+function detailProductImageFromHtml(html,pageUrl,confirmedName) {
+  const source=String(html||''),normalized=normalizedPresentationTitle(confirmedName||'');
+  const tagRx=/<img\b[^>]{1,2500}>/gi;let match;
+  while((match=tagRx.exec(source))){
+    const tag=match[0],before=source.slice(Math.max(0,match.index-300),match.index),
+      altMatch=tag.match(/\b(?:alt|title)\s*=\s*["']([^"']+)["']/i),alt=normalizedPresentationTitle(altMatch&&altMatch[1]),
+      merchandiseContext=/(?:product|goods|item|detail|gallery|zoom|main)[_-]?(?:image|photo|pic|thumb|view|visual|area|wrap)|(?:goods|product|item)[_-]?(?:detail|gallery|image)|\bitemprop\s*=\s*["']image["']/i.test(tag+' '+before);
+    if(!(normalized&&alt&&alt===normalized)&&!merchandiseContext)continue;
+    const img=imageAttrFromHtml(tag,pageUrl);
+    if(img&&isProductImageUrl(img))return img;
+  }
+  return '';
+}
+function isNonCommercialReferencePage(html,pageUrl) {
+  if(ProductRanking.isNonCommercialReferenceUrl(pageUrl))return true;
+  const source=String(html||''),nodes=jsonLdNodesDeep(source),types=nodes.map(nodeType).join(' '),
+    scholarly=/(?:ScholarlyArticle|Report|Thesis|Dataset|ResearchProject|DigitalDocument)/i.test(types),
+    commerceNode=nodes.some(node=>/\bProduct\b/i.test(nodeType(node))&&(node.offers||node.price)),
+    institutional=/(?:copyright licen[cs]e|cite this content|permanent link|short abstract|place of publication|institutional repository|dublin core|dc\.creator)/i.test(source.slice(0,140000)),
+    purchase=/(?:add\s*to\s*cart|buy\s*(?:now|ebook|book)|purchase\s*(?:ebook|book|now)|checkout|장바구니|바로구매|결제하기|購入する|カートに入れる)/i.test(source.slice(0,200000));
+  return !commerceNode&&!purchase&&scholarly&&institutional;
 }
 function isProductDetailUrl(url){return ProductRanking.isSpecificProductUrl(url);}
 
@@ -993,6 +1028,7 @@ function detailProductEvidence(html,pageUrl,canonical){
   const domName=[detailHeading,firstH1].find(value=>value&&!ProductRanking.isGenericProductName(value))||"";
   const metaImage=absoluteHttpUrl(pageUrl,metaContent(source,["og:image:secure_url","og:image","twitter:image"]));
   const selectedMetaImage=isProductImageUrl(metaImage)?metaImage:"";
+  const detailGalleryImage=detailProductImageFromHtml(source,pageUrl,structuredName||metaName||domName);
   // Site-specific DOM is a last resort, used only when a tag has explicit
   // merchandise context (or its alt text matches the confirmed product name).
   const confirmedName=structuredName||metaName||domName;
@@ -1006,8 +1042,8 @@ function detailProductEvidence(html,pageUrl,canonical){
     if(!isProductImageUrl(img))continue;
     domImage=img;break;
   }
-  const image=structuredImage||selectedMetaImage||domImage;
-  return {name:confirmedName,image:image||"",imageEvidence:structuredImage?"json_ld_detail":selectedMetaImage?"open_graph_detail":domImage?"detail_dom":"",titleEvidence:structuredName?"json_ld_detail":metaName?"open_graph_detail":domName?"detail_dom":""};
+  const image=structuredImage||detailGalleryImage||selectedMetaImage||domImage;
+  return {name:confirmedName,image:image||"",imageEvidence:structuredImage?"json_ld_detail":detailGalleryImage?"detail_dom":selectedMetaImage?"open_graph_detail":domImage?"detail_dom":"",titleEvidence:structuredName?"json_ld_detail":metaName?"open_graph_detail":domName?"detail_dom":""};
 }
 
 function productBlockContext(source,start,end){
@@ -1485,6 +1521,11 @@ async function inspectProductCandidate(item,params){
   if(!productUrl)return Object.assign({},row,{researchStatus:"invalid_product_url",productPageLive:false,inspectionComplete:true});
   const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,6000,3500,8000),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{
     const page=await fetchProductHtml(productUrl,controller);if(!page.ok){const retryable=retryableProviderStatus(page.status);return Object.assign({},row,{researchStatus:retryable?"inspection_deferred":page.status,productPageLive:false,inspectionComplete:!retryable,inspectionDeferred:retryable,inspectedAt:new Date().toISOString(),inspectionError:retryable?{code:text(page.status)||"TRANSIENT_FETCH",message:page.detail||"temporary product-page fetch failure"}:row.inspectionError});}
+    if(isNonCommercialReferencePage(page.html,page.url))return Object.assign({},row,{
+      researchStatus:'non_commercial_reference',productPageLive:false,inspectionComplete:true,
+      productEvidenceReviewRequired:true,productMediaReviewReasons:['non_commercial_reference_not_retail_product'],
+      inspectedAt:new Date().toISOString(),publicPublication:false,automaticImport:false
+    });
     const invalidPage=productPageInvalidState(page.html,productUrl,page.url,supplierSiteUrl);
     if(invalidPage.invalid){
       const recovered=await recoverInvalidProductReference(row,productUrl,supplierSiteUrl,invalidPage,params);
@@ -1511,9 +1552,16 @@ async function inspectProductCandidate(item,params){
     const independentDetailProof=evidence.titleEvidence==='json_ld_detail'||evidence.titleEvidence==='detail_dom'||
       evidence.imageEvidence==='json_ld_detail'||exact.offerPresent===true||!!pagePrice.price||!!pageAvailability;
     const promotionalPreviewOnly=!independentDetailProof&&evidence.imageEvidence==='open_graph_detail';
-    const ready=!!resolvedName&&!!(evidence.name||pageTitle)&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical)&&travelEvidence.verified===true&&!promotionalPreviewOnly;
+    // A digital reading page is not necessarily a saleable ebook/webtoon. A
+    // paid edition, chapter or license must have price/offer or a local buy/rent
+    // action; free readings and magazine articles stay private for review.
+    const digitalContentDetail=/\/(?:ebooks?|webtoons?|webcomics?|comics?|digital-books?|episodes?)\//i.test(new URL(canonical).pathname);
+    const digitalCommerceProof=!!(exact.offerPresent===true||pagePrice.price)||
+      /(?:buy\s+(?:book|ebook|chapter|episode|now)|purchase\s+(?:book|ebook|chapter|episode)|rent\s+(?:book|ebook|chapter)|add\s+to\s+cart|구매하기|유료\s*(?:회차|웹툰|전자책)|소장하기|대여하기|장바구니에\s*담기|購入する|カートに入れる)/i.test(productPageVisibleText(page.html).slice(0,100000));
+    const ready=!!resolvedName&&!!(evidence.name||pageTitle)&&!!image&&same&&ProductRanking.isSpecificProductUrl(canonical)&&travelEvidence.verified===true&&!promotionalPreviewOnly&&(!digitalContentDetail||digitalCommerceProof);
     const mediaReviewReasons=[];
     if(promotionalPreviewOnly)mediaReviewReasons.push('site_preview_not_individual_item_evidence');
+    if(digitalContentDetail&&!digitalCommerceProof)mediaReviewReasons.push('digital_purchase_evidence_missing');
     if(!evidence.image)mediaReviewReasons.push("product_image_not_verified_on_detail_page");
     if(!evidence.name&&!pageTitle)mediaReviewReasons.push("product_title_not_verified_on_detail_page");
     return Object.assign({},row,exact,{id:row.id||exact.id||productIdSeed(canonical,name),productName:name,title:name,provisionalName:!resolvedName,productUrl:canonical,url:canonical,imageUrl:isProductImageUrl(image)?image:"",imageOriginalUrl:isProductImageUrl(image)?image:"",imageSource:evidence.imageEvidence||"unverified_detail",productDetailProof:independentDetailProof,productDetailEvidenceSource:evidence.titleEvidence||"",productEvidenceReviewRequired:mediaReviewReasons.length>0,productMediaReviewReasons:mediaReviewReasons,price,priceCurrency,availability,offerPresent:exact.offerPresent===true||!!price,travelInventoryVerified:travelLike?travelEvidence.verified:undefined,travelInventoryEvidenceSource:travelLike?travelEvidence.source:undefined,videoUrl:first(exact.videoUrl,pageVideo.videoUrl,row.videoUrl),videoContentUrl:first(exact.videoContentUrl,pageVideo.videoContentUrl,row.videoContentUrl),videoEmbedUrl:first(exact.videoEmbedUrl,pageVideo.videoEmbedUrl,row.videoEmbedUrl),videoThumbnailUrl:first(exact.videoThumbnailUrl,pageVideo.videoThumbnailUrl,row.videoThumbnailUrl),videoSource:first(exact.videoSource,pageVideo.videoSource,row.videoSource),supplierSiteUrl:supplierSiteUrl||exact.supplierSiteUrl,supplierId:first(row.supplierId,exact.supplierId),supplierType:first(row.supplierType,exact.supplierType),supplierTrustScore:Math.max(Number(row.supplierTrustScore)||0,Number(exact.supplierTrustScore)||0),supplierEvidenceReady:row.supplierEvidenceReady===true||exact.supplierEvidenceReady===true,supplierApprovalReady:row.supplierApprovalReady===true||exact.supplierApprovalReady===true,sourcePageUrl:first(row.sourcePageUrl,exact.sourcePageUrl,page.url),verifiedDetailPageUrl:page.url,productPageLive:true,sameSupplierSite:same,inspectionComplete:true,inspectedAt:new Date().toISOString(),researchStatus:ready?"ready_for_admin_review":"needs_manual_review",slotDecision:text(row.slotDecision)||"undecided",publicPublication:false,automaticImport:false});

@@ -97,6 +97,10 @@ const KR_PRIORITY_QUERIES = Object.freeze([
   "대한민국 주방 미니가전 미니밥솥 전기그릴 샌드위치메이커 와플메이커 계란찜기 착즙기 전동다지기 에어프라이어 제조사 브랜드 공식몰"
 ]);
 const KR_BALANCED_PRIORITY_QUERIES = Object.freeze([
+  // Guaranteed discovery slots within the existing 30-query per-cycle budget.
+  "대한민국 유료 전자책 eBook ePub 디지털도서 전자책 단권 상세 상품 판매 서점 공식 구매 다운로드 ISBN",
+  "대한민국 유료 웹툰 디지털만화 만화 단행본 회차 구매 대여 이용권 공식 콘텐츠 플랫폼 출판사",
+  "대한민국 스마트폰 모바일 액세서리 케이스 맥세이프 무선충전기 GaN 충전기 보조배터리 USB-C 멀티허브 모바일 마이크 공식몰",
   "대한민국 화장품 스킨케어 메이크업 헤어 바디 뷰티 브랜드 책임판매업자 제조사 공식몰 직영몰 배송 반품 환불 고객센터",
   "대한민국 블루투스 이어폰 이어버드 헤드폰 스피커 마이크 태블릿 충전기 보조배터리 액션카메라 스마트워치 미니프로젝터 소형전자 제조사 브랜드 공식몰",
   "대한민국 소형가전 선풍기 써큘레이터 가습기 제습기 공기청정기 청소기 전기포트 블렌더 커피메이커 제조사 브랜드 공식몰",
@@ -481,7 +485,9 @@ function restoredKrRows(geo, sourceTerms, maxQueries){
   function laneFor(query,index){
     if(/지자체|농업기술센터|생산자 명단|기업 제품/.test(query)) return "public_directory_bridge";
     if(/화장품|스킨케어|색조화장품|메이크업|뷰티기기|LED마스크|갈바닉/.test(query)) return "beauty_focus";
+    if(/스마트폰|휴대폰|맥세이프|모바일 액세서리|GaN 충전기/i.test(query)) return "mobile_accessories_focus";
     if(/블루투스|이어폰|이어버드|헤드폰|스피커|마이크|태블릿|USB|충전기|보조배터리|웹캠/.test(query)) return "electronics_focus";
+    if(/전자책|디지털도서|웹툰|디지털만화|eBook|ePub|ISBN/i.test(query)) return "digital_books_focus";
     if(/소형가전|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피메이커|커피머신|에어프라이어/.test(query)) return "small_appliance_focus";
     if(/건강식품|건강식재료|영양식|곡물|견과|약초|꿀|발효식품/.test(query)) return "health_food_focus";
     if(/김치|장류|고추장|된장|쌈장|간장|젓갈|양념|소스|식용유|식초|가공식품|전통식품|반찬/.test(query)) return "food_focus";
@@ -522,6 +528,8 @@ function buildCountryRows(geo, locales, sourceTerms, maxQueries){
   };
   const focusLocale=localeRows[0]||"en",focusPack=packForLocale(focusLocale),focusName=localCountryName(country,focusLocale,first(geo&&geo.countryName,country));
   const focusedCommerceQueries=[
+    ["digital_books_focus","paid ebooks EPUB digital books ISBN individual book purchase publisher ebook store digital comics paid webtoon episodes licensed official platform"],
+    ["mobile_accessories_focus","mobile phone accessories cases USB-C power bank MagSafe Qi wireless charger GaN charger tablet pen stylus mobile microphone gimbal manufacturer brand official store"],
     ["beauty_focus","beauty skincare makeup foundation cushion BB CC lipstick lip tint mascara eyeliner eyebrow eyeshadow blush concealer powder fragrance nail hair body grooming beauty device electric shaver hair styler LED mask galvanic facial massager scalp care manufacturer brand official store"],
     ["electronics_focus","small electronics bluetooth earbuds earphones headphones speakers microphone tablet USB hub flash drive cable charger power bank webcam manufacturer brand official store"],
     ["small_appliance_focus","small home appliances portable fan desk fan handheld fan circulator humidifier dehumidifier air purifier vacuum electric kettle toaster blender coffee maker manufacturer brand official store"],

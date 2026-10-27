@@ -300,7 +300,7 @@ function productIdFromUrl(value) {
       }
     }
     const patterns = [
-      /\/(?:dp\/prod|i\/item|product\/detail|products?|items?|detail|prd)\/([^/?#]{1,})/i,
+      /\/(?:dp\/prod|i\/item|product\/detail|products?|items?|detail|prd|ebooks?|webtoons?|webcomics?|comics?|digital-books?|episodes?)\/([^/?#]{1,})/i,
       /\/(?:product|item|goods|prd)[_-](?:view|detail)[._/-]?([^/?#]{1,})/i,
       /\/goods\/(?:view|detail)\/([^/?#]{1,})/i,
       /\/goods\/([^/?#]{1,})/i
@@ -310,7 +310,7 @@ function productIdFromUrl(value) {
       if (!match || !match[1]) continue;
       const segment = lower(match[1]);
       if (/\.(?:php|html?|aspx?|jsp)$/i.test(segment)) continue;
-      if (/^(?:view|detail|list|best|today|brand|event|sale|search|category|first[_-]?time)$/i.test(segment)) continue;
+      if (/^(?:view|detail|list|best|today|brand|event|sale|search|category|first[_-]?time|home|index|about|all|featured|popular|free|latest|new|series|genres|browse)$/i.test(segment)) continue;
       return "path:" + segment;
     }
     return "";
@@ -380,9 +380,23 @@ function travelInventoryTailIsSpecific(value) {
   return meaningful.length > 0 && meaningful.some((segment) => !/^(?:all|best|popular|featured|special|new|top)$/i.test(segment));
 }
 
+// A repository record can have a stable /items/{uuid} detail URL without
+// being a saleable product. The commercial Books/ebooks case is deliberately
+// not blocked merely by the /items path or the host's country/language.
+function isNonCommercialReferenceUrl(value) {
+  const safe = safeHttpsUrl(value);
+  if (!safe) return false;
+  try {
+    const u = new URL(safe), host = u.hostname.toLowerCase().replace(/^www\./, ''), path = decodeURIComponent(u.pathname).toLowerCase();
+    const repositoryHost = /(?:^|\.)(?:openknowledge\.fao\.org|knowledge\.un\.org|openknowledge\.worldbank\.org)$/.test(host) ||
+      /(?:^|[.-])(?:repository|repositories|digitalcommons|openknowledge|dspace|researcharchive)(?:[.-]|$)/i.test(host);
+    return repositoryHost && /^\/(?:items?|handle|record|records|bitstream|publications?|reports?|research|datasets?|articles?)(?:\/|$)/i.test(path);
+  } catch (_error) { return false; }
+}
+
 function isSpecificProductUrl(value) {
   const url = canonicalProductUrl(value);
-  if (!url || isTemplateOrPlaceholderUrl(url) || isStaticOrApiUrl(url) || isListOrCampaignUrl(url)) return false;
+  if (!url || isNonCommercialReferenceUrl(url) || isTemplateOrPlaceholderUrl(url) || isStaticOrApiUrl(url) || isListOrCampaignUrl(url)) return false;
   if (productIdFromUrl(url)) return true;
   try {
     const path = lower(new URL(url).pathname);
@@ -1827,7 +1841,7 @@ function buildPortfolio(rowsInput, contextInput) {
 
 function isReviewableProduct(rowInput) {
   const row = plain(rowInput), url = first(row.productUrl, row.url), name = first(row.productName, row.title);
-  if (!safeHttpsUrl(url) || isStaticOrApiUrl(url) || isListOrCampaignUrl(url) || isGenericProductName(name)) return false;
+  if (!safeHttpsUrl(url) || isNonCommercialReferenceUrl(url) || isStaticOrApiUrl(url) || isListOrCampaignUrl(url) || isGenericProductName(name)) return false;
   return row.jsonLdProduct === true || isSpecificProductUrl(url);
 }
 
@@ -1847,6 +1861,7 @@ module.exports = {
   displayFamilyKey,
   supplierKey,
   isSpecificProductUrl,
+  isNonCommercialReferenceUrl,
   isReviewableProduct,
   isGenericProductName,
   normalizeFamilyTitle,
