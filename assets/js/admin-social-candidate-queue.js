@@ -799,20 +799,26 @@
   }
   function thumb(r, mode) {
     var url = thumbnailOf(r, mode);
-    return /^https:\/\//i.test(url)
-      ? '<img loading="lazy" referrerpolicy="no-referrer" src="' +
-          esc(url) +
-          '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'grid\'">' +
-          '<span class="candidate-thumb-fallback" style="display:none">' +
-          esc(r.platform || "SNS") +
-          "<br>" +
-          esc(r.creatorName || r.title || "공개 미리보기") +
-          "</span>"
-      : '<span class="candidate-thumb-fallback">' +
-          esc(r.platform || "SNS") +
-          "<br>" +
-          esc(r.creatorName || r.title || "공개 미리보기") +
-          "</span>";
+    var platform = lower(r.platform || r.sectionKey).replace(/^social-/, "");
+    var raw = r.raw || {};
+    var postUrl = text(r.latestContentUrl || raw.latestContentUrl || raw.latest_content_url || r.sourceUrl || raw.sourceUrl);
+    // A valid post link can be displayed even when its short-lived CDN cover
+    // has expired. Ask the same-origin social-only relay before blanking cards.
+    var relay = mode !== "registry" &&
+      ["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].indexOf(platform) >= 0 &&
+      /^https:\/\//i.test(postUrl)
+        ? "/.netlify/functions/social-thumbnail-proxy?platform=" + encodeURIComponent(platform) +
+          "&url=" + encodeURIComponent(postUrl) +
+          "&thumb=" + encodeURIComponent(genericProviderPreviewThumb(platform, url) ? "" : url)
+        : "";
+    var initial = relay || url;
+    var backup = relay && /^https:\/\//i.test(url) && !genericProviderPreviewThumb(platform, url) ? url : "";
+    var fallback = '<span class="candidate-thumb-fallback"' + (initial ? ' style="display:none"' : "") + '>' +
+      esc(r.platform || "SNS") + "<br>" + esc(r.creatorName || r.title || "공개 미리보기") + '</span>';
+    if (!initial || !/^(?:https:\/\/|\/\.netlify\/functions\/)/i.test(initial)) return fallback;
+    return '<img loading="lazy" referrerpolicy="no-referrer" src="' + esc(initial) +
+      '" data-direct-thumb="' + esc(backup) +
+      '" alt="" onerror="if(this.dataset.directThumb &amp;&amp; this.dataset.triedDirect!==\'1\'){this.dataset.triedDirect=\'1\';this.src=this.dataset.directThumb;}else{this.style.display=\'none\';this.nextElementSibling.style.display=\'grid\';}">' + fallback;
   }
   function rebuildLatestContentIndex(sourceRows) {
     latestContentIndex = new Map();

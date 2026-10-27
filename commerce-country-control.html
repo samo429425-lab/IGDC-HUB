@@ -292,7 +292,7 @@
       <div class="review-return-note">업체명·원본 주소·원본 사이트 링크는 브라우저 최상위 현재 탭에서 엽니다. 외부 페이지를 확인한 뒤 브라우저 좌상단의 뒤로가기를 누르면 이 관리자 목록과 기존 스크롤 위치로 돌아옵니다.</div>
       <div class="small" style="margin-top:10px">관리자 직접 공급업체 등록 및 상품 조사 링크는 <strong>상단 ‘관리자 직접 공급업체 수동 등록·상품 조사’</strong>에서 입력합니다. 기존 후보 관리와 심사 기능은 이 목록에서 그대로 사용합니다.</div>
       <div class="supplier-main-toolbar" aria-label="본 후보 일괄 관리">
-        <label class="supplier-select-label"><input id="supplierActiveSelectAll" type="checkbox" data-supplier-select-all="active"> 전체 선택</label>
+        <label class="supplier-select-label"><input id="supplierActiveSelectAll" type="checkbox" data-supplier-select-all="active"> 현재 페이지 최대 100개 업체 전체 선택</label>
         <span id="supplierActiveSelectedCount" class="supplier-selection-count">선택 0건</span>
         <button type="button" data-supplier-bulk="keep" data-supplier-bulk-scope="active" disabled>선택 계속 확인·유지</button>
         <button type="button" class="secondary" data-supplier-bulk="hold" data-supplier-bulk-scope="active" disabled>선택 후보 제외·보류</button>
@@ -300,7 +300,7 @@
         <button type="button" class="danger" data-supplier-bulk="purge" data-supplier-bulk-scope="active" disabled>선택 URL 영구 제외</button>
         <button type="button" class="danger" data-supplier-bulk="block" data-supplier-bulk-scope="active" disabled>선택 도메인 차단</button>
       </div>
-      <div class="tablewrap"><table class="supplier-table"><thead><tr><th>순번</th><th>선택</th><th>업체·원본 사이트·확인 증빙·유형·상태</th><th>AI 추천·강점·주의·다음 확인</th></tr></thead><tbody id="aiRows"></tbody></table></div>
+      <div class="tablewrap"><table class="supplier-table"><thead><tr><th>순번</th><th>선택</th><th>업체·원본 사이트·확인 증빙·유형·상태</th><th>AI 추천·강점·주의·다음 확인</th></tr></thead><tbody id="aiRows"></tbody></table></div><div id="supplierActivePager" aria-live="polite" style="margin:10px 0 4px"></div>
     </div>
   </details>
 

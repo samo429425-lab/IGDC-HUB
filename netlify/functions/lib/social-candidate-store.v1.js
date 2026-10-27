@@ -1768,8 +1768,17 @@ function replacementNeed(slot, currentRow, alternativeRow, sectionKey) {
   if (!platformContentUrl(platform, sourceUrl)) {
     return { needed: true, hard: true, reason: "invalid_or_noncontent_front_url" };
   }
-  if (!currentRow || !isPublishEligibleContentRow(currentRow)) {
-    return { needed: true, hard: true, reason: "candidate_missing_or_no_longer_publishable" };
+  // A bounded candidate query may omit a previously verified, live row. An
+  // absent row is not evidence that the actual video was deleted or blocked.
+  // Preserve its existing valid content URL until it is explicitly unpublished
+  // or an authoritative review supplies a non-publishable row. This prevents
+  // a transient Supabase/pagination miss from replacing dozens of videos with
+  // SAMPLE cards in a single front-match operation.
+  if (!currentRow) {
+    return { needed: false, hard: false, reason: "missing_candidate_read_preserve_live" };
+  }
+  if (!isPublishEligibleContentRow(currentRow)) {
+    return { needed: true, hard: true, reason: "candidate_explicitly_no_longer_publishable" };
   }
   if (plain(currentRow.raw).placementOverride === "replacement_waiting") {
     return { needed: true, hard: true, reason: "manual_replacement_waiting" };

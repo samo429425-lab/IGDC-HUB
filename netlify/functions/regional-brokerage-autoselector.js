@@ -897,7 +897,7 @@ function imageAttrFromHtml(fragment,baseUrl){
   // many storefronts keep a loader/spacer in src and the actual photo in
   // data-original, data-zoom-image, srcset, or a gallery-specific attribute.
   const attrs=["data-product-image","data-zoom-image","data-large-image","data-big-image",
-    "data-gallery-image","data-original","data-lazy-src","data-lazy","data-echo",
+    "data-full-image","data-zoom-src","data-fancybox-src","data-gallery-image","data-original","data-lazy-src","data-lazy","data-echo",
     "data-image","data-thumb","data-src","data-srcset","srcset","src"];
   for(const attr of attrs){
     const escaped=attr; // Attribute names above contain no regex metacharacters.
@@ -1028,6 +1028,15 @@ function detailProductEvidence(html,pageUrl,canonical){
   const domName=[detailHeading,firstH1].find(value=>value&&!ProductRanking.isGenericProductName(value))||"";
   const metaImage=absoluteHttpUrl(pageUrl,metaContent(source,["og:image:secure_url","og:image","twitter:image"]));
   const selectedMetaImage=isProductImageUrl(metaImage)?metaImage:"";
+  // Microdata image and legacy image_src are common on storefront detail pages.
+  // They are evidence only for the current, individually identified product.
+  const itemTags=Array.from(source.matchAll(/<(?:meta|link)\b[^>]{1,1600}>/gi)).slice(0,600);
+  let microdataImage="";
+  for(const tagMatch of itemTags){const tag=tagMatch[0];
+    if(!/(?:\bitemprop\s*=\s*["']image["']|\brel\s*=\s*["']image_src["'])/i.test(tag))continue;
+    const raw=(tag.match(/\b(?:content|href)\s*=\s*["']([^"']+)["']/i)||[])[1]||"";
+    const candidate=absoluteHttpUrl(pageUrl,raw);if(isProductImageUrl(candidate)){microdataImage=candidate;break;}
+  }
   const detailGalleryImage=detailProductImageFromHtml(source,pageUrl,structuredName||metaName||domName);
   // Site-specific DOM is a last resort, used only when a tag has explicit
   // merchandise context (or its alt text matches the confirmed product name).
@@ -1042,8 +1051,8 @@ function detailProductEvidence(html,pageUrl,canonical){
     if(!isProductImageUrl(img))continue;
     domImage=img;break;
   }
-  const image=structuredImage||detailGalleryImage||selectedMetaImage||domImage;
-  return {name:confirmedName,image:image||"",imageEvidence:structuredImage?"json_ld_detail":detailGalleryImage?"detail_dom":selectedMetaImage?"open_graph_detail":domImage?"detail_dom":"",titleEvidence:structuredName?"json_ld_detail":metaName?"open_graph_detail":domName?"detail_dom":""};
+  const image=structuredImage||detailGalleryImage||microdataImage||selectedMetaImage||domImage;
+  return {name:confirmedName,image:image||"",imageEvidence:structuredImage?"json_ld_detail":detailGalleryImage?"detail_dom":microdataImage?"itemprop_detail":selectedMetaImage?"open_graph_detail":domImage?"detail_dom":"",titleEvidence:structuredName?"json_ld_detail":metaName?"open_graph_detail":domName?"detail_dom":""};
 }
 
 function productBlockContext(source,start,end){

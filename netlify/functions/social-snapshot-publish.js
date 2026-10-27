@@ -1062,6 +1062,31 @@ exports.handler = async function (event) {
     );
     const publicationDiff = publicationPlanDiff(previousPublicationPlan, publicationPlan);
 
+    // A previously populated live section must not collapse to near-zero in
+    // a normal refresh when the candidate query temporarily returns a thin
+    // page (or an API fails). Explicit selected unpublish is exempt and keeps
+    // administrator deletion functional. Nothing is written on failure.
+    if (storeRelease && !unpublishSelected && serverAuthoritativeCandidateSelection) {
+      const dangerousDrops = Object.entries(publicationDiff.sections || {})
+        .filter(([section, value]) =>
+          requestedSections.includes(section) &&
+          Number(value.before || 0) >= 20 &&
+          Number(value.after || 0) < Math.ceil(Number(value.before || 0) * 0.65))
+        .map(([section, value]) => ({
+          section, before: Number(value.before || 0), after: Number(value.after || 0)
+        }));
+      if (dangerousDrops.length) {
+        return SocialStore.response(409, {
+          ok: false, version: VERSION,
+          error: "mass_publication_drop_prevented",
+          message: "기존 게시 콘텐츠가 대량 감소하는 배포를 차단했습니다. 원본 게시 목록을 유지하며 후보 조회와 승인 상태를 먼저 점검하세요.",
+          dangerousDrops, previousPublicationPlanHash, publicationPlanHash,
+          releaseStored: false, runtimeFrontReady: false,
+          preservedExistingFront: true, buildQueued: false
+        });
+      }
+    }
+
     if (
       publishMode === "selected_sections_front_publish" &&
       publicationDiff.changedSections.some((key) => !requestedSections.includes(key))

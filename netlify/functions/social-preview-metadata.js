@@ -402,6 +402,36 @@ async function oembed(platform, contentUrl) {
   return fetchJson(endpoint);
 }
 
+async function bilibiliVideoMetadata(contentUrl) {
+  try {
+    const parsed = new URL(contentUrl);
+    if (!/(^|\.)bilibili\.com$/i.test(parsed.hostname)) return null;
+    const match = parsed.pathname.match(/^\/video\/(BV[0-9A-Za-z]{10}|av\d+)(?:\/|$)/i);
+    if (!match) return null;
+    const id = match[1];
+    const query = /^BV/i.test(id) ? "bvid=" + encodeURIComponent(id) : "aid=" + encodeURIComponent(id.slice(2));
+    const response = await fetchWithTimeout("https://api.bilibili.com/x/web-interface/view?" + query, {
+      method: "GET", redirect: "error",
+      headers: {
+        accept: "application/json",
+        referer: "https://www.bilibili.com/",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"
+      }
+    }, TIMEOUT_MS);
+    if (!response.ok) return null;
+    const parsedResponse = await response.json();
+    if (Number(parsedResponse.code) !== 0 || !parsedResponse.data) return null;
+    const data = parsedResponse.data;
+    const owner = data.owner || {};
+    const thumb = previewImageUrl("bilibili", text(data.pic).startsWith("//") ? "https:" + data.pic : data.pic);
+    return {
+      resolvedUrl: contentUrl, thumbnailUrl: thumb,
+      title: stripTags(data.title || ""), creatorName: stripTags(owner.name || ""),
+      channelUrl: /^\d+$/.test(String(owner.mid || "")) ? "https://space.bilibili.com/" + owner.mid : "",
+      source: "bilibili-public-video-view"
+    };
+  } catch (_error) { return null; }
+}
 function shortProviderUrl(platform, value) {
   try {
     const url = new URL(value);
@@ -516,6 +546,14 @@ async function resolvePreview(platform, contentUrl) {
     } catch (_error) {}
   }
 
+
+  // A direct BV/av video ID is enough to request Bilibili's public metadata.
+  // This yields the actual cover/title/creator even when search HTML has no
+  // OpenGraph image. Permission/region failures simply fall back to HTML.
+  if (platform === "bilibili") {
+    const direct = await bilibiliVideoMetadata(workingUrl);
+    if (direct && direct.thumbnailUrl) return direct;
+  }
 
   const oe = await oembed(platform, workingUrl);
   const oeTitle = stripTags(oe && (oe.title || oe.author_name || ""));

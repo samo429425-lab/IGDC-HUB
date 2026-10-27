@@ -1725,6 +1725,11 @@ async function genericNativeHtmlSearch(platform, queryText, limit, pageIndex) {
           ["facebook-native-watch-search", "https://www.facebook.com/watch/search/?q=" + encodeURIComponent(clean), "https://www.facebook.com/", "en-US,en;q=0.8"],
           ["facebook-native-video-search", "https://www.facebook.com/search/videos/?q=" + encodeURIComponent(clean), "https://www.facebook.com/", "en-US,en;q=0.8"]
         ]
+      : platform === "snapchat"
+        ? [
+            ["snapchat-spotlight-public", "https://www.snapchat.com/spotlight", "https://www.snapchat.com/", "en-US,en;q=0.8"],
+            ["snapchat-spotlight-topic", "https://www.snapchat.com/topic/snapchat-spotlight", "https://www.snapchat.com/", "en-US,en;q=0.8"]
+          ]
       : platform === "douyin"
         ? [
             ["douyin-native-search", "https://www.douyin.com/search/" + encodeURIComponent(clean) + "?type=video&page=" + page, "https://www.douyin.com/", "zh-CN,zh;q=0.9,en;q=0.5"],
@@ -1821,18 +1826,61 @@ async function douyinPublicApiSearch(queryText, limit, pageIndex) {
   }
 }
 
+// Official Douyin video search is permission-gated (aweme.dy.video_search).
+// Only enable this lane after IGDC receives the platform's authorization;
+// never scrape authentication cookies or pretend an unconfigured lane ran.
+async function douyinOfficialVideoSearch(queryText, limit) {
+  const token = SocialStore.text(process.env.DOUYIN_VIDEO_SEARCH_ACCESS_TOKEN);
+  const deviceId = SocialStore.text(process.env.DOUYIN_VIDEO_SEARCH_DEVICE_ID);
+  const provider = "douyin-official-video-search";
+  if (!token || !/^\d{5,25}$/.test(deviceId)) {
+    return { provider, status: "not_configured", items: [], trace: [{ name: provider, status: "not_configured", count: 0 }] };
+  }
+  const clean = sparseSearchTerms(queryText, "douyin") || "旅游 音乐 文化 科普";
+  const wanted = Math.max(1, Math.min(20, Number(limit || 10)));
+  const params = new URLSearchParams({ device_id: deviceId, keyword: clean, count: String(wanted), cursor: "0", publish_time: "0", sort_type: "2" });
+  try {
+    const data = await fetchJson("https://open.douyin.com/dy_open_api/v1/search/video/?" + params.toString(), {
+      headers: { accept: "application/json", "content-type": "application/json", "access-token": token }
+    }, REQUEST_TIMEOUT_MS);
+    const code = Number(data && data.err_no || 0);
+    if (code !== 0) return { provider, status: "api_restricted", error: "official_douyin_code_" + code, items: [], trace: [{ name: provider, status: "api_restricted", count: 0, error: "official_douyin_code_" + code }] };
+    const results = data && data.data && data.data.data && data.data.data.video_list;
+    const items = (Array.isArray(results) ? results : []).map((row) => {
+      const id = firstText([row && row.item_id]);
+      if (!/^\d{8,25}$/.test(id)) return null;
+      const contentUrl = "https://www.douyin.com/video/" + id;
+      return {
+        provider, platform: "douyin", url: contentUrl,
+        latestContentUrl: contentUrl, sourceUrl: contentUrl,
+        title: firstText([row.title, row.high_quality_text, "Douyin · Video " + id]),
+        creatorName: firstText([row.nickname]),
+        thumbnail: /^https:\/\//i.test(firstText([row.cover])) ? row.cover : "",
+        publishedAt: Number(row.create_time || 0) > 0 ? new Date(Number(row.create_time) * 1000).toISOString() : "",
+        entityKind: "latest_video", engagement: { likes: Number(row.statistics && row.statistics.digg_count || 0) },
+        source: { name: provider, platform: "douyin", mode: "official_permissioned_video_search" }
+      };
+    }).filter(Boolean);
+    return { provider, status: items.length ? "ok" : "empty", items,
+      trace: [{ name: provider, status: items.length ? "ok" : "empty", count: items.length }] };
+  } catch (error) {
+    const status = error && (error.statusCode === 401 || error.statusCode === 403) ? "api_restricted" : (error && error.name === "AbortError" ? "timeout" : "error");
+    return { provider, status, error: "official_search_request_failed", items: [], trace: [{ name: provider, status, count: 0, error: "official_search_request_failed" }] };
+  }
+}
 async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep, pageIndex) {
   if (!plan || !SPARSE_DISCOVERY_PLATFORMS.has(plan.platform)) {
     return { provider: "sparse-native-public-search", status: "not_needed", items: [] };
   }
   if (plan.platform === "douyin") {
-    const [api, html] = await Promise.all([
+    const [official, api, html] = await Promise.all([
+      douyinOfficialVideoSearch(queryText, limit),
       douyinPublicApiSearch(queryText, limit, pageIndex),
       genericNativeHtmlSearch(plan.platform, queryText, limit, pageIndex)
     ]);
     const seen = new Set();
     const items = [];
-    [api, html].forEach((result) => (result.items || []).forEach((item) => {
+    [official, api, html].forEach((result) => (result.items || []).forEach((item) => {
       const key = SocialStore.text(item && (item.latestContentUrl || item.url)).toLowerCase();
       if (!key || seen.has(key)) return;
       seen.add(key);
@@ -1840,9 +1888,9 @@ async function sparseNativePublicSearch(plan, queryText, limit, qualitySweep, pa
     }));
     return {
       provider: "douyin-native-search",
-      status: items.length ? "ok" : (api.status === "error" || api.status === "timeout" || html.status === "degraded" ? "degraded" : "empty"),
+      status: items.length ? "ok" : (official.status === "api_restricted" || official.status === "error" || official.status === "timeout" || api.status === "error" || api.status === "timeout" || html.status === "degraded" ? "degraded" : "empty"),
       items,
-      trace: [].concat(api.trace || [], html.trace || [])
+      trace: [].concat(official.trace || [], api.trace || [], html.trace || [])
     };
   }
   if (plan.platform !== "bilibili") {
@@ -3655,6 +3703,7 @@ exports.__test = {
   registrySweepWindow,
   sparseSearchTerms,
   sparseNativePublicSearch,
+  douyinOfficialVideoSearch,
   psomSocialContract,
   searchBankContentResearchOne,
   googleChannelSearch,
