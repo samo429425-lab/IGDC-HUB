@@ -143,9 +143,11 @@
 
   <section class="panel">
     <h2>전 세계 예약 자동화</h2>
-    <div class="small">현재 접속 IP 또는 관리자 선택 국가의 수동 점검과 개별 설정은 아래 국가·지역 점검에서 그대로 수행합니다. 상단에서는 전 세계 지원국 예약 자동화의 시작과 전체 중지만 제어합니다. 전 세계 자동 시작은 기존 권역·국가·지역 예외를 상속 상태로 정리한 뒤 지원국 전체를 순환 예약하며 북한(KP)은 제외합니다.</div>
+    <div class="small">현재 접속 IP 또는 관리자 선택 국가의 수동 점검과 개별 설정은 아래 국가·지역 점검에서 그대로 수행합니다. 상단에서 전 세계 또는 현재 선택 국가·지역의 책임 공급업체 예약 자동화를 별도로 시작·중지할 수 있습니다. 이 예약은 상품 공개·20개 섹션 자동 게재를 승인하지 않으며, 개별 상품 검증·PSOM 배치·SearchBank·Snapshot의 안전 조건은 별도로 유지합니다. 전 세계 자동 시작은 기존 권역·국가·지역 예외를 상속 상태로 정리한 뒤 지원국 전체를 순환 예약하며 북한(KP)은 제외합니다.</div>
     <div class="operation-actions">
       <button id="globalAutoModeBtn" type="button">전 세계 자동 시작</button>
+      <button id="selectedCountryAutoBtn" type="button" class="secondary">선택 국가 예약 자동 시작</button>
+      <button id="selectedCountryAutoStopBtn" type="button" class="secondary">선택 국가 자동 중지</button>
       <button id="globalPauseBtn" type="button" class="danger">전체 자동 중지</button>
       <button id="globalSituationBtn" type="button" class="secondary">상황 점검</button>
       <button id="globalControlDownloadBtn" type="button" class="secondary" disabled>전체 관제 JSON 다운로드</button>
@@ -626,7 +628,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=igdc-40b1d7f17782"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=igdc-country-autoguard-20261028"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20261025-paged-exclusion-v1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

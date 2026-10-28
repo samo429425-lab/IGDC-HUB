@@ -338,6 +338,9 @@ function sanitizeSetting(input) {
     scopeType, regionGroup: scopeType === "region" ? regionGroup : (countryRow(countryCode) && countryRow(countryCode).regionGroup) || null,
     countryCode: countryCode || null, subdivisionCode: subdivisionCode || null,
     mode: settingMode, enabled: settingMode !== "off",
+    // Only the master can constrain the hourly scheduler to one selected scope.
+    selectedCountryCode: scopeType === "master" && settingMode === "manual" ? normalizeCountry(raw.selectedCountryCode) || null : null,
+    selectedSubdivisionCode: scopeType === "master" && settingMode === "manual" ? text(raw.selectedSubdivisionCode || "NATIONWIDE").toUpperCase() : null,
     intervalDays: Math.round(clamp(raw.intervalDays, 1, 30, DEFAULT_INTERVAL_DAYS)),
     expandSubdivisions: raw.expandSubdivisions === true,
     maxCandidates: Math.round(clamp(raw.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES)),
@@ -352,6 +355,8 @@ function rowToSetting(row) {
     countryCode: normalizeCountry(rule.countryCode || row && row.scope_country) || null,
     subdivisionCode: normalizeRegion(rule.subdivisionCode || row && row.scope_region, rule.countryCode || row && row.scope_country) || null,
     mode: mode(rule.mode, row && row.enabled === false ? "off" : "inherit"), enabled: row && row.enabled !== false,
+    selectedCountryCode: lower(rule.scopeType)==="master" ? normalizeCountry(rule.selectedCountryCode) || null : null,
+    selectedSubdivisionCode: lower(rule.scopeType)==="master" ? text(rule.selectedSubdivisionCode || "NATIONWIDE").toUpperCase() : null,
     intervalDays: Math.round(clamp(rule.intervalDays, 1, 30, DEFAULT_INTERVAL_DAYS)),
     expandSubdivisions: rule.expandSubdivisions === true, maxCandidates: Math.round(clamp(rule.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES)),
     researchDirective: ["country", "subdivision"].includes(lower(rule.scopeType)) ? text(rule.researchDirective).slice(0, 1200) : "",
@@ -424,13 +429,13 @@ async function saveSetting(actorId, input) {
 function operatingStatus(stateInput) {
   const state = stateInput || { master: { mode: "off" }, map: new Map(), settings: [] };
   const masterMode = state.master && state.master.mode || "off";
-  const profile = masterMode === "auto" ? "global_auto" : masterMode === "off" ? "global_pause" : "custom";
+  const profile = masterMode === "auto" ? "global_auto" : masterMode === "off" ? "global_pause" : "country_auto";
   let autoCountries = 0;
   if (masterMode === "auto") {
     for (const country of registry().countries) {
       if (effectiveSetting(state, country.code, "").mode === "auto") autoCountries += 1;
     }
-  }
+  } else if(masterMode === "manual" && countryRow(state.master.selectedCountryCode)) autoCountries=1;
   return {
     profile,
     masterMode,
@@ -475,10 +480,33 @@ async function resetScopedOverrides(actorId, rowsInput) {
   return updates.length;
 }
 
-async function applyOperatingPreset(actorId, presetInput) {
+async function applyOperatingPreset(actorId, presetInput, scopeInput) {
   const preset = lower(presetInput);
-  if (!["global_auto", "global_pause"].includes(preset)) {
+  if (!["global_auto", "global_pause", "country_auto", "country_pause"].includes(preset)) {
     const error = new Error("지원하지 않는 운영 전환 설정입니다."); error.statusCode = 400; throw error;
+  }
+  if (preset === "country_auto" || preset === "country_pause") {
+    const input=plain(scopeInput), country=normalizeCountry(input.countryCode||input.country), info=countryRow(country);
+    if(!info||country==="KP"){const error=new Error("선택한 지원 국가가 올바르지 않습니다.");error.statusCode=400;throw error;}
+    const region=normalizeRegion(input.subdivisionCode||input.regionCode||"NATIONWIDE",country)||"NATIONWIDE";
+    if(region!=="NATIONWIDE"&&!array(info.subdivisions).some(item=>item.code===region)){
+      const error=new Error("선택 국가의 공식 지역 코드가 아닙니다.");error.statusCode=400;throw error;
+    }
+    const stateBefore=await configState();
+    // A country-only start is exclusive by design, not a global start.
+    if(preset==="country_auto") {
+      const scopeType=region==="NATIONWIDE"?"country":"subdivision";
+      await saveSetting(actorId,{scopeType,countryCode:country,subdivisionCode:region,mode:"auto",intervalDays:DEFAULT_INTERVAL_DAYS,maxCandidates:DEFAULT_MAX_CANDIDATES});
+      await saveSetting(actorId,{scopeType:"master",mode:"manual",selectedCountryCode:country,selectedSubdivisionCode:region,intervalDays:DEFAULT_INTERVAL_DAYS,maxCandidates:DEFAULT_MAX_CANDIDATES});
+    }else{
+      if(stateBefore.master.mode==="manual"&&stateBefore.master.selectedCountryCode===country){
+        await saveSetting(actorId,{scopeType:"master",mode:"off",intervalDays:DEFAULT_INTERVAL_DAYS,maxCandidates:DEFAULT_MAX_CANDIDATES});
+      }else{
+        await saveSetting(actorId,{scopeType:region==="NATIONWIDE"?"country":"subdivision",countryCode:country,subdivisionCode:region,mode:"off",intervalDays:DEFAULT_INTERVAL_DAYS,maxCandidates:DEFAULT_MAX_CANDIDATES});
+      }
+    }
+    const after=await configState();
+    return{ok:true,reportType:"igdc-country-automation-operating-preset",version:VERSION,preset,scope:{country,region},operatingStatus:operatingStatus(after),reservationOnly:true,automaticProductPublication:false,manualDecisionPrecedence:true};
   }
   const rows = await policyRows();
   const clearedOverrides = preset === "global_auto" ? await resetScopedOverrides(actorId, rows) : 0;
@@ -3190,7 +3218,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   const movedToCandidate=candidateTransferredIdentities.size,transferred=movedToCandidate+Number(validationRoute.routedHold||0)+Number(validationRoute.routedReject||0)+Number(validationRoute.protectedPreserved||0);
   const partialQueue={schema:"igdc-product-research-partial-private-queue.v6",operation:"stage",source:lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual"),eligible:eligibleTotal,done,remaining,attempted:batch.length+Number(validationRoute.attempted||0),handled:summary.created+summary.updated+summary.preserved,movedToCandidate,transferred,transferredKeys:allTransferredKeys,candidateTransferredKeys:Array.from(candidateTransferredKeys),holdTransferredKeys,rejectTransferredKeys,protectedTransferredKeys,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,reserveDeferred:summary.reserveDeferred,reserveReplaced:summary.reserveReplaced,validationBlocked:selectedValidationBlockedRows.length,routedHold:Number(validationRoute.routedHold||0),routedReject:Number(validationRoute.routedReject||0),protectedPreserved:Number(validationRoute.protectedPreserved||0),blocked:selectedBlocked,blockedReasons,failed:totalFailed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),reactivationPending:Number(selectionReconcile.reactivationPending||0),complete,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsTransferred:hasSelection&&manualReviewQueue?transferred:0,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
   const consumedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));if(hasSelection&&manualReviewQueue)transferredIdentities.forEach((identity)=>consumedLatest.add(identity));
-  runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueScanCursor:hasSelection?Number(runtime.partialQueueScanCursor||0):scanCursor,partialQueueLedgerVerifiedVersion:hasSelection?text(runtime.partialQueueLedgerVerifiedVersion):VERSION,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueReserveDeferredIdentities:Array.from(reserveDeferred).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(consumedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
+  runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueScanCursor:hasSelection?Number(runtime.partialQueueScanCursor||0):((job.status!=="complete"&&!durablePaused&&lower(input&&input.source)==="administrator_manual")?0:scanCursor),partialQueueLedgerVerifiedVersion:hasSelection?text(runtime.partialQueueLedgerVerifiedVersion):VERSION,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueReserveDeferredIdentities:Array.from(reserveDeferred).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(consumedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
   return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,onlyValidatedProductsEnterActiveCandidateQueue:true,invalidLatestRowsClassifiedToHoldOrReject:hasSelection&&manualReviewQueue,latestListActsAsTransferInbox:hasSelection&&manualReviewQueue,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
 }
 
@@ -3202,7 +3230,12 @@ async function stageCurrentProductResearchQueue(actorId,input){
   if(!job||job.schema!==PRODUCT_JOB_SCHEMA){const error=new Error("현재 조사분을 등록할 공식 상품 리서치 작업이 없습니다.");error.statusCode=404;throw error;}
   const requestedJobId=text(input&&input.jobId);if(requestedJobId&&text(job.jobId)&&requestedJobId!==text(job.jobId)){const error=new Error("현재 국가·지역의 최신 상품 리서치 작업과 요청 작업 ID가 일치하지 않습니다. 상태를 새로 읽은 뒤 다시 실행하세요.");error.statusCode=409;throw error;}
   const durablePaused=runtime.pauseRequested===true&&(!text(runtime.jobId)||text(runtime.jobId)===text(job.jobId)),explicitSelection=array(input&&input.productIds).map(text).filter(Boolean).length>0||array(input&&input.productRefs).length>0;
-  if(operation==="stage"&&job.status!=="complete"&&!durablePaused&&!explicitSelection){const error=new Error("상품 리서치가 진행 중입니다. 전체 조사분 일괄 등록은 리서치 완료 또는 서버 일시정지 후 실행하세요. 화면에서 선택한 최신 상품은 진행 중에도 개별 대기열 등록할 수 있습니다.");error.statusCode=409;error.code="PRODUCT_RESEARCH_QUEUE_PHASE_NOT_READY";throw error;}
+  // Manual operator staging is a snapshot of ALREADY inspected products, not
+  // a command to complete an in-flight crawler. The inspection/quality gate
+  // downstream remains mandatory. The automatic pause path requires a durable
+  // pause; browser-only pause signals are not sufficient.
+  const stageSource=lower(input&&input.source),explicitManualSnapshot=stageSource==="administrator_manual";
+  if(operation==="stage"&&job.status!=="complete"&&!durablePaused&&!explicitSelection&&!explicitManualSnapshot){const error=new Error("상품 리서치 진행 중 자동 일괄 등록은 서버 일시정지 확인 후 실행하세요.");error.statusCode=409;error.code="PRODUCT_RESEARCH_QUEUE_PHASE_NOT_READY";throw error;}
   if(operation!=="delete"&&job.resultStorage!=="chunked_v1"&&array(job.products).length>80){
     const migration=await migrateLegacyProductResultsStep(job,actorId,3);
     if(!migration.complete){
@@ -3745,7 +3778,11 @@ function productCandidateId(scope, product) {
   return identity?"country_product_"+sha256(scope.country+"|"+scope.region+"|"+identity).slice(0,24):"";
 }
 function productCandidatePayload(actorId, scope, product, decision) {
-  const selected = decision === "slot_candidate", managementControl = plain(product.managementControl), aiSelected = selected && lower(managementControl.source) === "ai_automation";
+  const selected = decision === "slot_candidate", managementControl = Object.assign({},plain(product.managementControl)), aiSelected = selected && lower(managementControl.source) === "ai_automation";
+  if (plain(managementControl.latestResearchHandoff).completed !== true) {
+    managementControl.latestResearchHandoff = Object.assign({}, plain(managementControl.latestResearchHandoff),
+      { registered:true, completed:false, destination:"latest_research", registeredAt:iso(), scopeCountry:scope.country, scopeRegion:scope.region });
+  }
   const placement = plain(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || array(product.sectionAssignments)[0]);
   const productUrlValue = productUrl(product), imageUrlValue = productImageUrl(product), readiness = ProductPipeline.researchReadiness(product), card = ProductPipeline.productCard(product);
   const placementRecord = { page: text(placement.page), section: text(placement.sectionKey || placement.section), country: scope.country, region: scope.region, proposalOnly: !selected, administratorSelected: selected && !aiSelected, aiSelected, publicationPending: selected, publicPublication: false };
@@ -3869,6 +3906,11 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
     }
   }
   const payload = productCandidatePayload(actorId, scope, product, "research_pending");
+  if (existing && Object.keys(plain(existingPayload.managementControl)).length) {
+    payload.managementControl=Object.assign({},payload.managementControl,plain(existingPayload.managementControl));
+    if (plain(existingPayload.managementControl.latestResearchHandoff).completed===true)
+      payload.managementControl.latestResearchHandoff=plain(existingPayload.managementControl.latestResearchHandoff);
+  }
 
   // An explicit administrator queue-registration click means a rediscovered,
   // reviewable HOLD candidate should return to the active private management
@@ -4537,7 +4579,16 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
         inspected.thumb = sourceImage;
       }
     }
-    const health = candidateRuntimeHealth(inspected), priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), manualLocked = candidateRuntimeManualLock(existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
+    const initialHealth = candidateRuntimeHealth(inspected), manualLocked = candidateRuntimeManualLock(existingPayload);
+    const automaticEvidenceReady = inspected.inspectionComplete===true && inspected.productPageLive===true &&
+      !!productImageUrl(inspected) && !!productUrl(inspected) && ProductRanking.isSpecificProductUrl(productUrl(inspected)) &&
+      !ProductRanking.isGenericProductName(first(inspected.productName,inspected.title,inspected.sourceTitle));
+    // A site returning HTTP 200 is not proof of a sellable item. Without an
+    // actual product image/title/detail-page proof AI must KEEP it unassigned.
+    const health = !validationOnly && !manualLocked && initialHealth.live && !automaticEvidenceReady
+      ? Object.assign({},initialHealth,{inconclusive:true,live:false,ok:false,state:"inconclusive",reasons:array(initialHealth.reasons).concat(["automatic_product_evidence_incomplete"])})
+      : initialHealth;
+    const priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
     // A product that reached C/D is immutable to automated revalidation.
     // Even explicit 404 can block publication, but must never demote the
     // administrator ledger or delete its slot while replacement is unresolved.
@@ -4595,7 +4646,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       releaseCurrentBalance();
       nextDecision = "hold"; nextPlacement = null; status = "hold"; assigned = false;
       changeReason = manualLocked ? "runtime_product_unavailable_administrator_locked" : "runtime_product_unavailable";
-    } else if (health.inconclusive && !(forceSelectedAi && priorLiveFallback)) {
+    } else if (health.inconclusive && (!automaticEvidenceReady || !(forceSelectedAi && priorLiveFallback))) {
       // Anti-bot/429/temporary server failures are not proof that a product was
       // removed. A recent, exact prior detail-page verification may preserve an
       // administrator-selected external referral without inventing new evidence.
@@ -7163,10 +7214,19 @@ function due(lastRunAt, intervalDays) {
 }
 async function dueScopes(limitInput) {
   const state = await configState();
-  if (state.master.mode !== "auto") return { state, scopes: [], dueCount: 0 };
+  if (state.master.mode !== "auto" && state.master.mode !== "manual") return { state, scopes: [], dueCount: 0 };
+  const selectedCountryOnly=state.master.mode==="manual"?normalizeCountry(state.master.selectedCountryCode):"";
+  if(state.master.mode==="manual"&&!countryRow(selectedCountryOnly))return {state,scopes:[],dueCount:0};
+  const selectedRegionOnly=state.master.mode==="manual"?text(state.master.selectedSubdivisionCode||"NATIONWIDE").toUpperCase():"";
   const scopes = [];
   for (const country of registry().countries) {
+    if(selectedCountryOnly && country.code!==selectedCountryOnly)continue;
     const countryEffective = effectiveSetting(state, country.code, "");
+    if (state.master.mode==="manual" && selectedRegionOnly && selectedRegionOnly!=="NATIONWIDE"){
+      const local=effectiveSetting(state,country.code,selectedRegionOnly);
+      if(local.mode==="auto" && due(local.lastRunAt,local.intervalDays))scopes.push({countryCode:country.code,subdivisionCode:selectedRegionOnly,effective:local});
+      continue;
+    }
     if (countryEffective.mode !== "auto") continue;
     const countrySetting = specificSetting(state, "country", { countryCode: country.code });
     if (country.requiresSubdivision && countryEffective.expandSubdivisions === true && array(country.subdivisions).length) {

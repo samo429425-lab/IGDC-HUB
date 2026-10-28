@@ -392,7 +392,7 @@ exports.handler=async function(event){
       return json(200,recorded);
     }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
-    if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset));
+    if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset,body.scope||{}));
     if(action==="signal_research_begin"||action==="signal_research_step"){
       const scopeType=lower(body.scopeType||"global"),regionGroup=text(body.regionGroup),region=scopeType==="regional"?Automation.regionRow(regionGroup):null;
       if(scopeType==="regional"&&!region){const error=new Error("선택 권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}
