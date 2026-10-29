@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20261026-seven-main-refined-samples-fast-paint-v2
+// build: 20261030-platform-native-media-ratios-metadata-recommend-share-v2
 // 목적:
 // 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -473,12 +473,296 @@
       '<div class="meta">' +
       '<div class="title"></div>' +
       '<div class="desc"></div>' +
+      '<div class="sn-card-stats" aria-label=""></div>' +
+      '<div class="sn-card-actions"><span class="sn-card-action" data-sn-action="recommend" role="button" tabindex="-1"></span><span class="sn-card-action" data-sn-action="share" role="button" tabindex="-1"></span></div>' +
       '<div class="cta">' + label.replace(/[&<>"']/g, function (ch) {
         return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch];
       }) + '</div>' +
       '</div>'
     );
   }
+
+  // Metrics are optional. Only data carried by a published content record is
+  // displayed; never invent platform counts, engagement or timestamps.
+  function socialMetric(it, fieldNames) {
+    const sources = [it, it && it.metrics, it && it.stats,
+      it && it.engagement, it && it.social, it && it.social && it.social.metrics];
+    for (const obj of sources) {
+      if (!obj || typeof obj !== 'object') continue;
+      for (const key of fieldNames) {
+        const raw = obj[key];
+        if (raw == null || raw === '') continue;
+        const normalized = typeof raw === 'number' ? raw : Number(String(raw).replace(/[,_\s]/g, ''));
+        if (Number.isFinite(normalized) && normalized >= 0) return normalized;
+      }
+    }
+    return null;
+  }
+
+  function socialNumber(value) {
+    const rawLang = document.documentElement && document.documentElement.lang || 'en';
+    const lang = rawLang === 'zht' ? 'zh-TW' : rawLang;
+    try {
+      return new Intl.NumberFormat(lang, { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+    } catch (_e) { return String(value); }
+  }
+
+  function paintSocialStats(card, it) {
+    const statsEl = qs('.sn-card-stats', card);
+    if (!statsEl) return;
+    const views = socialMetric(it, ['viewCount', 'view_count', 'views', 'videoViews', 'playCount', 'play_count']);
+    const likes = socialMetric(it, ['likeCount', 'like_count', 'likes', 'heartCount']);
+    const recommendations = socialMetric(it, ['recommendCount', 'recommend_count', 'recommendationCount', 'recommendation_count', 'recommendations', 'upvoteCount', 'upvote_count', 'upvotes']);
+    const parts = [];
+    if (views !== null) parts.push('▶ ' + socialNumber(views));
+    if (likes !== null) parts.push('♥ ' + socialNumber(likes));
+    if (recommendations !== null) parts.push('★ ' + socialNumber(recommendations));
+    statsEl.textContent = parts.join('  ·  ');
+    // The reserved line still exists without verified metrics, preserving
+    // sample-to-real card geometry without inventing a popularity signal.
+    statsEl.setAttribute('aria-label', parts.join(', '));
+  }
+
+  // Social cards reuse the viewer's existing per-user IGDC recommendation state.
+  // This is NOT a platform endorsement or a globally aggregated vote count.
+  const SOCIAL_REACTION_STORAGE = 'IGDC_SOCIAL_REACTIONS_V1';
+  const SOCIAL_SHARE_LABELS = {
+    ko:['추천','전달하기','콘텐츠 전달하기','URL 주소','링크 복사','복사됨','닫기','기기에서 공유'],
+    en:['Recommend','Share','Share this content','Content URL','Copy link','Copied','Close','Share via device'],
+    ja:['おすすめ','共有','コンテンツを共有','コンテンツURL','リンクをコピー','コピーしました','閉じる','デバイスで共有'],
+    zh:['推荐','分享','分享此内容','内容链接','复制链接','已复制','关闭','通过设备分享'],
+    zht:['推薦','分享','分享此內容','內容連結','複製連結','已複製','關閉','使用裝置分享'],
+    de:['Empfehlen','Teilen','Inhalt teilen','Inhaltslink','Link kopieren','Kopiert','Schließen','Über Gerät teilen'],
+    fr:['Recommander','Partager','Partager ce contenu','Lien du contenu','Copier le lien','Copié','Fermer','Partager via l’appareil'],
+    es:['Recomendar','Compartir','Compartir contenido','URL del contenido','Copiar enlace','Copiado','Cerrar','Compartir desde el dispositivo'],
+    pt:['Recomendar','Partilhar','Partilhar conteúdo','URL do conteúdo','Copiar ligação','Copiado','Fechar','Partilhar no dispositivo'],
+    ru:['Рекомендовать','Поделиться','Поделиться контентом','Ссылка','Копировать ссылку','Скопировано','Закрыть','Поделиться с устройства'],
+    it:['Consiglia','Condividi','Condividi contenuto','URL contenuto','Copia link','Copiato','Chiudi','Condividi dal dispositivo'],
+    nl:['Aanbevelen','Delen','Inhoud delen','Inhoudslink','Link kopiëren','Gekopieerd','Sluiten','Delen via apparaat'],
+    sv:['Rekommendera','Dela','Dela innehåll','Innehållslänk','Kopiera länk','Kopierad','Stäng','Dela via enhet'],
+    pl:['Poleć','Udostępnij','Udostępnij treść','Adres treści','Kopiuj link','Skopiowano','Zamknij','Udostępnij z urządzenia'],
+    tr:['Öner','Paylaş','İçeriği paylaş','İçerik bağlantısı','Bağlantıyı kopyala','Kopyalandı','Kapat','Cihazla paylaş'],
+    ar:['توصية','مشاركة','مشاركة المحتوى','رابط المحتوى','نسخ الرابط','تم النسخ','إغلاق','المشاركة عبر الجهاز'],
+    th:['แนะนำ','แชร์','แชร์เนื้อหา','ลิงก์เนื้อหา','คัดลอกลิงก์','คัดลอกแล้ว','ปิด','แชร์ผ่านอุปกรณ์'],
+    vi:['Đề xuất','Chia sẻ','Chia sẻ nội dung','Liên kết nội dung','Sao chép liên kết','Đã sao chép','Đóng','Chia sẻ qua thiết bị'],
+    bn:['সুপারিশ','শেয়ার','কনটেন্ট শেয়ার','কনটেন্ট লিংক','লিংক কপি','কপি হয়েছে','বন্ধ করুন','ডিভাইস থেকে শেয়ার'],
+    fa:['پیشنهاد','اشتراک‌گذاری','اشتراک‌گذاری محتوا','پیوند محتوا','کپی پیوند','کپی شد','بستن','اشتراک‌گذاری با دستگاه'],
+    hi:['सिफारिश','साझा करें','सामग्री साझा करें','सामग्री लिंक','लिंक कॉपी करें','कॉपी हुआ','बंद करें','डिवाइस से साझा करें'],
+    hu:['Ajánlás','Megosztás','Tartalom megosztása','Tartalom URL','Hivatkozás másolása','Másolva','Bezárás','Megosztás eszközről'],
+    id:['Rekomendasikan','Bagikan','Bagikan konten','Tautan konten','Salin tautan','Disalin','Tutup','Bagikan lewat perangkat'],
+    ms:['Syorkan','Kongsi','Kongsi kandungan','Pautan kandungan','Salin pautan','Disalin','Tutup','Kongsi melalui peranti'],
+    sw:['Pendekeza','Shiriki','Shiriki maudhui','Kiungo cha maudhui','Nakili kiungo','Imenakiliwa','Funga','Shiriki kwa kifaa'],
+    ta:['பரிந்துரை','பகிர்','உள்ளடக்கத்தைப் பகிர்','உள்ளடக்க இணைப்பு','இணைப்பை நகலெடு','நகலெடுக்கப்பட்டது','மூடு','சாதனத்தில் பகிர்'],
+    tl:['Irekomenda','Ibahagi','Ibahagi ang nilalaman','Link ng nilalaman','Kopyahin ang link','Nakopya','Isara','Ibahagi sa device'],
+    uk:['Рекомендувати','Поділитися','Поділитися вмістом','Посилання','Копіювати посилання','Скопійовано','Закрити','Поділитися з пристрою'],
+    ur:['تجویز','شیئر کریں','مواد شیئر کریں','مواد کا لنک','لنک کاپی کریں','کاپی ہو گیا','بند کریں','ڈیوائس سے شیئر کریں'],
+    uz:['Tavsiya','Ulashish','Kontentni ulashish','Kontent havolasi','Havolani nusxalash','Nusxalandi','Yopish','Qurilmadan ulashish']
+  };
+  function socialUiLabels() {
+    let code = safeText(document.documentElement.lang || 'en').toLowerCase().replace(/_/g, '-');
+    if (code === 'zh-tw' || code === 'zh-hk' || code === 'zh-hant') code = 'zht';
+    else code = code.split('-')[0];
+    const x = SOCIAL_SHARE_LABELS[code] || SOCIAL_SHARE_LABELS.en;
+    return { recommend:x[0], share:x[1], title:x[2], url:x[3], copy:x[4], copied:x[5], close:x[6], device:x[7] };
+  }
+  function validContentShareUrl(raw) {
+    try {
+      const u = new URL(safeText(raw).trim(), window.location.href);
+      return (u.protocol === 'https:' || u.protocol === 'http:') && /^https?:\/\//i.test(safeText(raw).trim()) ? u.href : '';
+    } catch (_e) { return ''; }
+  }
+  function activeLocalRecommendation(url) {
+    try {
+      const rows = JSON.parse(localStorage.getItem(SOCIAL_REACTION_STORAGE) || '{}');
+      return !!(rows && rows[url] && rows[url].recommend);
+    } catch (_e) { return false; }
+  }
+  function changeLocalRecommendation(url, platform) {
+    if (!validContentShareUrl(url)) return null;
+    try {
+      const rows = JSON.parse(localStorage.getItem(SOCIAL_REACTION_STORAGE) || '{}');
+      const data = rows && typeof rows === 'object' && !Array.isArray(rows) ? rows : {};
+      const item = data[url] && typeof data[url] === 'object' ? data[url] : {};
+      item.recommend = !item.recommend;
+      item.updatedAt = new Date().toISOString();
+      data[url] = item;
+      localStorage.setItem(SOCIAL_REACTION_STORAGE, JSON.stringify(data));
+      window.dispatchEvent(new CustomEvent('igdc:social-reaction', {
+        detail: { url:url, type:'recommend', active:!!item.recommend, platform:platform }
+      }));
+      return !!item.recommend;
+    } catch (_e) { return null; }
+  }
+  function ensureCardActions(card) {
+    const meta = qs('.meta', card);
+    if (!meta) return null;
+    let bar = qs('.sn-card-actions', meta);
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'sn-card-actions';
+      const cta = qs('.cta', meta);
+      if (cta) meta.insertBefore(bar, cta);
+      else meta.appendChild(bar);
+    }
+    for (const action of ['recommend', 'share']) {
+      let item = qs('.sn-card-action[data-sn-action="' + action + '"]', bar);
+      if (!item) {
+        item = document.createElement('span');
+        item.className = 'sn-card-action';
+        item.dataset.snAction = action;
+        item.setAttribute('role', 'button');
+        bar.appendChild(item);
+      }
+      item.textContent = (action === 'recommend' ? '★ ' + socialUiLabels().recommend : '↗ ' + socialUiLabels().share);
+      const sample = card.dataset.sample === '1';
+      item.tabIndex = sample ? -1 : 0;
+      item.setAttribute('aria-hidden', sample ? 'true' : 'false');
+      if (action === 'recommend') item.setAttribute('aria-pressed', !sample && activeLocalRecommendation(card.dataset.contentUrl) ? 'true' : 'false');
+    }
+    return bar;
+  }
+  function createShareDialog() {
+    let overlay = document.getElementById('igdc-social-share-overlay');
+    if (overlay) return overlay;
+    const css = document.createElement('style');
+    css.id = 'igdc-social-share-dialog-style-v1';
+    css.textContent = `
+#igdc-social-share-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;background:rgba(8,16,28,.68);z-index:2147483647;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+#igdc-social-share-overlay[hidden]{display:none!important}
+#igdc-social-share-overlay .sn-share-panel{box-sizing:border-box;width:min(440px,100%);max-height:90dvh;overflow:auto;padding:18px;background:#fff;color:#172233;border-radius:14px;box-shadow:0 14px 48px rgba(0,0,0,.25);font-size:13px;text-align:start}
+#igdc-social-share-overlay .sn-share-head{display:flex;align-items:start;justify-content:space-between;gap:12px;margin-bottom:12px}
+#igdc-social-share-overlay h2{font-size:18px;font-weight:700;margin:0;line-height:1.4;color:#142034}
+#igdc-social-share-overlay button,#igdc-social-share-overlay a{font:inherit;cursor:pointer}
+#igdc-social-share-overlay .sn-share-close{background:transparent;color:#25334a;border:1px solid #dbe2ec;border-radius:8px;padding:4px 9px}
+#igdc-social-share-overlay label{display:block;margin:0 0 6px;font-weight:600}
+#igdc-social-share-overlay .sn-share-url-row{display:flex;gap:7px;margin-bottom:14px;align-items:center}
+#igdc-social-share-overlay .sn-share-url{box-sizing:border-box;flex:1;min-width:0;font-size:12px;padding:9px 8px;border:1px solid #cdd9e5;border-radius:8px;direction:ltr;text-align:left}
+#igdc-social-share-overlay .sn-share-copy,#igdc-social-share-overlay .sn-share-native{border:1px solid #bad0e6;background:#edf5fd;color:#174a79;border-radius:8px;padding:9px 11px;white-space:nowrap}
+#igdc-social-share-overlay .sn-share-options{display:flex;flex-wrap:wrap;gap:8px}
+#igdc-social-share-overlay .sn-share-options a{display:inline-flex;align-items:center;justify-content:center;min-width:80px;border:1px solid #d7e0ea;border-radius:8px;padding:9px 12px;text-decoration:none;color:#17324d;background:#f8fafc}
+#igdc-social-share-overlay .sn-share-native{margin-bottom:12px;width:100%}
+#igdc-social-share-overlay :focus-visible{outline:2px solid #2563eb;outline-offset:2px}`;
+    document.head.appendChild(css);
+    overlay = document.createElement('div');
+    overlay.id = 'igdc-social-share-overlay';
+    overlay.hidden = true;
+    overlay.setAttribute('role', 'presentation');
+    overlay.innerHTML = '<div class="sn-share-panel" role="dialog" aria-modal="true" aria-labelledby="igdc-social-share-title">' +
+      '<div class="sn-share-head"><h2 id="igdc-social-share-title"></h2><button class="sn-share-close" type="button"></button></div>' +
+      '<label for="igdc-social-share-url"></label><div class="sn-share-url-row"><input id="igdc-social-share-url" class="sn-share-url" type="url" readonly/><button class="sn-share-copy" type="button"></button></div>' +
+      '<button class="sn-share-native" type="button"></button><div class="sn-share-options"></div></div>';
+    document.body.appendChild(overlay);
+    const close = function () {
+      overlay.hidden = true;
+      if (overlay.__previousFocus && overlay.__previousFocus.focus) overlay.__previousFocus.focus();
+    };
+    overlay.__close = close;
+    qs('.sn-share-close', overlay).addEventListener('click', close);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    // The in-page viewer also has an ESC shortcut; consume it before its handler.
+    window.addEventListener('keydown', function (e) {
+      if (!overlay.hidden && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close(); }
+    }, true);
+    const input = qs('.sn-share-url', overlay);
+    input.addEventListener('click', function () { input.select(); });
+    qs('.sn-share-copy', overlay).addEventListener('click', async function () {
+      const val = input.value;
+      let ok = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(val);
+          ok = true;
+        }
+      } catch (_e) {}
+      if (!ok) {
+        input.focus(); input.select();
+        try { ok = !!document.execCommand('copy'); } catch (_e) {}
+      }
+      if (ok) qs('.sn-share-copy', overlay).textContent = socialUiLabels().copied;
+      else input.select(); // user can still manually copy the visible URL
+    });
+    qs('.sn-share-native', overlay).addEventListener('click', function () {
+      if (!navigator.share) return;
+      navigator.share({ title:overlay.__title, url:input.value }).then(close).catch(function () {});
+    });
+    return overlay;
+  }
+  function openSocialShare(title, rawUrl) {
+    const url = validContentShareUrl(rawUrl);
+    if (!url) return false;
+    const overlay = createShareDialog();
+    const labels = socialUiLabels();
+    overlay.__previousFocus = document.activeElement;
+    overlay.__title = safeText(title).trim() || document.title;
+    overlay.dir = document.documentElement.dir || 'ltr';
+    qs('h2', overlay).textContent = labels.title;
+    qs('.sn-share-close', overlay).textContent = labels.close + ' ×';
+    qs('label', overlay).textContent = labels.url;
+    qs('.sn-share-url', overlay).value = url;
+    qs('.sn-share-copy', overlay).textContent = labels.copy;
+    const native = qs('.sn-share-native', overlay);
+    native.hidden = typeof navigator.share !== 'function';
+    native.textContent = labels.device;
+    const targets = [
+      ['X', 'https://twitter.com/intent/tweet?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(overlay.__title)],
+      ['Facebook', 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(url)],
+      ['Reddit', 'https://www.reddit.com/submit?url=' + encodeURIComponent(url) + '&title=' + encodeURIComponent(overlay.__title)],
+      ['WhatsApp', 'https://api.whatsapp.com/send?text=' + encodeURIComponent(overlay.__title + ' ' + url)],
+      ['Telegram', 'https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(overlay.__title)],
+      ['Email', 'mailto:?subject=' + encodeURIComponent(overlay.__title) + '&body=' + encodeURIComponent(url)]
+    ];
+    const options = qs('.sn-share-options', overlay);
+    options.textContent = '';
+    for (const [name, href] of targets) {
+      const a = document.createElement('a');
+      a.textContent = name;
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      options.appendChild(a);
+    }
+    overlay.hidden = false;
+    qs('.sn-share-close', overlay).focus();
+    return true;
+  }
+  // Existing YouTube / Instagram / TikTok / Facebook viewer share buttons
+  // call this same dialog; no new <script> tags or locale HTML changes needed.
+  window.IGDCSocialShareDialog = { open:openSocialShare, labels:socialUiLabels };
+
+  // Capture at WINDOW, before the viewer bridge's document-level click capture.
+  // No card navigation or in-site playback occurs when using a card action.
+  function handleSocialCardAction(e) {
+    if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+    const action = e.target && e.target.closest && e.target.closest('.sn-card-action[data-sn-action]');
+    if (!action) return;
+    const card = action.closest('a.card');
+    if (!card || card.dataset.sample === '1') return;
+    const grid = card.closest('.thumb-grid[data-psom-key]');
+    if (!grid || !['social-youtube','social-instagram','social-tiktok'].includes(grid.getAttribute('data-psom-key'))) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    const url = validContentShareUrl(card.dataset.latestContentUrl || card.dataset.contentUrl || card.href);
+    if (!url) return;
+    if (action.dataset.snAction === 'share') {
+      openSocialShare(qs('.title',card) && qs('.title',card).textContent, url);
+    } else if (action.dataset.snAction === 'recommend') {
+      const platform = grid.getAttribute('data-psom-key').slice(7);
+      const active = changeLocalRecommendation(url, platform);
+      if (active !== null) action.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+  }
+  window.addEventListener('click', handleSocialCardAction, true);
+  window.addEventListener('keydown', handleSocialCardAction, true);
+  function syncRecommendationControls() {
+    qsa('.thumb-grid[data-psom-key^="social-"] .sn-card-action[data-sn-action="recommend"]').forEach(function (action) {
+      const card = action.closest('a.card');
+      if (!card || card.dataset.sample === '1') return;
+      action.setAttribute('aria-pressed', activeLocalRecommendation(card.dataset.latestContentUrl || card.dataset.contentUrl) ? 'true' : 'false');
+    });
+  }
+  window.addEventListener('igdc:social-reaction', syncRecommendationControls);
+  window.addEventListener('storage', function (e) { if (e.key === SOCIAL_REACTION_STORAGE) syncRecommendationControls(); });
 
   function normalizeMainCardLayout(gridEl) {
     if (!gridEl) return;
@@ -512,6 +796,84 @@
 .thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-loading="1"]{position:relative;background:linear-gradient(120deg,#e8eef7,#f4f7fb,#e8eef7)!important;overflow:hidden}
 .thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-loading="1"]::after{content:"";position:absolute;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);border:1px solid #c8d5e6;border-radius:50%;background:rgba(255,255,255,.8);pointer-events:none}
 .thumb-grid[data-psom-key^="social-"] a.card:not([data-sample="1"]) .pic[data-social-thumb-failed="1"]{font-size:12px!important;color:#718198;background:#f0f4f9!important}
+`;
+    document.head.appendChild(style);
+    ensurePlatformCardCss();
+  }
+
+  function ensurePlatformCardCss() {
+    const styleId = "igdc-social-native-platform-cards-v1";
+    if (document.getElementById(styleId)) return;
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+/* IGDC native-proportion SNS cards: fixed horizontal carousel, separate metadata.
+   16:9 for YouTube; portrait 9:16 for Instagram Reels and TikTok.
+   Instagram square/4:5 sources are letterboxed, not cropped/distorted. */
+.thumb-grid[data-psom-key="social-youtube"],
+.thumb-grid[data-psom-key="social-instagram"],
+.thumb-grid[data-psom-key="social-tiktok"]{grid-auto-flow:column!important;grid-template-rows:1fr!important;grid-template-columns:none!important;gap:12px!important;align-items:stretch!important;}
+.thumb-grid[data-psom-key="social-youtube"]{grid-auto-columns: minmax(230px,280px)!important;}
+.thumb-grid[data-psom-key="social-instagram"],
+.thumb-grid[data-psom-key="social-tiktok"]{grid-auto-columns: minmax(186px,216px)!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card,
+.thumb-grid[data-psom-key="social-instagram"] a.card,
+.thumb-grid[data-psom-key="social-tiktok"] a.card{box-sizing:border-box!important;width:100%!important;max-width:none!important;min-width:0!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;align-self:stretch!important;border-radius:12px!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .pic,
+.thumb-grid[data-psom-key="social-instagram"] a.card .pic,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .pic{box-sizing:border-box!important;flex:0 0 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important;position:relative!important;background:#101318!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .pic{aspect-ratio:16 / 9!important;}
+.thumb-grid[data-psom-key="social-instagram"] a.card .pic,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .pic{aspect-ratio:9 / 16!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .pic img,
+.thumb-grid[data-psom-key="social-instagram"] a.card .pic img,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .pic img,
+.thumb-grid[data-psom-key="social-youtube"] a.card .pic video,
+.thumb-grid[data-psom-key="social-instagram"] a.card .pic video,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .pic video,
+.thumb-grid[data-psom-key="social-youtube"] a.card .pic iframe,
+.thumb-grid[data-psom-key="social-instagram"] a.card .pic iframe,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .pic iframe{box-sizing:border-box!important;display:block!important;width:100%!important;height:100%!important;max-width:100%!important;min-width:0!important;max-height:100%!important;object-fit:contain!important;object-position:center!important;border:0!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .meta,
+.thumb-grid[data-psom-key="social-instagram"] a.card .meta,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .meta{box-sizing:border-box!important;padding:9px 11px 11px!important;display:flex!important;flex-direction:column!important;gap:5px!important;min-height:0!important;flex:1 0 auto!important;background:#fff!important;text-align:start!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .title,
+.thumb-grid[data-psom-key="social-instagram"] a.card .title,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .title{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:3!important;line-clamp:3!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:normal!important;overflow-wrap:anywhere!important;font-size:13px!important;font-weight:650!important;line-height:1.36!important;height:calc(3 * 1.36em)!important;max-height:calc(3 * 1.36em)!important;min-height:calc(3 * 1.36em)!important;color:#1d2530!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .desc,
+.thumb-grid[data-psom-key="social-instagram"] a.card .desc,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .desc{display:block!important;min-height:1.4em!important;height:1.4em!important;font-size:11px!important;font-weight:500!important;line-height:1.4!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;color:#66717e!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-stats,
+.thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-stats,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-stats{display:block!important;min-height:1.4em!important;height:1.4em!important;font-size:11px!important;line-height:1.4!important;color:#647484!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}
+/* IGDC recommend + content-share controls never navigate the video card. */
+.thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-actions{display:flex!important;flex-direction:row!important;gap:6px!important;align-items:center!important;justify-content:space-between!important;min-height:29px!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-action,
+.thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-action,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-action{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:4px 7px;border-radius:7px;border:1px solid #d5dfea;background:#f6f9fd;color:#284561;font-size:11px;font-weight:650;line-height:1.3;white-space:nowrap;cursor:pointer;user-select:none;}
+.thumb-grid[data-psom-key^="social-"] a.card .sn-card-action[aria-pressed="true"]{color:#174d9a;background:#e8f1ff;border-color:#8fb7ee}
+.thumb-grid[data-psom-key^="social-"] a.card .sn-card-action:focus-visible{outline:2px solid #2563eb;outline-offset:1px}
+.thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .sn-card-action{visibility:hidden!important;pointer-events:none!important}
+.thumb-grid[data-psom-key="social-youtube"] a.card .cta,
+.thumb-grid[data-psom-key="social-instagram"] a.card .cta,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .cta{margin-top:auto!important;padding:5px 8px!important;line-height:1.3!important;font-size:11px!important;border-radius:7px!important;}
+/* A sample and a published item occupy the exact same media and metadata box. */
+.thumb-grid[data-psom-key="social-youtube"] a.card[data-sample="1"] .title,
+.thumb-grid[data-psom-key="social-instagram"] a.card[data-sample="1"] .title,
+.thumb-grid[data-psom-key="social-tiktok"] a.card[data-sample="1"] .title{display:-webkit-box!important;-webkit-line-clamp:3!important;white-space:normal!important;font-size:13px!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card[data-sample="1"] .pic,
+.thumb-grid[data-psom-key="social-instagram"] a.card[data-sample="1"] .pic,
+.thumb-grid[data-psom-key="social-tiktok"] a.card[data-sample="1"] .pic{font-size:12px!important;line-height:1.3!important;}
+@media(max-width:768px) and (orientation:portrait){
+ .thumb-grid[data-psom-key="social-youtube"],
+ .thumb-grid[data-psom-key="social-instagram"],
+ .thumb-grid[data-psom-key="social-tiktok"]{grid-auto-columns:100%!important;width:100%!important;}
+ .thumb-grid[data-psom-key="social-youtube"] a.card,
+ .thumb-grid[data-psom-key="social-instagram"] a.card,
+ .thumb-grid[data-psom-key="social-tiktok"] a.card{width:100%!important;min-width:0!important;max-width:none!important;}
+}
 `;
     document.head.appendChild(style);
   }
@@ -566,9 +928,12 @@
     const metaDesc = qs(".desc", card);
     if (metaTitle) metaTitle.textContent = label + " · SAMPLE " + number;
     if (metaDesc) {
-      metaDesc.textContent = pickDesc(it) || "Snapshot sample slot";
-      metaDesc.style.display = "none";
+      metaDesc.textContent = label;
+      metaDesc.style.display = "";
     }
+    const stats = qs('.sn-card-stats', card);
+    if (stats) stats.textContent = '';
+    ensureCardActions(card);
     if (pic) {
       delete pic.dataset.socialThumbLoading;
       delete pic.dataset.socialThumbFailed;
@@ -738,17 +1103,19 @@
       metaTitle.textContent = title;
       metaTitle.style.display = "-webkit-box";
       metaTitle.style.webkitBoxOrient = "vertical";
-      metaTitle.style.webkitLineClamp = "2";
+      metaTitle.style.webkitLineClamp = "3";
       metaTitle.style.overflow = "hidden";
       metaTitle.style.whiteSpace = "normal";
       metaTitle.style.lineHeight = "1.35";
     }
     if (metaDesc) {
-      // Grid cards stay clean and YouTube-like: thumbnail + concise title only.
-      // The full provider description remains available inside the contained viewer.
+      // Keep the description/creator text accessible to the existing SNS
+      // viewer bridge, while showing a single metadata line in the card.
       metaDesc.textContent = desc;
-      metaDesc.style.display = "none";
+      metaDesc.style.display = '';
     }
+    paintSocialStats(card, it);
+    ensureCardActions(card);
 
     const slotIndex = Number(card.dataset.socialSlotNo || 0);
     const rowRect = card.getBoundingClientRect && card.getBoundingClientRect();
@@ -790,7 +1157,8 @@
         const title = qs('.title', card);
         if (title) title.textContent = label + ' · ' + card.dataset.socialSlotNo;
         const desc = qs('.desc', card);
-        if (desc) desc.style.display = 'none';
+        if (desc) { desc.textContent = label; desc.style.display = ''; }
+        ensureCardActions(card);
         fragment.appendChild(card);
       }
       // Existing slot and scroll-button geometry is preserved unchanged.
@@ -836,7 +1204,9 @@
         // ID alone is insufficient: published thumbnail/title changes must paint.
         const signature = [pickProductId(item), pickUrl(item), pickTitle(item),
           pickThumb(item), pickDesc(item), pickCreator(item),
-          safeText(item.embedUrl || item.embed_url)].join('\u001f');
+          safeText(item.embedUrl || item.embed_url),
+          socialMetric(item, ['viewCount','view_count','views','videoViews','playCount','play_count']),
+          socialMetric(item, ['likeCount','like_count','likes','heartCount'])].join('\u001f');
         if (card.dataset.socialRenderSignature !== signature || card.dataset.sample === '1') {
           paintMainCard(card, item);
           card.dataset.socialRenderSignature = signature;

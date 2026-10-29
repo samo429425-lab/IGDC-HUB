@@ -857,6 +857,8 @@
     /* Facebook share stays in a user-initiated popup, so the IGDC viewer never gets
        replaced by facebook.com. Fall back to Web Share/clipboard if a popup is blocked. */
     shareBtn.addEventListener('click', function () {
+      if (window.IGDCSocialShareDialog && typeof window.IGDCSocialShareDialog.open === 'function' &&
+          window.IGDCSocialShareDialog.open('Facebook', sourceUrl)) return;
       var shareUrl = 'https://www.facebook.com/sharer/sharer.php?' + new URLSearchParams({ u: sourceUrl }).toString();
       var popup = null;
       try { popup = window.open(shareUrl, 'igdcFacebookShare', 'popup=yes,width=720,height=640,resizable=yes,scrollbars=yes'); } catch (_) {}
@@ -1031,6 +1033,11 @@
 
   function shareSource(title, url, button) {
     if (!validHttp(url)) return;
+    // The Social main automap exposes one localized dialog with source URL,
+    // destination choices, native sharing and copy. Preserve the old fallback.
+    if (window.IGDCSocialShareDialog && typeof window.IGDCSocialShareDialog.open === 'function') {
+      if (window.IGDCSocialShareDialog.open(title || document.title, url)) return;
+    }
     function mark() {
       if (!button) return;
       var before = button.textContent;
@@ -1308,6 +1315,19 @@
     var shareBtn = makeActionButton('↗ ' + labels().ytShare);
     shareBtn.addEventListener('click', function () { shareSource(video.title || '', state.lastUrl || '', shareBtn); });
     actions.appendChild(shareBtn);
+    // IGDC recommendation is local/user-specific, distinct from YouTube Likes.
+    var youtubeUrl = state.lastUrl || '';
+    var recommendLabel = window.IGDCSocialShareDialog && window.IGDCSocialShareDialog.labels
+      ? window.IGDCSocialShareDialog.labels().recommend : 'Recommend';
+    var recommendBtn = makeActionButton('★ ' + recommendLabel,
+      'igsv-local-react' + (reactionActive(youtubeUrl, 'recommend') ? ' is-active' : ''));
+    recommendBtn.setAttribute('aria-pressed', reactionActive(youtubeUrl, 'recommend') ? 'true' : 'false');
+    recommendBtn.addEventListener('click', function () {
+      var active = toggleReaction(youtubeUrl, 'recommend');
+      recommendBtn.classList.toggle('is-active', active);
+      recommendBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    actions.appendChild(recommendBtn);
     var saveBtn = makeActionButton((isSavedUrl(state.lastUrl || '') ? '✓ ' + labels().ytSaved : '🔖 ' + labels().ytSave));
     saveBtn.addEventListener('click', function () {
       var saved = toggleSavedUrl(state.lastUrl || '');

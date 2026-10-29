@@ -554,7 +554,7 @@
     try{
       var result=await authorityCandidateAction('slot_candidate',ids,placement,{source:'administrator'});
       await refreshCandidateLedgerProducts({preserveResearchReport:true});
-      show('선택 상품 '+Number(result&&result.processed||ids.length)+'건을 '+sectionLabel(placement)+' 배치 예정 목록으로 이동했습니다. 프론트 공개는 아직 실행하지 않았습니다.','ok');
+      var confirmed=new Set((result&&result.processedIds||[]).map(text));var verified=ids.filter(function(id){var row=productById(id);return confirmed.has(id)&&row&&productDecision(row)==='slot_candidate'&&assignedSectionKey(row)===placement;});show('수동 이관 요청 '+ids.length+'건 · 목적지 저장 확인 '+verified.length+'건 · 추가 확인 '+(ids.length-verified.length)+'건. 프론트 공개는 아직 실행하지 않았습니다.',verified.length===ids.length?'ok':'warn');
     }catch(error){show(conciseRequestError(error&&error.message,error&&error.status)||'선택 상품 수동배치를 완료하지 못했습니다.','fail');}
   }
 
@@ -568,7 +568,7 @@
     var ids=selectedQueueIds();if(!ids.length){show('처리할 상품 후보를 선택해 주세요.','warn');return;}if(!window.confirm(queueActionMessage(action,ids.length)))return;
     try{
       var data=await api(QUEUE_CONTROL,'bulk_action','POST',{}, {candidateIds:ids,decision:action,countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE'});
-      var done=new Set((data.processedIds||ids).map(text));queueCandidateRows=queueCandidateRows.filter(function(row){return !done.has(queueCandidateId(row));});renderQueue(queueCandidateRows);try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}catch(_refreshError){}
+      var done=new Set((data.processedIds||[]).map(text));queueCandidateRows=queueCandidateRows.filter(function(row){return !done.has(queueCandidateId(row));});renderQueue(queueCandidateRows);try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}catch(_refreshError){}
       show('선택 '+(data.processed||done.size)+'건의 상품 후보 대기열 정리를 완료했습니다. 실제 원장 삭제·재수집 허용과 영구 제외는 서로 다른 상태로 저장됩니다.','ok');
     }catch(e){show(text(e&&e.message)||'상품 후보 대기열을 정리하지 못했습니다.','fail');}
   }
@@ -1217,30 +1217,55 @@
   function selectedCandidateIds(groupKey){var valid={};candidateGroupRows(groupKey).forEach(function(row){valid[text(row.id)]=true;});return Object.keys(candidateSelectedProducts).filter(function(id){return candidateSelectedProducts[id]===true&&valid[id];});}
   function syncCandidateSelectionControls(groupKey){var rows=candidateGroupRows(groupKey),ids=selectedCandidateIds(groupKey),safeKey=groupKey.replace(/[^a-z0-9_-]/gi,'_'),all=$('candidateSelectAll-'+safeKey),count=$('candidateSelectedCount-'+safeKey),busy=productAutomationActive||productFrontSyncActive||candidateBulkActionActive[groupKey]===true,selectedMap={};ids.forEach(function(id){selectedMap[id]=true;});if(all){all.checked=rows.length>0&&ids.length===rows.length;all.indeterminate=ids.length>0&&ids.length<rows.length;all.disabled=busy||!rows.length;}Array.prototype.forEach.call(document.querySelectorAll('[data-candidate-select]'),function(box){if(box.getAttribute('data-candidate-select')===groupKey){box.checked=selectedMap[text(box.value)]===true;box.disabled=busy;}});if(count)count.textContent='선택 후보 '+ids.length+'건';Array.prototype.forEach.call(document.querySelectorAll('[data-candidate-group="'+groupKey+'"]'),function(button){button.disabled=busy||!ids.length;});var target=document.querySelector('[data-candidate-target="'+groupKey+'"]');if(target)target.disabled=busy;}
   function setCandidateBulkState(groupKey,message,kind){var safeKey=text(groupKey).replace(/[^a-z0-9_-]/gi,'_'),el=$('candidateBulkState-'+safeKey);if(!el)return;el.textContent=text(message)||'준비';el.className='candidate-bulk-state small'+(kind?' '+kind:'');}
+  // The authority endpoint intentionally returns ok:false for a MIXED batch.
+  // Keep its confirmed IDs, isolate refusals, and continue with the remaining
+  // batches. A timeout does not prove that a database write failed.
   async function authorityCandidateAction(decision,candidateIds,placementKey,options){
-    options=options||{};candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
-    if(!candidateIds.length)return{ok:true,requested:0,processed:0,failed:0,processedIds:[],results:[],failures:[]};
-    /* Netlify functions have a finite invocation window.  Sending 100-3000 rows
-       to the authority in one request makes the server perform many Supabase
-       round-trips inside one invocation and the browser eventually sees a
-       timeout.  Keep each authority call small and durable, then aggregate the
-       exact per-chunk results in the browser. */
-    var chunkSize=Math.max(1,Math.min(8,Number(options.chunkSize||6))),processed=0,failures=[],results=[],processedIds=[];
-    for(var offset=0;offset<candidateIds.length;offset+=chunkSize){
-      var chunk=candidateIds.slice(offset,offset+chunkSize),data=null,lastError=null;
-      for(var attempt=0;attempt<3&&!data;attempt++){
-        try{data=await api(ADMIN_AUTHORITY,'apply','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:chunk,decision:decision,placementKey:placementKey||'',source:options.source||'administrator'},30000);}
-        catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
-      }
-      if(data){
-        processed+=Number(data.processed||0);(data.results||[]).forEach(function(row){results.push(row);});(data.processedIds||[]).forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});
-        (data.failures||[]).forEach(function(row){failures.push(row);});
-      }else{
-        chunk.forEach(function(id){failures.push({candidateId:id,error:text(lastError&&lastError.message)||'authority_request_failed'});});
-      }
-      if(typeof options.onProgress==='function')options.onProgress(Math.min(candidateIds.length,offset+chunk.length),candidateIds.length,failures.length);
+    options=options||{};
+    candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
+    if(!candidateIds.length)return{ok:true,complete:true,requested:0,processed:0,failed:0,processedIds:[],results:[],failures:[]};
+    var frozen=scopeKey(),country=selectedCountry,region=selectedSubdivision||'NATIONWIDE',chunkSize=Math.max(1,Math.min(8,Number(options.chunkSize||5))),done={},failedById={},results=[];
+    function capture(data,asked){
+      if(!data||typeof data!=='object')return false;
+      var wanted=new Set(asked),saw=false;
+      (Array.isArray(data.processedIds)?data.processedIds:[]).forEach(function(id){id=text(id);if(wanted.has(id)){done[id]=true;delete failedById[id];saw=true;}});
+      (Array.isArray(data.results)?data.results:[]).forEach(function(row){var id=text(row&&row.candidateId);if(!wanted.has(id))return;if(row.ok===true||row.ledgerVerified===true){done[id]=true;delete failedById[id];results.push(row);saw=true;}});
+      (Array.isArray(data.failures)?data.failures:[]).forEach(function(row){var id=text(row&&row.candidateId||row&&row.id);if(id&&wanted.has(id)&&!done[id]){failedById[id]={candidateId:id,error:text(row.error||row.reason)||'상품별 이관 거부'};saw=true;}});
+      return saw;
     }
-    return{ok:failures.length===0,complete:failures.length===0,requested:candidateIds.length,processed:processed,failed:failures.length,processedIds:processedIds,results:results,failures:failures};
+    function retryable(message){return /timeout|time.?out|gateway|network|temporar|connection|fetch|502|503|504|429/i.test(text(message));}
+    async function send(part){
+      return api(ADMIN_AUTHORITY,'apply','POST',{}, {countryCode:country,subdivisionCode:region,candidateIds:part,decision:decision,placementKey:placementKey||'',source:options.source||'administrator'},30000);
+    }
+    for(var offset=0;offset<candidateIds.length;offset+=chunkSize){
+      if(scopeKey()!==frozen){candidateIds.slice(offset).forEach(function(id){if(!done[id])failedById[id]={candidateId:id,error:'국가·지역 변경으로 이관 중단'};});break;}
+      var chunk=candidateIds.slice(offset,offset+chunkSize),data=null,batchError=null,batchWasParsed=false;
+      try{data=await send(chunk);capture(data,chunk);batchWasParsed=true;}
+      catch(error){batchError=error;batchWasParsed=capture(error&&error.payload,chunk);}
+      // A refusal of one row must never abort other rows. Only retry explicit
+      // transient failures; unknown/gateway outcomes are retried one ID at a
+      // time so an already-committed row cannot be counted twice.
+      var unresolved=chunk.filter(function(id){return !done[id];});
+      for(var i=0;i<unresolved.length;i++){
+        var id=unresolved[i],itemFailure=failedById[id];
+        if(itemFailure&&!retryable(itemFailure.error))continue;
+        // A fully parsed per-row refusal is definitive; avoid pointless retries.
+        if(batchWasParsed&&itemFailure&&!retryable(itemFailure.error))continue;
+        var lastError=batchError,received=false;
+        for(var attempt=0;attempt<2&&!received;attempt++){
+          if(scopeKey()!==frozen){lastError=new Error('국가·지역 변경으로 중단');break;}
+          try{var one=await send([id]);received=capture(one,[id]);if(!received)lastError=new Error('서버 상품별 확정 응답 없음');else if(failedById[id]&&!retryable(failedById[id].error))break;}
+          catch(err){lastError=err;received=capture(err&&err.payload,[id]);if(received&&failedById[id]&&!retryable(failedById[id].error))break;if(!transientResearchRequestError(err))break;}
+          if(done[id])break;
+          if(attempt===0)await new Promise(function(resolve){setTimeout(resolve,400);});
+        }
+        if(!done[id]&&!failedById[id])failedById[id]={candidateId:id,error:text(lastError&&lastError.message)||'처리 결과 확인 필요'};
+      }
+      chunk.forEach(function(id){if(!done[id]&&!failedById[id])failedById[id]={candidateId:id,error:text(batchError&&batchError.message)||'서버 저장 결과 미확인'};});
+      if(typeof options.onProgress==='function')options.onProgress(Math.min(candidateIds.length,offset+chunk.length),candidateIds.length,Object.keys(failedById).length,Object.keys(done).length);
+    }
+    var processedIds=candidateIds.filter(function(id){return !!done[id];}),failures=candidateIds.filter(function(id){return !done[id];}).map(function(id){return failedById[id]||{candidateId:id,error:'원장 저장 결과 확인 필요'};});
+    return{ok:!failures.length,complete:!failures.length,requested:candidateIds.length,processed:processedIds.length,failed:failures.length,processedIds:processedIds,results:results,failures:failures};
   }
   async function authorityAiPlacements(placements,options){
     options=options||{};placements=Array.isArray(placements)?placements.filter(function(row){return row&&text(row.candidateId)&&PRODUCT_SECTION_MAP[text(row.placementKey)];}):[];
@@ -1266,8 +1291,12 @@
       if(!id||!section||!row)return;
       var placement={page:section.page,section:section.section,sectionKey:section.section,country:selectedCountry,region:selectedSubdivision||'NATIONWIDE',administratorSelected:false,aiSelected:true,automaticPrivatePlacement:true,publicPublication:false};
       row.slotDecision='slot_candidate';row.approvedPlacement=placement;row.primaryPlacement=placement;row.placement=placement;
-      row.sectionAssignments=Array.isArray(row.sectionAssignments)?row.sectionAssignments:[];
-      if(!row.sectionAssignments.some(function(item){return sectionKeyOf(item)===key;}))row.sectionAssignments.unshift(Object.assign({reviewEligible:true,valueQualified:true,privateReviewOnly:true},placement));
+      // The manager has exactly one ACTIVE section per candidate and market.
+      // Do not leave old sectionAssignments behind in the rendered card.
+      row.sectionAssignments=(Array.isArray(row.sectionAssignments)?row.sectionAssignments:[]).filter(function(item){
+        return item&&text(item.country||selectedCountry)!==selectedCountry||item&&text(item.region||selectedSubdivision||'NATIONWIDE')!==(selectedSubdivision||'NATIONWIDE');
+      });
+      row.sectionAssignments.unshift(Object.assign({reviewEligible:true,valueQualified:true,privateReviewOnly:true},placement));
       row.managementControl=Object.assign({},row.managementControl||{},{source:'ai_psom_bulk',administratorLocked:false,aiReclassificationAllowed:true,automaticPrivatePlacement:true});
       row.review=Object.assign({},row.review||{},{state:'pending',nextGate:'administrator_front_match'});
       productPlacementSelections[id]='section:'+key;changed+=1;
@@ -1278,36 +1307,54 @@
   async function aiPlaceCandidateIds(candidateIds,options){
     options=options||{};candidateIds=Array.from(new Set((candidateIds||[]).map(text).filter(Boolean)));
     var preferredSectionKey=PRODUCT_SECTION_MAP[text(options.preferredSectionKey)]?text(options.preferredSectionKey):'';
-    var requested=candidateIds.length,chunkSize=Math.max(1,Math.min(10,Number(options.chunkSize||8))),processed=0,failed=0,results=[],processedIds=[],counts=productSectionCounts();
+    var requested=candidateIds.length,chunkSize=Math.max(1,Math.min(8,Number(options.chunkSize||5))),results=[],processedIds=[],counts=productSectionCounts(),frozen=scopeKey(),country=selectedCountry,region=selectedSubdivision||'NATIONWIDE';
+    async function send(ids){return api(CONTROL,'product_candidate_psom_place','POST',{}, {countryCode:country,subdivisionCode:region,candidateIds:ids,balanceCounts:counts,preferredSectionKey:preferredSectionKey||null},45000);}
+    var outcome={};
+    function record(data,asked){
+      if(!data||typeof data!=='object')return;
+      counts=Object.assign({},counts,data.balanceCounts||{});
+      var keys=new Set(asked);
+      (Array.isArray(data.results)?data.results:[]).forEach(function(row){var id=text(row&&row.candidateId);if(!id||!keys.has(id)||outcome[id]&&outcome[id].assigned===true)return;outcome[id]=row;});
+    }
     for(var offset=0;offset<candidateIds.length;offset+=chunkSize){
-      var chunk=candidateIds.slice(offset,offset+chunkSize),data=null,lastError=null;
-      for(var attempt=0;attempt<3&&!data;attempt++){
-        try{data=await api(CONTROL,'product_candidate_psom_place','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',candidateIds:chunk,balanceCounts:counts,preferredSectionKey:preferredSectionKey||null},45000);}
-        catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
+      if(scopeKey()!==frozen){candidateIds.slice(offset).forEach(function(id){outcome[id]={candidateId:id,assigned:false,error:'국가·지역 변경으로 작업 중단'};});break;}
+      var chunk=candidateIds.slice(offset,offset+chunkSize),batchError=null;
+      try{record(await send(chunk),chunk);}catch(error){batchError=error;record(error&&error.payload,chunk);}
+      // Missing replies are NOT a confirmed failure. Retry only those IDs,
+      // preserving successful placements already reported by the server.
+      var outstanding=chunk.filter(function(id){return !outcome[id];});
+      for(var j=0;j<outstanding.length;j++){
+        var id=outstanding[j],lastError=batchError;
+        if(scopeKey()!==frozen){outcome[id]={candidateId:id,assigned:false,error:'국가·지역 변경'};continue;}
+        for(var attempt=0;attempt<2&&!outcome[id];attempt++){
+          try{record(await send([id]),[id]);}catch(error){lastError=error;record(error&&error.payload,[id]);if(!transientResearchRequestError(error))break;}
+          if(!outcome[id]&&attempt===0)await new Promise(function(resolve){setTimeout(resolve,400);});
+        }
+        if(!outcome[id])outcome[id]={candidateId:id,assigned:false,error:text(lastError&&lastError.message)||'PSOM 배치 저장 미확인'};
       }
-      if(data){
-        counts=Object.assign({},counts,data.balanceCounts||{});processed+=Number(data.processed||data.assigned||0);failed+=Number(data.failed||0);
-        (data.results||[]).forEach(function(row){results.push(row);if(row&&row.assigned===true){var id=text(row.candidateId);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);}});
-        // Reflect confirmed durable placements immediately. This makes the card's
-        // management select show the chosen 20-section destination and removes
-        // successful rows from the unassigned pool even if the follow-up read is slow.
-        applyPsomPlacementResultsLocally(data.results||[]);
-      }else{failed+=chunk.length;chunk.forEach(function(id){results.push({candidateId:id,assigned:false,error:text(lastError&&lastError.message)||'psom_bulk_place_failed'});});}
-      if(typeof options.onProgress==='function')options.onProgress('analysis',Math.min(candidateIds.length,offset+chunk.length),candidateIds.length,failed);
+      // Never move the cards optimistically on an unverified response. The
+      // complete canonical readback below is the only UI commit boundary.
+      // This prevents a temporary "copied" card if a DB write times out.
+
+      if(typeof options.onProgress==='function')options.onProgress('analysis',Math.min(candidateIds.length,offset+chunk.length),candidateIds.length,candidateIds.slice(0,offset+chunk.length).filter(function(id){return !outcome[id]||outcome[id].assigned!==true;}).length);
     }
+    results=candidateIds.map(function(id){return outcome[id]||{candidateId:id,assigned:false,error:'PSOM 처리 중단'};});
+    processedIds=results.filter(function(row){return row.assigned===true;}).map(function(row){return text(row.candidateId);});
     var refreshError=null;
-    try{await refreshCandidateLedgerProducts({preserveResearchReport:true});}
-    catch(error){refreshError=error;}
-    // Verify the post-write UI model. Successful IDs must now be slot candidates
-    // with a valid 20-section assignment. Failed rows remain in the unassigned
-    // list and stay selectable; do not erase them just because siblings succeeded.
-    var verifiedIds=[];processedIds.forEach(function(id){var row=productById(id);if(row&&productDecision(row)==='slot_candidate'&&!!assignedSectionKey(row))verifiedIds.push(id);});
-    if(!refreshError&&verifiedIds.length<processedIds.length){
-      var missing={};verifiedIds.forEach(function(id){missing[id]=true;});processedIds.forEach(function(id){if(!missing[id])results.push({candidateId:id,assigned:false,error:'placement_write_not_visible_after_refresh'});});
-      failed+=processedIds.length-verifiedIds.length;processed=Math.max(0,processed-(processedIds.length-verifiedIds.length));processedIds=verifiedIds;
+    try{await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});}catch(error){refreshError=error;}
+    // A completed move must appear under exactly its new approved section in
+    // the durable ledger. Do not clear selections on a stale or partial read.
+    if(!refreshError){
+      var verifiedIds=processedIds.filter(function(id){var row=productById(id),result=outcome[id];return row&&productDecision(row)==='slot_candidate'&&assignedSectionKey(row)===text(result&&result.sectionKey);});
+      processedIds.forEach(function(id){if(verifiedIds.indexOf(id)<0){outcome[id]={candidateId:id,assigned:false,error:'placement_not_confirmed_at_destination'};}});
+      processedIds=verifiedIds;
+      results=candidateIds.map(function(id){return outcome[id];});
+    }else{
+      // Network ambiguity: keep the selection until the next successful read.
+      processedIds=[];
     }
-    var sectionSummary={};results.forEach(function(row){var key=text(row&&row.sectionKey);if(row&&row.assigned===true&&key)sectionSummary[key]=Number(sectionSummary[key]||0)+1;});
-    return{ok:failed===0,requested:requested,validated:requested,processed:processed,failed:failed,processedIds:processedIds,results:results,balanceCounts:counts,sectionSummary:sectionSummary,mode:'psom_private_pre_front',refreshWarning:refreshError?text(refreshError&&refreshError.message):null};
+    var failed=requested-processedIds.length,sectionSummary={};results.forEach(function(row){var key=text(row&&row.sectionKey);if(row&&row.assigned===true&&processedIds.indexOf(text(row.candidateId))>=0&&key)sectionSummary[key]=Number(sectionSummary[key]||0)+1;});
+    return{ok:failed===0,requested:requested,validated:requested,processed:processedIds.length,failed:failed,processedIds:processedIds,results:results,balanceCounts:counts,sectionSummary:sectionSummary,mode:'psom_private_pre_front',refreshWarning:refreshError?text(refreshError&&refreshError.message):null};
   }
   // Two-phase AI rank comparison: preview candidates and potential demotions,
   // then apply exactly the administrator-confirmed plan. The server calculates
@@ -1318,8 +1365,18 @@
     var frozen={country:selectedCountry,region:selectedSubdivision||'NATIONWIDE'},previews=[],failures=[],accepted=[],count={place:0,replace:0,defer:0,preserve:0,quality:0};
     for(var off=0;off<ids.length;off+=batchSize){
       if(selectedCountry!==frozen.country||(selectedSubdivision||'NATIONWIDE')!==frozen.region)throw new Error('AI 비교 분석 중 관리 국가·지역이 변경됐습니다.');
-      var chunk=ids.slice(off,off+batchSize),preview=await api(CONTROL,'product_candidate_psom_ranked_replace','POST',{}, {countryCode:frozen.country,subdivisionCode:frozen.region,candidateIds:chunk,preferredSectionKey:preferred||null,previewOnly:true},90000);
-      (preview&&preview.results||[]).forEach(function(item){
+      var chunk=ids.slice(off,off+batchSize),preview=null,previewError=null;
+      try{preview=await api(CONTROL,'product_candidate_psom_ranked_replace','POST',{}, {countryCode:frozen.country,subdivisionCode:frozen.region,candidateIds:chunk,preferredSectionKey:preferred||null,previewOnly:true},90000);}
+      catch(error){previewError=error;preview=error&&error.payload||null;}
+      var previewRows=Array.isArray(preview&&preview.results)?preview.results.slice():[],seenPreview={};
+      previewRows.forEach(function(item){if(item&&item.candidateId)seenPreview[text(item.candidateId)]=true;});
+      for(var pi=0;pi<chunk.length;pi++){
+        var previewId=chunk[pi];if(seenPreview[previewId])continue;
+        try{var solo=await api(CONTROL,'product_candidate_psom_ranked_replace','POST',{}, {countryCode:frozen.country,subdivisionCode:frozen.region,candidateIds:[previewId],preferredSectionKey:preferred||null,previewOnly:true},90000),items=Array.isArray(solo&&solo.results)?solo.results:[];
+          if(items.length)previewRows.push.apply(previewRows,items);else previewRows.push({candidateId:previewId,action:'defer',error:'preview_result_unconfirmed'});
+        }catch(e){previewRows.push({candidateId:previewId,action:'defer',error:text(e&&e.message)||text(previewError&&previewError.message)||'preview_failed'});}
+      }
+      previewRows.forEach(function(item){
         previews.push(item);
         if(item.action==='replace'||item.action==='place'){accepted.push(item);count[item.action]++;}
         else if(item.error==='product_quality_review_required'){count.quality++;failures.push(item);}
@@ -1343,8 +1400,19 @@
       if(selectedCountry!==frozen.country||(selectedSubdivision||'NATIONWIDE')!==frozen.region)throw new Error('치환 반영 중 관리 국가·지역이 변경됐습니다.');
       var chunk=accepted.slice(off,off+batchSize),plan={};
       chunk.forEach(function(item){plan[item.candidateId]={action:item.action,sectionKey:item.sectionKey,replacementId:item.replacementId||''};});
-      var response=await api(CONTROL,'product_candidate_psom_ranked_replace','POST',{}, {countryCode:frozen.country,subdivisionCode:frozen.region,candidateIds:chunk.map(function(item){return item.candidateId;}),preferredSectionKey:preferred||null,previewOnly:false,acceptedPlan:plan},90000);
-      (response&&response.results||[]).forEach(function(item){
+      var response=null,applyError=null,applyIds=chunk.map(function(item){return item.candidateId;});
+      try{response=await api(CONTROL,'product_candidate_psom_ranked_replace','POST',{}, {countryCode:frozen.country,subdivisionCode:frozen.region,candidateIds:applyIds,preferredSectionKey:preferred||null,previewOnly:false,acceptedPlan:plan},90000);}
+      catch(error){applyError=error;response=error&&error.payload||null;}
+      var appliedRows=Array.isArray(response&&response.results)?response.results.slice():[],appliedMap={};
+      appliedRows.forEach(function(item){if(item&&item.candidateId)appliedMap[text(item.candidateId)]=true;});
+      for(var ri=0;ri<chunk.length;ri++){
+        var one=chunk[ri],id=text(one.candidateId);if(appliedMap[id])continue;
+        if(selectedCountry!==frozen.country||(selectedSubdivision||'NATIONWIDE')!==frozen.region){appliedRows.push({candidateId:id,assigned:false,error:'country_scope_changed'});continue;}
+        try{var soloPlan={};soloPlan[id]=plan[id];var answer=await api(CONTROL,'product_candidate_psom_ranked_replace','POST',{}, {countryCode:frozen.country,subdivisionCode:frozen.region,candidateIds:[id],preferredSectionKey:preferred||null,previewOnly:false,acceptedPlan:soloPlan},90000),returned=Array.isArray(answer&&answer.results)?answer.results:[];
+          appliedRows.push(returned[0]||{candidateId:id,assigned:false,error:'apply_result_unconfirmed'});
+        }catch(error){appliedRows.push({candidateId:id,assigned:false,error:text(error&&error.message)||text(applyError&&applyError.message)||'ranked_apply_failed'});}
+      }
+      appliedRows.forEach(function(item){
         results.push(item);
         if(item.assigned===true){processed++;processedIds.push(item.candidateId);if(item.replacedExisting===true)replaced++;if(item.partial===true)partial++;}
         else failed++;
@@ -1451,21 +1519,26 @@
       if(ledgerRows.length===selectedRows.length&&ledgerRows.length){
         var candidateIds=Array.from(new Set(ledgerRows.map(function(row){return text(row.candidateId||row.id);}).filter(Boolean))),decision=action==='place'?'slot_candidate':action==='list_delete'?'remove_from_list':action;
         var bulk;
-        if(action==='place'||(groupKey==='latest_research'&&decision==='undecided')){
-          bulk=await authorityCandidateAction(decision,candidateIds,placement||'',{source:groupKey==='latest_research'?'latest_research_group':'administrator',chunkSize:2,onProgress:function(done,total,failCount){
-            setCandidateBulkState(groupKey,'국가별 원장 저장 확인 '+done+'/'+total+'건 · 실패 '+failCount+'건',failCount?'warn':'working');
+        // All candidate moves share one verified, scoped authority.
+          {
+          bulk=await authorityCandidateAction(decision,candidateIds,placement||'',{source:groupKey==='latest_research'?'latest_research_group':'administrator',chunkSize:5,onProgress:function(done,total,failCount,successCount){
+            setCandidateBulkState(groupKey,'국가별 원장 이관 '+done+'/'+total+'건 · 성공 '+successCount+'건 · 실패 '+failCount+'건',failCount?'warn':'working');
             if(groupKey==='latest_research'){
               var remaining=$('latestResearchWaitingCount');
-              if(remaining){var original=Number(remaining.getAttribute('data-start-count')||0),confirmed=Math.max(0,done-failCount);
+              if(remaining){var original=Number(remaining.getAttribute('data-start-count')||0),confirmed=Number(successCount||0);
                 remaining.textContent='이관 대기 '+Math.max(0,original-confirmed)+'건 · 현재 요청에서 원장 확인 '+confirmed+'건 (최종 재조회 진행 전)';}
             }
           }});
-        }else{
-          bulk=await exclusionQueueBulk('',candidateIds,decision,function(done,total,failCount){setCandidateBulkState(groupKey,'원장 처리 '+done+'/'+total+'건'+(failCount?' · 실패 '+failCount+'건':''),failCount?'warn':'working');});
         }
         succeeded=Number(bulk&&bulk.processed||0);failed=Number(bulk&&bulk.failed||0);
         confirmedSuccessIds=(bulk&&bulk.processedIds||[]).map(text).filter(Boolean);
-        setCandidateBulkState(groupKey,'최종 원장 새로고침 중…',failed?'warn':'working');await refreshCandidateLedgerProducts({preserveResearchReport:true});
+        setCandidateBulkState(groupKey,'최종 원장 새로고침 중…',failed?'warn':'working');
+        await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});
+        // A server acknowledgement is not a move until the new canonical
+        // destination is read back. Leave failed/unconfirmed rows selected.
+        var accepted=[],expectedDecision=decision==='remove_from_list'?'removed_from_list':decision;
+        confirmedSuccessIds.forEach(function(id){var row=productById(id)||latestOverviewCanonicalById[id],actual=row&&productDecision(row),where=row&&assignedSectionKey(row);if(row&&actual===expectedDecision&&(expectedDecision!=='slot_candidate'||where===placement)){accepted.push(id);}else{failed+=1;}});
+        confirmedSuccessIds=accepted;succeeded=accepted.length;
       }else{
         var lastBulkData=null;
         for(var i=0;i<ids.length;i++){
@@ -1474,9 +1547,11 @@
         }
         if(lastBulkData){lastProductJson=lastBulkData;rememberReport('product',lastBulkData);renderProductProgress(lastBulkData);renderProducts(lastBulkData.products||[]);saveReviewSnapshot();}
       }
-      ids.forEach(function(id){if(groupKey!=='latest_research'||confirmedSuccessIds.indexOf(id)>=0)delete candidateSelectedProducts[id];});saveReviewSnapshot();
+      // Never clear failed selections. The operator must be able to retry the
+      // exact remaining IDs without hunting through the source list.
+      confirmedSuccessIds.forEach(function(id){delete candidateSelectedProducts[id];});saveReviewSnapshot();
       var actionLabel=action==='place'?(placement?sectionLabel(placement)+' 섹션으로 수동 배치':'PSOM 기준 자동 배치'):action==='undecided'?'미배정 후보로 복원':action==='hold'?'보류':action==='purge'?'영구 제외':action==='list_delete'?'현재 후보 관리 목록에서만 제거':action==='reject'?'제외':action;
-      var resultText='요청 '+ids.length+'건 · 성공 '+succeeded+'건 · 실패 '+failed+'건';setCandidateBulkState(groupKey,resultText+' · '+actionLabel,failed?'warn':'ok');if(succeeded)show(resultText+' · '+actionLabel+'했습니다. 관리자 원장만 변경했으며 프론트 공개·해제·결제는 실행하지 않았습니다. 다음 프론트 매칭 단계에서 이 변경을 동기화합니다.',failed?'warn':'ok');else show(resultText+' · 처리된 항목이 없습니다. 후보 상태·ID 또는 저장 권한을 확인해 주세요.','fail');
+      var failureSample=(bulk&&bulk.failures||[]).slice(0,3).map(function(f){return text(f.candidateId||f.id)+' · '+text(f.error);}).join(' / ');var resultText='요청 '+ids.length+'건 · 성공 '+succeeded+'건 · 실패 '+failed+'건'+(failureSample?' · '+failureSample:'');setCandidateBulkState(groupKey,resultText+' · '+actionLabel,failed?'warn':'ok');if(succeeded)show(resultText+' · '+actionLabel+'했습니다. 관리자 원장만 변경했으며 프론트 공개·해제·결제는 실행하지 않았습니다. 다음 프론트 매칭 단계에서 이 변경을 동기화합니다.',failed?'warn':'ok');else show(resultText+' · 처리된 항목이 없습니다. 후보 상태·ID 또는 저장 권한을 확인해 주세요.','fail');
     }catch(error){failed=Math.max(failed,ids.length-succeeded);setCandidateBulkState(groupKey,'처리 중단 · 성공 '+succeeded+'건 · 실패 '+failed+'건','fail');show(conciseRequestError(error&&error.message,error&&error.status)||'선택 후보 일괄 처리를 완료하지 못했습니다.','fail');}
     finally{candidateBulkActionActive[groupKey]=false;syncCandidateSelectionControls(groupKey);}
   }
@@ -1665,7 +1740,7 @@
     var frozen=scopeKey(),newIds=entries.filter(function(e){return e.kind==='unregistered';}).map(function(e){return e.researchId;}),
       existing=entries.filter(function(e){return e.kind==='registered';}).map(function(e){return frontCandidateLedgerId(e.candidate);}).filter(Boolean),confirmed=[];
     if(newIds.length){
-      var stage=await runLatestInCandidateAction('stage',{researchIds:newIds});
+      var stage=await runLatestInCandidateAction('stage',{researchIds:newIds,skipConfirm:true});
       confirmed=Array.isArray(stage&&stage.confirmed)?stage.confirmed:[];
     }
     if(scopeKey()!==frozen)throw new Error('관리 국가·지역이 변경되어 이관을 중지했습니다.');
@@ -1673,7 +1748,7 @@
       var row=productById(id);return row&&row.ledgerSource==='candidate'&&productDecision(row)==='undecided'&&!frontPublicationActive(row);
     });
     if(!wanted.length){show('검증되어 등록된 비공개 후보가 없어 미배치 이관을 실행하지 않았습니다.','warn');return;}
-    var move=await authorityCandidateAction('undecided',wanted,'',{source:'latest_research_group',chunkSize:2});
+    var move=await authorityCandidateAction('undecided',wanted,'',{source:'latest_research_group',chunkSize:5,onProgress:function(done,total,failCount,successCount){var state=$('latestInCandidateStatus');if(state)state.textContent='미배치 이관 '+done+'/'+total+'건 · 확정 '+successCount+'건 · 확인 필요 '+failCount+'건';}});
     await refreshCandidateLedgerProducts({preserveResearchReport:true,atomicLedgerRefresh:true});
     var successful=(move.processedIds||[]).filter(function(id){var row=productById(id),h=row&&row.managementControl&&row.managementControl.latestResearchHandoff||{};
       return row&&productDecision(row)==='undecided'&&h.completed===true&&h.destination==='unassigned';});
@@ -1847,7 +1922,7 @@
       return !!(choice&&choice.scope===frozen);
     });
     if(!chosen.length){show('현재 국가·지역에서 최초 등록할 미등록 상품이 없습니다.','warn');return;}
-    if(!window.confirm('선택 국가·지역 '+frozen+' · '+(allMode?'미등록 전체 ':'선택 미등록 ')+chosen.length+'건을 상품별로 검증합니다. 검증된 실상품만 현재 후보 원장에 등록하며, 등록된 상품은 기존 미배치 관리 기능을 그대로 사용합니다. 진행할까요?'))return;
+    if(!options.skipConfirm&&!window.confirm('선택 국가·지역 '+frozen+' · '+(allMode?'미등록 전체 ':'선택 미등록 ')+chosen.length+'건을 상품별로 검증합니다. 검증된 실상품만 현재 후보 원장에 등록하며, 등록된 상품은 기존 미배치 관리 기능을 그대로 사용합니다. 진행할까요?'))return;
     latestInCandidateBusy=true;
     latestInCandidateMessage='상품 상세 검증·기존 후보 원장 최초 등록 0/'+chosen.length+'건';
     renderLatestResearchCandidateGroup();
@@ -1891,7 +1966,7 @@
       // group still displays them and uses normal candidate bulk actions.
       latestInCandidateRememberIds(confirmed,frozen);if(confirmed.length){latestResearchUnifiedFilter='registered';candidateGroupPages['candidate:latest_research']=0;}
       confirmed.forEach(function(id){candidateSelectedProducts[id]=true;});
-      chosen.forEach(function(item){var key=latestProductKey(item.research);if(key)delete latestInCandidateSelections[key];});
+      chosen.forEach(function(item){var key=latestProductKey(item.research);if(key&&confirmed.some(function(id){return !!map[id]&&productUrlMatchKey(map[id].productUrl||map[id].url)===productUrlMatchKey(item.research.productUrl||item.research.url);}))delete latestInCandidateSelections[key];});
       var registeredRows=latestResearchCanonicalCandidateRows(),first=registeredRows.findIndex(function(row){return confirmed.indexOf(frontCandidateLedgerId(row))>=0;});
       if(first>=0)candidateGroupPages['candidate:latest_research']=Math.floor(first/MANAGEMENT_PAGE_SIZE);
       latestInCandidateMessage='신규 리서치 검증 '+chosen.length+'건 · 후보 원장 등록 확인 '+confirmed.length+'건 · 보류·제외 '+held+'건 · 추가 확인 '+failed.length+'건'+(failed.length?' · '+failed.slice(0,2).join(' / '):'');
@@ -4107,7 +4182,7 @@
     var groups={hold:[],reject:[],other:[]};(rows||[]).forEach(function(row){var d=productDecision(row),id=text(row&&row.candidateId||row&&row.id);if(!id)return;if(d==='hold')groups.hold.push(id);else if(d==='reject'||d==='purge')groups.reject.push(id);else groups.other.push(id);});
     var processed=0,failed=0,failures=[],processedIds=[];
     for(var gi=0;gi<2;gi++){var bucket=gi===0?'hold':'reject',list=groups[bucket];for(var off=0;off<list.length;off+=100){var chunk=list.slice(off,off+100);try{var result=await api(QUEUE_CONTROL,'bulk_action','POST',{}, {candidateIds:chunk,decision:'restore',expectedBucket:bucket,countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE'},45000),done=Array.isArray(result&&result.processedIds)?result.processedIds:[];processed+=Number(result&&result.processed||done.length||0);failed+=Number(result&&result.failures&&result.failures.length||0);done.forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});(result&&result.failures||[]).slice(0,20).forEach(function(f){failures.push(f);});}catch(error){failed+=chunk.length;failures.push({error:text(error&&error.message)||'restore_failed'});}}}
-    for(var oi=0;oi<groups.other.length;oi+=100){var otherChunk=groups.other.slice(oi,oi+100);try{var otherResult=await authorityCandidateAction('undecided',otherChunk,'',{source:'administrator_restore'}),otherDone=Array.isArray(otherResult&&otherResult.processedIds)?otherResult.processedIds:otherChunk;processed+=Number(otherResult&&otherResult.processed||otherDone.length||0);failed+=Number(otherResult&&otherResult.failed||otherResult&&otherResult.failures&&otherResult.failures.length||0);otherDone.forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});(otherResult&&otherResult.failures||[]).slice(0,20).forEach(function(f){failures.push(f);});}catch(error){failed+=otherChunk.length;failures.push({error:text(error&&error.message)||'restore_failed'});}}
+    for(var oi=0;oi<groups.other.length;oi+=100){var otherChunk=groups.other.slice(oi,oi+100);try{var otherResult=await authorityCandidateAction('undecided',otherChunk,'',{source:'administrator_restore'}),otherDone=Array.isArray(otherResult&&otherResult.processedIds)?otherResult.processedIds:[];processed+=Number(otherResult&&otherResult.processed||otherDone.length||0);failed+=Number(otherResult&&otherResult.failed||otherResult&&otherResult.failures&&otherResult.failures.length||0);otherDone.forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});(otherResult&&otherResult.failures||[]).slice(0,20).forEach(function(f){failures.push(f);});}catch(error){failed+=otherChunk.length;failures.push({error:text(error&&error.message)||'restore_failed'});}}
     return{processed:processed,failed:failed,failures:failures,processedIds:processedIds};
   }
   function verifyCandidateRestore(ids){var missing=[],wrong=[],map={};productRows.forEach(function(row){map[managementRowId(row)]=row;});(ids||[]).forEach(function(id){id=text(id);var row=map[id];if(!row){missing.push(id);return;}if(productDecision(row)!=='undecided')wrong.push(id);});return{ok:missing.length===0&&wrong.length===0,missing:missing,wrong:wrong,failed:missing.length+wrong.length};}
@@ -4116,7 +4191,7 @@
     if(decision==='undecided'&&ledger.length){
       restoreResult=await restoreLedgerCandidateRows(ledger);processed+=Number(restoreResult.processed||0);failed+=Number(restoreResult.failed||0);failures=failures.concat(restoreResult.failures||[]);processedIds=processedIds.concat(restoreResult.processedIds||[]);if(processedIds.length)applyLocalCandidateRestore(processedIds);
     }else{
-      for(var off=0;off<ledger.length;off+=100){var chunk=ledger.slice(off,off+100).map(function(row){return text(row.candidateId||row.id);}).filter(Boolean);try{var source=decision==='dismiss'?'administrator_delete_rediscovery':'administrator',result=await authorityCandidateAction(decision,chunk,placementKey||'',{source:source}),done=Array.isArray(result&&result.processedIds)?result.processedIds:chunk;processed+=Number(result&&result.processed||0);failed+=Number(result&&result.failed||result&&result.failures&&result.failures.length||0);done.forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});(result&&result.failures||[]).slice(0,20).forEach(function(f){failures.push(f);});}catch(error){failed+=chunk.length;failures.push({error:text(error&&error.message)||'bulk_failed'});}}
+      for(var off=0;off<ledger.length;off+=100){var chunk=ledger.slice(off,off+100).map(function(row){return text(row.candidateId||row.id);}).filter(Boolean);try{var source=decision==='dismiss'?'administrator_delete_rediscovery':'administrator',result=await authorityCandidateAction(decision,chunk,placementKey||'',{source:source}),done=Array.isArray(result&&result.processedIds)?result.processedIds:[];processed+=Number(result&&result.processed||0);failed+=Number(result&&result.failed||result&&result.failures&&result.failures.length||0);done.forEach(function(id){id=text(id);if(id&&processedIds.indexOf(id)<0)processedIds.push(id);});(result&&result.failures||[]).slice(0,20).forEach(function(f){failures.push(f);});}catch(error){failed+=chunk.length;failures.push({error:text(error&&error.message)||'bulk_failed'});}}
     }
     var last=null;for(var i=0;i<legacy.length;i++){try{last=await api(CONTROL,'product_candidate_action','POST',{}, {countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',productId:text(legacy[i].id),decision:decision,placementKey:placementKey||''},45000);processed+=1;processedIds.push(text(legacy[i].id));}catch(error){failed+=1;failures.push({id:text(legacy[i].id),error:text(error&&error.message)||'item_failed'});}}
     if(last){lastProductJson=last;rememberReport('product',last);renderProductProgress(last);renderProducts(last.products||[]);}
