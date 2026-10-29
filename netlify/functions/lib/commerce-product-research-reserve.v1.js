@@ -43,7 +43,7 @@ function scopeMatches(row,scope){
 }
 function reserveRowActive(row){const p=obj(row&&row.source_payload),q=obj(p.queueControl),state=low(row&&row.status),decision=low(p.slotDecision);return ACTIVE_STATUSES.has(state)&&!['hold','reject','purge','removed','suppressed'].includes(decision)&&q.hiddenFromCountryQueue!==true;}
 function protectedRow(row){const p=obj(row&&row.source_payload),front=obj(p.frontPublication),placement=obj(p.approvedPlacement),manual=obj(p.managementControl);
- return p.slotDecision==='slot_candidate'||!!(placement.section||placement.sectionKey)||manual.administratorLocked===true||PUBLISHED.has(low(front.status))||row&&row._relationProtected===true;
+ return p.slotDecision==='slot_candidate'||!!(placement.section||placement.sectionKey)||manual.administratorLocked===true||row&&row._supplierRegistryProtected===true||PUBLISHED.has(low(front.status))||row&&row._relationProtected===true;
 }
 function score(row){const p=obj(row&&row.source_payload),rank=obj(p.productRanking);const value=Number(row&&row.rankingScore!=null?row.rankingScore:rank.score);return Number.isFinite(value)?value:0;}
 function decision(activeRows,input,options){

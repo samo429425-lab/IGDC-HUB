@@ -355,6 +355,10 @@ function isListOrCampaignUrl(value) {
     const genericProviderCollection = /^(?:\/(?:[a-z]{2}(?:-[a-z]{2})?))?\/(?:tour|travel|trips?|vacations?|agency|services?|discover|magazine|blog)\/(?:books?|guides?|articles?|posts?|news|info|information|destinations?|catalog|categories?|search|lists?|index|packages?|offers?|promotions?|hotels?|tickets?|activities)(?:\/)?$/i.test(path) ||
       /^\/(?:news|press|blog|journal|editorial|articles?)(?:\/|$)/i.test(path) || /^\/media\/(?:news|press|articles?|blog|stories|events)(?:\/|$)/i.test(path);
     if (genericProviderCollection) return true;
+    // Kayak/HotelsCombined-style KSP destination search is a collection of
+    // offers, not a verified car or hotel inventory item. The numeric suffix
+    // is a location code, not a purchasable product ID.
+    if(/\/(?:car-rental|cars|car-hire|hotel-search)\/[^/?#]+\.\d+\.ksp\/?$/i.test(path))return true;
     const detailContext = productDetailPathHint(parsed.pathname);
     const queryProductId = Array.from(parsed.searchParams.entries()).some(([rawKey, rawValue]) => {
       const key = lower(rawKey);
