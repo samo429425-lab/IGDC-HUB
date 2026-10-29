@@ -4388,12 +4388,19 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
   const bookFit=/(도서|책방|서점|책\b|출판|전자책|웹툰|코믹|만화|bookstore|book\b|books\b|publishing|ebook|webtoon|comic)/i.test(hay);
   const healthKnowledgeFit=primary==="baby_family_education"||/(지식|교육|학습|건강|헬스|피트니스|영양제|비타민|웰니스|knowledge|education|learning|health|fitness|supplement|vitamin|wellness)/i.test(hay);
   const premiumBrandFit=/(프리미엄|명품|럭셔리|고급|하이엔드|밍크|모피|디자이너|premium|luxury|high[- ]?end|mink|fur|designer|flagship)/i.test(hay);
+  // PSOM Home 6 policy: everyday miscellaneous goods and consumable essentials.
+  // The supplier homepage/category title is not product evidence.
+  const home6Title=lower([product.productName,product.title,product.sourceTitle,product.summary].map(text).join(" "));
+  const home6EverydayFit=!bookFit && !explicitFoodFit && !beautyFit && !fashionFit &&
+    !smallApplianceFit && !furnitureFit && !automotiveFit && !outdoorFit &&
+    /(생활잡화|일상잡화|잡화|생필품|생활필수품|생활용품|생활소모품|일회용품|화장지|휴지|티슈|물티슈|생리대|기저귀|위생용품|욕실용품|수납용품|수납함|정리함|휴대용품|생활편의|daily\s*goods|everyday\s*(?:goods|essentials)|general\s*merchandise|household\s*(?:goods|essentials|supplies|consumables)|toiletries|tissue|wipes?|diapers?|disposable\s*supplies|organizers?)/i.test(home6Title);
+  if (home6EverydayFit) add("home|home_6", 128, "홈 6 잡화·생필품·생활용품 개별 상품", "psom_home6_misc_daily_essentials");
 
   // Physical outdoor/sports goods are retail products. Only travel/booking services are Tour-exclusive.
   if (automotiveFit || outdoorFit) add("home|home_right_middle", 124, automotiveFit?"자동차 용품 홈 우측 중단":"아웃도어 홈 우측 중단", "psom_home_right_automotive_outdoor");
   if (outdoorFit) add("distribution|distribution-extra", 112, "유통 아웃도어 전용", "psom_distribution_outdoor");
   if (furnitureFit) { add("home|home_5",116,"홈 5 소형 리빙·가구","psom_home5_living"); add("home|home_right_bottom", 122, "가구·리빙 홈 우측 하단", "psom_home_right_living"); }
-  if (bookFit) { add("home|home_6", 124, "웹툰·서적·전자책 Home 6", "psom_home6_books"); add("home|home_right_bottom", 108, "책방·리빙 우측 하단", "psom_home_right_books"); }
+  if (bookFit) { add("home|home_right_bottom", 108, "책방·리빙 우측 하단", "psom_home_right_books"); }
   if (healthKnowledgeFit || /(헬스케어|건강식품|영양제|보충제|wellness|healthcare|supplement)/i.test(hay)) add("home|home_right_top", 118, "지식·건강·생활 우측 상단", "psom_home_right_health_knowledge");
 
   if (beautyFit) {
@@ -4417,8 +4424,8 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
     add("distribution|distribution-others",120,"유통 생필품·생활","psom_distribution_essentials");
   } else if (furnitureFit) {
     add("distribution|distribution-others",112,"유통 리빙·가구","psom_distribution_living");
-  } else if (!automotiveFit && !outdoorFit && !bookFit && !healthKnowledgeFit) {
-    add("home|home_5",108,"홈 5 생활잡화·소형 리빙","psom_home5_misc");
+  } else if (!automotiveFit && !outdoorFit && !bookFit && !healthKnowledgeFit && !home6EverydayFit) {
+    add("home|home_5",108,"홈 5 일반 소형 리빙 검토","psom_home5_general_living");
   }
   if (premiumBrandFit && (fashionFit||furnitureFit||beautyFit)) add("distribution|distribution-right",126,"검증 브랜드 가구·의류·뷰티 우측 추천","psom_distribution_premium_brand");
   // Unknown-but-real product candidates are still allowed into a private

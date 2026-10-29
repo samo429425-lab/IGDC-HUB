@@ -324,7 +324,7 @@
     "etc": "생필품·생활",
     "extra": "기타·아웃도어·식품",
     "right_panel": "브랜드 추천",
-    "home_6": "Home 6",
+    "home_6": "잡화·생필품·생활용품",
     "distribution-extra": "기타·아웃도어·식품"
   },
   "items": [
@@ -6040,9 +6040,9 @@
       "keywords": [
         "home",
         "main",
-        "books",
-        "webtoon",
-        "ebook"
+        "miscellaneous_goods",
+        "daily_essentials",
+        "household_supplies"
       ],
       "weight": 3,
       "enabled": true,
@@ -6401,28 +6401,37 @@
         "reclassifyOnlyUndecided": true
       },
       "home|home_6": {
-        "intent": "digital_reading_books_comics",
-        "priority": [
-          "fashion",
-          "beauty",
-          "small_electronics",
-          "small_appliances",
-          "household_essentials"
-        ],
-        "categoryFamilies": [
-          "books",
-          "ebooks",
-          "webtoon",
-          "digital_reading"
-        ],
-        "searchbankKeywordsKo": [
-          "웹툰",
-          "서적",
-          "전자책"
-        ],
-        "existingAssignmentImmutable": true,
-        "reclassifyOnlyUndecided": true
-      },
+                       "intent": "misc_daily_household_essentials",
+                       "priority": [
+                         "misc_daily_goods",
+                         "household_essentials",
+                         "living_supplies"
+                       ],
+                       "categoryFamilies": [
+                         "misc",
+                         "household",
+                         "daily_essentials",
+                         "living_supplies"
+                       ],
+                       "searchbankKeywordsKo": [
+                         "잡화",
+                         "생활잡화",
+                         "생필품",
+                         "생활용품",
+                         "생활소모품",
+                         "위생용품",
+                         "수납용품"
+                       ],
+                       "existingAssignmentImmutable": true,
+                       "reclassifyOnlyUndecided": true,
+                       "excludeCategoryFamilies": [
+                         "books",
+                         "ebooks",
+                         "webtoon",
+                         "digital_reading"
+                       ],
+                       "requiresVerifiedDirectProductUrl": true
+                     },
       "home|home_right_top": {
         "intent": "health_knowledge_nutrition",
         "categoryFamilies": [
@@ -6870,21 +6879,31 @@
           "requiresVerifiedDirectProductUrl": true
         },
         "home|home_6": {
-          "intent": "digital_reading_books_comics",
-          "families": [
-            "books",
-            "ebooks",
-            "webtoon",
-            "digital_reading"
-          ],
-          "researchKeywordsKo": [
-            "웹툰",
-            "서적",
-            "전자책"
-          ],
-          "suggestionOnly": true,
-          "requiresVerifiedDirectProductUrl": true
-        },
+                         "intent": "misc_daily_household_essentials",
+                         "families": [
+                           "misc",
+                           "household",
+                           "daily_essentials",
+                           "living_supplies"
+                         ],
+                         "researchKeywordsKo": [
+                           "잡화",
+                           "생활잡화",
+                           "생필품",
+                           "생활용품",
+                           "생활소모품",
+                           "위생용품",
+                           "수납용품"
+                         ],
+                         "suggestionOnly": true,
+                         "requiresVerifiedDirectProductUrl": true,
+                         "excludedFamilies": [
+                           "books",
+                           "ebooks",
+                           "webtoon",
+                           "digital_reading"
+                         ]
+                       },
         "home|home_right_top": {
           "intent": "health_knowledge_nutrition",
           "families": [

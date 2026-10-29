@@ -265,7 +265,7 @@
       "home_right_top": "우측 상",
       "home_right_middle": "우측 중",
       "home_right_bottom": "우측 하",
-      "home_6": "웹툰·책·전자책"
+      "home_6": "잡화·생필품·생활용품"
     },
     "network": {
       "network-right": "우측"
@@ -321,7 +321,7 @@
     "maru-global-insight": {
       "main": "마지막"
     },
-    "home_6": "Home 6",
+    "home_6": "잡화·생필품·생활용품",
     "home_right_top": "지식·건강·생활",
     "home_right_middle": "자동차·아웃도어",
     "home_right_bottom": "리빙·책방·기타",
@@ -2995,16 +2995,16 @@
       "id": "home-main-006",
       "page": "home",
       "section": "home_6",
-      "title": "Home 6",
+      "title": "잡화·생필품·생활용품",
       "category": "platform",
       "type": "thumbnail",
       "url": "/index.html",
       "keywords": [
         "home",
         "main",
-        "books",
-        "webtoon",
-        "ebook"
+        "miscellaneous_goods",
+        "daily_essentials",
+        "household_supplies"
       ],
       "weight": 3,
       "enabled": true,
@@ -3363,28 +3363,37 @@
         "reclassifyOnlyUndecided": true
       },
       "home|home_6": {
-        "intent": "digital_reading_books_comics",
-        "priority": [
-          "fashion",
-          "beauty",
-          "small_electronics",
-          "small_appliances",
-          "household_essentials"
-        ],
-        "categoryFamilies": [
-          "books",
-          "ebooks",
-          "webtoon",
-          "digital_reading"
-        ],
-        "searchbankKeywordsKo": [
-          "웹툰",
-          "서적",
-          "전자책"
-        ],
-        "existingAssignmentImmutable": true,
-        "reclassifyOnlyUndecided": true
-      },
+                       "intent": "misc_daily_household_essentials",
+                       "priority": [
+                         "misc_daily_goods",
+                         "household_essentials",
+                         "living_supplies"
+                       ],
+                       "categoryFamilies": [
+                         "misc",
+                         "household",
+                         "daily_essentials",
+                         "living_supplies"
+                       ],
+                       "searchbankKeywordsKo": [
+                         "잡화",
+                         "생활잡화",
+                         "생필품",
+                         "생활용품",
+                         "생활소모품",
+                         "위생용품",
+                         "수납용품"
+                       ],
+                       "existingAssignmentImmutable": true,
+                       "reclassifyOnlyUndecided": true,
+                       "excludeCategoryFamilies": [
+                         "books",
+                         "ebooks",
+                         "webtoon",
+                         "digital_reading"
+                       ],
+                       "requiresVerifiedDirectProductUrl": true
+                     },
       "home|home_right_top": {
         "intent": "health_knowledge_nutrition",
         "categoryFamilies": [
@@ -3832,21 +3841,31 @@
           "requiresVerifiedDirectProductUrl": true
         },
         "home|home_6": {
-          "intent": "digital_reading_books_comics",
-          "families": [
-            "books",
-            "ebooks",
-            "webtoon",
-            "digital_reading"
-          ],
-          "researchKeywordsKo": [
-            "웹툰",
-            "서적",
-            "전자책"
-          ],
-          "suggestionOnly": true,
-          "requiresVerifiedDirectProductUrl": true
-        },
+                         "intent": "misc_daily_household_essentials",
+                         "families": [
+                           "misc",
+                           "household",
+                           "daily_essentials",
+                           "living_supplies"
+                         ],
+                         "researchKeywordsKo": [
+                           "잡화",
+                           "생활잡화",
+                           "생필품",
+                           "생활용품",
+                           "생활소모품",
+                           "위생용품",
+                           "수납용품"
+                         ],
+                         "suggestionOnly": true,
+                         "requiresVerifiedDirectProductUrl": true,
+                         "excludedFamilies": [
+                           "books",
+                           "ebooks",
+                           "webtoon",
+                           "digital_reading"
+                         ]
+                       },
         "home|home_right_top": {
           "intent": "health_knowledge_nutrition",
           "families": [

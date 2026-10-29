@@ -655,3 +655,80 @@
   `;
   (document.head||document.documentElement).appendChild(st);
 })();
+
+/* Home 6 arrow wiring / locale accessibility, 2026-10-29.
+ * Each of the 30 language homes already ships #shopScroller6 and arrows, but
+ * the legacy inline binder hard-codes ROWS=5. Bind ONLY row 6 here; rows 1..5
+ * remain owned by the original page and their card/fallback logic is untouched.
+ */
+(function(){
+  'use strict';
+  if(window.__IGDC_HOME6_ARROWS_BOUND__) return;
+  window.__IGDC_HOME6_ARROWS_BOUND__=true;
+  var LABELS={
+    ko:'잡화 · 생필품 · 생활용품',en:'Daily Goods · Household Essentials',
+    ja:'日用雑貨・生活必需品',zh:'日用杂货 · 生活必需品',zht:'日用雜貨 · 生活必需品',
+    ar:'سلع يومية · مستلزمات منزلية',fa:'کالاهای روزمره · لوازم ضروری خانه',
+    ur:'روزمرہ سامان · گھریلو ضروریات',de:'Alltagswaren · Haushaltsbedarf',
+    fr:'Articles du quotidien · Essentiels ménagers',es:'Artículos cotidianos · Esenciales del hogar',
+    pt:'Utilidades domésticas · Essenciais do dia a dia',it:'Articoli quotidiani · Essenziali per la casa',
+    nl:'Dagelijkse artikelen · Huishoudelijke benodigdheden',sv:'Vardagsvaror · Hushållsartiklar',
+    no:'Hverdagsvarer · Husholdningsartikler',da:'Dagligvarer · Husholdningsartikler',
+    fi:'Arkitavarat · Kodin tarvikkeet',pl:'Artykuły codzienne · Artykuły gospodarstwa domowego',
+    tr:'Günlük ürünler · Ev ihtiyaçları',ru:'Товары для дома · Повседневные товары',
+    th:'ของใช้ประจำวัน · ของใช้ในบ้าน',vi:'Đồ dùng hằng ngày · Đồ gia dụng',
+    id:'Barang sehari-hari · Kebutuhan rumah tangga',ms:'Barangan harian · Keperluan rumah',
+    bn:'দৈনন্দিন পণ্য · গৃহস্থালির প্রয়োজনীয় সামগ্রী',hi:'रोजमर्रा का सामान · घरेलू आवश्यक वस्तुएँ',
+    ta:'அன்றாடப் பொருட்கள் · வீட்டு அத்தியாவசியங்கள்',tl:'Pang-araw-araw na gamit · Pangangailangan sa bahay',
+    uk:'Повсякденні товари · Товари для дому',hu:'Mindennapi cikkek · Háztartási kellékek',
+    sw:'Bidhaa za kila siku · Mahitaji ya nyumbani',uz:'Kundalik tovarlar · Uy-ro‘zg‘or buyumlari'
+  };
+  function locale(){
+    var path=(location.pathname||'').split('/').filter(Boolean);
+    var lang=path.length>1&&/^home_[a-z]+\.html$/i.test(path[path.length-1])?path[0]:'';
+    return lang||String(document.documentElement.lang||'ko').toLowerCase().replace(/[-_].*$/,'');
+  }
+  function setup(){
+    var wrap=document.querySelector('.shop-row-wrap[data-srow="6"]');
+    var rail=document.getElementById('shopScroller6');
+    var left=document.getElementById('srowLeft6');
+    var right=document.getElementById('srowRight6');
+    if(!wrap||!rail||!left||!right) return;
+    wrap.setAttribute('aria-label',LABELS[locale()]||LABELS.en);
+    // Leave the 30 home HTML files and their existing inline fingerprint intact;
+    // update the in-page descriptor used by later client-side consumers.
+    var fingerprint=document.getElementById('shopping-fingerprint');
+    if(fingerprint&&fingerprint.type==='application/json'){
+      try{var json=JSON.parse(fingerprint.textContent);if(json&&json.lines&&json.lines['6']){
+        json.lines['6'].category=['misc_daily_goods','household_essentials','living_supplies'];
+        json.lines['6'].notes='individual purchasable miscellaneous, daily household and essential goods';
+        fingerprint.textContent=JSON.stringify(json);
+      }}catch(_e){}
+    }
+    function width(){return Math.max(220,Math.floor(rail.clientWidth*.9));}
+    function update(){
+      var overflow=rail.scrollWidth>rail.clientWidth+2;
+      var atStart=rail.scrollLeft<=1;
+      var atEnd=rail.scrollLeft+rail.clientWidth>=rail.scrollWidth-2;
+      left.style.display=right.style.display=overflow?'block':'none';
+      left.classList.toggle('disabled',!overflow||atStart);
+      right.classList.toggle('disabled',!overflow||atEnd);
+      left.disabled=!overflow||atStart;
+      right.disabled=!overflow||atEnd;
+    }
+    left.addEventListener('click',function(){rail.scrollBy({left:-width(),behavior:'smooth'});});
+    right.addEventListener('click',function(){rail.scrollBy({left:width(),behavior:'smooth'});});
+    rail.addEventListener('scroll',update,{passive:true});
+    window.addEventListener('resize',update,{passive:true});
+    document.addEventListener('igdc:home-automap-rendered',update);
+    // Home AutoMap renders incrementally after the page's DOMContentLoaded.
+    // Child additions trigger visibility updates without polling or repainting.
+    if(typeof MutationObserver!=='undefined'){
+      var observer=new MutationObserver(update);
+      observer.observe(rail,{childList:true,subtree:true});
+    }
+    update();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});
+  else setup();
+})();

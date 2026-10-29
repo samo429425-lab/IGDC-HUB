@@ -500,11 +500,15 @@
         ]
       },
       "home|home_6": {
-        "intent": "digital_reading_books_comics",
+        "intent": "misc_daily_household_essentials",
         "keywordsKo": [
-          "웹툰",
-          "서적",
-          "전자책"
+          "잡화",
+          "생활잡화",
+          "생필품",
+          "생활용품",
+          "생활소모품",
+          "위생용품",
+          "수납용품"
         ]
       },
       "home|home_right_top": {

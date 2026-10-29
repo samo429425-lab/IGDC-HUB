@@ -632,7 +632,7 @@ function strictPlacementSectionKeys(rowInput) {
     case "travel_service": add("tour|tour"); break;
     case "local_dining": add("social|rightPanel"); add("tour|tour"); break;
     case "automotive": add("home|home_right_middle"); if (profile.premiumBrand) add("distribution|distribution-right"); break;
-    case "books": add("home|home_6"); add("home|home_right_bottom"); break;
+    case "books": add("home|home_right_bottom"); break;
     case "beauty":
       add("home|home_1"); add("distribution|distribution-sponsor"); add("distribution|distribution-recommend");
       if (profile.trending) add("distribution|distribution-trending"); break;
@@ -647,11 +647,11 @@ function strictPlacementSectionKeys(rowInput) {
     case "furniture_living": add("home|home_5"); add("home|home_right_bottom"); add("distribution|distribution-others"); if (profile.premiumBrand) add("distribution|distribution-right"); break;
     case "outdoor": add("home|home_right_middle"); add("distribution|distribution-extra"); if (profile.premiumBrand) add("distribution|distribution-right"); break;
     case "food": add("home|home_4"); add("distribution|distribution-extra"); add("network|network-right"); break;
-    case "household": add("home|home_5"); add("distribution|distribution-others"); add("network|network-right"); break;
+    case "household": add("home|home_6"); add("home|home_5"); add("distribution|distribution-others"); add("network|network-right"); break;
     case "health_knowledge": add("home|home_right_top"); break;
     case "industrial": if (profile.premiumBrand) add("distribution|distribution-right"); break;
     case "stationery": add("home|home_3"); break;
-    case "misc": add("home|home_5"); break;
+    case "misc": add("home|home_6"); break;
     default: break;
   }
   // Network Hub right rail is a market/popularity showcase, not a product-category bucket.
@@ -1225,9 +1225,16 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   const fashionFit = category.primary === "fashion" || /(패션|의류|옷|신발|가방|주얼리|보석|반지|목걸이|귀걸이|시계|안경|fashion|apparel|clothing|shoes|bag|jewelry|watch)/i.test(hay);
   const automotiveFit = /(자동차|차량|자동차용품|차량용품|타이어|휠|블랙박스|대시캠|카케어|세차|세차기|카샴푸|차량청소|모빌리티|전기차|오토바이|모터사이클|car\b|vehicle|automotive|tire|wheel|dashcam|car care|car wash|mobility|motorcycle)/i.test(hay);
   const bookShopFit = /(도서|책방|서점|책\b|출판|전자책|웹툰|코믹|만화|디지털\s*독서|bookstore|book\b|books\b|publishing|ebook|webtoon|comic|digital reading)/i.test(hay);
-  const home6DigitalReadingFit = bookShopFit;
+  // Home 6 is the daily-goods / household-consumables lane, not the book lane.
+  // Match the actual individual product text first; an all-purpose supplier name
+  // must not turn unrelated products into Home 6 candidates.
+  const home6ProductText = lower([row.productName,row.title,row.sourceTitle,row.description,row.summary].map(text).join(" "));
+  const home6DailyGoodsFit = !bookShopFit &&
+    /(생활잡화|일상잡화|잡화|생필품|생활필수품|생활용품|생활소모품|일회용품|화장지|휴지|티슈|물티슈|생리대|기저귀|위생용품|욕실용품|수납용품|수납함|정리함|휴대용품|생활편의|daily\s*goods|everyday\s*(?:goods|essentials)|general\s*merchandise|household\s*(?:goods|essentials|supplies|consumables)|personal\s*care\s*supplies|toiletries|tissue|wipes?|diapers?|disposable\s*supplies|organizers?)/i.test(home6ProductText) &&
+    !/(미용기기|소형가전|이어폰|충전기|보조배터리|화장품|도서|웹툰|전자책|스마트폰|tablet|charger|power\s*bank|webtoon|ebook|bookstore)/i.test(home6ProductText);
+
   const outdoorProductFit = tourProfile.outdoorGear || tourProfile.golfGear || tourProfile.sportsGear || /(아웃도어|등산|트레킹|캠핑|골프|스포츠용품|텐트|침낭|등산화|등산스틱|outdoor|hiking|trekking|camping|golf|sports gear|tent|sleeping bag)/i.test(hay);
-  const explicitFoodHomeFit = /(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|쌀|잡곡|과일|채소|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b)/i.test(hay) || category.primary === "agriculture_fishery_forestry";
+  const explicitFoodHomeFit = /(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|쌀|잡곡|과일|채소|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b)/i.test(lower([row.productName,row.title,row.sourceTitle,row.description,row.summary].map(text).join(" "))) || category.primary === "agriculture_fishery_forestry";
   const householdEssentialHomeFit = !explicitFoodHomeFit && (category.primary === "food_household_essentials" || /(생필품|생활필수|생활용품|화장지|휴지|티슈|물티슈|세제|세정제|청소|위생|주방용품|욕실용품|수납|household|essential|tissue|detergent|cleaning|hygiene|kitchen|bath|storage)/i.test(hay));
   const furnitureLivingFit = /(가구|소파|의자|테이블|책상|수납장|침대|매트리스|침구|조명|인테리어|리빙|furniture|sofa|chair|table|desk|cabinet|bed|mattress|bedding|lighting|interior|living)/i.test(hay);
   const smallApplianceHomeFit = !furnitureLivingFit && (category.primary === "electronics_accessories" || /(소형가전|이어폰|이어버드|헤드폰|스피커|태블릿|웹캠|카메라|짐벌|마이크|스마트워치|프로젝터|선풍기|써큘레이터|가습기|제습기|공기청정기|청소기|전기포트|토스터|블렌더|커피머신|small appliance|earbud|earphone|headphone|speaker|tablet|webcam|camera|gimbal|microphone|smartwatch|projector|fan|humidifier|dehumidifier|air purifier|vacuum|kettle|toaster|blender|coffee machine)/i.test(hay));
@@ -1244,10 +1251,11 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
     if (fashionFit) add("home", "home_2", mainScore + 6, "홈 2 의류·브랜드·트렌디 패션", "home2_apparel_fashion", []);
     if (smallApplianceHomeFit || /(문구|복사용지|프린터\s*용지|사무용품|키보드|마우스|충전기|거치대|stationery|printer\s*paper|keyboard|mouse|charger|stand)/i.test(hay)) add("home", "home_3", mainScore + 6, "홈 3 소형가전·모바일·컴퓨터 주변기기·문구", "home3_electronics_stationery", []);
     if (explicitFoodHomeFit) add("home", "home_4", mainScore + 5, "홈 4 마트형 가공·포장 식재료·농축수산 상품", "home4_packaged_ingredients", []);
-    if (householdEssentialHomeFit || furnitureLivingFit || /(?:주방용품|조리도구|프라이팬|후라이팬|냄비|식기|그릇|도마|청소도구|수건|타월|방향제|kitchenware|cookware|tableware|cleaning|towel|air\s*freshener)/i.test(hay) || miscEverydayFit) add("home", "home_5", mainScore + 5, "홈 5 생필품·청소·주방·소형 리빙", "home5_household_living", []);
+    if (householdEssentialHomeFit || furnitureLivingFit || /(?:주방용품|조리도구|프라이팬|후라이팬|냄비|식기|그릇|도마|청소도구|수건|타월|방향제|kitchenware|cookware|tableware|cleaning|towel|air\s*freshener)/i.test(hay)) add("home", "home_5", mainScore + 5, "홈 5 생필품·청소·주방·소형 리빙", "home5_household_living", []);
   }
-  if (home6DigitalReadingFit && risk.gatePassed === true) {
-    add("home", "home_6", baseScore + 7, "웹툰·서적·전자책·디지털 독서 Home 6 정책 적합", "home_6_digital_reading_books", []);
+  if (home6DailyGoodsFit && risk.gatePassed === true && !explicitFoodHomeFit &&
+      !beautyHomeFit && !fashionFit && !smallApplianceHomeFit && !automotiveFit && !outdoorProductFit) {
+    add("home", "home_6", baseScore + 12, "홈 6 잡화·생필품·생활소모품 직접 판매 상품", "home_6_misc_daily_essentials", []);
   }
   if (knowledgeHealthFit && risk.gatePassed === true) {
     add("home", "home_right_top", baseScore + 4, "지식·건강·생활 우측 상단 정책 적합", "home_right_knowledge_health_life", []);
@@ -1267,7 +1275,7 @@ function proposedSections(rowInput, category, risk, commercial, supplierInput, v
   // defines a visible Distribution section. Travel/service inventory is already
   // returned to Tour exclusively above and cannot enter these rails.
   const beautyDistributionFit = category.primary === "beauty_personal_care" || /(뷰티|화장품|스킨케어|메이크업|헤어케어|바디케어|향수|선크림|세럼|크림|립|마스크팩|beauty|cosmetic|skincare|makeup|hair care|body care|perfume|serum|sunscreen)/i.test(hay);
-  const smallApplianceDistributionFit = !home6DigitalReadingFit && !furnitureLivingFit && (category.primary === "electronics_accessories" || smallApplianceHomeFit);
+  const smallApplianceDistributionFit = !bookShopFit && !furnitureLivingFit && (category.primary === "electronics_accessories" || smallApplianceHomeFit);
   const apparelFashionDistributionFit = category.primary === "fashion" || /(패션|의류|옷|자켓|재킷|코트|셔츠|블라우스|원피스|팬츠|청바지|정장|캐주얼|빈티지|스니커즈|신발|가방|아웃도어 의류|등산복|fashion|apparel|clothing|jacket|coat|shirt|blouse|dress|pants|jeans|suit|casual|vintage|sneaker|shoes|bag|outdoor wear|hiking wear)/i.test(hay);
   const distributionProductText = lower([row.productName, row.title, row.description, row.summary].map(text).join(" "));
   const explicitFoodDistributionFit = /(식재료|식료품|조미료|간편식|음료|농산물|수산물|축산물|건강식품|과자|커피|차\b|grocery|ingredient|seasoning|meal|beverage|produce|seafood|food|health food|snack|coffee|tea\b)/i.test(distributionProductText);

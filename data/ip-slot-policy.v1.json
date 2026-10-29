@@ -144,15 +144,15 @@
         ]
       },
       "home_6": {
-        "strategyId": "home-6-digital-reading",
-        "role": "webtoon_books_ebooks_digital_reading",
+        "strategyId": "home-6-misc-daily-essentials",
+        "role": "misc_daily_household_essentials",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
-          "digital_product"
+          "producer_cooperative_offer"
         ],
         "requiredSlotProfiles": [
-          "home-6-digital-reading"
+          "home-6-misc-daily-essentials"
         ]
       }
     },
