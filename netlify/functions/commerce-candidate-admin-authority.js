@@ -125,8 +125,21 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
   const actorId=text(actor&&actor.sub)||"administrator",prior=currentPlacement(payload,scope,oldRows);
   let status=text(row.status)||"approval_pending",effective=decision,assignment=null;
   const oldQueue=plain(oldPayload.queueControl),oldDecision=lower(oldPayload.slotDecision);
-  // A queue transfer must not silently unpublish products or detach active public relations.
-  if(decision!=="front_unmatch"&&publiclyProtected(oldPayload,oldRows))throw Object.assign(new Error("published_or_unpublish_pending_candidate_protected"),{statusCode:409});
+  // A manual section-to-section relocation is a distinct administrative act.
+  // Other mutations (including automatic reclassification) remain protected.
+  // The old public snapshot must be reconciled by Front Match; it must not be
+  // represented as already changed merely because the private ledger moved.
+  const sourceKey=text(prior&&prior.key)||((prior&&prior.page&&prior.sectionKey)?text(prior.page)+"|"+text(prior.sectionKey):"");
+  const targetKey=placementKey(key);
+  const frontStatus=lower(plain(oldPayload.frontPublication).status);
+  const isManualSectionMove=decision==="slot_candidate"&&source==="administrator"&&
+    !!sourceKey&&!!targetKey&&sourceKey!==targetKey&&
+    oldRows.some(item=>sameScope(item,scope)&&text(item.hub_key)+"|"+text(item.slot_key)===sourceKey);
+  const pendingUnpublish=["unpublish_requested","unpublish_failed"].includes(frontStatus);
+  const liveProtected=publiclyProtected(oldPayload,oldRows);
+  if(decision!=="front_unmatch"&&liveProtected&&(!isManualSectionMove||pendingUnpublish)){
+    throw Object.assign(new Error(pendingUnpublish?"front_unpublish_pending_complete_before_move":"published_or_unpublish_pending_candidate_protected"),{statusCode:409});
+  }
 
   if((decision==="slot_candidate"||decision==="sync_ai")&&(oldQueue.permanentExcluded===true||oldDecision==="purge"||lower(row.status)==="suppressed"&&lower(oldQueue.action)==="purge")){
     throw Object.assign(new Error("영구 제외된 상품은 배치할 수 없습니다. 먼저 제외 목록에서 후보로 복원해 주세요."),{statusCode:409,code:"candidate_permanently_excluded"});
@@ -136,14 +149,29 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
     const target=placementKey(key||text(plain(payload.approvedPlacement||payload.placement).key)||((text(plain(payload.approvedPlacement||payload.placement).page)&&text(plain(payload.approvedPlacement||payload.placement).sectionKey||plain(payload.approvedPlacement||payload.placement).section))?text(plain(payload.approvedPlacement||payload.placement).page)+"|"+text(plain(payload.approvedPlacement||payload.placement).sectionKey||plain(payload.approvedPlacement||payload.placement).section):""));
     if(!target)throw Object.assign(new Error("배치할 20개 섹션을 확인하세요."),{statusCode:400});
     const split=splitKey(target),ai=(decision==="sync_ai"||source==="ai_automation");
+    // Record the previous section before changing the private assignment. The
+    // public output is still unchanged until the next verified Front Match.
+    if(isManualSectionMove){
+      payload.previousApprovedPlacement=Object.assign({},plain(prior),{
+        key:sourceKey,country:scope.country,region:scope.region,
+        removedAt:now,removedReason:"administrator_section_relocation",
+        frontWasPublished:liveProtected
+      });
+      payload.sectionRelocation={schema:"igdc-section-relocation.v1",
+        previousKey:sourceKey,targetKey:target,country:scope.country,region:scope.region,
+        requestedAt:now,requestedBy:actorId,
+        frontSyncRequired:liveProtected,frontSyncConfirmed:false};
+    }
+    // Reuse the existing ID, but never retain a second section assignment.
+    // This remains a private-ledger move; frontend publication is a separate gate.
     await removeScopeAssignments(oldRows,scope);
     assignment=await upsertAssignment(candidateId,scope,target,actorId,ai?"ai_automation":"administrator",oldRows);
     payload.slotDecision="slot_candidate";
     payload.approvedPlacement={key:target,page:split.page,section:split.section,sectionKey:split.section,country:scope.country,region:scope.region,administratorSelected:!ai,aiSelected:ai,proposalOnly:false,publicPublication:false,selectedAt:now,selectedBy:actorId,selectionSource:ai?"ai_automation":"administrator"};
     payload.placement=Object.assign({},payload.approvedPlacement);
-    payload.managementControl={schema:"igdc-product-management-control.v1",source:ai?"ai_automation":"administrator",administratorLocked:!ai,aiReclassificationAllowed:ai,decidedAt:now,decidedBy:actorId};
+    payload.managementControl=Object.assign({},plain(oldPayload.managementControl),{schema:"igdc-product-management-control.v1",source:ai?"ai_automation":"administrator",administratorLocked:!ai,aiReclassificationAllowed:ai,decidedAt:now,decidedBy:actorId});
     payload.queueControl=Object.assign({},plain(payload.queueControl),{hiddenFromCountryQueue:false,permanentExcluded:false,action:ai?"ai_section_selected":"section_selected",restoredAt:now,restoredBy:actorId});
-    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"match",status:"ready",queued:false,persisted:true,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:true,authority:"administrator_candidate_ledger",assignmentId:assignment.id,sectionKey:target,country:scope.country,region:scope.region,preparedAt:now,preparedBy:actorId});
+    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"match",status:"ready",queued:false,persisted:true,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:true,authority:"administrator_candidate_ledger",assignmentId:assignment.id,sectionKey:target,country:scope.country,region:scope.region,preparedAt:now,preparedBy:actorId,previousSectionKey:isManualSectionMove?sourceKey:null,relocationPendingFrontSync:isManualSectionMove&&liveProtected});
     // Keep the DB lifecycle status unchanged; only the private workflow decision changes.
     if(source==="ai_automation"&&verifiedMetadata){
       const category=text(verifiedMetadata.category).slice(0,80),tags=array(verifiedMetadata.categoryTags).map(text).filter(Boolean).slice(0,20);
@@ -178,7 +206,7 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
       rediscoveryAllowed:effective!=="purge",
       decidedAt:now,decidedBy:actorId
     });
-    payload.managementControl={schema:"igdc-product-management-control.v1",source:"administrator",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:actorId};
+    payload.managementControl=Object.assign({},plain(oldPayload.managementControl),{schema:"igdc-product-management-control.v1",source:"administrator",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:actorId});
     // These rows passed the public-protection guard: they were NOT published.
     // Mark private placement as unmatched, never unpublish_requested (which
     // makes later verified-PSOM re-placement incorrectly look public/locked).
@@ -207,7 +235,7 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
       throw Object.assign(new Error("latest_research_handoff_not_confirmed:"+candidateId),{statusCode:409});
     }
   }
-  return{candidateId,decision,effectiveDecision:effective,placement:payload.approvedPlacement||null,status,assignmentId:assignment&&assignment.id||null,ok:true,ledgerVerified:verified.verified,assignmentCount:verified.assignmentCount};
+  return{candidateId,decision,effectiveDecision:effective,placement:payload.approvedPlacement||null,status,assignmentId:assignment&&assignment.id||null,ok:true,ledgerVerified:verified.verified,assignmentCount:verified.assignmentCount,relocation:payload.sectionRelocation||null,frontSyncRequired:!!(payload.sectionRelocation&&payload.sectionRelocation.frontSyncRequired)};
 }
 
 exports.handler=async function(event){
@@ -238,7 +266,7 @@ exports.handler=async function(event){
         else failures.push({candidateId:req.candidateId,error:text(entry.reason&&entry.reason.message||entry.reason)});
       });
     }
-    return json(200,{ok:true,version:VERSION,complete:failures.length===0,requested:requests.length,processed:results.length,failed:failures.length,processedIds:results.map(r=>r.candidateId),results,failures,scope,publicPublication:false,paymentExecution:false});
+    return json(200,{ok:failures.length===0,version:VERSION,complete:failures.length===0,requested:requests.length,processed:results.length,failed:failures.length,processedIds:results.map(r=>r.candidateId),results,failures,scope,publicPublication:false,paymentExecution:false});
   }catch(error){
     return json(Number(error&&error.statusCode)||500,{ok:false,version:VERSION,error:text(error&&error.message)||"candidate_admin_authority_failed"});
   }

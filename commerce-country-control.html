@@ -183,7 +183,7 @@
       <div class="scope-card"><strong id="detectedScope">현재 IP 확인 중</strong><div class="small">VPN을 사용하면 배포 환경에서 해당 국가·지역 값으로 다시 판정됩니다. 북한(KP)은 운영 목록에서 제외됩니다.</div></div>
       <div class="field"><span>전체 마스터</span><div id="masterState" class="switchstate off">OFF</div></div>
       <div class="field"><label for="masterMode">운영 모드</label><select id="masterMode"><option value="off">OFF</option><option value="auto">AI 자동</option><option value="manual">전체 수동</option></select></div>
-      <div class="field"><label for="masterInterval">기본 주기</label><select id="masterInterval"><option value="1">1일</option><option value="2">2일</option><option value="3">3일</option><option value="7">7일</option><option value="14">14일</option><option value="30">30일</option></select></div>
+      <div class="field"><label for="masterInterval">기본 주기</label><select id="masterInterval"><option value="1">1일</option><option value="2">2일</option><option value="3">3일</option><option value="3.5">주 2회 (84시간)</option><option value="7">7일</option><option value="14">14일</option><option value="30">30일</option></select></div>
       <button id="saveMasterBtn" type="button">마스터 저장</button>
     </div>
     <div class="small" style="margin-top:9px">마스터가 OFF이면 정기 업체 발굴은 멈춥니다. 스케줄러는 매시간 실행 여부만 확인하고, 각 범위의 설정 주기가 도래한 경우에만 책임 공급업체 후보를 비공개로 점검합니다.</div>
@@ -216,7 +216,7 @@
       <div class="scope-card">
         <div class="scope-fields">
           <div class="field"><label for="scopeMode">범위 모드</label><select id="scopeMode"><option value="inherit">상위 설정 상속</option><option value="auto">AI 자동</option><option value="manual">수동 우선</option><option value="off">OFF</option></select></div>
-          <div class="field"><label for="scopeInterval">점검 주기</label><select id="scopeInterval"><option value="1">1일</option><option value="2">2일</option><option value="3">3일</option><option value="7">7일</option><option value="14">14일</option><option value="30">30일</option></select></div>
+          <div class="field"><label for="scopeInterval">점검 주기</label><select id="scopeInterval"><option value="1">1일</option><option value="2">2일</option><option value="3">3일</option><option value="3.5">주 2회 (84시간)</option><option value="7">7일</option><option value="14">14일</option><option value="30">30일</option></select></div>
           <div class="field"><label for="maxCandidates">1회 최대 업체 후보</label><select id="maxCandidates"><option value="10">10개</option><option value="20">20개</option><option value="30">30개</option><option value="50">50개</option></select></div>
           <div class="field"><label for="supplierResearchRounds">업체 리서치 반복 횟수</label><select id="supplierResearchRounds"><option value="1">1회</option><option value="2">2회</option><option value="3">3회</option><option value="4">4회</option><option value="5">5회</option></select></div>
           <div id="expandField" class="field hidden"><label for="expandSubdivisions">하위 지역 자동화</label><select id="expandSubdivisions"><option value="false">전국 범위만</option><option value="true">주·성·지역 순환</option></select></div>
@@ -628,7 +628,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=igdc-country-autoguard-20261028"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=igdc-global-weekly2-20261029"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20261025-paged-exclusion-v1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

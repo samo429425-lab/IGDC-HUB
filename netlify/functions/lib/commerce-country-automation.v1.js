@@ -57,7 +57,9 @@ function checkedCandidateStatus(existing){
   return previous;
 }
 const DEFAULT_MODEL = "gpt-4o-mini";
-const DEFAULT_INTERVAL_DAYS = 7;
+// Global operating standard: two supplier-discovery eligibility cycles per 7 days (84 hours).
+// The hourly scheduler remains the dispatcher; this is NOT a promise of automatic product publication.
+const DEFAULT_INTERVAL_DAYS = 3.5;
 const DEFAULT_MAX_CANDIDATES = 20;
 const DEFAULT_SCOPES_PER_RUN = 12;
 const MAX_SCOPES_PER_RUN = 24;
@@ -179,6 +181,11 @@ function bool(value) {
 function clamp(value, min, max, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+}
+// Preserve exact 3.5-day cadence while retaining whole-day choices for custom schedules.
+function normalizeIntervalDays(value) {
+  const days = clamp(value, 1, 30, DEFAULT_INTERVAL_DAYS);
+  return Math.abs(days - DEFAULT_INTERVAL_DAYS) < 0.001 ? DEFAULT_INTERVAL_DAYS : Math.round(days);
 }
 function iso() { return new Date().toISOString(); }
 function sha256(value) { return crypto.createHash("sha256").update(String(value || "")).digest("hex"); }
@@ -341,7 +348,7 @@ function sanitizeSetting(input) {
     // Only the master can constrain the hourly scheduler to one selected scope.
     selectedCountryCode: scopeType === "master" && settingMode === "manual" ? normalizeCountry(raw.selectedCountryCode) || null : null,
     selectedSubdivisionCode: scopeType === "master" && settingMode === "manual" ? text(raw.selectedSubdivisionCode || "NATIONWIDE").toUpperCase() : null,
-    intervalDays: Math.round(clamp(raw.intervalDays, 1, 30, DEFAULT_INTERVAL_DAYS)),
+    intervalDays: normalizeIntervalDays(raw.intervalDays),
     expandSubdivisions: raw.expandSubdivisions === true,
     maxCandidates: Math.round(clamp(raw.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES)),
     // The operator directive is a search hint, not a trust/safety override.
@@ -357,7 +364,7 @@ function rowToSetting(row) {
     mode: mode(rule.mode, row && row.enabled === false ? "off" : "inherit"), enabled: row && row.enabled !== false,
     selectedCountryCode: lower(rule.scopeType)==="master" ? normalizeCountry(rule.selectedCountryCode) || null : null,
     selectedSubdivisionCode: lower(rule.scopeType)==="master" ? text(rule.selectedSubdivisionCode || "NATIONWIDE").toUpperCase() : null,
-    intervalDays: Math.round(clamp(rule.intervalDays, 1, 30, DEFAULT_INTERVAL_DAYS)),
+    intervalDays: normalizeIntervalDays(rule.intervalDays),
     expandSubdivisions: rule.expandSubdivisions === true, maxCandidates: Math.round(clamp(rule.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES)),
     researchDirective: ["country", "subdivision"].includes(lower(rule.scopeType)) ? text(rule.researchDirective).slice(0, 1200) : "",
     lastRunAt: text(rule.lastRunAt) || null, lastRunSummary: plain(rule.lastRunSummary), updatedAt: text(row && row.updated_at) || null
