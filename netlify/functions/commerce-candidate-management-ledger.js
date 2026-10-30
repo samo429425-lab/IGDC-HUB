@@ -10,7 +10,7 @@ const SlotStore=require("./lib/global-slot-console-supabase");
 const MarketSaleScope=require("./lib/market-sale-scope.v1");
 const ProductPipeline=require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION="commerce-candidate-management-ledger-v1.4.0-assignment-inclusive-source-consistency";
+const VERSION="commerce-candidate-management-ledger-v1.5.0-readonly-scope-assignment-integrity";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 // The ranking engine and administrator-placement authority accept both sources.
 // A candidate in either source must remain findable on the ordinary board.
@@ -41,19 +41,50 @@ function scopeMatch(payload,countryInput,regionInput){
   if(requested==="NATIONWIDE")return scopes.some(s=>s.region==="NATIONWIDE");
   return scopes.some(s=>s.region===requested||s.region==="NATIONWIDE");
 }
-function compact(candidate,assignmentRowsInput){
+// The same country/region relation is used for both publication status and
+// administrator placement. Never display an unrelated market assignment as the
+// selected country's slot. An empty relation stays visible for manual repair.
+function relationMatches(row,country,region){
+  const c=normalizeCountry(row&&row.country_code),r=normalizeRegion(row&&row.region_code||"NATIONWIDE",c)||"NATIONWIDE";
+  return c===country&&(r===region||(region!=="NATIONWIDE"&&r==="NATIONWIDE"));
+}
+function relationKey(row){return text(row&&row.hub_key)+"|"+text(row&&row.slot_key);}
+function payloadPlacementKey(payload){
+  const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.placement||payload.primaryPlacement);
+  return (text(placement.page||placement.channel)&&text(placement.sectionKey||placement.section))?text(placement.page||placement.channel)+"|"+text(placement.sectionKey||placement.section):"";
+}
+function compact(candidate,assignmentRowsInput,country,region){
   const payload=plain(candidate&&candidate.source_payload),assignmentRows=array(assignmentRowsInput),live=ProductPipeline.liveQueueRow(candidate,{assignments:assignmentRows,markets:[],revenues:[],evidence:[]});
   live.officialProductUrl=text(candidate.official_url)||text(payload.externalProductUrl)||text(payload.productUrl);
   live.queueControl=plain(payload.queueControl);live.slotDecision=text(payload.slotDecision);live.recoverySuggestions=array(plain(payload.review).recoverySuggestions).slice(0,5);live.recoveryReason=text(plain(payload.review).recoveryReason);live.lastRecoveryCheckedAt=text(plain(payload.review).lastRecoveryCheckedAt);live.managementControl=plain(payload.managementControl);live.decisionSource=text(payload.decisionSource);
   live.createdAt=text(candidate&&candidate.created_at);live.updatedAt=text(candidate&&candidate.updated_at);
   const placement=plain(payload.approvedPlacement||payload.selectedPlacement||payload.placement),front=plain(payload.frontPublication||payload.publication||payload.frontSync);
   if(Object.keys(placement).length){live.placement=Object.assign({},plain(live.placement),placement,{page:text(placement.page),section:text(placement.section||placement.sectionKey),sectionKey:text(placement.sectionKey||placement.section),slot:text(placement.slot),country:text(placement.country||plain(payload.marketScope).marketCountry),region:text(placement.region||plain(payload.marketScope).marketRegion)});}
-  // The durable slot-assignment relation is the publication authority.  Only
-  // use a legacy payload marker when no live assignment row exists at all.
-  const liveAssignment=plain(plain(live.lifecycle).assignment);
-  if(Object.keys(front).length&&!text(liveAssignment.publicationStatus)){
-    live.lifecycle=Object.assign({},plain(live.lifecycle),{assignment:{publicationStatus:text(front.status||front.publicationStatus||front.publication_status),hubKey:text(front.hubKey||front.hub_key),slotKey:text(front.slotKey||front.slot_key)}});
+  // A legacy payload front marker is historical metadata, not a live
+  // assignment. Do NOT manufacture a publish_requested lifecycle from it:
+  // two exported KR records carried that marker without an active relation.
+  live.ledgerLegacyPublicationStatus=text(front.status||front.publicationStatus||front.publication_status);
+  const active=assignmentRows.filter(row=>["approved","pinned"].includes(lower(row&&row.state)));
+  const published=active.filter(row=>["audit_ready","ready","publish_requested","queued","matched","published","active"].includes(lower(row&&row.publication_status)));
+  const activeKeys=Array.from(new Set(active.map(relationKey).filter(Boolean)));
+  const payloadKey=payloadPlacementKey(payload),slotCandidate=lower(payload.slotDecision)==="slot_candidate";
+  // The lifecycle helper previously omitted approved/unpublished relations.
+  // They are still durable assignments, so expose their actual ID and slot
+  // instead of quietly replacing them with a stale payload Front Match marker.
+  if(active.length){
+    const primary=active.find(row=>relationKey(row)===payloadKey)||active[0];
+    const related={id:text(primary.id),hubKey:text(primary.hub_key),slotKey:text(primary.slot_key),countryCode:text(primary.country_code),regionCode:text(primary.region_code),state:text(primary.state),publicationStatus:text(primary.publication_status),priority:Number(primary.priority||0)};
+    live.lifecycle=Object.assign({},plain(live.lifecycle),{assignment:related});
   }
+  const issues=[];
+  if(slotCandidate&&!active.length)issues.push("placement_without_active_assignment");
+  // not_ready means the administrator has not Front Matched this product yet;
+  // it is NOT a missing placement, and must not be sent to the repair pool.
+  if(activeKeys.length>1)issues.push("multiple_active_section_assignments");
+  if(slotCandidate&&payloadKey&&activeKeys.length&&!activeKeys.includes(payloadKey))issues.push("placement_relation_section_mismatch");
+  if(!slotCandidate&&active.length)issues.push("assignment_without_slot_candidate_decision");
+  live.ledgerConsistency={schema:"igdc-administrator-product-relation-consistency.v1",country,region,sourceRef:text(candidate.source_ref),payloadSectionKey:payloadKey,assignmentSectionKeys:activeKeys,activeAssignmentCount:active.length,publicationReadyCount:published.length,issues,consistent:issues.length===0};
+  live.assignmentRepairRequired=issues.length>0;
   live.managementProjection="direct_source_ref";return live;
 }
 async function selectPage(query){return SlotStore.request(SlotStore.rest("gslot_candidates",query),{method:"GET"});}
@@ -126,7 +157,8 @@ exports.handler=async function(event){
       }
     }
     const candidates=rows.map(row=>{
-      const record=compact(row,assignmentByCandidate.get(text(row&&row.id))||[]);
+      const matchingRelations=(assignmentByCandidate.get(text(row&&row.id))||[]).filter(relation=>relationMatches(relation,country,region));
+      const record=compact(row,matchingRelations,country,region);
       // Keep assignment-only scope evidence visible for administrator repair.
       if(!scopeMatch(plain(row.source_payload),country,region)){
         record.ledgerScopeSource="assignment";

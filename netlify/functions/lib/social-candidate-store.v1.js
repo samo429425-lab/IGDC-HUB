@@ -126,7 +126,16 @@ function platformContentUrl(platform, value) {
   if (p === "youtube") ok = host === "youtu.be" || (path === "/watch" && !!u.searchParams.get("v")) || /^\/(shorts|live|embed)\//i.test(path);
   else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
   else if (p === "tiktok") ok = /\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[A-Za-z0-9_-]+/i.test(path) || host === "vm.tiktok.com" || host === "vt.tiktok.com";
-  else if (p === "facebook") ok = host === "fb.watch" || /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (/^\/watch\/?$/i.test(path) && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
+  else if (p === "facebook") ok =
+    (host === "fb.watch" && /^\/[A-Za-z0-9_-]{4,}/.test(path)) ||
+    ((host === "facebook.com" || host === "m.facebook.com" || host === "web.facebook.com") && (
+      /^\/reel\/[A-Za-z0-9_-]+/i.test(path) ||
+      /^\/[^/]+\/(?:posts|videos|photos)\/[A-Za-z0-9_-]+/i.test(path) ||
+      /^\/(?:videos|posts|photos)\/[A-Za-z0-9_-]+/i.test(path) ||
+      /^\/watch\/?$/i.test(path) && !!u.searchParams.get("v") ||
+      /^\/(?:story|permalink)\.php$/i.test(path) && !!u.searchParams.get("story_fbid") ||
+      /^\/share\/(?:r|v|p)\/[A-Za-z0-9_-]+/i.test(path)
+    ));
   else if (p === "reddit") ok = /^(?:reddit\.com|old\.reddit\.com|np\.reddit\.com)$/i.test(host) && /^\/r\/[a-z0-9_]+\/comments\/[a-z0-9]+(?:\/|$)/i.test(path);
   else if (p === "snapchat") ok = host === "snapchat.com" && /^\/spotlight\/[^/]+\/?$/i.test(path);
   else if (p === "bilibili") ok = host === "b23.tv" ? /^\/[^/]+/i.test(path) : /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path);
@@ -1225,9 +1234,9 @@ function providerBrandThumbnail(platform, value) {
          /\/(?:obj\/)?tiktok-webarch-solution-i18n(?:-|\/|$)/i.test(url.pathname) ||
          !/(^|\.)(?:tiktokcdn(?:-[a-z0-9]+)?\.com|tiktok\.com|byteimg\.com|ibyteimg\.com|muscdn\.com)$/i.test(host))) return true;
     if (platform === "facebook" &&
-        (/(?:^|\.)static\.[^.]*fbcdn\.net$/i.test(host) || /\/rsrc\.php(?:$|[/?#])/i.test(path))) return true;
+        (/(?:^|\.)static\.[^.]+\.fbcdn\.net$/i.test(host) || /\/rsrc\.php(?:$|[/?#])/i.test(path))) return true;
     if (platform === "instagram") {
-      if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return true;
+      if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]+\.fbcdn\.net$/i.test(host)) return true;
       if (/\/rsrc\.php(?:$|[/?#])/i.test(url.pathname)) return true;
       if (/instagram[^/]*(?:logo|glyph)|(?:logo|glyph)[^/]*instagram/i.test(path)) return true;
     }

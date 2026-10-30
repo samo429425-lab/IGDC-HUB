@@ -368,6 +368,39 @@ function isPlaceholderImage(value) {
   const v = lower(value);
   return !v || v.includes("placeholder") || v.includes("/assets/sample/");
 }
+function realFacebookPostUrl(value) {
+  try {
+    const u = new URL(text(value));
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    const path = u.pathname.replace(/\/{2,}/g, "/");
+    if (host === "fb.watch") return /^\/[a-z0-9_-]{4,}/i.test(path);
+    if (!["facebook.com", "m.facebook.com", "web.facebook.com"].includes(host)) return false;
+    return /^\/reel\/[a-z0-9_-]+/i.test(path) ||
+      /^\/[^/]+\/(?:posts|videos|photos)\/[a-z0-9_-]+/i.test(path) ||
+      /^\/(?:videos|posts|photos)\/[a-z0-9_-]+/i.test(path) ||
+      (path === "/watch" && !!u.searchParams.get("v")) ||
+      (/^\/(story|permalink)\.php$/i.test(path) && !!u.searchParams.get("story_fbid")) ||
+      /^\/share\/(?:r|v|p)\/[a-z0-9_-]+/i.test(path);
+  } catch (_error) { return false; }
+}
+function validProviderImage(value) {
+  const v = lower(value);
+  if (!validHttps(v) || isPlaceholderImage(v)) return false;
+  try {
+    const u = new URL(v);
+    const host = u.hostname.toLowerCase();
+    if (/(^|\.)static\.[^.]+\.fbcdn\.net$/i.test(host) || /\/rsrc\.php/i.test(u.pathname)) return false;
+    if (/\.(?:js|css|html?|json|svg)(?:$|[?#])/i.test(u.pathname)) return false;
+    if ((host === "facebook.com" || host === "www.facebook.com") && !/\.(?:png|jpe?g|webp|avif)(?:$|[?#])/i.test(u.pathname)) return false;
+  } catch (_error) { return false; }
+  return true;
+}
+function validRedditTextPost(value) {
+  try { const u = new URL(text(value));
+    return u.protocol === "https:" && /^(?:www\.|old\.|np\.)?reddit\.com$/i.test(u.hostname) &&
+      /^\/r\/[a-z0-9_]+\/comments\/[a-z0-9]+(?:\/|$)/i.test(u.pathname);
+  } catch (_error) { return false; }
+}
 function policyGate(root, bank) {
   const psom = psomSocialSections(root);
   const allowed = new Set(SocialStore.Policy.SECTION_KEYS);
@@ -392,7 +425,22 @@ function policyGate(root, bank) {
     if (!id) reasons.push("CANDIDATE_ID_MISSING");
     if (!text(item.title)) reasons.push("TITLE_MISSING");
     if (!validHttps(url)) reasons.push("PUBLIC_HTTPS_URL_REQUIRED");
-    if (!validHttps(image) || isPlaceholderImage(image)) reasons.push("REAL_HTTPS_THUMBNAIL_REQUIRED");
+    // Reddit text discussions are real content without provider image media.
+    // Never invent or mislabel a placeholder as the author's thumbnail.
+    const redditText = section === "social-reddit" && validRedditTextPost(url);
+    const facebookIndividualPost = section === "social-facebook" && realFacebookPostUrl(url);
+    if (section === "social-facebook" && !facebookIndividualPost) reasons.push("FACEBOOK_INDIVIDUAL_POST_REQUIRED");
+    // Facebook/Reddit original embeds are acceptable *without a media image*.
+    // The viewer must label them as post previews, never as a verified photo.
+    if (!validProviderImage(image) && !redditText && !facebookIndividualPost) reasons.push("REAL_HTTPS_THUMBNAIL_REQUIRED");
+    if (redditText && !validProviderImage(image)) {
+      item.socialTextPost = true;
+      item.thumbnail = item.thumb = item.image = "";
+    }
+    if (facebookIndividualPost && !validProviderImage(image)) {
+      item.socialEmbedOnly = true;
+      item.thumbnail = item.thumb = item.image = "";
+    }
     if (item.publicAccess !== true) reasons.push("PUBLIC_ACCESS_REQUIRED");
     if (item.searchBankEligible === false || item.snapshotEligible === false || item.frontSupplyAllowed === false) reasons.push("SEARCHBANK_OR_SNAPSHOT_NOT_ELIGIBLE");
     if (["blocked", "critical", "illegal", "unsafe", "rejected"].includes(lower(item.riskLevel))) reasons.push("RISK_BLOCKED");

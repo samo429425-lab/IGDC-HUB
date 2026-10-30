@@ -1128,6 +1128,56 @@
     // remains unchanged, and the card retains its text title.
     return true;
   }
+  function paintRedditTextPost(pic) {
+    // A text-based Reddit post has no image by design. Show a readable, clearly
+    // labeled post surface rather than a fake thumbnail or an empty grey box.
+    var parentCard = pic && pic.closest && pic.closest('a.card');
+    var label = parentCard && parentCard.querySelector('.title');
+    var title = safeText(label && label.textContent) || 'Reddit post';
+    var wrap = document.createElement('div');
+    wrap.className = 'igdc-reddit-text-post';
+    wrap.style.cssText = 'box-sizing:border-box;width:100%;height:100%;padding:20px 15px;display:flex;flex-direction:column;justify-content:center;gap:18px;background:#fff;color:#20252c;text-align:left;';
+    var provider = document.createElement('strong');
+    provider.textContent = 'Reddit · Post';
+    provider.style.cssText = 'color:#ff4500;font-size:13px;font-weight:750;';
+    var heading = document.createElement('div');
+    heading.textContent = title;
+    heading.style.cssText = 'font-size:15px;line-height:1.43;font-weight:650;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:7;overflow:hidden;overflow-wrap:anywhere;';
+    wrap.appendChild(provider); wrap.appendChild(heading);
+    pic.appendChild(wrap);
+  }
+  function paintFacebookOfficialPreview(pic, contentUrl) {
+    // Provider's own post/video frame is the fallback; not another social
+    // user's photo, a fabricated cover, or a generic Facebook logo.
+    try {
+      var u = new URL(contentUrl);
+      if (!/^(?:www\.|m\.|web\.)?facebook\.com$/i.test(u.hostname) &&
+          !/^fb\.watch$/i.test(u.hostname)) return false;
+      var path = u.pathname || '';
+      var isIndividual = /^\/reel\/[\w-]+/i.test(path) ||
+        /\/(?:posts|videos|photos)\/[\w-]+/i.test(path) ||
+        (path === '/watch' && !!u.searchParams.get('v')) ||
+        /\/(?:story|permalink)\.php$/i.test(path) && !!u.searchParams.get('story_fbid');
+      if (!isIndividual) return false;
+      var isVideo = /\/(?:videos|reel)\//i.test(path) || (path === '/watch' && !!u.searchParams.get('v'));
+      var url = new URL(isVideo ? 'https://www.facebook.com/plugins/video.php' : 'https://www.facebook.com/plugins/post.php');
+      url.searchParams.set('href', contentUrl);
+      url.searchParams.set('show_text', 'true');
+      url.searchParams.set('width', '400');
+      if (isVideo) url.searchParams.set('autoplay', 'false');
+      var iframe = document.createElement('iframe');
+      iframe.title = 'Facebook original post preview';
+      iframe.loading = 'lazy';
+      iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+      iframe.setAttribute('allow', 'encrypted-media; fullscreen');
+      iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+      iframe.tabIndex = -1;
+      iframe.style.cssText = 'display:block;width:100%;height:100%;border:0;pointer-events:none;background:#fff;';
+      iframe.src = url.toString();
+      pic.appendChild(iframe);
+      return true;
+    } catch (_error) { return false; }
+  }
   function paintThumb(pic, platform, contentUrl, thumb, eager) {
     if (!pic) return;
     pic.style.backgroundImage = "";
@@ -1140,6 +1190,8 @@
       delete pic.dataset.socialThumbLoading;
       pic.dataset.socialThumbFailed = '1';
       if (platform === "tiktok" && paintTikTokPlayerFallback(pic, contentUrl)) return;
+      if (platform === "facebook" && paintFacebookOfficialPreview(pic, contentUrl)) return;
+      if (platform === "reddit") { paintRedditTextPost(pic); return; }
       pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
       return;
     }
@@ -1188,6 +1240,8 @@
       delete pic.dataset.socialThumbLoading;
       pic.dataset.socialThumbFailed = '1';
       if (platform === "tiktok" && paintTikTokPlayerFallback(pic, contentUrl)) return;
+      if (platform === "facebook" && paintFacebookOfficialPreview(pic, contentUrl)) return;
+      if (platform === "reddit") { paintRedditTextPost(pic); return; }
       pic.textContent = platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "•";
     });
     pic.appendChild(img);

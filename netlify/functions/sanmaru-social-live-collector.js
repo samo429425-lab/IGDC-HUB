@@ -423,7 +423,16 @@ function contentKind(platform, value) {
     }
     if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
     if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[a-z0-9_-]+/i.test(path) || /^(?:vm|vt)\.tiktok\.com$/i.test(url.hostname))) return "latest_video";
-    if (platform === "facebook" && (/^fb\.watch$/i.test(url.hostname) || /^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (/^\/watch\/?$/i.test(path) && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
+    if (platform === "facebook" && (
+      (/^fb\.watch$/i.test(url.hostname) && /^\/[a-z0-9_-]{4,}/i.test(path)) ||
+      (/^(?:www\.|m\.|web\.)?facebook\.com$/i.test(url.hostname) && (
+        /^\/reel\/[a-z0-9_-]+/i.test(path) ||
+        /^\/[^/]+\/(?:videos|posts|photos)\/[a-z0-9_-]+/i.test(path) ||
+        /^\/(?:videos|posts|photos)\/[a-z0-9_-]+/i.test(path) ||
+        (/^\/watch\/?$/i.test(path) && !!url.searchParams.get("v")) ||
+        (/^\/(?:permalink|story)\.php$/i.test(path) && !!url.searchParams.get("story_fbid")) ||
+        /^\/share\/(?:r|v|p)\/[a-z0-9_-]+/i.test(path)
+      )))) return "latest_post";
     if (platform === "reddit" && /^\/r\/[a-z0-9_]+\/comments\/[a-z0-9]+(?:\/|$)/i.test(path)) return "latest_post";
     if (platform === "snapchat" && /^\/spotlight\/[^/]+\/?$/i.test(path)) return "latest_video";
     if (platform === "bilibili" && (/^b23\.tv$/i.test(url.hostname) || /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path))) return "latest_video";
@@ -592,6 +601,10 @@ function providerConfig() {
   const youtubeKey = keyValue(
     ["YOUTUBE_API_KEY", "GOOGLE_YOUTUBE_API_KEY"], FRIENDLY_KEY_NAMES.youtubeKey, values
   ) || googleKey;
+  const facebookToken = keyValue(
+    ["FB_OEMBED_TOKEN", "FACEBOOK_ACCESS_TOKEN", "FACEBOOK_APP_ACCESS_TOKEN", "FACEBOOK_PAGE_ACCESS_TOKEN", "FB_ACCESS_TOKEN", "META_APP_TOKEN", "FACEBOOK_API_KEY"],
+    ["Facebook API Key", "Facebook Access Token", "Meta App Token", "FB OAuth Token"], values
+  );
   const naverId = keyValue(
     ["NAVER_API_KEY", "NAVER_CLIENT_ID", "NAVER_SEARCH_CLIENT_ID", "NAVER_OPENAPI_CLIENT_ID"],
     FRIENDLY_KEY_NAMES.naverId, values
@@ -600,7 +613,7 @@ function providerConfig() {
     ["NAVER_CLIENT_SECRET", "NAVER_API_SECRET", "NAVER_SEARCH_CLIENT_SECRET", "NAVER_OPENAPI_CLIENT_SECRET"],
     FRIENDLY_KEY_NAMES.naverSecret, values
   );
-  return { bundle, googleKey, googleCx, youtubeKey, naverId, naverSecret };
+  return { bundle, googleKey, googleCx, youtubeKey, facebookToken, naverId, naverSecret };
 }
 function providerReadiness(configValue) {
   const cfg = configValue || providerConfig();
@@ -633,13 +646,17 @@ function providerReadiness(configValue) {
     },
     facebookPublicContentSearch: {
       googleCustomSearchReady: !!(cfg.googleKey && cfg.googleCx),
+      metaTokenConfigured: !!cfg.facebookToken,
+      metaPostMetadataEnabled: !!cfg.facebookToken,
+      metaAccessScopeVerified: false,
+      metaSearchAllPublicPostsSupported: false,
       naverSupplementReady: !!(cfg.naverId && cfg.naverSecret),
       searchBankReady: !!(SearchBankEngine && typeof SearchBankEngine.runEngine === "function"),
       nativePublicFallbackEnabled: true,
       // A Facebook app/access token is not equivalent to permission to search
       // arbitrary public posts. Do not claim an uploaded Meta key is used here.
       metaGraphPublicPostSearchUsed: false,
-      role: "Google CSE / SearchBank / 공개 게시물 검색으로 Facebook 실게시물 URL 발견; Meta Graph 범용 공개 검색 권한을 가정하지 않음"
+      role: "Google CSE / SearchBank로 Facebook 공개 게시물 발견, 권한 있는 Meta oEmbed 토큰은 개별 게시물 확인·썸네일 보완에만 사용"
     },
     psomSearchBankContentResearch: {
       ready: !!(SearchBankEngine && typeof SearchBankEngine.runEngine === "function" && readSocialPsomContract().sections.length),
@@ -2662,9 +2679,9 @@ function genericProviderThumbnail(value, platform) {
          /\/(?:obj\/)?tiktok-webarch-solution-i18n(?:-|\/|$)/i.test(url.pathname) ||
          !(SocialPreview && SocialPreview.previewImageUrl("tiktok", normalized)))) return true;
     if (platform === "facebook" &&
-        (/(?:^|\.)static\.[^.]*fbcdn\.net$/i.test(host) || /\/rsrc\.php(?:$|[/?#])/i.test(path))) return true;
+        (/(?:^|\.)static\.[^.]+\.fbcdn\.net$/i.test(host) || /\/rsrc\.php(?:$|[/?#])/i.test(path))) return true;
     if (platform === "instagram") {
-      if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]*fbcdn\.net$/i.test(host)) return true;
+      if (host === "static.cdninstagram.com" || /(^|\.)static\.[^.]+\.fbcdn\.net$/i.test(host)) return true;
       if (/\/rsrc\.php(?:$|[/?#])/i.test(url.pathname)) return true;
       if (/instagram[^/]*(?:logo|glyph)|(?:logo|glyph)[^/]*instagram/i.test(path)) return true;
     }
@@ -2695,6 +2712,27 @@ function usableThumbnail(value, contentUrl, platform) {
     if (expiry && expiry <= Date.now() + 30 * 60 * 1000) return "";
     return normalized;
   } catch (_error) { return ""; }
+}
+async function metaFacebookPostMetadata(contentUrl) {
+  const token = providerConfig().facebookToken;
+  if (!token || !/^https:\/\/(?:www\.|m\.|web\.)?facebook\.com\//i.test(contentUrl)) return {};
+  const isVideo = /\/(?:reel|videos|watch)\//i.test(contentUrl) || /[?&]v=\d+/i.test(contentUrl);
+  const types = isVideo ? ["oembed_video", "oembed_post"] : ["oembed_post"];
+  for (const type of types) {
+    try {
+      const api = new URL("https://graph.facebook.com/v21.0/" + type);
+      api.searchParams.set("url", contentUrl);
+      api.searchParams.set("access_token", token);
+      api.searchParams.set("omitscript", "true");
+      const data = await fetchJson(api.toString(), { headers: { Accept: "application/json" } }, 3600);
+      const thumbnail = usableThumbnail(firstText([data.thumbnail_url, data.thumbnailUrl, data.image_url]), contentUrl, "facebook");
+      if (thumbnail || data.title || data.author_name) return {
+        thumbnail, title: firstText([data.title]), creatorName: firstText([data.author_name]),
+        source: "meta_authorized_post_oembed"
+      };
+    } catch (_error) { /* denied scopes and private posts are not public results */ }
+  }
+  return {};
 }
 async function stablePublicThumbnail(platform, contentUrl, supplied) {
   let thumb = usableThumbnail(supplied, contentUrl, platform);
@@ -2733,6 +2771,11 @@ async function stablePublicThumbnail(platform, contentUrl, supplied) {
   }
 
   if (platform === "facebook") {
+    // Prefer authorized post metadata only for a genuine missing cover. No
+    // platform-wide Graph search or secret value is disclosed to the browser.
+    const meta = await metaFacebookPostMetadata(contentUrl);
+    thumb = usableThumbnail(meta.thumbnail, contentUrl, platform);
+    if (thumb) return { thumbnail: thumb, metadata: meta, resolvedUrl: contentUrl };
     const embedMetadata = await publicEmbedMetadata(platform, contentUrl);
     thumb = usableThumbnail(embedMetadata.thumbnail, contentUrl, platform);
     if (thumb) return { thumbnail: thumb, metadata: embedMetadata, resolvedUrl: contentUrl };

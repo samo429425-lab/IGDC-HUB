@@ -450,6 +450,7 @@ async function triggerCanonicalBuild(release, operation, route, handoff) {
     }
     return {
       ok: true,
+      queued: true,
       status: "queued",
       environment: setting.name,
       httpStatus: response.status,
@@ -1135,6 +1136,19 @@ exports.handler = async function (event) {
     }
     if (verifiedPreviousStored) {
       const previousStored = verifiedPreviousStored;
+      const staticRequested = params.forceBuild === true || params.forceBuild === "true" || params.forceBuild === "1" ||
+        process.env.SOCIAL_FORCE_STATIC_BUILD === "1" || !!buildHookSetting().value;
+      // Same stored release is not proof that the SearchBank handoff and static
+      // snapshot exist. One full build is necessary when these are missing.
+      let pipelineState = null;
+      if (staticRequested) {
+        try { pipelineState = await runtimePipelineDiagnostic(route); } catch (_error) { pipelineState = { ok: false }; }
+      }
+      const rebuild = staticRequested && (!pipelineState || !pipelineState.ok);
+      const retryTrigger = rebuild
+        ? await triggerCanonicalBuild(previousStored, "publish", route, {
+            publicationPlan, publicationPlanHash, publishMode, requestedSections,
+          }) : null;
       const priorHash = text(previousStored.snapshot_hash);
       const registrySync = await syncSupplementalInfluencers(
         base.doc,
@@ -1177,24 +1191,27 @@ exports.handler = async function (event) {
         selectiveReplacement: snapshot && snapshot.meta && snapshot.meta.selectiveReplacement || null,
         noChange: true,
         duplicateDeploymentPrevented: true,
-        deploymentRequired: false,
+        deploymentRequired: rebuild,
+        pipelineState: pipelineState ? { ok: pipelineState.ok, reason: pipelineState.reason || null } : null,
         releaseId: text(previousStored.release_id),
         snapshotHash: priorHash,
         runtimeFrontReady: true,
         releaseStored: true,
         releaseStoredVerified: true,
         actualFrontApplyStored: false,
-        actualFrontApplyQueued: false,
+        actualFrontApplyQueued: !!(retryTrigger && retryTrigger.queued),
         actualApplyRequested: true,
         storeReleaseRequested: true,
-        frontPublicationStatus: "unchanged_no_deploy",
+        frontPublicationStatus: rebuild
+          ? (retryTrigger && retryTrigger.queued ? "canonical_build_queued" : "release_stored_waiting_for_build")
+          : "unchanged_no_deploy",
         buildHook: buildHookStatus(),
-        buildTrigger: {
+        buildTrigger: retryTrigger || {
           ok: true,
           status: "skipped_unchanged",
           queued: false,
           duplicateDeploymentPrevented: true,
-          message: "마지막 정상 Social 게시 계획과 동일하여 새 Release 저장과 Netlify 배포를 모두 생략했습니다.",
+          message: "기존 Release 및 Social SearchBank가 일치하여 새 빌드를 생략했습니다.",
         },
         route,
         safety: {
@@ -1271,7 +1288,10 @@ exports.handler = async function (event) {
       !!(storeRelease && storedVerified)
     );
     let buildTrigger = null;
-    const forceStaticBuild = params.forceBuild === true || params.forceBuild === "true" || params.forceBuild === "1" || process.env.SOCIAL_FORCE_STATIC_BUILD === "1";
+    // Apply means Release + canonical static SearchBank/Snapshot, not only
+    // Supabase persistence. Trigger only when a server-side hook is configured.
+    const forceStaticBuild = params.forceBuild === true || params.forceBuild === "true" || params.forceBuild === "1" ||
+      process.env.SOCIAL_FORCE_STATIC_BUILD === "1" || !!buildHookSetting().value;
     if (storeRelease && storedVerified) {
       if (forceStaticBuild) {
         buildTrigger = await triggerCanonicalBuild(
@@ -1323,7 +1343,7 @@ exports.handler = async function (event) {
     const runtimeFrontReady = !!(storeRelease && storedVerified);
     const staticBuildQueued = !!(buildTrigger && buildTrigger.ok && buildTrigger.queued !== false && buildTrigger.status !== "skipped_runtime_release_live");
     return SocialStore.response(staticBuildQueued ? 202 : 200, {
-      ok: true,
+      ok: !storeRelease || storedVerified,
       version: VERSION,
       reportType,
       actionType: publishMode,
