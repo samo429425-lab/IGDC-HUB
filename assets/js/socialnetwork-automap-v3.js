@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20261030-platform-native-media-ratios-metadata-recommend-share-v2
+// build: 20261030-four-platform-compact-info-five-actions-v3
 // 목적:
 // 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -461,25 +461,24 @@
     return qsa("a.card", gridEl);
   }
 
+  const COMPACT_MAIN_KEYS = new Set(['social-youtube','social-instagram','social-tiktok','social-facebook']);
   function mainCtaLabel(gridEl) {
-    const existing = qs("a.card .cta", gridEl);
-    return safeText(existing && existing.textContent).trim() || "Open";
+    const existing = qs('a.card .cta', gridEl);
+    return safeText(existing && existing.textContent).trim() || 'Open';
   }
-
   function mainCardMarkup(gridEl) {
-    const label = mainCtaLabel(gridEl);
-    return (
-      '<div class="pic"></div>' +
-      '<div class="meta">' +
-      '<div class="title"></div>' +
-      '<div class="desc"></div>' +
-      '<div class="sn-card-stats" aria-label=""></div>' +
-      '<div class="sn-card-actions"><span class="sn-card-action" data-sn-action="recommend" role="button" tabindex="-1"></span><span class="sn-card-action" data-sn-action="share" role="button" tabindex="-1"></span></div>' +
-      '<div class="cta">' + label.replace(/[&<>"']/g, function (ch) {
-        return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch];
-      }) + '</div>' +
-      '</div>'
-    );
+    const compact = COMPACT_MAIN_KEYS.has(gridEl && gridEl.getAttribute('data-psom-key'));
+    if (!compact) {
+      const label = mainCtaLabel(gridEl).replace(/[&<>"']/g, function (ch) {
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];
+      });
+      return '<div class="pic"></div><div class="meta"><div class="title"></div><div class="desc"></div>' +
+        '<div class="sn-card-stats" aria-label=""></div>' +
+        '<div class="sn-card-actions"><span class="sn-card-action" data-sn-action="recommend" role="button" tabindex="-1"></span><span class="sn-card-action" data-sn-action="share" role="button" tabindex="-1"></span></div>' +
+        '<div class="cta">' + label + '</div></div>';
+    }
+    return '<div class="pic"></div><div class="meta"><div class="title"></div><div class="desc"></div>' +
+      '<div class="sn-card-stats" aria-hidden="true"></div><div class="sn-card-actions"></div></div>';
   }
 
   // Metrics are optional. Only data carried by a published content record is
@@ -492,7 +491,11 @@
       for (const key of fieldNames) {
         const raw = obj[key];
         if (raw == null || raw === '') continue;
-        const normalized = typeof raw === 'number' ? raw : Number(String(raw).replace(/[,_\s]/g, ''));
+        const value = String(raw).trim().replace(/[,_\s]/g, '');
+        const suffix = value.match(/^(\d+(?:\.\d+)?)([kmb])$/i);
+        const normalized = typeof raw === 'number' ? raw : suffix
+          ? Number(suffix[1]) * ({k:1e3,m:1e6,b:1e9}[suffix[2].toLowerCase()])
+          : Number(value);
         if (Number.isFinite(normalized) && normalized >= 0) return normalized;
       }
     }
@@ -508,19 +511,32 @@
   }
 
   function paintSocialStats(card, it) {
-    const statsEl = qs('.sn-card-stats', card);
-    if (!statsEl) return;
-    const views = socialMetric(it, ['viewCount', 'view_count', 'views', 'videoViews', 'playCount', 'play_count']);
+    // Provider likes and IGDC click counts are not interchangeable.
+    // Do not fabricate absent values or label provider video views as IGDC clicks.
+    const grid = card.closest('.thumb-grid[data-psom-key]');
+    if (!grid || !COMPACT_MAIN_KEYS.has(grid.getAttribute('data-psom-key'))) {
+      const statsEl = qs('.sn-card-stats', card);
+      if (!statsEl) return;
+      const views = socialMetric(it, ['viewCount', 'view_count', 'views', 'videoViews', 'playCount', 'play_count']);
+      const likes = socialMetric(it, ['likeCount', 'like_count', 'likes', 'heartCount']);
+      const recommends = socialMetric(it, ['recommendCount', 'recommend_count', 'recommendationCount', 'recommendation_count', 'recommendations', 'upvoteCount', 'upvote_count', 'upvotes']);
+      const parts = [];
+      if (views !== null) parts.push('▶ ' + socialNumber(views));
+      if (likes !== null) parts.push('♥ ' + socialNumber(likes));
+      if (recommends !== null) parts.push('★ ' + socialNumber(recommends));
+      statsEl.textContent = parts.join('  ·  ');
+      statsEl.setAttribute('aria-label', parts.join(', '));
+      return;
+    }
     const likes = socialMetric(it, ['likeCount', 'like_count', 'likes', 'heartCount']);
-    const recommendations = socialMetric(it, ['recommendCount', 'recommend_count', 'recommendationCount', 'recommendation_count', 'recommendations', 'upvoteCount', 'upvote_count', 'upvotes']);
-    const parts = [];
-    if (views !== null) parts.push('▶ ' + socialNumber(views));
-    if (likes !== null) parts.push('♥ ' + socialNumber(likes));
-    if (recommendations !== null) parts.push('★ ' + socialNumber(recommendations));
-    statsEl.textContent = parts.join('  ·  ');
-    // The reserved line still exists without verified metrics, preserving
-    // sample-to-real card geometry without inventing a popularity signal.
-    statsEl.setAttribute('aria-label', parts.join(', '));
+    const clicks = socialMetric(it, ['clickCount', 'click_count', 'outboundClickCount', 'outbound_click_count', 'cardClickCount', 'card_click_count']);
+    if (likes === null) delete card.dataset.snLikes;
+    else card.dataset.snLikes = String(likes);
+    if (clicks === null) delete card.dataset.snClicks;
+    else card.dataset.snClicks = String(clicks);
+    const statsEl = qs('.sn-card-stats', card);
+    if (statsEl) { statsEl.textContent = ''; statsEl.setAttribute('aria-hidden', 'true'); }
+    refreshCardMetricValues(card);
   }
 
   // Social cards reuse the viewer's existing per-user IGDC recommendation state.
@@ -565,6 +581,37 @@
     const x = SOCIAL_SHARE_LABELS[code] || SOCIAL_SHARE_LABELS.en;
     return { recommend:x[0], share:x[1], title:x[2], url:x[3], copy:x[4], copied:x[5], close:x[6], device:x[7] };
   }
+  const SOCIAL_METRIC_LABELS = {
+    ko:['좋아요','클릭수','URL'],en:['Likes','Clicks','URL'],ja:['いいね','クリック数','URL'],
+    zh:['点赞','点击量','链接'],zht:['讚','點擊數','連結'],de:['Likes','Klicks','URL'],
+    fr:['J’aime','Clics','URL'],es:['Me gusta','Clics','URL'],pt:['Gostos','Cliques','URL'],
+    ru:['Нравится','Клики','Ссылка'],it:['Mi piace','Clic','URL'],nl:['Likes','Klikken','URL'],
+    sv:['Gilla','Klick','URL'],pl:['Polubienia','Kliknięcia','URL'],tr:['Beğeni','Tıklama','URL'],
+    ar:['الإعجابات','النقرات','الرابط'],th:['ถูกใจ','คลิก','ลิงก์'],vi:['Thích','Lượt nhấp','URL'],
+    bn:['পছন্দ','ক্লিক','লিংক'],fa:['پسند','کلیک','پیوند'],hi:['पसंद','क्लिक','लिंक'],
+    hu:['Kedvelés','Kattintás','URL'],id:['Suka','Klik','URL'],ms:['Suka','Klik','URL'],
+    sw:['Kupenda','Mibofyo','Kiungo'],ta:['விருப்பம்','கிளிக்','இணைப்பு'],tl:['Like','Click','Link'],
+    uk:['Вподобання','Кліки','URL'],ur:['پسند','کلکس','لنک'],uz:['Yoqtirish','Bosish','Havola']
+  };
+  function socialMetricLabels() {
+    let code = safeText(document.documentElement.lang || 'en').toLowerCase().replace(/_/g, '-');
+    if (['zh-tw','zh-hk','zh-hant'].includes(code)) code = 'zht';
+    else code = code.split('-')[0];
+    const list = SOCIAL_METRIC_LABELS[code] || SOCIAL_METRIC_LABELS.en;
+    return { likes:list[0], clicks:list[1], url:list[2] };
+  }
+  function refreshCardMetricValues(card) {
+    const labels = socialMetricLabels();
+    for (const name of ['likes','clicks']) {
+      const el = qs('.sn-card-metric[data-sn-metric="' + name + '"]', card);
+      if (!el) continue;
+      const raw = name === 'likes' ? card.dataset.snLikes : card.dataset.snClicks;
+      const number = raw != null && raw !== '' && Number.isFinite(Number(raw)) ? socialNumber(Number(raw)) : '–';
+      el.textContent = (name === 'likes' ? '♥ ' : '◉ ') + number;
+      el.setAttribute('aria-label', (name === 'likes' ? labels.likes : labels.clicks) + ': ' + (number === '–' ? '—' : number));
+      el.title = name === 'likes' ? labels.likes : labels.clicks;
+    }
+  }
   function validContentShareUrl(raw) {
     try {
       const u = new URL(safeText(raw).trim(), window.location.href);
@@ -596,29 +643,44 @@
   function ensureCardActions(card) {
     const meta = qs('.meta', card);
     if (!meta) return null;
+    const grid = card.closest('.thumb-grid[data-psom-key]');
+    if (!grid || !COMPACT_MAIN_KEYS.has(grid.getAttribute('data-psom-key'))) return qs('.sn-card-actions', meta);
     let bar = qs('.sn-card-actions', meta);
     if (!bar) {
       bar = document.createElement('div');
       bar.className = 'sn-card-actions';
-      const cta = qs('.cta', meta);
-      if (cta) meta.insertBefore(bar, cta);
-      else meta.appendChild(bar);
+      meta.appendChild(bar);
     }
-    for (const action of ['recommend', 'share']) {
+    const labels = socialUiLabels(), metricLabels = socialMetricLabels();
+    // Remove legacy order and duplicate buttons once; future refreshes reuse nodes.
+    for (const metric of ['likes', 'clicks']) {
+      let el = qs('.sn-card-metric[data-sn-metric="' + metric + '"]', bar);
+      if (!el) {
+        el = document.createElement('span');
+        el.className = 'sn-card-metric';
+        el.dataset.snMetric = metric;
+      }
+      bar.appendChild(el);
+    }
+    for (const action of ['recommend', 'share', 'url']) {
       let item = qs('.sn-card-action[data-sn-action="' + action + '"]', bar);
       if (!item) {
         item = document.createElement('span');
         item.className = 'sn-card-action';
         item.dataset.snAction = action;
         item.setAttribute('role', 'button');
-        bar.appendChild(item);
       }
-      item.textContent = (action === 'recommend' ? '★ ' + socialUiLabels().recommend : '↗ ' + socialUiLabels().share);
+      const label = action === 'recommend' ? labels.recommend : action === 'share' ? labels.share : metricLabels.url;
+      item.textContent = action === 'recommend' ? '★' : action === 'share' ? '↗' : '🔗';
+      item.title = label;
+      item.setAttribute('aria-label', label);
       const sample = card.dataset.sample === '1';
       item.tabIndex = sample ? -1 : 0;
       item.setAttribute('aria-hidden', sample ? 'true' : 'false');
-      if (action === 'recommend') item.setAttribute('aria-pressed', !sample && activeLocalRecommendation(card.dataset.contentUrl) ? 'true' : 'false');
+      if (action === 'recommend') item.setAttribute('aria-pressed', !sample && activeLocalRecommendation(card.dataset.latestContentUrl || card.dataset.contentUrl || card.href) ? 'true' : 'false');
+      bar.appendChild(item);
     }
+    refreshCardMetricValues(card);
     return bar;
   }
   function createShareDialog() {
@@ -687,7 +749,7 @@
     });
     return overlay;
   }
-  function openSocialShare(title, rawUrl) {
+  function openSocialShare(title, rawUrl, mode) {
     const url = validContentShareUrl(rawUrl);
     if (!url) return false;
     const overlay = createShareDialog();
@@ -695,13 +757,14 @@
     overlay.__previousFocus = document.activeElement;
     overlay.__title = safeText(title).trim() || document.title;
     overlay.dir = document.documentElement.dir || 'ltr';
-    qs('h2', overlay).textContent = labels.title;
+    const urlOnly = mode === 'url';
+    qs('h2', overlay).textContent = urlOnly ? labels.url : labels.title;
     qs('.sn-share-close', overlay).textContent = labels.close + ' ×';
     qs('label', overlay).textContent = labels.url;
     qs('.sn-share-url', overlay).value = url;
     qs('.sn-share-copy', overlay).textContent = labels.copy;
     const native = qs('.sn-share-native', overlay);
-    native.hidden = typeof navigator.share !== 'function';
+    native.hidden = urlOnly || typeof navigator.share !== 'function';
     native.textContent = labels.device;
     const targets = [
       ['X', 'https://twitter.com/intent/tweet?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(overlay.__title)],
@@ -713,7 +776,8 @@
     ];
     const options = qs('.sn-share-options', overlay);
     options.textContent = '';
-    for (const [name, href] of targets) {
+    options.hidden = urlOnly;
+    for (const [name, href] of (urlOnly ? [] : targets)) {
       const a = document.createElement('a');
       a.textContent = name;
       a.href = href;
@@ -738,7 +802,7 @@
     const card = action.closest('a.card');
     if (!card || card.dataset.sample === '1') return;
     const grid = card.closest('.thumb-grid[data-psom-key]');
-    if (!grid || !['social-youtube','social-instagram','social-tiktok'].includes(grid.getAttribute('data-psom-key'))) return;
+    if (!grid || !['social-youtube','social-instagram','social-tiktok','social-facebook'].includes(grid.getAttribute('data-psom-key'))) return;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
@@ -746,6 +810,8 @@
     if (!url) return;
     if (action.dataset.snAction === 'share') {
       openSocialShare(qs('.title',card) && qs('.title',card).textContent, url);
+    } else if (action.dataset.snAction === 'url') {
+      openSocialShare(qs('.title',card) && qs('.title',card).textContent, url, 'url');
     } else if (action.dataset.snAction === 'recommend') {
       const platform = grid.getAttribute('data-psom-key').slice(7);
       const active = changeLocalRecommendation(url, platform);
@@ -812,68 +878,108 @@
    Instagram square/4:5 sources are letterboxed, not cropped/distorted. */
 .thumb-grid[data-psom-key="social-youtube"],
 .thumb-grid[data-psom-key="social-instagram"],
-.thumb-grid[data-psom-key="social-tiktok"]{grid-auto-flow:column!important;grid-template-rows:1fr!important;grid-template-columns:none!important;gap:12px!important;align-items:stretch!important;}
+.thumb-grid[data-psom-key="social-tiktok"],
+.thumb-grid[data-psom-key="social-facebook"]{grid-auto-flow:column!important;grid-template-rows:1fr!important;grid-template-columns:none!important;gap:12px!important;align-items:stretch!important;}
+.thumb-grid[data-psom-key="social-facebook"]{grid-auto-columns:minmax(215px,250px)!important;}
 .thumb-grid[data-psom-key="social-youtube"]{grid-auto-columns: minmax(230px,280px)!important;}
 .thumb-grid[data-psom-key="social-instagram"],
 .thumb-grid[data-psom-key="social-tiktok"]{grid-auto-columns: minmax(186px,216px)!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card,
 .thumb-grid[data-psom-key="social-instagram"] a.card,
-.thumb-grid[data-psom-key="social-tiktok"] a.card{box-sizing:border-box!important;width:100%!important;max-width:none!important;min-width:0!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;align-self:stretch!important;border-radius:12px!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card,
+.thumb-grid[data-psom-key="social-facebook"] a.card{box-sizing:border-box!important;width:100%!important;max-width:none!important;min-width:0!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;align-self:stretch!important;border-radius:12px!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .pic,
 .thumb-grid[data-psom-key="social-instagram"] a.card .pic,
-.thumb-grid[data-psom-key="social-tiktok"] a.card .pic{box-sizing:border-box!important;flex:0 0 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important;position:relative!important;background:#101318!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .pic,
+.thumb-grid[data-psom-key="social-facebook"] a.card .pic{box-sizing:border-box!important;flex:0 0 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important;position:relative!important;background:#101318!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .pic{aspect-ratio:16 / 9!important;}
+.thumb-grid[data-psom-key="social-facebook"] a.card .pic{aspect-ratio:16 / 9!important;}
 .thumb-grid[data-psom-key="social-instagram"] a.card .pic,
 .thumb-grid[data-psom-key="social-tiktok"] a.card .pic{aspect-ratio:9 / 16!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .pic img,
 .thumb-grid[data-psom-key="social-instagram"] a.card .pic img,
 .thumb-grid[data-psom-key="social-tiktok"] a.card .pic img,
+.thumb-grid[data-psom-key="social-facebook"] a.card .pic img,
 .thumb-grid[data-psom-key="social-youtube"] a.card .pic video,
 .thumb-grid[data-psom-key="social-instagram"] a.card .pic video,
 .thumb-grid[data-psom-key="social-tiktok"] a.card .pic video,
+.thumb-grid[data-psom-key="social-facebook"] a.card .pic video,
 .thumb-grid[data-psom-key="social-youtube"] a.card .pic iframe,
 .thumb-grid[data-psom-key="social-instagram"] a.card .pic iframe,
-.thumb-grid[data-psom-key="social-tiktok"] a.card .pic iframe{box-sizing:border-box!important;display:block!important;width:100%!important;height:100%!important;max-width:100%!important;min-width:0!important;max-height:100%!important;object-fit:contain!important;object-position:center!important;border:0!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .pic iframe,
+.thumb-grid[data-psom-key="social-facebook"] a.card .pic iframe{box-sizing:border-box!important;display:block!important;width:100%!important;height:100%!important;max-width:100%!important;min-width:0!important;max-height:100%!important;object-fit:contain!important;object-position:center!important;border:0!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .meta,
 .thumb-grid[data-psom-key="social-instagram"] a.card .meta,
-.thumb-grid[data-psom-key="social-tiktok"] a.card .meta{box-sizing:border-box!important;padding:9px 11px 11px!important;display:flex!important;flex-direction:column!important;gap:5px!important;min-height:0!important;flex:1 0 auto!important;background:#fff!important;text-align:start!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .meta,
+.thumb-grid[data-psom-key="social-facebook"] a.card .meta{box-sizing:border-box!important;padding:9px 11px 11px!important;display:flex!important;flex-direction:column!important;gap:5px!important;min-height:0!important;flex:1 0 auto!important;background:#fff!important;text-align:start!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .title,
 .thumb-grid[data-psom-key="social-instagram"] a.card .title,
-.thumb-grid[data-psom-key="social-tiktok"] a.card .title{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:3!important;line-clamp:3!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:normal!important;overflow-wrap:anywhere!important;font-size:13px!important;font-weight:650!important;line-height:1.36!important;height:calc(3 * 1.36em)!important;max-height:calc(3 * 1.36em)!important;min-height:calc(3 * 1.36em)!important;color:#1d2530!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .title,
+.thumb-grid[data-psom-key="social-facebook"] a.card .title{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:3!important;line-clamp:3!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:normal!important;overflow-wrap:anywhere!important;font-size:13px!important;font-weight:650!important;line-height:1.36!important;height:calc(3 * 1.36em)!important;max-height:calc(3 * 1.36em)!important;min-height:calc(3 * 1.36em)!important;color:#1d2530!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .desc,
 .thumb-grid[data-psom-key="social-instagram"] a.card .desc,
-.thumb-grid[data-psom-key="social-tiktok"] a.card .desc{display:block!important;min-height:1.4em!important;height:1.4em!important;font-size:11px!important;font-weight:500!important;line-height:1.4!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;color:#66717e!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .desc,
+.thumb-grid[data-psom-key="social-facebook"] a.card .desc{display:block!important;min-height:1.4em!important;height:1.4em!important;font-size:11px!important;font-weight:500!important;line-height:1.4!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;color:#66717e!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-stats,
 .thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-stats,
-.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-stats{display:block!important;min-height:1.4em!important;height:1.4em!important;font-size:11px!important;line-height:1.4!important;color:#647484!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-stats,
+.thumb-grid[data-psom-key="social-facebook"] a.card .sn-card-stats{display:block!important;min-height:1.4em!important;height:1.4em!important;font-size:11px!important;line-height:1.4!important;color:#647484!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}
 /* IGDC recommend + content-share controls never navigate the video card. */
 .thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-actions,
 .thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-actions,
-.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-actions{display:flex!important;flex-direction:row!important;gap:6px!important;align-items:center!important;justify-content:space-between!important;min-height:29px!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-facebook"] a.card .sn-card-actions{display:flex!important;flex-direction:row!important;gap:6px!important;align-items:center!important;justify-content:space-between!important;min-height:29px!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-action,
 .thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-action,
-.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-action{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:4px 7px;border-radius:7px;border:1px solid #d5dfea;background:#f6f9fd;color:#284561;font-size:11px;font-weight:650;line-height:1.3;white-space:nowrap;cursor:pointer;user-select:none;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-action,
+.thumb-grid[data-psom-key="social-facebook"] a.card .sn-card-action{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:4px 7px;border-radius:7px;border:1px solid #d5dfea;background:#f6f9fd;color:#284561;font-size:11px;font-weight:650;line-height:1.3;white-space:nowrap;cursor:pointer;user-select:none;}
 .thumb-grid[data-psom-key^="social-"] a.card .sn-card-action[aria-pressed="true"]{color:#174d9a;background:#e8f1ff;border-color:#8fb7ee}
 .thumb-grid[data-psom-key^="social-"] a.card .sn-card-action:focus-visible{outline:2px solid #2563eb;outline-offset:1px}
 .thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .sn-card-action{visibility:hidden!important;pointer-events:none!important}
 .thumb-grid[data-psom-key="social-youtube"] a.card .cta,
 .thumb-grid[data-psom-key="social-instagram"] a.card .cta,
-.thumb-grid[data-psom-key="social-tiktok"] a.card .cta{margin-top:auto!important;padding:5px 8px!important;line-height:1.3!important;font-size:11px!important;border-radius:7px!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .cta,
+.thumb-grid[data-psom-key="social-facebook"] a.card .cta{margin-top:auto!important;padding:5px 8px!important;line-height:1.3!important;font-size:11px!important;border-radius:7px!important;}
 /* A sample and a published item occupy the exact same media and metadata box. */
 .thumb-grid[data-psom-key="social-youtube"] a.card[data-sample="1"] .title,
 .thumb-grid[data-psom-key="social-instagram"] a.card[data-sample="1"] .title,
-.thumb-grid[data-psom-key="social-tiktok"] a.card[data-sample="1"] .title{display:-webkit-box!important;-webkit-line-clamp:3!important;white-space:normal!important;font-size:13px!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card[data-sample="1"] .title,
+.thumb-grid[data-psom-key="social-facebook"] a.card[data-sample="1"] .title{display:-webkit-box!important;-webkit-line-clamp:3!important;white-space:normal!important;font-size:13px!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card[data-sample="1"] .pic,
 .thumb-grid[data-psom-key="social-instagram"] a.card[data-sample="1"] .pic,
-.thumb-grid[data-psom-key="social-tiktok"] a.card[data-sample="1"] .pic{font-size:12px!important;line-height:1.3!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card[data-sample="1"] .pic,
+.thumb-grid[data-psom-key="social-facebook"] a.card[data-sample="1"] .pic{font-size:12px!important;line-height:1.3!important;}
 @media(max-width:768px) and (orientation:portrait){
  .thumb-grid[data-psom-key="social-youtube"],
  .thumb-grid[data-psom-key="social-instagram"],
- .thumb-grid[data-psom-key="social-tiktok"]{grid-auto-columns:100%!important;width:100%!important;}
+ .thumb-grid[data-psom-key="social-tiktok"],
+ .thumb-grid[data-psom-key="social-facebook"]{grid-auto-columns:100%!important;width:100%!important;}
  .thumb-grid[data-psom-key="social-youtube"] a.card,
  .thumb-grid[data-psom-key="social-instagram"] a.card,
- .thumb-grid[data-psom-key="social-tiktok"] a.card{width:100%!important;min-width:0!important;max-width:none!important;}
+ .thumb-grid[data-psom-key="social-tiktok"] a.card,
+ .thumb-grid[data-psom-key="social-facebook"] a.card{width:100%!important;min-width:0!important;max-width:none!important;}
 }
+/* Equal compact information footer for the four active SNS cards. */
+.thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-stats,
+.thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-stats,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-stats,
+.thumb-grid[data-psom-key="social-facebook"] a.card .sn-card-stats{display:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .cta,
+.thumb-grid[data-psom-key="social-instagram"] a.card .cta,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .cta,
+.thumb-grid[data-psom-key="social-facebook"] a.card .cta{display:none!important;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-facebook"] a.card .sn-card-actions{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr) repeat(3,26px)!important;align-items:center!important;gap:3px!important;width:100%!important;min-height:25px!important;margin-top:0!important;direction:inherit!important;}
+.thumb-grid[data-psom-key^="social-"] a.card .sn-card-metric{font-size:10px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;color:#647484;text-align:center;unicode-bidi:plaintext;}
+.thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-action,
+.thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-action,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-action,
+.thumb-grid[data-psom-key="social-facebook"] a.card .sn-card-action{min-height:24px!important;padding:3px!important;font-size:12px!important;font-weight:650!important;}
+.thumb-grid[data-psom-key="social-facebook"] a.card .meta{min-height:0!important;}
+.thumb-grid[data-psom-key="social-facebook"] a.card .title{margin:0!important;}
+.thumb-grid[data-psom-key="social-facebook"] a.card .desc{margin:0!important;}
 `;
     document.head.appendChild(style);
   }
@@ -933,6 +1039,8 @@
     }
     const stats = qs('.sn-card-stats', card);
     if (stats) stats.textContent = '';
+    delete card.dataset.snLikes;
+    delete card.dataset.snClicks;
     ensureCardActions(card);
     if (pic) {
       delete pic.dataset.socialThumbLoading;
@@ -1072,7 +1180,9 @@
     const url = pickUrl(it);
     const platform = safeText(it && (it.platform || (it.social && it.social.platform) || (it.source && it.source.platform))).toLowerCase().replace(/^social-/, "");
     const title = cleanCardTitle(it, platform);
-    const desc = cardIdentity(it) || " ";
+    const desc = COMPACT_MAIN_KEYS.has('social-' + platform)
+      ? (pickCreator(it) || safeText(it && (it.publisher || it.channelName || it.author || (it.source && it.source.publisher))) || (platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "Social"))
+      : cardIdentity(it);
     const thumb = pickThumb(it);
 
     const latestContentUrl = safeText(it && (it.latestContentUrl || it.latest_content_url || (it.social && it.social.latestContentUrl)));
@@ -1114,8 +1224,8 @@
       metaDesc.textContent = desc;
       metaDesc.style.display = '';
     }
-    paintSocialStats(card, it);
     ensureCardActions(card);
+    paintSocialStats(card, it);
 
     const slotIndex = Number(card.dataset.socialSlotNo || 0);
     const rowRect = card.getBoundingClientRect && card.getBoundingClientRect();
@@ -1139,6 +1249,18 @@
       if (!MANAGED_MAIN_KEYS.has(key)) return;
       const label = sampleLabelForSection(key);
       const existing = getMainSlots(grid);
+      if (['social-youtube','social-instagram','social-tiktok','social-facebook'].includes(key)) {
+        existing.forEach(function(card) {
+          if (!qs('.meta', card)) return;
+          if (key === 'social-facebook') {
+            const descEl = qs('.desc', card);
+            if (descEl && /^\s*false\s*[·:|\-]/i.test(descEl.textContent || '')) {
+              descEl.textContent = descEl.textContent.replace(/^\s*false\s*[·:|\-]\s*/i, '');
+            }
+          }
+          ensureCardActions(card);
+        });
+      }
       if (existing.length >= MAIN_LIMIT) return;
       const fragment = document.createDocumentFragment();
       const cardMarkup = mainCardMarkup(grid);
@@ -1206,7 +1328,8 @@
           pickThumb(item), pickDesc(item), pickCreator(item),
           safeText(item.embedUrl || item.embed_url),
           socialMetric(item, ['viewCount','view_count','views','videoViews','playCount','play_count']),
-          socialMetric(item, ['likeCount','like_count','likes','heartCount'])].join('\u001f');
+          socialMetric(item, ['likeCount','like_count','likes','heartCount']),
+          socialMetric(item, ['clickCount','click_count','outboundClickCount','outbound_click_count','cardClickCount','card_click_count'])].join('\u001f');
         if (card.dataset.socialRenderSignature !== signature || card.dataset.sample === '1') {
           paintMainCard(card, item);
           card.dataset.socialRenderSignature = signature;
