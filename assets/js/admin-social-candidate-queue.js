@@ -52,6 +52,8 @@
     previewHydrationBusy = false,
     previewHydratedIds = new Set(),
     firstContentListOpened = false,
+    sectionListenersBound = false,
+    candidateReadStatus = { status: "pending", lastSuccessAt: null, error: "" },
     emptySectionCollectionBusy = false,
     activeParallelCollectionJob = null;
   var $ = function (id) {
@@ -1124,6 +1126,9 @@
   function waitingActions(key) {
     return (
       '<div class="section-actionbar"><span class="section-note small">후보 등록/해제와 프론트 등록/해제를 분리해서 관리합니다.</span>' +
+      '<button class="publish" type="button" data-section-collect="' + esc(key) + '">이 SNS 공개 콘텐츠 검색·수집</button>' +
+      '<button class="secondary" type="button" data-section-import-content="' + esc(key) + '">이 SNS SearchBank 실후보 반입</button>' +
+      (key === "social-reddit" ? '<button class="secondary" type="button" data-reddit-intake="1">Reddit 게시물 URL 직접 등록</button>' : '') +
       '<button class="secondary" type="button" data-waiting-select-all="' + esc(key) + '">섹션 전체 선택</button>' +
       '<button class="secondary" type="button" data-waiting-clear-all="' + esc(key) + '">선택 해제</button>' +
       '<button type="button" data-waiting-promote="' + esc(key) + '">선택 후보 등록</button>' +
@@ -1185,7 +1190,9 @@
           (queue === "waiting"
             ? "후보 " + sourceCount + " · 프론트 " + frontCount
             : sourceCount + (queue === "registry" ? "명" : "개")) +
-          '</span></span><span class="section-chevron">⌄</span></button></div>' +
+          '</span></span><span class="section-chevron">⌄</span></button>' +
+          (queue === "waiting" ? '<button class="secondary" type="button" data-section-diagnostic="' + esc(key) + '" style="margin:6px">점검 JSON</button>' : '') +
+          '</div>' +
           (isOpen
             ? '<div class="section-body">' +
               (queue === "registry" ? finalActions(key) : queue === "hold" ? holdActions(key) : waitingActions(key)) +
@@ -1750,12 +1757,61 @@
     }
   }
 
+  function setCandidateReadStatus(status, detail) {
+    candidateReadStatus.status = status;
+    candidateReadStatus.error = text(detail);
+    if (status === "connected") candidateReadStatus.lastSuccessAt = new Date().toISOString();
+    var el = $("socialSectionLoadState");
+    if (!el) return;
+    el.classList.toggle("warn", status !== "connected");
+    el.textContent = status === "connected"
+      ? "후보 원장 조회 정상 · " + rows.length + "개 기록 · " + candidateReadStatus.lastSuccessAt + " · 5개 SNS 관리 기능 사용 가능"
+      : status === "loading" || status === "pending"
+        ? "후보 원장 데이터 조회 중입니다. SNS별 관리·수집·점검 버튼은 항상 표시됩니다."
+        : "후보 원장 읽기 실패 · " + text(detail) + " · 현재 표시된 0건은 실제 후보 0건을 뜻하지 않습니다. 검색/등록 결과는 점검 JSON으로 확인하세요.";
+  }
+  function downloadSectionDiagnostic(key) {
+    if (order.indexOf(key) < 0) return;
+    var part = rows.filter(function (row) { return row && row.sectionKey === key; });
+    var content = part.filter(function (row) { return assetClass(row) === "latest_content"; });
+    var registry = part.filter(function (row) { return assetClass(row) === "influencer_registry"; });
+    var published = content.filter(function (row) { return publishedContentIds.has(text(row.id)); });
+    var report = {
+      reportType: "igdc-social-section-admin-diagnostic",
+      generatedAt: new Date().toISOString(), sectionKey: key, platform: label(key),
+      candidateRead: Object.assign({}, candidateReadStatus),
+      scope: currentScope(),
+      counts: {
+        registry: registry.length, latestContent: content.length,
+        visibleContent: content.filter(function (row) { return !excluded(row) && !contentHold(row); }).length,
+        frontContent: published.length,
+        heldContent: content.filter(contentHold).length,
+        blocked: part.filter(blocked).length,
+        excluded: part.filter(excluded).length,
+        pendingPublicSelection: content.filter(function (row) { return placementById[text(row.id)] === "public_selected"; }).length
+      },
+      lastCollection: liveReports.filter(function (r) {
+        return text(r && (r.sectionKey || r.section || (r.liveCollection && r.liveCollection.sectionKey))) === key;
+      }).slice(-3),
+      sample: content.slice(0,20).map(function (row) {
+        return {id: text(row.id), url: text(row.contentUrl || row.sourceUrl || row.url || row.postUrl),
+          reviewStatus: text(row.reviewStatus), published: publishedContentIds.has(text(row.id))};
+      }),
+      note: candidateReadStatus.status === "connected"
+        ? "조회 결과 기준이며 실제 공개 여부는 Snapshot과 프론트 화면에서 추가 확인합니다."
+        : "후보 API 읽기 오류 중이므로 목록 및 수치는 현재 실제 DB 상태를 보장하지 않습니다."
+    };
+    download("igdc-social-" + key.replace(/^social-/, "") + "-section-diagnostic.json", report);
+    show(label(key) + " 섹션 점검 JSON을 다운로드했습니다.", "ok");
+  }
   async function refresh() {
     hide();
+    setCandidateReadStatus("loading", "");
     $("refreshBtn").disabled = true;
     try {
       var d = await get(REVIEW + "?action=candidates");
       rows = (d.queue && d.queue.rows) || d.candidates || [];
+      setCandidateReadStatus("connected", "");
       pruneSelections();
       await Promise.all([loadPlacement(), loadPublishedState()]);
       renderSummary(d.summary);
@@ -1791,6 +1847,11 @@
       );
       return true;
     } catch (e) {
+      setCandidateReadStatus("error", e && e.message || "후보 DB/API 연결 실패");
+      // Never hide a mission-critical management section when its API is down.
+      try { renderSections(); } catch (renderError) {
+        console.error("[IGDC Social Admin] fallback section rendering failed", renderError);
+      }
       show(e.message || "대기열을 읽지 못했습니다.", "warn");
       return false;
     } finally {
@@ -2197,7 +2258,7 @@
     if ($("collectorProgressBar")) $("collectorProgressBar").style.width =
       Math.min(100, Math.round(finished * 100 / Math.max(1, total))) + "%";
     if ($("collectorState")) $("collectorState").textContent =
-      "7개 SNS 동시 수집 " + (Number(job.round || 0) + 1) + "차" +
+      "5개 SNS 동시 수집 " + (Number(job.round || 0) + 1) + "차" +
       (stopRequested ? " · 현재 진행 중인 묶음 종료 후 일시정지" : " · 각 10개 내외 검색 중");
   }
   function progress(j) {
@@ -2600,7 +2661,7 @@
   }
   async function collectAll(skipConfirm) {
     if (!skipConfirm && !confirm(
-      "Social 7개 SNS를 동시에 검색합니다. 매 차례 각 SNS에서 약 10개씩 독립적으로 " +
+      "Social 5개 SNS를 동시에 검색합니다. 매 차례 각 SNS에서 약 10개씩 독립적으로 " +
       "수집·저장하고 결과를 확인한 뒤 다음 차례를 시작합니다 (최대 " + FULL_RESEARCH_ROUNDS +
       "차, 섹션당 후보 120개 목표). 외부 API 제한이 발생할 수 있으며 " +
       "기존 후보·관리자 보류/차단 기록은 보존합니다. 계속할까요?"
@@ -2724,7 +2785,7 @@
         saveJob(j);
         show(fatalError
           ? "수집 또는 저장 오류로 병렬 검색을 중지했습니다. 실패한 검색 커서를 보존했습니다. " + collectionErrorState(fatalError) + " · " + text(fatalError.message)
-          : "7개 SNS 동시 검색을 일시정지했습니다. 다시 누르면 완료되지 않은 단계부터 재개합니다.",
+          : "5개 SNS 동시 검색을 일시정지했습니다. 다시 누르면 완료되지 않은 단계부터 재개합니다.",
           fatalError ? "warn" : "ok");
       } else {
         clearJob();
@@ -2759,7 +2820,7 @@
           sectionSummary: perSection,
           collectionBatches: liveReports.map(function (x) { return x.liveCollection || x; }),
         });
-        show("7개 SNS 동시 수집 " + FULL_RESEARCH_ROUNDS + "차 완료. 실제 신규 저장 " +
+        show("5개 SNS 동시 수집 " + FULL_RESEARCH_ROUNDS + "차 완료. 실제 신규 저장 " +
           perSection.reduce(function (sum, item) { return sum + Number(item.verifiedInserted || 0); }, 0) +
           "건, 기존 갱신 " +
           perSection.reduce(function (sum, item) { return sum + Number(item.updated || 0); }, 0) +
@@ -3304,7 +3365,7 @@
     }
   }
   async function autoCurate(sectionKey, skipConfirm) {
-    var target = sectionKey ? label(sectionKey) : "전체 7개 섹션",
+    var target = sectionKey ? label(sectionKey) : "전체 5개 섹션",
       scope = currentScope(),
       scopeName =
         (scope.country &&
@@ -3734,7 +3795,7 @@
   }
 
   async function actualApply(sectionKey, skipConfirm, exactIds, publishMode, requestedSections) {
-    var target = sectionKey ? label(sectionKey) : "전체 7개 섹션",
+    var target = sectionKey ? label(sectionKey) : "전체 5개 섹션",
       scope = currentScope(),
       scopeName =
         (scope.country &&
@@ -4027,7 +4088,7 @@
   async function actualUnapplyAll(sectionKey) {
     var target = sectionKey
       ? label(sectionKey) + " 섹션 전체"
-      : "전체 7개 섹션";
+      : "전체 5개 섹션";
     try {
       var ids = await currentPublishedIds(sectionKey);
       if (!ids.length) {
@@ -4112,7 +4173,7 @@
         return '<label class="small" style="display:inline-flex;align-items:center;gap:5px"><input class="aiSectionCheck" type="checkbox" value="' +
           esc(key) + '" /> ' + esc(label(key)) + '</label>';
       }).join("") +
-      '<button id="aiSelectAllSectionsBtn" class="secondary" type="button">7개 전체 선택</button>' +
+      '<button id="aiSelectAllSectionsBtn" class="secondary" type="button">5개 전체 선택</button>' +
       '<button id="aiClearSectionsBtn" class="secondary" type="button">선택 해제</button>';
     $("aiSelectAllSectionsBtn").onclick = function () {
       host.querySelectorAll(".aiSectionCheck").forEach(function (el) { el.checked = true; });
@@ -4293,6 +4354,10 @@
         renderSections();
         return;
       }
+      var sectionCollect = event.target.closest("[data-section-collect]");
+      if (sectionCollect) { collectEmptySection(sectionCollect.dataset.sectionCollect); return; }
+      var sectionDiagnosticButton = event.target.closest("[data-section-diagnostic]");
+      if (sectionDiagnosticButton) { downloadSectionDiagnostic(sectionDiagnosticButton.dataset.sectionDiagnostic); return; }
       var emptyCollect = event.target.closest("[data-empty-collect]");
       if (emptyCollect) {
         collectEmptySection(emptyCollect.dataset.emptyCollect);
@@ -4638,7 +4703,7 @@
     $("collectorStopBtn").onclick = function () {
       stopRequested = true;
       this.disabled = true;
-      $("collectorState").textContent = "진행 중인 7개 SNS 검색 묶음 완료 후 일시정지";
+      $("collectorState").textContent = "진행 중인 5개 SNS 검색 묶음 완료 후 일시정지";
     };
     if ($("rotationBtn")) $("rotationBtn").onclick = rotate;
     if ($("publishPreviewBtn")) $("publishPreviewBtn").onclick = publish;
@@ -4775,6 +4840,7 @@
     bindAccordion($("sectionAccordion"), "final");
     bindAccordion($("waitingAccordion"), "waiting");
     bindAccordion($("holdAccordion"), "hold");
+    sectionListenersBound = true;
     $("selectAllExcluded").onchange = function () {
       document.querySelectorAll(".excludedCheck").forEach(function (e) {
         e.checked = this.checked;
@@ -4823,11 +4889,33 @@
     };
     providerStatus();
   }
+  function bindEssentialSectionControls() {
+    if (!sectionListenersBound) {
+      bindAccordion($("sectionAccordion"), "final");
+      bindAccordion($("waitingAccordion"), "waiting");
+      bindAccordion($("holdAccordion"), "hold");
+      sectionListenersBound = true;
+    }
+    if ($("redditAdminCollectBtn")) $("redditAdminCollectBtn").onclick = function () { collectEmptySection("social-reddit"); };
+    if ($("redditAdminUrlsBtn")) $("redditAdminUrlsBtn").onclick = importRedditUrls;
+    if ($("redditAdminOpenBtn")) $("redditAdminOpenBtn").onclick = function () { openContentSection("social-reddit"); };
+    if ($("redditAdminDiagnosticBtn")) $("redditAdminDiagnosticBtn").onclick = function () { downloadSectionDiagnostic("social-reddit"); };
+    // The admin management accordion exists before the first network request.
+    // A network failure is reported, never confused with an empty candidate pool.
+    options();
+    filters({});
+    renderSections();
+    setCandidateReadStatus("pending", "");
+  }
   async function start() {
     bindDiagnosticControls();
     try { bind(); } catch (e) {
       console.error("[IGDC Social Admin] non-diagnostic UI bind failed", e);
       show("일부 관리자 UI 연결에 오류가 있습니다. 점검 JSON 버튼은 계속 사용할 수 있습니다: " + text(e && e.message), "warn");
+    }
+    try { bindEssentialSectionControls(); } catch (e) {
+      console.error("[IGDC Social Admin] essential section controls failed", e);
+      setCandidateReadStatus("error", "관리 블록 초기화 오류: " + text(e && e.message));
     }
     try { bindBatchExtras(); } catch (e) {
       console.error("[IGDC Social Admin] provider controls bind failed", e);
