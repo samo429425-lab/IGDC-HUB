@@ -4852,7 +4852,16 @@ async function productCandidatePsomRankedReplace(actorId,input){
   const selected=await frontSyncSelectCandidates(ids),byId=new Map(selected.map(row=>[text(row.id),row]));
   // Scope-local across 249 country ledgers. Never use browser-provided counts.
   const scopedRows=await readResearchReserveRows(scope),bySection=new Map();
-  for(const row of scopedRows){const key=PSOMRankCompare.sectionKey(row);if(!key)continue;if(!bySection.has(key))bySection.set(key,[]);bySection.get(key).push(row);}
+  // A top-pin release does not terminate an administrator's supplier contract.
+  // Read CURRENT registry authority for the selected country/region before
+  // allowing private ranked replacements (product-card flags may be stale).
+  const protectedSuppliers=await manualSupplierRegistry(scope);
+  for(const row of scopedRows){
+    const p=plain(row&&row.source_payload),supplier=plain(p.supplier);
+    const root=first(supplier.officialUrl,p.supplierSiteUrl,p.supplierOfficialUrl,row&&row.official_url);
+    if(activePinnedManualSupplier(protectedSuppliers,{officialUrl:root,manualSupplierId:first(supplier.manualSupplierId,p.manualSupplierId)}))row._supplierRegistryProtected=true;
+    const key=PSOMRankCompare.sectionKey(row);if(!key)continue;if(!bySection.has(key))bySection.set(key,[]);bySection.get(key).push(row);
+  }
   const replacementCandidates=scopedRows.filter(row=>PSOMRankCompare.sectionKey(row)&&lower(plain(row.source_payload).slotDecision)==='slot_candidate'&&!PSOMRankCompare.isProtected(row,[]));
   const relationById={};
   for(let start=0;start<replacementCandidates.length;start+=80){
@@ -7263,6 +7272,15 @@ async function applyMaintenanceReplacement(actorId,entryInput){
   const replacementSeed={productUrl:entry.replacementProductUrl,url:entry.replacementProductUrl,productName:entry.title,title:entry.title,imageUrl:entry.image,imageOriginalUrl:entry.image,supplierSiteUrl:entry.supplierSiteUrl,price:entry.price,priceCurrency:entry.priceCurrency,availability:entry.availability,candidateId,id:candidateId};
   let inspected=null;try{const res=await RegionalSelector.inspectProductResearchStep([replacementSeed],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});inspected=plain(array(res&&res.items)[0]);}catch(_e){inspected={};}
   const health=candidateRuntimeHealth(inspected);if(!health.live)return{ok:false,reason:health.inconclusive?"replacement_revalidation_inconclusive":"replacement_revalidation_failed",keepQueue:health.inconclusive===true,dropQueue:health.inconclusive!==true,reasons:health.reasons};
+  // An explicit top pin protects the selected PRODUCT, not just the section slot.
+  // Never silently swap it for a different product during scheduled maintenance;
+  // genuine safety/unavailability checks remain active and admin review stays possible.
+  const topPin=plain(originalPayload.sectionRevenueOverride),pinKey=scope.country+"|"+scope.region+"|"+text(assignment.hub_key)+"|"+text(assignment.slot_key);
+  if(topPin.mode==="pin_top"&&topPin.scopeKey===pinKey){
+    const oldIdentity=ProductRanking.productIdentity(current),newIdentity=ProductRanking.productIdentity(inspected);
+    if(!oldIdentity||!newIdentity||oldIdentity!==newIdentity)return{ok:false,reason:"administrator_top_pin_cross_product_replacement_requires_review",keepQueue:true,administratorTopPinned:true};
+  }
+
   // A manually registered supplier is protected from an unnoticed cross-seller
   // substitution, but a verified same-supplier repair remains permitted.
   const registry=await manualSupplierRegistry(scope);

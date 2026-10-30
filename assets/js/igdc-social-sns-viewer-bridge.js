@@ -12,7 +12,7 @@
  */
 (function () {
   'use strict';
-  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20261017-six-sns-bilibili-douyin-v1'; } catch (_) {}
+  try { window.__IGDC_SOCIAL_VIEWER_BUILD__ = '20261030-five-sns-provider-native-v2'; } catch (_) {}
 
   if (window.__IGDC_SOCIAL_SNS_VIEWER_V2__) return;
   window.__IGDC_SOCIAL_SNS_VIEWER_V2__ = true;
@@ -404,6 +404,9 @@
       '#igdcSocialViewerV2 .igsv-stage[data-provider="instagram-post"] .igsv-content{background:#fff}' +
       '#igdcSocialViewerV2 .igsv-media[data-aspect="auto"]{height:max(720px,calc(100dvh - 56px - 56px));min-height:720px}' +
       '#igdcSocialViewerV2 .igsv-frame{width:100%;height:100%;border:0;background:#000;display:block;flex:0 0 auto}' +
+      '#igdcSocialViewerV2 .igsv-media[data-provider="facebook-post"],#igdcSocialViewerV2 .igsv-media[data-provider="reddit-official-post"]{aspect-ratio:auto!important;max-width:100%;background:#fff}' +
+      '#igdcSocialViewerV2 .igsv-stage[data-provider="facebook-post"] .igsv-media .igsv-frame{position:static!important;inset:auto!important;max-width:100%;transform:none!important;touch-action:auto!important}' +
+      '#igdcSocialViewerV2 .igsv-provider-original-link{display:inline-flex;padding:9px 14px;border-radius:8px;background:#f2f5f8;color:#154b80;text-decoration:underline;font-weight:650}' +
       '#igdcSocialViewerV2 .igsv-contained-preview{width:100%;height:100%;display:block;object-fit:contain;object-position:center;background:#000}' +
       '#igdcSocialViewerV2 .igsv-detail{width:100%;max-width:none;box-sizing:border-box;padding:22px clamp(18px,3vw,48px) 28px;background:#fff;color:#111;border-top:1px solid #e5e7eb;align-self:stretch}' +
       '#igdcSocialViewerV2 .igsv-detail-title{font:700 20px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;word-break:break-word}' +
@@ -645,38 +648,34 @@
     return !!row[kind];
   }
 
+  function recordSocialMainEvent(eventType, url, platform) {
+    if (!validHttp(url) || !/^(viewer_open|original_outbound)$/.test(eventType)) return;
+    try {
+      fetch('/.netlify/functions/social-main-events', {
+        method:'POST', credentials:'same-origin', keepalive:true,
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ eventType:eventType, contentUrl:url, platform:platform,
+          sectionKey:'social-' + platform })
+      }).catch(function() {});
+    } catch (_) {}
+  }
+
   function mountProviderUtilityActions(detail, platform, title, sourceUrl) {
-    if (!detail || platform === 'youtube' || platform === 'facebook') return;
-    var tools = document.createElement('div');
-    tools.className = 'igsv-provider-tools';
-    tools.appendChild(makeText('span', 'igsv-provider-label', 'IGDC'));
-    var target = sourceUrl || state.lastUrl || '';
-
-    [['like','👍'], ['heart','❤️'], ['recommend','★ 추천']].forEach(function (pair) {
-      var btn = makeActionButton(pair[1], 'igsv-local-react' + (reactionActive(target, pair[0]) ? ' is-active' : ''));
-      btn.setAttribute('aria-pressed', reactionActive(target, pair[0]) ? 'true' : 'false');
-      btn.addEventListener('click', function () {
-        var active = toggleReaction(target, pair[0]);
-        btn.classList.toggle('is-active', active);
-        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
-      });
-      tools.appendChild(btn);
-    });
-
-    var shareBtn = makeActionButton('↗ ' + labels().ytShare);
-    shareBtn.addEventListener('click', function () {
-      shareSource(title || platform || document.title, target, shareBtn);
-    });
-    tools.appendChild(shareBtn);
-
-    var saveBtn = makeActionButton((isSavedUrl(target) ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave));
-    saveBtn.addEventListener('click', function () {
-      var saved = toggleSavedUrl(target);
-      saveBtn.textContent = saved ? '✓ ' + labels().ytSaved : '▣ ' + labels().ytSave;
-    });
-    tools.appendChild(saveBtn);
-
-    detail.appendChild(tools);
+    if (!detail || !validHttp(sourceUrl) || q('.igsv-provider-original-link', detail)) return;
+    // The original provider owns likes, subscriptions, comments and shares.
+    // A cross-origin iframe cannot reveal that a user actually subscribed.
+    const row = document.createElement('div');
+    row.className = 'igsv-provider-tools';
+    const link = document.createElement('a');
+    link.className = 'igsv-provider-original-link';
+    link.href = sourceUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = ({youtube:'YouTube',instagram:'Instagram',tiktok:'TikTok',facebook:'Facebook',reddit:'Reddit'})[platform] || platform;
+    link.setAttribute('aria-label', link.textContent + ' - original content');
+    link.addEventListener('click', function() { recordSocialMainEvent('original_outbound', sourceUrl, platform); });
+    row.appendChild(link);
+    detail.appendChild(row);
   }
 
   function facebookPluginFrame(src, className, title, height) {
@@ -719,204 +718,9 @@
   }
 
   function mountFacebookOfficialActions(host, sourceUrl) {
-    if (!host || !validHttp(sourceUrl)) return;
-    var box = document.createElement('div');
-    box.className = 'igsv-fb-official';
-    var width = Math.max(320, Math.floor((host.getBoundingClientRect().width || window.innerWidth || 750) - 96));
-    var l = labels();
-
-    /* Keep the Facebook action strip compact and familiar: Like + Share + the two
-       most common reaction affordances on one row. Less-common reactions live in
-       a small drop block so they do not turn the viewer into an emoji toolbar. */
-    var bar = document.createElement('div');
-    bar.className = 'igsv-fb-nativebar';
-    var likeBtn = document.createElement('button');
-    likeBtn.className = 'igsv-fb-nativebtn igsv-fb-like-toggle';
-    likeBtn.type = 'button';
-    likeBtn.appendChild(makeText('span', 'igsv-fb-like-emoji', '👍'));
-    likeBtn.appendChild(makeText('span', 'igsv-fb-like-label', l.ytLikes));
-    var shareBtn = makeText('button', 'igsv-fb-nativebtn igsv-fb-share-btn', '↗ ' + l.ytShare);
-    shareBtn.type = 'button';
-    bar.appendChild(likeBtn);
-
-    var reactionCluster = document.createElement('div');
-    reactionCluster.className = 'igsv-fb-reaction-cluster';
-    ['❤️'].forEach(function (emoji) {
-      var b = makeText('button', 'igsv-fb-reactbtn', emoji);
-      b.type = 'button';
-      b.setAttribute('aria-label', 'Facebook reaction ' + emoji);
-      reactionCluster.appendChild(b);
-    });
-    var reactionMore = makeText('button', 'igsv-fb-reactmore', '▼');
-    reactionMore.type = 'button';
-    reactionMore.setAttribute('aria-label', '댓글 이모지 열기');
-    reactionMore.setAttribute('aria-expanded', 'false');
-    reactionCluster.appendChild(reactionMore);
-
-    var reactionMenu = document.createElement('div');
-    reactionMenu.className = 'igsv-fb-reaction-menu';
-    reactionMenu.hidden = true;
-    var commentEmojiPalette = [
-      '😀','😃','😄','😁','😂','🤣','😊','😍',
-      '🥰','😘','😎','🤩','🤔','😮','😲','😢',
-      '😭','😡','😤','🥳','👍','👎','👏','🙌',
-      '🙏','🤝','💪','👌','✌️','🤞','👊','🤟',
-      '❤️','🩷','🧡','💛','💚','💙','💜','🤍',
-      '💕','💖','💯','🔥','✨','🎉','🎊','⭐'
-    ];
-    commentEmojiPalette.forEach(function (emoji) {
-      var b = makeText('button', 'igsv-fb-reactbtn igsv-fb-emoji-option', emoji);
-      b.type = 'button';
-      b.setAttribute('aria-label', '댓글 이모지 ' + emoji);
-      b.setAttribute('title', '댓글 이모지');
-      b.setAttribute('data-emoji', emoji);
-      reactionMenu.appendChild(b);
-    });
-    reactionCluster.appendChild(reactionMenu);
-    bar.appendChild(reactionCluster);
-    bar.appendChild(shareBtn);
-
-    var igdcRecommend = makeText('button', 'igsv-fb-nativebtn igsv-local-react', '★ 추천');
-    igdcRecommend.type = 'button';
-    var igdcSaved = makeText('button', 'igsv-fb-nativebtn', isSavedUrl(sourceUrl) ? '✓ ' + l.ytSaved : '▣ ' + l.ytSave);
-    igdcSaved.type = 'button';
-    if (reactionActive(sourceUrl, 'recommend')) igdcRecommend.classList.add('is-active');
-    igdcRecommend.addEventListener('click', function () {
-      var active = toggleReaction(sourceUrl, 'recommend');
-      igdcRecommend.classList.toggle('is-active', active);
-    });
-    igdcSaved.addEventListener('click', function () {
-      var saved = toggleSavedUrl(sourceUrl);
-      igdcSaved.textContent = saved ? '✓ ' + l.ytSaved : '▣ ' + l.ytSave;
-    });
-    bar.appendChild(igdcRecommend);
-    bar.appendChild(igdcSaved);
-    box.appendChild(bar);
-
-    var interactionWrap = document.createElement('div');
-    interactionWrap.className = 'igsv-fb-interaction-wrap';
-    interactionWrap.hidden = true;
-    box.appendChild(interactionWrap);
-    var interactionFrame = null;
-
-    function ensureInteraction(forceOpen) {
-      var opening = typeof forceOpen === 'boolean' ? forceOpen : interactionWrap.hidden;
-      interactionWrap.hidden = !opening;
-      if (!opening) return;
-      if (!interactionFrame) {
-        var src = 'https://www.facebook.com/plugins/post.php?' + new URLSearchParams({
-          href: sourceUrl,
-          show_text: 'true',
-          width: String(Math.max(320, Math.min(750, width)))
-        }).toString();
-        interactionFrame = facebookPluginFrame(src, 'igsv-fb-interaction-frame', 'Facebook post interactions');
-        interactionWrap.appendChild(interactionFrame);
-      }
-      window.setTimeout(function () {
-        try { interactionWrap.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {}
-      }, 30);
-    }
-
-    likeBtn.addEventListener('click', function () { ensureInteraction(); });
-    Array.prototype.forEach.call(reactionCluster.querySelectorAll('.igsv-fb-reactbtn:not(.igsv-fb-emoji-option)'), function (btn) {
-      btn.addEventListener('click', function () {
-        reactionMenu.hidden = true;
-        reactionMore.setAttribute('aria-expanded', 'false');
-        ensureInteraction(true);
-      });
-    });
-    Array.prototype.forEach.call(reactionMenu.querySelectorAll('.igsv-fb-emoji-option'), function (btn) {
-      btn.addEventListener('click', function () {
-        var emoji = btn.getAttribute('data-emoji') || btn.textContent || '';
-        reactionMenu.hidden = true;
-        reactionMore.setAttribute('aria-expanded', 'false');
-        /* Facebook's official Comments plugin is cross-origin, so IGDC cannot
-           programmatically write into its textarea. Copy the selected Unicode emoji
-           and open the official comments section so the user can paste it without
-           leaving the Social viewer. */
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(emoji).catch(function () {});
-        } catch (_) {}
-        toggleComments(true);
-      });
-    });
-    function placeReactionMenu() {
-      var viewer = document.getElementById('igdcSocialViewerV2');
-      var bounds = viewer ? viewer.getBoundingClientRect() : { left: 0, right: window.innerWidth || 0 };
-      var buttonRect = reactionMore.getBoundingClientRect();
-      var clusterRect = reactionCluster.getBoundingClientRect();
-      var startX = Math.max(0, Math.round(buttonRect.left - clusterRect.left));
-      var availableRight = Math.max(180, Math.floor((bounds.right || window.innerWidth || 0) - buttonRect.left - 16));
-      var menuWidth = Math.min(420, availableRight);
-      reactionMenu.style.left = startX + 'px';
-      reactionMenu.style.right = 'auto';
-      reactionMenu.style.width = menuWidth + 'px';
-      reactionMenu.style.maxWidth = menuWidth + 'px';
-    }
-
-    reactionMore.addEventListener('click', function () {
-      reactionMenu.hidden = !reactionMenu.hidden;
-      reactionMore.setAttribute('aria-expanded', reactionMenu.hidden ? 'false' : 'true');
-      if (!reactionMenu.hidden) {
-        placeReactionMenu();
-        window.setTimeout(function () {
-          try { reactionMenu.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); } catch (_) {}
-        }, 0);
-      }
-    });
-
-    /* Facebook share stays in a user-initiated popup, so the IGDC viewer never gets
-       replaced by facebook.com. Fall back to Web Share/clipboard if a popup is blocked. */
-    shareBtn.addEventListener('click', function () {
-      if (window.IGDCSocialShareDialog && typeof window.IGDCSocialShareDialog.open === 'function' &&
-          window.IGDCSocialShareDialog.open('Facebook', sourceUrl)) return;
-      var shareUrl = 'https://www.facebook.com/sharer/sharer.php?' + new URLSearchParams({ u: sourceUrl }).toString();
-      var popup = null;
-      try { popup = window.open(shareUrl, 'igdcFacebookShare', 'popup=yes,width=720,height=640,resizable=yes,scrollbars=yes'); } catch (_) {}
-      if (!popup) shareSource('Facebook', sourceUrl, shareBtn);
-    });
-
-    /* Comments are a separate document section, matching the YouTube viewer pattern.
-       The comments plugin is lazy-loaded only when the user opens the section. */
-    var commentsSection = document.createElement('section');
-    commentsSection.className = 'igsv-fb-comments-section';
-    var head = document.createElement('div');
-    head.className = 'igsv-fb-comments-head';
-    head.appendChild(makeText('h2', 'igsv-fb-comments-title', l.ytComments));
-    var toggle = makeText('button', 'igsv-fb-comments-toggle', l.ytOpenComments);
-    toggle.type = 'button';
-    toggle.setAttribute('aria-expanded', 'false');
-    head.appendChild(toggle);
-    commentsSection.appendChild(head);
-
-    var commentsWrap = document.createElement('div');
-    commentsWrap.className = 'igsv-fb-comments-wrap';
-    commentsWrap.hidden = true;
-    commentsSection.appendChild(commentsWrap);
-    var commentsFrame = null;
-
-    function toggleComments(forceOpen) {
-      var opening = typeof forceOpen === 'boolean' ? forceOpen : commentsWrap.hidden;
-      commentsWrap.hidden = !opening;
-      toggle.textContent = opening ? l.ytCloseComments : l.ytOpenComments;
-      toggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
-      if (opening && !commentsFrame) {
-        var src = facebookPluginUrl('comments', sourceUrl, width);
-        if (src) {
-          commentsFrame = facebookPluginFrame(src, 'igsv-fb-comments-frame', 'Facebook Comments');
-          commentsWrap.appendChild(commentsFrame);
-        }
-      }
-      if (opening) {
-        window.setTimeout(function () {
-          try { commentsWrap.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {}
-        }, 30);
-      }
-    }
-    toggle.addEventListener('click', function () { toggleComments(); });
-    box.appendChild(commentsSection);
-
-    host.appendChild(box);
+    // Official Facebook post/video iframe already carries provider actions.
+    // Do not build IGDC lookalike reaction/share/comment controls.
+    mountProviderUtilityActions(host, 'facebook', 'Facebook', sourceUrl);
   }
 
   function mountFacebookVideoMedia(media, sourceUrl, title) {
@@ -1600,24 +1404,16 @@
     if (embed.mode === 'preview') {
       return mountContainedPreview(stage, embed, title, description, platform);
     }
-    if (embed.provider === 'facebook-post') {
-      /* Do not render Facebook's cross-origin post shell as the visible document.
-         Its internal `See more` link can only navigate within Facebook and its
-         natural cross-origin height cannot be measured reliably, which produced
-         the large blank gaps seen in some posts. Render the stored/public media
-         and text as an IGDC-owned document, then attach Meta's official Like/
-         Reaction, Share and Comments plugins below it. */
-      return mountFacebookPostDocument(stage, title, description, state.lastUrl || '');
-    }
     var iframe = document.createElement('iframe');
     iframe.className = 'igsv-frame';
     var frameSrc = embed.src;
     if (embed.provider === 'facebook-post') {
       var stageRect = stage.getBoundingClientRect();
-      var providerWidth = Math.max(350, Math.min(750, Math.floor(stageRect.width || 750)));
+      var providerWidth = Math.max(320, Math.min(750, Math.floor(stageRect.width || 750)));
       try {
         var fbSrc = new URL(frameSrc, location.href);
         fbSrc.searchParams.set('width', String(providerWidth));
+        fbSrc.searchParams.set('show_text', 'true');
         frameSrc = fbSrc.toString();
       } catch (_) {}
       iframe.__igdcFacebookWidth = providerWidth;
@@ -1641,33 +1437,9 @@
       sizeProviderFrame(stage, iframe, embed);
       showStatus('');
     }, { once: true });
-    if (embed.provider === 'facebook-post') {
-      var shell = document.createElement('div');
-      shell.className = 'igsv-fb-shell';
-      var canvas = document.createElement('div');
-      canvas.className = 'igsv-fb-canvas';
-      canvas.appendChild(iframe);
-      shell.appendChild(canvas);
-
-      /* Facebook's cross-origin `더보기/See more` cannot be allowed to replace the
-         IGDC top-level page. The provider text is therefore hidden in the plugin
-         (`show_text=false`) and rendered as an IGDC-owned expandable detail block.
-         Native reactions/comments/share remain provider-owned inside the official
-         Facebook plugin; no fake success UI is introduced. */
-      var fbDetail = buildDetail(title || platform, description || '', platform);
-      fbDetail.classList.add('igsv-fb-detail');
-      shell.appendChild(fbDetail);
-      mountProviderUtilityActions(fbDetail, platform, title || platform, state.lastUrl || '');
-      loadFacebookPublicDetail(fbDetail, state.lastUrl || '');
-
-      var fbSafe = document.createElement('div');
-      fbSafe.className = 'igsv-safe-space';
-      fbSafe.setAttribute('aria-hidden', 'true');
-      shell.appendChild(fbSafe);
-
-      stage.appendChild(shell);
-      bindViewerScrollHost(shell);
-    } else {
+    {
+      /* Every provider uses its official iframe in a scrollable main-only
+         document. Facebook posts are never stretched into a fake layout. */
       /* All six main SNS viewers share one scroll contract: the provider media
          sits in a full-width content document and a consistent 90px safe area remains
          below it. The browser only paints a vertical scrollbar when that document
@@ -1680,6 +1452,21 @@
       media.className = 'igsv-media';
       media.setAttribute('data-aspect', embed.aspect || 'auto');
       if (embed.provider) media.setAttribute('data-provider', embed.provider);
+      if (embed.provider === 'facebook-post') {
+        media.style.width = 'min(100%,750px)';
+        media.style.height = 'min(960px,calc(100dvh - 95px))';
+        media.style.minHeight = '520px';
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+      }
+      if (embed.provider === 'reddit-official-post') {
+        media.style.width = 'min(100%,840px)';
+        media.style.height = 'min(960px,calc(100dvh - 95px))';
+        media.style.minHeight = '520px';
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.setAttribute('scrolling', 'yes');
+      }
       media.appendChild(iframe);
       content.appendChild(media);
 
@@ -1689,9 +1476,7 @@
          title/description and (for YouTube) public detail controls. */
       var detail = buildDetail(title || platform, description || '', platform);
       content.appendChild(detail);
-      if (platform === 'youtube') loadYouTubeDetail(detail, state.lastUrl || '', 'relevance');
-      else if (platform === 'facebook') mountFacebookOfficialActions(content, state.lastUrl || '');
-      else mountProviderUtilityActions(detail, platform, title || platform, state.lastUrl || '');
+      mountProviderUtilityActions(detail, platform, title || platform, state.lastUrl || '');
 
       var safeSpace = document.createElement('div');
       safeSpace.className = 'igsv-safe-space';
@@ -1701,7 +1486,7 @@
       stage.appendChild(scroll);
       bindViewerScrollHost(scroll);
     }
-    sizeProviderFrame(stage, iframe, embed);
+    if (embed.provider !== 'facebook-post') sizeProviderFrame(stage, iframe, embed);
     iframe.__igdcSocialEmbed = embed;
 
     /* If a provider never fires load, do not leave the loading veil forever. */
@@ -1728,6 +1513,7 @@
     state.lastPreview = previewUrlOf(card);
     state.platform = platform;
     state.open = true;
+    recordSocialMainEvent('viewer_open', url, platform);
     state.closingFromHistory = false;
     state.parentTopState = null;
 

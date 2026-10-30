@@ -124,8 +124,18 @@ const PLATFORM_POLICIES = Object.freeze({
    defaultDisplayMode: "link_card_or_official_embed",
    publicPreference: "public_subreddit_post_only",
    categories: ["travel", "culture", "technology", "art", "education", "food", "fashion", "books", "creator"],
-   // Explicit URL ingestion only until commercial API access is approved.
-   collectionQueries: []
+   // Search public web-index entries to discover canonical public post URLs.
+   // This does NOT enable Reddit API access or bypass login/robots restrictions.
+   collectionQueries: [
+     "reddit art photography creative communities posts",
+     "reddit travel destinations public discussion posts",
+     "reddit science education tutorials interesting posts",
+     "reddit technology tools reviews public posts",
+     "reddit books literature writing recommendations",
+     "reddit food recipes culture community posts",
+     "reddit design architecture handmade work posts",
+     "reddit nature wildlife outdoor photography posts"
+   ]
  }
 });
 

@@ -3,7 +3,7 @@
 const Auth=require('./lib/global-slot-console-auth');
 const Store=require('./lib/global-slot-console-supabase');
 const Market=require('./lib/market-sale-scope.v1');
-const VERSION='igdc-section-revenue-order-v1.0.0';
+const VERSION='igdc-section-revenue-order-v1.2.0-explicit-admin-top-pin';
 const ROLE=new Set(['owner','admin','super_admin','site_manager','site_manager_director','director']);
 const KEYS=new Set([
 'home|home_1','home|home_2','home|home_3','home|home_4','home|home_5','home|home_6','home|home_right_top','home|home_right_middle','home|home_right_bottom',
@@ -32,26 +32,45 @@ function rating(row,scope,key){
  const opportunity=['affiliate_connection_required','referral_pending','affiliate_pending','advertising_possible'].includes(str(revenue.monetizationState).toLowerCase());
  const tier=TIER[cls]===undefined?40:TIER[cls],effectiveTier=cls==='ORDINARY'&&opportunity?50:tier;
  const ranks=obj(payload.ranking),score=Number(ranks.finalScore||ranks.score||payload.rankingScore||0);
- return{candidateId:row.id,title:str(row.title),sectionKey:key,override:override==='demote'?'demote':'',tier:effectiveTier,className:cls,score:Number.isFinite(score)?score:0,originalPriority:Number(row.assignment.priority||0),assignmentId:str(row.assignment.id),createdAt:str(row.assignment.created_at)};
+ return{candidateId:row.id,title:str(row.title),sectionKey:key,override:['pin_top','demote'].includes(override)?override:'',pinnedAt:str(management.pinnedAt),tier:effectiveTier,className:cls,score:Number.isFinite(score)?score:0,originalPriority:Number(row.assignment.priority||0),assignmentId:str(row.assignment.id),createdAt:str(row.assignment.created_at)};
 }
-function compare(a,b){return (a.override==='demote'?1:0)-(b.override==='demote'?1:0)||b.tier-a.tier||b.score-a.score||a.candidateId.localeCompare(b.candidateId);}
+function compare(a,b){
+ const pinnedA=a.override==='pin_top',pinnedB=b.override==='pin_top';
+ if(pinnedA!==pinnedB)return pinnedA?-1:1;
+ // Newest explicit top pin goes first. Revenue rank never displaces a pin.
+ if(pinnedA&&pinnedB)return b.pinnedAt.localeCompare(a.pinnedAt)||a.candidateId.localeCompare(b.candidateId);
+ return (a.override==='demote'?1:0)-(b.override==='demote'?1:0)||b.tier-a.tier||b.score-a.score||a.candidateId.localeCompare(b.candidateId);
+}
 function chunks(rows,size){const out=[];for(let i=0;i<rows.length;i+=size)out.push(rows.slice(i,i+size));return out;}
 async function readAll(scope,keys){
- const assignments=[];const pageSize=200,maxRecords=3000;
- for(let offset=0;offset<maxRecords;offset+=pageSize){
-   const query='select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at&country_code=eq.'+encodeURIComponent(scope.country)+'&region_code=eq.'+encodeURIComponent(scope.region)+'&limit='+pageSize+'&offset='+offset+'&order=id.asc';
-   const batch=await Store.select('gslot_slot_assignments',query);
-   if(!Array.isArray(batch))err('배치 원장 조회 실패',502);
-   assignments.push(...batch);
-   if(batch.length<pageSize)break;
-   if(offset+pageSize>=maxRecords)err('배치 원장이 안전 조회 한도를 초과했습니다. 정렬을 실행하지 않습니다.',409);
+ // Fetch ONLY assignments for the requested sections. The former implementation
+ // read every section in 200-row pages, even when previewing one section.
+ const scoped=[];const pageSize=200,maxSectionRecords=2000;
+ for(const key of keys){
+   const part=segment(key);
+   for(let offset=0;offset<maxSectionRecords;offset+=pageSize){
+     const query='select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at'
+       +'&country_code=eq.'+encodeURIComponent(scope.country)
+       +'&region_code=eq.'+encodeURIComponent(scope.region)
+       +'&hub_key=eq.'+encodeURIComponent(part.page)
+       +'&slot_key=eq.'+encodeURIComponent(part.section)
+       +'&limit='+pageSize+'&offset='+offset+'&order=id.asc';
+     const batch=await Store.select('gslot_slot_assignments',query);
+     if(!Array.isArray(batch))err('배치 원장 조회 실패',502);
+     scoped.push(...batch.filter(row=>['approved','pinned'].includes(str(row.state).toLowerCase())));
+     if(batch.length<pageSize)break;
+     if(offset+pageSize>=maxSectionRecords)err('해당 섹션 배치 조회 한도를 초과했습니다: '+key,409);
+   }
  }
- const scoped=assignments.filter(x=>keys.has(str(x.hub_key)+'|'+str(x.slot_key))&&['approved','pinned'].includes(str(x.state).toLowerCase()));
  const ids=[...new Set(scoped.map(x=>str(x.candidate_id)).filter(Boolean))],candidates=new Map();
- for(const batch of chunks(ids,35)){
-   const result=await Store.select('gslot_candidates','select=id,title,status,source_ref,source_payload,updated_at&id=in.('+batch.map(encodeURIComponent).join(',')+')&limit='+batch.length);
-   if(!Array.isArray(result))err('상품 후보 원장 조회 실패',502);
-   result.forEach(row=>candidates.set(str(row.id),row));
+ const candidateBatches=chunks(ids,35);
+ for(const group of chunks(candidateBatches,3)){
+   const responses=await Promise.all(group.map(batch=>Store.select('gslot_candidates',
+     'select=id,title,status,source_ref,source_payload,updated_at&id=in.('+batch.map(encodeURIComponent).join(',')+')&limit='+batch.length)));
+   responses.forEach(result=>{
+     if(!Array.isArray(result))err('상품 후보 원장 조회 실패',502);
+     result.forEach(row=>candidates.set(str(row.id),row));
+   });
  }
  if(candidates.size!==ids.length)err('상품 원장과 배치 원장의 상품 수가 일치하지 않아 정렬을 중단했습니다.',409);
  const groups=new Map([...keys].map(k=>[k,[]])),seen=new Set();
@@ -68,34 +87,61 @@ async function readAll(scope,keys){
 async function setOverride(scope,key,id,mode,actor){
  if(!KEYS.has(key))err('섹션 키가 잘못됐습니다.');if(!id)err('상품 ID가 비어 있습니다.');
  const data=await readAll(scope,new Set([key])),item=(data.get(key)||[]).find(r=>r.id===id);if(!item)err('선택 상품이 해당 섹션에 배치되어 있지 않습니다.',409);
- const now=new Date().toISOString(),p=Object.assign({},item.payload);
- if(mode==='demote')p.sectionRevenueOverride={scopeKey:groupScope(scope,key),mode:'demote',decidedBy:actor,decidedAt:now};
- else delete p.sectionRevenueOverride;
- await Store.update('gslot_candidates','id=eq.'+encodeURIComponent(id),{source_payload:p,updated_at:now});
- return{candidateId:id,sectionKey:key,override:mode==='demote'?'demote':''};
+ const now=new Date().toISOString(),p=Object.assign({},item.payload),current=obj(p.sectionRevenueOverride),belongs=current.scopeKey===groupScope(scope,key),prior=belongs?str(current.mode):'';
+ if(mode==='demote'&&prior==='pin_top')err('고정된 상품은 먼저 관리자 최상단 고정을 해제하세요.',409);
+ if(mode==='pin_top'){
+  // A new explicit pin supersedes any prior ordinary-automation release.
+  delete p.sectionRevenueAutomation;
+  p.sectionRevenueOverride={schema:'igdc-section-explicit-top-pin.v1',scopeKey:groupScope(scope,key),mode:'pin_top',pinnedAt:now,decidedBy:actor,decidedAt:now};
+ }
+ else if(mode==='demote')p.sectionRevenueOverride={schema:'igdc-section-revenue-override.v1',scopeKey:groupScope(scope,key),mode:'demote',decidedBy:actor,decidedAt:now};
+ else if(mode==='unpin_top'&&prior!=='pin_top')err('현재 고정 상태가 아니므로 해제할 수 없습니다.',409);
+ else if(mode==='restore'&&prior!=='demote')err('현재 후순위 상태가 아닙니다.',409);
+ else if(mode==='unpin_top'){
+  delete p.sectionRevenueOverride;
+  // Release ONLY the explicit top-pin restriction in this market/section.
+  // It does not release an unrelated supplier contract or public slot guard.
+  p.sectionRevenueAutomation={schema:'igdc-section-ordinary-automation-v1',scopeKey:groupScope(scope,key),ordinaryEligible:true,unpinReleasedAt:now,unpinReleasedBy:actor};
+ }
+ else if(mode==='restore')delete p.sectionRevenueOverride;
+ else err('알 수 없는 관리자 예외 지정',400);
+ // Prevent a stale pin/unpin response from replacing a newer administrator decision.
+ if(!str(item.candidateUpdatedAt))err('원장 버전을 확인할 수 없어 고정 작업을 중단했습니다.',409);
+ const changed=await Store.update('gslot_candidates','id=eq.'+encodeURIComponent(id)+'&updated_at=eq.'+encodeURIComponent(item.candidateUpdatedAt),{source_payload:p,updated_at:now});
+ if(!Array.isArray(changed)||!changed.some(row=>str(row.id)===id))err('관리 상태가 변경되었습니다. 새로 조회 후 다시 시도하세요.',409);
+ return{candidateId:id,sectionKey:key,override:mode==='pin_top'?'pin_top':mode==='demote'?'demote':'',explicitTopPin:mode==='pin_top'};
 }
 async function order(scope,keys,apply,actor,offset=0){
  const groups=await readAll(scope,keys),summaries=[],items=[],plans=[];
  for(const key of keys){const rows=groups.get(key)||[],ranked=rows.map(row=>Object.assign(rating(row,scope,key),{row})).sort(compare);
   ranked.forEach((v,i)=>{
    const rank=i+1,priority=Math.max(1,10000-rank);
-   items.push({candidateId:v.candidateId,sectionKey:key,rank,priority,tier:v.tier,className:v.className,override:v.override,title:v.title,previousPriority:v.originalPriority});
+   items.push({candidateId:v.candidateId,sectionKey:key,rank,priority,tier:v.tier,className:v.className,override:v.override,pinnedAt:v.pinnedAt,title:v.title,previousPriority:v.originalPriority});
    plans.push({item:v.row,priority,rank,key,tier:v.tier,className:v.className});
   });
-  summaries.push({sectionKey:key,count:ranked.length,manualDemoted:ranked.filter(v=>v.override==='demote').length});
+  summaries.push({sectionKey:key,count:ranked.length,manualDemoted:ranked.filter(v=>v.override==='demote').length,manualTopPinned:ranked.filter(v=>v.override==='pin_top').length});
  }
  if(!apply)return{preview:true,applied:false,sections:summaries,items};
- let saved=0;const now=new Date().toISOString();
- // Only ordinal metadata and assignment priority are modified. No section/status/publication writes.
- // Work is retryable; a failed write returns partial progress, never claims completion.
- for(const job of plans.slice(offset,offset+12)){
-  const p=Object.assign({},job.item.payload),scopeKey=groupScope(scope,job.key);
-  p.sectionRevenueRanking={schema:VERSION,scopeKey,rank:job.rank,priority:job.priority,tier:job.tier,className:job.className,rankedAt:now,rankedBy:actor};
-  await Store.update('gslot_candidates','id=eq.'+encodeURIComponent(job.item.id),{source_payload:p,updated_at:now});
-  await Store.update('gslot_slot_assignments','id=eq.'+encodeURIComponent(job.item.assignment.id),{priority:job.priority,updated_at:now,updated_by:actor});
-  saved+=1;
+ const batch=plans.slice(offset,offset+5),now=new Date().toISOString();let saved=0,alreadyComplete=0;
+ for(const job of batch){
+  const row=job.item,scopeKey=groupScope(scope,job.key),prior=obj(row.payload.sectionRevenueRanking);
+  // Each already committed item acts as a durable resume marker: starting an
+  // interrupted apply again at offset 0 skips confirmed records, not reorders them.
+  if(prior.schema==='igdc-section-revenue-order-v1.0.0'&&prior.scopeKey===scopeKey&&Number(prior.rank)===job.rank&&Number(prior.priority)===job.priority&&Number(row.assignment.priority)===job.priority){alreadyComplete++;continue;}
+  const p=Object.assign({},row.payload);
+  // Canonical Snapshot publisher accepts this data-contract schema, while the
+  // endpoint VERSION may evolve independently. Without this the front ignores ranking.
+  p.sectionRevenueRanking={schema:'igdc-section-revenue-order-v1.0.0',scopeKey,rank:job.rank,priority:job.priority,tier:job.tier,className:job.className,rankedAt:now,rankedBy:actor};
+  const revision=str(row.candidateUpdatedAt),asgnRevision=str(row.assignment.updated_at);
+  if(!revision||!asgnRevision)err('변경 감지를 위한 원장 버전이 없어 순위 적용을 중지했습니다.',409);
+  const written=await Store.update('gslot_candidates','id=eq.'+encodeURIComponent(row.id)+'&updated_at=eq.'+encodeURIComponent(revision),{source_payload:p,updated_at:now});
+  if(!Array.isArray(written)||!written.some(x=>str(x.id)===row.id))err('관리자 변경이 감지되어 순위 적용을 중단했습니다. 다시 실행하면 저장된 항목은 건너뜁니다.',409);
+  const assigned=await Store.update('gslot_slot_assignments','id=eq.'+encodeURIComponent(row.assignment.id)+'&candidate_id=eq.'+encodeURIComponent(row.id)+'&updated_at=eq.'+encodeURIComponent(asgnRevision),{priority:job.priority,updated_at:now,updated_by:actor});
+  if(!Array.isArray(assigned)||!assigned.some(x=>str(x.id)===str(row.assignment.id)))err('배치 원장 충돌로 순위 적용이 중단되었습니다. 다시 실행하면 완료 항목은 건너뜁니다.',409);
+  saved++;
  }
- return{preview:false,applied:true,saved,sections:summaries,items,nextOffset:offset+saved,remaining:Math.max(0,plans.length-(offset+saved)),frontMatchExecuted:false,placementsModified:0};
+ const nextOffset=offset+batch.length;
+ return{preview:false,applied:nextOffset>=plans.length,saved,alreadyComplete,sections:summaries,items,nextOffset,remaining:Math.max(0,plans.length-nextOffset),frontMatchExecuted:false,placementsModified:0};
 }
 exports.handler=async(event)=>{
  try{
@@ -106,7 +152,7 @@ exports.handler=async(event)=>{
   if(!keys.size)err('정렬할 섹션을 선택하세요.');
   let result;
   if(action==='preview'||action==='apply'){const offset=Number(input.offset||0);if(!Number.isInteger(offset)||offset<0||offset>3000)err('정렬 저장 위치가 올바르지 않습니다.');result=await order(scope,keys,action==='apply',name,offset);}
-  else if(action==='demote'||action==='restore'){
+  else if(['demote','restore','pin_top','unpin_top'].includes(action)){
     if(keys.size!==1)err('예외 지정은 한 섹션씩 처리하세요.');
     result=await setOverride(scope,[...keys][0],str(input.candidateId),action,name);
   }else err('알 수 없는 수익 순위 작업입니다.');

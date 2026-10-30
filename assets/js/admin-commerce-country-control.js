@@ -1086,7 +1086,8 @@
     if(genericOrChallengeResearchTitle(title)){activeImage='';imageAlts=[];}
     var image=activeImage?(productUrl?'<a href="'+esc(productUrl)+'" target="_top" data-review-link="1" rel="noreferrer external nofollow" referrerpolicy="no-referrer">':'')+'<img data-product-image="1" '+(imageAlts.length?'data-image-alternates="'+esc(JSON.stringify(imageAlts))+'" ':'')+'src="'+esc(activeImage)+'" alt="'+esc(title)+'" loading="lazy" decoding="async" fetchpriority="low">'+(productUrl?'</a>':'')+'<div class="product-image-missing hidden">상품 이미지 원본을 불러오지 못했습니다 · 상품 URL 확인 필요</div>':'<div class="product-image-missing">상품 이미지 확인 필요 · 이미지 없다고 상품이 없는 것은 아닙니다</div>';
     var revenueRank=mode==='candidate'&&PRODUCT_SECTION_MAP[groupKey]&&sectionRevenueViewScope===scopeKey()?sectionRevenueView[text(row.candidateId||row.id)]:null;
-    var revenueRankControl=revenueRank?'<div class="small">수익 우선 순번 <strong>'+esc(revenueRank.rank)+'위</strong> · '+esc(revenueRank.className||'ORDINARY')+(revenueRank.override==='demote'?' · 관리자 후순위 지정':'')+'</div><button type="button" class="ghost" data-section-revenue-action="'+(revenueRank.override==='demote'?'restore':'demote')+'" data-section-revenue-section="'+esc(groupKey)+'" data-section-revenue-id="'+esc(row.candidateId||row.id)+'">'+(revenueRank.override==='demote'?'관리자 후순위 해제':'관리자 판단으로 뒤로 보내기')+'</button>':'';
+    var rowPinMeta=row.sectionRevenueOverride||(row.source_payload&&row.source_payload.sectionRevenueOverride)||{},pinOverride=(revenueRank&&revenueRank.override)||((rowPinMeta.scopeKey===scopeKey()+'|'+groupKey)?rowPinMeta.mode:'');
+    var revenueRankControl=mode==='candidate'&&PRODUCT_SECTION_MAP[groupKey]&&row.id?'<div class="small">'+(revenueRank?'수익 우선 순번 <strong>'+esc(revenueRank.rank)+'위</strong> · '+esc(revenueRank.className||'ORDINARY'):'현재 순위: 미조회')+(pinOverride==='pin_top'?' · 관리자 최상단 고정':(pinOverride==='demote'?' · 관리자 후순위 지정':''))+'</div><button type="button" class="ghost" data-section-revenue-action="'+(pinOverride==='pin_top'?'unpin_top':'pin_top')+'" data-section-revenue-section="'+esc(groupKey)+'" data-section-revenue-id="'+esc(row.candidateId||row.id)+'">'+(pinOverride==='pin_top'?'관리자 최상단 고정 해제':'관리자 최상단 고정')+'</button> '+(pinOverride==='pin_top'?'':'<button type="button" class="ghost" data-section-revenue-action="'+(pinOverride==='demote'?'restore':'demote')+'" data-section-revenue-section="'+esc(groupKey)+'" data-section-revenue-id="'+esc(row.candidateId||row.id)+'">'+(pinOverride==='demote'?'관리자 후순위 해제':'관리자 판단으로 뒤로 보내기')+'</button>'):'';
     var links=[];if(productUrl)links.push(externalReviewAnchor(productUrl,'상품 원본·판매처 열기',''));if(supplierUrl)links.push(externalReviewAnchor(supplierUrl,'업체 사이트 확인',''));var placementHtml='',actions='';
     if(mode==='candidate'||mode==='section'){
       placementHtml=productManagementOptions(row,mode,groupKey,slotAllowed);
@@ -1146,62 +1147,101 @@
     });
   }
   function sectionRevenueTargetKeys(){
-    var selected=selectedSectionKeys();return selected.length?selected:PRODUCT_SECTIONS.map(function(s){return s.key;});
+    return selectedSectionKeys();
+  }
+  async function requestSectionRevenueOrder(action,key,candidateId,progress){
+    var offset=0,firstItems=null,response=null;
+    for(var attempt=0;attempt<300;attempt++){
+      response=await api(SECTION_REVENUE_RANK,'ranking','POST',{}, {
+        action:action,sectionKeys:[key],candidateId:candidateId||'',countryCode:selectedCountry,
+        subdivisionCode:selectedSubdivision||'NATIONWIDE',offset:offset
+      },45000);
+      if(!response||response.ok===false)throw new Error(text(response&&response.error)||'rank_unavailable');
+      if(firstItems===null&&Array.isArray(response.items))firstItems=response.items;
+      if(action!=='apply'||!Number(response.remaining||0))break;
+      var next=Number(response.nextOffset||0);
+      if(next<=offset)throw new Error('수익 순위 저장 위치가 진행되지 않아 중단했습니다: '+key);
+      offset=next;
+      if(progress)progress(offset,offset+Number(response.remaining||0));
+      if(attempt===299)throw new Error('수익 순위 저장 반복 한도 초과: '+key);
+    }
+    if(firstItems!==null)response.items=firstItems;
+    return response;
   }
   async function operateSectionRevenueRanking(action,oneSection,candidateId){
     if(sectionRevenueBusy||!selectedCountry||productFrontSyncActive||productAutomationActive||productLoopActive){show('조사 또는 공개 작업이 끝난 다음 수익 순위를 처리하세요.','warn');return;}
     var keys=oneSection?[oneSection]:sectionRevenueTargetKeys(),isApply=action==='apply';
+    if(!keys.length){
+      var notice='수익 우선 순위를 계산할 섹션을 먼저 선택하세요. 전체 실행은 20개 전체 선택을 체크하세요.';
+      var emptyStatus=$('sectionRevenueRankingState');if(emptyStatus)emptyStatus.textContent=notice;
+      show(notice,'warn');return;
+    }
     if(isApply&&!window.confirm('선택된 '+keys.length+'개 섹션 안에서만 수익 우선 순번을 저장합니다. 상품 소속 섹션, 후보 원장 승인, 프론트 공개 상태는 변경하지 않습니다.\n\n적용 후 프론트에 반영하려면 기존 Front Match를 별도로 실행해야 합니다. 진행하시겠습니까?'))return;
+    if(action==='pin_top'&&!window.confirm('이 상품을 소속 섹션의 최상단에 관리자 지정으로 고정하시겠습니까? 일반 자동 수익 순위 변경에서 제외됩니다.'))return;
+    if(action==='unpin_top'&&!window.confirm('관리자 최상단 고정을 해제하고 일반 자동 수익 순위 관리 대상으로 되돌리시겠습니까?'))return;
     if(action==='demote'&&!window.confirm('선택 상품을 소속 섹션의 수익 우선 정렬에서 뒤쪽으로 보내겠습니까? 다른 섹션으로 옮기지 않습니다.'))return;
-    sectionRevenueBusy=true;var status=$('sectionRevenueRankingState');if(status)status.textContent='수익 순위 '+(action==='preview'?'미리보기':action==='apply'?'저장':action==='demote'?'관리자 예외 지정':'예외 해제')+' 처리 중…';
+    sectionRevenueBusy=true;
+    var status=$('sectionRevenueRankingState'),completed=0;
+    if(status)status.textContent='수익 우선 순위 '+(isApply?'저장':'미리보기')+' 준비 · '+keys.length+'개 섹션';
     try{
-      var offset=0,response=null,firstItems=null,attempts=0;
-      do{
-        response=await api(SECTION_REVENUE_RANK,'ranking','POST',{}, {action:action,sectionKeys:keys,candidateId:candidateId||'',countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',offset:offset},75000);
-        if(!response||response.ok===false)throw new Error(text(response&&response.error)||'rank_unavailable');
-        if(firstItems===null&&Array.isArray(response.items))firstItems=response.items;
-        if(action!=='apply')break;
-        if(Number(response.remaining||0)>0&&Number(response.nextOffset)<=offset)throw new Error('정렬 저장 위치가 진행되지 않아 중단했습니다.');
-        offset=Number(response.nextOffset||0);attempts+=1;
-        if(status)status.textContent='수익 순위 저장 '+offset+'/'+(offset+Number(response.remaining||0))+'건 · 기존 섹션과 공개 상태 유지';
-        if(attempts>300)throw new Error('정렬 저장 안전 반복 한도 초과');
-      }while(Number(response.remaining||0)>0);
-      if(firstItems)response.items=firstItems;
-      if(response&&response.ok===false)throw new Error(response.error||'ranking_failed');
-      if(action==='demote'||action==='restore'){
-        if(status)status.textContent='관리자 개별 조정 저장 완료 · 같은 섹션에서 수익 우선 순번을 재계산합니다.';
-        return await operateSectionRevenueRankFollowUp(keys[0]);
+      if(['demote','restore','pin_top','unpin_top'].includes(action)){
+        await requestSectionRevenueOrder(action,keys[0],candidateId);
+        if(status)status.textContent='관리자 개별 조정 저장 완료 · 해당 섹션의 수익 우선 순번을 다시 계산합니다.';
+        try{await operateSectionRevenueRankFollowUp(keys[0]);if($('sectionRevenuePinPanel')&&$('sectionRevenuePinPanel').open)await refreshSectionRevenuePins();return;}
+        catch(rankError){show('관리자 고정·해제는 저장됐지만 순위 재계산에 실패했습니다. 해당 섹션 순위 적용을 다시 실행하세요: '+text(rankError&&rankError.message),'warn');}
+        return;
       }
-      var map={},items=Array.isArray(response.items)?response.items:[];
+      var summaries=[],items=[];
+      for(var i=0;i<keys.length;i++){
+        var key=keys[i];
+        if(status)status.textContent='수익 우선 '+(isApply?'순번 저장':'미리보기')+' · 섹션 '+(i+1)+'/'+keys.length+' · '+sectionLabel(key);
+        var response=await requestSectionRevenueOrder(action,key,'',function(done,total){
+          if(status)status.textContent='수익 순위 저장 · 섹션 '+(i+1)+'/'+keys.length+' · '+done+'/'+total+'건';
+        });
+        (response.sections||[]).forEach(function(entry){summaries.push(entry);});
+        (response.items||[]).forEach(function(entry){items.push(entry);});
+        completed+=1;
+      }
+      var map={};
       items.forEach(function(item){var id=text(item&&item.candidateId);if(id)map[id]=item;});
       sectionRevenueView=map;sectionRevenueViewScope=scopeKey();
-      var summaries=Array.isArray(response.sections)?response.sections:[];
-      var message='수익 우선 '+(isApply?'순번 저장':'미리보기')+' · '+summaries.length+'개 섹션 · '+items.length+'개 상품 · 관리자 개별 뒤로 보내기 '+summaries.reduce(function(n,x){return n+Number(x.manualDemoted||0);},0)+'건 · 섹션 이동 0건 · 프론트 공개 변경 0건';
-      if(status)status.textContent=message+(isApply?' · 프론트 게시 순서 변경은 별도 Front Match 실행 후 반영됩니다.':' · 적용 버튼을 누르기 전에는 원장 변경이 없습니다.');
+      var message='수익 우선 '+(isApply?'순번 저장':'미리보기')+' · '+summaries.length+'개 섹션 · '+items.length+'개 상품 · 관리자 후순위 지정 '+summaries.reduce(function(n,x){return n+Number(x.manualDemoted||0);},0)+'건 · 관리자 최상단 고정 '+summaries.reduce(function(n,x){return n+Number(x.manualTopPinned||0);},0)+'건 · 섹션 이동 0건 · 공개 변경 0건';
+      if(status)status.textContent=message+(isApply?' · 프론트 순서는 별도 Front Match 실행 후 반영됩니다.':' · 미리보기는 저장하지 않았습니다.');
       show(message,'ok');renderProducts(productRows);
-    }catch(error){var msg='수익 순위 작업을 중단했습니다: '+text(error&&error.message||error);if(status)status.textContent=msg;show(msg,'fail');}
-    finally{sectionRevenueBusy=false;}
+    }catch(error){
+      var msg='수익 순위 작업을 중단했습니다 ('+completed+'/'+keys.length+'개 섹션 완료): '+text(error&&error.message||error);
+      if(status)status.textContent=msg;
+      show(msg,'fail');
+    }finally{sectionRevenueBusy=false;}
   }
   async function operateSectionRevenueRankFollowUp(sectionKey){
-    var result=null,offset=0,firstItems=null;
-    for(var pass=0;pass<300;pass++){
-      result=await api(SECTION_REVENUE_RANK,'ranking','POST',{}, {action:'apply',sectionKeys:[sectionKey],countryCode:selectedCountry,subdivisionCode:selectedSubdivision||'NATIONWIDE',offset:offset},75000);
-      if(result&&result.ok===false)throw new Error(result.error||'ranking_followup_failed');
-      if(firstItems===null)firstItems=result.items||[];
-      if(!Number(result.remaining||0))break;
-      if(Number(result.nextOffset)<=offset)throw new Error('개별 예외 적용 중 저장 위치가 멈췄습니다.');
-      offset=Number(result.nextOffset||0);
-    }
-    if(firstItems)result.items=firstItems;
-    if(result&&result.ok===false)throw new Error(result.error||'ranking_followup_failed');
+    var result=await requestSectionRevenueOrder('apply',sectionKey,'');
     sectionRevenueViewScope=scopeKey();(result.items||[]).forEach(function(item){sectionRevenueView[text(item.candidateId)]=item;});
     renderProducts(productRows);show(sectionLabel(sectionKey)+' 수익 순위 개별 조정 완료 · 다른 섹션·Front Match 변경 없음','ok');
+  }
+  function openSectionRevenuePins(){
+    var panel=$('sectionRevenuePinPanel'),selector=$('sectionRevenuePinSection');if(!panel||!selector)return;
+    if(!selector.options.length){PRODUCT_SECTIONS.forEach(function(section){var option=document.createElement('option');option.value=section.key;option.textContent=section.label;selector.appendChild(option);});}
+    if(selectedSectionKeys().length===1)selector.value=selectedSectionKeys()[0];
+    panel.open=true;refreshSectionRevenuePins();
+  }
+  async function refreshSectionRevenuePins(){
+    var key=text($('sectionRevenuePinSection')&&$('sectionRevenuePinSection').value),target=$('sectionRevenuePinList');if(!key||!PRODUCT_SECTION_MAP[key]||!target)return;
+    target.textContent='관리자 최상단 고정 상품 확인 중 · '+sectionLabel(key);
+    try{
+      var result=await requestSectionRevenueOrder('preview',key,''),ranked=Array.isArray(result.items)?result.items:[],pinned=ranked.filter(function(row){return row.override==='pin_top';});
+      ranked.forEach(function(item){sectionRevenueView[text(item.candidateId)]=item;});sectionRevenueViewScope=scopeKey();
+      target.innerHTML='<strong>'+esc(sectionLabel(key))+' · 고정 '+pinned.length+'건</strong>'+(pinned.length?'<div class="small">고정 상품은 일반 자동 랭킹 교체에서 우선 보호됩니다. 고정 해제 후에는 일반 상품으로 돌아갑니다.</div>'+pinned.map(function(item){return'<div class="small" style="margin:5px 0">'+esc(item.rank)+'위 · '+esc(item.title||item.candidateId)+' <button type="button" class="ghost" data-section-revenue-action="unpin_top" data-section-revenue-section="'+esc(key)+'" data-section-revenue-id="'+esc(item.candidateId)+'">고정 해제</button></div>';}).join(''):'<div class="small">현재 고정 상품이 없습니다. 아래 섹션 카드에서 상품별 「관리자 최상단 고정」을 선택하세요.</div>');
+      renderProducts(productRows);
+    }catch(error){target.textContent='고정 목록을 조회하지 못했습니다. '+text(error&&error.message||error);}
   }
   function wireSectionRevenueControls(){
     document.addEventListener('click',function(event){
       var node=event.target&&event.target.closest&&event.target.closest('[data-section-revenue-action]');if(!node)return;
       event.preventDefault();event.stopPropagation();var action=node.getAttribute('data-section-revenue-action'),key=node.getAttribute('data-section-revenue-section')||'',id=node.getAttribute('data-section-revenue-id')||'';
-      if(!['preview','apply','demote','restore'].includes(action))return;
+      if(action==='manage-pins'){openSectionRevenuePins();return;}
+      if(action==='list-pins'){refreshSectionRevenuePins();return;}
+      if(!['preview','apply','demote','restore','pin_top','unpin_top'].includes(action))return;
       operateSectionRevenueRanking(action,key,id);
     });
   }

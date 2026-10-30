@@ -642,43 +642,21 @@
     const meta = qs('.meta', card);
     if (!meta) return null;
     const grid = card.closest('.thumb-grid[data-psom-key]');
-    if (!grid || !COMPACT_MAIN_KEYS.has(grid.getAttribute('data-psom-key'))) return qs('.sn-card-actions', meta);
+    if (!grid || !COMPACT_MAIN_KEYS.has(grid.getAttribute('data-psom-key'))) return null;
     let bar = qs('.sn-card-actions', meta);
     if (!bar) {
       bar = document.createElement('div');
       bar.className = 'sn-card-actions';
       meta.appendChild(bar);
     }
-    const labels = socialUiLabels(), metricLabels = socialMetricLabels();
-    // Remove legacy order and duplicate buttons once; future refreshes reuse nodes.
-    for (const metric of ['likes', 'clicks']) {
-      let el = qs('.sn-card-metric[data-sn-metric="' + metric + '"]', bar);
-      if (!el) {
-        el = document.createElement('span');
-        el.className = 'sn-card-metric';
-        el.dataset.snMetric = metric;
-      }
-      bar.appendChild(el);
-    }
-    for (const action of ['recommend', 'share', 'url']) {
-      let item = qs('.sn-card-action[data-sn-action="' + action + '"]', bar);
-      if (!item) {
-        item = document.createElement('span');
-        item.className = 'sn-card-action';
-        item.dataset.snAction = action;
-        item.setAttribute('role', 'button');
-      }
-      const label = action === 'recommend' ? labels.recommend : action === 'share' ? labels.share : metricLabels.url;
-      item.textContent = action === 'recommend' ? '★' : action === 'share' ? '↗' : '🔗';
-      item.title = action === 'recommend' ? ('IGDC · ' + label) : label;
-      item.setAttribute('aria-label', action === 'recommend' ? ('IGDC · ' + label) : label);
-      const sample = card.dataset.sample === '1';
-      item.tabIndex = sample ? -1 : 0;
-      item.setAttribute('aria-hidden', sample ? 'true' : 'false');
-      if (action === 'recommend') item.setAttribute('aria-pressed', !sample && activeLocalRecommendation(card.dataset.latestContentUrl || card.dataset.contentUrl || card.href) ? 'true' : 'false');
-      bar.appendChild(item);
-    }
-    refreshCardMetricValues(card);
+    // No faux Like, Recommend, Subscribe, or Share controls. The originating
+    // provider owns those actions in its official embed/original post.
+    bar.replaceChildren();
+    const name = grid.getAttribute('data-psom-key').slice(7);
+    const label = document.createElement('span');
+    label.className = 'sn-native-provider-name';
+    label.textContent = ({ youtube:'YouTube', instagram:'Instagram', tiktok:'TikTok', facebook:'Facebook', reddit:'Reddit' })[name] || name;
+    bar.appendChild(label);
     return bar;
   }
   function createShareDialog() {
@@ -1001,7 +979,24 @@
 .thumb-grid[data-psom-key="social-facebook"] a.card .sn-card-action{min-height:24px!important;padding:3px!important;font-size:12px!important;font-weight:650!important;}
 .thumb-grid[data-psom-key="social-facebook"] a.card .meta{min-height:0!important;}
 .thumb-grid[data-psom-key="social-facebook"] a.card .title{margin:0!important;}
-.thumb-grid[data-psom-key="social-facebook"] a.card .desc{margin:0!important;}
+ .thumb-grid[data-psom-key="social-facebook"] a.card .desc{margin:0!important;}
+/* Native interactions only: this footer identifies the provider, not a fake
+   reaction meter. Equal footer baseline; never touch data-psom-key=rightPanel. */
+.thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-facebook"] a.card .sn-card-actions,
+.thumb-grid[data-psom-key="social-reddit"] a.card .sn-card-actions{display:flex!important;align-items:center!important;justify-content:flex-start!important;min-height:24px!important;height:24px!important;margin-top:auto!important;padding-top:2px!important;box-sizing:border-box!important;}
+.thumb-grid[data-psom-key^="social-"] a.card .sn-native-provider-name{font-size:11px;font-weight:650;color:#526477;line-height:1.35;}
+.thumb-grid[data-psom-key="social-facebook"] a.card .pic{aspect-ratio:4 / 5!important;background:#101318!important;}
+.thumb-grid[data-psom-key="social-facebook"] a.card .pic img{object-fit:contain!important;}
+.thumb-grid[data-psom-key="social-reddit"]{grid-auto-flow:column!important;grid-template-rows:1fr!important;grid-auto-columns:minmax(215px,250px)!important;align-items:stretch!important;gap:12px!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card{box-sizing:border-box!important;width:100%!important;min-width:0!important;display:flex!important;flex-direction:column!important;align-self:stretch!important;overflow:hidden!important;border-radius:12px!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .pic{aspect-ratio:4 / 5!important;min-height:0!important;flex:0 0 auto!important;display:flex!important;align-items:center!important;justify-content:center!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .meta{display:flex!important;flex:1 0 auto!important;flex-direction:column!important;gap:5px!important;box-sizing:border-box!important;padding:9px 11px 11px!important;text-align:start!important;background:#fff!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .title{height:calc(3 * 1.36em)!important;min-height:calc(3 * 1.36em)!important;max-height:calc(3 * 1.36em)!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .desc{height:1.4em!important;min-height:1.4em!important;}
+@media(max-width:767px){.thumb-grid[data-psom-key="social-reddit"]{grid-auto-columns:100%!important;}}
 `;
     document.head.appendChild(style);
   }
@@ -1161,7 +1156,7 @@
       const currentPlatform = pic.dataset.snMediaPlatform;
       const currentUrl = pic.dataset.snMediaUrl || '';
       if ((currentPlatform === 'instagram' && !/\/(reel|reels)\//i.test(currentUrl)) ||
-          (currentPlatform === 'facebook' && !/\/(videos|watch)\b/i.test(currentUrl)) || currentPlatform === 'reddit') {
+          currentPlatform === 'reddit') {
         const native = img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 0;
         if (native >= .5 && native <= 2.2) {
           const value = nearestNativeRatio(currentPlatform, native);
@@ -1256,7 +1251,8 @@
       ? (pickCreator(it) || safeText(it && (it.publisher || it.channelName || it.author || (it.source && it.source.publisher))) || (platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "Social"))
       : cardIdentity(it);
     const thumb = pickThumb(it);
-    const originalRatio = COMPACT_MAIN_KEYS.has('social-' + platform) ? originalMediaRatio(platform, url, it) : '';
+    const originalRatio = platform === 'facebook' ? '4 / 5' :
+      (COMPACT_MAIN_KEYS.has('social-' + platform) ? originalMediaRatio(platform, url, it) : '');
 
     const latestContentUrl = safeText(it && (it.latestContentUrl || it.latest_content_url || (it.social && it.social.latestContentUrl)));
     const viewerUrl = safeText(it && (it.viewerUrl || it.permalink || it.href || it.link));

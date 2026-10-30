@@ -34,13 +34,13 @@ const LIMIT_MAP = {
   default: 300
 };
 
-const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.9-social-bilibili-douyin-six-slot-invariant";
+const SNAPSHOT_ENGINE_VERSION = "snapshot-engine-vNext.3.10-social-reddit-five-slot-invariant";
 const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
 const SOCIAL_MANAGED_MAIN_SECTIONS = new Set([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-bilibili", "social-douyin"
+  "social-reddit"
 ]);
 
 function uniq(arr) {
@@ -367,7 +367,7 @@ function enforceSocialMainSectionShape(sections) {
     }
   });
 
-  // The six active Social rows are permanent 100-slot surfaces. New/rebuilt
+  // The five active Social rows are permanent 100-slot surfaces. New/rebuilt
   // sections therefore retain their row even before real content is published.
   for (const sectionKey of SOCIAL_MANAGED_MAIN_SECTIONS) {
     let list = Array.isArray(sections[sectionKey]) ? sections[sectionKey] : [];
@@ -1551,7 +1551,7 @@ function handleSocialSnapshot(bank) {
 
   for (const sectionKey of sectionKeys) {
 
-    // The six managed SNS sections are authoritative release surfaces: remove
+    // The five managed SNS sections are authoritative release surfaces: remove
     // only rows previously published by the Social candidate pipeline, while
     // preserving structural/sample/manual rows. rightPanel and social-maru are
     // never in SOCIAL_MANAGED_MAIN_SECTIONS and are therefore untouched.

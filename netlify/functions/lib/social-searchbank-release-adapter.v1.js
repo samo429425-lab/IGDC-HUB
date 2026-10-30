@@ -349,12 +349,8 @@ function psomSocialSections(root) {
     const rows = doc && doc.pages && doc.pages.social && doc.pages.social.sections;
     if (Array.isArray(rows) && rows.length) {
       const sections = new Set(rows.map(text).filter(Boolean));
-      // Section-local additive contract only; shared PSOM JSON is read-only.
-      // Other page contracts and Social rightPanel are unchanged.
-      if (SocialStore.Policy.SECTION_KEYS.includes("social-snapchat") &&
-          sections.has("social-facebook") && sections.has("social-bilibili")) {
-        sections.add("social-snapchat");
-      }
+      // Only the five Social main sections published by the current PSOM are eligible.
+      // All other pages and the reserved rightPanel remain unchanged.
       return { file, sections };
     }
   }

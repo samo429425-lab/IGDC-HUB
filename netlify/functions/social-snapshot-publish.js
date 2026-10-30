@@ -15,6 +15,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const CountryRouting = require("./lib/social-country-routing.v1");
 const SocialSearchBankReleaseAdapter = require("./lib/social-searchbank-release-adapter.v1");
 const InfluencerFrontSync = require("./lib/social-influencer-front-sync.v1");
+const VerifiedPromotionPartners = require("./lib/social-promotion-partners.v1");
 
 const VERSION =
   "social-snapshot-publish-v1.19.0-selective-needed-only-replacement";
@@ -966,7 +967,11 @@ exports.handler = async function (event) {
       const allRows = typeof SocialStore.selectCandidatesBySections === "function"
         ? await SocialStore.selectCandidatesBySections(approvedQuery(params.limit), 1000)
         : await SocialStore.selectCandidates(approvedQuery(params.limit));
-      const approvedRows = Array.isArray(allRows) ? allRows : [];
+      // Contract-approved partners receive higher rotation priority only when the
+      // candidate is already publish-eligible and has a verified matching channel.
+      // A missing partner table MUST NOT block the existing Social publication.
+      const partnerOverlay = await VerifiedPromotionPartners.apply(Array.isArray(allRows) ? allRows : []);
+      const approvedRows = partnerOverlay.rows;
       const requestedIds = new Set(candidateIds);
       const requestedSectionSet = new Set(requestedSections);
       rows = approvedRows.filter((row) => {
@@ -997,6 +1002,9 @@ exports.handler = async function (event) {
           selectiveReplacement: authoritativeReconcile,
         },
       );
+      // Contract-first front ordering is applied only after existing content
+      // quality, regional, safety and public-URL gates have passed.
+      VerifiedPromotionPartners.prioritizeSnapshotSlots(snapshot, rows);
     }
     // Canonicalize to the exact JSON shape that Supabase JSONB stores before
     // calculating the release hash. publicSocialSlot intentionally uses

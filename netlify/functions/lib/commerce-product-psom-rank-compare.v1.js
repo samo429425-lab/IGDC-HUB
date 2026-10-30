@@ -12,11 +12,21 @@ const plain=x=>x&&typeof x==='object'&&!Array.isArray(x)?x:{};
 const arr=x=>Array.isArray(x)?x:[];
 const LIVE=new Set(['published','matched','active','publish_requested','queued','pending_build','unpublish_requested','unpublish_pending','ready','audit_ready']);
 function sectionKey(row){const p=plain(row&&row.source_payload);for(const placement of [p.approvedPlacement,p.selectedPlacement,p.primaryPlacement,p.placement]){const value=plain(placement),direct=text(value.key),joined=text(value.page)+'|'+text(value.section||value.sectionKey);const key=SECTION_KEYS.has(direct)?direct:(SECTION_KEYS.has(joined)?joined:'');if(key)return key;}return '';}
-function isProtected(row,relations){const p=plain(row&&row.source_payload),m=plain(p.managementControl),q=plain(p.queueControl),front=plain(p.frontPublication),slot=low(p.slotDecision);
+function isProtected(row,relations){
+ const p=plain(row&&row.source_payload),m=plain(p.managementControl),q=plain(p.queueControl),front=plain(p.frontPublication),slot=low(p.slotDecision);
+ const key=sectionKey(row),override=plain(p.sectionRevenueOverride),release=plain(p.sectionRevenueAutomation);
+ const pinned=override.mode==='pin_top'&&text(override.scopeKey).endsWith('|'+key);
+ // Unpin removes the extra top-pin lock. Previously placed private products
+ // can then rejoin ordinary PSOM comparison, provided they have NO durable
+ // assignment and NO public or contractual protection. The release marker is
+ // written only by the authenticated administrator override endpoint.
+ const ordinaryReleased=release.schema==='igdc-section-ordinary-automation-v1'&&release.ordinaryEligible===true&&text(release.scopeKey).endsWith('|'+key);
+ const legacyManualLock=!ordinaryReleased&&(m.administratorLocked===true||m.aiReclassificationAllowed===false||plain(p.approvedPlacement).administratorSelected===true);
  // Every durable slot assignment is preserved: even a stale assignment can be
- // referenced by a deployment, and must be reconciled by a separate workflow.
- return !row||slot!=='slot_candidate'||m.administratorLocked===true||m.aiReclassificationAllowed===false||plain(p.approvedPlacement).administratorSelected===true||
- LIVE.has(low(front.status))||row._relationProtected===true||arr(relations).length>0||q.permanentExcluded===true;
+ // referenced by a deployment, and must be reconciled separately. An explicit
+ // pin release is NOT permission to delete a live assignment or MOU supplier.
+ return !row||pinned||slot!=='slot_candidate'||row._supplierRegistryProtected===true||legacyManualLock||
+  LIVE.has(low(front.status))||row._relationProtected===true||arr(relations).length>0||q.permanentExcluded===true;
 }
 function rank(row){const p=plain(row&&row.source_payload),v=plain(p.valueAssessment),r=plain(p.productRanking),commercial=low(p.commercialPriorityClass),stage=low(plain(p.affiliateSettlement).stage);
  const base=Reserve.score(row);let bonus=0;

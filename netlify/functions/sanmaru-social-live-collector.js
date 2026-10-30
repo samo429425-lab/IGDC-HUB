@@ -92,6 +92,7 @@ const CONTENT_SITE_FILTERS = Object.freeze({
   instagram: { host: "instagram.com", hint: "(inurl:reel OR inurl:/p/)" },
   tiktok: { host: "tiktok.com", hint: "inurl:video" },
   facebook: { host: "facebook.com", hint: "(inurl:reel OR inurl:videos OR inurl:watch OR inurl:posts)" },
+  reddit: { host: "reddit.com", hint: "inurl:comments" },
   snapchat: { host: "snapchat.com", hint: "inurl:spotlight" },
   bilibili: { host: "bilibili.com", hint: "inurl:video" },
   douyin: { host: "douyin.com", hint: "(inurl:video OR inurl:note)" }
@@ -118,10 +119,8 @@ function readSocialPsomContract() {
      Object.entries(social.mapping || {}).forEach(([platform, key]) => {
        if (SocialStore.Policy.SECTION_KEYS.includes(key)) mapping[platform] = key;
      });
-     // Social-only migration: no global PSOM change. Reddit manually reviewed
-     // public post URLs can be accepted, but Reddit API scraping is NOT enabled.
-     if (!sections.includes("social-reddit")) sections.push("social-reddit");
-     mapping.reddit = "social-reddit";
+     // Reddit is explicitly declared in the Social PSOM contract. Never alter
+     // the shared SearchBank ledger or accept arbitrary non-post Reddit links.
       if (sections.length && Object.keys(mapping).length) {
         SOCIAL_PSOM_CACHE = { file, sections, mapping };
         return SOCIAL_PSOM_CACHE;
@@ -154,6 +153,7 @@ const PUBLIC_POST_SEARCH = Object.freeze({
   instagram: { host: "instagram.com", hint: "reel post" },
   tiktok: { host: "tiktok.com", hint: "video" },
   facebook: { host: "facebook.com", hint: "reel video posts" },
+  reddit: { host: "reddit.com", hint: "subreddit comments public post" },
   snapchat: { host: "snapchat.com", hint: "spotlight video" },
   bilibili: { host: "bilibili.com", hint: "video UP creator" },
   douyin: { host: "douyin.com", hint: "video note" }
@@ -173,6 +173,11 @@ const SPARSE_PLATFORM_DISCOVERY_TERMS = Object.freeze({
     "music performance viral creator", "travel destination creator", "food culture creator",
     "education tutorial howto", "science technology creator", "art design creator",
     "nature outdoor wellness", "family entertainment lifestyle"
+  ],
+  reddit: [
+    "art photography creators", "travel city local guides", "science education learning",
+    "technology gadgets tips", "books writing literature", "food cooking culture",
+    "nature outdoors photography", "design crafts communities"
   ],
   facebook: [
     "creator reel public video", "artist musician public reel", "travel food culture creator",
@@ -200,6 +205,7 @@ const SPARSE_DISCOVERY_PLATFORMS = new Set(Object.keys(SPARSE_PLATFORM_DISCOVERY
 const REGISTRY_QUALITY_FOCUS = Object.freeze({
   tiktok: "music travel food culture education art nature lifestyle entertainment useful public creator",
   facebook: "creator reel public video music travel food culture education art nature lifestyle",
+  reddit: "reddit public community posts art travel culture science technology education books food",
   snapchat: "spotlight music travel food culture education nature art entertainment public creator",
   bilibili: "UP主 视频 音乐 旅行 文化 科普 教育 科技 艺术 游戏 动画 美食 documentary creator",
   douyin: "旅游 音乐 文化 美食 艺术 自然 娱乐 健康 教育 travel music culture food art nature entertainment health education"
@@ -392,7 +398,7 @@ function candidateUrls(item) {
     source.title, source.description, social.title, social.description,
     data.title, data.description, data.snippet
   ].map((value) => decodeXml(SocialStore.text(value))).filter(Boolean);
-  const socialUrlRe = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com|youtu\.be|instagram\.com|tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com|facebook\.com|fb\.watch|snapchat\.com|bilibili\.com|b23\.tv|douyin\.com|v\.douyin\.com)\/[^\s<>"'`\]\[()]+/ig;
+  const socialUrlRe = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com|youtu\.be|instagram\.com|tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com|facebook\.com|fb\.watch|(?:www\.)?reddit\.com)\/[^\s<>"'`\]\[()]+/ig;
   for (const value of textFields.slice(0, 18)) {
     let match;
     let guard = 0;
@@ -1379,6 +1385,7 @@ function publicSearchQuery(plan, queryText, registrySeed) {
   // Social-only SearchBank query: remove redundant creator/public qualifiers.
   // Actual Facebook reel/video/post validation still runs after discovery.
   if (platform === "facebook") return [base, exact, "site:facebook.com", "reel"].filter(Boolean).join(" ");
+  if (platform === "reddit") return [base, exact, "site:reddit.com", "inurl:comments"].filter(Boolean).join(" ");
   if (platform === "snapchat") {
     const topic = base.replace(/\b(?:snapchat|spotlight|video|videos|shorts|official|public|latest|popular|creator|high quality)\b/gi, " ")
       .replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
@@ -1401,6 +1408,7 @@ function directProviderQuery(plan, queryText, registrySeed) {
   if (platform === "instagram") return [topic, exact, "site:instagram.com", "inurl:reel"].filter(Boolean).join(" ");
   if (platform === "tiktok") return [topic, exact, "site:tiktok.com", "inurl:video"].filter(Boolean).join(" ");
   if (platform === "facebook") return [topic, exact, "site:facebook.com", "reel"].filter(Boolean).join(" ");
+  if (platform === "reddit") return [topic, exact, "site:reddit.com", "inurl:comments"].filter(Boolean).join(" ");
   if (platform === "snapchat") {
     const shortTopic = topic.replace(/\b(?:spotlight|video|videos|shorts|official|public|latest|popular|creator|high quality)\b/gi, " ")
       .replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
@@ -1424,6 +1432,7 @@ function directProviderBroadQuery(plan, queryText) {
   }
   if (platform === "tiktok") return [topic, "site:tiktok.com", "video"].filter(Boolean).join(" ");
   if (platform === "facebook") return [topic, "site:facebook.com", "reel video"].filter(Boolean).join(" ");
+  if (platform === "reddit") return [topic, "site:reddit.com", "inurl:comments"].filter(Boolean).join(" ");
   if (platform === "douyin") return [topic || "热门", "site:douyin.com", "抖音 视频"].filter(Boolean).join(" ");
   return "";
 }
@@ -1434,6 +1443,7 @@ function naverProviderQuery(plan, queryText) {
     instagram: "instagram.com reel",
     tiktok: "tiktok.com video",
     facebook: "facebook.com reel video",
+    reddit: "reddit.com comments",
     snapchat: "snapchat.com spotlight video",
     bilibili: "bilibili.com video BV",
     douyin: "douyin.com video 抖音"
@@ -3308,9 +3318,6 @@ exports.handler = async function(event) {
     const plan = sectionPlan(sectionKey, route);
     if (!plan) return SocialStore.response(400, { ok: false, version: VERSION, error: "invalid_social_section", allowedSections: Policy.SECTION_KEYS });
 
-    if (sectionKey === "social-reddit" && !/^(intake_urls|direct_intake|intake_channels)$/i.test(SocialStore.text(body.action))) {
-      return SocialStore.response(409, { ok:false, version:VERSION, error:"reddit_manual_public_post_urls_only" });
-    }
     const dryRun = flag(body.dryRun || body.dry_run);
     const batchSize = Math.max(1, Math.min(MAX_BATCH_SIZE, Number(body.batchSize || body.batch_size || body.limit || DEFAULT_BATCH_SIZE) || DEFAULT_BATCH_SIZE));
     const aiPolicy = AIPolicy.normalize(body.aiPolicy || {});

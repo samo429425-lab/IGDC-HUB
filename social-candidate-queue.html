@@ -823,6 +823,47 @@
         복귀하며, 해당 프론트 슬롯은 기존 샘플 또는 준비 중 슬롯으로
         되돌아갑니다.
       </p>
+      <!-- Contract-verified promotion partners. Separate from supplemental discovery registry. -->
+      <section id="socialPartnerPanel" class="panel">
+        <div class="modal-head">
+          <div>
+            <h2 style="margin:0">홍보 제휴·협약 업체 및 인플루언서 관리</h2>
+            <div class="small">일반 인플루언서 등록부와 분리된 계약·협약 원장입니다. 상대 이름과 실제 SNS 채널/업체 주소, 홍보할 유통 상품·미디어 영상 주소를 연결합니다. 서류 확인과 승인 전에는 우선 노출하지 않습니다. 원본 SNS 임베드·소셜 우측 Distribution 패널에는 영향을 주지 않습니다.</div>
+          </div>
+          <div class="collect-controls" style="margin:0">
+            <button id="socialPartnerRefreshBtn" type="button" class="secondary">제휴 원장 새로고침</button>
+            <button id="socialPartnerDiagnosticBtn" type="button" class="secondary">제휴·협약 관리 점검 JSON 다운로드</button>
+            <button id="socialPartnerToggleBtn" type="button" class="secondary" aria-expanded="false">관리창 펼치기</button>
+          </div>
+        </div>
+        <div id="socialPartnerSummary" class="small">제휴·협약 원장 연결 대기</div>
+        <div id="socialPartnerBody" class="hidden">
+          <form id="socialPartnerForm" class="scope-grid" style="margin-top:12px">
+            <input id="socialPartnerId" type="hidden">
+            <div class="scope-field"><label for="socialPartnerName">제휴 업체·인플루언서 명칭 *</label><input id="socialPartnerName" maxlength="180" required placeholder="업체명 또는 활동 이름"></div>
+            <div class="scope-field"><label for="socialPartnerKind">구분</label><select id="socialPartnerKind"><option value="influencer">인플루언서</option><option value="business">제휴·협약 업체</option></select></div>
+            <div class="scope-field"><label for="socialPartnerSection">SNS 플랫폼 *</label><select id="socialPartnerSection"><option value="social-youtube">YouTube</option><option value="social-instagram">Instagram</option><option value="social-tiktok">TikTok</option><option value="social-facebook">Facebook</option><option value="social-reddit">Reddit</option></select></div>
+            <div class="scope-field"><label for="socialPartnerChannel">공식 SNS 프로필·채널 주소 *</label><input id="socialPartnerChannel" type="url" maxlength="1000" required placeholder="https://..."></div>
+            <div class="scope-field"><label for="socialPartnerWebsite">업체 홈페이지 (선택)</label><input id="socialPartnerWebsite" type="url" maxlength="1000" placeholder="https://..."></div>
+            <div class="scope-field"><label for="socialPartnerTarget">홍보 대상 IGDC 유통 상품·미디어 주소 (선택)</label><input id="socialPartnerTarget" type="url" maxlength="1000" placeholder="https://igdcglobal.com/..."></div>
+            <div class="scope-field"><label for="socialPartnerTargetType">홍보 연결 구분</label><select id="socialPartnerTargetType"><option value="distribution">유통 상품·콘텐츠</option><option value="media">미디어 허브 영상</option><option value="platform">플랫폼 공동 홍보</option></select></div>
+            <div class="scope-field"><label for="socialPartnerStatus">업무 상태</label><select id="socialPartnerStatus"><option value="prospect">발굴·검토</option><option value="negotiating">협의·교섭</option><option value="paused">보류</option></select></div>
+            <div class="scope-field"><label for="socialPartnerFrom">협약 시작일 (승인 시 필수)</label><input id="socialPartnerFrom" type="date"></div>
+            <div class="scope-field"><label for="socialPartnerUntil">협약 종료일 (선택)</label><input id="socialPartnerUntil" type="date"></div>
+            <div class="scope-field"><label for="socialPartnerProof">협약·계약 증빙 참조번호 (승인 시 필수)</label><input id="socialPartnerProof" maxlength="240" placeholder="계약 문서 ID 또는 승인 관리번호 (비밀키 입력 금지)"></div>
+            <div class="scope-field"><label for="socialPartnerNote">관리 메모</label><input id="socialPartnerNote" maxlength="1000" placeholder="홍보 범위와 연락 상태 등"></div>
+            <div class="collect-controls" style="grid-column:1/-1">
+              <button id="socialPartnerSaveBtn" type="submit">제휴 후보 등록·변경 저장</button>
+              <button id="socialPartnerVerifyBtn" type="button" class="publish">협약 검증 승인·우선 배치 활성화</button>
+              <button id="socialPartnerPauseBtn" type="button" class="secondary">선택 계약 우선 배치 중지</button>
+              <button id="socialPartnerClearBtn" type="button" class="secondary">신규 입력으로 전환</button>
+            </div>
+          </form>
+          <div class="small">협약 검증 승인은 권한 있는 책임자가 실제 계약 증빙을 확인한 뒤에만 실행할 수 있습니다. 활성 계약이더라도 실제 공개 콘텐츠 URL·품질·안전 심사를 통과한 후보만 우선 순위에 반영합니다. 기존 프론트 노출은 정상 발행 절차를 따라 변경됩니다.</div>
+          <div id="socialPartnerState" class="state" role="status" style="display:block;margin:10px 0">제휴 관리 준비 중</div>
+          <div class="tablewrap"><table><thead><tr><th>업체·인플루언서</th><th>SNS</th><th>채널/사이트</th><th>홍보 대상</th><th>협약 상태</th><th>우선 배치</th><th>관리</th></tr></thead><tbody id="socialPartnerRows"><tr><td colspan="7">새로고침으로 저장 현황을 확인하세요.</td></tr></tbody></table></div>
+        </div>
+      </section>
       <div class="small" style="margin:18px 0 8px;font-weight:700">아래 영역은 콘텐츠 프론트 배치와 분리된 보조 관리입니다.</div>
       <section id="tablePanel" class="panel hidden">
         <div class="modal-head">
@@ -864,6 +905,7 @@
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
     <script src="/assets/js/admin-social-candidate-queue.js?v=50"></script>
+    <script src="/assets/js/admin-social-partners.js?v=20261030-1"></script>
     <script src="/assets/js/admin-social-ai-dialog.js?v=2"></script>
   <script src="/assets/js/admin-checkbox-accessibility.js?v=20260925-1" defer></script>
 </body>
