@@ -10,9 +10,12 @@ const SlotStore=require("./lib/global-slot-console-supabase");
 const MarketSaleScope=require("./lib/market-sale-scope.v1");
 const ProductPipeline=require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION="commerce-candidate-management-ledger-v1.3.0-complete-scoped-cursor";
+const VERSION="commerce-candidate-management-ledger-v1.4.0-assignment-inclusive-source-consistency";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
-const PRODUCT_SOURCE_REF=ProductPipeline.SOURCE_REF; // country-product-ranking-review
+// The ranking engine and administrator-placement authority accept both sources.
+// A candidate in either source must remain findable on the ordinary board.
+const PRODUCT_SOURCE_REF=ProductPipeline.SOURCE_REF;
+const PRODUCT_SOURCE_REFS=[PRODUCT_SOURCE_REF,"commerce-candidate-review-api"];
 function text(v){return v==null?"":String(v).trim();}
 function lower(v){return text(v).toLowerCase().replace(/\s+/g,"_");}
 function plain(v){return v&&typeof v==="object"&&!Array.isArray(v)?v:{};}
@@ -72,12 +75,32 @@ exports.handler=async function(event){
     const batchSize=150,maxBatchesPerRequest=6;
     let rows=[],scanOffset=offset,rawDone=false,scanned=0;
     for(let page=0;page<maxBatchesPerRequest&&rows.length<limit;page++){
-      const query="select="+fields+"&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&order=id.asc&limit="+batchSize+"&offset="+scanOffset;
+      const sourceFilter="in.("+PRODUCT_SOURCE_REFS.map(encodeURIComponent).join(",")+")";
+      const query="select="+fields+"&source_ref="+sourceFilter+"&order=id.asc&limit="+batchSize+"&offset="+scanOffset;
       const raw=array(await selectPage(query));
+      // A valid assignment is a second, durable proof that this candidate is
+      // managed in the selected market.  Older candidate payloads can lack
+      // marketKeys/marketScope even though their KR/NATIONWIDE assignment still
+      // exists.  Never hide such a card before the administrator can repair it.
+      const mismatched=raw.filter(row=>!scopeMatch(plain(row.source_payload),country,region));
+      const assignmentMatched=new Set();
+      for(let i=0;i<mismatched.length;i+=75){
+        const ids=mismatched.slice(i,i+75).map(row=>text(row.id)).filter(Boolean);
+        if(!ids.length)continue;
+        const assignmentQuery="select=candidate_id,country_code,region_code,hub_key,slot_key,state,publication_status"+
+          "&candidate_id=in.("+ids.map(encodeURIComponent).join(",")+")"+
+          "&country_code=eq."+encodeURIComponent(country)+"&region_code=eq."+encodeURIComponent(region)+"&limit=5000";
+        const assignments=array(await SlotStore.select("gslot_slot_assignments",assignmentQuery));
+        for(const assigned of assignments){
+          if(["approved","pinned"].includes(lower(assigned.state)) || ["ready","published","publish_requested"].includes(lower(assigned.publication_status))){
+            assignmentMatched.add(text(assigned.candidate_id));
+          }
+        }
+      }
       let consumed=0;
       for(const row of raw){
         consumed+=1;
-        if(scopeMatch(plain(row.source_payload),country,region))rows.push(row);
+        if(scopeMatch(plain(row.source_payload),country,region)||assignmentMatched.has(text(row.id)))rows.push(row);
         if(rows.length>=limit)break;
       }
       scanOffset+=consumed;scanned+=consumed;
@@ -102,7 +125,15 @@ exports.handler=async function(event){
         }
       }
     }
-    const candidates=rows.map(row=>compact(row,assignmentByCandidate.get(text(row&&row.id))||[]));
-    return json(200,{ok:true,version:VERSION,sourceRef:PRODUCT_SOURCE_REF,scope:{country,region},candidates,pagination:{offset,limit,returned:candidates.length,hasMore,nextOffset:hasMore?scanOffset:null,mode,scanned,scanOffset},runtime:{totalMs:Date.now()-started},publicationAuthority:"gslot_slot_assignments.publication_status",safety:{readOnly:true,mutatesDatabase:false}});
+    const candidates=rows.map(row=>{
+      const record=compact(row,assignmentByCandidate.get(text(row&&row.id))||[]);
+      // Keep assignment-only scope evidence visible for administrator repair.
+      if(!scopeMatch(plain(row.source_payload),country,region)){
+        record.ledgerScopeSource="assignment";
+        record.ledgerScopeConflict=true;
+      }
+      return record;
+    });
+    return json(200,{ok:true,version:VERSION,sourceRef:PRODUCT_SOURCE_REF,sourceRefs:PRODUCT_SOURCE_REFS,scope:{country,region},candidates,pagination:{offset,limit,returned:candidates.length,hasMore,nextOffset:hasMore?scanOffset:null,mode,scanned,scanOffset},runtime:{totalMs:Date.now()-started},publicationAuthority:"gslot_slot_assignments.publication_status",safety:{readOnly:true,mutatesDatabase:false}});
   }catch(error){return json(Number(error&&error.statusCode)||500,{ok:false,version:VERSION,error:text(error&&error.message||error),runtime:{totalMs:Date.now()-started}});}
 };
