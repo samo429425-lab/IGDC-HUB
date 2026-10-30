@@ -14,8 +14,48 @@
   },
   "brands": [
     {
-      "id": "maru-media-player",
+      "id": "maru-media-player-android",
       "name": "MARU Media Player Android",
+      "aliases": [
+        "Android MARU Media Player",
+        "MARU Android",
+        "마루 미디어 플레이어 안드로이드",
+        "안드로이드 비디오 플레이어",
+        "안드로이드 오디오 플레이어",
+        "Android video player",
+        "Android multimedia player",
+        "Android audio player"
+      ],
+      "path": "/maru-android.html",
+      "vertical": "media_player_android",
+      "keywords": [
+        "MARU Media Player Android",
+        "Android media player",
+        "Android video player",
+        "Android audio player",
+        "Android music player",
+        "Android MP3 player",
+        "Android subtitle player",
+        "Android PiP player",
+        "video player for Android",
+        "multimedia player for Android",
+        "mobile media player",
+        "mobile video player",
+        "offline video player Android",
+        "마루 미디어 플레이어 안드로이드",
+        "안드로이드 미디어 플레이어",
+        "안드로이드 비디오 플레이어",
+        "안드로이드 동영상 플레이어",
+        "안드로이드 음악 플레이어",
+        "안드로이드 오디오 플레이어",
+        "안드로이드 자막 플레이어",
+        "태블릿 비디오 플레이어",
+        "폴더블 미디어 플레이어"
+      ]
+    },
+    {
+      "id": "maru-media-player",
+      "name": "MARU Media Player",
       "aliases": [
         "MARU Media",
         "MARU Player",
@@ -28,14 +68,10 @@
         "마루비디오",
         "마루오디오",
         "MARU Video",
-        "MARU Audio",
-        "Android MARU Media Player",
-        "MARU Android",
-        "마루 미디어 플레이어 안드로이드",
-        "마루 동영상 플레이어 모바일"
+        "MARU Audio"
       ],
-      "path": "/maru-android.html",
-      "vertical": "media_player_android",
+      "path": "/maru-download.html",
+      "vertical": "media_player",
       "keywords": [
         "media player",
         "video player",
@@ -61,37 +97,7 @@
         "음악 플레이어",
         "마루 미디어",
         "마루 비디오",
-        "마루 오디오",
-        "Android video player",
-        "Android media player",
-        "Google Play MARU",
-        "Android subtitle player",
-        "Android PiP video player",
-        "모바일 미디어 플레이어",
-        "안드로이드 미디어 플레이어",
-        "태블릿 비디오 플레이어"
-      ]
-    },
-    {
-      "id": "maru-media-player-windows",
-      "name": "MARU Media Player Windows",
-      "aliases": [
-        "MARU Windows player",
-        "MARU Media Player PC",
-        "마루 미디어 플레이어 윈도우",
-        "마루 윈도우 플레이어"
-      ],
-      "path": "/maru-download.html",
-      "vertical": "media_player_windows",
-      "keywords": [
-        "Windows media player",
-        "Windows video player",
-        "Windows audio player",
-        "MARU Windows installer",
-        "PC video player",
-        "윈도우 비디오 플레이어",
-        "윈도우 미디어 플레이어",
-        "PC용 마루 플레이어"
+        "마루 오디오"
       ]
     },
     {
@@ -404,14 +410,14 @@
   },
   "extraPages": [
     "/index.html",
-    "/maru-android.html",
     "/maru-download.html",
     "/privacy-policy.html",
     "/support.html",
     "/maru-windows-privacy.html",
     "/maru-windows-refund.html",
     "/maru-windows-terms.html",
-    "/organic-search/index.html"
+    "/organic-search/index.html",
+    "/maru-android.html"
   ],
   "localizedTerms": {
     "ko": [

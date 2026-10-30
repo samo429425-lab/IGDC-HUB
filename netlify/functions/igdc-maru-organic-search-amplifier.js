@@ -129,6 +129,9 @@ function scoreTarget(q,target,lang){
     else if(query.includes(normalized) && normalized.length>=3) score+=2;
   }
   if(target.id==="maru-media-player" && /media|video|audio|player|플레이어|미디어|영상|동영상|오디오|음악|播放器|播放|プレーヤー|オーディオ|lecteur|reproductor|spieler|плеер|плеер|صوت/i.test(q)) score+=8;
+  // Additive Android-first discovery: keep the original Windows brand, terms, score and URL unchanged.
+  if(target.id==="maru-media-player-android" && /media|video|audio|player|플레이어|미디어|영상|동영상|오디오|음악|播放器|播放|プレーヤー|オーディオ|lecteur|reproductor|spieler|плеер|صوت/i.test(q)) score+=17;
+  if(target.id==="maru-media-player" && /(windows|win10|win11|윈도우|desktop|pc player|pc용)/i.test(q)) score+=22;
   if(target.id==="distributionhub" && /distribution|distrib|유통|배급|流通|分销|분배|distribución|distribution/i.test(q)) score+=8;
   if(target.id==="mediahub" && /media|미디어|媒体|メディア/i.test(q)) score+=6;
   return score;
