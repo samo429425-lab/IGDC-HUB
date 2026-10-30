@@ -1,8 +1,7 @@
-/* IGDC Social Navigation Country Gate (2026-10-28)
- * Limited to index top navigation and the Social sidebar link of the five
- * other front hubs rendered in index#mainFrame (30 locales, including RTL).
- * Shares Donation's /igdc-country-geo decision; does not change Donation,
- * Auth0, Social Hub, any Social data, or the five hub HTML files.
+/* IGDC Social Public Navigation Pause (2026-10-31)
+ * Hide Social globally in index top navigation and mainFrame hub sidebars
+ * across all 30 languages. Reuses the country-gate route guards.
+ * Does NOT modify country/Donation policy, admin, Social content or DB.
  */
 (function () {
   'use strict';
@@ -137,18 +136,8 @@
     }
   }, true);
 
-  // Same public Netlify Edge decision already used by Donation. No IP value
-  // is retained and no separate country list is hard-coded in the browser.
-  fetch('/igdc-country-geo', { method: 'GET', credentials: 'same-origin', cache: 'no-store' })
-    .then(function (response) {
-      if (!response || !response.ok) throw new Error('social_geo_unavailable');
-      return response.json();
-    })
-    .then(function (data) {
-      if (!data || data.ok !== true) throw new Error('social_geo_invalid');
-      if (data.excluded === true) return onState('blocked');
-      if (data.resolved === true && /^[A-Z]{2}$/.test(String(data.country || ''))) return onState('allowed');
-      throw new Error('social_geo_unresolved');
-    })
-    .catch(function () { onState('blocked'); });
+  // Temporary global public-menu pause. Existing database collection,
+  // administrator views and other country rules remain unchanged.
+  // Restore the previous geo-decision block when reopening the public hub.
+  onState('blocked');
 })();
