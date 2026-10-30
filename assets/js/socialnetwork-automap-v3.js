@@ -854,9 +854,9 @@
 .thumb-grid[data-psom-key="social-tiktok"],
 .thumb-grid[data-psom-key="social-facebook"]{grid-auto-flow:column!important;grid-template-rows:1fr!important;grid-template-columns:none!important;gap:12px!important;align-items:stretch!important;}
 .thumb-grid[data-psom-key="social-facebook"]{grid-auto-columns:minmax(215px,250px)!important;}
-.thumb-grid[data-psom-key="social-youtube"]{grid-auto-columns: minmax(230px,280px)!important;}
+.thumb-grid[data-psom-key="social-youtube"]{grid-auto-columns: minmax(271px,330px)!important;}
 .thumb-grid[data-psom-key="social-instagram"],
-.thumb-grid[data-psom-key="social-tiktok"]{grid-auto-columns: minmax(186px,216px)!important;}
+.thumb-grid[data-psom-key="social-tiktok"]{grid-auto-columns: minmax(219px,255px)!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card,
 .thumb-grid[data-psom-key="social-instagram"] a.card,
 .thumb-grid[data-psom-key="social-tiktok"] a.card,
