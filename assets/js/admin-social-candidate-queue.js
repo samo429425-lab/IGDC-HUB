@@ -2,6 +2,7 @@
 (function () {
   "use strict";
   var REVIEW = "/.netlify/functions/social-candidate-review",
+    PAGE_READ = "/.netlify/functions/social-candidate-page-read",
     LIVE = "/.netlify/functions/sanmaru-social-live-collector",
     PIPELINE = "/.netlify/functions/sanmaru-social-pipeline-trigger",
     ACTION = "/.netlify/functions/social-candidate-action",
@@ -318,6 +319,74 @@
   }
   async function get(url) {
     return request(url, {}, false);
+  }
+  // Read the same original DB ledger in bounded, section-specific pages.
+  // A 502 from the old all-sections response must never turn saved items into "0".
+  async function readCandidatePages() {
+    var PAGE_SIZE = 150, MAX_PAGES = 12;
+    var sections = await Promise.all(order.map(async function (sectionKey) {
+      var result = [], pages = 0;
+      while (pages < MAX_PAGES) {
+        var query = new URLSearchParams({
+          sectionKey: sectionKey, offset: String(result.length), limit: String(PAGE_SIZE)
+        });
+        var page = await get(PAGE_READ + "?" + query.toString());
+        if (!page || page.sectionKey !== sectionKey || !Array.isArray(page.rows)) {
+          throw new Error(label(sectionKey) + " 분할 조회 데이터 형식 오류");
+        }
+        result.push.apply(result, page.rows);
+        pages++;
+        if (!page.hasMore) return { sectionKey: sectionKey, rows: result };
+      }
+      // Do not label a truncated ledger as complete.
+      throw new Error(label(sectionKey) + " 조회가 페이지 상한을 초과했습니다. 데이터를 삭제하거나 0건으로 표시하지 않습니다.");
+    }));
+    var full = sections.reduce(function (all, part) { return all.concat(part.rows); }, []);
+    var byRisk = {}, byReview = {};
+    full.forEach(function (row) {
+      var risk = text(row.riskLevel) || "unknown", review = text(row.reviewStatus) || "unknown";
+      byRisk[risk] = (byRisk[risk] || 0) + 1;
+      byReview[review] = (byReview[review] || 0) + 1;
+    });
+    var summary = {
+      candidateCount: full.length,
+      promotableCount: full.filter(function (r) { return !!r.promotable && !excluded(r); }).length,
+      verificationRequired: full.filter(function (r) {
+        return !excluded(r) && /required/i.test(text(r.verificationStatus));
+      }).length,
+      searchExcludedCount: full.filter(function (r) { return /^search_excluded$/i.test(text(r.reviewStatus)); }).length,
+      permanentBlockedCount: full.filter(blocked).length,
+      byRisk: byRisk, byReview: byReview,
+      rotationPolicy: {targetPerSection: 120, publicSlotsPerSection:100, replacementReservePerSection:20}
+    };
+    return {
+      ok: true, queue: { rows: full }, summary: summary,
+      source: { candidateSourceMode: "supabase_five_section_paged_read", sectionReadCounts:
+        Object.fromEntries(sections.map(function (part) { return [part.sectionKey, part.rows.length]; })) }
+    };
+  }
+  async function readOriginalCandidates() {
+    try {
+      return await readCandidatePages();
+    } catch (pageError) {
+      // Compatible with older deployments while the new read-only endpoint is
+      // deploying.  The original endpoint is never allowed to turn errors into zero.
+      try {
+        var legacy = await get(REVIEW + "?action=candidates");
+        if (!legacy || !legacy.queue || !Array.isArray(legacy.queue.rows)) {
+          throw new Error("원본 후보 조회 응답에 후보 목록이 없습니다.");
+        }
+        if (!legacy.queue.rows.length && legacy.source &&
+          /(?:unavailable|missing|ambiguous)/i.test(text(legacy.source.candidateSourceMode))) {
+          throw new Error("원본 후보 원장이 연결되지 않았습니다: " + text(legacy.source.candidateSourceMode));
+        }
+        return legacy;
+      } catch (legacyError) {
+        throw new Error("SNS 후보 원장 읽기 실패 (분할 조회: " +
+          text(pageError && pageError.message) + "; 기존 조회: " +
+          text(legacyError && legacyError.message) + ")");
+      }
+    }
   }
   async function post(url, body) {
     var payload = Object.assign({}, body || {});
@@ -1187,9 +1256,11 @@
           '"><span class="section-toggle-main"><span class="section-toggle-title">' +
           esc(label(key)) +
           '</span><span class="section-count">' +
-          (queue === "waiting"
-            ? "후보 " + sourceCount + " · 프론트 " + frontCount
-            : sourceCount + (queue === "registry" ? "명" : "개")) +
+          (candidateReadStatus.status !== "connected" && !candidateReadStatus.lastSuccessAt
+            ? "원장 연결 오류 · 건수 확인 불가"
+            : queue === "waiting"
+              ? "후보 " + sourceCount + " · 프론트 " + frontCount
+              : sourceCount + (queue === "registry" ? "명" : "개")) +
           '</span></span><span class="section-chevron">⌄</span></button>' +
           (queue === "waiting" ? '<button class="secondary" type="button" data-section-diagnostic="' + esc(key) + '" style="margin:6px">점검 JSON</button>' : '') +
           '</div>' +
@@ -1205,7 +1276,8 @@
                     .join("") +
                   "</div>"
                 : queue === "waiting"
-                  ? '<div class="empty-section">후보 원장에 이 SNS의 최신 게시물이 없습니다. 검색 결과 수는 실제 저장 건수가 아닙니다. 수집 후에도 0건이라면 수집 진행 JSON의 gateway.readback 및 rejectedByReason을 확인해 주세요.' +
+                  ? '<div class="empty-section">' +
+                    (candidateReadStatus.status !== "connected" ? "후보 원장 조회 오류: 실제 저장된 수량은 확인되지 않았습니다. 삭제·초기화를 실행하지 마세요." : "후보 원장에 이 SNS의 최신 게시물이 없습니다. 수집 후에도 0건이라면 수집 진행 JSON의 gateway.readback 및 rejectedByReason을 확인해 주세요.") +
                     '<div class="section-actionbar"><button class="secondary" type="button" data-empty-collect="' + esc(key) + '">이 SNS 실제 콘텐츠 다시 수집</button></div></div>'
                   : '<div class="empty-section">현재 이 범위에 해당하는 항목이 없습니다.</div>') +
               "</div>"
@@ -1246,6 +1318,12 @@
     });
     var activeId = waitingViewMode === "new" ? "replacementViewNewBtn" : waitingViewMode === "public" ? "replacementViewPublicBtn" : waitingViewMode === "replacement" ? "replacementViewWaitingBtn" : waitingViewMode === "front" ? "replacementViewFrontBtn" : "replacementViewAllBtn";
     if ($(activeId)) $(activeId).classList.add("publish");
+    if (candidateReadStatus.status !== "connected") {
+      el.textContent = "후보 원장 확인 대기 · 기존 기록을 삭제하지 않았습니다.";
+      ["contentCountAll", "contentCountNew", "contentCountPublic", "contentCountReserve", "contentCountFront", "contentCountHold"].forEach(function (id) {
+        if ($(id)) $(id).textContent = candidateReadStatus.status === "pending" || candidateReadStatus.status === "loading" ? "조회 중" : "확인 불가";
+      });
+    }
   }
   function renderSections() {
     var scopedRows = countryScopedActive();
@@ -1260,7 +1338,8 @@
       holdList = list.filter(contentHold),
       waitingList = waitingAll.filter(waitingViewAccept);
     lastVisibleRows = list.slice();
-    $("filterState").textContent =
+    $("filterState").textContent = candidateReadStatus.status !== "connected" && !candidateReadStatus.lastSuccessAt
+      ? "후보 원장 연결 오류 · 실제 후보 수 확인 불가" :
       "표시 " +
       list.length +
       "개 / 활성 후보 " +
@@ -1307,6 +1386,7 @@
     updateMasterSelectionState();
     updateSectionSelectionState();
     updateFrontSectionSelectionState();
+    lockCandidateMutationControls();
   }
   function excludedRow(r, n) {
     var restore =
@@ -1757,18 +1837,45 @@
     }
   }
 
+  function lockCandidateMutationControls() {
+    var ready = candidateReadStatus.status === "connected";
+    ["selectAllWaitingMaster", "selectAllWaitingBtn", "clearWaitingSelectionBtn",
+      "waitingPromoteBtn", "waitingDemoteBtn", "publishSelectedSectionsBtn",
+      "unpublishAllBtn", "selectAllFrontSectionsBtn", "clearFrontSectionsBtn",
+      "publishSelectedFrontSectionsBtn", "unpublishSelectedFrontSectionsBtn",
+      "waitingDeleteBtn", "waitingBlockBtn", "publishAllBtn",
+      "unpublishAllScopeBtn"].forEach(function (id) {
+      var node = $(id);
+      if (node) node.disabled = !ready;
+    });
+    var list = $("waitingAccordion");
+    if (list) list.querySelectorAll("button, input").forEach(function (node) {
+      var collectionOrDiagnostic = node.matches(
+        "[data-waiting-toggle], [data-section-collect], [data-empty-collect], [data-section-diagnostic], [data-reddit-intake]"
+      );
+      if (!collectionOrDiagnostic) node.disabled = !ready;
+    });
+  }
   function setCandidateReadStatus(status, detail) {
     candidateReadStatus.status = status;
     candidateReadStatus.error = text(detail);
     if (status === "connected") candidateReadStatus.lastSuccessAt = new Date().toISOString();
+    lockCandidateMutationControls();
     var el = $("socialSectionLoadState");
     if (!el) return;
     el.classList.toggle("warn", status !== "connected");
     el.textContent = status === "connected"
       ? "후보 원장 조회 정상 · " + rows.length + "개 기록 · " + candidateReadStatus.lastSuccessAt + " · 5개 SNS 관리 기능 사용 가능"
       : status === "loading" || status === "pending"
-        ? "후보 원장 데이터 조회 중입니다. SNS별 관리·수집·점검 버튼은 항상 표시됩니다."
-        : "후보 원장 읽기 실패 · " + text(detail) + " · 현재 표시된 0건은 실제 후보 0건을 뜻하지 않습니다. 검색/등록 결과는 점검 JSON으로 확인하세요.";
+        ? "후보 원장 조회 중 · 조회 완료 전까지 기존 데이터 변경은 잠시 보호됩니다."
+        : status === "empty"
+          ? "DB 연결은 정상이나 조회 결과가 0건입니다. 기존 후보 삭제로 단정할 수 없습니다. 데이터 소스와 권한을 점검하기 전까지 변경 버튼이 잠깁니다."
+          : "후보 원장 읽기 실패 · " + text(detail) + " · 실제 저장 수량 미확인 · 기존 데이터 변경 버튼을 잠갔습니다.";
+    if (status !== "connected") {
+      ["contentCountAll", "contentCountNew", "contentCountPublic", "contentCountReserve", "contentCountFront", "contentCountHold"].forEach(function (id) {
+        if ($(id)) $(id).textContent = status === "loading" || status === "pending" ? "조회 중" : "확인 불가";
+      });
+    }
   }
   function downloadSectionDiagnostic(key) {
     if (order.indexOf(key) < 0) return;
@@ -1809,9 +1916,9 @@
     setCandidateReadStatus("loading", "");
     $("refreshBtn").disabled = true;
     try {
-      var d = await get(REVIEW + "?action=candidates");
+      var d = await readOriginalCandidates();
       rows = (d.queue && d.queue.rows) || d.candidates || [];
-      setCandidateReadStatus("connected", "");
+      setCandidateReadStatus(rows.length ? "connected" : "empty", "");
       pruneSelections();
       await Promise.all([loadPlacement(), loadPublishedState()]);
       renderSummary(d.summary);
@@ -1839,12 +1946,12 @@
       renderExclusions();
       setTimeout(hydrateMissingPreviewsAsync, 0);
       $("state").textContent =
-        "연결 정상 · " +
+        (rows.length ? "연결 정상 · " : "연결됨 · 후보 조회 0건 · 원장 확인 필요 · ") +
         ((d.source && d.source.candidateSourceMode) || "read_only");
-      show(
-        "관리 화면에서는 인플루언서 등록부와 최신 콘텐츠 후보·교체 대기열을 유형별로 분리합니다. 실제 수집은 PSOM·SearchBank 기준의 최신 콘텐츠 탐색을 먼저 수행하고, 인플루언서 등록부는 발견된 우수 제작자를 보조 데이터로 유지합니다.",
-        "ok",
-      );
+      show(rows.length
+        ? "기존 후보 원장을 조회했습니다. 인플루언서 등록부와 최신 콘텐츠 후보·교체 대기열을 유형별로 분리합니다."
+        : "후보 조회가 0건입니다. 데이터 소스 확인 전에는 삭제·프론트 해제 등을 실행하지 않습니다.",
+        rows.length ? "ok" : "warn");
       return true;
     } catch (e) {
       setCandidateReadStatus("error", e && e.message || "후보 DB/API 연결 실패");
@@ -4896,10 +5003,6 @@
       bindAccordion($("holdAccordion"), "hold");
       sectionListenersBound = true;
     }
-    if ($("redditAdminCollectBtn")) $("redditAdminCollectBtn").onclick = function () { collectEmptySection("social-reddit"); };
-    if ($("redditAdminUrlsBtn")) $("redditAdminUrlsBtn").onclick = importRedditUrls;
-    if ($("redditAdminOpenBtn")) $("redditAdminOpenBtn").onclick = function () { openContentSection("social-reddit"); };
-    if ($("redditAdminDiagnosticBtn")) $("redditAdminDiagnosticBtn").onclick = function () { downloadSectionDiagnostic("social-reddit"); };
     // The admin management accordion exists before the first network request.
     // A network failure is reported, never confused with an empty candidate pool.
     options();

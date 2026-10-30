@@ -72,14 +72,17 @@ async function readAll(scope,keys){
      result.forEach(row=>candidates.set(str(row.id),row));
    });
  }
- if(candidates.size!==ids.length)err('상품 원장과 배치 원장의 상품 수가 일치하지 않아 정렬을 중단했습니다.',409);
+ if(candidates.size!==ids.length){
+  const missing=ids.filter(id=>!candidates.has(id));
+  err('배치 원장에 있으나 후보 원장에 없는 상품이 있습니다. 변경 없이 중단했습니다: '+missing.slice(0,5).join(', ')+(missing.length>5?' 외 '+(missing.length-5)+'건':''),409);
+ }
  const groups=new Map([...keys].map(k=>[k,[]])),seen=new Set();
  for(const a of scoped){
    const key=str(a.hub_key)+'|'+str(a.slot_key),candidate=candidates.get(str(a.candidate_id)),payload=obj(candidate&&candidate.source_payload),placed=obj(payload.approvedPlacement||payload.placement||payload.primaryPlacement),placementKey=str(placed.key||((placed.page&&placed.sectionKey||placed.section)?str(placed.page)+'|'+str(placed.sectionKey||placed.section):'')),uniq=groupScope(scope,key)+'|'+str(a.candidate_id);
-   if(seen.has(uniq))err('같은 상품이 같은 섹션에 중복 배정되어 있습니다. 먼저 중복 배정을 정리하세요.',409);
+   if(seen.has(uniq))err('같은 상품의 중복 배치가 확인되었습니다. 자동 삭제 없이 중단했습니다: '+str(a.candidate_id)+' / '+key,409);
    seen.add(uniq);
-   if(str(payload.slotDecision)!=='slot_candidate'||placementKey!==key)err('현재 관리자 배치와 원장 배정이 불일치합니다. 변경 없이 중단했습니다: '+str(a.candidate_id),409);
-   if(!['country-product-ranking-review','commerce-candidate-review-api'].includes(str(candidate.source_ref)))err('관리자 원장 밖 상품이 포함되어 있습니다.',409);
+   if(str(payload.slotDecision)!=='slot_candidate'||placementKey!==key)err('현재 관리자 배치와 원장 배정이 불일치합니다. 변경 없이 중단했습니다: '+str(a.candidate_id)+' [배치 관계='+key+', 상품 관리 배치='+(placementKey||'없음')+', 관리 결정='+(str(payload.slotDecision)||'없음')+']',409);
+   if(!['country-product-ranking-review','commerce-candidate-review-api'].includes(str(candidate.source_ref)))err('관리 원장 범위 밖 상품이 배치 관계에 포함됐습니다. 변경 없이 중단했습니다: '+str(a.candidate_id)+' / '+key,409);
    groups.get(key).push({id:str(candidate.id),title:candidate.title,payload,assignment:a,candidateUpdatedAt:candidate.updated_at});
  }
  return groups;

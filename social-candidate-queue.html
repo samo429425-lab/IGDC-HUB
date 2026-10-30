@@ -711,14 +711,7 @@
           <span id="waitingCapacityState" class="state"></span>
         </div>
         <div id="socialSectionLoadState" role="status" class="notice warn" style="margin:10px 0">
-          후보 원장 조회 대기 · 조회 전의 0건은 실제 후보가 없다는 의미가 아닙니다.
-        </div>
-        <div class="reviewbar" style="margin:10px 0;gap:8px">
-          <strong style="align-self:center">Reddit 바로가기</strong>
-          <button id="redditAdminCollectBtn" type="button" class="publish">Reddit 공개 콘텐츠 검색·수집</button>
-          <button id="redditAdminUrlsBtn" type="button" class="secondary">Reddit 게시물 URL 직접 등록</button>
-          <button id="redditAdminOpenBtn" type="button" class="secondary">Reddit 후보·배치 목록 열기</button>
-          <button id="redditAdminDiagnosticBtn" type="button" class="secondary">Reddit 점검 JSON 다운로드</button>
+          후보 원장 조회 중 · 응답이 실패하면 기존 후보가 삭제된 것으로 표시하지 않습니다.
         </div>
         <div class="reviewbar">
           <label class="small"><input id="selectAllWaitingMaster" type="checkbox" /> 현재 조회 콘텐츠 전체 선택</label
@@ -916,7 +909,7 @@
       </section>
     </main>
     <script src="/assets/js/igdc-member-auth.js"></script>
-    <script src="/assets/js/admin-social-candidate-queue.js?v=20261030-admin-restore"></script>
+    <script src="/assets/js/admin-social-candidate-queue.js?v=20261030-read-recovery-v2"></script>
     <script src="/assets/js/admin-social-partners.js?v=20261030-1"></script>
     <script src="/assets/js/admin-social-ai-dialog.js?v=2"></script>
   <script src="/assets/js/admin-checkbox-accessibility.js?v=20260925-1" defer></script>

@@ -1191,23 +1191,37 @@
         catch(rankError){show('관리자 고정·해제는 저장됐지만 순위 재계산에 실패했습니다. 해당 섹션 순위 적용을 다시 실행하세요: '+text(rankError&&rankError.message),'warn');}
         return;
       }
-      var summaries=[],items=[];
+      var summaries=[],items=[],failedSections=[];
       for(var i=0;i<keys.length;i++){
         var key=keys[i];
-        if(status)status.textContent='수익 우선 '+(isApply?'순번 저장':'미리보기')+' · 섹션 '+(i+1)+'/'+keys.length+' · '+sectionLabel(key);
-        var response=await requestSectionRevenueOrder(action,key,'',function(done,total){
-          if(status)status.textContent='수익 순위 저장 · 섹션 '+(i+1)+'/'+keys.length+' · '+done+'/'+total+'건';
-        });
-        (response.sections||[]).forEach(function(entry){summaries.push(entry);});
-        (response.items||[]).forEach(function(entry){items.push(entry);});
-        completed+=1;
+        if(status)status.textContent='수익 우선 '+(isApply?'순번 저장':'미리보기')+' · 섹션 '+(i+1)+'/'+keys.length+' · '+sectionLabel(key)+' · 정상 완료 '+completed+'개';
+        try{
+          // A broken assignment must not abort unrelated sections or be silently ranked.
+          // Keep the failed section untouched; the administrator can inspect its
+          // candidate/assignment discrepancy and retry after reconciling the ledger.
+          var response=await requestSectionRevenueOrder(action,key,'',function(done,total){
+            if(status)status.textContent='수익 순위 저장 · 섹션 '+(i+1)+'/'+keys.length+' · '+done+'/'+total+'건';
+          });
+          (response.sections||[]).forEach(function(entry){summaries.push(entry);});
+          (response.items||[]).forEach(function(entry){items.push(entry);});
+          completed+=1;
+        }catch(sectionError){
+          var reason=conciseRequestError(sectionError&&sectionError.message,sectionError&&sectionError.status)||'섹션 원장 재확인 필요';
+          failedSections.push({key:key,reason:reason});
+          if(status)status.textContent='수익 순위 진행 '+(i+1)+'/'+keys.length+'개 섹션 · 정상 완료 '+completed+'개 · 확인 필요 '+failedSections.length+'개 · '+sectionLabel(key)+' : '+reason;
+        }
       }
       var map={};
       items.forEach(function(item){var id=text(item&&item.candidateId);if(id)map[id]=item;});
       sectionRevenueView=map;sectionRevenueViewScope=scopeKey();
       var message='수익 우선 '+(isApply?'순번 저장':'미리보기')+' · '+summaries.length+'개 섹션 · '+items.length+'개 상품 · 관리자 후순위 지정 '+summaries.reduce(function(n,x){return n+Number(x.manualDemoted||0);},0)+'건 · 관리자 최상단 고정 '+summaries.reduce(function(n,x){return n+Number(x.manualTopPinned||0);},0)+'건 · 섹션 이동 0건 · 공개 변경 0건';
-      if(status)status.textContent=message+(isApply?' · 프론트 순서는 별도 Front Match 실행 후 반영됩니다.':' · 미리보기는 저장하지 않았습니다.');
-      show(message,'ok');renderProducts(productRows);
+      if(failedSections.length){
+        var failNote=failedSections.slice(0,5).map(function(x){return sectionLabel(x.key)+' : '+x.reason;}).join(' / ');
+        if(failedSections.length>5)failNote+=' 외 '+(failedSections.length-5)+'개 섹션';
+        message+=' · 원장 확인 필요 '+failedSections.length+'개 섹션 · '+failNote;
+      }
+      if(status)status.textContent=message+(isApply?' · 정상 저장 섹션만 별도 Front Match 반영 가능, 불일치 섹션은 수정하지 않았습니다.':' · 미리보기는 저장하지 않았습니다.');
+      show(message,failedSections.length?'warn':'ok');renderProducts(productRows);
     }catch(error){
       var msg='수익 순위 작업을 중단했습니다 ('+completed+'/'+keys.length+'개 섹션 완료): '+text(error&&error.message||error);
       if(status)status.textContent=msg;
