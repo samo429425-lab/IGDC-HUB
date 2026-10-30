@@ -1115,22 +1115,27 @@ exports.handler = async function (event) {
       });
     }
 
-    // Same public candidate plan means the visible Social front would not change.
-    // Do not create another release row and do not spend a Netlify build for an
-    // identical publication. Metadata timestamps are intentionally ignored here;
-    // the canonical candidate-ID plan is the deployment identity.
-    if (
-      storeRelease &&
-      actualApplyOperation &&
-      !unpublishSelected &&
-      hasDurablePreviousRelease &&
+    // No-change is valid only when the SAME published plan AND visible fields
+    // already exist in a hash-verified durable release. A reconstructed static
+    // base is not proof of a live publication: that old shortcut could claim
+    // success without writing anything or matching the public read endpoint.
+    const possibleNoChange = storeRelease && actualApplyOperation &&
+      !unpublishSelected && hasDurablePreviousRelease &&
       publicationPlanHash === previousPublicationPlanHash &&
-      frontVisiblePayloadSignature(snapshot) === frontVisiblePayloadSignature(base.doc)
-    ) {
-      // Refresh auxiliary registry even if the publish plan is unchanged;
-      // this also reconciles existing installations on their first post-patch run.
-      const previousStored = await latestStoredReleaseForRoute(route).catch(() => null);
-      const priorHash = SocialStore.sha256(base.doc);
+      frontVisiblePayloadSignature(snapshot) === frontVisiblePayloadSignature(base.doc);
+    let verifiedPreviousStored = null;
+    if (possibleNoChange) {
+      const previous = await latestStoredReleaseForRoute(route).catch(() => null);
+      if (previous && previous.snapshot && text(previous.snapshot_hash) &&
+          SocialStore.sha256(previous.snapshot) === text(previous.snapshot_hash) &&
+          SocialStore.sha256(releasedIdsBySection(previous.snapshot)) === publicationPlanHash &&
+          frontVisiblePayloadSignature(previous.snapshot) === frontVisiblePayloadSignature(snapshot)) {
+        verifiedPreviousStored = previous;
+      }
+    }
+    if (verifiedPreviousStored) {
+      const previousStored = verifiedPreviousStored;
+      const priorHash = text(previousStored.snapshot_hash);
       const registrySync = await syncSupplementalInfluencers(
         base.doc,
         priorHash,
@@ -1173,9 +1178,11 @@ exports.handler = async function (event) {
         noChange: true,
         duplicateDeploymentPrevented: true,
         deploymentRequired: false,
+        releaseId: text(previousStored.release_id),
+        snapshotHash: priorHash,
         runtimeFrontReady: true,
-        releaseStored: false,
-        releaseStoredVerified: false,
+        releaseStored: true,
+        releaseStoredVerified: true,
         actualFrontApplyStored: false,
         actualFrontApplyQueued: false,
         actualApplyRequested: true,

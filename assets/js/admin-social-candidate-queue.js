@@ -3647,6 +3647,8 @@
         return row && row.sectionKey === key && selectedContents.has(text(row.id));
       });
     });
+    // Publishing already approved rows must not trigger fresh provider research,
+    // preview hydration or auto-curation. Those are explicit admin workflows.
     if (!(await prepareFrontPublication(requestedKeys))) return false;
     selectedIds = Array.from(selectedContents);
 
@@ -3774,24 +3776,26 @@
     return true;
   }
   async function prepareFrontPublication(sectionKeys) {
-    var keys = Array.isArray(sectionKeys) && sectionKeys.length ? sectionKeys.slice() : order.slice();
-    show(keys.map(label).join(", ") + " 최신 공개 콘텐츠를 먼저 재검색하고 있습니다.", "warn");
-    if (!(await refreshLiveCandidatesForPublish(keys))) return false;
-    show(keys.map(label).join(", ") + " 실제 콘텐츠 썸네일을 최종 점검하고 있습니다.", "warn");
-    await hydrateFrontPublicationPreviews(keys);
-    // Pull back server-side preview repairs before AI registration. This makes
-    // front publication deterministic instead of racing the background preview
-    // hydrator that runs after refresh().
-    await refresh();
-    var oneSection = keys.length === 1 ? keys[0] : "";
-    var curated = await autoCurate(oneSection, true);
-    if (!curated) return false;
+    var keys = Array.from(new Set((sectionKeys || order).filter(function (key) {
+      return order.indexOf(key) >= 0;
+    })));
+    if (!keys.length) {
+      show("프론트에 등록할 SNS 섹션을 선택해 주세요.", "warn");
+      return false;
+    }
+    // The explicit publication command is read/validate/publish only.
+    // Automatic discovery, AI curation, thumbnail hydration and legacy status
+    // restoration are separate admin actions. Running them on this button used
+    // to block all five sections when one external provider (TikTok in
+    // particular) was unavailable, despite existing approved candidates.
+    if (candidateReadStatus.status !== "connected") {
+      show("후보 원장 조회가 완료되지 않았습니다. 목록 새로고침과 점검 JSON으로 원장 연결을 확인해 주세요.", "warn");
+      return false;
+    }
     return true;
   }
 
   async function actualApplyAllRegistered(skipConfirm, publishMode) {
-    var repaired = await repairLegacyFrontUnpublishHolds("");
-    if (repaired) await refresh();
     if (!(await prepareFrontPublication(order.slice()))) return false;
     var ids = registeredContentIds("");
     if (!ids.length)
@@ -3812,11 +3816,6 @@
   async function actualApplySelectedFrontSections() {
     var keys = selectedFrontSectionKeys();
     if (!keys.length) return show("프론트 등록할 SNS 섹션을 먼저 선택해 주세요.", "warn");
-    var repaired = 0;
-    for (var repairIndex = 0; repairIndex < keys.length; repairIndex++) {
-      repaired += await repairLegacyFrontUnpublishHolds(keys[repairIndex]);
-    }
-    if (repaired) await refresh();
     if (!(await prepareFrontPublication(keys))) return false;
     var ids = [];
     keys.forEach(function (key) { ids = ids.concat(registeredContentIds(key)); });
@@ -3846,8 +3845,6 @@
   }
 
   async function actualApplySection(sectionKey, skipConfirm) {
-    var repaired = await repairLegacyFrontUnpublishHolds(sectionKey);
-    if (repaired) await refresh();
     if (!(await prepareFrontPublication([sectionKey]))) return false;
     var selectedInSectionAll = Array.from(selectedContents).filter(function (id) {
       return rows.some(function (row) {
@@ -4017,8 +4014,32 @@
             "개만 실제 적용 대상으로 확인했습니다.",
         );
       }
+      // A no-change response is NOT a newly queued Netlify build. Verify the
+      // previous durable release against the public read endpoint before
+      // reporting success. Never call it a deployment when nothing was stored.
+      if (d.noChange === true) {
+        if (!d.releaseId || d.releaseStoredVerified !== true) {
+          throw new Error("변경 없음 응답에서 기존 게시 Release 저장 검증 정보를 받지 못했습니다.");
+        }
+        var sameScope = new URLSearchParams({
+          view: "front", scopeMode: scope.scopeMode || "auto",
+          countryCode: scope.countryCode || "", regionId: scope.regionId || "",
+          _: String(Date.now())
+        });
+        var currentPublished = await getReport(CURRENT_SOCIAL + "?" + sameScope.toString());
+        diagnostic({ actualApply: d, runtimeFront: currentPublished });
+        if (!currentPublished || currentPublished.ok !== true ||
+            text(currentPublished.releaseId) !== text(d.releaseId) ||
+            currentPublished.hashVerified !== true) {
+          throw new Error("동일 게시본 응답을 받았지만 프론트 Release·해시가 확인되지 않아 완료로 처리하지 않았습니다.");
+        }
+        download(publishResultFileName(actionMode), d);
+        if ($("frontApplyState")) $("frontApplyState").textContent = "기존 프론트 게시본 확인 · 변경 없음";
+        show(scopeName + " 범위의 " + applyLabel + "은 기존 승인 게시본과 같으며, 프론트 Release를 확인했습니다. 새 배포는 실행하지 않았습니다.", "ok");
+        return true;
+      }
       var runtimeDirect = d.runtimeFrontReady === true && d.releaseStoredVerified === true;
-      var buildAccepted = !!(d.buildTrigger && d.buildTrigger.ok);
+      var buildAccepted = !!(d.buildTrigger && d.buildTrigger.ok && d.buildTrigger.queued === true);
       if (!runtimeDirect && !buildAccepted)
         throw new Error(
           "실제 적용 후보는 확인됐지만 저장 Release 또는 배포 경로가 준비되지 않았습니다.",
@@ -4084,7 +4105,16 @@
       return true;
     } catch (e) {
       if ($("frontApplyState"))
-        $("frontApplyState").textContent = "SearchBank 인계 실패";
+        $("frontApplyState").textContent = "프론트 등록 확인 실패";
+      // Keep the actual HTTP status, server error code, and publish stage in
+      // the existing diagnostic JSON; do not display a misleading zero count.
+      diagnostic({ ok: false, reportType: "social-front-publish-failure",
+        publishMode: actionMode, requestedSections: actionSections,
+        stage: text(e && e.stage) || "front_publish",
+        httpStatus: Number(e && e.status || 0) || null,
+        error: text(e && e.code) || "front_publish_failed",
+        message: text(e && e.message), serverResponse: e && e.payload || null,
+        existingCandidateLedgerUnchanged: true });
       show(e.message || "프론트 등록을 완료하지 못했습니다.", "warn");
       return false;
     }

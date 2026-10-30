@@ -631,6 +631,16 @@ function providerReadiness(configValue) {
       clientSecretConfigured: !!cfg.naverSecret,
       role: "한국어 최신 공개 영상·게시물 검색 보조"
     },
+    facebookPublicContentSearch: {
+      googleCustomSearchReady: !!(cfg.googleKey && cfg.googleCx),
+      naverSupplementReady: !!(cfg.naverId && cfg.naverSecret),
+      searchBankReady: !!(SearchBankEngine && typeof SearchBankEngine.runEngine === "function"),
+      nativePublicFallbackEnabled: true,
+      // A Facebook app/access token is not equivalent to permission to search
+      // arbitrary public posts. Do not claim an uploaded Meta key is used here.
+      metaGraphPublicPostSearchUsed: false,
+      role: "Google CSE / SearchBank / 공개 게시물 검색으로 Facebook 실게시물 URL 발견; Meta Graph 범용 공개 검색 권한을 가정하지 않음"
+    },
     psomSearchBankContentResearch: {
       ready: !!(SearchBankEngine && typeof SearchBankEngine.runEngine === "function" && readSocialPsomContract().sections.length),
       role: "PSOM Social 섹션 계약 + Social 정책 쿼리를 기준으로 SearchBank/Sanmaru에서 실제 콘텐츠를 우선 리서치",
@@ -2380,15 +2390,25 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
     tasks.push(publicDirectorySearch(plan, route, limit, directoryOffset));
   }
 
-  const settled = await Promise.allSettled(tasks);
+  // Keep independent public providers concurrent. Report their actual latency
+  // in the existing collector diagnostic so slow Facebook searches can be
+  // attributed to a specific source without guessing about Meta API tokens.
+  const tracked = tasks.map((task, index) => {
+    const started = Date.now();
+    return Promise.resolve(task).then(
+      (value) => ({ value, elapsedMs: Date.now() - started }),
+      (error) => ({ error, elapsedMs: Date.now() - started, index })
+    );
+  });
+  const settled = await Promise.all(tracked);
   let providers = settled.map((entry, index) => {
-    if (entry.status === "fulfilled") return entry.value;
-    return {
+    if (entry.error) return {
       provider: "provider-group-" + providerGroup + "-" + index,
-      status: "error",
-      error: entry.reason && entry.reason.message || String(entry.reason || "provider_failed"),
+      status: "error", elapsedMs: entry.elapsedMs,
+      error: entry.error && entry.error.message || String(entry.error || "provider_failed"),
       items: []
     };
+    return Object.assign({}, entry.value || {}, { elapsedMs: entry.elapsedMs });
   });
 
   // Instagram has no dependable anonymous native search endpoint. If the
@@ -2413,6 +2433,7 @@ async function searchOne(event, plan, queryText, limit, language, start, route, 
       source: result.source || null,
       error: result.error || null,
       trace: result.trace || [],
+      elapsedMs: Number(result.elapsedMs || 0),
       countryStrict: result.countryStrict == null ? null : !!result.countryStrict,
       countryFallback: !!result.countryFallback,
       offset: Number(result.offset || 0),
