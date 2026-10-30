@@ -16,9 +16,7 @@
     ["social-instagram", "Instagram", "instagram"],
     ["social-tiktok", "TikTok", "tiktok"],
     ["social-facebook", "Facebook", "facebook"],
-    ["social-snapchat", "Snapchat / Spotlight", "snapchat"],
-    ["social-bilibili", "Bilibili / 哔哩哔哩", "bilibili"],
-    ["social-douyin", "Douyin / 抖音", "douyin"],
+    ["social-reddit", "Reddit", "reddit"],
   ];
   var COLLECTOR_JOB_VERSION = 13,
     FULL_RESEARCH_ROUNDS = 12,
@@ -1085,6 +1083,17 @@
       })
     });
   }
+  async function importRedditUrls() {
+    var input = window.prompt('공개 Reddit 게시물 URL을 입력하세요. (여러 건은 줄바꿈, | 제목 선택 입력)\n예: https://www.reddit.com/r/Art/comments/abc123/example/ | 작품 설명');
+    if (!text(input)) return;
+    try {
+      var result = await post(LIVE, { action:'intake_urls', sectionKey:'social-reddit', rawText:input, dryRun:false });
+      show('Reddit URL 등록 요청: ' + Number(result.saved || result.inserted || 0) + '건 저장 응답. 등록 후 후보 목록에서 검증하세요.', 'ok');
+      await refresh();
+    } catch (error) {
+      show(text(error && error.message) || 'Reddit 공개 URL 등록 실패', 'warn');
+    }
+  }
   function finalActions(key) {
     return (
       '<div class="section-actionbar"><span class="section-note small">인플루언서 등록과 최신 콘텐츠 배치는 별도로 관리됩니다.</span>' +
@@ -1097,6 +1106,7 @@
       '<button type="button" data-section-approve="' +
       esc(key) +
       '">선택 인플루언서 승인</button>' +
+      (key === "social-reddit" ? '<button class="secondary" type="button" data-reddit-intake="1">Reddit 공개 게시물 URL 등록</button>' : "") +
       '<button class="secondary" type="button" data-section-import-content="' +
       esc(key) +
       '">이 SNS 실후보 반입</button>' +
@@ -4299,6 +4309,7 @@
         sourceAlert(source.dataset.candidateId);
         return;
       }
+      if (event.target.closest("[data-reddit-intake]")) { importRedditUrls(); return; }
       var key;
       if ((key = event.target.dataset.sectionSelectAll))
         selectQueue("registry", key, true);

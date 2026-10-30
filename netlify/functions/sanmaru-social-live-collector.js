@@ -112,17 +112,16 @@ function readSocialPsomContract() {
       if (!fs.existsSync(file)) continue;
       const doc = JSON.parse(fs.readFileSync(file, "utf8"));
       const social = doc && doc.pages && doc.pages.social || {};
-      const sections = Array.isArray(social.sections) ? social.sections.slice() : [];
-      const mapping = social.mapping && typeof social.mapping === "object" ? { ...social.mapping } : {};
-      // Social-only runtime extension. Preserve canonical shared PSOM byte-for-byte;
-      // only add the newly approved Spotlight section to this Social collector's
-      // effective contract. Never extend Distribution, rightPanel or other pages.
-      if (SocialStore.Policy.SECTION_KEYS.includes("social-snapchat") &&
-          sections.includes("social-facebook") && sections.includes("social-bilibili") &&
-          !sections.includes("social-snapchat")) {
-        sections.splice(sections.indexOf("social-bilibili"), 0, "social-snapchat");
-        mapping.snapchat = "social-snapchat";
-      }
+      const sections = Array.isArray(social.sections)
+       ? social.sections.filter((key) => SocialStore.Policy.SECTION_KEYS.includes(key)) : [];
+     const mapping = {};
+     Object.entries(social.mapping || {}).forEach(([platform, key]) => {
+       if (SocialStore.Policy.SECTION_KEYS.includes(key)) mapping[platform] = key;
+     });
+     // Social-only migration: no global PSOM change. Reddit manually reviewed
+     // public post URLs can be accepted, but Reddit API scraping is NOT enabled.
+     if (!sections.includes("social-reddit")) sections.push("social-reddit");
+     mapping.reddit = "social-reddit";
       if (sections.length && Object.keys(mapping).length) {
         SOCIAL_PSOM_CACHE = { file, sections, mapping };
         return SOCIAL_PSOM_CACHE;
@@ -419,6 +418,7 @@ function contentKind(platform, value) {
     if (platform === "instagram" && /^\/(p|reel|reels|tv)\/[^/]+/i.test(path)) return "latest_post";
     if (platform === "tiktok" && (/\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[a-z0-9_-]+/i.test(path) || /^(?:vm|vt)\.tiktok\.com$/i.test(url.hostname))) return "latest_video";
     if (platform === "facebook" && (/^fb\.watch$/i.test(url.hostname) || /^\/(reel|watch|videos|posts|photos|photo|share)\//i.test(path) || /\/(videos|posts|photos|reel)\/[^/]+/i.test(path) || /\/(permalink|story)\.php$/i.test(path) || (/^\/watch\/?$/i.test(path) && url.searchParams.get("v")) || url.searchParams.get("story_fbid"))) return "latest_post";
+    if (platform === "reddit" && /^\/r\/[a-z0-9_]+\/comments\/[a-z0-9]+(?:\/|$)/i.test(path)) return "latest_post";
     if (platform === "snapchat" && /^\/spotlight\/[^/]+\/?$/i.test(path)) return "latest_video";
     if (platform === "bilibili" && (/^b23\.tv$/i.test(url.hostname) || /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path))) return "latest_video";
     if (platform === "douyin" && (/^\/(?:share\/)?(video|note)\/\d+/i.test(path) || /^v\.douyin\.com$/i.test(url.hostname))) return /\/note\//i.test(path) ? "latest_post" : "latest_video";
@@ -3308,6 +3308,9 @@ exports.handler = async function(event) {
     const plan = sectionPlan(sectionKey, route);
     if (!plan) return SocialStore.response(400, { ok: false, version: VERSION, error: "invalid_social_section", allowedSections: Policy.SECTION_KEYS });
 
+    if (sectionKey === "social-reddit" && !/^(intake_urls|direct_intake|intake_channels)$/i.test(SocialStore.text(body.action))) {
+      return SocialStore.response(409, { ok:false, version:VERSION, error:"reddit_manual_public_post_urls_only" });
+    }
     const dryRun = flag(body.dryRun || body.dry_run);
     const batchSize = Math.max(1, Math.min(MAX_BATCH_SIZE, Number(body.batchSize || body.batch_size || body.limit || DEFAULT_BATCH_SIZE) || DEFAULT_BATCH_SIZE));
     const aiPolicy = AIPolicy.normalize(body.aiPolicy || {});

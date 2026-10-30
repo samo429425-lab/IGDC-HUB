@@ -25,9 +25,7 @@
     'social-instagram': 'instagram',
     'social-tiktok': 'tiktok',
     'social-facebook': 'facebook',
-    'social-snapchat': 'snapchat',
-    'social-bilibili': 'bilibili',
-    'social-douyin': 'douyin'
+    'social-reddit': 'reddit'
   };
 
   var state = {
@@ -341,6 +339,19 @@
         provider: 'bilibili-video'
       };
     }
+
+    if (platform === 'reddit') {
+     try {
+       var ru = new URL(url);
+       var host = ru.hostname.toLowerCase().replace(/^www\./, '');
+       var match = ru.pathname.match(/^\/r\/([a-z0-9_]+)\/comments\/([a-z0-9]+)(?:\/([^/?#]*))?/i);
+       if ((host === 'reddit.com' || host === 'old.reddit.com' || host === 'np.reddit.com') && match) {
+         var canonical = '/r/' + encodeURIComponent(match[1]) + '/comments/' + encodeURIComponent(match[2]) + '/' + (match[3] ? encodeURIComponent(match[3]) + '/' : '');
+         return { mode:'iframe', src:'https://www.redditmedia.com' + canonical + '?embed=true&ref_source=embed', aspect:'auto', provider:'reddit-official-post' };
+       }
+     } catch (_e) {}
+     return containedFallbackEmbed(platform, card, titleOf(card));
+   }
 
     if (platform === 'douyin' && validHttp(url)) {
       var douyinPreview = previewUrlOf(card);

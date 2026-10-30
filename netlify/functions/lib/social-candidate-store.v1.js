@@ -127,6 +127,7 @@ function platformContentUrl(platform, value) {
   else if (p === "instagram") ok = /^\/(p|reel|reels|tv)\//i.test(path);
   else if (p === "tiktok") ok = /\/video\/\d+/i.test(path) || /\/v\/\d+\.html(?:$|[?#])/i.test(path) || /^\/t\/[A-Za-z0-9_-]+/i.test(path) || host === "vm.tiktok.com" || host === "vt.tiktok.com";
   else if (p === "facebook") ok = host === "fb.watch" || /^\/(reel|watch|videos|posts|photos|photo|share|story\.php|permalink\.php)(?:\/|$)/i.test(path) || /\/(posts|videos|photos|reel)\/[^/]+/i.test(path) || (/^\/watch\/?$/i.test(path) && !!u.searchParams.get("v")) || !!u.searchParams.get("story_fbid");
+  else if (p === "reddit") ok = /^(?:reddit\.com|old\.reddit\.com|np\.reddit\.com)$/i.test(host) && /^\/r\/[a-z0-9_]+\/comments\/[a-z0-9]+(?:\/|$)/i.test(path);
   else if (p === "snapchat") ok = host === "snapchat.com" && /^\/spotlight\/[^/]+\/?$/i.test(path);
   else if (p === "bilibili") ok = host === "b23.tv" ? /^\/[^/]+/i.test(path) : /^\/video\/(?:BV[0-9A-Za-z]+|av\d+)/i.test(path);
   else if (p === "douyin") ok = host === "v.douyin.com" || /^\/(?:share\/)?(?:video|note)\/\d{8,}/i.test(path);
@@ -157,6 +158,10 @@ function socialEmbedUrl(platform, value) {
       ? "video.php" : "post.php";
     return "https://www.facebook.com/plugins/" + endpoint + "?href=" + encodeURIComponent(url) + (endpoint === "video.php" ? "&show_text=false&autoplay=true" : "&show_text=true");
   }
+  if (p === "reddit") {
+   const match = path.match(/^\/r\/([a-z0-9_]+)\/comments\/([a-z0-9]+)(?:\/([^/?#]*))?/i);
+   return match ? "https://www.redditmedia.com/r/" + encodeURIComponent(match[1]) + "/comments/" + encodeURIComponent(match[2]) + "/" + (match[3] ? encodeURIComponent(match[3]) + "/" : "") + "?embed=true&ref_source=embed" : "";
+ }
   if (p === "bilibili") {
     match = path.match(/^\/video\/(BV[0-9A-Za-z]+)/i);
     if (match) return "https://player.bilibili.com/player.html?bvid=" + encodeURIComponent(match[1]) + "&autoplay=1";
@@ -1318,7 +1323,7 @@ function publishableThumbnail(row) {
 // Public Social cards must carry a real provider-owned preview image. Keeping
 // this strict prevents blank or synthetic cards from consuming permanent slots.
 const PREVIEW_OPTIONAL_PUBLIC_CONTENT_PLATFORMS = new Set([
-  "instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"
+  "instagram", "tiktok", "facebook", "reddit"
 ]);
 function publishableIdentity(row) {
   const r = plain(row);

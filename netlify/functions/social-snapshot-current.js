@@ -15,8 +15,7 @@ function text(value) {
 
 const FRONT_SECTION_KEYS = Object.freeze([
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-snapchat",
-  "social-bilibili", "social-douyin",
+  "social-reddit",
 ]);
 const FRONT_SLOT_LIMIT = 100;
 let warmProjectionCache = null;
@@ -87,7 +86,7 @@ function compactFrontSnapshot(snapshot) {
   const sections = snapshot && snapshot.pages && snapshot.pages.social && snapshot.pages.social.sections || {};
   const compactSections = {};
   FRONT_SECTION_KEYS.forEach((key) => {
-    // Front layout owns six permanent 100-slot rows. A stored release may be
+    // Front layout owns five permanent 100-slot rows. A stored release may be
     // older than the current Social schema, so never collapse a row merely
     // because that release has no array for a newly introduced platform.
     // The server readback pads only with replaceable SAMPLE slots; real content

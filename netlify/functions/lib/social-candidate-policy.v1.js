@@ -27,9 +27,7 @@ const SECTION_KEYS = Object.freeze([
   "social-instagram",
   "social-tiktok",
   "social-facebook",
-  "social-snapchat",
-  "social-bilibili",
-  "social-douyin"
+  "social-reddit"
 ]);
 
 const ALLOWED_SECTIONS = new Set(SECTION_KEYS);
@@ -40,9 +38,7 @@ const PLATFORM_BY_SECTION = Object.freeze({
   "social-instagram": "instagram",
   "social-tiktok": "tiktok",
   "social-facebook": "facebook",
-  "social-snapchat": "snapchat",
-  "social-bilibili": "bilibili",
-  "social-douyin": "douyin"
+  "social-reddit": "reddit"
 });
 
 const SECTION_ALIASES = Object.freeze({
@@ -50,9 +46,7 @@ const SECTION_ALIASES = Object.freeze({
   "instagram": "social-instagram", "insta": "social-instagram", "ig": "social-instagram", "social-instagram": "social-instagram",
   "tiktok": "social-tiktok", "tik-tok": "social-tiktok", "social-tiktok": "social-tiktok",
   "facebook": "social-facebook", "fb": "social-facebook", "social-facebook": "social-facebook",
-  "snapchat": "social-snapchat", "snap": "social-snapchat", "spotlight": "social-snapchat", "social-snapchat": "social-snapchat",
-  "bilibili": "social-bilibili", "bili": "social-bilibili", "social-bilibili": "social-bilibili",
-  "douyin": "social-douyin", "dy": "social-douyin", "抖音": "social-douyin", "social-douyin": "social-douyin"
+  "reddit": "social-reddit", "social-reddit": "social-reddit"
 });
 
 const HOST_PLATFORM = Object.freeze({
@@ -60,9 +54,7 @@ const HOST_PLATFORM = Object.freeze({
   "instagram.com": "instagram",
   "tiktok.com": "tiktok", "vm.tiktok.com": "tiktok", "vt.tiktok.com": "tiktok",
   "facebook.com": "facebook", "m.facebook.com": "facebook", "fb.watch": "facebook",
-  "snapchat.com": "snapchat", "www.snapchat.com": "snapchat",
-  "bilibili.com": "bilibili", "www.bilibili.com": "bilibili", "m.bilibili.com": "bilibili", "space.bilibili.com": "bilibili", "b23.tv": "bilibili",
-  "douyin.com": "douyin", "www.douyin.com": "douyin", "v.douyin.com": "douyin", "iesdouyin.com": "douyin"
+  "reddit.com": "reddit", "old.reddit.com": "reddit", "np.reddit.com": "reddit"
 });
 
 const PLATFORM_POLICIES = Object.freeze({
@@ -127,43 +119,14 @@ const PLATFORM_POLICIES = Object.freeze({
       "facebook trending creator public video"
     ]
   },
-  snapchat: {
-    sectionKey: "social-snapchat",
-    defaultDisplayMode: "link_card_or_contained_preview",
-    publicPreference: "public_spotlight_video_card",
-    categories: ["music", "travel", "culture", "food", "education", "art", "nature", "lifestyle", "creator", "short_video"],
-    // Discover individual Spotlight posts worldwide. Profiles are supplemental only.
-    collectionQueries: [
-      "snapchat spotlight music performance", "snapchat spotlight travel places",
-      "snapchat spotlight food culture", "snapchat spotlight education tutorial",
-      "snapchat spotlight art design", "snapchat spotlight nature outdoor",
-      "snapchat spotlight comedy creator", "snapchat spotlight wellness lifestyle"
-    ]
-  },
-  bilibili: {
-    sectionKey: "social-bilibili",
-    defaultDisplayMode: "link_card_or_official_embed",
-    publicPreference: "public_video_or_creator_channel",
-    categories: ["music", "travel", "culture", "documentary", "education", "technology", "gaming", "animation", "art", "creator", "video"],
-    // Native-search seed terms deliberately stay short and in Chinese.
-    // Quality verification is applied after actual video URLs are discovered.
-    collectionQueries: [
-      "音乐 演出", "旅行 旅游", "科普 教育", "纪录片 文化",
-      "艺术 摄影", "游戏 动画", "美食 文化", "自然 生活"
-    ]
-  },
-  douyin: {
-    sectionKey: "social-douyin",
-    defaultDisplayMode: "link_card_or_contained_preview",
-    publicPreference: "public_video_or_note_card",
-    categories: ["music", "dance", "travel", "food", "culture", "lifestyle", "creator", "short_video", "education", "art"],
-    // Chinese first. English-only creator queries return very little from
-    // Douyin's native public search and Chinese regional indices.
-    collectionQueries: [
-      "音乐 演出", "旅行 景点", "美食 文化", "健康 生活",
-      "非遗 传统文化", "艺术 摄影", "教育 科普", "科技 创意"
-    ]
-  }
+  reddit: {
+   sectionKey: "social-reddit",
+   defaultDisplayMode: "link_card_or_official_embed",
+   publicPreference: "public_subreddit_post_only",
+   categories: ["travel", "culture", "technology", "art", "education", "food", "fashion", "books", "creator"],
+   // Explicit URL ingestion only until commercial API access is approved.
+   collectionQueries: []
+ }
 });
 
 const HARD_BLOCK_TERMS = Object.freeze([
@@ -406,6 +369,15 @@ function validationReasons(row, normalized) {
   if (n.sectionKey && n.platform && PLATFORM_BY_SECTION[n.sectionKey] && PLATFORM_BY_SECTION[n.sectionKey] !== n.platform) reasons.push("platform_section_mismatch");
   if (!n.title) reasons.push("title_required");
   if (!n.sourceUrl || isBadPlaceholderUrl(n.sourceUrl)) reasons.push("source_url_required");
+  if (n.platform === "reddit") {
+   try {
+     const u = new URL(n.sourceUrl);
+     const host = u.hostname.toLowerCase().replace(/^www\./, "");
+     if (!(host === "reddit.com" || host === "old.reddit.com" || host === "np.reddit.com") ||
+         !/^\/r\/[a-z0-9_]+\/comments\/[a-z0-9]+(?:\/|$)/i.test(u.pathname)) reasons.push("reddit_public_post_url_required");
+   } catch (_) { reasons.push("reddit_public_post_url_required"); }
+ }
+
   if (n.seedContent) reasons.push("seed_or_placeholder_preserved_not_imported");
   if (n.hardBlocked || n.riskLevel === "blocked") reasons.push("safety_blocked");
   return reasons;

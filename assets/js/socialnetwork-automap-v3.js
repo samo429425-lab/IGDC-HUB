@@ -1,5 +1,5 @@
 // socialnetwork-automap.v3.fixed.js
-// build: 20261030-four-platform-compact-info-five-actions-v3
+// build: 20261030-five-platform-reddit-manual-native-v1
 // 목적:
 // 1) Social 메인 6섹션은 최신 저장 Social Release만 읽는다. Distribution Snapshot을 fallback으로 쓰지 않는다.
 // 2) rightPanel은 Home/Distribution/Network/Tour와 같은 Canonical Distribution/IP 경로만 읽어 표시한다.
@@ -17,7 +17,7 @@
   const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
   const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
-  const MAIN_ROWS = 7;
+  const MAIN_ROWS = 5;
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 12; // first-screen content first; remaining slots are painted without geometry changes
   const RIGHT_LIMIT = 100;
@@ -27,9 +27,7 @@
     "social-instagram",
     "social-tiktok",
     "social-facebook",
-    "social-snapchat",
-    "social-bilibili",
-    "social-douyin",
+    "social-reddit",
   ]);
   const mainRenderTokens = new WeakMap();
   const rightRenderTokens = new WeakMap();
@@ -407,7 +405,7 @@
   // Public Social main release only. Session-local projection avoids repeat
   // network/DB gating when a user reopens or refreshes the page; the current
   // release is still fetched asynchronously and wins on successful readback.
-  const MAIN_FAST_CACHE = "igdc.social.mainRelease.v7";
+  const MAIN_FAST_CACHE = "igdc.social.mainRelease.v5.reddit";
   function readFastMain() {
     try {
       const raw = sessionStorage.getItem(MAIN_FAST_CACHE);
@@ -461,7 +459,7 @@
     return qsa("a.card", gridEl);
   }
 
-  const COMPACT_MAIN_KEYS = new Set(['social-youtube','social-instagram','social-tiktok','social-facebook']);
+  const COMPACT_MAIN_KEYS = new Set(['social-youtube','social-instagram','social-tiktok','social-facebook','social-reddit']);
   function mainCtaLabel(gridEl) {
     const existing = qs('a.card .cta', gridEl);
     return safeText(existing && existing.textContent).trim() || 'Open';
@@ -672,8 +670,8 @@
       }
       const label = action === 'recommend' ? labels.recommend : action === 'share' ? labels.share : metricLabels.url;
       item.textContent = action === 'recommend' ? '★' : action === 'share' ? '↗' : '🔗';
-      item.title = label;
-      item.setAttribute('aria-label', label);
+      item.title = action === 'recommend' ? ('IGDC · ' + label) : label;
+      item.setAttribute('aria-label', action === 'recommend' ? ('IGDC · ' + label) : label);
       const sample = card.dataset.sample === '1';
       item.tabIndex = sample ? -1 : 0;
       item.setAttribute('aria-hidden', sample ? 'true' : 'false');
@@ -853,9 +851,7 @@
 .thumb-grid[data-psom-key="social-youtube"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#f8ecec,#fbf7f7 60%,#f4e9ed)!important}
 .thumb-grid[data-psom-key="social-instagram"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#f5edf9,#f9f4f9 60%,#f4edf0)!important}
 .thumb-grid[data-psom-key="social-tiktok"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#e7f3f3,#f2f6f8 60%,#e9eef5)!important}
-.thumb-grid[data-psom-key="social-snapchat"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#f9f6e8,#fbfaf4 60%,#f4f1e5)!important}
-.thumb-grid[data-psom-key="social-bilibili"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#eaf3f9,#f4f8fb 60%,#e9f0f7)!important}
-.thumb-grid[data-psom-key="social-douyin"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#e9edf4,#f5f6f9 60%,#e9edf2)!important}
+.thumb-grid[data-psom-key="social-reddit"] a.card[data-sample="1"] .pic{background:linear-gradient(135deg,#fff0e7,#fff7f1 60%,#fce8df)!important}
 .thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .meta{min-height:0;color:#6a7585}
 .thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .title{display:block!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap!important;color:#66778d;font-size:11px!important;font-weight:550!important;line-height:1.4!important}
 .thumb-grid[data-psom-key^="social-"] a.card[data-sample="1"] .cta{background:#e9eff7!important;color:#647996!important;font-weight:600!important;font-size:11px!important;letter-spacing:.01em}
@@ -873,9 +869,10 @@
     const style = document.createElement("style");
     style.id = styleId;
     style.textContent = `
-/* IGDC native-proportion SNS cards: fixed horizontal carousel, separate metadata.
-   16:9 for YouTube; portrait 9:16 for Instagram Reels and TikTok.
-   Instagram square/4:5 sources are letterboxed, not cropped/distorted. */
+/* IGDC original-aspect social cards: YouTube 16:9, Instagram post 4:5,
+   Instagram Reels and TikTok 9:16; Facebook varies by content type.
+   A published image can refine the media box to its known native ratio.
+   Footer remains independent; neither the right panel nor other SNS change. */
 .thumb-grid[data-psom-key="social-youtube"],
 .thumb-grid[data-psom-key="social-instagram"],
 .thumb-grid[data-psom-key="social-tiktok"],
@@ -893,9 +890,10 @@
 .thumb-grid[data-psom-key="social-tiktok"] a.card .pic,
 .thumb-grid[data-psom-key="social-facebook"] a.card .pic{box-sizing:border-box!important;flex:0 0 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important;position:relative!important;background:#101318!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .pic{aspect-ratio:16 / 9!important;}
-.thumb-grid[data-psom-key="social-facebook"] a.card .pic{aspect-ratio:16 / 9!important;}
-.thumb-grid[data-psom-key="social-instagram"] a.card .pic,
+.thumb-grid[data-psom-key="social-facebook"] a.card .pic,
+.thumb-grid[data-psom-key="social-instagram"] a.card .pic{aspect-ratio:4 / 5!important;}
 .thumb-grid[data-psom-key="social-tiktok"] a.card .pic{aspect-ratio:9 / 16!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .pic{aspect-ratio:16 / 9!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .pic img,
 .thumb-grid[data-psom-key="social-instagram"] a.card .pic img,
 .thumb-grid[data-psom-key="social-tiktok"] a.card .pic img,
@@ -908,6 +906,11 @@
 .thumb-grid[data-psom-key="social-instagram"] a.card .pic iframe,
 .thumb-grid[data-psom-key="social-tiktok"] a.card .pic iframe,
 .thumb-grid[data-psom-key="social-facebook"] a.card .pic iframe{box-sizing:border-box!important;display:block!important;width:100%!important;height:100%!important;max-width:100%!important;min-width:0!important;max-height:100%!important;object-fit:contain!important;object-position:center!important;border:0!important;}
+/* Image covers the native media rectangle; video/iframe content is never cropped. */
+.thumb-grid[data-psom-key="social-youtube"] a.card .pic img,
+.thumb-grid[data-psom-key="social-instagram"] a.card .pic img,
+.thumb-grid[data-psom-key="social-tiktok"] a.card .pic img,
+.thumb-grid[data-psom-key="social-facebook"] a.card .pic img{object-fit:cover!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .meta,
 .thumb-grid[data-psom-key="social-instagram"] a.card .meta,
 .thumb-grid[data-psom-key="social-tiktok"] a.card .meta,
@@ -916,6 +919,8 @@
 .thumb-grid[data-psom-key="social-instagram"] a.card .title,
 .thumb-grid[data-psom-key="social-tiktok"] a.card .title,
 .thumb-grid[data-psom-key="social-facebook"] a.card .title{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:3!important;line-clamp:3!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:normal!important;overflow-wrap:anywhere!important;font-size:13px!important;font-weight:650!important;line-height:1.36!important;height:calc(3 * 1.36em)!important;max-height:calc(3 * 1.36em)!important;min-height:calc(3 * 1.36em)!important;color:#1d2530!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .title,
+.thumb-grid[data-psom-key="social-tiktok"] a.card[data-sample="1"] .title{-webkit-line-clamp:2!important;line-clamp:2!important;height:calc(2 * 1.36em)!important;min-height:calc(2 * 1.36em)!important;max-height:calc(2 * 1.36em)!important;}
 .thumb-grid[data-psom-key="social-youtube"] a.card .desc,
 .thumb-grid[data-psom-key="social-instagram"] a.card .desc,
 .thumb-grid[data-psom-key="social-tiktok"] a.card .desc,
@@ -959,7 +964,24 @@
  .thumb-grid[data-psom-key="social-tiktok"] a.card,
  .thumb-grid[data-psom-key="social-facebook"] a.card{width:100%!important;min-width:0!important;max-width:none!important;}
 }
-/* Equal compact information footer for the four active SNS cards. */
+
+/* Visual familiarity only: IGDC actions are not third-party native controls. */
+.thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-action{border-radius:15px!important;background:#f2f2f2!important;color:#242424!important;border-color:#e5e5e5!important;}
+.thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-action{border-radius:9px!important;background:#fff!important;color:#29222c!important;border-color:#e3dce6!important;}
+.thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-action{border-radius:7px!important;background:#f3f5f6!important;color:#1e242a!important;border-color:#dbe1e5!important;}
+.thumb-grid[data-psom-key="social-facebook"] a.card .sn-card-action{border-radius:7px!important;background:#eff4fc!important;color:#20549c!important;border-color:#d4e2f6!important;}
+
+
+/* Reddit: official post/video preview uses original-aspect image when available. */
+.thumb-grid[data-psom-key="social-reddit"] a.card{box-sizing:border-box!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .pic{position:relative!important;overflow:hidden!important;box-sizing:border-box!important;background:#101318!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .pic img{display:block!important;width:100%!important;height:100%!important;object-fit:contain!important;object-position:center!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .title{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:3!important;line-clamp:3!important;overflow:hidden!important;white-space:normal!important;font-size:13px!important;line-height:1.36!important;height:calc(3 * 1.36em)!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .desc{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:1!important;overflow:hidden!important;white-space:nowrap!important;text-overflow:ellipsis!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .cta{display:none!important;}
+.thumb-grid[data-psom-key="social-reddit"] a.card .sn-card-action{border-radius:16px!important;background:#fff2e9!important;color:#e04a13!important;border-color:#f4d0be!important;}
+
+/* Equal compact information footer for the five active SNS cards. */
 .thumb-grid[data-psom-key="social-youtube"] a.card .sn-card-stats,
 .thumb-grid[data-psom-key="social-instagram"] a.card .sn-card-stats,
 .thumb-grid[data-psom-key="social-tiktok"] a.card .sn-card-stats,
@@ -990,9 +1012,7 @@
       "social-instagram": "Instagram",
       "social-tiktok": "TikTok",
       "social-facebook": "Facebook",
-      "social-snapchat": "Snapchat",
-      "social-bilibili": "Bilibili",
-      "social-douyin": "Douyin",
+      "social-reddit": "Reddit",
     };
     return labels[safeText(key)] || "SNS";
   }
@@ -1043,6 +1063,8 @@
     delete card.dataset.snClicks;
     ensureCardActions(card);
     if (pic) {
+      setOriginalMediaRatio(pic, "");
+      delete pic.dataset.snMediaRatio; delete pic.dataset.snMediaUrl; delete pic.dataset.snMediaPlatform;
       delete pic.dataset.socialThumbLoading;
       delete pic.dataset.socialThumbFailed;
       pic.style.backgroundImage = "";
@@ -1075,7 +1097,7 @@
   }
 
   function thumbnailRenderUrl(platform, contentUrl, thumb) {
-    if (["instagram", "tiktok", "facebook", "snapchat", "bilibili", "douyin"].indexOf(platform) < 0) return thumb || "";
+    if (["instagram", "tiktok", "facebook"].indexOf(platform) < 0) return thumb || "";
     // A stored blank/expired/brand image must not prevent runtime lookup of
     // a real cover from the exact, already-published post URL.
     if (!contentUrl || !/^https:\/\//i.test(contentUrl)) return "";
@@ -1134,6 +1156,19 @@
     img.addEventListener("load", function () {
       if (img.parentNode !== pic) return;
       delete pic.dataset.socialThumbLoading;
+      // Only static IG/FB posts adapt to the real photo ratio; player video
+      // ratios must not be inferred from a cropped 16:9 oEmbed poster.
+      const currentPlatform = pic.dataset.snMediaPlatform;
+      const currentUrl = pic.dataset.snMediaUrl || '';
+      if ((currentPlatform === 'instagram' && !/\/(reel|reels)\//i.test(currentUrl)) ||
+          (currentPlatform === 'facebook' && !/\/(videos|watch)\b/i.test(currentUrl)) || currentPlatform === 'reddit') {
+        const native = img.naturalWidth > 0 && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 0;
+        if (native >= .5 && native <= 2.2) {
+          const value = nearestNativeRatio(currentPlatform, native);
+          setOriginalMediaRatio(pic, value);
+          pic.dataset.snMediaRatio = value;
+        }
+      }
       img.style.opacity = "1";
     });
     // Only first on-screen cards receive eager network priority. Every other
@@ -1164,6 +1199,43 @@
     img.src = proxied;
   }
 
+  // Original-media shapes: do not force every Instagram/Facebook post into
+  // a video rectangle. Metadata wins; media image natural ratio is fallback.
+  function originalMediaRatio(platform, url, item) {
+    const textValue = (v) => safeText(v).toLowerCase();
+    const kind = textValue(item && (item.mediaType || item.contentType || item.postType ||
+      (item.social && (item.social.mediaType || item.social.contentType))));
+    const candidate = textValue(url);
+    if (platform === 'youtube') return '16 / 9';
+    if (platform === 'reddit') return '';
+    if (platform === 'tiktok') return '9 / 16';
+    if (platform === 'instagram' && (/\/(reel|reels)\//i.test(candidate) || /reel|story/.test(kind))) return '9 / 16';
+    if (platform === 'facebook' && (/\/(videos|watch)\b/i.test(candidate) || /video|reel/.test(kind))) return '16 / 9';
+    const meta = item && (item.aspectRatio || item.aspect_ratio || item.mediaAspectRatio ||
+      (item.social && item.social.aspectRatio));
+    const asNum = typeof meta === 'number' ? meta : (/^\d+(?:\.\d+)?$/.test(textValue(meta)) ? Number(meta) : NaN);
+    const split = textValue(meta).match(/^(\d+(?:\.\d+)?)\s*[:\/]\s*(\d+(?:\.\d+)?)$/);
+    const ratio = split ? Number(split[1]) / Number(split[2]) : asNum;
+    if (Number.isFinite(ratio) && ratio >= .5 && ratio <= 2.2) return nearestNativeRatio(platform, ratio);
+    return '4 / 5';
+  }
+  function nearestNativeRatio(platform, value) {
+    const options = platform === 'facebook'
+      ? [[9,16],[3,4],[4,5],[1,1],[16,9]]
+      : [[9,16],[3,4],[4,5],[1,1],[16,9]];
+    let best = options[0], error = Infinity;
+    options.forEach(pair => {
+      const e = Math.abs(Math.log(value / (pair[0] / pair[1])));
+      if (e < error) { error = e; best = pair; }
+    });
+    return best[0] + ' / ' + best[1];
+  }
+  function setOriginalMediaRatio(pic, ratio) {
+    if (!pic) return;
+    if (ratio) pic.style.setProperty('aspect-ratio', ratio, 'important');
+    else pic.style.removeProperty('aspect-ratio');
+  }
+
   function paintMainCard(card, it) {
     if (!card || !it) return;
 
@@ -1184,6 +1256,7 @@
       ? (pickCreator(it) || safeText(it && (it.publisher || it.channelName || it.author || (it.source && it.source.publisher))) || (platform ? platform.charAt(0).toUpperCase() + platform.slice(1) : "Social"))
       : cardIdentity(it);
     const thumb = pickThumb(it);
+    const originalRatio = COMPACT_MAIN_KEYS.has('social-' + platform) ? originalMediaRatio(platform, url, it) : '';
 
     const latestContentUrl = safeText(it && (it.latestContentUrl || it.latest_content_url || (it.social && it.social.latestContentUrl)));
     const viewerUrl = safeText(it && (it.viewerUrl || it.permalink || it.href || it.link));
@@ -1206,6 +1279,8 @@
     card.removeAttribute("data-dummy");
 
     const pic = qs(".pic", card);
+    setOriginalMediaRatio(pic, originalRatio);
+    if (pic) { pic.dataset.snMediaRatio = originalRatio; pic.dataset.snMediaPlatform = platform; pic.dataset.snMediaUrl = url; }
     const metaTitle = qs(".title", card);
     const metaDesc = qs(".desc", card);
 
@@ -1213,7 +1288,7 @@
       metaTitle.textContent = title;
       metaTitle.style.display = "-webkit-box";
       metaTitle.style.webkitBoxOrient = "vertical";
-      metaTitle.style.webkitLineClamp = "3";
+      metaTitle.style.webkitLineClamp = platform === "tiktok" ? "2" : "3";
       metaTitle.style.overflow = "hidden";
       metaTitle.style.whiteSpace = "normal";
       metaTitle.style.lineHeight = "1.35";

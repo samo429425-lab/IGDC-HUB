@@ -14,11 +14,10 @@ const Curator = require("./social-candidate-auto-curator");
 const Actions = require("./social-candidate-action");
 const Store = require("./lib/social-candidate-store.v1");
 
-const VERSION = "social-content-rotation-scheduler-v1.5.0-seven-parallel-candidate-publish";
+const VERSION = "social-content-rotation-scheduler-v1.6.0-four-auto-curated-reddit";
 const SECTIONS = [
   "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-snapchat",
-  "social-bilibili", "social-douyin"
+
 ];
 
 function bodyOf(response) {
@@ -36,41 +35,30 @@ function cursorFor(sectionIndex, now) {
 
 exports.handler = async function() {
   const startedAt = new Date();
-  // Seven independent Social lanes advance together. Failure or timeout on
-  // one SNS must not starve the later Snapchat/Bilibili/Douyin lanes.
-  // Each lane owns one cursor and one bounded candidate write per scheduled run.
-  const results = await Promise.allSettled(SECTIONS.map(async (sectionKey, i) => {
-    let baselineCursor = cursorFor(i, startedAt);
-    // A truly empty Bilibili/Douyin ledger gets the search query that has
-    // previously returned verified direct content URLs in diagnostics. This
-    // remains a best-effort read; errors leave the normal cursor untouched.
-    if (/^social-(?:snapchat|bilibili|douyin)$/.test(sectionKey)) {
-      try {
-        const ledger = await Store.selectCandidates("select=id,raw&section_key=eq." + encodeURIComponent(sectionKey) + "&limit=100");
-        if (Array.isArray(ledger) && !ledger.some((row) => Store.assetClassOf(row) === "latest_content")) baselineCursor = 0;
-      } catch (_error) { /* Keep the ordinary rotating cursor. */ }
-    }
-    const response = await Collector.collectInternal({
-      action: "collect_live", sectionKey, batchSize: 10, limit: 10,
-      queryPasses: 1, queryCursor: baselineCursor, qualitySweep: true,
-      contentFirst: true, registryOnly: false, registrySweepDone: true,
-      scopeMode: "global", countryCode: "", regionId: "", scheduledRotation: true
-    });
-    const data = bodyOf(response);
-    return {
-      sectionKey, ok: !!data.ok,
-      accepted: Number(data.accepted || 0), saved: Number(data.saved || 0),
-      insertedLatestContent: Number(data.insertedLatestContent || 0),
-      verifiedInsertedLatestContent: data.verifiedInsertedLatestContent == null ? null : Number(data.verifiedInsertedLatestContent),
-      searchedRows: Number(data.liveCollection && data.liveCollection.searchedRows || 0),
-      providerGroupName: data.liveCollection && data.liveCollection.providerGroupName || null,
-      error: data.error || data.liveCollection && data.liveCollection.gateway && data.liveCollection.gateway.error || null
-    };
-  }));
-  const runs = results.map((entry, i) => entry.status === "fulfilled"
-    ? entry.value
-    : { sectionKey: SECTIONS[i], ok: false, accepted: 0, saved: 0,
-        searchedRows: 0, error: String(entry.reason && entry.reason.message || entry.reason) });
+  // Run approved public-provider discovery concurrently; Reddit stays curated
+ // until official commercial API permissions are verified and configured.
+ const results = await Promise.allSettled(SECTIONS.map(async (sectionKey, i) => {
+   const response = await Collector.collectInternal({
+     action: "collect_live", sectionKey, batchSize: 10, limit: 10,
+     queryPasses: 1, queryCursor: cursorFor(i, startedAt), qualitySweep: true,
+     contentFirst: true, registryOnly: false, registrySweepDone: true,
+     scopeMode: "global", countryCode: "", regionId: "", scheduledRotation: true
+   });
+   const data = bodyOf(response);
+   return {
+     sectionKey, ok: !!data.ok,
+     accepted: Number(data.accepted || 0), saved: Number(data.saved || 0),
+     insertedLatestContent: Number(data.insertedLatestContent || 0),
+     verifiedInsertedLatestContent: data.verifiedInsertedLatestContent == null ? null : Number(data.verifiedInsertedLatestContent),
+     searchedRows: Number(data.liveCollection && data.liveCollection.searchedRows || 0),
+     providerGroupName: data.liveCollection && data.liveCollection.providerGroupName || null,
+     error: data.error || (data.liveCollection && data.liveCollection.gateway && data.liveCollection.gateway.error) || null
+   };
+ }));
+ const runs = results.map((entry, i) => entry.status === "fulfilled"
+   ? entry.value
+   : { sectionKey: SECTIONS[i], ok: false, accepted: 0, saved: 0,
+       searchedRows: 0, error: String(entry.reason && entry.reason.message || entry.reason) });
 
   // Bounded existing-schedule thumbnail repair: at most 2 rows per SNS.
   // This path is Social-only and never invokes a public new scheduler route.
@@ -142,7 +130,7 @@ exports.handler = async function() {
       version: VERSION,
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
-      strategy: "seven_parallel_psom_platform_content_first_then_verified_ledger_and_selective_ranked_runtime_publish",
+      strategy: "four_parallel_verified_social_research_plus_manual_reddit_intake",
       runs,
       preview,
       curation,
