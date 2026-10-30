@@ -23,9 +23,7 @@
   var MAIN_KEYS = {
     'social-youtube': 'youtube',
     'social-instagram': 'instagram',
-    'social-tiktok': 'tiktok',
-    'social-facebook': 'facebook',
-    'social-reddit': 'reddit'
+    'social-tiktok': 'tiktok'
   };
 
   var state = {

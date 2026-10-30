@@ -469,8 +469,7 @@ a[id*="qna"]{
 <div class="row-viewport" data-row="1"><div class="row-scroller" id="rowScroller1"><div class="row-grid" id="rowGrid1"><div class="thumb-grid thumb-scroller" data-psom-key="social-youtube"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft1">‹</button><button class="rscroll right" id="rsRight1">›</button></div>
 <div class="row-viewport" data-row="2"><div class="row-scroller" id="rowScroller2"><div class="row-grid" id="rowGrid2"><div class="thumb-grid thumb-scroller" data-psom-key="social-instagram"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft2">‹</button><button class="rscroll right" id="rsRight2">›</button></div>
 <div class="row-viewport" data-row="3"><div class="row-scroller" id="rowScroller3"><div class="row-grid" id="rowGrid3"><div class="thumb-grid thumb-scroller" data-psom-key="social-tiktok"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft3">‹</button><button class="rscroll right" id="rsRight3">›</button></div>
-<div class="row-viewport" data-row="4"><div class="row-scroller" id="rowScroller4"><div class="row-grid" id="rowGrid4"><div class="thumb-grid thumb-scroller" data-psom-key="social-facebook"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft4">‹</button><button class="rscroll right" id="rsRight4">›</button></div>
-<div class="row-viewport" data-row="5"><div class="row-scroller" id="rowScroller5"><div class="row-grid" id="rowGrid5"><div class="thumb-grid thumb-scroller" data-psom-key="social-reddit"><div class="thumb-inner"></div></div></div></div><button class="rscroll left" id="rsLeft5">‹</button><button class="rscroll right" id="rsRight5">›</button></div>
+
 <section id="rpMobileBox">
 <h3 class="ad-headline">💎 Mặt hàng phổ biến 💎</h3>
 <div id="rpMobileScroller">
@@ -1119,7 +1118,7 @@ function boot(){
           setTimeout(sync, t);
         });
       }
-      for(var i=1;i<=5;i++){
+      for(var i=1;i<=3;i++){
         bindRow(
           document.querySelector('.row-viewport[data-row="'+i+'"]'),
           document.getElementById('rowScroller'+i),

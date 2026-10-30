@@ -17,7 +17,7 @@
   const RIGHT_SNAPSHOT_URL = "/data/social.snapshot.json"; // Edge-routed Canonical Distribution/IP snapshot; rightPanel only
   const CURRENT_SNAPSHOT_URL = "/.netlify/functions/social-snapshot-current";
   const COUNTRY_ROUTE_URL = "/.netlify/functions/social-country-route";
-  const MAIN_ROWS = 5;
+  const MAIN_ROWS = 3;
   const MAIN_LIMIT = 100;
   const MAIN_BATCH = 12; // first-screen content first; remaining slots are painted without geometry changes
   const RIGHT_LIMIT = 100;
@@ -26,8 +26,6 @@
     "social-youtube",
     "social-instagram",
     "social-tiktok",
-    "social-facebook",
-    "social-reddit",
   ]);
   const mainRenderTokens = new WeakMap();
   const rightRenderTokens = new WeakMap();
@@ -459,7 +457,7 @@
     return qsa("a.card", gridEl);
   }
 
-  const COMPACT_MAIN_KEYS = new Set(['social-youtube','social-instagram','social-tiktok','social-facebook','social-reddit']);
+  const COMPACT_MAIN_KEYS = new Set(['social-youtube','social-instagram','social-tiktok']);
   function mainCtaLabel(gridEl) {
     const existing = qs('a.card .cta', gridEl);
     return safeText(existing && existing.textContent).trim() || 'Open';
@@ -778,7 +776,7 @@
     const card = action.closest('a.card');
     if (!card || card.dataset.sample === '1') return;
     const grid = card.closest('.thumb-grid[data-psom-key]');
-    if (!grid || !['social-youtube','social-instagram','social-tiktok','social-facebook'].includes(grid.getAttribute('data-psom-key'))) return;
+    if (!grid || !['social-youtube','social-instagram','social-tiktok'].includes(grid.getAttribute('data-psom-key'))) return;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
@@ -1374,7 +1372,7 @@
       if (!MANAGED_MAIN_KEYS.has(key)) return;
       const label = sampleLabelForSection(key);
       const existing = getMainSlots(grid);
-      if (['social-youtube','social-instagram','social-tiktok','social-facebook'].includes(key)) {
+      if (['social-youtube','social-instagram','social-tiktok'].includes(key)) {
         existing.forEach(function(card) {
           if (!qs('.meta', card)) return;
           if (key === 'social-facebook') {

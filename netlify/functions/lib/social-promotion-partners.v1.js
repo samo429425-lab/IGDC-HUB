@@ -2,7 +2,7 @@
 /* IGDC Social contract-only promotion overlay; never a discovery seed or eligibility bypass. */
 const Store = require("./social-candidate-store.v1");
 const TABLE = "social_promotion_partners";
-const SECTIONS = new Set(["social-youtube", "social-instagram", "social-tiktok", "social-facebook", "social-reddit"]);
+const SECTIONS = new Set(["social-youtube", "social-instagram", "social-tiktok"]);
 const HOSTS = {
   "social-youtube": ["youtube.com", "youtu.be"], "social-instagram": ["instagram.com"],
   "social-tiktok": ["tiktok.com"], "social-facebook": ["facebook.com"],

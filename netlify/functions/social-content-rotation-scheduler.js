@@ -16,7 +16,7 @@ const Store = require("./lib/social-candidate-store.v1");
 
 const VERSION = "social-content-rotation-scheduler-v1.6.0-four-auto-curated-reddit";
 const SECTIONS = [
-  "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
+  "social-youtube", "social-instagram", "social-tiktok",
 
 ];
 

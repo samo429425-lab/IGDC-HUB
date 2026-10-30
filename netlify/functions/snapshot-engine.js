@@ -39,8 +39,7 @@ const SEARCH_BANK_CONTRACT_VERSION = "sanmaru-searchbank-supply-contract-v1.1";
 const PG_STATUS_PENDING = "pending_pg_approval";
 const SECTION_SLOT_LIMIT = 100;
 const SOCIAL_MANAGED_MAIN_SECTIONS = new Set([
-  "social-youtube", "social-instagram", "social-tiktok", "social-facebook",
-  "social-reddit"
+  "social-youtube", "social-instagram", "social-tiktok"
 ]);
 
 function uniq(arr) {

@@ -25,9 +25,7 @@ const LANGUAGES_30 = Object.freeze([
 const SECTION_KEYS = Object.freeze([
   "social-youtube",
   "social-instagram",
-  "social-tiktok",
-  "social-facebook",
-  "social-reddit"
+  "social-tiktok"
 ]);
 
 const ALLOWED_SECTIONS = new Set(SECTION_KEYS);

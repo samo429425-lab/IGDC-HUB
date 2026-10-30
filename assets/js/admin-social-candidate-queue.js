@@ -16,8 +16,6 @@
     ["social-youtube", "YouTube", "youtube"],
     ["social-instagram", "Instagram", "instagram"],
     ["social-tiktok", "TikTok", "tiktok"],
-    ["social-facebook", "Facebook", "facebook"],
-    ["social-reddit", "Reddit", "reddit"],
   ];
   var COLLECTOR_JOB_VERSION = 13,
     FULL_RESEARCH_ROUNDS = 12,
@@ -361,7 +359,7 @@
     };
     return {
       ok: true, queue: { rows: full }, summary: summary,
-      source: { candidateSourceMode: "supabase_five_section_paged_read", sectionReadCounts:
+      source: { candidateSourceMode: "supabase_three_section_paged_read", sectionReadCounts:
         Object.fromEntries(sections.map(function (part) { return [part.sectionKey, part.rows.length]; })) }
     };
   }
@@ -1177,7 +1175,6 @@
       '<button type="button" data-section-approve="' +
       esc(key) +
       '">선택 인플루언서 승인</button>' +
-      (key === "social-reddit" ? '<button class="secondary" type="button" data-reddit-intake="1">Reddit 공개 게시물 URL 등록</button>' : "") +
       '<button class="secondary" type="button" data-section-import-content="' +
       esc(key) +
       '">이 SNS 실후보 반입</button>' +
@@ -1197,7 +1194,6 @@
       '<div class="section-actionbar"><span class="section-note small">후보 등록/해제와 프론트 등록/해제를 분리해서 관리합니다.</span>' +
       '<button class="publish" type="button" data-section-collect="' + esc(key) + '">이 SNS 공개 콘텐츠 검색·수집</button>' +
       '<button class="secondary" type="button" data-section-import-content="' + esc(key) + '">이 SNS SearchBank 실후보 반입</button>' +
-      (key === "social-reddit" ? '<button class="secondary" type="button" data-reddit-intake="1">Reddit 게시물 URL 직접 등록</button>' : '') +
       '<button class="secondary" type="button" data-waiting-select-all="' + esc(key) + '">섹션 전체 선택</button>' +
       '<button class="secondary" type="button" data-waiting-clear-all="' + esc(key) + '">선택 해제</button>' +
       '<button type="button" data-waiting-promote="' + esc(key) + '">선택 후보 등록</button>' +
@@ -1865,7 +1861,7 @@
     if (!el) return;
     el.classList.toggle("warn", status !== "connected");
     el.textContent = status === "connected"
-      ? "후보 원장 조회 정상 · " + rows.length + "개 기록 · " + candidateReadStatus.lastSuccessAt + " · 5개 SNS 관리 기능 사용 가능"
+      ? "후보 원장 조회 정상 · " + rows.length + "개 기록 · " + candidateReadStatus.lastSuccessAt + " · 3개 SNS 관리 기능 사용 가능"
       : status === "loading" || status === "pending"
         ? "후보 원장 조회 중 · 조회 완료 전까지 기존 데이터 변경은 잠시 보호됩니다."
         : status === "empty"
@@ -2365,7 +2361,7 @@
     if ($("collectorProgressBar")) $("collectorProgressBar").style.width =
       Math.min(100, Math.round(finished * 100 / Math.max(1, total))) + "%";
     if ($("collectorState")) $("collectorState").textContent =
-      "5개 SNS 동시 수집 " + (Number(job.round || 0) + 1) + "차" +
+      "3개 SNS 동시 수집 " + (Number(job.round || 0) + 1) + "차" +
       (stopRequested ? " · 현재 진행 중인 묶음 종료 후 일시정지" : " · 각 10개 내외 검색 중");
   }
   function progress(j) {
@@ -2768,7 +2764,7 @@
   }
   async function collectAll(skipConfirm) {
     if (!skipConfirm && !confirm(
-      "Social 5개 SNS를 동시에 검색합니다. 매 차례 각 SNS에서 약 10개씩 독립적으로 " +
+      "Social 3개 SNS를 동시에 검색합니다. 매 차례 각 SNS에서 약 10개씩 독립적으로 " +
       "수집·저장하고 결과를 확인한 뒤 다음 차례를 시작합니다 (최대 " + FULL_RESEARCH_ROUNDS +
       "차, 섹션당 후보 120개 목표). 외부 API 제한이 발생할 수 있으며 " +
       "기존 후보·관리자 보류/차단 기록은 보존합니다. 계속할까요?"
@@ -2892,7 +2888,7 @@
         saveJob(j);
         show(fatalError
           ? "수집 또는 저장 오류로 병렬 검색을 중지했습니다. 실패한 검색 커서를 보존했습니다. " + collectionErrorState(fatalError) + " · " + text(fatalError.message)
-          : "5개 SNS 동시 검색을 일시정지했습니다. 다시 누르면 완료되지 않은 단계부터 재개합니다.",
+          : "3개 SNS 동시 검색을 일시정지했습니다. 다시 누르면 완료되지 않은 단계부터 재개합니다.",
           fatalError ? "warn" : "ok");
       } else {
         clearJob();
@@ -2927,7 +2923,7 @@
           sectionSummary: perSection,
           collectionBatches: liveReports.map(function (x) { return x.liveCollection || x; }),
         });
-        show("5개 SNS 동시 수집 " + FULL_RESEARCH_ROUNDS + "차 완료. 실제 신규 저장 " +
+        show("3개 SNS 동시 수집 " + FULL_RESEARCH_ROUNDS + "차 완료. 실제 신규 저장 " +
           perSection.reduce(function (sum, item) { return sum + Number(item.verifiedInserted || 0); }, 0) +
           "건, 기존 갱신 " +
           perSection.reduce(function (sum, item) { return sum + Number(item.updated || 0); }, 0) +
@@ -3472,7 +3468,7 @@
     }
   }
   async function autoCurate(sectionKey, skipConfirm) {
-    var target = sectionKey ? label(sectionKey) : "전체 5개 섹션",
+    var target = sectionKey ? label(sectionKey) : "전체 3개 섹션",
       scope = currentScope(),
       scopeName =
         (scope.country &&
@@ -3899,7 +3895,7 @@
   }
 
   async function actualApply(sectionKey, skipConfirm, exactIds, publishMode, requestedSections) {
-    var target = sectionKey ? label(sectionKey) : "전체 5개 섹션",
+    var target = sectionKey ? label(sectionKey) : "전체 3개 섹션",
       scope = currentScope(),
       scopeName =
         (scope.country &&
@@ -4225,7 +4221,7 @@
   async function actualUnapplyAll(sectionKey) {
     var target = sectionKey
       ? label(sectionKey) + " 섹션 전체"
-      : "전체 5개 섹션";
+      : "전체 3개 섹션";
     try {
       var ids = await currentPublishedIds(sectionKey);
       if (!ids.length) {
@@ -4310,7 +4306,7 @@
         return '<label class="small" style="display:inline-flex;align-items:center;gap:5px"><input class="aiSectionCheck" type="checkbox" value="' +
           esc(key) + '" /> ' + esc(label(key)) + '</label>';
       }).join("") +
-      '<button id="aiSelectAllSectionsBtn" class="secondary" type="button">5개 전체 선택</button>' +
+      '<button id="aiSelectAllSectionsBtn" class="secondary" type="button">3개 전체 선택</button>' +
       '<button id="aiClearSectionsBtn" class="secondary" type="button">선택 해제</button>';
     $("aiSelectAllSectionsBtn").onclick = function () {
       host.querySelectorAll(".aiSectionCheck").forEach(function (el) { el.checked = true; });
@@ -4840,7 +4836,7 @@
     $("collectorStopBtn").onclick = function () {
       stopRequested = true;
       this.disabled = true;
-      $("collectorState").textContent = "진행 중인 5개 SNS 검색 묶음 완료 후 일시정지";
+      $("collectorState").textContent = "진행 중인 3개 SNS 검색 묶음 완료 후 일시정지";
     };
     if ($("rotationBtn")) $("rotationBtn").onclick = rotate;
     if ($("publishPreviewBtn")) $("publishPreviewBtn").onclick = publish;

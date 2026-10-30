@@ -11,7 +11,7 @@
   var CHAT_KEY = "igdc.socialAiChats.v1";
   var SECTION_LABELS = {
     "social-youtube":"YouTube", "social-instagram":"Instagram", "social-tiktok":"TikTok",
-    "social-facebook":"Facebook", "social-reddit":"Reddit"
+
   };
   function text(v){ return v == null ? "" : String(v).trim(); }
   function readJson(key, fallback){ try { return JSON.parse(localStorage.getItem(key) || "") || fallback; } catch(_e){ return fallback; } }
