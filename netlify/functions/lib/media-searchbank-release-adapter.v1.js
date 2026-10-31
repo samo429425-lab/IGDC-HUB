@@ -273,25 +273,38 @@ function decorateEngineSnapshot(engineSnapshot,release,engineReport,searchBankHa
     const source=next.sections[sectionKey];
     const section=Array.isArray(source)?{key:sectionKey,title:sectionKey,slots:source}:Object.assign({},plain(source));
     const trusted=new Map(desired[sectionKey].map((slot)=>[slotIdOf(slot),slot]));
-    const found=new Set();
-    section.slots=slotsOf(source).map((slot)=>{
-      const id=slotIdOf(slot),original=trusted.get(id);
-      if(!original)return slot;
-      found.add(id);
-      return Object.assign({},slot,clone(original),{
-        slotId:Number(slot&&slot.slotId)||Number(original.slotId)||null,
-        managedBy:SLOT_OWNER,
-        releaseContract:Object.assign({},plain(original.releaseContract),{eligible:true})
-      });
+    const engineSlots=slotsOf(source).map(clone);
+    const managedPositions=[];
+    const actual=[];
+    engineSlots.forEach((slot,index)=>{
+      // The Snapshot Engine may not yet mark a matched item as managed.
+      // Recognize exact approved IDs as well as unexpected managed items,
+      // so membership verification remains strict and migration-safe.
+      const id=slotIdOf(slot);
+      if(trusted.has(id)){
+        actual.push(id);
+        managedPositions.push(index);
+      }else if(managedSlot(slot)){
+        actual.push(id);
+      }
     });
-    trusted.forEach((slot,id)=>{if(!found.has(id))problems.push("snapshot_engine_missing_media:"+sectionKey+":"+id);});
-    // Snapshot Engine / PSOM may legitimately reorder approved real content inside a
-    // section (ranking, sample replacement, capacity policy).  The media bridge must
-    // verify membership, not freeze the upstream slot number/order.  Enforce that the
-    // exact approved content-id set survives in the same section with no duplicates.
     const expectedIds=desired[sectionKey].map(slotIdOf).filter(Boolean).sort();
-    const actualIds=section.slots.filter(managedSlot).map(slotIdOf).filter(Boolean).sort();
-    if(stableStringify(expectedIds)!==stableStringify(actualIds))problems.push("snapshot_engine_section_membership_mismatch:"+sectionKey);
+    const actualIds=actual.slice().sort();
+    if(stableStringify(expectedIds)!==stableStringify(actualIds)){
+      problems.push("snapshot_engine_section_membership_mismatch:"+sectionKey);
+    }else{
+      // SearchBank/Snapshot Engine may reorder cards during matching. Restore the
+      // administrator's authoritative slot order without touching unrelated slots.
+      managedPositions.sort((a,b)=>a-b).forEach((position,rankIndex)=>{
+        const authoritative=desired[sectionKey][rankIndex];
+        const previous=engineSlots[position];
+        engineSlots[position]=Object.assign({},previous,clone(authoritative),{
+          slotId:position+1,managedBy:SLOT_OWNER,
+          releaseContract:Object.assign({},plain(authoritative.releaseContract),{eligible:true})
+        });
+      });
+    }
+    section.slots=engineSlots;
     next.sections[sectionKey]=section;
   });
   if(problems.length){const error=new Error(problems.join(","));error.code="media_snapshot_engine_verification_failed";error.problems=problems;throw error;}

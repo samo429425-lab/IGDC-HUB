@@ -174,6 +174,23 @@
     var match=String(row.qualityPriority||'').match(/(\d+)/);
     return Number(row.rankingScore||match&&match[1]||0);
   }
+  function rankForFront(row){
+    var ctl=row&&row.frontControl||{},value=ctl.manualRank;
+    if(value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value)))return Number(value);
+    var id=text(row&&(row.contentId||row.id)),hash=2166136261;
+    for(var i=0;i<id.length;i++){hash^=id.charCodeAt(i);hash=Math.imul(hash,16777619);}
+    return rowRank(row)+((hash>>>0)/4294967296)*0.0001;
+  }
+  function rankForFrontCompare(a,b){
+    return rankForFront(b)-rankForFront(a)||text(a&&a.id).localeCompare(text(b&&b.id));
+  }
+  function rankableRow(row){
+    return lower(row&&row.reviewStatus)==='approved'&&lower(row.verificationStatus)==='approved_for_snapshot'&&row.frontEnabled!==false&&
+      row.promotable===true&&row.candidateOnly!==true&&row.seedContent!==true;
+  }
+  function rankControlsActive(){
+    return text($('sortSelect').value)==='rank'&&!text($('searchInput').value)&&!text($('riskFilter').value)&&!text($('safetyFilter').value)&&!text($('statusFilter').value);
+  }
   function sortRows(rows){
     var sort=$('sortSelect').value;
     return rows.slice().sort(function(left,right){
@@ -181,7 +198,8 @@
       if(sort==='year')return Number(right.year||0)-Number(left.year||0)||rowRank(right)-rowRank(left);
       if(sort==='subtitle')return Number(right.subtitleCount||0)-Number(left.subtitleCount||0)||rowRank(right)-rowRank(left);
       if(sort==='title')return text(left.title).localeCompare(text(right.title));
-      return rowRank(right)-rowRank(left)||qualityValue(right.qualityTarget)-qualityValue(left.qualityTarget)||Number(right.year||0)-Number(left.year||0);
+      if(rankableRow(left)!==rankableRow(right))return rankableRow(left)?-1:1;
+      return rankForFrontCompare(left,right);
     });
   }
   function visibleRows(){
@@ -217,7 +235,7 @@
     if(seconds<3600)return Math.round(seconds/60)+'분';
     return Math.floor(seconds/3600)+'시간 '+Math.round((seconds%3600)/60)+'분';
   }
-  function candidateCardHtml(row,sectionKey,readOnly){
+  function candidateCardHtml(row,sectionKey,readOnly,displayPosition){
     var id=text(row.contentId||row.id);
     var languages=Array.isArray(row.subtitleLanguages)?row.subtitleLanguages:[];
     var warnings=Array.isArray(row.contentWarnings)?row.contentWarnings:[];
@@ -236,7 +254,7 @@
       '</button>'+
       '<div class="candidate-card-body">'+
         '<div class="candidate-card-title">'+esc(row.title||'(제목 없음)')+'</div>'+
-        '<div class="candidate-card-meta">'+pill(row.qualityTarget||'화질 미확인','rank')+pill((row.rankingTier||'-')+' '+rowRank(row),'rank')+pill(row.discoveryRegion||row.region||'지역 미확인','section')+pill(row.safetyDecision||'검토 필요',safetyClass)+(lower(row.reviewStatus)==='approved'?pill(row.frontEnabled===false?'프론트 공급 중지':'프론트 공급 허용',row.frontEnabled===false?'blocked':'section'):'')+'</div>'+
+        '<div class="candidate-card-meta">'+(rankControlsActive()&&rankableRow(row)?pill('관리자 순위 '+displayPosition,'section'):'')+pill(row.qualityTarget||'화질 미확인','rank')+pill((row.rankingTier||'-')+' '+rowRank(row),'rank')+pill(row.discoveryRegion||row.region||'지역 미확인','section')+pill(row.safetyDecision||'검토 필요',safetyClass)+(lower(row.reviewStatus)==='approved'?pill(row.frontEnabled===false?'프론트 공급 중지':'프론트 공급 허용',row.frontEnabled===false?'blocked':'section'):'')+'</div>'+
         '<div class="candidate-card-detail">'+esc(row.provider||'-')+' · '+esc(row.year||'연도 미확인')+' · 자막 '+esc(row.subtitleCount||0)+'개<br>'+
         '분류 '+esc(row.classificationConfidence||0)+'% · '+esc(row.reviewStatus||'-')+
         (row.discoveryLane?'<br>탐색 '+esc(row.discoveryLane)+' · '+esc(row.discoveryRegion||row.region||'지역 미확인'):'')+
@@ -247,6 +265,8 @@
         '<div class="candidate-card-footer"><button type="button" class="previewBtn" data-candidate-id="'+esc(id)+'">점검 재생</button>'+
         (!thumb&&!readOnly?'<button type="button" class="secondary thumbnailGenerateBtn" data-candidate-id="'+esc(id)+'">썸네일 생성</button>':'')+
         (!readOnly&&lower(row.reviewStatus)==='approved'&&lower(row.verificationStatus)==='approved_for_snapshot'?'<button type="button" class="'+(row.frontEnabled===false?'publish':'danger')+' contentFrontToggleBtn" data-candidate-id="'+esc(id)+'" data-section-key="'+esc(sectionKey)+'" data-front-enabled="'+(row.frontEnabled===false?'0':'1')+'">'+(row.frontEnabled===false?'이 콘텐츠 프론트 넣기':'이 콘텐츠 프론트 빼기')+'</button>':'')+
+        (!readOnly&&rankControlsActive()&&rankableRow(row)?'<button type="button" class="secondary frontMoveBtn" data-direction="up" data-candidate-id="'+esc(id)+'" title="랭킹에서 한 칸 앞으로">▲ 앞</button><button type="button" class="secondary frontMoveBtn" data-direction="down" data-candidate-id="'+esc(id)+'" title="랭킹에서 한 칸 뒤로">▼ 뒤</button>':'')+
+        (!readOnly&&rankControlsActive()&&row.frontControl&&row.frontControl.manualRank!==undefined&&row.frontControl.manualRank!==null?'<button type="button" class="secondary frontRankResetBtn" data-candidate-id="'+esc(id)+'" title="수동 지정 해제 · 자동 랭킹으로 복귀">자동순위 복원</button>':'')+
         '</div>'+
       '</div></article>';
   }
@@ -257,14 +277,15 @@
       '<div class="read-only-note">지금 뜨는 콘텐츠는 영화·드라마·버라이어티·음악 후보의 최신성·랭킹을 자동 조합한 점검용 미리보기입니다. 수동 고정이나 일괄 상태 변경은 하지 않습니다. <button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>':
       '<div class="section-actionbar" data-section-key="'+esc(key)+'">'+
         '<div class="section-front-control"><input class="sectionResearchPhrase" maxlength="120" placeholder="제목 · 프로그램명 · 장르 · 주제어 맞춤 리서치" value="'+esc(sectionResearchTerms[key]||'')+'" style="min-width:260px;flex:1"><button type="button" class="secondary sectionResearchBtn">후보 맞춤 수집</button><button type="button" class="secondary sectionWebResearchBtn">웹에서 제목 찾기</button></div>'+
-        '<div class="section-front-control"><span class="pill section">마지막 프론트 반영 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
+        '<div class="section-front-control"><span class="small">랭킹순 보기에서 승인된 영상의 ▲/▼ 순서 조정 가능 · 조정 후 이 섹션 프론트 반영 필요</span></div><div class="section-front-control"><span class="pill section">마지막 프론트 반영 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
+        '<div class="section-front-control"><span class="small">원하는 영상 1개 체크 → 목표 순위 입력</span><input type="number" class="sectionFrontPosition" min="1" max="100" step="1" placeholder="목표 순위" style="width:112px"><button type="button" class="secondary sectionFrontPositionBtn">선택 영상 순위 지정</button></div>'+
         '<button type="button" class="secondary sectionSelectAllBtn">전체 선택</button><button type="button" class="secondary sectionClearSelectionBtn">선택 해제</button>'+
         '<button type="button" class="sectionActionBtn" data-action="approve">선택 승인</button><button type="button" class="sectionActionBtn" data-action="hold">선택 보류</button><button type="button" class="sectionActionBtn" data-action="reset">선택 재검토</button>'+
         '<button type="button" class="danger sectionActionBtn" data-action="reject">선택 반려</button><button type="button" class="danger sectionActionBtn" data-action="block">선택 영구 제외·차단</button><button type="button" class="danger sectionActionBtn" data-action="delete">선택 삭제(재검색 허용)</button>'+
         '<input class="section-note" placeholder="관리 메모(선택, 승인 시 필수)" maxlength="1000">'+
         '<div class="section-confirmations"><label><input class="sectionContentConfirm" type="checkbox"> 실제 재생·콘텐츠 안전 확인</label><label><input class="sectionRightsConfirm" type="checkbox"> 원본·권리 확인</label><label><input class="sectionSubtitleConfirm" type="checkbox"> 자막 확인</label></div>'+
       '</div>';
-    return controls+(list.length?'<div class="candidate-card-grid">'+list.map(function(row){return candidateCardHtml(row,key,readOnly);}).join('')+'</div>':'<div class="empty-section">현재 조건에 맞는 후보가 없습니다.</div>');
+    return controls+(list.length?'<div class="candidate-card-grid">'+list.map(function(row,index){return candidateCardHtml(row,key,readOnly,index+1);}).join('')+'</div>':'<div class="empty-section">현재 조건에 맞는 후보가 없습니다.</div>');
   }
   function thumbnailRepairBodyHtml(list){
     if(!list.length)return '<div class="empty-section">썸네일 보완이 필요한 후보가 없습니다.</div>';
@@ -309,6 +330,43 @@
     $('filterState').textContent='검색 조건 일치 '+rows.length+'개 / 전체 활성 후보 '+activeRows().length+'개 · 펼친 섹션만 썸네일 로드';
     $('candidateCapacityState').textContent='일반 9개 섹션 모두 본선 100 + 예비 20 · 지금 뜨는 콘텐츠는 별도 수집 없는 자동 랭킹 50';
     $('tablePanel').classList.remove('hidden');
+  }
+  async function setSelectedFrontPosition(sectionKey,section,button){
+    if(!rankControlsActive()){show('랭킹순 보기 및 검색·필터 해제 상태에서 위치를 지정해 주세요.','warn');return;}
+    var selected=Array.from(selectedBySection[sectionKey]||[]);
+    if(selected.length!==1){show('해당 섹션에서 순서를 바꿀 영상 한 개만 체크해 주세요.','warn');return;}
+    var row=rowsCache.find(function(item){return text(item.contentId||item.id)===selected[0];});
+    if(!rankableRow(row)){show('최종 승인 및 프론트 공급 가능 상태인 영상만 순서를 조정할 수 있습니다.','warn');return;}
+    var input=section&&section.querySelector('.sectionFrontPosition');
+    var position=Number(input&&input.value);
+    if(!Number.isInteger(position)||position<1||position>100){show('목표 순위는 1부터 100까지 정수로 입력해 주세요.','warn');return;}
+    button.disabled=true;
+    try{
+      var data=await post(ACT,{action:'front_move',ids:[selected[0]],position:position});
+      await refresh();
+      show(data.unchanged?'이미 선택한 영상이 해당 순위에 있습니다.':'관리자 순위 '+Number(data.position||position)+'번 저장 완료 · 섹션 프론트 반영을 눌러 공개 적용하세요.','ok');
+    }catch(error){show('순위 지정 실패: '+error.message,'warn');button.disabled=false;}
+  }
+  async function resetFrontRank(id,button){
+    if(!id)return;
+    button.disabled=true;
+    try{
+      await post(ACT,{action:'front_rank_reset',ids:[id]});
+      await refresh();
+      show('수동 순위 해제 완료 · 자동 랭킹으로 복귀했습니다. 프론트 반영을 실행하면 공개 순서가 바뀝니다.','ok');
+    }catch(error){show('자동 순위 복원 실패: '+error.message,'warn');button.disabled=false;}
+  }
+  async function moveFrontCandidate(id,direction,button){
+    if(!id||!['up','down'].includes(direction))return;
+    if(!rankControlsActive()){show('랭킹순 보기 및 검색·필터 해제 상태에서 위치를 조정해 주세요.','warn');return;}
+    button.disabled=true;
+    try{
+      var data=await post(ACT,{action:'front_move',ids:[id],direction:direction});
+      if(data.unchanged){show('이미 해당 섹션의 맨 앞 또는 맨 뒤 영상입니다.','ok');button.disabled=false;return;}
+      // Keep the interface in sync with authoritative storage, not a local-only swap.
+      await refresh();
+      show('영상 순위 '+Number(data.position||0)+'번 저장 완료. 실제 공개 적용은 해당 섹션 프론트 반영 버튼을 누르세요.','ok');
+    }catch(error){show('영상 순위 이동 실패: '+error.message,'warn');button.disabled=false;}
   }
   function exclusionRowHtml(row,index){
     var id=text(row.contentId||row.id),status=lower(row.reviewStatus);
@@ -1721,6 +1779,10 @@
         renderRows();
         return;
       }
+      var resetRank=event.target.closest('.frontRankResetBtn');
+      if(resetRank){resetFrontRank(text(resetRank.dataset.candidateId),resetRank);return;}
+      var move=event.target.closest('.frontMoveBtn');
+      if(move){moveFrontCandidate(text(move.dataset.candidateId),text(move.dataset.direction),move);return;}
       var preview=event.target.closest('.previewBtn');
       if(preview){openPreview(text(preview.dataset.candidateId));return;}
       var thumbnail=event.target.closest('.thumbnailGenerateBtn');
@@ -1734,6 +1796,7 @@
       var sectionFrontButton=event.target.closest('.sectionFrontBtn');
       if(sectionFrontButton){publishFrontAction(text(sectionFrontButton.dataset.frontAction),sectionKey);return;}
       if(event.target.closest('.sectionPipelineJsonBtn')){downloadPipelineStatus(sectionKey);return;}
+      if(event.target.closest('.sectionFrontPositionBtn')){setSelectedFrontPosition(sectionKey,section,event.target);return;}
       if(event.target.closest('.sectionSelectAllBtn')){
         sectionRows(sectionKey,visibleRows()).forEach(function(row){selected.add(text(row.contentId||row.id));});
         renderRows();return;

@@ -355,33 +355,32 @@ function publicSlot(row, slotId, defaults){
     revenue: {ads:true, affiliate:false, provider:false, directSale:false}
   });
 }
+// Default ranking remains automatic. Only an administrator's explicit move
+// stores a narrowly scoped manual rank in the existing candidate raw JSON.
+function frontRank(row){
+  const raw=plain(row&&row.raw),ctl=plain(raw.frontControl);
+  const override=ctl.manualRank;
+  if(override!==null&&override!==undefined&&override!==''&&Number.isFinite(Number(override)))return Number(override);
+  const priority=Number((text(row&&row.priority).match(/(\d+(?:\.\d+)?)/)||[])[1]||0);
+  const rawRank=Number(raw.rankingScore||row&&row.ranking_score||priority||0);
+  // Small deterministic tie breaker: one move can position a row accurately
+  // among equal-ranked candidates without rewriting all the other candidates.
+  const id=text(row&&row.id);
+  let hash=2166136261;
+  for(let i=0;i<id.length;i++){hash^=id.charCodeAt(i);hash=Math.imul(hash,16777619);}
+  return rawRank+((hash>>>0)/4294967296)*0.0001;
+}
+function compareFrontRows(a,b){
+  const diff=frontRank(b)-frontRank(a);
+  if(diff)return diff;
+  const at=text(a&&a.id),bt=text(b&&b.id);
+  return at<bt?-1:(at>bt?1:0);
+}
 function groupsBySection(rows){
   const out={};
   Array.from(ALLOWED_SECTIONS).forEach((section)=>{out[section]=[];});
   rows.forEach((row)=>{const section=normalizeSection(row.section_key);if(section)out[section].push(row);});
-  Object.keys(out).forEach((section)=>out[section].sort((a,b)=>{
-    const ar=plain(a&&a.raw),br=plain(b&&b.raw);
-    const as=plain(ar.sourceMetadata),bs=plain(br.sourceMetadata);
-    const apriority=Number((text(a&&a.priority).match(/(\d+(?:\.\d+)?)/)||[])[1]||0);
-    const bpriority=Number((text(b&&b.priority).match(/(\d+(?:\.\d+)?)/)||[])[1]||0);
-    const arank=Number(ar.rankingScore||a&&a.ranking_score||apriority||0);
-    const brank=Number(br.rankingScore||b&&b.ranking_score||bpriority||0);
-    if(arank!==brank)return brank-arank;
-    const aheight=Number(as.height||ar.height||(text(a&&a.quality_hint).match(/(\d{3,4})p/i)||[])[1]||0);
-    const bheight=Number(bs.height||br.height||(text(b&&b.quality_hint).match(/(\d{3,4})p/i)||[])[1]||0);
-    if(aheight!==bheight)return bheight-aheight;
-    const abitrate=Number(as.bitrateBps||ar.bitrateBps||0);
-    const bbitrate=Number(bs.bitrateBps||br.bitrateBps||0);
-    if(abitrate!==bbitrate)return bbitrate-abitrate;
-    const alatency=Number(plain(ar.playbackProbe||as.playbackProbe).latencyMs||Number.MAX_SAFE_INTEGER);
-    const blatency=Number(plain(br.playbackProbe||bs.playbackProbe).latencyMs||Number.MAX_SAFE_INTEGER);
-    if(alatency!==blatency)return alatency-blatency;
-    const ayear=Number(ar.year||as.year||0),byear=Number(br.year||bs.year||0);
-    if(ayear!==byear)return byear-ayear;
-    const ap=text(a.approved_at || a.reviewed_at || a.updated_at); const bp=text(b.approved_at || b.reviewed_at || b.updated_at);
-    if(ap!==bp) return ap<bp?1:-1;
-    return text(a.title).localeCompare(text(b.title));
-  }));
+  Object.keys(out).forEach((section)=>out[section].sort(compareFrontRows));
   return out;
 }
 function isReplaceableMediaSlot(slot){
@@ -401,8 +400,13 @@ function isReplaceableMediaSlot(slot){
   return false;
 }
 function blankMediaSlot(slot,index){
-  return{slotId:Number(slot&&slot.slotId)||index+1,contentId:null,title:null,thumb:"#",provider:null};
+  const blank={slotId:Number(slot&&slot.slotId)||index+1,contentId:null,title:null,thumb:"#",provider:null};
+  // Preserve the original committed slot backup when reshuffling ranked media.
+  // Otherwise a future "stop section" can no longer restore its prior sample.
+  if(slot&&slot.fallbackSample&&typeof slot.fallbackSample==="object")blank.fallbackSample=cloneSafeMedia(slot.fallbackSample);
+  return blank;
 }
+function cloneSafeMedia(value){return JSON.parse(JSON.stringify(value));}
 function buildSnapshot(baseSnapshot, rows, opts){
   const base=plain(baseSnapshot);
   const sections=Object.assign({}, plain(base.sections));
@@ -416,28 +420,15 @@ function buildSnapshot(baseSnapshot, rows, opts){
     const requestedCapacity=Number(opts && opts.capacityPerSection);
     const capacity=Math.max(1,Math.min(100,Number.isFinite(requestedCapacity)&&requestedCapacity>0?requestedCapacity:100));
 
-    const previousManagedIndex=new Map();
-    sourceSlots.slice(0,capacity).forEach((slot,index)=>{
-      if(slot&&slot.managedBy==="media-snapshot-publish"&&text(slot.contentId||slot.id)){
-        previousManagedIndex.set(text(slot.contentId||slot.id),index);
-      }
-    });
-
+    // The previous implementation pinned managed items to old slot indexes,
+    // silently defeating newer rankings and administrator moves.
     const next=[];
     for(let i=0;i<capacity;i++){
       const slot=plain(sourceSlots[i]);
-      next.push(slot.managedBy==="media-snapshot-publish"?blankMediaSlot(slot,i):Object.assign({},slot,{slotId:Number(slot.slotId)||i+1}));
+      next.push(slot.managedBy==="media-snapshot-publish"?blankMediaSlot(slot,i):Object.assign({},slot,{slotId:i+1}));
     }
-
     const desired=groups[sectionKey].slice(0,capacity);
     const placed=new Set();
-
-    desired.forEach((row)=>{
-      const id=text(row&&row.id),index=previousManagedIndex.get(id);
-      if(index===undefined||index<0||index>=next.length)return;
-      next[index]=publicSlot(row,index+1,next[index]);
-      placed.add(id);
-    });
 
     let cursor=0;
     desired.forEach((row)=>{
@@ -456,7 +447,7 @@ function buildSnapshot(baseSnapshot, rows, opts){
   });
 
   return Object.assign({},base,{
-    version:"media.snapshot.generated.supabase.v2.sample-preserving",
+    version:"media.snapshot.generated.supabase.v2.ranked-order",
     type:"media_snapshot",
     sections,
     meta:Object.assign({},plain(base.meta),{
@@ -476,5 +467,5 @@ module.exports={
   VERSION, CANDIDATE_TABLE, RELEASE_TABLE, RELEASE_WRITE_COLUMNS, ALLOWED_SECTIONS,
   text, lower, compact, bool, plain, array, nowIso, sha256, shortHash, normalizeUrl, hostOf, normalizeSection, roleList, requireRole,
   response, parseBody, config, supabase, rest, encodeEq, encodeIn, selectCandidates, upsertCandidates, updateCandidates, deleteCandidates, canonicalReleaseRow, insertRelease, selectReleaseById, releaseStorageContract,
-  normalizeCandidate, validateCandidate, isPlaceholderThumbnail, usableThumbnailUrl, thumbnailMeta, snapshotEligible, publicSlot, buildSnapshot, MediaPolicy
+  normalizeCandidate, validateCandidate, isPlaceholderThumbnail, usableThumbnailUrl, thumbnailMeta, snapshotEligible, publicSlot, buildSnapshot, frontRank, compareFrontRows, MediaPolicy
 };

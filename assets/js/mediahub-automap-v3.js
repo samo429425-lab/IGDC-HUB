@@ -25,8 +25,8 @@
   const HERO_MIN_HEIGHT = 720;
   const HERO_ROTATE_WINDOW_DAYS = 3;
   const HERO_ROTATE_TOP_POOL = 3;
-  const HERO_MIN_EDGE_MEAN = 6.8;
-  const HERO_MIN_EDGE_P90 = 19;
+  const HERO_MIN_EDGE_MEAN = 3.5;
+  const HERO_MIN_EDGE_P90 = 9.0;
   const HERO_CAPTURE_TARGET_LIMIT = 8;
   const HERO_CONTROL_URL = '/.netlify/functions/media-snapshot-publish?heroPublicStatus=1';
   const HERO_CONTROL_POLL_MS = 30000;
@@ -718,13 +718,16 @@
       const count=lum.length;if(!count)return null;
       const mean=sum/count,variance=Math.max(0,(sum2/count)-(mean*mean));
       let edgeSum=0,edgeCount=0;const edgeSamples=[];
+      const sampleStep=Math.max(1,Math.floor((Math.ceil(w/2)*Math.ceil(h/2))/5000));
       for(let y=1;y<h;y+=2){
         const row=y*w,prev=(y-1)*w;
         for(let x=1;x<w;x+=2){
           const v=lum[row+x];
           const e=(Math.abs(v-lum[row+x-1])+Math.abs(v-lum[prev+x]))*.5;
           edgeSum+=e;edgeCount++;
-          if(edgeSamples.length<5000)edgeSamples.push(e);
+          // Sample across the entire frame, not just the first few rows.
+          // A bright/flat sky at the top must not hide a sharp central subject.
+          if(edgeCount%sampleStep===0&&edgeSamples.length<5000)edgeSamples.push(e);
         }
       }
       edgeSamples.sort((a,b)=>a-b);
@@ -737,7 +740,7 @@
   }
   function heroVisualQualityFromCanvas(ctx,w,h){
     try{
-      const SW=320,SH=180,sample=D.createElement('canvas'),sx=sample.getContext('2d',{alpha:false});
+      const SW=960,SH=540,sample=D.createElement('canvas'),sx=sample.getContext('2d',{alpha:false});
       if(!sx)return null;sample.width=SW;sample.height=SH;
       sx.drawImage(ctx.canvas,0,0,w,h,0,0,SW,SH);
       return heroVisualQualityFromPixels(sx.getImageData(0,0,SW,SH).data,SW,SH);
@@ -745,7 +748,7 @@
   }
   function heroVisualQualityFromImage(img){
     try{
-      const SW=320,SH=180,c=D.createElement('canvas'),ctx=c.getContext('2d',{alpha:false});
+      const SW=960,SH=540,c=D.createElement('canvas'),ctx=c.getContext('2d',{alpha:false});
       if(!ctx)return null;c.width=SW;c.height=SH;
       const iw=Number(img.naturalWidth||0),ih=Number(img.naturalHeight||0);
       if(iw<HERO_MIN_WIDTH||ih<HERO_MIN_HEIGHT)return null;
@@ -916,7 +919,7 @@
           ctx.imageSmoothingEnabled=true;if('imageSmoothingQuality' in ctx)ctx.imageSmoothingQuality='high';
           ctx.drawImage(video,sx,sy,sw,sh,0,0,CW,CH);
           const visual=heroVisualQualityFromCanvas(ctx,CW,CH);
-          if(visual&&visual.usable){
+          if(visual&&visual.sharp){
             const score=(Number(visual.edgeMean||0)*10)+Number(visual.edgeP90||0)+(Math.sqrt(Math.max(0,Number(visual.variance||0)))*.12);
             if(!best||score>best.score){best={url:c.toDataURL('image/jpeg',.94),w:CW,h:CH,visual,score,sourceWidth:Number(video.videoWidth||0),sourceHeight:Number(video.videoHeight||0)};}
           }
@@ -973,10 +976,8 @@
       const pa=a.getAttribute('data-placeholder')==='true'?1:0;
       const pb=b.getAttribute('data-placeholder')==='true'?1:0;
       if(pa!==pb)return pa-pb;
-      if(pa===0){
-        const qaScore=Number(a.dataset.frontPriority||0),qbScore=Number(b.dataset.frontPriority||0);
-        if(Number.isFinite(qaScore)&&Number.isFinite(qbScore)&&qaScore!==qbScore)return qbScore-qaScore;
-      }
+      // Once published, the release slot order is authoritative. Never sort
+      // by a second heuristic that disagrees with the administrator.
       const oa=Number(a.dataset.frontOrder),ob=Number(b.dataset.frontOrder);
       if(Number.isFinite(oa)&&Number.isFinite(ob)&&oa!==ob)return oa-ob;
       if(Number.isFinite(oa)&&!Number.isFinite(ob))return -1;
@@ -1090,7 +1091,7 @@
     line.dataset.igdcMediaMapped='1';
     const ph=ensurePlaceholders(line);
     const capacity=lineCapacity(line);
-    const ranked=items.filter(isFrontCandidate).slice().sort((a,b)=>frontPriority(b)-frontPriority(a));
+    const ranked=items.filter(isFrontCandidate); // preserve published slot order
     const immediate=[],pending=[];
     const scanLimit=Math.max(capacity*3,capacity);
     for(const item of ranked){
@@ -1115,7 +1116,7 @@
     for(const entry of immediate.slice(0,capacity)){
       if(slot>=ph.length||slot>=capacity)break;
       const card=ph[slot];
-      card.dataset.frontOrder=String(slot);
+      card.dataset.frontOrder=String(Number(entry.item.slotId||0)>0?Number(entry.item.slotId)-1:slot);
       if(slot<eagerLimit)card.dataset.thumbEager='1';else delete card.dataset.thumbEager;
       bindItemToAnchor(card,entry.item,entry.thumb);
       slot++;
@@ -1127,7 +1128,7 @@
       if(slot>=ph.length||slot>=capacity)break;
       const card=ph[slot];
       resetAnchorToPlaceholder(card,'thumbnail_pending');
-      card.dataset.frontOrder=String(slot);
+      card.dataset.frontOrder=String(Number(item.slotId||0)>0?Number(item.slotId)-1:slot);
       recoverThumbnail(card,item);
       slot++;
     }
@@ -1397,10 +1398,16 @@
     // the same content later, so slow image generation can never permanently
     // empty the hero.
     const highHint=candidates.filter((row)=>row.hint>=2).sort(heroPreProbeCompare);
-    const probeSet=[];
+    const probeSet=[],probesByItem=new Map();
     for(const candidate of highHint.concat(candidates.slice().sort(heroPreProbeCompare))){
-      if(probeSet.length>=8)break;
+      if(probeSet.length>=12)break;
       if(probeSet.indexOf(candidate)>=0)continue;
+      const id=heroItemKey(candidate.item)||candidate.url;
+      const used=probesByItem.get(id)||0;
+      // Prefer inspecting two strong images across several distinct movies,
+      // instead of probing eight variants of the same blurry title.
+      if(used>=2)continue;
+      probesByItem.set(id,used+1);
       probeSet.push(candidate);
     }
     const checked=await Promise.all(probeSet.map((candidate)=>checkedCandidate(candidate,3600)));
@@ -1581,7 +1588,7 @@
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.4.7-first-paint-reduced-dom-work';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.5.0-authoritative-rank-sharp-hero';
 })();
 
 

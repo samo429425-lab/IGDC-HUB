@@ -11,7 +11,7 @@ const SharedAdminAuth = require("./lib/global-slot-console-auth");
 const VERSION = "media-candidate-action-v1.10.0-canonical-lifecycle";
 const ACTIONS = new Set([
   "approve","approve_all","hold","block","reject","reset","delete","front_enable","front_disable",
-  "restore_hold","release_exclusion","restore","resume","permanent_block","forget"
+  "restore_hold","release_exclusion","restore","resume","permanent_block","forget","front_move","front_rank_reset"
 ]);
 const EXCLUSION_RECORD_VERSION = "media-candidate-exclusion-v1";
 
@@ -235,7 +235,7 @@ function validateTransitions(action,rows){
     else if(action==="restore_hold"||action==="release_exclusion")ok=["search_excluded","exclusion_released"].includes(status);
     else if(action==="forget")ok=true;
     else if(action==="resume")ok=status==="hold";
-    else if(action==="front_enable"||action==="front_disable")ok=status==="approved";
+    else if(action==="front_enable"||action==="front_disable"||action==="front_move"||action==="front_rank_reset")ok=status==="approved";
     else if(action==="reset")ok=!["search_excluded","exclusion_released","permanent_blocked"].includes(status);
     else if(action==="hold"||action==="reject"||action==="delete")ok=!["search_excluded","exclusion_released","permanent_blocked"].includes(status);
     if(!ok)invalid.push(MediaStore.text(row.id)+":"+status);
@@ -310,13 +310,13 @@ function frontControlPatch(row,body,actor,enabled){
   const info=audit(actor,body);
   const raw=Object.assign({},MediaStore.plain(row&&row.raw));
   const previous=MediaStore.plain(raw.frontControl);
-  raw.frontControl={
+  raw.frontControl=Object.assign({},previous,{
     enabled:enabled===true,
     changedAt:info.now,
     changedBy:info.by,
     note:info.note|| (enabled?"front_content_enabled":"front_content_disabled"),
     previousEnabled:previous.enabled!==false
-  };
+  });
   appendHistory(raw,{
     action:enabled?"front_enable":"front_disable",at:info.now,by:info.by,note:info.note,
     frontEnabled:enabled===true,reviewStatus:statusOf(row),verificationStatus:MediaStore.text(row&&row.verification_status)
@@ -472,6 +472,54 @@ exports.handler=async function(event){
     if(action==="resume"){
       const updated=await updateRowsIndividually(rows,(row)=>resumeHoldPatch(row,body,actor));
       return MediaStore.response(200,{ok:true,version:VERSION,action,requested:ids.length,updated:updated.length,items:updated,resumedFromHold:true,recollectAllowed:false});
+    }
+    if(action==="front_rank_reset"){
+      if(ids.length!==1)return MediaStore.response(400,{ok:false,error:"single_candidate_required"});
+      const raw=Object.assign({},MediaStore.plain(rows[0].raw));
+      const control=Object.assign({},MediaStore.plain(raw.frontControl));
+      delete control.manualRank;
+      delete control.manualRankChangedAt;
+      delete control.manualRankChangedBy;
+      raw.frontControl=control;
+      const changed=await MediaStore.updateCandidates(ids,{raw,updated_at:MediaStore.nowIso()});
+      if(!Array.isArray(changed)||changed.length!==1)throw new Error("자동 순위 복원 저장 검증 실패");
+      return MediaStore.response(200,{ok:true,version:VERSION,action,updated:1,publishRequired:true});
+    }
+    if(action==="front_move"){
+      if(ids.length!==1)return MediaStore.response(400,{ok:false,error:"single_candidate_required"});
+      const hasPosition=body.position!==undefined&&body.position!==null&&body.position!=='';
+      const direction=MediaStore.lower(body.direction);
+      if(!hasPosition&&direction!=="up"&&direction!=="down")return MediaStore.response(400,{ok:false,error:"invalid_move_direction"});
+      const current=rows[0],section=MediaStore.normalizeSection(current.section_key);
+      const all=await MediaStore.selectCandidates("select=*&section_key="+MediaStore.encodeEq(section)+"&review_status=eq.approved&verification_status=eq.approved_for_snapshot&limit=1000");
+      const eligible=all.filter((row)=>MediaStore.plain(MediaStore.plain(row.raw).frontControl).enabled!==false&&MediaStore.snapshotEligible(row)).sort(MediaStore.compareFrontRows);
+      const index=eligible.findIndex((row)=>MediaStore.text(row.id)===ids[0]);
+      if(index<0)return MediaStore.response(409,{ok:false,error:"candidate_not_front_eligible",message:"공개 권한·안전 검증·썸네일 확인이 완료된 영상만 프론트 순서를 변경할 수 있습니다."});
+      const position=Number(body.position);
+      if(hasPosition&&(!Number.isInteger(position)||position<1||position>eligible.length)){
+        return MediaStore.response(400,{ok:false,error:"invalid_front_position",message:"현재 공개 가능한 영상은 "+eligible.length+"개입니다. 이 범위의 목표 순위를 입력하세요."});
+      }
+      const target=hasPosition?position-1:index+(direction==="up"?-1:1);
+      if(target<0||target>=eligible.length||target===index)return MediaStore.response(200,{ok:true,version:VERSION,action,updated:0,unchanged:true,position:index+1});
+      const reordered=eligible.slice();
+      reordered.splice(target,0,reordered.splice(index,1)[0]);
+      const previous=target>0?MediaStore.frontRank(reordered[target-1]):null;
+      const next=target+1<reordered.length?MediaStore.frontRank(reordered[target+1]):null;
+      let score;
+      if(previous===null)score=next+1;
+      else if(next===null)score=previous-1;
+      else score=(previous+next)/2;
+      if(!Number.isFinite(score)||(previous!==null&&score>=previous)||(next!==null&&score<=next)){
+        return MediaStore.response(409,{ok:false,error:"front_order_precision_exhausted",message:"순위 간격이 부족합니다. 랭킹 재계산이 필요합니다."});
+      }
+      const raw=Object.assign({},MediaStore.plain(current.raw));
+      raw.frontControl=Object.assign({},MediaStore.plain(raw.frontControl),{
+        manualRank:score,manualRankChangedAt:MediaStore.nowIso(),manualRankChangedBy:MediaStore.compact(actor.email||actor.memberId||"admin",200)
+      });
+      const changed=await MediaStore.updateCandidates([ids[0]],{raw,updated_at:MediaStore.nowIso()});
+      if(!Array.isArray(changed)||changed.length!==1)throw new Error("영상 순서 저장 결과 확인 실패");
+      return MediaStore.response(200,{ok:true,version:VERSION,action,updated:1,id:ids[0],sectionKey:section,position:target+1,
+        manualRank:score,publishRequired:true,message:"관리자 순위 저장 완료. 프론트 반영을 실행하면 공개 순서에 적용됩니다."});
     }
     if(action==="front_enable"||action==="front_disable"){
       const enabled=action==="front_enable",updated=await updateRowsIndividually(rows,(row)=>frontControlPatch(row,body,actor,enabled));
