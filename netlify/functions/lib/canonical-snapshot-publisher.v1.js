@@ -24,6 +24,7 @@ const IpSlotPolicy = require("./ip-slot-policy.v1");
 const MarketSaleScope = require("./market-sale-scope.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
+const ProductImage = require("./commerce-product-image-integrity.v1");
 
 const VERSION = "canonical-snapshot-publisher-v1.8.2-admin-section-order";
 const CONTRACT_VERSION = "sanmaru-searchbank-canonical-publication-contract-v1.6-country-scoped-admin-publication";
@@ -456,8 +457,11 @@ function validateCandidate(raw, index, context) {
   const candidateId = marketScopeKey ? baseCandidateId + "::" + marketScopeKey : baseCandidateId;
   const destinationRaw = urlOf(item);
   const destination = normalizeUrl(destinationRaw);
-  const imageRaw = firstValue(item.image, item.thumb, item.thumbnail, objectAt(item, ["media", "thumb"]), objectAt(item, ["media", "image"]));
-  const image = normalizeUrl(imageRaw);
+  // Use the same provenanced product-photo field for every public section;
+  // never publish a long description strip as the card's representative photo.
+  const chosenImage = ProductImage.resolve(item);
+  const imageRaw = chosenImage.image || firstValue(item.image, item.thumb, item.thumbnail, objectAt(item, ["media", "thumb"]), objectAt(item, ["media", "image"]));
+  const image = chosenImage.image ? normalizeUrl(chosenImage.image) : "";
   const host = hostOf(destination);
   const contract = contractOf(item);
   const evidence = evidenceOf(item, contract);
@@ -470,7 +474,7 @@ function validateCandidate(raw, index, context) {
 
   if (!str(item.title || item.name)) reasons.push("TITLE_MISSING");
   if (!destination) reasons.push("DESTINATION_NOT_HTTPS");
-  if (!image) reasons.push("IMAGE_NOT_HTTPS");
+  if (!image) reasons.push(chosenImage.current && chosenImage.reason !== "invalid_url" ? "PRODUCT_REPRESENTATIVE_IMAGE_UNVERIFIED:"+chosenImage.reason : "IMAGE_NOT_HTTPS");
   if (isSampleLike(item, destinationRaw) || /(^|\/)(sample|samples|placeholder|demo|mock|fixture)(\/|$)/i.test(str(imageRaw))) reasons.push("PLACEHOLDER_OR_SAMPLE");
   if (!host || /^\d+\.\d+\.\d+\.\d+$/.test(host) || host === "localhost" || host.endsWith(".local") || host.includes("example.")) reasons.push("DESTINATION_HOST_UNSAFE");
   if (host && Array.from(context.trust.denyDomains).some(rule => isHostMatch(host, rule))) reasons.push("DESTINATION_DOMAIN_DENIED");
@@ -850,9 +854,15 @@ function buildCanonicalItem(entry, releaseId) {
     item.detailUrl = directProductUrl;
     item.checkoutUrl = directProductUrl;
   }
+  // Published display aliases must all describe the same approved photograph.
+  // Preserve original source evidence separately; never overwrite the raw
+  // candidate ledger or invent an alternate photo.
   item.image = entry.image;
+  item.imageUrl = entry.image;
+  item.displayImage = entry.image;
   item.thumb = entry.image;
   item.thumbnail = entry.image;
+  item.thumbnailUrl = entry.image;
   item.canonicalSource = {
     name: entry.source.name,
     url: entry.source.url,

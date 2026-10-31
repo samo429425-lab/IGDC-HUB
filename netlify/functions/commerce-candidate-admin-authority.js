@@ -137,7 +137,14 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
     oldRows.some(item=>sameScope(item,scope)&&text(item.hub_key)+"|"+text(item.slot_key)===sourceKey);
   const pendingUnpublish=["unpublish_requested","unpublish_failed"].includes(frontStatus);
   const liveProtected=publiclyProtected(oldPayload,oldRows);
-  if(decision!=="front_unmatch"&&liveProtected&&(!isManualSectionMove||pendingUnpublish)){
+  // A published card must never block an EXPLICIT administrator's private
+  // management decision. The public card itself is NOT removed by this write:
+  // retain a durable unpublish request for the subsequent Front Match build.
+  // AI reclassification and automatic jobs do not inherit this permission.
+  const administratorPrivateRelease=(source==="administrator"||source==="latest_research_group")&&
+    ["undecided","hold","reject","purge","dismiss","remove_from_list"].includes(decision);
+  const releaseNeedsFrontSync=administratorPrivateRelease&&liveProtected;
+  if(decision!=="front_unmatch"&&liveProtected&&!administratorPrivateRelease&&(!isManualSectionMove||pendingUnpublish)){
     throw Object.assign(new Error(pendingUnpublish?"front_unpublish_pending_complete_before_move":"published_or_unpublish_pending_candidate_protected"),{statusCode:409});
   }
 
@@ -207,10 +214,25 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
       decidedAt:now,decidedBy:actorId
     });
     payload.managementControl=Object.assign({},plain(oldPayload.managementControl),{schema:"igdc-product-management-control.v1",source:"administrator",administratorLocked:true,aiReclassificationAllowed:false,decidedAt:now,decidedBy:actorId});
-    // These rows passed the public-protection guard: they were NOT published.
-    // Mark private placement as unmatched, never unpublish_requested (which
-    // makes later verified-PSOM re-placement incorrectly look public/locked).
-    payload.frontPublication=Object.assign({},plain(payload.frontPublication),{schema:"igdc-product-front-publication-control.v4",candidateId,operation:"unmatch",status:"unmatched",queued:false,persisted:true,pendingBuild:false,publicSnapshotConfirmed:false,buildVerificationRequired:false,reason:"administrator_private_section_release",page:prior&&prior.page||null,section:prior&&prior.sectionKey||prior&&prior.section||null,sectionKey:prior&&prior.sectionKey||prior&&prior.section||null,country:scope.country,region:scope.region,requestedAt:now,requestedBy:actorId});
+    // Two-phase withdrawal: first commit the operator's private decision and
+    // clear the private assignment. When the card MAY still be in the public
+    // snapshot, retain an explicit pending withdrawal instead of falsely
+    // claiming that the live frontend was already changed. Front Match must
+    // reconcile the published snapshot. Archive the original section/slot so
+    // unpublication can be audited without restoring the product to the section.
+    payload.frontPublication=Object.assign({},plain(oldPayload.frontPublication),{
+      schema:"igdc-product-front-publication-control.v4",candidateId,operation:"unmatch",
+      status:releaseNeedsFrontSync?"unpublish_requested":"unmatched",
+      queued:false,persisted:true,pendingBuild:releaseNeedsFrontSync,
+      publicSnapshotConfirmed:false,buildVerificationRequired:releaseNeedsFrontSync,
+      deferredBuild:releaseNeedsFrontSync,
+      reason:releaseNeedsFrontSync?"administrator_management_change_front_sync_required":"administrator_private_section_release",
+      page:prior&&prior.page||text(plain(oldPayload.frontPublication).page)||null,
+      section:prior&&(prior.sectionKey||prior.section)||text(plain(oldPayload.frontPublication).section)||null,
+      sectionKey:prior&&(prior.sectionKey||prior.section)||text(plain(oldPayload.frontPublication).sectionKey)||null,
+      country:scope.country,region:scope.region,requestedAt:now,requestedBy:actorId,
+      originalPublicationStatus:frontStatus||null
+    });
   }
 
   // A research candidate already exists in the canonical master. The explicit
@@ -225,6 +247,15 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
   payload.decisionAt=now;payload.decisionBy=actorId;payload.decisionSource=source==="ai_automation"?"ai_automation":"administrator_candidate_authority";payload.publicPublication=false;payload.automaticImport=false;
   const reviewState=decision==="dismiss"?"deleted_from_management":(decision==="remove_from_list"?"removed_from_list":(effective==="slot_candidate"?"pending":effective));
   payload.review=Object.assign({},plain(payload.review),{state:reviewState,decidedAt:now,decidedBy:actorId});
+  // An administrator's explicit HOLD from the image-review worklist is
+  // identifiable later in the standard hold queue. Never reject research or
+  // permanently exclude a candidate because of this diagnostic annotation.
+  if(decision==='hold'&&source==='administrator'&&plain(verifiedMetadata).reviewReason==='representative_image_requires_review'){
+    payload.review=Object.assign({},payload.review,{
+      recoveryReason:'대표 이미지 출처 또는 유형 확인 필요',
+      qualityHold:{schema:'igdc-candidate-quality-hold.v1',reason:'representative_image_requires_review',originalPlacement:prior||null,recordedAt:now,recordedBy:actorId,rediscoveryBlocked:false}
+    });
+  }
   // Existing row.status already satisfies the database CHECK. It must not be
   // rewritten with queue-control terms such as research_pending/hold/suppressed.
   await SlotStore.update("gslot_candidates","id=eq."+encodeURIComponent(candidateId),{source_payload:payload,updated_at:now});
@@ -235,7 +266,7 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
       throw Object.assign(new Error("latest_research_handoff_not_confirmed:"+candidateId),{statusCode:409});
     }
   }
-  return{candidateId,decision,effectiveDecision:effective,placement:payload.approvedPlacement||null,status,assignmentId:assignment&&assignment.id||null,ok:true,ledgerVerified:verified.verified,assignmentCount:verified.assignmentCount,relocation:payload.sectionRelocation||null,frontSyncRequired:!!(payload.sectionRelocation&&payload.sectionRelocation.frontSyncRequired)};
+  return{candidateId,decision,effectiveDecision:effective,placement:payload.approvedPlacement||null,status,assignmentId:assignment&&assignment.id||null,ok:true,ledgerVerified:verified.verified,assignmentCount:verified.assignmentCount,relocation:payload.sectionRelocation||null,frontSyncRequired:releaseNeedsFrontSync||!!(payload.sectionRelocation&&payload.sectionRelocation.frontSyncRequired),frontBuildDispatched:false,unpublicationPending:releaseNeedsFrontSync};
 }
 
 exports.handler=async function(event){
@@ -259,7 +290,7 @@ exports.handler=async function(event){
     const results=[],failures=[];
     for(let offset=0;offset<requests.length;offset+=8){
       const chunk=requests.slice(offset,offset+8);
-      const settled=await Promise.allSettled(chunk.map(req=>applyOne(actor,req.candidateId,scope,decision,req.placementKey,source)));
+      const settled=await Promise.allSettled(chunk.map(req=>applyOne(actor,req.candidateId,scope,decision,req.placementKey,source,decision==='hold'?{reviewReason:text(body.reviewReason)}:null)));
       settled.forEach((entry,index)=>{
         const req=chunk[index];
         if(entry.status==="fulfilled")results.push(entry.value);

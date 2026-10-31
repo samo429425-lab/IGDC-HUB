@@ -276,7 +276,7 @@ exports.handler=async function(event){
       const scope=ProductGoLiveAudit.selectedScope(text(body.countryCode||body.country).toUpperCase(),text(body.subdivisionCode||body.regionCode||body.region||"NATIONWIDE").toUpperCase());
       let replacementPlan=null,replacementUnpublish=null;
       if(publicationReplacement){
-        replacementPlan=await Automation.productFrontReplacementPlan(Object.assign({},body,{authoritativeReplacement:true,explicitReplacementCleanup:true,replacementCandidateIds:requestedReplacementCandidateIds}));
+        replacementPlan=await Automation.productFrontReplacementPlan(Object.assign({},body,{authoritativeReplacement:true,explicitReplacementCleanup:true,replacementCandidateIds:requestedReplacementCandidateIds,allowVerifiedEmptyReplacement:body.allowVerifiedEmptyReplacement===true}));
         const staleAssignments=Array.isArray(replacementPlan&&replacementPlan.withdrawAssignments)?replacementPlan.withdrawAssignments:[];
         if(staleAssignments.length){
           // Publication-only stale cleanup: only publication_status is changed.

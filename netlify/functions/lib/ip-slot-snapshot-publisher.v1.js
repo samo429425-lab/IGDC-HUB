@@ -134,10 +134,10 @@ function cloneCard(item) {
   const productCard = isObject(item && item.productCard) ? item.productCard : {};
   const image = text(
     item &&
-      (item.thumb ||
-        item.thumbnail ||
-        item.image ||
+      (item.image ||
         item.imageUrl ||
+        item.thumb ||
+        item.thumbnail ||
         item.thumbnailUrl ||
         item.image_url ||
         item.thumbnail_url ||
@@ -172,6 +172,7 @@ function cloneCard(item) {
   );
   const card = {
     id: item.id || publication.candidateId,
+    candidateId: publication.candidateId,
     contentId: item.contentId || item.id || publication.candidateId,
     title: text(item.title || item.name),
     name: text(item.name || item.title),

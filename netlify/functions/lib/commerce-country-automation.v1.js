@@ -6649,11 +6649,13 @@ async function productFrontReplacementPlan(input) {
   const sectionKeys = Array.from(new Set(array(input && input.replacementSectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
   const desiredCandidateIds = Array.from(new Set(array(input && input.replacementCandidateIds).map(text).filter(Boolean))).slice(0, 3000);
   if (!authoritative || !sectionKeys.length) return { ok:true, applied:false, scope, sectionKeys:[], desiredCandidateIds, staleCandidateIds:[], withdrawAssignments:[] };
-  // Never treat an empty/unavailable administrator-board projection as a
-  // request to withdraw all existing published products. Explicit Unmatch is
-  // the operator-controlled way to remove publication for an empty section.
-  if (!desiredCandidateIds.length) {
-    const error=new Error("Front Match 치환 대상 상품이 0건입니다. 기존 공개 상품을 보존합니다. 관리 원장/선택 섹션을 다시 조회하거나 매칭 해제를 별도로 실행하세요.");
+  // Empty is allowed only for an EXPLICIT administrator-verified, complete
+  // board. We also verify server-side that no approved/pinned assignment is
+  // left in any selected section. Otherwise a stale client projection could
+  // accidentally remove legitimate public products.
+  const verifiedEmptyRequest = !desiredCandidateIds.length && input && input.allowVerifiedEmptyReplacement === true;
+  if (!desiredCandidateIds.length && !verifiedEmptyRequest) {
+    const error=new Error("비어 있는 섹션의 공개 치환은 관리자 전체 원장 조회와 별도 확인이 필요합니다. 기존 공개 상품을 보존합니다.");
     error.statusCode=409;error.code="FRONT_REPLACEMENT_EMPTY_BOARD_PROTECTED";throw error;
   }
   const sectionSet = new Set(sectionKeys), desired = new Set(desiredCandidateIds);
@@ -6663,7 +6665,18 @@ async function productFrontReplacementPlan(input) {
     "order=updated_at.desc",
     "limit=5000"
   ].join("&"));
+  if (array(rows).length >= 5000) {
+    const error=new Error("국가 배치 원장이 조회 한도에 도달했습니다. 일부 결과만으로 공개 상품을 치환하지 않습니다.");
+    error.statusCode=409;error.code="FRONT_REPLACEMENT_INCOMPLETE_ASSIGNMENT_SCAN";throw error;
+  }
   const acceptedStates = new Set(["approved","pinned"]), acceptedPublication = new Set(["audit_ready","ready","not_ready","publish_requested","published","matched","active","queued"]);
+  if (verifiedEmptyRequest) {
+    const assigned=array(rows).filter((row)=>row&&normalizeCountry(row.country_code)===scope.country&&frontSyncExpectedRegion(row,scope.country)===scope.region&&acceptedStates.has(lower(row.state))&&sectionKeys.includes(text(row.hub_key)+"|"+text(row.slot_key)));
+    if (assigned.length) {
+      const error=new Error("관리자 화면은 빈 섹션이지만 실제 배치 원장에 "+assigned.length+"건이 남아 있습니다. 자동 공개 해제를 중단하고 배치 관계를 확인하세요.");
+      error.statusCode=409;error.code="FRONT_EMPTY_SECTION_ASSIGNMENTS_REMAIN";throw error;
+    }
+  }
   const stale = array(rows).filter((row) => {
     if (!row || normalizeCountry(row.country_code) !== scope.country || frontSyncExpectedRegion(row, scope.country) !== scope.region) return false;
     if (!acceptedStates.has(lower(row.state)) || !acceptedPublication.has(lower(row.publication_status))) return false;
@@ -6671,7 +6684,7 @@ async function productFrontReplacementPlan(input) {
     return sectionSet.has(key) && !desired.has(text(row.candidate_id));
   });
   const withdrawAssignments = stale.map((row) => ({ candidateId:text(row.candidate_id), assignmentId:text(row.id), sectionKey:text(row.hub_key)+"|"+text(row.slot_key), reason:"administrator_authoritative_section_replacement" })).filter((row)=>row.candidateId&&row.assignmentId);
-  return { ok:true, applied:true, scope, sectionKeys, desiredCandidateIds, staleCandidateIds:Array.from(new Set(withdrawAssignments.map((row)=>row.candidateId))), withdrawAssignments };
+  return { ok:true, applied:true, scope, sectionKeys, desiredCandidateIds, verifiedEmpty:verifiedEmptyRequest, staleCandidateIds:Array.from(new Set(withdrawAssignments.map((row)=>row.candidateId))), withdrawAssignments };
 }
 
 async function productFrontSyncTargets(input, jobInput) {

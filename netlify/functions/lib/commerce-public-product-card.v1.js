@@ -16,6 +16,7 @@
  */
 
 const crypto = require("crypto");
+const ProductImage = require("./commerce-product-image-integrity.v1");
 
 const VERSION = "commerce-public-product-card-v1.0.0";
 
@@ -117,6 +118,7 @@ function safeImageUrl(value){
   try{
     const u=new URL(safe);
     if(badDestinationHost(u.hostname)) return "";
+    if(ProductImage.classification(safe)!=="candidate_photo") return "";
     const low=lower(decodeURIComponent(safe));
     if(/(?:^|[\/_\-.])(?:logo|favicon|icon|sprite|avatar|profile|banner|header|footer|brandmark|placeholder|no[-_]?image)(?:[\/_\-.]|$)/i.test(low)) return "";
     if(/\/assets\/sample\//i.test(low)) return "";
