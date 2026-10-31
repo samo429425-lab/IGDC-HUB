@@ -63,8 +63,11 @@
   var previewSources=[];
   var previewSourceIndex=0;
   var fullscreenUiTimer=null;
-  var openSectionKey='';
+  var openSectionKey='media-movie';
   var selectedBySection={};
+  var publishedTrendingRows=[];
+  var publishedTrendingStatus='공개 인기 영상 확인 전';
+  var publishedTrendingLoaded=false;
   var frontReleaseState={hasRelease:false,totalManagedSlots:0,sections:{}};
   var supplierCache=[];
   var supplierDiagnosticCache=null;
@@ -185,8 +188,10 @@
     return rankForFront(b)-rankForFront(a)||text(a&&a.id).localeCompare(text(b&&b.id));
   }
   function rankableRow(row){
-    return lower(row&&row.reviewStatus)==='approved'&&lower(row.verificationStatus)==='approved_for_snapshot'&&row.frontEnabled!==false&&
-      row.promotable===true&&row.candidateOnly!==true&&row.seedContent!==true;
+    // Show rank controls to the administrator for approved/public-enabled rows;
+    // the server remains the final authority for every move (rights, thumbnail,
+    // playability, candidateOnly and policy checks are not bypassed).
+    return lower(row&&row.reviewStatus)==='approved'&&lower(row.verificationStatus)==='approved_for_snapshot'&&row.frontEnabled!==false;
   }
   function rankControlsActive(){
     return text($('sortSelect').value)==='rank'&&!text($('searchInput').value)&&!text($('riskFilter').value)&&!text($('safetyFilter').value)&&!text($('statusFilter').value);
@@ -221,13 +226,38 @@
   }
   function pill(value,className){return '<span class="pill '+(className||'')+'">'+esc(value||'-')+'</span>';}
   function sectionRows(key,rows){
-    if(key!=='media-trending')return rows.filter(function(row){return text(row.sectionKey)===key;});
-    var sources=new Set(['media-movie','media-drama','media-variety','media-music']);
-    return rows.filter(function(row){return sources.has(text(row.sectionKey));}).sort(function(left,right){
-      var leftScore=rowRank(left)+(Number(left.year||0)>=2024?8:0);
-      var rightScore=rowRank(right)+(Number(right.year||0)>=2024?8:0);
-      return rightScore-leftScore;
-    }).slice(0,50);
+    // Trending is a shared view of the actual *published* four source sections.
+    // Unapproved candidate rows must never be shown as if they were live.
+    if(key==='media-trending')return publishedTrendingRows;
+    return rows.filter(function(row){return text(row.sectionKey)===key;});
+  }
+  async function loadPublishedTrending(force){
+    if(publishedTrendingLoaded&&!force)return;
+    publishedTrendingStatus='프론트 공개 데이터와 순위 확인 중';
+    renderRows();
+    try{
+      var response=await fetch('/data/media.snapshot.json',{credentials:'same-origin',cache:force?'no-cache':'default'});
+      if(!response.ok)throw new Error('공개 스냅샷 HTTP '+response.status);
+      var snapshot=await response.json();
+      var module=await import('/assets/js/media-trending-ranking.mjs');
+      publishedTrendingRows=module.rankMediaTrending(snapshot).map(function(entry,index){
+        return Object.assign({},entry.item,{publishedTrendingRank:index+1,publishedSourceSection:entry.sectionKey});
+      });
+      publishedTrendingLoaded=true;
+      publishedTrendingStatus='공개 프론트 기준 · '+publishedTrendingRows.length+'개 · 별도 수집 없음';
+    }catch(error){
+      publishedTrendingStatus='공개 프론트 조회 실패: '+String(error.message||error);
+      publishedTrendingLoaded=false;publishedTrendingRows=[];
+    }
+    renderRows();
+  }
+  function publishedTrendingCardHtml(item,index){
+    var thumb=usableCandidateThumbnail(item),title=text(item.title||item.name),source=text(item.publishedSourceSection||'');
+    return '<article class="candidate-card" data-published-rank="'+(index+1)+'">'+
+      '<div class="candidate-thumb-button" style="cursor:default">'+
+      (thumb?'<img class="candidate-thumb-image" loading="lazy" src="'+esc(thumb)+'" alt="'+esc(title)+'">':'<span class="candidate-thumb-fallback">썸네일 대기</span>')+
+      '</div><div class="candidate-card-body"><strong class="candidate-card-title">'+(index+1)+'위 · '+esc(title||'제목 미확인')+'</strong>'+
+      '<div class="candidate-card-meta">'+pill(SECTION_LABELS[source]||source,'section')+pill('프론트 게시 순위','rank')+'</div></div></article>';
   }
   function durationLabel(seconds){
     seconds=Number(seconds);
@@ -254,7 +284,7 @@
       '</button>'+
       '<div class="candidate-card-body">'+
         '<div class="candidate-card-title">'+esc(row.title||'(제목 없음)')+'</div>'+
-        '<div class="candidate-card-meta">'+(rankControlsActive()&&rankableRow(row)?pill('관리자 순위 '+displayPosition,'section'):'')+pill(row.qualityTarget||'화질 미확인','rank')+pill((row.rankingTier||'-')+' '+rowRank(row),'rank')+pill(row.discoveryRegion||row.region||'지역 미확인','section')+pill(row.safetyDecision||'검토 필요',safetyClass)+(lower(row.reviewStatus)==='approved'?pill(row.frontEnabled===false?'프론트 공급 중지':'프론트 공급 허용',row.frontEnabled===false?'blocked':'section'):'')+'</div>'+
+        '<div class="candidate-card-meta">'+(rankableRow(row)?pill('관리자 순위 '+displayPosition,'section'):'')+pill(row.qualityTarget||'화질 미확인','rank')+pill((row.rankingTier||'-')+' '+rowRank(row),'rank')+pill(row.discoveryRegion||row.region||'지역 미확인','section')+pill(row.safetyDecision||'검토 필요',safetyClass)+(lower(row.reviewStatus)==='approved'?pill(row.frontEnabled===false?'프론트 공급 중지':'프론트 공급 허용',row.frontEnabled===false?'blocked':'section'):'')+'</div>'+
         '<div class="candidate-card-detail">'+esc(row.provider||'-')+' · '+esc(row.year||'연도 미확인')+' · 자막 '+esc(row.subtitleCount||0)+'개<br>'+
         '분류 '+esc(row.classificationConfidence||0)+'% · '+esc(row.reviewStatus||'-')+
         (row.discoveryLane?'<br>탐색 '+esc(row.discoveryLane)+' · '+esc(row.discoveryRegion||row.region||'지역 미확인'):'')+
@@ -262,11 +292,11 @@
         (languages.length?'<br>자막 '+esc(languages.join(' · ')):'')+
         (warnings.length||reasons.length?'<br>'+esc(warnings.concat(reasons).slice(0,3).join(' · ')):'')+
         '</div>'+
-        '<div class="candidate-card-footer"><button type="button" class="previewBtn" data-candidate-id="'+esc(id)+'">점검 재생</button>'+
+        '<div class="candidate-card-footer">'+(!readOnly?'<button type="button" class="secondary candidateSelectBtn" data-candidate-id="'+esc(id)+'">'+(selected?'선택 해제':'이 영상 선택')+'</button>':'')+'<button type="button" class="previewBtn" data-candidate-id="'+esc(id)+'">점검 재생</button>'+
         (!thumb&&!readOnly?'<button type="button" class="secondary thumbnailGenerateBtn" data-candidate-id="'+esc(id)+'">썸네일 생성</button>':'')+
         (!readOnly&&lower(row.reviewStatus)==='approved'&&lower(row.verificationStatus)==='approved_for_snapshot'?'<button type="button" class="'+(row.frontEnabled===false?'publish':'danger')+' contentFrontToggleBtn" data-candidate-id="'+esc(id)+'" data-section-key="'+esc(sectionKey)+'" data-front-enabled="'+(row.frontEnabled===false?'0':'1')+'">'+(row.frontEnabled===false?'이 콘텐츠 프론트 넣기':'이 콘텐츠 프론트 빼기')+'</button>':'')+
-        (!readOnly&&rankControlsActive()&&rankableRow(row)?'<button type="button" class="secondary frontMoveBtn" data-direction="up" data-candidate-id="'+esc(id)+'" title="랭킹에서 한 칸 앞으로">▲ 앞</button><button type="button" class="secondary frontMoveBtn" data-direction="down" data-candidate-id="'+esc(id)+'" title="랭킹에서 한 칸 뒤로">▼ 뒤</button>':'')+
-        (!readOnly&&rankControlsActive()&&row.frontControl&&row.frontControl.manualRank!==undefined&&row.frontControl.manualRank!==null?'<button type="button" class="secondary frontRankResetBtn" data-candidate-id="'+esc(id)+'" title="수동 지정 해제 · 자동 랭킹으로 복귀">자동순위 복원</button>':'')+
+        (!readOnly&&rankableRow(row)?'<button type="button" class="secondary frontMoveBtn" data-direction="up" data-candidate-id="'+esc(id)+'" title="랭킹에서 한 칸 앞으로">▲ 앞</button><button type="button" class="secondary frontMoveBtn" data-direction="down" data-candidate-id="'+esc(id)+'" title="랭킹에서 한 칸 뒤로">▼ 뒤</button>':'')+
+        (!readOnly&&row.frontControl&&row.frontControl.manualRank!==undefined&&row.frontControl.manualRank!==null?'<button type="button" class="secondary frontRankResetBtn" data-candidate-id="'+esc(id)+'" title="수동 지정 해제 · 자동 랭킹으로 복귀">자동순위 복원</button>':'')+
         '</div>'+
       '</div></article>';
   }
@@ -274,10 +304,10 @@
     var readOnly=key==='media-trending';
     var released=Number(frontReleaseState.sections&&frontReleaseState.sections[key]||0);
     var controls=readOnly?
-      '<div class="read-only-note">지금 뜨는 콘텐츠는 영화·드라마·버라이어티·음악 후보의 최신성·랭킹을 자동 조합한 점검용 미리보기입니다. 수동 고정이나 일괄 상태 변경은 하지 않습니다. <button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>':
+      '<div class="read-only-note">영화·드라마·예능·음악 경연방송의 실제 공개 영상만으로 프론트와 같은 순위를 표시합니다. 별도 수집·수동 배치하지 않습니다. <button type="button" class="secondary refreshPublishedTrendingBtn">공개 랭킹 새로고침</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button><div class="small">'+esc(publishedTrendingStatus)+'</div></div>':
       '<div class="section-actionbar" data-section-key="'+esc(key)+'">'+
         '<div class="section-front-control"><input class="sectionResearchPhrase" maxlength="120" placeholder="제목 · 프로그램명 · 장르 · 주제어 맞춤 리서치" value="'+esc(sectionResearchTerms[key]||'')+'" style="min-width:260px;flex:1"><button type="button" class="secondary sectionResearchBtn">후보 맞춤 수집</button><button type="button" class="secondary sectionWebResearchBtn">웹에서 제목 찾기</button></div>'+
-        '<div class="section-front-control"><span class="small">랭킹순 보기에서 승인된 영상의 ▲/▼ 순서 조정 가능 · 조정 후 이 섹션 프론트 반영 필요</span></div><div class="section-front-control"><span class="pill section">마지막 프론트 반영 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
+        '<div class="section-front-control"><span class="small">영상별 ‘이 영상 선택’ 또는 체크박스로 선택 → ▲/▼ 이동 또는 목표 순위 지정 · 변경 후 프론트 반영</span></div><div class="section-front-control"><span class="pill section">마지막 프론트 반영 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
         '<div class="section-front-control"><span class="small">원하는 영상 1개 체크 → 목표 순위 입력</span><input type="number" class="sectionFrontPosition" min="1" max="100" step="1" placeholder="목표 순위" style="width:112px"><button type="button" class="secondary sectionFrontPositionBtn">선택 영상 순위 지정</button></div>'+
         '<button type="button" class="secondary sectionSelectAllBtn">전체 선택</button><button type="button" class="secondary sectionClearSelectionBtn">선택 해제</button>'+
         '<button type="button" class="sectionActionBtn" data-action="approve">선택 승인</button><button type="button" class="sectionActionBtn" data-action="hold">선택 보류</button><button type="button" class="sectionActionBtn" data-action="reset">선택 재검토</button>'+
@@ -285,7 +315,7 @@
         '<input class="section-note" placeholder="관리 메모(선택, 승인 시 필수)" maxlength="1000">'+
         '<div class="section-confirmations"><label><input class="sectionContentConfirm" type="checkbox"> 실제 재생·콘텐츠 안전 확인</label><label><input class="sectionRightsConfirm" type="checkbox"> 원본·권리 확인</label><label><input class="sectionSubtitleConfirm" type="checkbox"> 자막 확인</label></div>'+
       '</div>';
-    return controls+(list.length?'<div class="candidate-card-grid">'+list.map(function(row,index){return candidateCardHtml(row,key,readOnly,index+1);}).join('')+'</div>':'<div class="empty-section">현재 조건에 맞는 후보가 없습니다.</div>');
+    return controls+(list.length?'<div class="candidate-card-grid">'+list.map(function(row,index){return readOnly?publishedTrendingCardHtml(row,index):candidateCardHtml(row,key,false,index+1);}).join('')+'</div>':'<div class="empty-section">'+(readOnly?esc(publishedTrendingStatus):'현재 조건에 맞는 후보가 없습니다.')+'</div>');
   }
   function thumbnailRepairBodyHtml(list){
     if(!list.length)return '<div class="empty-section">썸네일 보완이 필요한 후보가 없습니다.</div>';
@@ -312,7 +342,7 @@
       var countLabel=key==='media-trending'?
         primaryCount+' / '+capacity:
         '본선 '+primaryCount+'/'+capacity+' · 예비 '+reserveCount+'/'+sectionReserveCapacity(key)+(overflowCount?' · 최신/추가 '+overflowCount:'');
-      if(list.length!==fullCount)countLabel+=' · 표시 '+list.length;
+      if(key!=='media-trending'&&list.length!==fullCount)countLabel+=' · 표시 '+list.length;
       if(key!=='media-trending')countLabel+=' · 프론트 '+released;
       var batchAllowed=key!=='media-trending';
       var batchChecked=batchAllowed&&selectedMediaSections.has(key);
@@ -332,7 +362,6 @@
     $('tablePanel').classList.remove('hidden');
   }
   async function setSelectedFrontPosition(sectionKey,section,button){
-    if(!rankControlsActive()){show('랭킹순 보기 및 검색·필터 해제 상태에서 위치를 지정해 주세요.','warn');return;}
     var selected=Array.from(selectedBySection[sectionKey]||[]);
     if(selected.length!==1){show('해당 섹션에서 순서를 바꿀 영상 한 개만 체크해 주세요.','warn');return;}
     var row=rowsCache.find(function(item){return text(item.contentId||item.id)===selected[0];});
@@ -358,7 +387,6 @@
   }
   async function moveFrontCandidate(id,direction,button){
     if(!id||!['up','down'].includes(direction))return;
-    if(!rankControlsActive()){show('랭킹순 보기 및 검색·필터 해제 상태에서 위치를 조정해 주세요.','warn');return;}
     button.disabled=true;
     try{
       var data=await post(ACT,{action:'front_move',ids:[id],direction:direction});
@@ -1777,7 +1805,18 @@
         var key=text(toggle.dataset.sectionKey);
         openSectionKey=openSectionKey===key?'':key;
         renderRows();
+        if(key==='media-trending')loadPublishedTrending(false);
         return;
+      }
+      if(event.target.closest('.refreshPublishedTrendingBtn')){publishedTrendingLoaded=false;loadPublishedTrending(true);return;}
+      var selectCandidate=event.target.closest('.candidateSelectBtn');
+      if(selectCandidate){
+        var card=selectCandidate.closest('.candidate-card');
+        var key=card&&card.closest('.candidate-section')&&card.closest('.candidate-section').dataset.sectionKey;
+        var id=text(selectCandidate.dataset.candidateId);
+        var selection=selectedBySection[key]||(selectedBySection[key]=new Set());
+        if(selection.has(id))selection.delete(id);else selection.add(id);
+        renderRows();return;
       }
       var resetRank=event.target.closest('.frontRankResetBtn');
       if(resetRank){resetFrontRank(text(resetRank.dataset.candidateId),resetRank);return;}

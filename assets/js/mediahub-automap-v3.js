@@ -142,11 +142,7 @@
     a.href = 'javascript:void(0)';
     const thumb = D.createElement('div');
     thumb.className = 'thumb ph';
-    const img = D.createElement('img');
-    img.src = SAMPLE_IMAGE;
-    img.alt = 'Media Sample';
-    img.loading = 'lazy';
-    thumb.appendChild(img);
+    // The CSS placeholder is sufficient; avoid loading a thousand sample <img> tags.
     const meta = D.createElement('div');
     meta.className = 'meta';
     meta.textContent = 'Sample';
@@ -431,7 +427,9 @@
     let meta=q('.meta',a);if(!meta){meta=D.createElement('div');meta.className='meta';a.appendChild(meta);}meta.textContent='Sample';
     a.setAttribute('data-placeholder','true');
     a.dataset.thumbPending='1';a.dataset.thumbPendingKind='ready';
-    img.alt=title||'';img.loading='lazy';img.decoding='async';img.dataset.autoThumbResolved='1';
+    img.alt=title||'';img.loading=a.dataset.thumbEager==='1'?'eager':'lazy';img.decoding='async';
+    try{if('fetchPriority' in img)img.fetchPriority=a.dataset.thumbEager==='1'?'high':'low';}catch(_e){}
+    img.dataset.autoThumbResolved='1';
     // Keep the blue MEDIA SAMPLE artwork visible until a real thumbnail has
     // actually loaded and passed validation. Off-screen cards do not start
     // network thumbnail work at all; this avoids large request bursts at boot.
@@ -969,19 +967,15 @@
     if(cards.length<2)return;
     const ranked=cards.map((card,index)=>({card,index})).sort((A,B)=>{
       const a=A.card,b=B.card;
-      // Hard rule: a card is front-eligible only after a real thumbnail has
-      // actually loaded and data-placeholder has been removed. Every Sample,
-      // pending thumbnail, recovery item and quarantine slot stays behind all
-      // verified/rendered cards.
+      // Published slot position wins even while an image is loading. Moving
+      // ready cards ahead of pending cards previously scrambled admin order.
+      const ar=a.dataset.frontOrder,br=b.dataset.frontOrder;
+      const oa=ar!==undefined&&ar!==''?Number(ar):Infinity;
+      const ob=br!==undefined&&br!==''?Number(br):Infinity;
+      if(oa!==ob)return oa-ob;
       const pa=a.getAttribute('data-placeholder')==='true'?1:0;
       const pb=b.getAttribute('data-placeholder')==='true'?1:0;
       if(pa!==pb)return pa-pb;
-      // Once published, the release slot order is authoritative. Never sort
-      // by a second heuristic that disagrees with the administrator.
-      const oa=Number(a.dataset.frontOrder),ob=Number(b.dataset.frontOrder);
-      if(Number.isFinite(oa)&&Number.isFinite(ob)&&oa!==ob)return oa-ob;
-      if(Number.isFinite(oa)&&!Number.isFinite(ob))return -1;
-      if(!Number.isFinite(oa)&&Number.isFinite(ob))return 1;
       // Stable final tie-breaker so repeated compaction never oscillates.
       return A.index-B.index;
     }).map((row)=>row.card);
@@ -1092,46 +1086,35 @@
     const ph=ensurePlaceholders(line);
     const capacity=lineCapacity(line);
     const ranked=items.filter(isFrontCandidate); // preserve published slot order
-    const immediate=[],pending=[];
+    // Preserve the released order *before* attempting thumbnails. Previously
+    // "ready" images were assembled ahead of pending images, changing the
+    // advertised positions and the trending ranking after asynchronous loads.
+    const ordered=[],reserve=[];
     const scanLimit=Math.max(capacity*3,capacity);
     for(const item of ranked){
       if(isSyntheticSampleItem(item))continue;
       const thumb=safeFrontThumbnail(rawThumbnail(item));
-      // A URL by itself is not enough when the snapshot explicitly says the
-      // thumbnail is still pending/generating. Such items stay behind the
-      // already-renderable group until their thumbnail is actually ready.
-      if(thumb&&!thumbnailExplicitlyPending(item))immediate.push({item,thumb});
-      else if(thumb||providerThumbnailCandidates(item).length||directVideoForThumb(mediaSourceForThumb(item)))pending.push(item);
-      if(immediate.length+pending.length>=scanLimit)break;
+      const ready=!!thumb&&!thumbnailExplicitlyPending(item);
+      const recoverable=!!thumb||providerThumbnailCandidates(item).length>0||directVideoForThumb(mediaSourceForThumb(item));
+      if(!recoverable)continue;
+      if(ordered.length<capacity)ordered.push({item,thumb,ready});
+      else if(ready)reserve.push({item,thumb,order:capacity+reserve.length});
+      if(ordered.length+reserve.length>=scanLimit)break;
     }
-    // Keep extra pre-ranked items with real thumbnail URLs as a reserve. A slot
-    // whose thumbnail fails is refilled from here immediately, so valid content
-    // behind it is never stranded behind a blue Sample card.
-    line.__igdcFrontReserveQueue=immediate.slice(capacity).map((entry,index)=>({item:entry.item,thumb:entry.thumb,order:capacity+index}));
-    let slot=0;
+    line.__igdcFrontReserveQueue=reserve;
     const lineKey=canonKey(line.getAttribute('data-psom-key')||'');
-    // Only the first visible cards of the first three rails are eager. All
-    // other cards remain lazy/pre-warmed, preventing the old all-at-once burst.
-    const eagerLimit=lineKey==='media-trending'?6:(lineKey==='media-movie'||lineKey==='media-drama'?4:0);
-    for(const entry of immediate.slice(0,capacity)){
-      if(slot>=ph.length||slot>=capacity)break;
-      const card=ph[slot];
-      card.dataset.frontOrder=String(Number(entry.item.slotId||0)>0?Number(entry.item.slotId)-1:slot);
+    const eagerLimit=lineKey==='media-trending'?6:(lineKey==='media-movie'||lineKey==='media-drama'?5:0);
+    ordered.forEach((entry,slot)=>{
+      const card=ph[slot];if(!card)return;
+      // Trending source slotId refers to its original section, not its
+      // *trending* position. This rail has a new 1..50 ranking.
+      const publishedSlot=Number(entry.item.slotId||0);
+      const order=lineKey==='media-trending'?slot:(publishedSlot>0?publishedSlot-1:slot);
+      card.dataset.frontOrder=String(order);
       if(slot<eagerLimit)card.dataset.thumbEager='1';else delete card.dataset.thumbEager;
-      bindItemToAnchor(card,entry.item,entry.thumb);
-      slot++;
-    }
-    // Thumbnail-generation/recovery candidates are allowed only after every
-    // ready-thumbnail candidate. They remain Sample placeholders until recovery
-    // actually succeeds; compaction then promotes them ahead of all Samples.
-    for(const item of pending){
-      if(slot>=ph.length||slot>=capacity)break;
-      const card=ph[slot];
-      resetAnchorToPlaceholder(card,'thumbnail_pending');
-      card.dataset.frontOrder=String(Number(item.slotId||0)>0?Number(item.slotId)-1:slot);
-      recoverThumbnail(card,item);
-      slot++;
-    }
+      if(entry.ready)bindItemToAnchor(card,entry.item,entry.thumb);
+      else{resetAnchorToPlaceholder(card,'thumbnail_pending');card.dataset.frontOrder=String(order);recoverThumbnail(card,entry.item);}
+    });
     compactLine(line);
   }
 
@@ -1410,7 +1393,12 @@
       probesByItem.set(id,used+1);
       probeSet.push(candidate);
     }
-    const checked=await Promise.all(probeSet.map((candidate)=>checkedCandidate(candidate,3600)));
+    const checked=[];
+    for(let i=0;i<probeSet.length;i+=6){
+      const batch=await Promise.all(probeSet.slice(i,i+6).map(candidate=>checkedCandidate(candidate,3000)));
+      checked.push(...batch);
+      if(checked.some(result=>result&&result.tier>=3&&result.visual&&result.visual.sharp))break;
+    }
     let best=chooseBest(checked);
 
     // If provider/backdrop assets are not HD, try a real 1280x720 frame from the
@@ -1511,46 +1499,22 @@
     const snapshotPromise = loadSnapshotAny();
     installReadyFirstCompactionWatch();
 
-    // stabilize layout first
-    lines.forEach(ensurePlaceholders);
-
+    // Do not construct all ~950 placeholders on the first paint.
+    // Each rail is expanded on demand by applyLine / visibility.
     const snapshot = await snapshotPromise;
     const sectionMap = normalizeSectionMap(snapshot);
 	
-// ===== MEDIA TRENDING: VERIFIED TOP-50, SHARED FROM FOUR SOURCE SECTIONS =====
-(function(){
-  if(!sectionMap)return;
-  const sourceKeys=['media-movie','media-drama','media-variety','media-music'];
-  const used=new Set(),ranked=[];
-  function broadcastMusic(item){
-    // The trending music lane means televised music contests, auditions and shows,
-    // not generic music videos or stand-alone concerts.
-    const tags=[item.title,item.name,item.genre,item.subgenre,item.category,item.programTitle,
-      item.description,item.summary].concat(Array.isArray(item.tags)?item.tags:[]).join(' ').toLowerCase();
-    return /(?:music\s*(?:show|competition|contest|audition|program|programme)|singing\s*(?:contest|competition|show)|audition|talent\s*show|music\s*festival|가왕|가요제|음악\s*방송|음악\s*경연|오디션|트로트\s*(?:경연|대회)|경연\s*프로그램|歌唱比赛|选秀节目|歌唱比賽|音楽番組)/i.test(tags);
-  }
-  function score(item){
-    const rawDate=item.publishedAt||item.releaseDate||item.createdAt||item.date;
-    const date=new Date(rawDate||0).getTime();
-    const days=Number.isFinite(date)&&date>0?Math.max(0,(Date.now()-date)/86400000):3650;
-    const freshness=Math.max(0,1-days/90);
-    // Ranking/hotness precedes recency. Front policy still enforces thumbnail,
-    // playability and verified supply; newly collected samples cannot trend.
-    const interest=numeric(item,['rankingScore','trendScore','hotScore','popularity','score']);
-    return frontPriority(item)+(Math.max(0,interest)*5)+(freshness*200);
-  }
-  for(const key of sourceKeys){
-    for(const item of extractItems(sectionMap[key])){
-      if(!isTrendingReadyCandidate(item))continue;
-      if(key==='media-music'&&!broadcastMusic(item))continue;
-      const id=String(ensureContentId(item)||mediaSourceForThumb(item)||'').trim();
-      if(!id||used.has(id))continue;
-      used.add(id);ranked.push({item,score:score(item),source:key});
+// One canonical public ranking function for the front and the administrator.
+    // This is derived from the four *released* source sections; never the raw queue.
+    try{
+      const trending=await import('/assets/js/media-trending-ranking.mjs');
+      sectionMap['media-trending']={items:trending.rankMediaTrending(sectionMap).map(row=>row.item)};
+    }catch(error){
+      // Preserve source sections; do not silently render a different "trending"
+      // order if the shared ranking logic is unavailable.
+      console.warn('[IGDC Media] 공유 인기순위 모듈 로드 실패:',error);
+      sectionMap['media-trending']={items:[]};
     }
-  }
-  ranked.sort((a,b)=>b.score-a.score||heroFreshnessDay(b.item)-heroFreshnessDay(a.item));
-  sectionMap['media-trending']={items:ranked.slice(0,TRENDING_LIMIT).map((row)=>row.item)};
-})();
 
     // Apply every snapshot-backed rail immediately. Any optional feed fallback
     // is scheduled independently instead of serially blocking the following
@@ -1564,7 +1528,10 @@
         scheduleLineApply(line,items);
       }else if(ENABLE_FEED_MEDIA_FALLBACK){
         fallbackJobs.push(loadFeedItems(key).then((feedItems)=>{if(feedItems&&feedItems.length)scheduleLineApply(line,feedItems);}));
-      }
+      }else if('IntersectionObserver' in window){
+        const emptyObserver=new IntersectionObserver(entries=>{for(const entry of entries){if(entry.isIntersecting){emptyObserver.disconnect();ensurePlaceholders(line);break;}}},{rootMargin:'1000px 0px',threshold:0});
+        emptyObserver.observe(line);
+      }else ensurePlaceholders(line);
     }
     if(fallbackJobs.length)Promise.allSettled(fallbackJobs).then(()=>compactMappedLines(lines));
 
@@ -1582,13 +1549,13 @@
     // initial mapping as an additional deterministic safety net.
     // The mutation observer already schedules compaction on thumbnail-ready.
     // Two safety sweeps cover late changes without repeatedly re-sorting 500 slots.
-    [150,1200].forEach((delay)=>setTimeout(()=>compactMappedLines(lines),delay));
+    [150,1200].forEach((delay)=>setTimeout(()=>compactMappedLines(lines.filter(line=>EAGER_LINE_KEYS.has(canonKey(line.getAttribute('data-psom-key')||'')))),delay));
   }
 
   if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', main);
   else main();
 
-  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.5.0-authoritative-rank-sharp-hero';
+  window.__IGDC_MEDIAHUB_AUTOMAP_VERSION__='5.6.0-shared-trending-lazy-front-order';
 })();
 
 
