@@ -14,9 +14,10 @@
   var originalRestore = (typeof window.restoreFrameWithoutHistory === 'function')
     ? window.restoreFrameWithoutHistory : null;
   var originalLoad = (typeof window.loadPage === 'function') ? window.loadPage : null;
+  var adminSidebarSocialEntry = false;
   var SIDEBAR_STYLE_ID = 'igdc-social-country-hidden-sidebar';
   var SIDE_CSS = '.sidebar a[href*="socialnetwork" i]{display:none!important;pointer-events:none!important;}';
-  var HUB_NAME = /^(?:home|networkhub|distributionhub|mediahub|tour)(?:_[a-z]{2,3})?\.html$/i;
+  var HUB_NAME = /^(?:home|networkhub|distributionhub|mediahub|tour)(?:_[a-z]{2,3})?(?:\.html)?$/i;
   var SOCIAL_NAME = /^socialnetwork(?:_[a-z]{2,3})?(?:\.html)?$/i;
 
   function pathName(value) {
@@ -36,6 +37,15 @@
     try { doc = frame.contentDocument; } catch (_error) { return; }
     if (!doc) return;
     var oldStyle = doc.getElementById(SIDEBAR_STYLE_ID);
+    // An explicitly selected link in the Admin sidebar may open the Social
+    // viewer. This exception does not apply to any public hub/sidebar.
+    if (pathName(doc.location.href).toLowerCase() === 'admin.html' && !doc.__igdcAdminSocialClickGuard) {
+      doc.__igdcAdminSocialClickGuard = true;
+      doc.addEventListener('click', function (event) {
+        var link = event.target && event.target.closest && event.target.closest('.sidebar a[href]');
+        if (link && socialPath(link.href)) adminSidebarSocialEntry = true;
+      }, true);
+    }
     if (!restricted() || !isHubDocument(doc)) {
       if (oldStyle) oldStyle.remove();
       return;
@@ -121,8 +131,14 @@
     frame.addEventListener('load', function () {
       applySidebar();
       if (state === 'blocked') {
-        try { if (socialPath(frame.contentWindow.location.href)) redirectToHome(); }
-        catch (_error) {}
+        try {
+          if (socialPath(frame.contentWindow.location.href)) {
+            if (adminSidebarSocialEntry) adminSidebarSocialEntry = false;
+            else redirectToHome();
+          } else {
+            adminSidebarSocialEntry = false;
+          }
+        } catch (_error) { adminSidebarSocialEntry = false; }
       }
     });
     applySidebar();
