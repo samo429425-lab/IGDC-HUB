@@ -129,10 +129,23 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
   // Other mutations (including automatic reclassification) remain protected.
   // The old public snapshot must be reconciled by Front Match; it must not be
   // represented as already changed merely because the private ledger moved.
-  const sourceKey=text(prior&&prior.key)||((prior&&prior.page&&prior.sectionKey)?text(prior.page)+"|"+text(prior.sectionKey):"");
+  const approvedKey=placementKey(plain(oldPayload.approvedPlacement).key||((text(plain(oldPayload.approvedPlacement).page)&&text(plain(oldPayload.approvedPlacement).sectionKey||plain(oldPayload.approvedPlacement).section))?text(plain(oldPayload.approvedPlacement).page)+"|"+text(plain(oldPayload.approvedPlacement).sectionKey||plain(oldPayload.approvedPlacement).section):""));
   const targetKey=placementKey(key);
+  // An explicit administrator reconciliation may interpret the single durable
+  // relationship as the old section while preserving the signed private placement.
+  // Never let AI or an ordinary Front Match call use this permission.
+  const owned=oldRows.filter(item=>sameScope(item,scope)&&["approved","pinned"].includes(lower(item.state)));
+  const reconcileSource=source==="administrator_reconcile"&&decision==="slot_candidate"&&
+    targetKey&&approvedKey===targetKey&&owned.length===1&&
+    plain(oldPayload.managementControl).source==="administrator"&&
+    plain(oldPayload.managementControl).administratorLocked===true&&
+    text(owned[0].hub_key)+"|"+text(owned[0].slot_key)!==targetKey;
+  if(source==="administrator_reconcile"&&!reconcileSource)throw Object.assign(new Error('unverified_administrator_assignment_reconciliation'),{statusCode:409});
+  const sourceKey=reconcileSource?text(owned[0].hub_key)+"|"+text(owned[0].slot_key):
+    (text(prior&&prior.key)||((prior&&prior.page&&prior.sectionKey)?text(prior.page)+"|"+text(prior.sectionKey):""));
+  const sourceRecord=reconcileSource?{key:sourceKey,page:text(owned[0].hub_key),section:text(owned[0].slot_key),sectionKey:text(owned[0].slot_key),country:scope.country,region:scope.region}:prior;
   const frontStatus=lower(plain(oldPayload.frontPublication).status);
-  const isManualSectionMove=decision==="slot_candidate"&&source==="administrator"&&
+  const isManualSectionMove=decision==="slot_candidate"&&(source==="administrator"||reconcileSource)&&
     !!sourceKey&&!!targetKey&&sourceKey!==targetKey&&
     oldRows.some(item=>sameScope(item,scope)&&text(item.hub_key)+"|"+text(item.slot_key)===sourceKey);
   const pendingUnpublish=["unpublish_requested","unpublish_failed"].includes(frontStatus);
@@ -159,7 +172,7 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
     // Record the previous section before changing the private assignment. The
     // public output is still unchanged until the next verified Front Match.
     if(isManualSectionMove){
-      payload.previousApprovedPlacement=Object.assign({},plain(prior),{
+      payload.previousApprovedPlacement=Object.assign({},plain(sourceRecord),{
         key:sourceKey,country:scope.country,region:scope.region,
         removedAt:now,removedReason:"administrator_section_relocation",
         frontWasPublished:liveProtected
