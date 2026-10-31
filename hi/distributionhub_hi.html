@@ -1462,6 +1462,9 @@ a[id*="qna"]{
   }
 
   function initSlots(){
+    // Canonical IP snapshot owns all Distribution PSOM slots. 800 temporary
+    // legacy nodes before first paint add layout cost and are discarded.
+    if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V8__===true)return;
 
     document
       .querySelectorAll('.thumb-grid[data-psom-key]')
@@ -1539,6 +1542,8 @@ if (document.querySelector('.thumb-list .thumb-card')) return;
   }
 
   function init() {
+    // The canonical renderer mounts its own small loading state.
+    if(window.__DISTRIBUTION_PRODUCTS_AUTOMAP_V8__===true)return;
     document.querySelectorAll('.thumb-list').forEach(mountSkeleton);
   }
 
@@ -2473,7 +2478,9 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
     }
 
     function run(){
-      document.querySelectorAll(".thumb-list.thumb-scroller").forEach(backfillList);
+      // Never fill country-scoped commerce PSOM or its mobile mirror from
+      // /api/recommend: that endpoint has no request-time market proof.
+      document.querySelectorAll(".thumb-list.thumb-scroller:not([data-psom-key]):not(#mobile-ad-rail-list)").forEach(backfillList);
     }
 
     if (document.readyState === "loading") {
@@ -3495,49 +3502,6 @@ window.addEventListener("message",function(ev){
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
 <script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
 <script defer="" src="/assets/js/distribution-products-automap.v3.js"></script>
-<script id="igdc-distribution-right-100-sync-final-v3">
-(function(){
-  'use strict';
-  if(window.__IGDC_DISTRIBUTION_RIGHT_100_SYNC_V3__) return;
-  window.__IGDC_DISTRIBUTION_RIGHT_100_SYNC_V3__=true;
-
-  var syncing=false, timer=0;
-  function placeholder(){
-    var d=document.createElement('div');
-    d.className='thumb-card placeholder';
-    d.innerHTML='<div class="thumb-img"></div><div class="thumb-title">Auto-filled</div>';
-    return d;
-  }
-  function source(){ return document.querySelector('.thumb-grid[data-psom-key="distribution-right"]'); }
-  function ensure100(src){
-    if(!src) return;
-    while(src.children.length < 100) src.appendChild(placeholder());
-    while(src.children.length > 100) src.removeChild(src.lastElementChild);
-  }
-  function mirror(){
-    if(syncing) return; syncing=true;
-    try{
-      var src=source(); if(!src) return;
-      ensure100(src);
-      var dst=document.getElementById('mobile-ad-rail-list');
-      if(dst){
-        dst.innerHTML='';
-        var frag=document.createDocumentFragment();
-        Array.prototype.slice.call(src.children,0,100).forEach(function(card){ frag.appendChild(card.cloneNode(true)); });
-        dst.appendChild(frag);
-      }
-    }finally{ syncing=false; }
-  }
-  function schedule(){ clearTimeout(timer); timer=setTimeout(mirror,30); }
-  function boot(){
-    var src=source(); if(!src) return;
-    mirror();
-    if('MutationObserver' in window){ new MutationObserver(schedule).observe(src,{childList:true}); }
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
-  window.addEventListener('load',schedule,{once:true});
-  window.addEventListener('resize',schedule,{passive:true});
-})();
-</script>
+<script id="igdc-distribution-right-100-sync-v4" src="/assets/js/distribution-right-rail-mirror.v4.js" defer></script>
 </body>
 </html>

@@ -384,6 +384,25 @@ function initialDistributionCard(card) {
   ];
   const out = {};
   for (const key of keep) if (card[key] !== undefined) out[key] = card[key];
+  // Never lose the Canonical candidate/slot identity in a fast front projection.
+  // The public card may have a legacy SearchBank id distinct from candidateId.
+  // These are public routing references, not private candidate/financial data.
+  const publication = card.canonicalPublication || {};
+  const placement = card.placement || {};
+  const candidateId = String(publication.candidateId || card.candidateId || "").trim();
+  if (candidateId) out.candidateId = candidateId;
+  const slot = card.slot !== undefined && card.slot !== null ? card.slot : placement.slot;
+  if (slot !== undefined && slot !== null && slot !== "") {
+    out.slot = slot;
+    out.slotId = slot;
+  }
+  if (candidateId && publication.status === "published") {
+    out.canonicalPublication = { candidateId, status: "published", releaseId: publication.releaseId || "", mappingDigest: publication.mappingDigest || "" };
+  }
+  if (placement.page && placement.section) {
+    out.placement = { page: placement.page, section: placement.section,
+      slot: slot === undefined ? null : slot, country: placement.country || "", region: placement.region || "" };
+  }
   return out;
 }
 function initialDistributionView(bytes, limit, view = "initial") {
@@ -426,6 +445,25 @@ function projectedFrontCard(card) {
   ];
   const out = {};
   for (const key of keep) if (card[key] !== undefined) out[key] = card[key];
+  // Never lose the Canonical candidate/slot identity in a fast front projection.
+  // The public card may have a legacy SearchBank id distinct from candidateId.
+  // These are public routing references, not private candidate/financial data.
+  const publication = card.canonicalPublication || {};
+  const placement = card.placement || {};
+  const candidateId = String(publication.candidateId || card.candidateId || "").trim();
+  if (candidateId) out.candidateId = candidateId;
+  const slot = card.slot !== undefined && card.slot !== null ? card.slot : placement.slot;
+  if (slot !== undefined && slot !== null && slot !== "") {
+    out.slot = slot;
+    out.slotId = slot;
+  }
+  if (candidateId && publication.status === "published") {
+    out.canonicalPublication = { candidateId, status: "published", releaseId: publication.releaseId || "", mappingDigest: publication.mappingDigest || "" };
+  }
+  if (placement.page && placement.section) {
+    out.placement = { page: placement.page, section: placement.section,
+      slot: slot === undefined ? null : slot, country: placement.country || "", region: placement.region || "" };
+  }
   return out;
 }
 function frontPageView(bytes, page) {

@@ -20,7 +20,7 @@
   const REGIONAL_SNAPSHOT_URL=''; // Edge-routed canonical snapshot is the only source.
   const LIMIT_MAIN=100, LIMIT_RIGHT=100;
   const RENDER_BATCH=12;
-  const FIRST_VIEW_EAGER=6;
+  const FIRST_VIEW_EAGER=8;
 
   // Cached content is only the instant first view. Every return visit revalidates
   // the public snapshot without delaying the visible page.
@@ -32,7 +32,7 @@
   const REGIONAL_REFRESH_DELAY=1400;
   // Only visible loading skeletons belong in the DOM. Real published lists
   // still retain every approved slot (100 per section) in incrementalJobs.
-  const INITIAL_SEED_PER_SECTION=6;
+  const INITIAL_SEED_PER_SECTION=8;
   const STATIC_TIMEOUT=12000;
   const REGIONAL_TIMEOUT=8500;
   const CACHE_PREFIX='igdc:distribution:instant-render:v5:';
@@ -189,6 +189,12 @@
     item=item&&typeof item==='object'?item:{};
     return {
       id:pick(item,['id','uid','productId','contentId','candidateId','candidate_id']),
+      // A public card ID can differ from the administrator's candidate ID.
+      // Both identities and the approved slot survive the small initial view.
+      candidateId:pick(item,['candidateId','candidate_id'])||(item.canonicalPublication&&item.canonicalPublication.candidateId)||'',
+      slotId:pick(item,['slotId','slot','slotKey'])||(item.placement&&item.placement.slot)||'',
+      // Canonical samples are legitimate unfilled slots, not paid products.
+      sample:item.sample===true||item.isSample===true||item.placeholder===true||item.type==='sample'||item.type==='placeholder',
       title:pick(item,['title','name','text']),
       name:pick(item,['name','title']),
       meta:pick(item,['meta','subtitle','summary','description']),
@@ -211,6 +217,25 @@
       currency:pick(item,['currency','ccy']),
       section:pick(item,['section','psom_key'])
     };
+  }
+  function isSample(item){
+    return !!(item&&(item.__igdcSeed===true||item.sample===true));
+  }
+  function displayedIdentity(item){
+    if(!item)return '';
+    return JSON.stringify([
+      item.id,item.candidateId,item.slotId,item.title,item.name,item.meta,
+      item.summary,item.description,item.thumb,item.image,item.url,item.href,
+      item.link,item.section,item.trackId,item.affiliateOutboundUrl,
+      item.externalOutboundUrl,item.sample,item.__igdcSeed
+    ]);
+  }
+  function snapshotScopeMatches(before,after){
+    const a=before&&before.meta||{},b=after&&after.meta||{};
+    for(const key of ['targetMarket','targetRegion','canonicalReleaseId']){
+      if(a[key]&&b[key]&&String(a[key])!==String(b[key]))return false;
+    }
+    return true;
   }
   function compactSnapshot(snapshot,networkMeta){
     const source=sectionsOf(snapshot); if(!source) return null;
@@ -275,6 +300,8 @@
     // autohook from duplicating the same signals on Distribution Hub cards.
     root.setAttribute('data-igdc-revenue-manual','1');
     if(item&&item.id) root.setAttribute('data-item-id',text(item.id));
+    if(item&&item.candidateId) root.setAttribute('data-candidate-id',text(item.candidateId));
+    if(item&&item.slotId!==undefined&&item.slotId!==null&&item.slotId!=='') root.setAttribute('data-slot-id',text(item.slotId));
     if(item&&item.trackId) root.setAttribute('data-track-id',text(item.trackId));
     if(item&&item.section) root.setAttribute('data-section',text(item.section));
     if(item&&item.affiliateOutboundUrl) root.setAttribute('data-affiliate-outbound','1');
@@ -311,8 +338,13 @@
       root.addEventListener('click',open);
       root.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
     }
-    if(item&&item.__igdcSeed===true){root.classList.add('thumb-card--seed');root.setAttribute('aria-busy','true');}
-    if(track!==false&&!(item&&item.__igdcSeed===true)) revenue(item,'trackImpression');
+    if(isSample(item)){
+      root.classList.add('thumb-card--seed');
+      root.setAttribute('data-igdc-sample','1');
+      // Real publication and commerce metrics must never count sample slots.
+      root.removeAttribute('role'); root.removeAttribute('tabindex');
+    }
+    if(track!==false&&!isSample(item)) revenue(item,'trackImpression');
     return root;
   }
   function addHash(hash,value){
@@ -337,7 +369,7 @@
         const list=normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]);
         hash=addHash(hash,cfg.key+':'+list.length+'|');
         list.forEach(function(item){
-          hash=addHash(hash,[pick(item,['id','uid','productId','contentId']),pick(item,['title','name','text']),pick(item,['meta','subtitle','summary','description']),pick(item,['thumb','thumbnail','image','imageUrl']),pick(item,['url','href','link'])].join('\u001f'));
+          hash=addHash(hash,[pick(item,['id','uid','productId','contentId']),pick(item,['candidateId','candidate_id']),pick(item,['slotId','slot']),pick(item,['title','name','text']),pick(item,['meta','subtitle','summary','description']),pick(item,['thumb','thumbnail','image','imageUrl']),pick(item,['url','href','link'])].join('\u001f'));
         });
       });
       return (hash>>>0).toString(16);
@@ -403,7 +435,7 @@
     };
     const card=makeCard(item,false);
     card.classList.add('thumb-card--seed');
-    card.setAttribute('aria-busy','true');
+    card.setAttribute('data-igdc-sample','1');
     return card;
   }
   function seedInitialView(){
@@ -431,6 +463,21 @@
     else job.box.appendChild(fragment);
     job.offset=end;
   }
+  // The separate mobile rail mirrors this source; it must never pad/mutate it.
+  // On narrow screens the desktop source is hidden and cannot receive scroll
+  // events, so expose only a bounded way to request its next verified batch.
+  window.IGDCDistributionRightRail = Object.freeze({
+    appendNextBatch: function(){
+      if(!baseSnapshot) return false;
+      const box=document.querySelector('[data-psom-key="distribution-right"]');
+      const job=box && incrementalJobs.get(box);
+      if(!job || job.generation!==renderGeneration || job.offset>=job.list.length) return false;
+      // Do not paint speculative seed cards ahead of the full snapshot.
+      if(job.list[job.offset] && job.list[job.offset].__igdcSeed===true) return false;
+      renderMore(job);
+      return true;
+    }
+  });
   function bindIncremental(box,list,generation){
     const job={box:box,list:list,offset:0,generation:generation};
     incrementalJobs.set(box,job);
@@ -535,7 +582,11 @@
     fullSnapshotUpgradePromise=fetchJson(STATIC_CARDS_URL,STATIC_TIMEOUT,'no-cache').then(function(result){
       if(result.empty||!result.payload)return false;
       const compact=compactSnapshot(result.payload,{etag:result.etag});if(!compact)return false;
+      // Revalidate the scope as well as the content between phase-one and full
+      // view. A changed IP/release must fully rerender, never mix two markets.
+      const sameScope=snapshotScopeMatches(baseSnapshot,compact);
       baseSnapshot=compact;setCached('static',compact);lastStaticRefreshAt=Date.now();
+      if(!sameScope){renderMerged();return true;}
       const sections=sectionsOf(compact)||{};
       SECTION_MAP.forEach(function(cfg){
         const box=document.querySelector(cfg.selector),job=box&&incrementalJobs.get(box);
@@ -543,8 +594,19 @@
         const real=normalizeList(sections[cfg.key]||sections[ALIAS[cfg.key]]).slice(0,cfg.limit);
         const list=real.slice();
         for(let i=list.length;i<cfg.limit;i++)list.push({id:'distribution-seed-'+cfg.key+'-'+(i+1),title:cfg.label+' '+(i+1),meta:'',section:cfg.key,url:'#',__igdcSeed:true});
+        const previous=job.list;
         job.list=list;
+        const alreadyPainted=Math.min(job.offset,list.length,job.box.children.length);
+        for(let index=0;index<alreadyPainted;index++){
+          // Even a previously real card may have changed in the later, fully
+          // verified snapshot (ID, URL, picture, slot or listing order).
+          // Update only changed slots; retain unchanged DOM and scroll state.
+          if(displayedIdentity(previous[index])!==displayedIdentity(list[index])){
+            job.box.replaceChild(makeCard(list[index],true,index<FIRST_VIEW_EAGER),job.box.children[index]);
+          }
+        }
       });
+      try{window.dispatchEvent(new Event('igdc:distribution-full-snapshot'));}catch(_e){}
       activeFingerprint=fingerprint(mergedSnapshot(),'merged');
       activeStamp=snapshotStamp(compact);
       return true;
