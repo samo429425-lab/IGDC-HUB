@@ -306,7 +306,7 @@ function decorateEngineSnapshot(engineSnapshot,release,engineReport,searchBankHa
     generatedAt:new Date().toISOString(),generatedBy:"snapshot-engine+media-release-adapter",
     validated:true,crossChecked:true,pipelineReady:true,contentReady,sampleOnly:!contentReady,ready:contentReady,
     filled:Object.fromEntries(MANUAL_SECTIONS.map((key)=>[key,state.sections[key].managedCount])),
-    supplyState:{contentReady,sampleOnly:!contentReady,totalManagedSlots:state.totalManaged,manualSections:MANUAL_SECTIONS.length,frontVisiblePerSection:50,snapshotCapacityPerSection:100},
+    supplyState:{contentReady,sampleOnly:!contentReady,totalManagedSlots:state.totalManaged,manualSections:MANUAL_SECTIONS.length,frontVisiblePerSection:100,snapshotCapacityPerSection:100},
     releasePipeline:{
       version:VERSION,status:"applied",releaseId:info.releaseId,requestHash:info.requestHash,
       action:info.action,sectionKey:info.sectionKey,requestedAt:info.requestedAt,requestedBy:info.requestedBy,

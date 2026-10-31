@@ -13,7 +13,7 @@
   var QUEUE_CONTROL='/.netlify/functions/commerce-candidate-queue-control';
   var ADMIN_AUTHORITY='/.netlify/functions/commerce-candidate-admin-authority';
   var SECTION_REVENUE_RANK='/.netlify/functions/commerce-candidate-section-revenue-rank';
-  var sectionRevenueView={},sectionRevenueBusy=false,sectionRevenueViewScope='';
+  var sectionRevenueView={},sectionRevenueBusy=false,sectionRevenueViewScope='',sectionRevenueViewMode='',sectionRevenuePreview=null,sectionRevenueIncompleteApply=null;
   var RUNTIME_DIAGNOSTIC='/.netlify/functions/igdc-runtime-diagnostic';
   var GEO='/api/igdc-country-geo';
   var $=function(id){return document.getElementById(id);};
@@ -1145,7 +1145,7 @@
   function frontTopRowsForSection(sectionKey){return rankedSectionRows(sectionKey).slice(0,frontSlotCapacity(sectionKey));}
   function capFrontReplacementRows(rows,keys){var allowed=new Set((keys||[]).filter(function(key){return!!PRODUCT_SECTION_MAP[key];})),grouped={};(rows||[]).forEach(function(row){var key=assignedSectionKey(row);if(!key||!allowed.has(key))return;(grouped[key]||(grouped[key]=[])).push(row);});var out=[];Object.keys(grouped).forEach(function(key){out=out.concat(grouped[key].sort(compareSectionRankRows).slice(0,frontSlotCapacity(key)));});return out;}
   function syncFrontSelectionControls(){
-    var busy=productAutomationActive||productFrontSyncActive||productFrontSyncPreflightActive||frontMatchCommandBusy||frontMatchDeploymentBusy||productSectionCleanupActive,matchBusy=busy,sections=selectedSectionKeys(),placed=productRows.filter(function(row){return productDecision(row)==='slot_candidate'&&!!assignedSectionKey(row);}),active=placed.filter(frontPublicationActive),refreshable=placed;
+    var busy=productAutomationActive||productFrontSyncActive||productFrontSyncPreflightActive||frontMatchCommandBusy||frontMatchDeploymentBusy||productSectionCleanupActive||sectionRevenueBusy,matchBusy=busy,sections=selectedSectionKeys(),placed=productRows.filter(function(row){return productDecision(row)==='slot_candidate'&&!!assignedSectionKey(row);}),active=placed.filter(frontPublicationActive),refreshable=placed;
     if($('selectedSectionCount'))$('selectedSectionCount').textContent='선택 섹션 '+sections.length+'개';
     var master=$('allSectionsSelect');if(master){master.checked=sections.length===PRODUCT_SECTIONS.length;master.indeterminate=sections.length>0&&sections.length<PRODUCT_SECTIONS.length;master.disabled=busy;}
     // Master-board publication controls must also be able to replace a section with
@@ -1167,7 +1167,7 @@
     var image=activeImage?(productUrl?'<a href="'+esc(productUrl)+'" target="_top" data-review-link="1" rel="noreferrer external nofollow" referrerpolicy="no-referrer">':'')+'<img data-product-image="1" '+(imageAlts.length?'data-image-alternates="'+esc(JSON.stringify(imageAlts))+'" ':'')+'src="'+esc(activeImage)+'" alt="'+esc(title)+'" loading="lazy" decoding="async" fetchpriority="low">'+(productUrl?'</a>':'')+'<div class="product-image-missing hidden">상품 이미지 원본을 불러오지 못했습니다 · 상품 URL 확인 필요</div>':'<div class="product-image-missing">상품 이미지 확인 필요 · 이미지 없다고 상품이 없는 것은 아닙니다</div>';
     var revenueRank=mode==='candidate'&&PRODUCT_SECTION_MAP[groupKey]&&sectionRevenueViewScope===scopeKey()?sectionRevenueView[text(row.candidateId||row.id)]:null;
     var rowPinMeta=row.sectionRevenueOverride||(row.source_payload&&row.source_payload.sectionRevenueOverride)||{},pinOverride=(revenueRank&&revenueRank.override)||((rowPinMeta.scopeKey===scopeKey()+'|'+groupKey)?rowPinMeta.mode:'');
-    var revenueRankControl=mode==='candidate'&&PRODUCT_SECTION_MAP[groupKey]&&row.id?'<div class="small">'+(revenueRank?'수익 우선 순번 <strong>'+esc(revenueRank.rank)+'위</strong> · '+esc(revenueRank.className||'ORDINARY'):'현재 순위: 미조회')+(pinOverride==='pin_top'?' · 관리자 최상단 고정':(pinOverride==='demote'?' · 관리자 후순위 지정':''))+'</div><button type="button" class="ghost" data-section-revenue-action="'+(pinOverride==='pin_top'?'unpin_top':'pin_top')+'" data-section-revenue-section="'+esc(groupKey)+'" data-section-revenue-id="'+esc(row.candidateId||row.id)+'">'+(pinOverride==='pin_top'?'관리자 최상단 고정 해제':'관리자 최상단 고정')+'</button> '+(pinOverride==='pin_top'?'':'<button type="button" class="ghost" data-section-revenue-action="'+(pinOverride==='demote'?'restore':'demote')+'" data-section-revenue-section="'+esc(groupKey)+'" data-section-revenue-id="'+esc(row.candidateId||row.id)+'">'+(pinOverride==='demote'?'관리자 후순위 해제':'관리자 판단으로 뒤로 보내기')+'</button>'):'';
+    var revenueRankControl=mode==='candidate'&&PRODUCT_SECTION_MAP[groupKey]&&row.id?'<div class="small">'+(revenueRank?(sectionRevenueViewMode==='preview'?'임시 미리보기 ':'저장된 순위 ')+'<strong>'+esc(revenueRank.rank)+'위</strong> · '+esc(revenueRank.className||'ORDINARY'):'현재 순위: 미조회')+(pinOverride==='pin_top'?' · 관리자 최상단 고정':(pinOverride==='demote'?' · 관리자 후순위 지정':''))+'</div><button type="button" class="ghost" data-section-revenue-action="'+(pinOverride==='pin_top'?'unpin_top':'pin_top')+'" data-section-revenue-section="'+esc(groupKey)+'" data-section-revenue-id="'+esc(row.candidateId||row.id)+'">'+(pinOverride==='pin_top'?'관리자 최상단 고정 해제':'관리자 최상단 고정')+'</button> '+(pinOverride==='pin_top'?'':'<button type="button" class="ghost" data-section-revenue-action="'+(pinOverride==='demote'?'restore':'demote')+'" data-section-revenue-section="'+esc(groupKey)+'" data-section-revenue-id="'+esc(row.candidateId||row.id)+'">'+(pinOverride==='demote'?'관리자 후순위 해제':'관리자 판단으로 뒤로 보내기')+'</button>'):'';
     var links=[];if(productUrl)links.push(externalReviewAnchor(productUrl,'상품 원본·판매처 열기',''));if(supplierUrl)links.push(externalReviewAnchor(supplierUrl,'업체 사이트 확인',''));var placementHtml='',actions='';
     if(mode==='candidate'||mode==='section'){
       placementHtml=productManagementOptions(row,mode,groupKey,slotAllowed);
@@ -1186,7 +1186,7 @@
   }
   function productGroupDetails(key,label,rows,kind){
     var count=rows.length,validSection=!!PRODUCT_SECTION_MAP[key],frontCount=validSection?currentFrontCount(key):0,occupancy=count,frontCapacity=frontSlotCapacity(key),capacity=validSection?'<span class="product-section-capacity '+(occupancy>frontCapacity?'warn':'')+'">'+esc(sectionOccupancyText(key,count))+'</span>':'<span class="small">'+count+'건'+(frontCount>0?' · 실상품 '+frontCount+'건':'')+'</span>';
-    var controlsBusy=productAutomationActive||productFrontSyncActive||productFrontSyncPreflightActive||frontMatchCommandBusy||frontMatchDeploymentBusy||productSectionCleanupActive,matchBusy=controlsBusy,autoDisabled=controlsBusy||productLoopActive||!productRows.length,autoButton='';
+    var controlsBusy=productAutomationActive||productFrontSyncActive||productFrontSyncPreflightActive||frontMatchCommandBusy||frontMatchDeploymentBusy||productSectionCleanupActive||sectionRevenueBusy,matchBusy=controlsBusy,autoDisabled=controlsBusy||productLoopActive||!productRows.length,autoButton='';
     if(kind==='section'&&validSection)autoButton='<button type="button" class="product-section-ai-button" data-section-ai-auto="'+esc(key)+'" '+(autoDisabled?'disabled':'')+'>이 섹션 AI 자동 배치</button>';
     else if(kind==='candidate'&&validSection)autoButton='<button type="button" class="product-section-ai-button" data-section-ai-auto="'+esc(key)+'" '+(autoDisabled||!count?'disabled':'')+'>이 후보군 AI 자동 배치</button>';
     else if(kind==='candidate'&&key==='assignment_repair')autoButton='<button type="button" class="product-section-ai-button" data-candidate-repair-auto="1" '+(autoDisabled||!count?'disabled':'')+'>실제 배정 누락 전체 복구(정상상품만)</button>';
@@ -1205,7 +1205,9 @@
       candidateToolbar='<div class="section-product-toolbar candidate-bulk-toolbar"><label class="product-front-select-label"><input id="candidateSelectAll-quality_review" type="checkbox" data-candidate-select-all="quality_review"> 검토 대상 전체 선택</label><span id="candidateSelectedCount-quality_review" class="pill info">선택 후보 0건</span><button type="button" class="secondary" data-candidate-bulk="hold" data-candidate-group="quality_review" disabled>선택 상품 보류 목록으로 이동</button><button type="button" class="ghost" data-quality-unmatch="1">선택 상품 프론트 매칭 해제</button><span id="candidateBulkState-quality_review" class="candidate-bulk-state small" aria-live="polite">관리자에서 먼저 보류로 이관하고 원장 저장을 확인합니다. 기존 프론트 상품은 이후 Front Match와 배포 확인으로 반영됩니다. 원장·리서치 기록은 보존합니다.</span></div>';
     }
     var productToolbar=kind==='section'&&validSection?'<div class="section-product-toolbar"><label class="product-front-select-label"><input id="sectionProductSelectAll-'+esc(safeKey)+'" type="checkbox" data-section-products-select-all="'+esc(key)+'"> 이 섹션 상품 전체 선택</label><span id="sectionProductSelectedCount-'+esc(safeKey)+'" class="pill info">선택 상품 0건</span><button type="button" class="product-section-front-button" data-selected-products-front="'+esc(key)+'" data-front-operation="match" disabled>선택 상품 매칭</button><button type="button" class="product-section-unmatch-button" data-selected-products-front="'+esc(key)+'" data-front-operation="unmatch" disabled>선택 상품 매칭 해제</button><button type="button" class="secondary" data-section-selected-remove="'+esc(key)+'" disabled>선택 후보 목록에서 제거</button><button type="button" class="product-section-ai-button" data-section-rank-trim="'+esc(key)+'" '+(controlsBusy||count<=frontCapacity?'disabled':'')+'>AI 랭킹 상위 '+frontCapacity+' 정리</button><button type="button" class="product-section-front-button" data-section-front-match="'+esc(key)+'" '+(matchBusy?'disabled':'')+'>이 섹션 전체 상품 매칭</button><button type="button" class="product-section-unmatch-button" data-section-front-unmatch="'+esc(key)+'" '+(controlsBusy||!rows.some(frontPublicationActive)?'disabled':'')+'>이 섹션 전체 상품 매칭 해제</button></div>':'';
-    return'<details class="product-group" data-product-group="'+esc(key)+'" data-product-group-kind="'+esc(kind)+'"><summary><span>'+sectionSelect+' <strong>'+esc(label)+'</strong> '+capacity+'</span><span class="product-group-summary-actions">'+policyButton+autoButton+frontButtons+'<span class="pill info" data-group-toggle-label>목록 펼치기</span></span></summary><div class="product-group-body">'+sectionMismatchMarkup(key,count)+candidateToolbar+productToolbar+'<div class="product-group-grid"></div><div class="product-group-pager"></div></div></details>';
+    var previewStamp=kind==='candidate'&&validSection&&sectionRevenueViewMode==='preview'&&sectionRevenueViewScope===scopeKey()&&sectionRevenuePreview&&sectionRevenuePreview.sections[key]
+      ?'<div class="small" style="padding:6px 8px;margin:0 0 8px;border:1px solid #567994;border-radius:6px">임시 수익 우선순위 미리보기 · '+esc(sectionRevenuePreview.sections[key].count)+'건 · 아직 저장되지 않았습니다. 확인 후 위의 「수익 우선순위 적용」을 누르세요.</div>':'';
+    return'<details class="product-group" data-product-group="'+esc(key)+'" data-product-group-kind="'+esc(kind)+'"><summary><span>'+sectionSelect+' <strong>'+esc(label)+'</strong> '+capacity+'</span><span class="product-group-summary-actions">'+policyButton+autoButton+frontButtons+'<span class="pill info" data-group-toggle-label>목록 펼치기</span></span></summary><div class="product-group-body">'+previewStamp+sectionMismatchMarkup(key,count)+candidateToolbar+productToolbar+'<div class="product-group-grid"></div><div class="product-group-pager"></div></div></details>';
   }
   // Candidate management must keep two views distinct:
   // - an AI/manual placement leaves its former raw/unassigned pool;
@@ -1299,12 +1301,13 @@
   function sectionRevenueTargetKeys(){
     return selectedSectionKeys();
   }
-  async function requestSectionRevenueOrder(action,key,candidateId,progress){
+  async function requestSectionRevenueOrder(action,key,candidateId,progress,expected){
     var offset=0,firstItems=null,response=null;
     for(var attempt=0;attempt<300;attempt++){
       response=await api(SECTION_REVENUE_RANK,'ranking','POST',{}, {
         action:action,sectionKeys:[key],candidateId:candidateId||'',countryCode:selectedCountry,
-        subdivisionCode:selectedSubdivision||'NATIONWIDE',offset:offset
+        subdivisionCode:selectedSubdivision||'NATIONWIDE',offset:offset,
+        expectedPlanHash:expected&&expected.planHash||'',expectedVersionHash:expected&&expected.versionHash||''
       },45000);
       if(!response||response.ok===false)throw new Error(text(response&&response.error)||'rank_unavailable');
       if(firstItems===null&&Array.isArray(response.items))firstItems=response.items;
@@ -1318,69 +1321,137 @@
     if(firstItems!==null)response.items=firstItems;
     return response;
   }
+  function sectionRevenuePreviewStillSelected(preview,keys){
+    return !!preview&&preview.scope===scopeKey()&&preview.keys.join('~')===keys.join('~')&&
+      keys.every(function(key){return !!preview.sections[key];});
+  }
+  function showRevenuePreviewSection(key){
+    // The canonical master list is the existing 20-section manager; display
+    // the sorted cards THERE, not in a separate preview modal or list.
+    if(!$('productCandidatePanel')||!$('productCandidatePanel').open)return;
+    var root=$('productGrid'),panels=root&&root.querySelectorAll('details[data-product-group]');
+    if(!panels)return;
+    var found=null;
+    Array.prototype.forEach.call(panels,function(panel){
+      if(panel.getAttribute('data-product-group')===key&&panel.getAttribute('data-product-group-kind')==='candidate')found=panel;
+    });
+    if(found){
+      Array.prototype.forEach.call(panels,function(panel){if(panel!==found&&panel.open)panel.open=false;});
+      found.open=true;
+      try{found.scrollIntoView({block:'nearest',behavior:'auto'});}catch(_e){}
+    }
+  }
   async function operateSectionRevenueRanking(action,oneSection,candidateId){
-    if(sectionRevenueBusy||!selectedCountry||productFrontSyncActive||productAutomationActive||productLoopActive){show('조사 또는 공개 작업이 끝난 다음 수익 순위를 처리하세요.','warn');return;}
-    var keys=oneSection?[oneSection]:sectionRevenueTargetKeys(),isApply=action==='apply';
+    if(sectionRevenueBusy||!selectedCountry||productFrontSyncActive||productAutomationActive||productLoopActive||frontMatchCommandBusy||frontMatchDeploymentBusy){show('조사 또는 프론트 공개 작업이 끝난 다음 수익 순위를 처리하세요.','warn');return;}
+    var keys=oneSection?[oneSection]:sectionRevenueTargetKeys(),isApply=action==='apply',isPreview=action==='preview';
+    var status=$('sectionRevenueRankingState');
     if(!keys.length){
-      var notice='수익 우선 순위를 계산할 섹션을 먼저 선택하세요. 전체 실행은 20개 전체 선택을 체크하세요.';
-      var emptyStatus=$('sectionRevenueRankingState');if(emptyStatus)emptyStatus.textContent=notice;
+      var notice='먼저 아래 20개 섹션에서 원하는 섹션을 체크하세요. 전체 실행은 20개 전체 선택을 체크하세요.';
+      if(status)status.textContent=notice;
       show(notice,'warn');return;
     }
-    if(isApply&&!window.confirm('선택된 '+keys.length+'개 섹션 안에서만 수익 우선 순번을 저장합니다. 상품 소속 섹션, 후보 원장 승인, 프론트 공개 상태는 변경하지 않습니다.\n\n적용 후 프론트에 반영하려면 기존 Front Match를 별도로 실행해야 합니다. 진행하시겠습니까?'))return;
+    var snapshot=sectionRevenuePreview;
+    if(isApply&&!sectionRevenuePreviewStillSelected(snapshot,keys)){
+      var needed='현재 선택한 '+keys.length+'개 섹션의 미리보기가 없습니다. 먼저 「선택 섹션 수익 우선순위 미리보기」를 실행해 상품 카드 순서를 확인해 주세요.';
+      if(status)status.textContent=needed;show(needed,'warn');return;
+    }
+    if(isApply&&!window.confirm('미리보기에서 확인한 '+keys.length+'개 섹션의 상품 순위를 관리자 원장에 저장하시겠습니까?\n\n이 단계는 프론트 페이지를 변경하지 않습니다. 저장 완료 후 「선택 섹션 프론트 매칭」을 실행해야 공개됩니다.'))return;
     if(action==='pin_top'&&!window.confirm('이 상품을 소속 섹션의 최상단에 관리자 지정으로 고정하시겠습니까? 일반 자동 수익 순위 변경에서 제외됩니다.'))return;
     if(action==='unpin_top'&&!window.confirm('관리자 최상단 고정을 해제하고 일반 자동 수익 순위 관리 대상으로 되돌리시겠습니까?'))return;
     if(action==='demote'&&!window.confirm('선택 상품을 소속 섹션의 수익 우선 정렬에서 뒤쪽으로 보내겠습니까? 다른 섹션으로 옮기지 않습니다.'))return;
-    sectionRevenueBusy=true;
-    var status=$('sectionRevenueRankingState'),completed=0;
-    if(status)status.textContent='수익 우선 순위 '+(isApply?'저장':'미리보기')+' 준비 · '+keys.length+'개 섹션';
+    sectionRevenueBusy=true;syncFrontSelectionControls();
+    if(status)status.textContent='수익 우선 순위 '+(isApply?'원장 저장':'임시 미리보기')+' · 준비 중 · '+keys.length+'개 섹션';
+    var completed=0,scopeAtStart=scopeKey();
     try{
       if(['demote','restore','pin_top','unpin_top'].includes(action)){
+        sectionRevenuePreview=null;sectionRevenueViewMode='';
         await requestSectionRevenueOrder(action,keys[0],candidateId);
-        if(status)status.textContent='관리자 개별 조정 저장 완료 · 해당 섹션의 수익 우선 순번을 다시 계산합니다.';
+        if(status)status.textContent='관리자 개별 고정·해제 저장 완료 · 해당 섹션의 수익 순위를 다시 계산합니다.';
         try{await operateSectionRevenueRankFollowUp(keys[0]);if($('sectionRevenuePinPanel')&&$('sectionRevenuePinPanel').open)await refreshSectionRevenuePins();return;}
-        catch(rankError){show('관리자 고정·해제는 저장됐지만 순위 재계산에 실패했습니다. 해당 섹션 순위 적용을 다시 실행하세요: '+text(rankError&&rankError.message),'warn');}
+        catch(rankError){show('관리자 개별 지정은 저장됐지만 순위 재계산에 실패했습니다. 다시 미리보기 후 순위를 적용해 주세요: '+text(rankError&&rankError.message),'warn');}
         return;
       }
-      var summaries=[],items=[],failedSections=[];
+      var summaries=[],items=[],failedSections=[],previews={},previewItems=[];
+      // Read-only preflight for EVERY selected section. Never show partial
+      // sorting as if the whole selection succeeded.
+      if(isApply){
+        for(var v=0;v<keys.length;v++){
+          if(scopeKey()!==scopeAtStart||!sectionRevenuePreviewStillSelected(snapshot,sectionRevenueTargetKeys()))throw new Error('국가·지역 또는 선택 섹션이 변경됐습니다. 다시 미리보기를 실행해 주세요.');
+          if(status)status.textContent='적용 전 원장 재검증 · '+(v+1)+'/'+keys.length+'개 섹션';
+          var check=await requestSectionRevenueOrder('preview',keys[v],'');
+          var source=snapshot.sections[keys[v]],got=check.sections&&check.sections[0];
+          if(!got||source.planHash!==got.planHash||source.versionHash!==got.versionHash)throw new Error(sectionLabel(keys[v])+'의 상품·배치가 미리보기 이후 변경됐습니다. 다시 미리보기를 실행해 주세요.');
+        }
+      }
       for(var i=0;i<keys.length;i++){
         var key=keys[i];
-        if(status)status.textContent='수익 우선 '+(isApply?'순번 저장':'미리보기')+' · 섹션 '+(i+1)+'/'+keys.length+' · '+sectionLabel(key)+' · 정상 완료 '+completed+'개';
+        if(scopeKey()!==scopeAtStart)throw new Error('국가·지역이 바뀌어 순위 작업을 중단했습니다.');
+        if(status)status.textContent='수익 우선 '+(isApply?'순번 저장':'임시 미리보기')+' · 섹션 '+(i+1)+'/'+keys.length+' · '+sectionLabel(key)+' · 정상 완료 '+completed+'개';
         try{
-          // A broken assignment must not abort unrelated sections or be silently ranked.
-          // Keep the failed section untouched; the administrator can inspect its
-          // candidate/assignment discrepancy and retry after reconciling the ledger.
           var response=await requestSectionRevenueOrder(action,key,'',function(done,total){
-            if(status)status.textContent='수익 순위 저장 · 섹션 '+(i+1)+'/'+keys.length+' · '+done+'/'+total+'건';
-          });
+            if(status)status.textContent='수익 순위 원장 저장 · '+sectionLabel(key)+' · '+done+'/'+total+'건';
+          },isApply?snapshot.sections[key]:null);
+          if(!response.sections||response.sections.length!==1)throw new Error('선택 섹션의 순위 응답이 불완전합니다.');
+          var info=response.sections[0];
+          if(isPreview&&(!info.planHash||!info.versionHash))throw new Error('순위 미리보기 검증 정보가 없어 중단했습니다.');
+          if(isApply&&response.applied!==true)throw new Error('선택 섹션의 순위 저장이 완료되지 않았습니다.');
+          if(isPreview){
+            var visible=productRows.filter(function(row){return candidatePoolRow(row)&&candidateGroupKey(row)===key;}),visibleIds=visible.map(frontCandidateLedgerId).filter(Boolean),serverIds=(response.items||[]).map(function(item){return text(item.candidateId);}).filter(Boolean),serverSet=new Set(serverIds);
+            if(serverIds.length!==Number(info.count||0)||visibleIds.length!==serverIds.length||new Set(visibleIds).size!==visibleIds.length||visibleIds.some(function(id){return !serverSet.has(id);}))throw new Error('관리자 화면과 실제 배치 상품 목록이 다릅니다. 원장을 새로 조회한 뒤 정합성을 점검해 주세요.');
+            previews[key]={planHash:info.planHash,versionHash:info.versionHash,count:Number(info.count||0)};
+          }
           (response.sections||[]).forEach(function(entry){summaries.push(entry);});
           (response.items||[]).forEach(function(entry){items.push(entry);});
-          completed+=1;
+          completed++;
         }catch(sectionError){
           var reason=conciseRequestError(sectionError&&sectionError.message,sectionError&&sectionError.status)||'섹션 원장 재확인 필요';
           failedSections.push({key:key,reason:reason});
-          if(status)status.textContent='수익 순위 진행 '+(i+1)+'/'+keys.length+'개 섹션 · 정상 완료 '+completed+'개 · 확인 필요 '+failedSections.length+'개 · '+sectionLabel(key)+' : '+reason;
+          if(isApply)break; // Do not continue blindly after an in-progress write failure.
+        }
+      }
+      if(scopeKey()!==scopeAtStart)throw new Error('국가·지역이 변경되어 이전 범위의 순위 결과를 화면에 표시하지 않습니다.');
+      if(isPreview&&keys.join('~')!==selectedSectionKeys().join('~'))throw new Error('작업 중 선택 섹션이 변경됐습니다. 다시 미리보기를 실행하세요.');
+      if(failedSections.length){
+        var failNote=failedSections.slice(0,3).map(function(x){return sectionLabel(x.key)+' : '+x.reason;}).join(' / ');
+        var failedMessage='수익 순위 '+(isApply?'적용':'미리보기')+' 미완료 · 정상 '+completed+'/'+keys.length+'개 섹션 · 원장 확인 필요 '+failedSections.length+'건 · '+failNote;
+        if(isApply){sectionRevenuePreview=null;sectionRevenueViewMode='';sectionRevenueIncompleteApply={scope:scopeAtStart,keys:keys.slice()};failedMessage+=' · 완료된 저장은 유지됩니다. 원장 상태를 재조회하고 다시 미리보기를 실행하세요. Front Match는 자동 실행하지 않았습니다.';}
+        else{sectionRevenuePreview=null;sectionRevenueViewMode='';sectionRevenueView={};}
+        if(status)status.textContent=failedMessage;show(failedMessage,'warn');return;
+      }
+      if(isPreview){
+        sectionRevenuePreview={scope:scopeAtStart,keys:keys.slice(),sections:previews};
+        sectionRevenueViewMode='preview';
+      }else{
+        sectionRevenuePreview=null;
+        sectionRevenueViewMode='saved';
+        // Only a completely successful save lifts the Front Match partial-save hold.
+        if(sectionRevenueIncompleteApply&&sectionRevenueIncompleteApply.scope===scopeAtStart){
+          var pending=sectionRevenueIncompleteApply.keys.filter(function(key){return keys.indexOf(key)<0;});
+          sectionRevenueIncompleteApply=pending.length?{scope:scopeAtStart,keys:pending}:null;
         }
       }
       var map={};
       items.forEach(function(item){var id=text(item&&item.candidateId);if(id)map[id]=item;});
-      sectionRevenueView=map;sectionRevenueViewScope=scopeKey();
-      var message='수익 우선 '+(isApply?'순번 저장':'미리보기')+' · '+summaries.length+'개 섹션 · '+items.length+'개 상품 · 관리자 후순위 지정 '+summaries.reduce(function(n,x){return n+Number(x.manualDemoted||0);},0)+'건 · 관리자 최상단 고정 '+summaries.reduce(function(n,x){return n+Number(x.manualTopPinned||0);},0)+'건 · 섹션 이동 0건 · 공개 변경 0건';
-      if(failedSections.length){
-        var failNote=failedSections.slice(0,5).map(function(x){return sectionLabel(x.key)+' : '+x.reason;}).join(' / ');
-        if(failedSections.length>5)failNote+=' 외 '+(failedSections.length-5)+'개 섹션';
-        message+=' · 원장 확인 필요 '+failedSections.length+'개 섹션 · '+failNote;
-      }
-      if(status)status.textContent=message+(isApply?' · 정상 저장 섹션만 별도 Front Match 반영 가능, 불일치 섹션은 수정하지 않았습니다.':' · 미리보기는 저장하지 않았습니다.');
-      show(message,failedSections.length?'warn':'ok');renderProducts(productRows);
+      sectionRevenueView=map;sectionRevenueViewScope=scopeAtStart;
+      var message='수익 우선 '+(isPreview?'미리보기':'원장 저장 완료')+' · '+summaries.length+'개 섹션 · '+items.length+'개 상품 · 관리자 최상단 고정 '+summaries.reduce(function(n,x){return n+Number(x.manualTopPinned||0);},0)+'건 · 섹션 이동 0건';
+      if(isPreview)message+=' · 아래 선택한 섹션 카드가 임시 순위대로 재배열됩니다. 아직 저장·프론트 공개되지 않았습니다. 확인 후 「수익 우선순위 적용」을 누르세요.';
+      else message+=' · 관리자 순위는 저장됐으며 프론트는 아직 변경되지 않았습니다. 「선택 섹션 프론트 매칭」으로 공개하세요.';
+      if(status)status.textContent=message;
+      if(isPreview&&keys.length)setTimeout(function(){
+        if(sectionRevenuePreviewStillSelected(sectionRevenuePreview,keys))showRevenuePreviewSection(keys[0]);
+      },60);
+      show(message,'ok');
     }catch(error){
-      var msg='수익 순위 작업을 중단했습니다 ('+completed+'/'+keys.length+'개 섹션 완료): '+text(error&&error.message||error);
+      var msg='수익 순위 작업 중단 ('+completed+'/'+keys.length+'개 섹션 완료): '+text(error&&error.message||error);
+      if(isApply){sectionRevenuePreview=null;sectionRevenueViewMode='';sectionRevenueIncompleteApply={scope:scopeAtStart,keys:keys.slice()};}
+      else if(isPreview){sectionRevenuePreview=null;sectionRevenueViewMode='';sectionRevenueView={};}
       if(status)status.textContent=msg;
       show(msg,'fail');
-    }finally{sectionRevenueBusy=false;}
+    }finally{sectionRevenueBusy=false;renderProducts(productRows);syncFrontSelectionControls();}
   }
   async function operateSectionRevenueRankFollowUp(sectionKey){
     var result=await requestSectionRevenueOrder('apply',sectionKey,'');
-    sectionRevenueViewScope=scopeKey();(result.items||[]).forEach(function(item){sectionRevenueView[text(item.candidateId)]=item;});
+    sectionRevenuePreview=null;sectionRevenueViewMode='saved';sectionRevenueViewScope=scopeKey();(result.items||[]).forEach(function(item){sectionRevenueView[text(item.candidateId)]=item;});
     renderProducts(productRows);show(sectionLabel(sectionKey)+' 수익 순위 개별 조정 완료 · 다른 섹션·Front Match 변경 없음','ok');
   }
   function openSectionRevenuePins(){
@@ -2212,7 +2283,7 @@
     }).join('');
   }
   function renderProductCandidateGroups(){var root=$('productGrid');if(!root)return;ensureManagementProductLookup();var rows=productRows.filter(candidatePoolRow),groups={};PRODUCT_SECTIONS.forEach(function(section){groups[section.key]=[];});rows.forEach(function(row){var key=candidateGroupKey(row);(groups[key]||(groups[key]=[])).push(row);});PRODUCT_SECTIONS.forEach(function(section){groups[section.key]=sectionRevenueViewSort(groups[section.key],section.key);});var keys=[];if(queueFocusedCandidateIds.length){var focused=rows.filter(function(row){var candidate=text(row&&row.candidateId),id=text(row&&row.id);return queueFocusedCandidateIds.indexOf(candidate)>=0||queueFocusedCandidateIds.indexOf(id)>=0;});if(focused.length){groups.queue_selected=focused;keys.push('queue_selected');}}if(!groups.quality_review)groups.quality_review=rows.filter(function(row){return !!verifiedProductImageReviewIssue(row);});keys.push('quality_review');if(!groups.assignment_repair)groups.assignment_repair=[];keys.push('assignment_repair');PRODUCT_SECTIONS.forEach(function(section){keys.push(section.key);});if(!groups.unassigned)groups.unassigned=[];keys.push('unassigned');var labels={queue_selected:'선택한 상품 · 아래 버튼으로 AI 자동배치/수동배치/제외 처리',quality_review:'대표 이미지 검토 필요 · 관리자 보류 이관',assignment_repair:'실제 섹션 배정 누락 · 복구 필요',unassigned:'미배치 상품 목록 · 추가 확인 필요'};root.innerHTML=keys.map(function(key){return productGroupDetails(key,labels[key]||sectionLabel(key),groups[key]||[],'candidate');}).join('');wireProductGroupDetails(root,groups,'candidate');keys.forEach(syncCandidateSelectionControls);renderLatestResearchCandidateGroup();var lookup=$('igdc-management-product-lookup');if(lookup&&text(lookup.value).length>=2)renderManagementProductLookup(lookup.closest('[data-management-lookup]'),lookup.value);}
-  function renderProductSectionBoard(){var root=$('productSectionList'),board=$('productSectionBoard');if(!root)return;if(board&&board.getAttribute('aria-disabled')==='true'){root.innerHTML='';return;}var groups={};PRODUCT_SECTIONS.forEach(function(section){groups[section.key]=[];});productRows.filter(function(row){return productDecision(row)==='slot_candidate';}).forEach(function(row){var key=assignedSectionKey(row);if(groups[key])groups[key].push(row);});root.innerHTML=PRODUCT_SECTIONS.map(function(section){return productGroupDetails(section.key,section.label,groups[section.key]||[],'section');}).join('');wireProductGroupDetails(root,groups,'section');}
+  function renderProductSectionBoard(){var root=$('productSectionList'),board=$('productSectionBoard');if(!root)return;if(board&&board.getAttribute('aria-disabled')==='true'){root.innerHTML='';return;}var groups={};PRODUCT_SECTIONS.forEach(function(section){groups[section.key]=[];});productRows.filter(function(row){return productDecision(row)==='slot_candidate';}).forEach(function(row){var key=assignedSectionKey(row);if(groups[key])groups[key].push(row);});root.innerHTML=PRODUCT_SECTIONS.map(function(section){return productGroupDetails(section.key,section.label,sectionRevenueViewSort(groups[section.key]||[],section.key),'section');}).join('');wireProductGroupDetails(root,groups,'section');}
   function wireProductGroupDetails(root,groups,kind){
     Array.prototype.forEach.call(root.querySelectorAll('details[data-product-group]'),function(panel){
       function draw(){
@@ -3804,7 +3875,31 @@
   var productFrontSyncPreflightActive=false;
   var frontMatchCommandBusy=false,frontMatchDeploymentBusy=false;
   async function runProductFrontSync(operation,mode,sectionKey,productId,selection){
-    if(!selectedCountry||frontMatchCommandBusy||frontMatchDeploymentBusy||productFrontSyncActive||productFrontSyncPreflightActive)return;
+    if(!selectedCountry||sectionRevenueBusy||frontMatchCommandBusy||frontMatchDeploymentBusy||productFrontSyncActive||productFrontSyncPreflightActive)return;
+    if(operation==='match'&&sectionRevenueIncompleteApply&&sectionRevenueIncompleteApply.scope===scopeKey()){
+      var blockedScope=mode==='section'?[sectionKey]:mode==='sections'?(Array.isArray(selection)?selection:[]):mode==='all'?PRODUCT_SECTIONS.map(function(item){return item.key;}):[];
+      if(mode==='candidates'){
+        var chosen=(Array.isArray(selection)?selection:[]).concat(productId?[productId]:[]).map(text);
+        blockedScope=productRows.filter(function(row){return chosen.indexOf(text(row&&row.id))>=0;}).map(assignedSectionKey);
+      }
+      if(blockedScope.some(function(key){return sectionRevenueIncompleteApply.keys.indexOf(key)>=0;})){
+        var incomplete='선택한 섹션의 수익 순위 원장 저장이 일부 완료되지 않았습니다. 다시 미리보기와 적용을 끝낸 뒤 Front Match를 실행하세요.';
+        var warn=$('sectionRevenueRankingState');if(warn)warn.textContent=incomplete;
+        show(incomplete,'warn');return;
+      }
+    }
+    if(operation==='match'&&sectionRevenueViewMode==='preview'&&sectionRevenuePreview&&sectionRevenuePreview.scope===scopeKey()){
+      var requestedSections=mode==='section'?[sectionKey]:mode==='sections'?(Array.isArray(selection)?selection:[]):mode==='all'?PRODUCT_SECTIONS.map(function(item){return item.key;}):[];
+      if(mode==='candidates'){
+        var ids=(Array.isArray(selection)?selection:[]).concat(productId?[productId]:[]).map(text);
+        requestedSections=productRows.filter(function(row){return ids.indexOf(text(row&&row.id))>=0;}).map(assignedSectionKey);
+      }
+      if(requestedSections.some(function(key){return sectionRevenuePreview.keys.indexOf(key)>=0;})){
+        var pending='선택한 섹션에 저장되지 않은 수익 우선순위 미리보기가 있습니다. 먼저 「수익 우선순위 적용」으로 원장에 저장한 뒤 Front Match를 실행하세요.';
+        var state=$('sectionRevenueRankingState');if(state)state.textContent=pending;
+        show(pending,'warn');return;
+      }
+    }
     frontMatchCommandBusy=true;
     // Set disabled properties within the click event itself.  Yield one
     // browser paint opportunity before scanning the 249-market ledger.

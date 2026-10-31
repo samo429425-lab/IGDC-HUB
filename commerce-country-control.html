@@ -373,8 +373,8 @@
           <button type="button" class="secondary" data-section-revenue-action="preview">선택 섹션 수익 우선 순위 미리보기</button>
           <button type="button" class="product-section-ai-button" data-section-revenue-action="apply">선택 섹션 수익 우선 순위 적용</button>
           <button type="button" class="secondary" data-section-revenue-action="manage-pins">20개 섹션 관리자 지정 상품 고정</button>
-          <span class="small">섹션을 선택해 미리보기·적용합니다. 특정 상품을 맨 앞에 고정한 경우에만 자동 수익 순위에서 보호합니다. 단순 수동 이동은 고정이 아닙니다.</span>
-          <div id="sectionRevenueRankingState" class="small" aria-live="polite" style="width:100%">미리보기는 원장을 변경하지 않습니다. 실제 프론트 반영은 기존 Front Match에서 별도로 실행합니다.</div>
+          <span class="small">① 미리보기: 아래 섹션 상품 카드를 임시 순서로 재정렬(미저장) → ② 적용: 그 순서를 관리자 원장에 저장 → ③ 선택 섹션 프론트 매칭: 실제 프론트 반영. 관리자 최상단 고정 상품은 보호합니다.</span>
+          <div id="sectionRevenueRankingState" class="small" aria-live="polite" style="width:100%">섹션을 선택한 뒤 미리보기를 실행하세요. 상품 카드가 해당 섹션에서 즉시 순위대로 정렬됩니다. 적용 전까지 저장하지 않습니다.</div>
         </div>
         <details id="sectionLedgerAuditPanel" style="margin:10px 0;padding:10px;border:1px solid #637b91;border-radius:7px">
           <summary><strong>20개 섹션 · 관리자 원장 ↔ 실제 배치 관계 정합성 점검·복구</strong></summary>
@@ -641,7 +641,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=igdc-section-ledger-reconcile-20261031"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=igdc-revenue-visible-three-step-20261101"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20261025-paged-exclusion-v1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

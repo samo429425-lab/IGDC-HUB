@@ -1235,7 +1235,7 @@ html[dir="ltr"] .igdc-qa-thread-a { direction: rtl; text-align: right; }
 </section>
 <div class="content-area">
 <section class="hero">
-<img alt="main-ad" src="https://placehold.co/1600x900?text=Main%20Ad%20/Trailer"/>
+<img alt="main-ad" src="/assets/images/media-hero-pending.svg"/>
 <!-- END: Video Search UI -->
 </section></div>
 <div class="hero-overlay">
@@ -4316,9 +4316,9 @@ window.addEventListener("message",function(ev){
 </style>
 <script id="media-lazy-reveal-v2">
 (function(){
-  const INITIAL = 7;
+  const INITIAL = 100;
   const STEP = 6;
-  const MAX = 50;
+  const MAX = 100;
 
   function setupSection(line){
     if(!line) return;
@@ -4423,12 +4423,13 @@ window.addEventListener("message",function(ev){
 <script defer="" src="/assets/js/media-empty-handler.js"></script>
 <!-- Media Hub AutoMap (정본) -->
 <script defer="" src="/assets/js/igdc-engagement-storage-bridge.js?v=20260629-media-v2"></script>
-<script defer="" src="/assets/js/mediahub-automap-v3.js?v=20260824-v54-hero-sharp-hd-only-540"></script>
+<script defer="" src="/assets/js/mediahub-automap-v3.js?v=20261101-media-phase1-100-hero"></script>
 <script defer="" src="/assets/js/mediahub-ott-inline.v1.js?v=20260820-mobile-immersive-resume-33"></script>
-<script defer="" src="/assets/js/mediahub-playback-controller.v2.js?v=20260821-v43-desktop-panel-tools-431"></script>
+<script defer="" src="/assets/js/mediahub-playback-controller.v2.js?v=20261101-media-phase1-clip"></script>
 <script id="igdc-media-10section-frame">
 (function(){
-  const LIMIT = 50;
+  const LIMIT = 100;
+  const TRENDING_LIMIT = 50;
   function isMediaKey(key){
     return key && key.indexOf('media-') === 0 && key !== 'media-hero';
   }
@@ -4456,7 +4457,7 @@ window.addEventListener("message",function(ev){
 
     // Count current cards (including placeholders)
     const cards = container.querySelectorAll(':scope > a.card');
-    const need = LIMIT - cards.length;
+    const need = (key === 'media-trending' ? TRENDING_LIMIT : LIMIT) - cards.length;
     if(need <= 0) return;
 
     const frag = document.createDocumentFragment();

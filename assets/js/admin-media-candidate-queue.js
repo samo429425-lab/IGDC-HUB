@@ -16,7 +16,9 @@
     'media-thriller':'스릴러·미스터리','media-romance':'로맨스','media-variety':'버라이어티·토크',
     'media-documentary':'다큐멘터리','media-animation':'애니메이션','media-music':'음악·공연','media-shorts':'쇼츠·단편'
   };
-  var SECTION_CAPACITY={'media-music':50,'media-shorts':50};
+  var SECTION_CAPACITY={};
+  var sectionResearchTerms={};
+  var sectionResearchPages={};
   var DISCOVERY_CYCLE_LENGTH=12;
   var MIN_REGIONAL_LANES_PER_RUN=6;
   function sectionCapacity(key){return key==='media-trending'?50:(SECTION_CAPACITY[key]||100);}
@@ -254,6 +256,7 @@
     var controls=readOnly?
       '<div class="read-only-note">지금 뜨는 콘텐츠는 영화·드라마·버라이어티·음악 후보의 최신성·랭킹을 자동 조합한 점검용 미리보기입니다. 수동 고정이나 일괄 상태 변경은 하지 않습니다. <button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>':
       '<div class="section-actionbar" data-section-key="'+esc(key)+'">'+
+        '<div class="section-front-control"><input class="sectionResearchPhrase" maxlength="120" placeholder="제목 · 프로그램명 · 장르 · 주제어 맞춤 리서치" value="'+esc(sectionResearchTerms[key]||'')+'" style="min-width:260px;flex:1"><button type="button" class="secondary sectionResearchBtn">후보 맞춤 수집</button><button type="button" class="secondary sectionWebResearchBtn">웹에서 제목 찾기</button></div>'+
         '<div class="section-front-control"><span class="pill section">마지막 프론트 반영 '+released+'개</span><button type="button" class="publish sectionFrontBtn" data-front-action="publish_section">이 섹션 프론트 반영</button><button type="button" class="danger sectionFrontBtn" data-front-action="stop_section">이 섹션 반영 취소·중지</button><button type="button" class="secondary sectionPipelineJsonBtn">이 섹션 상태 JSON</button></div>'+
         '<button type="button" class="secondary sectionSelectAllBtn">전체 선택</button><button type="button" class="secondary sectionClearSelectionBtn">선택 해제</button>'+
         '<button type="button" class="sectionActionBtn" data-action="approve">선택 승인</button><button type="button" class="sectionActionBtn" data-action="hold">선택 보류</button><button type="button" class="sectionActionBtn" data-action="reset">선택 재검토</button>'+
@@ -304,7 +307,7 @@
     $('sectionAccordion').innerHTML=html;
     updateMediaSectionBatchUi();
     $('filterState').textContent='검색 조건 일치 '+rows.length+'개 / 전체 활성 후보 '+activeRows().length+'개 · 펼친 섹션만 썸네일 로드';
-    $('candidateCapacityState').textContent='일반 본선 100 + 예비 20 · 음악/쇼츠 본선 50 + 예비 20';
+    $('candidateCapacityState').textContent='일반 9개 섹션 모두 본선 100 + 예비 20 · 지금 뜨는 콘텐츠는 별도 수집 없는 자동 랭킹 50';
     $('tablePanel').classList.remove('hidden');
   }
   function exclusionRowHtml(row,index){
@@ -510,6 +513,57 @@
       if(job.batches<DISCOVERY_CYCLE_LENGTH&&job.saved<remaining)await wait(350);
     }
     return{requestedSaved:job.saved,newSavedAll:totalAll,batches:job.batches,skipped:false};
+  }
+  async function searchKnownVideoTitles(section,phrase,button){
+    section=text(section);phrase=text(phrase).replace(/\s+/g,' ').slice(0,120);
+    if(!section||section==='media-trending'||!phrase){show('검색할 섹션과 제목·장르·주제어를 입력하세요.','warn');return;}
+    if(button)button.disabled=true;
+    var panel=$('mediaKeywordResultPanel');
+    panel.classList.remove('hidden');
+    $('mediaKeywordResultTitle').textContent=(SECTION_LABELS[section]||section)+' · 「'+phrase+'」 제목 탐색';
+    $('mediaKeywordResultItems').textContent='공개 검색 결과를 확인하고 있습니다.';
+    try{
+      var url='/.netlify/functions/maru-search?q='+encodeURIComponent(phrase+' '+(SECTION_LABELS[section]||''))+'&type=video&limit=30&external=1';
+      var response=await fetch(url,{headers:headers(false),credentials:'same-origin',cache:'no-store'});
+      if(!response.ok)throw new Error('공개 검색 HTTP '+response.status);
+      var data=await response.json();
+      var items=Array.isArray(data.items)?data.items:(Array.isArray(data.results)?data.results:[]);
+      var seen=new Set();
+      var valid=items.filter(function(item){
+        if(!item||item.placeholder===true||/search-link|discovery|passthrough/i.test(text(item.sourceType)))return false;
+        var address=text(item.videoUrl||item.watchUrl||item.url||item.link);
+        if(!/^https:\/\/[^\s]+/i.test(address)||/google\.com\/search|youtube\.com\/results|search\.naver\.com/i.test(address))return false;
+        var key=address.toLowerCase();if(seen.has(key))return false;seen.add(key);return true;
+      }).slice(0,30);
+      var target=$('mediaKeywordResultItems');target.textContent='';
+      if(!valid.length){target.textContent='실제 영상 제목·원본 링크가 확인되지 않았습니다. 다른 검색어로 다시 검색하세요.';return;}
+      valid.forEach(function(item){
+        var address=text(item.videoUrl||item.watchUrl||item.url||item.link),title=text(item.title||item.name)||'제목 미확인';
+        var row=document.createElement('div');row.style.cssText='padding:8px 0;border-bottom:1px solid #294159';
+        var link=document.createElement('a');link.href=address;link.target='_blank';link.rel='noopener noreferrer';link.textContent=title;
+        link.style.cssText='color:#b8d7ff;overflow-wrap:anywhere';row.appendChild(link);
+        var detail=document.createElement('div');detail.textContent=text(item.provider||item.source||'공개 검색')+' · 원본 링크를 열어 실제 재생·권리를 확인한 뒤 사용';
+        detail.style.cssText='color:#aebfd4;font-size:12px';row.appendChild(detail);target.appendChild(row);
+      });
+    }catch(error){$('mediaKeywordResultItems').textContent='제목 탐색에 실패했습니다: '+error.message;}
+    finally{if(button&&button.isConnected)button.disabled=false;}
+  }
+  async function targetedResearch(section,phrase,button){
+    section=text(section);phrase=text(phrase).replace(/\s+/g,' ').slice(0,120);
+    if(!section||section==='media-trending'||!phrase){show('일반 9개 섹션과 검색어를 선택하세요.','warn');return;}
+    if(button)button.disabled=true;
+    var unchanged=sectionResearchTerms[section]===phrase;
+    var page=unchanged?Number(sectionResearchPages[section]||1):1;
+    sectionResearchTerms[section]=phrase;
+    try{
+      var data=await post(COL,{source:'internet_archive',section:section,searchPhrase:phrase,page:page,target:5,batchSize:5,
+        aiPolicy:mediaAiPolicy(section,'collector'),policyQuery:mediaAiQuery(section,'collector')});
+      sectionResearchPages[section]=page+1;
+      show((SECTION_LABELS[section]||section)+' · 「'+phrase+'」 검색 '+Number(data.searched||0)+'건, 정책 적격 '+Number(data.qualified||0)+'건, 후보 저장 '+Number(data.saved||0)+'건'+(data.saved?' · 승인 전 후보 목록에서 검토하세요.':' · 결과가 없으면 검색어를 바꾸거나 다시 탐색하세요.'),'ok');
+      openSectionKey=section;
+      await refresh();
+    }catch(error){show('맞춤 리서치 실패: '+error.message,'warn');}
+    finally{if(button&&button.isConnected)button.disabled=false;}
   }
   async function collect(admin,wholeRun,targetOverride){
     var section=$('collectorSection').value;
@@ -1604,6 +1658,9 @@
     $('downloadPipelineStatusBtn').onclick=function(){downloadPipelineStatus('');};
     $('returnBtn').onclick=function(){location.href='/admin.html';};
     $('collectBtn').onclick=function(){collect(false,false);};
+    $('collectorKeywordBtn').onclick=function(){targetedResearch($('collectorSection').value,$('collectorSearchPhrase').value,this);};
+    $('mediaKeywordResultClose').onclick=function(){$('mediaKeywordResultPanel').classList.add('hidden');};
+    $('collectorSearchPhrase').addEventListener('keydown',function(event){if(event.key==='Enter'){event.preventDefault();$('collectorKeywordBtn').click();}});
     $('collectAllBtn').onclick=collectAll;
     $('autoCurateBtn').onclick=autoCurateAll;
     $('publishFrontBtn').onclick=publishFront;
@@ -1645,6 +1702,18 @@
     $('sectionAccordion').addEventListener('click',function(event){
       var aiButton=event.target.closest('.sectionAiPolicyBtn');
       if(aiButton){var aiKey=text(aiButton.dataset.sectionKey);if(window.IGDCMediaAI&&typeof window.IGDCMediaAI.openDialog==='function')window.IGDCMediaAI.openDialog('section',aiKey,(SECTION_LABELS[aiKey]||aiKey)+' 섹션');return;}
+      var sectionResearch=event.target.closest('.sectionResearchBtn');
+      if(sectionResearch){
+        var researchPanel=sectionResearch.closest('.candidate-section');
+        targetedResearch(text(researchPanel&&researchPanel.dataset.sectionKey),text(researchPanel&&researchPanel.querySelector('.sectionResearchPhrase')&&researchPanel.querySelector('.sectionResearchPhrase').value),sectionResearch);
+        return;
+      }
+      var webResearch=event.target.closest('.sectionWebResearchBtn');
+      if(webResearch){
+        var researchSection=webResearch.closest('.candidate-section');
+        searchKnownVideoTitles(text(researchSection&&researchSection.dataset.sectionKey),text(researchSection&&researchSection.querySelector('.sectionResearchPhrase')&&researchSection.querySelector('.sectionResearchPhrase').value),webResearch);
+        return;
+      }
       var toggle=event.target.closest('.section-toggle');
       if(toggle){
         var key=text(toggle.dataset.sectionKey);
@@ -1678,6 +1747,11 @@
         if(action==='delete')removeCandidates(ids,text(noteInput&&noteInput.value),sectionKey);
         else candidateAction(action,ids,section);
       }
+    });
+    $('sectionAccordion').addEventListener('input',function(event){
+      if(!event.target.classList.contains('sectionResearchPhrase'))return;
+      var section=event.target.closest('.candidate-section');
+      if(section){var sectionKey=text(section.dataset.sectionKey);if(sectionResearchTerms[sectionKey]!==event.target.value)sectionResearchPages[sectionKey]=1;sectionResearchTerms[sectionKey]=event.target.value;}
     });
     $('sectionAccordion').addEventListener('change',function(event){
       var sectionBatch=event.target.closest('.section-batch-check');

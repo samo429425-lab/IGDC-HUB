@@ -3,7 +3,8 @@
 const Auth=require('./lib/global-slot-console-auth');
 const Store=require('./lib/global-slot-console-supabase');
 const Market=require('./lib/market-sale-scope.v1');
-const VERSION='igdc-section-revenue-order-v1.2.0-explicit-admin-top-pin';
+const crypto=require('crypto');
+const VERSION='igdc-section-revenue-order-v1.3.0-visible-three-step-preview';
 const ROLE=new Set(['owner','admin','super_admin','site_manager','site_manager_director','director']);
 const KEYS=new Set([
 'home|home_1','home|home_2','home|home_3','home|home_4','home|home_5','home|home_6','home|home_right_top','home|home_right_middle','home|home_right_bottom',
@@ -114,7 +115,19 @@ async function setOverride(scope,key,id,mode,actor){
  if(!Array.isArray(changed)||!changed.some(row=>str(row.id)===id))err('관리 상태가 변경되었습니다. 새로 조회 후 다시 시도하세요.',409);
  return{candidateId:id,sectionKey:key,override:mode==='pin_top'?'pin_top':mode==='demote'?'demote':'',explicitTopPin:mode==='pin_top'};
 }
-async function order(scope,keys,apply,actor,offset=0){
+// Preview values are bound to the country, section, candidate identities, explicit
+// pins and the exact database versions observed before committing. A subsequent
+// apply re-evaluates all records. No client-supplied rank or product placement is
+// ever written directly.
+function planDigest(scope,key,ranked){
+ const raw=ranked.map((v,i)=>[v.candidateId,i+1,Math.max(1,10000-i-1),v.tier,v.className,v.override,v.pinnedAt,v.score,v.assignmentId]);
+ return crypto.createHash('sha256').update(JSON.stringify([groupScope(scope,key),raw])).digest('hex');
+}
+function versionDigest(scope,key,ranked){
+ const raw=ranked.map(v=>[v.candidateId,str(v.row.candidateUpdatedAt),str(v.row.assignment.updated_at)]);
+ return crypto.createHash('sha256').update(JSON.stringify([groupScope(scope,key),raw])).digest('hex');
+}
+async function order(scope,keys,apply,actor,offset=0,expectedPlanHash='',expectedVersionHash=''){
  const groups=await readAll(scope,keys),summaries=[],items=[],plans=[];
  for(const key of keys){const rows=groups.get(key)||[],ranked=rows.map(row=>Object.assign(rating(row,scope,key),{row})).sort(compare);
   ranked.forEach((v,i)=>{
@@ -122,7 +135,12 @@ async function order(scope,keys,apply,actor,offset=0){
    items.push({candidateId:v.candidateId,sectionKey:key,rank,priority,tier:v.tier,className:v.className,override:v.override,pinnedAt:v.pinnedAt,title:v.title,previousPriority:v.originalPriority});
    plans.push({item:v.row,priority,rank,key,tier:v.tier,className:v.className});
   });
-  summaries.push({sectionKey:key,count:ranked.length,manualDemoted:ranked.filter(v=>v.override==='demote').length,manualTopPinned:ranked.filter(v=>v.override==='pin_top').length});
+  const planHash=planDigest(scope,key,ranked),versionHash=versionDigest(scope,key,ranked);
+  // The first commit must match the entire preview. Later chunks must still
+  // match the ranking plan; their timestamps legitimately change as we save.
+  if(apply&&expectedPlanHash&&planHash!==expectedPlanHash)err('미리보기 이후 상품 순위 또는 관리자 지정이 변경됐습니다. 다시 미리보기를 실행해 주세요.',409);
+  if(apply&&offset===0&&expectedVersionHash&&versionHash!==expectedVersionHash)err('미리보기 이후 상품 또는 배치 원장이 변경됐습니다. 다시 미리보기를 실행해 주세요.',409);
+  summaries.push({sectionKey:key,count:ranked.length,manualDemoted:ranked.filter(v=>v.override==='demote').length,manualTopPinned:ranked.filter(v=>v.override==='pin_top').length,planHash,versionHash});
  }
  if(!apply)return{preview:true,applied:false,sections:summaries,items};
  const batch=plans.slice(offset,offset+5),now=new Date().toISOString();let saved=0,alreadyComplete=0;
@@ -154,7 +172,7 @@ exports.handler=async(event)=>{
   const input=parse(event),scope=normScope(input),action=str(input.action),keys=new Set([].concat(input.sectionKeys||[]).filter(k=>KEYS.has(str(k))).map(str)),name=str(actor&&actor.sub)||'administrator';
   if(!keys.size)err('정렬할 섹션을 선택하세요.');
   let result;
-  if(action==='preview'||action==='apply'){const offset=Number(input.offset||0);if(!Number.isInteger(offset)||offset<0||offset>3000)err('정렬 저장 위치가 올바르지 않습니다.');result=await order(scope,keys,action==='apply',name,offset);}
+  if(action==='preview'||action==='apply'){const offset=Number(input.offset||0);if(!Number.isInteger(offset)||offset<0||offset>3000)err('정렬 저장 위치가 올바르지 않습니다.');result=await order(scope,keys,action==='apply',name,offset,str(input.expectedPlanHash),str(input.expectedVersionHash));}
   else if(['demote','restore','pin_top','unpin_top'].includes(action)){
     if(keys.size!==1)err('예외 지정은 한 섹션씩 처리하세요.');
     result=await setOverride(scope,[...keys][0],str(input.candidateId),action,name);

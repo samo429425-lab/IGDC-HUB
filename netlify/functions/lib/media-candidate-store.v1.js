@@ -267,7 +267,7 @@ function publicSlot(row, slotId, defaults){
   const heroGeneration=plain(raw.heroThumbnailGeneration||source.heroThumbnailGeneration||thumbMeta.generation);
   const heroSourceWidth=Number(heroGeneration.sourceWidth||0)||0,heroSourceHeight=Number(heroGeneration.sourceHeight||0)||0;
   const heroEdgeMean=Number(heroGeneration.edgeMean||0)||0,heroEdgeP90=Number(heroGeneration.edgeP90||0)||0;
-  const heroSharpVerified=lower(heroGeneration.mode)==="administrator_video_frame"&&heroSourceWidth>=1280&&heroSourceHeight>=720&&(heroGeneration.sharp===true||heroEdgeMean>=4.8||heroEdgeP90>=15);
+  const heroSharpVerified=lower(heroGeneration.mode)==="administrator_video_frame"&&lower(heroGeneration.capturePurpose)==="hero"&&heroSourceWidth>=1280&&heroSourceHeight>=720&&heroEdgeMean>=6.8&&heroEdgeP90>=19;
   // A separately captured, source-HD + sharp-verified Hero frame outranks the card
   // thumbnail even when the card image itself happens to be 1280x720.
   const useAlternateHero=!!alternateHeroUrl&&(heroSharpVerified||!thumbMeta.heroReady);

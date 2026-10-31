@@ -328,14 +328,25 @@ function discoveryPlan(section,page){
   return Object.assign({sourcePage:Math.floor((Math.max(1,Number(page)||1)-1)/plans.length)+1},plans[index]);
 }
 function discoveryLane(page,section){return discoveryPlan(section||"media-movie",page).lane;}
-function searchUrl(section,rows,page){
+// Administrator-supplied search text is converted into literal Archive field phrases,
+// never interpreted as a raw advanced-search expression. Section and safety gates stay intact.
+function literalSearchPhrase(value){
+  const phrase=MediaStore.text(value).replace(/[\x00-\x1f\x7f]/g," ").replace(/\s+/g," ").slice(0,120);
+  const tokens=phrase.split(" ").filter(Boolean).slice(0,12);
+  if(!tokens.length)return"";
+  const escaped=tokens.join(" ").replace(/[\\"]/g,"\\$&");
+  return escaped;
+}
+function searchUrl(section,rows,page,searchPhrase){
   const params=new URLSearchParams();
   const plan=discoveryPlan(section,page);
-  params.set("q","("+plan.query+") AND year:["+DEFAULT_MIN_YEAR+" TO 9999]");
+  const phrase=literalSearchPhrase(searchPhrase);
+  const keyword=phrase?' AND (title:"'+phrase+'" OR subject:"'+phrase+'" OR description:"'+phrase+'")':'';
+  params.set("q","("+(phrase?SECTION_LONGFORM_QUERIES[section]:plan.query)+") AND year:["+DEFAULT_MIN_YEAR+" TO 9999]"+keyword);
   ["identifier","title","creator","year","description","subject","collection","coverage","licenseurl","rights","downloads","date","publicdate","language","avg_rating","num_reviews"].forEach((field)=>params.append("fl[]",field));
   plan.sort.forEach((sort)=>params.append("sort[]",sort));
   params.set("rows",String(rows));
-  params.set("page",String(plan.sourcePage));
+  params.set("page",String(searchPhrase?Math.max(1,Number(page)||1):plan.sourcePage));
   params.set("output","json");
   return IA_SEARCH+"?"+params.toString();
 }
@@ -609,7 +620,9 @@ exports.handler=async function(event){
     const rawIdentifier=MediaStore.text(body.identifier||body.archiveIdentifier||body.sourceUrl);
     const identifier=rawIdentifier?safeId((rawIdentifier.match(/archive\.org\/(?:details|download)\/([^/?#]+)/i)||[])[1]||rawIdentifier):"";
     const adminException=body.adminException===true||body.adminException==="true";
+    const searchPhrase=literalSearchPhrase(body.searchPhrase||body.keyword||"");
     const overrideReason=MediaStore.compact(body.overrideReason||body.reason||"",500);
+    if(searchPhrase&&identifier){const error=new Error("검색어 수집과 Archive 단일식별자 수집은 동시에 실행할 수 없습니다.");error.statusCode=400;throw error;}
     if(adminException&&(!identifier||!overrideReason)){
       const error=new Error("관리자 예외 수집에는 식별자와 사유가 필요합니다.");
       error.statusCode=400;error.code="admin_exception_input_required";throw error;
@@ -618,7 +631,7 @@ exports.handler=async function(event){
     const plan=discoveryPlan(section,page);
     if(identifier){docs=[{identifier,title:identifier}];totalFound=1;}
     else{
-      const search=await fetchJson(searchUrl(section,batchSize,page));
+      const search=await fetchJson(searchUrl(section,batchSize,page,searchPhrase));
       docs=search&&search.response&&Array.isArray(search.response.docs)?search.response.docs:[];
       totalFound=Number(search&&search.response&&search.response.numFound||0);
     }
@@ -627,9 +640,9 @@ exports.handler=async function(event){
     const skippedExisting=docs.length-docsForInspection.length;
     const inspected=await mapLimit(docsForInspection,2,(doc)=>inspect(doc,section,{
       adminException,overrideReason,
-      discoveryLane:identifier?"administrator_identifier":plan.lane,
+      discoveryLane:identifier?"administrator_identifier":(searchPhrase?"admin_keyword_search":plan.lane),
       discoveryRegion:identifier?"administrator":plan.region,
-      discoveryQuery:identifier?"identifier:"+identifier:plan.query
+      discoveryQuery:identifier?"identifier:"+identifier:(searchPhrase?searchPhrase:plan.query)
     }));
     const accepted=[],rejected=[];
     inspected.forEach((entry,index)=>{
@@ -668,8 +681,9 @@ exports.handler=async function(event){
     return MediaStore.response(200,{
       ok:true,version:VERSION,mode:identifier?"administrator_exception":"batched_cumulative",
       section,target,batchSize,page,nextPage,
-      discoveryLane:identifier?"administrator_identifier":plan.lane,
+      discoveryLane:identifier?"administrator_identifier":(searchPhrase?"admin_keyword_search":plan.lane),
       discoveryRegion:identifier?"administrator":plan.region,
+      searchPhrase:searchPhrase||null,
       discoveryCycleLength:DISCOVERY_CYCLE_LENGTH,
       done:exhausted,searched:docs.length,totalFound,qualified:accepted.length,
       accepted:normalized.length,saved:savedRows.length,

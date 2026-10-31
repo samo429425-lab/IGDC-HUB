@@ -16,6 +16,9 @@ const VERSION = "media-snapshot-publish-v1.12.3-live-hero-control";
 const MANUAL_SECTIONS=Array.from(MediaStore.ALLOWED_SECTIONS);
 const STATUS_SECTIONS=["media-trending"].concat(MANUAL_SECTIONS);
 const HERO_SECTIONS=new Set(["media-movie","media-drama"]);
+// The candidate store does not export FRONT_CAPACITY. Keep this explicitly
+// aligned with the 100-slot release contract (undefined previously emptied slots).
+const FRONT_CAPACITY=100;
 
 function componentStatus(){
   let storage=null;
@@ -108,12 +111,12 @@ function attachCommittedFallbacks(snapshot, committedBase){
     const baseSlots=sectionSlots(base.sections&&base.sections[sectionKey]);
     const objectSection=Array.isArray(current)?{key:sectionKey,title:sectionKey,slots:current}:Object.assign({},current||{key:sectionKey,title:sectionKey});
     const slots=sectionSlots(current).slice();
-    const capacity=Math.max(MediaStore.FRONT_CAPACITY,slots.length,baseSlots.length);
+    const capacity=Math.max(FRONT_CAPACITY,slots.length,baseSlots.length);
     while(slots.length<capacity)slots.push({slotId:slots.length+1,contentId:null,title:null,thumb:"#",provider:null,placeholder:true});
-    objectSection.slots=slots.slice(0,MediaStore.FRONT_CAPACITY).map((slot,index)=>{
+    objectSection.slots=slots.slice(0,FRONT_CAPACITY).map((slot,index)=>{
       const out=Object.assign({},slot,{slotId:index+1});
       if(out.managedBy==="media-snapshot-publish"&&!out.fallbackSample){
-        out.fallbackSample=MediaStore.sampleFallbackFor(baseSlots[index]||{},index);
+        out.fallbackSample=clone(baseSlots[index]||blankSlot({},index));
       }
       return out;
     });

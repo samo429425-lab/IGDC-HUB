@@ -5,7 +5,7 @@
  *  - MediaHub 메인 10섹션(data-psom-key="media-*")에 "미디어 콘텐츠"를 슬롯-우선(slot-first)으로 꽂는다.
  *  - 우선순위: /data/media.snapshot*.json 단일 경로(feed-media legacy fallback 비활성)
  *  - 데이터 없으면 HTML 더미(placeholder) 유지 (파괴/삭제 금지)
- *  - 모든 섹션 카드 수: 50 고정(부족하면 placeholder 추가)
+ *  - 일반 9개 섹션 100슬롯, 지금 뜨는 콘텐츠 50슬롯(부족하면 placeholder 추가)
  *  - 우측 패널 없음(처리하지 않음)
  *  - Hero는 프론트에 실제 렌더링된 영화/드라마 카드 1개의 고화질 대표 이미지만 사용한다.
  *  - 저해상도 카드 썸네일 확대는 금지하며, 실제 1280x720+ 이미지 또는 원본 HD 영상의 선명한 프레임만 허용한다.
@@ -18,14 +18,15 @@
 
   const D = document;
 
-  const LIMIT = 50;
+  const LIMIT = 100;
+  const TRENDING_LIMIT = 50;
   const SAMPLE_IMAGE = '/assets/images/media-sample-card.png';
   const HERO_MIN_WIDTH = 1280;
   const HERO_MIN_HEIGHT = 720;
   const HERO_ROTATE_WINDOW_DAYS = 3;
   const HERO_ROTATE_TOP_POOL = 3;
-  const HERO_MIN_EDGE_MEAN = 4.8;
-  const HERO_MIN_EDGE_P90 = 15;
+  const HERO_MIN_EDGE_MEAN = 6.8;
+  const HERO_MIN_EDGE_P90 = 19;
   const HERO_CAPTURE_TARGET_LIMIT = 8;
   const HERO_CONTROL_URL = '/.netlify/functions/media-snapshot-publish?heroPublicStatus=1';
   const HERO_CONTROL_POLL_MS = 30000;
@@ -159,7 +160,11 @@
     return q('.scroll-content', line) || line;
   }
 
+  function lineCapacity(line){
+    return canonKey(line && line.getAttribute('data-psom-key') || '') === 'media-trending' ? TRENDING_LIMIT : LIMIT;
+  }
   function ensurePlaceholders(line){
+    const capacity = lineCapacity(line);
     const container = getContainer(line);
 
     // collect existing placeholders (preferred)
@@ -176,10 +181,10 @@
       ph = qa('a[data-placeholder="true"]', container);
     }
 
-    // add up to LIMIT
-    if(ph.length < LIMIT){
+    // add up to the section capacity
+    if(ph.length < capacity){
       const frag = D.createDocumentFragment();
-      for(let i=ph.length;i<LIMIT;i++){
+      for(let i=ph.length;i<capacity;i++){
         frag.appendChild(makePlaceholder());
       }
       container.appendChild(frag);
@@ -187,7 +192,7 @@
     }
 
     // if too many, keep first LIMIT as fill targets
-    if(ph.length > LIMIT) ph = ph.slice(0, LIMIT);
+    if(ph.length > capacity) ph = ph.slice(0, capacity);
 
     return ph;
   }
@@ -595,6 +600,17 @@
     if(!img||!img.naturalWidth||!img.naturalHeight)return '';
     return safeFrontThumbnail(img.currentSrc||img.src||'');
   }
+  function inspectableHeroUrl(value){
+    const input=String(value||'').trim();
+    try{
+      const parsed=new URL(input,location.origin);
+      const match=parsed.pathname.match(/^\/vi\/([A-Za-z0-9_-]{6,20})\/(maxresdefault|sddefault|hqdefault)\.jpg$/i);
+      if(parsed.protocol==='https:'&&/^(?:i|img)\.ytimg\.com$/i.test(parsed.hostname)&&match){
+        return '/.netlify/functions/media-hero-image?videoId='+encodeURIComponent(match[1])+'&variant='+encodeURIComponent(match[2].toLowerCase());
+      }
+    }catch(_e){}
+    return input;
+  }
   function heroImageCandidates(item){
     if(!item||isSyntheticSampleItem(item))return [];
     const values=[];
@@ -603,7 +619,7 @@
       const enc=encodeURIComponent(yt);
       // Hero only: probe the provider's genuine high-resolution artwork before
       // rail/card thumbnails. Missing maxres images are rejected by dimension checks.
-      values.push('https://i.ytimg.com/vi/'+enc+'/maxresdefault.jpg');
+      values.push(inspectableHeroUrl('https://i.ytimg.com/vi/'+enc+'/maxresdefault.jpg'));
     }
     values.push(
       item.heroImage,item.heroImageUrl,item.heroThumbnail,item.heroThumb,
@@ -623,7 +639,7 @@
     }
     const seen=new Set(),out=[];
     for(const value of values){
-      const url=safeFrontThumbnail(value);
+      const url=safeFrontThumbnail(inspectableHeroUrl(value));
       if(!url||seen.has(url))continue;
       seen.add(url);out.push(url);
     }
@@ -715,7 +731,7 @@
       const p90=edgeSamples.length?edgeSamples[Math.min(edgeSamples.length-1,Math.floor(edgeSamples.length*.90))]:0;
       const edgeMean=edgeCount?edgeSum/edgeCount:0;
       const usable=mean>12&&mean<244&&variance>120;
-      const sharp=usable&&(edgeMean>=HERO_MIN_EDGE_MEAN||p90>=HERO_MIN_EDGE_P90);
+      const sharp=usable&&edgeMean>=HERO_MIN_EDGE_MEAN&&p90>=HERO_MIN_EDGE_P90;
       return{mean,variance,edgeMean,edgeP90:p90,usable,sharp};
     }catch(_e){return null;}
   }
@@ -869,7 +885,7 @@
     if(heroRuntime.frameCaptureCache.has(key))return heroRuntime.frameCaptureCache.get(key);
     const promise=new Promise((resolve)=>{
       const video=D.createElement('video');let done=false,targetIndex=0,best=null,targets=[];
-      const timer=setTimeout(()=>finish(best),14000);
+      const timer=setTimeout(()=>finish(best),9000);
       function clean(){clearTimeout(timer);try{video.pause();video.removeAttribute('src');video.load();video.remove();}catch(_e){}}
       function finish(value){if(done)return;done=true;clean();resolve(value&&value.visual&&value.visual.sharp?value:null);}
       function buildTargets(){
@@ -1073,9 +1089,10 @@
     if(!Array.isArray(items) || items.length === 0) return;
     line.dataset.igdcMediaMapped='1';
     const ph=ensurePlaceholders(line);
+    const capacity=lineCapacity(line);
     const ranked=items.filter(isFrontCandidate).slice().sort((a,b)=>frontPriority(b)-frontPriority(a));
     const immediate=[],pending=[];
-    const scanLimit=Math.max(LIMIT*3,LIMIT);
+    const scanLimit=Math.max(capacity*3,capacity);
     for(const item of ranked){
       if(isSyntheticSampleItem(item))continue;
       const thumb=safeFrontThumbnail(rawThumbnail(item));
@@ -1089,14 +1106,14 @@
     // Keep extra pre-ranked items with real thumbnail URLs as a reserve. A slot
     // whose thumbnail fails is refilled from here immediately, so valid content
     // behind it is never stranded behind a blue Sample card.
-    line.__igdcFrontReserveQueue=immediate.slice(LIMIT).map((entry,index)=>({item:entry.item,thumb:entry.thumb,order:LIMIT+index}));
+    line.__igdcFrontReserveQueue=immediate.slice(capacity).map((entry,index)=>({item:entry.item,thumb:entry.thumb,order:capacity+index}));
     let slot=0;
     const lineKey=canonKey(line.getAttribute('data-psom-key')||'');
     // Only the first visible cards of the first three rails are eager. All
     // other cards remain lazy/pre-warmed, preventing the old all-at-once burst.
     const eagerLimit=lineKey==='media-trending'?6:(lineKey==='media-movie'||lineKey==='media-drama'?4:0);
-    for(const entry of immediate.slice(0,LIMIT)){
-      if(slot>=ph.length||slot>=LIMIT)break;
+    for(const entry of immediate.slice(0,capacity)){
+      if(slot>=ph.length||slot>=capacity)break;
       const card=ph[slot];
       card.dataset.frontOrder=String(slot);
       if(slot<eagerLimit)card.dataset.thumbEager='1';else delete card.dataset.thumbEager;
@@ -1107,7 +1124,7 @@
     // ready-thumbnail candidate. They remain Sample placeholders until recovery
     // actually succeeds; compaction then promotes them ahead of all Samples.
     for(const item of pending){
-      if(slot>=ph.length||slot>=LIMIT)break;
+      if(slot>=ph.length||slot>=capacity)break;
       const card=ph[slot];
       resetAnchorToPlaceholder(card,'thumbnail_pending');
       card.dataset.frontOrder=String(slot);
@@ -1328,19 +1345,9 @@
     if(!candidates.length)return !!heroRuntime.currentItem;
 
     function resolveKnown(candidate){
-      const w=Number(candidate.knownW||0),h=Number(candidate.knownH||0),item=candidate&&candidate.item;
-      const tier=heroResolutionTier(w,h);
-      if(tier<2)return null;
-      const verifiedSharp=!!(item&&item.heroSharpVerified===true);
-      // Do not immediately promote an arbitrary 720p rail image just because its
-      // dimensions are large. Full-HD may fast-path; 720p needs sharp verification
-      // or the normal probe/fallback pass below.
-      if(tier===2&&!verifiedSharp)return null;
-      const visual=verifiedSharp?{sharp:true,edgeMean:Number(item.heroEdgeMean||0)||HERO_MIN_EDGE_MEAN,edgeP90:Number(item.heroEdgeP90||0)||HERO_MIN_EDGE_P90}:null;
-      const qualityMetric=heroQualityMetric(w,h,visual);
-      return Object.assign({},candidate,{w,h,tier,visual,qualityMetric,
-        freshnessDay:heroFreshnessDay(candidate.item),popularityMetric:heroPopularityMetric(candidate.item),
-        finalScore:candidate.score+(tier>=3?1100:700)+(visual&&visual.sharp?180:0)});
+      // Even a 1920x1080 image can be an enlarged, blurred 320x180 thumbnail.
+      // The previous metadata/full-HD fast path skipped actual pixel inspection.
+      return null;
     }
     function heroRotationBucket(){
       const now=Date.now();
@@ -1363,7 +1370,8 @@
     }
     async function checkedCandidate(candidate,timeoutMs){
       const known=resolveKnown(candidate);if(known)return known;
-      const probe=await probeHeroImage(candidate.url,timeoutMs);
+      const inspectable=inspectableHeroUrl(candidate.url);
+      const probe=await probeHeroImage(inspectable,timeoutMs);
       if(!probe)return null;
       const tier=heroResolutionTier(probe.w,probe.h);
       if(tier<2)return null;
@@ -1372,8 +1380,8 @@
       // on the front or come from an explicit HD source hint.
       const visual=probe.visual;
       const pixelPassed=!!(visual&&visual.sharp);
-      const trustedUninspected=!visual&&(tier>=2&&(candidate.domReady||Number(candidate.hint||0)>=2));
-      if(!pixelPassed&&!trustedUninspected)return null;
+      // Cross-origin or unreadable images are not considered sharp by default.
+      if(!pixelPassed)return null;
       const qualityMetric=heroQualityMetric(probe.w,probe.h,visual);
       const dimBonus=tier===3?900:620;
       return Object.assign({},candidate,probe,{tier,visual,qualityMetric,
@@ -1381,10 +1389,8 @@
         finalScore:candidate.score+dimBonus+(pixelPassed?180:0)});
     }
 
-    // Fast path: a rail thumbnail that is already proven to be 720p/1080p can
-    // fill the hero immediately. This is the path V46 lacked in production.
-    const knownBest=chooseBest(candidates.map(resolveKnown));
-    if(knownBest)commitHeroChoice(heroImg,knownBest);
+    // Do not use naturalWidth alone to fast-path a hero: require pixel verification.
+    const knownBest=null;
 
     // Probe likely HD sources. Candidate timeouts are per-attempt only; they do
     // not reject the item. Thumbnail-ready events and scheduled refreshes retry
@@ -1393,7 +1399,7 @@
     const highHint=candidates.filter((row)=>row.hint>=2).sort(heroPreProbeCompare);
     const probeSet=[];
     for(const candidate of highHint.concat(candidates.slice().sort(heroPreProbeCompare))){
-      if(probeSet.length>=28)break;
+      if(probeSet.length>=8)break;
       if(probeSet.indexOf(candidate)>=0)continue;
       probeSet.push(candidate);
     }
@@ -1404,8 +1410,9 @@
     // top-ranked direct movie/drama video. This is a genuine frame capture; low-res
     // sources are never upscaled and cross-origin failures simply fall back safely.
     if(!best){
-      for(const row of pool.slice(0,18)){
-        const captured=await captureHeroFrameForItem(row.item);
+      const capturedFrames=await Promise.all(pool.slice(0,3).map(async(row)=>({row,captured:await captureHeroFrameForItem(row.item)})));
+      for(const pair of capturedFrames){
+        const row=pair.row,captured=pair.captured;
         if(!captured)continue;
         const tier=heroResolutionTier(captured.w,captured.h);
         if(tier<2)continue;
@@ -1503,62 +1510,39 @@
     const snapshot = await snapshotPromise;
     const sectionMap = normalizeSectionMap(snapshot);
 	
-// ===== MEDIA TRENDING BALANCED AUTO-COMBINE =====
+// ===== MEDIA TRENDING: VERIFIED TOP-50, SHARED FROM FOUR SOURCE SECTIONS =====
 (function(){
   if(!sectionMap)return;
-  const existing=extractItems(sectionMap['media-trending']).filter(isTrendingReadyCandidate);
-
   const sourceKeys=['media-movie','media-drama','media-variety','media-music'];
-  function recency(item){
-    const t=item&&(item.publishedAt||item.releaseDate||item.createdAt||item.date);
-    if(!t)return 0;
-    const time=new Date(t).getTime();if(!Number.isFinite(time))return 0;
-    const days=Math.max(0,(Date.now()-time)/86400000);
-    return Math.max(0,1-(days/45));
+  const used=new Set(),ranked=[];
+  function broadcastMusic(item){
+    // The trending music lane means televised music contests, auditions and shows,
+    // not generic music videos or stand-alone concerts.
+    const tags=[item.title,item.name,item.genre,item.subgenre,item.category,item.programTitle,
+      item.description,item.summary].concat(Array.isArray(item.tags)?item.tags:[]).join(' ').toLowerCase();
+    return /(?:music\s*(?:show|competition|contest|audition|program|programme)|singing\s*(?:contest|competition|show)|audition|talent\s*show|music\s*festival|가왕|가요제|음악\s*방송|음악\s*경연|오디션|트로트\s*(?:경연|대회)|경연\s*프로그램|歌唱比赛|选秀节目|歌唱比賽|音楽番組)/i.test(tags);
   }
   function score(item){
-    // "지금 뜨는 콘텐츠"는 단순 최신순이 아니라 실제 재생 가능성,
-    // 정상 썸네일, 콘텐츠 품질/반응, 최신성을 함께 본다.
-    return frontPriority(item)+(recency(item)*140);
+    const rawDate=item.publishedAt||item.releaseDate||item.createdAt||item.date;
+    const date=new Date(rawDate||0).getTime();
+    const days=Number.isFinite(date)&&date>0?Math.max(0,(Date.now()-date)/86400000):3650;
+    const freshness=Math.max(0,1-days/90);
+    // Ranking/hotness precedes recency. Front policy still enforces thumbnail,
+    // playability and verified supply; newly collected samples cannot trend.
+    const interest=numeric(item,['rankingScore','trendScore','hotScore','popularity','score']);
+    return frontPriority(item)+(Math.max(0,interest)*5)+(freshness*200);
   }
-  function dedupeKey(item){return String(item&&(item.contentId||item.id||item.video||item.url||item.link)||JSON.stringify(item||{}));}
-  const seen=new Set(),lanes={};
-  sourceKeys.forEach((key)=>{
-    const list=extractItems(sectionMap[key]).filter(isTrendingReadyCandidate).map((item)=>Object.assign({},item,{_sectionKey:key}));
-    list.sort((a,b)=>score(b)-score(a));
-    lanes[key]=list.filter((item)=>{const id=dedupeKey(item);if(!id||seen.has(key+'|'+id))return false;seen.add(key+'|'+id);return true;});
-  });
-
-  // Movie and drama alternate at the front; variety/music are inserted regularly.
-  // This prevents a high-score movie batch from monopolising the "latest" row.
-  const pattern=['media-movie','media-drama','media-movie','media-drama','media-variety','media-music'];
-  const cursors=Object.fromEntries(sourceKeys.map((key)=>[key,0]));
-  const used=new Set(),mixed=[];
-  let safety=0;
-  while(mixed.length<50&&safety++<400){
-    let progressed=false;
-    for(const key of pattern){
-      const lane=lanes[key]||[];
-      while(cursors[key]<lane.length){
-        const item=lane[cursors[key]++],id=dedupeKey(item);
-        if(used.has(id))continue;
-        used.add(id);mixed.push(item);progressed=true;break;
-      }
-      if(mixed.length>=50)break;
+  for(const key of sourceKeys){
+    for(const item of extractItems(sectionMap[key])){
+      if(!isTrendingReadyCandidate(item))continue;
+      if(key==='media-music'&&!broadcastMusic(item))continue;
+      const id=String(ensureContentId(item)||mediaSourceForThumb(item)||'').trim();
+      if(!id||used.has(id))continue;
+      used.add(id);ranked.push({item,score:score(item),source:key});
     }
-    if(!progressed)break;
   }
-  // Keep curated/latest items too, but only after the balanced movie/drama lead.
-  // When movie+drama lanes exist, the first row can no longer collapse into movies only.
-  for(const item of existing){
-    const id=dedupeKey(item);
-    if(!id||used.has(id))continue;
-    used.add(id);mixed.push(item);
-    if(mixed.length>=50)break;
-  }
-  // If the category lanes are temporarily empty, preserve an existing curated trending list.
-  if(!mixed.length&&existing.length)mixed.push(...existing.slice(0,50));
-  sectionMap['media-trending']={items:mixed.slice(0,50)};
+  ranked.sort((a,b)=>b.score-a.score||heroFreshnessDay(b.item)-heroFreshnessDay(a.item));
+  sectionMap['media-trending']={items:ranked.slice(0,TRENDING_LIMIT).map((row)=>row.item)};
 })();
 
     // Apply every snapshot-backed rail immediately. Any optional feed fallback

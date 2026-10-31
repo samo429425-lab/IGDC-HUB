@@ -137,6 +137,16 @@
         <button id="autoCurateBtn" class="secondary">AI 전자동 후보 정리 적용</button>
       </div>
     </div>
+    <div class="collect-controls" aria-label="관리자 맞춤 영상 리서치" style="margin-top:10px;gap:8px;flex-wrap:wrap">
+      <input id="collectorSearchPhrase" maxlength="120" placeholder="영화 제목 · 방송 프로그램명 · 장르 · 주제어 (선택 섹션 검색)" style="min-width:300px;flex:1">
+      <button id="collectorKeywordBtn" type="button" class="secondary">입력 조건으로 영상 탐색</button>
+      <span class="small">선택한 섹션에만 적용 · 검색 결과는 공개 전 검토 후보로 저장</span>
+    </div>
+    <section id="mediaKeywordResultPanel" class="hidden" aria-live="polite" style="margin:10px 0;padding:12px;border:1px solid #35516f;border-radius:10px;background:#112033">
+      <div class="supplier-head"><strong id="mediaKeywordResultTitle">영상 제목 탐색 결과</strong><button id="mediaKeywordResultClose" type="button" class="secondary">닫기</button></div>
+      <div class="small" style="margin:6px 0">공개 검색에서 찾은 제목·원본 링크의 검토용 목록입니다. 자동 등록·승인·배치는 실행되지 않습니다.</div>
+      <div id="mediaKeywordResultItems" class="small"></div>
+    </section>
     <div id="collectorProgress" class="progressbox hidden">
       <div id="collectorProgressText" class="small"></div><div class="progressbar"><i id="collectorProgressBar"></i></div><div id="collectorRejectText" class="small"></div>
     </div>

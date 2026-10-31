@@ -135,7 +135,7 @@ function buildState(rows,release){
       overflow:overflow.slice(0,40).map((x)=>compactRow(x.row,x.score,"overflow",false))
     };
   }
-  return{ok:true,version:VERSION,generatedAt:now(),policy:{primaryDefault:100,primaryAllSections:100,frontVisiblePerSection:50,reservePerSection:RESERVE_CAPACITY,automaticReplacement:"approved-and-verified-only",manualDisablePreserved:true,lifecycleOwner:"media-candidate-action"},release:{present:!!release,id:text(release&&release.release_id),status:text(release&&release.status),createdAt:text(release&&release.created_at)},sections};
+  return{ok:true,version:VERSION,generatedAt:now(),policy:{primaryDefault:100,primaryAllSections:100,frontVisiblePerSection:100,reservePerSection:RESERVE_CAPACITY,automaticReplacement:"approved-and-verified-only",manualDisablePreserved:true,lifecycleOwner:"media-candidate-action"},release:{present:!!release,id:text(release&&release.release_id),status:text(release&&release.status),createdAt:text(release&&release.created_at)},sections};
 }
 function poolRowObject(row,bucket,score,actor,enabled,extra){
   const raw=Object.assign({},rawOf(row));const previous=poolControl(row);const changedAt=now();

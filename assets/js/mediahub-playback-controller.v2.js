@@ -913,39 +913,120 @@
 
   function safeName(value) { return String(value||'maru-media').replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim().slice(0,90)||'maru-media'; }
   function downloadBlob(blob, filename) { var url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;(document.body||document.documentElement).appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1800); }
-  function captureFrame() {
-    var e=extraCopy(),video=currentVideo(); if(!video||!video.videoWidth||!video.videoHeight){showNotice(e.shotUnsupported);return;}
-    try {
-      var canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{alpha:false}); canvas.width=video.videoWidth; canvas.height=video.videoHeight; ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      canvas.toBlob(function(blob){if(!blob){showNotice(e.shotUnsupported);return;}downloadBlob(blob,safeName(titleFor(state.card))+'_'+formatTime(video.currentTime).replace(/:/g,'-')+'.png');showNotice(e.shotSaved);},'image/png');
-    } catch(_){showNotice(e.shotUnsupported);}
+  // Direct-file capture comes first. If an embedded provider does not expose
+  // a video element, use only an explicit browser-controlled tab picker.
+  // Never bypass DRM, browser content protections, or original-provider rules.
+  async function permissionSelectedTab(){
+    if(!navigator.mediaDevices||typeof navigator.mediaDevices.getDisplayMedia!=='function')return null;
+    // No persistent permission. The browser picker is invoked only by a click.
+    var stream=await navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser'},audio:true,
+      preferCurrentTab:true,selfBrowserSurface:'include',surfaceSwitching:'exclude'});
+    var track=stream.getVideoTracks()[0];
+    var surface=track&&track.getSettings&&track.getSettings().displaySurface;
+    if(surface==='monitor'||surface==='window'){stream.getTracks().forEach(function(t){t.stop();});throw new Error('Please select the current browser tab.');}
+    return stream;
   }
-  function bestRecorderMime() {
-    if(!global.MediaRecorder)return''; var types=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
-    for(var i=0;i<types.length;i+=1){try{if(!MediaRecorder.isTypeSupported||MediaRecorder.isTypeSupported(types[i]))return types[i];}catch(_){}}
-    return '';
+  function stopTracks(stream){if(stream&&stream.getTracks)stream.getTracks().forEach(function(track){try{track.stop();}catch(_){}});}
+  async function captureTabFrame(e){
+    var stream=null,video=null;
+    try{
+      stream=await permissionSelectedTab();if(!stream){showNotice(e.shotUnsupported);return;}
+      video=document.createElement('video');video.muted=true;video.playsInline=true;video.srcObject=stream;
+      await video.play();
+      if(!video.videoWidth||!video.videoHeight)throw new Error('No video frame');
+      var canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+      canvas.getContext('2d',{alpha:false}).drawImage(video,0,0,canvas.width,canvas.height);
+      var blob=await new Promise(function(resolve){canvas.toBlob(resolve,'image/png');});
+      if(!blob)throw new Error('Frame unavailable');
+      downloadBlob(blob,safeName(titleFor(state.card))+'_frame.png');showNotice(e.shotSaved);
+    }catch(_){showNotice(e.shotUnsupported);}
+    finally{if(video)video.srcObject=null;stopTracks(stream);}
   }
-  function setRecordingBadge(open, elapsed, total) {
-    var badge=state.detail&&state.detail.querySelector('.igdc-maru-recording'); if(!badge)return; badge.dataset.open=open?'true':'false'; var t=badge.querySelector('[data-record-time]'); if(t)t.textContent=open?(formatTime(elapsed)+' / '+formatTime(total)):'';
+  function captureFrame(){
+    var e=extraCopy(),video=currentVideo();
+    if(!video||!video.videoWidth||!video.videoHeight){captureTabFrame(e);return;}
+    try{
+      var canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{alpha:false});
+      canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      canvas.toBlob(function(blob){if(!blob){showNotice(e.shotUnsupported);return;}
+        downloadBlob(blob,safeName(titleFor(state.card))+'_'+formatTime(video.currentTime).replace(/:/g,'-')+'.png');showNotice(e.shotSaved);
+      },'image/png');
+    }catch(_){captureTabFrame(e);}
   }
-  function cancelClipCapture() {
-    state.clipCancelled=true; clearInterval(state.clipTimer); state.clipTimer=0; if(state.clipRecorder&&state.clipRecorder.state!=='inactive'){try{state.clipRecorder.stop();}catch(_){}} state.clipRecorder=null; setRecordingBadge(false,0,0);
+  function bestRecorderMime(){
+    if(!global.MediaRecorder)return'';
+    var types=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+    for(var i=0;i<types.length;i+=1){try{if(MediaRecorder.isTypeSupported(types[i]))return types[i];}catch(_){}}
+    return'';
   }
-  function captureClip(seconds) {
-    var e=extraCopy(),video=currentVideo(); if(state.clipRecorder&&state.clipRecorder.state!=='inactive'){showNotice(e.clipBusy);return;}
-    var capture=video&&(video.captureStream||video.mozCaptureStream); if(!video||!capture||!global.MediaRecorder){showNotice(e.clipUnsupported);return;}
-    var stream,mime=bestRecorderMime();
-    try{stream=capture.call(video);}catch(_){showNotice(e.clipUnsupported);return;}
-    if(!stream||!stream.getTracks||!stream.getTracks().length){showNotice(e.clipUnsupported);return;}
-    var chunks=[],recorder;
-    try{recorder=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:6000000}:undefined);}catch(_e){try{recorder=new MediaRecorder(stream);}catch(_x){showNotice(e.clipUnsupported);return;}}
-    state.clipRecorder=recorder; state.clipCancelled=false; var startedAt=Date.now(),target=Math.max(1,Number(seconds)||20),wasPaused=video.paused;
+  function setRecordingBadge(open,elapsed,total){
+    var badge=state.detail&&state.detail.querySelector('.igdc-maru-recording');if(!badge)return;
+    badge.dataset.open=open?'true':'false';var t=badge.querySelector('[data-record-time]');
+    if(t)t.textContent=open?(formatTime(elapsed)+' / '+formatTime(total)):'';
+  }
+  function cancelClipCapture(){
+    state.clipCancelled=true;clearInterval(state.clipTimer);state.clipTimer=0;
+    if(state.clipRecorder)state.clipRecorder.__igdcCancelled=true;
+    if(state.clipRecorder&&state.clipRecorder.state!=='inactive')try{state.clipRecorder.stop();}catch(_){}
+    state.clipRecorder=null;setRecordingBadge(false,0,0);
+  }
+  function startClipRecorder(stream,seconds,video,ownsStream){
+    var e=extraCopy(),mime=bestRecorderMime(),recorder;
+    if(!stream||!stream.getTracks||!stream.getTracks().some(function(track){return track.kind==='video'&&track.readyState==='live';})){
+      if(ownsStream)stopTracks(stream);showNotice(e.clipUnsupported);return;
+    }
+    try{recorder=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:6000000}:undefined);}
+    catch(_e){try{recorder=new MediaRecorder(stream);}catch(_x){if(ownsStream)stopTracks(stream);showNotice(e.clipUnsupported);return;}}
+    var chunks=[],startedAt=Date.now(),target=Math.max(1,Number(seconds)||20),wasPaused=!!(video&&video.paused),finished=false;
+    state.clipRecorder=recorder;state.clipCancelled=false;
+    function finish(){
+      if(finished)return;finished=true;
+      clearInterval(state.clipTimer);state.clipTimer=0;
+      if(state.clipRecorder===recorder)state.clipRecorder=null;
+      setRecordingBadge(false,0,0);
+      if(ownsStream)stopTracks(stream);
+    }
     recorder.ondataavailable=function(ev){if(ev.data&&ev.data.size)chunks.push(ev.data);};
-    recorder.onerror=function(){clearInterval(state.clipTimer);state.clipTimer=0;state.clipRecorder=null;setRecordingBadge(false,0,0);showNotice(e.clipUnsupported);};
-    recorder.onstop=function(){clearInterval(state.clipTimer);state.clipTimer=0;state.clipRecorder=null;setRecordingBadge(false,0,0);if(state.clipCancelled){state.clipCancelled=false;return;}if(!chunks.length){showNotice(e.clipUnsupported);return;}var type=(chunks[0]&&chunks[0].type)||mime||'video/webm',ext=/mp4/i.test(type)?'mp4':'webm';downloadBlob(new Blob(chunks,{type:type}),safeName(titleFor(state.card))+'_'+target+'s_'+formatTime(video.currentTime).replace(/:/g,'-')+'.'+ext);showNotice(e.clipSaved);if(wasPaused){try{video.pause();}catch(_){}}};
-    try{recorder.start(1000);}catch(_){state.clipRecorder=null;showNotice(e.clipUnsupported);return;}
-    if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(){});} showNotice(e.clipStarted); setRecordingBadge(true,0,target);
-    state.clipTimer=setInterval(function(){var elapsed=(Date.now()-startedAt)/1000;setRecordingBadge(true,Math.min(elapsed,target),target);if(elapsed>=target||video.ended){clearInterval(state.clipTimer);state.clipTimer=0;if(recorder.state!=='inactive'){try{recorder.stop();}catch(_){}}}},250);
+    recorder.onerror=function(){finish();showNotice(e.clipUnsupported);};
+    recorder.onstop=function(){
+      var cancelled=recorder.__igdcCancelled===true||state.clipCancelled;finish();state.clipCancelled=false;
+      if(cancelled)return;
+      if(!chunks.length){showNotice(e.clipUnsupported);return;}
+      var type=(chunks[0]&&chunks[0].type)||mime||'video/webm',ext=/mp4/i.test(type)?'mp4':'webm';
+      downloadBlob(new Blob(chunks,{type:type}),safeName(titleFor(state.card))+'_'+target+'s.'+ext);showNotice(e.clipSaved);
+      if(video&&wasPaused)try{video.pause();}catch(_){}
+    };
+    stream.getVideoTracks().forEach(function(track){track.addEventListener('ended',function(){if(recorder.state!=='inactive')try{recorder.stop();}catch(_){};},{once:true});});
+    try{recorder.start(1000);}catch(_){finish();showNotice(e.clipUnsupported);return;}
+    if(video&&video.paused){var p=video.play();if(p&&p.catch)p.catch(function(){});}
+    showNotice(e.clipStarted);setRecordingBadge(true,0,target);
+    state.clipTimer=setInterval(function(){
+      var elapsed=(Date.now()-startedAt)/1000;setRecordingBadge(true,Math.min(elapsed,target),target);
+      if(elapsed>=target||(video&&video.ended)){
+        clearInterval(state.clipTimer);state.clipTimer=0;
+        if(recorder.state!=='inactive')try{recorder.stop();}catch(_){}
+      }
+    },250);
+  }
+  function captureClip(seconds){
+    var e=extraCopy(),video=currentVideo();
+    if(state.clipRecorder&&state.clipRecorder.state!=='inactive'){showNotice(e.clipBusy);return;}
+    if(!global.MediaRecorder){showNotice(e.clipUnsupported);return;}
+    var capture=video&&(video.captureStream||video.mozCaptureStream);
+    if(capture){
+      try{var direct=capture.call(video);
+        if(direct&&direct.getVideoTracks&&direct.getVideoTracks().length){startClipRecorder(direct,seconds,video,false);return;}
+      }catch(_){/* fall through to the permission-based browser tab picker */}
+    }
+    // YouTube/provider iframe is not programmatically accessible. Use a user-
+    // approved browser-tab capture only; never steal media or suppress protections.
+    var requestedCard=state.card;
+    permissionSelectedTab().then(function(stream){
+      if(!state.open||state.card!==requestedCard){stopTracks(stream);return;}
+      if(stream)startClipRecorder(stream,seconds,null,true);else showNotice(e.clipUnsupported);
+    })
+      .catch(function(){showNotice(e.clipUnsupported);});
   }
   function togglePip() {
     var e=extraCopy(),video=currentVideo(); if(!video){showNotice(e.pipUnsupported);return;}

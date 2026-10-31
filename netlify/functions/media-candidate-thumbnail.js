@@ -9,7 +9,7 @@
 const MediaStore=require("./lib/media-candidate-store.v1");
 const SharedAdminAuth=require("./lib/global-slot-console-auth");
 
-const VERSION="media-candidate-thumbnail-v1.5.0-hero-source-hd-sharp";
+const VERSION="media-candidate-thumbnail-v1.5.1-hero-card-separated";
 const DEFAULT_BUCKET="media-candidate-thumbnails";
 const MAX_IMAGE_BYTES=1572864;
 const PROBE_TIMEOUT_MS=1600;
@@ -18,8 +18,8 @@ const FRONT_MIN_WIDTH=320;
 const FRONT_MIN_HEIGHT=180;
 const HERO_MIN_WIDTH=1280;
 const HERO_MIN_HEIGHT=720;
-const HERO_MIN_EDGE_MEAN=4.8;
-const HERO_MIN_EDGE_P90=15;
+const HERO_MIN_EDGE_MEAN=6.8;
+const HERO_MIN_EDGE_P90=19;
 
 function plain(value){return value&&typeof value==="object"&&!Array.isArray(value)?value:{};}
 function imageHeaders(){return{"accept":"image/*","user-agent":"IGDC-MARU-MediaThumbnail/1.0 (+https://igdc.info)"};}
@@ -258,16 +258,20 @@ async function uploadCapture(row,dataUrl,actor,meta){
   meta=plain(meta);
   const section=MediaStore.normalizeSection(row.section_key||plain(row.raw).sectionKey);
   const heroSection=section==="media-movie"||section==="media-drama";
+  const capturePurpose=MediaStore.lower(meta.capturePurpose||"card");
+  const heroCapture=heroSection&&capturePurpose==="hero";
   const sourceWidth=Number(meta.sourceWidth||0)||0,sourceHeight=Number(meta.sourceHeight||0)||0;
   const edgeMean=Number(meta.edgeMean||0)||0,edgeP90=Number(meta.edgeP90||0)||0,variance=Number(meta.variance||0)||0;
-  const sharp=meta.sharp===true||(edgeMean>=HERO_MIN_EDGE_MEAN||edgeP90>=HERO_MIN_EDGE_P90);
-  if(heroSection){
+  // Hero source verification must not block ordinary film/drama rail thumbnails:
+  // the existing administrator card-capture caller sends no hero measurements.
+  const sharp=edgeMean>=HERO_MIN_EDGE_MEAN&&edgeP90>=HERO_MIN_EDGE_P90;
+  if(heroCapture){
     if(sourceWidth<HERO_MIN_WIDTH||sourceHeight<HERO_MIN_HEIGHT){
       const error=new Error("히어로용 캡처는 실제 원본 영상이 최소 1280×720이어야 합니다. 저해상도 원본 확대 저장은 허용하지 않습니다.");
       error.statusCode=400;error.code="media_hero_capture_source_below_hd_floor";throw error;
     }
-    if(!sharp){
-      const error=new Error("히어로용 프레임이 충분히 선명하지 않습니다. 다른 구간 또는 다른 콘텐츠를 선택해 주세요.");
+    if(!sharp||image.width<HERO_MIN_WIDTH||image.height<HERO_MIN_HEIGHT){
+      const error=new Error("히어로용 프레임의 원본 해상도 또는 선명도가 부족합니다. 다른 장면을 선택해 주세요.");
       error.statusCode=400;error.code="media_hero_capture_not_sharp";throw error;
     }
   }
@@ -293,14 +297,14 @@ async function uploadCapture(row,dataUrl,actor,meta){
   const generation={
     version:VERSION,mode:"administrator_video_frame",mime:image.mime,bytes:image.buffer.length,
     width:image.width,height:image.height,sourceWidth,sourceHeight,edgeMean,edgeP90,variance,sharp,
-    capturePurpose:MediaStore.text(meta.capturePurpose||"card"),
+    capturePurpose,
     frontReady:image.width>=FRONT_MIN_WIDTH&&image.height>=FRONT_MIN_HEIGHT,
-    heroReady:heroSection&&sourceWidth>=HERO_MIN_WIDTH&&sourceHeight>=HERO_MIN_HEIGHT&&sharp&&image.width>=HERO_MIN_WIDTH&&image.height>=HERO_MIN_HEIGHT,
+    heroReady:heroCapture&&sourceWidth>=HERO_MIN_WIDTH&&sourceHeight>=HERO_MIN_HEIGHT&&sharp&&image.width>=HERO_MIN_WIDTH&&image.height>=HERO_MIN_HEIGHT,
     bucket,objectName
   };
   // Keep a good card thumbnail in place. Hero captures are stored separately so
   // the large representative image never becomes the rail thumbnail by accident.
-  if(heroSection&&MediaStore.normalizeUrl(row.thumb_url))await storeHeroResolved(row,publicUrl,generation,actor);
+  if(heroCapture)await storeHeroResolved(row,publicUrl,generation,actor);
   else await storeResolved(row,publicUrl,generation,actor);
   return publicUrl;
 }
