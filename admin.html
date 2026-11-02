@@ -834,24 +834,24 @@
   </div>
 </section>
 <!-- Windows downloads: independent read-only requests dashboard. No changes to revenue. -->
-<section id="maru-win-download-stats" aria-label="MARU Windows 프로그램 다운로드 현황"
+<section id="maru-win-download-stats" aria-label="MARU / IGDC 프로그램 다운로드 현황"
   style="background:#f8fbff;border:1px solid #b0d4f0;border-radius:8px;padding:18px;margin-top:10px;box-sizing:border-box;text-align:left;">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
-    <h3 style="margin:0;font-size:1.05rem;color:#004080;">MARU Windows 프로그램 다운로드 현황</h3>
+    <h3 style="margin:0;font-size:1.05rem;color:#004080;">MARU / IGDC 프로그램 다운로드 현황</h3>
     <button id="maru-win-download-refresh" type="button" style="padding:7px 14px;border:1px solid #8eb8da;background:#fff;border-radius:6px;cursor:pointer;">새로고침</button>
   </div>
   <div style="font-size:12px;color:#546c83;margin:0 0 10px;">IGDC 웹사이트에서 누른 다운로드 요청 수만 집계합니다. 실제 다운로드 완료·설치·실행·고유 사용자 수가 아닙니다.</div>
   <div style="overflow-x:auto;">
     <table id="maru-win-download-table" style="width:100%;border-collapse:collapse;min-width:620px;background:#fff;">
       <thead><tr>
-        <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">Windows 프로그램</th>
+        <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">프로그램</th>
         <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">오늘</th>
         <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">이번 주</th>
         <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">이번 달</th>
         <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">올해</th>
         <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">누적</th>
       </tr></thead>
-      <tbody>
+      <tbody id="maru-win-download-rows">
         <tr data-win-program="maru_windows_player"><th style="border:1px solid #c9d9e8;padding:9px;text-align:left;">MARU Media Player (Windows)</th><td data-col="day">—</td><td data-col="week">—</td><td data-col="month">—</td><td data-col="year">—</td><td data-col="total">—</td></tr>
         <tr data-win-program="maru_capture_windows"><th style="border:1px solid #c9d9e8;padding:9px;text-align:left;">MARU Capture (Windows)</th><td data-col="day">—</td><td data-col="week">—</td><td data-col="month">—</td><td data-col="year">—</td><td data-col="total">—</td></tr>
       </tbody>
@@ -860,9 +860,54 @@
   <style>#maru-win-download-table tbody td{border:1px solid #c9d9e8;padding:9px;text-align:center;font-variant-numeric:tabular-nums}</style>
   <div style="font-size:12px;color:#546c83;margin:12px 0 4px;">최근 30일 국가별 다운로드 요청</div>
   <div id="maru-win-download-countries" style="font-size:12px;line-height:1.8;">집계 대기</div>
+  <details id="maru-win-detail-panel" style="margin-top:14px;border:1px solid #c5d9ec;background:#fff;border-radius:8px;padding:10px 12px;">
+    <summary style="cursor:pointer;font-weight:700;color:#004080;padding:5px 2px;">다운로드 상세 통계 보기 · 국가별 / 기간별 / 프로그램별</summary>
+    <div style="font-size:12px;color:#52677d;margin:10px 0;">실제 설치·고유 사용자·실제 다운로드 완료 통계가 아니라 IGDC 사이트 다운로드 버튼 요청 통계입니다. 국가·운영체제는 접속 정보 기준이며 미확인 값이 있을 수 있습니다.</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <label for="maru-win-period">조회 기간</label>
+      <select id="maru-win-period" style="padding:7px;border:1px solid #b9cfe4;border-radius:6px;"><option value="7d">최근 7일</option><option value="30d" selected>최근 30일</option><option value="90d">최근 90일</option><option value="365d">최근 1년</option><option value="all">전체 누적</option></select>
+      <label for="maru-win-program-filter">프로그램</label>
+      <select id="maru-win-program-filter" style="padding:7px;max-width:240px;border:1px solid #b9cfe4;border-radius:6px;"><option value="all">전체 프로그램</option></select>
+      <button id="maru-win-detail-refresh" type="button" style="padding:7px 12px;border:1px solid #b9cfe4;border-radius:6px;background:#eff7ff;cursor:pointer;">통계 조회</button>
+      <button id="maru-win-export" type="button" disabled style="padding:7px 12px;border:1px solid #b9cfe4;border-radius:6px;background:#eff7ff;cursor:pointer;">CSV 저장</button>
+    </div>
+    <div style="display:flex;gap:15px;align-items:baseline;flex-wrap:wrap;margin:12px 0;">
+      <strong>선택 기간 다운로드 요청 <span id="maru-win-detail-total">—</span></strong>
+      <small id="maru-win-detail-asof" style="color:#52677d;">집계 대기</small>
+    </div>
+    <div id="maru-win-download-chart" style="border:1px solid #dce6ef;padding:8px;border-radius:8px;overflow-x:auto;background:#fbfdff;" aria-label="기간별 다운로드 요청 추이 그래프"></div>
+    <div class="maru-win-detail-grids">
+      <section><h4>국가별 다운로드 요청 순위</h4><div class="maru-win-table-scroll"><table><thead><tr><th>순위</th><th>국가</th><th>요청</th></tr></thead><tbody id="maru-win-detail-country"></tbody></table></div></section>
+      <section><h4>운영체제별 요청</h4><div class="maru-win-table-scroll"><table><thead><tr><th>순위</th><th>운영체제</th><th>요청</th></tr></thead><tbody id="maru-win-detail-device"></tbody></table></div></section>
+      <section><h4>프로그램별 요청</h4><div class="maru-win-table-scroll"><table><thead><tr><th>순위</th><th>프로그램</th><th>요청</th></tr></thead><tbody id="maru-win-detail-program"></tbody></table></div></section>
+    </div>
+    <details style="border-top:1px solid #d9e6f2;margin-top:16px;padding:12px 0;">
+      <summary style="cursor:pointer;font-weight:700;color:#004080;">향후 프로그램 등록 · 공식 다운로드 링크 추가</summary>
+      <p style="color:#52677d;font-size:12px;">추가 프로그램 파일을 공식 GitHub Releases에 업로드한 뒤 등록하세요. 기존 두 프로그램과 다운로드 주소는 수정되지 않습니다. 등록 후 다운로드 페이지에 새 항목이 자동으로 표시됩니다.</p>
+      <form id="maru-win-program-add" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <input id="maru-win-new-id" type="text" required maxlength="64" pattern="[a-z][a-z0-9_]{2,63}" placeholder="영문 ID (예: maru_creator_studio)" style="padding:8px;border:1px solid #b9cfe4;border-radius:6px;min-width:210px;flex:1;">
+        <input id="maru-win-new-name" type="text" required maxlength="100" placeholder="프로그램 표시 이름" style="padding:8px;border:1px solid #b9cfe4;border-radius:6px;min-width:200px;flex:1;">
+        <input id="maru-win-new-url" type="url" required maxlength="900" placeholder="공식 GitHub Release 설치파일 URL" style="padding:8px;border:1px solid #b9cfe4;border-radius:6px;min-width:290px;flex:2;">
+        <button id="maru-win-register" type="submit" style="padding:8px 14px;border:1px solid #8eb8da;background:#edf6ff;border-radius:6px;cursor:pointer;">프로그램 등록</button>
+      </form>
+    </details>
+    <div id="maru-win-detail-status" role="status" style="color:#52677d;font-size:12px;margin-top:12px;">상세 통계를 열면 데이터를 불러옵니다.</div>
+  </details>
+  <style>
+    #maru-win-download-stats .maru-win-country-chip{display:inline-block;padding:4px 8px;background:#edf5fc;border:1px solid #cee0ee;border-radius:6px;margin:3px}
+    #maru-win-download-rows th{text-align:left;border:1px solid #c9d9e8;padding:9px}
+    #maru-win-download-stats button:disabled{opacity:.55;cursor:default}
+    #maru-win-download-chart svg{display:block;width:100%;height:auto;max-height:260px}
+    #maru-win-download-stats .maru-win-detail-grids{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:14px}
+    #maru-win-download-stats .maru-win-detail-grids h4{margin:5px 0 8px;color:#004080;font-size:13px}
+    #maru-win-download-stats .maru-win-table-scroll{max-height:250px;overflow:auto}
+    #maru-win-download-stats .maru-win-table-scroll table{width:100%;border-collapse:collapse;font-size:12px}
+    #maru-win-download-stats .maru-win-table-scroll th,#maru-win-download-stats .maru-win-table-scroll td{padding:7px;border:1px solid #d7e4ef;text-align:left}
+    #maru-win-download-stats .maru-win-table-scroll th{background:#edf5fc;position:sticky;top:0}
+  </style>
   <div id="maru-win-download-status" role="status" style="font-size:12px;color:#476783;margin-top:10px;">집계 대기</div>
 </section>
-<script defer src="/assets/js/admin-maru-download-stats.js?v=20261101-1"></script>
+<script defer src="/assets/js/admin-maru-download-stats.js?v=20261102-analytics-v2"></script>
 <script id="maru-player-net-profit-script">
 (function(){
   'use strict';

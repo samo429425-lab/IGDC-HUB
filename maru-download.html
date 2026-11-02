@@ -131,7 +131,8 @@ document.getElementById('guideBtn').addEventListener('click',function(ev){
 });
 </script>
 
-<!-- Minimal, non-blocking request analytics; existing GitHub hrefs are unchanged. -->
+<!-- Official program registry: the existing download links remain unchanged.
+     Approved future programs appear below without modifying this page again. -->
 <script id="maru-windows-download-click-tracking">
 (function(){
   'use strict';
@@ -141,6 +142,7 @@ document.getElementById('guideBtn').addEventListener('click',function(ev){
     if(!session){session=(window.crypto&&crypto.randomUUID?crypto.randomUUID():String(Date.now())+'-'+String(Math.random()).slice(2));sessionStorage.setItem('maru.download.stats.session',session);}
   }catch(_e){session=String(Date.now())+'-'+String(Math.random()).slice(2);}
   function log(program){
+    if(!/^[a-z][a-z0-9_]{2,63}$/.test(program))return;
     try{
       var payload=JSON.stringify({event:'download_click',program:program,session:session});
       var blob=new Blob([payload],{type:'text/plain;charset=UTF-8'});
@@ -148,10 +150,44 @@ document.getElementById('guideBtn').addEventListener('click',function(ev){
       if(window.fetch)fetch(endpoint,{method:'POST',body:payload,headers:{'Content-Type':'text/plain;charset=UTF-8'},credentials:'same-origin',keepalive:true}).catch(function(){});
     }catch(_e){}
   }
-  [['downloadBtn','maru_windows_player'],['captureBtn','maru_capture_windows']].forEach(function(pair){
-    var el=document.getElementById(pair[0]);
-    if(el)el.addEventListener('click',function(){log(pair[1]);},{passive:true});
-  });
+  var player=document.getElementById('downloadBtn'),capture=document.getElementById('captureBtn');
+  if(player)player.setAttribute('data-maru-download-program','maru_windows_player');
+  if(capture)capture.setAttribute('data-maru-download-program','maru_capture_windows');
+  document.addEventListener('click',function(ev){
+    var a=ev.target&&ev.target.closest&&ev.target.closest('a[data-maru-download-program]');
+    if(a)log(a.getAttribute('data-maru-download-program')||'');
+  },{passive:true});
+  function officialUrl(value){
+    try{var u=new URL(value);return u.protocol==='https:'&&!u.search&&!u.hash&&!u.username&&!u.password&&
+      ((u.hostname==='github.com'&&/^\/samo429425-lab\/[A-Za-z0-9_.-]+\/releases\/(?:download\/|latest\/download\/)/i.test(u.pathname))||
+        ((u.hostname==='igdcglobal.com'||u.hostname==='www.igdcglobal.com')&&/^\/(?:downloads|assets\/downloads)\//i.test(u.pathname)));
+    }catch(_){return false;}
+  }
+  function showFuture(list){
+    var host=document.querySelector('#downloadsTitle');
+    var area=host&&host.closest('article');
+    var before=area&&area.querySelector('.policyInside');
+    if(!area||!before)return;
+    var old=document.getElementById('maru-other-programs');if(old)old.remove();
+    var section=document.createElement('div');section.id='maru-other-programs';
+    var downloadLabel=(player&&player.textContent||'Download').trim()||'Download';
+    var seen=new Set(['maru_windows_player','maru_capture_windows']);
+    (Array.isArray(list)?list:[]).forEach(function(p){
+      if(!p||seen.has(p.program)||!p.url||!officialUrl(p.url)||!/^[a-z][a-z0-9_]{2,63}$/.test(p.program))return;
+      seen.add(p.program);
+      var item=document.createElement('div');item.className='downloadItem';
+      var detail=document.createElement('div'),title=document.createElement('b'),hint=document.createElement('span');
+      title.textContent=p.name||p.program;hint.textContent=(document.documentElement.lang==='ko'?'IGDC 공식 프로그램':'IGDC official program');detail.appendChild(title);detail.appendChild(hint);
+      var link=document.createElement('a');link.className='btn';link.textContent=downloadLabel;link.href=p.url;
+      link.target='_blank';link.rel='noopener noreferrer';link.setAttribute('data-maru-download-program',p.program);
+      item.appendChild(detail);item.appendChild(link);section.appendChild(item);
+    });
+    if(section.children.length)area.insertBefore(section,before);
+  }
+  if(window.fetch)fetch(endpoint+'?view=programs',{cache:'no-store',credentials:'same-origin'})
+    .then(function(res){if(!res.ok)throw new Error('registry');return res.json();})
+    .then(function(data){if(data&&data.ok)showFuture(data.programs);})
+    .catch(function(){/* Existing download links always remain available. */});
 })();
 </script>
 
