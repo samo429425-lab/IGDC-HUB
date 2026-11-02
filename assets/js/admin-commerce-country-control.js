@@ -1181,8 +1181,13 @@
     var frontSelect=mode==='section'&&row.id?'<div class="product-card-front-select"><label class="product-front-select-label"><input type="checkbox" data-product-front-select="1" data-product-front-section="'+esc(groupKey)+'" value="'+esc(row.id)+'" '+(frontSelectedProducts[text(row.id)]===true?'checked ':'')+'> 이 상품 선택</label></div>':'',candidateSelect=mode==='candidate'&&row.id?'<div class="product-card-front-select"><label class="product-front-select-label"><input type="checkbox" data-candidate-select="'+esc(groupKey)+'" value="'+esc(row.id)+'" '+(candidateSelectedProducts[text(row.id)]===true?'checked ':'')+'> 이 후보 선택</label></div>':'',latestKey=latestProductKey(row),latestSelect=mode==='latest'&&latestKey?'<div class="product-card-front-select"><label class="product-front-select-label"><input type="checkbox" data-latest-queue-select="1" value="'+esc(latestKey)+'" '+(latestSelectedProducts[latestKey]===true?'checked ':'')+'> 이 상품 선택</label></div>':'';
     var directDelete=mode==='latest'&&latestKey?'<button type="button" class="secondary" data-latest-delete-one="'+esc(latestKey)+'">이 상품 목록에서 삭제</button> <button type="button" class="danger" data-latest-purge-one="'+esc(latestKey)+'">이 상품 영구 제외</button>':((mode==='candidate'||mode==='section')&&row.id?'<button type="button" class="secondary" data-candidate-delete-one="'+esc(frontCandidateLedgerId(row))+'">이 후보 목록에서 삭제</button>':'');
     if(directDelete)actions+=(actions?' ':'')+directDelete;
+    // Explain the exact private-vs-durable placement discrepancy on each
+    // repair card before the administrator decides whether any write is safe.
+    var relation=row&&row.ledgerConsistency||{},actualRelationKeys=Array.isArray(relation.assignmentSectionKeys)?relation.assignmentSectionKeys:[],relationIssues=Array.isArray(relation.issues)?relation.issues:[];
+    var relationIssueLabels={placement_without_active_assignment:'실제 배정 기록 없음',multiple_active_section_assignments:'복수 섹션 중복 배정',placement_relation_section_mismatch:'관리자 지정과 실제 배정 충돌',assignment_without_slot_candidate_decision:'후보 상태와 실제 배정 불일치'};
+    var repairRelationNote=groupKey==='assignment_repair'?'<div class="small" style="padding:6px 8px;border:1px solid #7d99a9;border-radius:5px;margin:7px 0">관리자 지정: <strong>'+esc(sectionLabel(relation.payloadSectionKey||productPlacementKey(row)))+'</strong> · 실제 배정: <strong>'+esc(actualRelationKeys.length?actualRelationKeys.map(sectionLabel).join(', '):'없음')+'</strong> · 점검 사유: '+esc(relationIssues.map(function(code){return relationIssueLabels[code]||code;}).join(', ')||'관계 재검증 필요')+'</div>':'';
     var researchReferenceNote=groupKey==='quality_review'?'<div class="small">검토 사유: '+esc(productImageReviewLabel(verifiedProductImageReviewIssue(row)))+' · 현재 섹션 '+esc(sectionLabel(productPlacementKey(row)))+'</div>':(groupKey==='latest_research'?'<div class="small mono" style="overflow-wrap:anywhere">원본 조사 URL: '+esc(reviewUrlLabel(row.productUrl||row.url||row.originalOfficialProductUrl))+'</div>'+(productUrl?'':'<div class="small">상품 상세 URL 검증 필요 · 업체/목록 페이지는 상품 링크로 연결하지 않습니다.</div>'):'');
-    return'<article class="product-card" data-review-anchor="product-'+esc(row.id||productUrl||title)+'">'+candidateSelect+frontSelect+latestSelect+latestDuplicateNote+'<div class="product-image-frame">'+image+'</div><div class="product-body"><strong class="product-title">'+(productUrl?externalReviewAnchor(productUrl,title,'product-title-link'):esc(title))+'</strong><div class="product-price"><strong>'+esc(priceDisplay)+'</strong></div><div class="small">판매·결제·배송 책임 업체: '+esc(row.supplierName||'-')+'</div><div class="small"><span class="pill '+(ready?'good':'warn')+'">'+esc(row.researchStatus||'미확인')+'</span> <span class="pill info">'+esc(decisionLabel)+'</span>'+(mode==='latest'&&verifiedReviewUi.latest[latestKey]==='verified'?' <span class="pill good">정상 검증 완료 · 복귀 대기</span>':'')+(priority?' <span class="pill good">'+esc(priority)+'</span>':'')+(row.productEvidenceReviewRequired===true?' <span class="pill warn">상세상품 확인 필요 · 기존 섹션 보존</span>':'')+(verifiedProductImageReviewIssue(row)?' <span class="pill warn">대표사진 검토: '+esc(productImageReviewLabel(verifiedProductImageReviewIssue(row)))+' · 보류 처리 가능</span>':'')+'</div>'+settlementHtml+frontPublicationSummary(row)+revenueRankControl+placementHtml+'<div class="product-links">'+(links.join('')||'<span class="small">확인 가능한 외부 링크가 없습니다.</span>')+'</div><div class="small mono" style="overflow-wrap:anywhere">'+esc(productUrl||(productAccessChallengeUrl(row.productUrl||row.url)?'접근 제한 인증 주소 격리 · 원본 상세주소 복구 필요':'상품 원본 주소 확인 필요'))+'</div>'+researchReferenceNote+'<div class="product-actions">'+actions+singleFront+'</div></div></article>';
+    return'<article class="product-card" data-review-anchor="product-'+esc(row.id||productUrl||title)+'">'+candidateSelect+frontSelect+latestSelect+latestDuplicateNote+'<div class="product-image-frame">'+image+'</div><div class="product-body"><strong class="product-title">'+(productUrl?externalReviewAnchor(productUrl,title,'product-title-link'):esc(title))+'</strong><div class="product-price"><strong>'+esc(priceDisplay)+'</strong></div><div class="small">판매·결제·배송 책임 업체: '+esc(row.supplierName||'-')+'</div><div class="small"><span class="pill '+(ready?'good':'warn')+'">'+esc(row.researchStatus||'미확인')+'</span> <span class="pill info">'+esc(decisionLabel)+'</span>'+(mode==='latest'&&verifiedReviewUi.latest[latestKey]==='verified'?' <span class="pill good">정상 검증 완료 · 복귀 대기</span>':'')+(priority?' <span class="pill good">'+esc(priority)+'</span>':'')+(row.productEvidenceReviewRequired===true?' <span class="pill warn">상세상품 확인 필요 · 기존 섹션 보존</span>':'')+(verifiedProductImageReviewIssue(row)?' <span class="pill warn">대표사진 검토: '+esc(productImageReviewLabel(verifiedProductImageReviewIssue(row)))+' · 보류 처리 가능</span>':'')+'</div>'+settlementHtml+frontPublicationSummary(row)+revenueRankControl+placementHtml+'<div class="product-links">'+(links.join('')||'<span class="small">확인 가능한 외부 링크가 없습니다.</span>')+'</div><div class="small mono" style="overflow-wrap:anywhere">'+esc(productUrl||(productAccessChallengeUrl(row.productUrl||row.url)?'접근 제한 인증 주소 격리 · 원본 상세주소 복구 필요':'상품 원본 주소 확인 필요'))+'</div>'+repairRelationNote+researchReferenceNote+'<div class="product-actions">'+actions+singleFront+'</div></div></article>';
   }
   function productGroupDetails(key,label,rows,kind){
     var count=rows.length,validSection=!!PRODUCT_SECTION_MAP[key],frontCount=validSection?currentFrontCount(key):0,occupancy=count,frontCapacity=frontSlotCapacity(key),capacity=validSection?'<span class="product-section-capacity '+(occupancy>frontCapacity?'warn':'')+'">'+esc(sectionOccupancyText(key,count))+'</span>':'<span class="small">'+count+'건'+(frontCount>0?' · 실상품 '+frontCount+'건':'')+'</span>';
@@ -1750,6 +1755,112 @@
     return result;
   }
 
+  // The repair pool is a read-only projection of the mismatch between the
+  // authoritative administrator decision and durable gslot_slot_assignments.
+  // An existing approvedPlacement is NOT a successful repair by itself.
+  async function reconcileSelectedRepairPoolCandidates(selectedUiIds,manualKey){
+    var originalScope=scopeKey(),country=selectedCountry,region=selectedSubdivision||'NATIONWIDE';
+    var allKeys=PRODUCT_SECTIONS.map(function(s){return s.key;}),allowed=new Set(allKeys);
+    var selectedRows=candidateGroupRows('assignment_repair').filter(function(row){return selectedUiIds.indexOf(text(row.id))>=0;});
+    var candidateIds=Array.from(new Set(selectedRows.map(frontCandidateLedgerId).filter(Boolean)));
+    var messages=[],changed=0,verified=0,unresolved=[];
+    if(!latestOverviewLedgerComplete)throw new Error('상품 후보 원장 전체 조회가 확인되지 않았습니다. 새로고침 후 다시 실행하세요.');
+    if(!candidateIds.length)throw new Error('선택 상품의 실제 원장 ID를 찾지 못했습니다.');
+    function ensureScope(){if(scopeKey()!==originalScope)throw new Error('국가·지역이 변경되어 복구를 중단했습니다.');}
+    function progress(message){setCandidateBulkState('assignment_repair',message,'working');}
+    // A selected new section is a deliberate administrator decision, not an
+    // invitation to let AI silently reinterpret a previously approved section.
+    var manualChanges=manualKey?selectedRows.filter(function(row){return productPlacementKey(row)!==manualKey;}):[];
+    if(manualChanges.length){
+      var summary=manualChanges.slice(0,3).map(function(row){return text(row.productName||row.title||row.id)+' ('+sectionLabel(productPlacementKey(row))+' → '+sectionLabel(manualKey)+')';}).join('\n');
+      if(!window.confirm('선택 '+manualChanges.length+'건은 기존 관리자 확정 배치와 선택 섹션이 다릅니다.\n기존 확정 배치를 변경하는 별도 관리자 수동 이동으로 처리하시겠습니까?\n공개 프론트는 변경하지 않으며, 공개 상품은 서버 보호 규칙으로 거부될 수 있습니다.\n\n'+summary))return {cancelled:true};
+      ensureScope();progress('관리자 지정 섹션 이동 · '+manualChanges.length+'건 · 저장 및 검증 중');
+      var moved=await authorityCandidateAction('slot_candidate',manualChanges.map(frontCandidateLedgerId),manualKey,{source:'administrator',chunkSize:1});
+      changed+=Number(moved&&moved.processed||0);
+      (moved&&moved.failures||[]).forEach(function(f){unresolved.push(text(f.candidateId||f.id)+' : '+text(f.error||f.reason));});
+    }
+    ensureScope();
+    // Only rows without any confirmed placement may use the old additive
+    // PSOM-recovery endpoint. It validates product evidence, but does not
+    // create missing durable assignments: authority must finish that part.
+    if(!manualKey){
+      var empty=selectedRows.filter(function(row){return !productPlacementKey(row);}).map(frontCandidateLedgerId);
+      if(empty.length){
+        progress('관리자 확정 섹션이 없는 '+empty.length+'건 · PSOM 기록 검증 중');
+        var restored=await repairMissingCandidatePlacements(empty,{onProgress:function(_stage,done,total,bad){progress('PSOM 배치 기록 확인 '+done+'/'+total+'건 · 검토 '+bad+'건');}});
+        (restored.errors||[]).forEach(function(e){unresolved.push(text(e));});
+      }
+    }
+    ensureScope();
+    // Atomic readback: never use an incomplete list to decide that a row moved.
+    var before=await refreshCandidateLedgerProducts({atomicLedgerRefresh:true,frontSyncPreflight:true,pageSize:125,preserveResearchReport:true});
+    if(!before||!Array.isArray(before.products)||!latestOverviewLedgerComplete)throw new Error('복구 후 관리자 원장 전체 재조회 실패');
+    var liveById={};before.products.forEach(function(row){liveById[frontCandidateLedgerId(row)]=row;});
+    // Close the additive legacy recovery with the existing authoritative writer
+    // only for originally unplaced, verified PSOM candidates.
+    if(!manualKey){
+      var unfinished=selectedRows.filter(function(row){return !productPlacementKey(row);}).map(frontCandidateLedgerId).filter(function(id){var row=liveById[id];return row&&row.assignmentRepairRequired===true&&allowed.has(productPlacementKey(row));});
+      for(var z=0;z<unfinished.length;z++){
+        ensureScope();var uid=unfinished[z],destination=productPlacementKey(liveById[uid]);
+        progress('검증된 신규 배치 관계 저장 '+(z+1)+'/'+unfinished.length+' · '+sectionLabel(destination));
+        var completed=await authorityCandidateAction('slot_candidate',[uid],destination,{source:'administrator',chunkSize:1});
+        changed+=Number(completed&&completed.processed||0);
+        (completed&&completed.failures||[]).forEach(function(f){unresolved.push(text(f.candidateId||uid)+' : '+text(f.error||f.reason));});
+      }
+      if(unfinished.length){
+        before=await refreshCandidateLedgerProducts({atomicLedgerRefresh:true,frontSyncPreflight:true,pageSize:125,preserveResearchReport:true});
+        liveById={};before.products.forEach(function(row){liveById[frontCandidateLedgerId(row)]=row;});
+      }
+    }
+    ensureScope();
+    var groups={},still=[];
+    candidateIds.forEach(function(id){
+      var row=liveById[id];
+      if(!row){unresolved.push(id+' : 원장 재조회에서 상품 확인 불가');return;}
+      if(row.assignmentRepairRequired!==true){verified++;return;}
+      var key=productPlacementKey(row);
+      if(!allowed.has(key)){unresolved.push(id+' : 관리자 확정 섹션 없음 · 수동 확인 필요');return;}
+      if(manualKey&&key!==manualKey){unresolved.push(id+' : 선택한 섹션과 관리자 확정 섹션이 다름');return;}
+      (groups[key]||(groups[key]=[])).push(id);still.push(id);
+    });
+    var eligible={},diagnosed={};
+    for(var k=0;k<allKeys.length;k++){
+      var key=allKeys[k],scopeIds=groups[key]||[];if(!scopeIds.length)continue;
+      ensureScope();progress('실제 관계 원장 대조 '+(k+1)+'/'+allKeys.length+' · '+sectionLabel(key));
+      var result=await api(SECTION_LEDGER_AUDIT,'audit','POST',{}, {action:'audit',countryCode:country,subdivisionCode:region,sectionKey:key,sectionKeys:allKeys,expectedCandidateIds:scopeIds},60000);
+      if(!result||result.ok!==true||!result.result||result.result.sectionKey!==key)throw new Error(sectionLabel(key)+' 배정 관계 점검이 완전하지 않습니다. 변경을 중단합니다.');
+      (result.result.issues||[]).forEach(function(item){var id=text(item.candidateId);if(scopeIds.indexOf(id)<0)return;diagnosed[id]=item;if(item.canRepair===true&&item.desiredKey===key)eligible[id]=item;else unresolved.push(id+' : '+text(item.status)+' · 관리자 '+sectionLabel(item.desiredKey)+' / 실제 '+((item.actualKeys||[]).map(sectionLabel).join(', ')||'없음')+' · 수동 확인 필요');});
+      scopeIds.forEach(function(id){if(!diagnosed[id])unresolved.push(id+' : 관계 점검 결과 확인 필요');});
+    }
+    var repairs=Object.keys(eligible).map(function(id){return eligible[id];});
+    if(repairs.length){
+      if(window.confirm('배치 관계를 대조한 결과 관리자 확정 배치가 명확한 '+repairs.length+'건을 복구할 수 있습니다.\n기존 상품·관리자 고정·타 국가 배치를 보호하고, 각 건을 저장 직전 다시 검사합니다.\n프론트 공개는 하지 않습니다. 복구하시겠습니까?')){
+        for(var i=0;i<repairs.length;i++){
+          ensureScope();var item=repairs[i];progress('확정 배치 관계 복구 '+(i+1)+'/'+repairs.length+' · '+text(item.candidateId));
+          try{
+            var reply=await api(SECTION_LEDGER_AUDIT,'repair','POST',{}, {action:'repair',countryCode:country,subdivisionCode:region,sectionKeys:allKeys,candidateId:item.candidateId,desiredKey:item.desiredKey,expectedUpdatedAt:item.updatedAt,confirmation:'ADMIN_RECONCILE_CONFIRMED'},60000);
+            if(!reply||!reply.result||reply.result.authorityVerified!==true)throw new Error('저장 확인 실패');
+            changed++;
+          }catch(error){unresolved.push(item.candidateId+' : '+text(error&&error.message||error));}
+        }
+      }else messages.push('정합성 관계 자동 복구는 실행하지 않음');
+    }
+    ensureScope();progress('최종 원장 전체 재조회 · 정상 배정 여부 확인 중');
+    var finalData=await refreshCandidateLedgerProducts({atomicLedgerRefresh:true,frontSyncPreflight:true,pageSize:125,preserveResearchReport:true});
+    if(!finalData||!Array.isArray(finalData.products)||!latestOverviewLedgerComplete)throw new Error('최종 원장 재조회 불완전 · 변경 결과 확인 필요');
+    var finalMap={};finalData.products.forEach(function(row){finalMap[frontCandidateLedgerId(row)]=row;});
+    var repairedIds=[];candidateIds.forEach(function(id){
+      var row=finalMap[id];if(row&&row.assignmentRepairRequired!==true&&allowed.has(assignedSectionKey(row))&&(!manualKey||assignedSectionKey(row)===manualKey))repairedIds.push(id);
+      else if(!unresolved.some(function(v){return v.indexOf(id)>=0;}))unresolved.push(id+' : 실제 배정 관계가 아직 일치하지 않음');
+    });
+    var remaining=new Set(candidateIds.filter(function(id){return repairedIds.indexOf(id)<0;}));
+    // Do not report an earlier transient refusal as a final problem if the
+    // canonical relation was repaired by a later safe step.
+    unresolved=unresolved.filter(function(reason){return !repairedIds.some(function(id){return reason.indexOf(id+' : ')===0;});});
+    candidateIds.forEach(function(id){if(!remaining.has(id)){selectedRows.forEach(function(row){if(frontCandidateLedgerId(row)===id)delete candidateSelectedProducts[text(row.id)];});}});
+    saveReviewSnapshot();renderProducts(productRows);
+    return {count:candidateIds.length,verified:repairedIds.length,unresolved:unresolved.length,errors:unresolved.slice(0,4),messages:messages,changed:changed};
+  }
   async function runCandidateBulkAction(groupKey,action){
     var ids=selectedCandidateIds(groupKey);if(!ids.length){setCandidateBulkState(groupKey,'먼저 처리할 후보를 선택해 주세요.','warn');show('먼저 처리할 후보를 선택해 주세요.','warn');return;}
     if(candidateBulkActionActive[groupKey]===true)return;
@@ -1759,6 +1870,16 @@
     candidateBulkActionActive[groupKey]=true;syncCandidateSelectionControls(groupKey);setCandidateBulkState(groupKey,'처리 준비 · 0/'+ids.length+'건','working');
     var succeeded=0,failed=0,confirmedSuccessIds=[];
     try{
+      if(groupKey==='assignment_repair'&&(action==='ai'||action==='place')){
+        var repaired=await reconcileSelectedRepairPoolCandidates(ids,placement);
+        if(repaired.cancelled===true){setCandidateBulkState(groupKey,'관리자 수동 배치 변경 취소 · 원장 변경 없음','warn');return;}
+        var message='배정 관계 최종 검증 '+repaired.verified+'/'+repaired.count+'건 · 추가 확인 '+(repaired.count-repaired.verified)+'건';
+        if(repaired.errors.length)message+=' · 원인 '+repaired.errors.slice(0,2).join(' / ');
+        if(repaired.messages.length)message+=' · '+repaired.messages.join(' / ');
+        setCandidateBulkState(groupKey,message,repaired.count===repaired.verified?'ok':'warn');
+        show(message+' · 프론트 공개는 변경하지 않았습니다.',repaired.count===repaired.verified?'ok':'warn');
+        return;
+      }
       if(action==='ai'){
         var aiResult=groupKey==='assignment_repair'
           ?await repairMissingCandidatePlacements(ids,{onProgress:function(stage,done,total,failCount){setCandidateBulkState(groupKey,'배정 누락 복구 '+done+'/'+total+'건'+(failCount?' · 확인 필요 '+failCount+'건':''),failCount?'warn':'working');}})
