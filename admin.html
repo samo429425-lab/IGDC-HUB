@@ -833,6 +833,36 @@
     </table>
   </div>
 </section>
+<!-- Windows downloads: independent read-only requests dashboard. No changes to revenue. -->
+<section id="maru-win-download-stats" aria-label="MARU Windows 프로그램 다운로드 현황"
+  style="background:#f8fbff;border:1px solid #b0d4f0;border-radius:8px;padding:18px;margin-top:10px;box-sizing:border-box;text-align:left;">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+    <h3 style="margin:0;font-size:1.05rem;color:#004080;">MARU Windows 프로그램 다운로드 현황</h3>
+    <button id="maru-win-download-refresh" type="button" style="padding:7px 14px;border:1px solid #8eb8da;background:#fff;border-radius:6px;cursor:pointer;">새로고침</button>
+  </div>
+  <div style="font-size:12px;color:#546c83;margin:0 0 10px;">IGDC 웹사이트에서 누른 다운로드 요청 수만 집계합니다. 실제 다운로드 완료·설치·실행·고유 사용자 수가 아닙니다.</div>
+  <div style="overflow-x:auto;">
+    <table id="maru-win-download-table" style="width:100%;border-collapse:collapse;min-width:620px;background:#fff;">
+      <thead><tr>
+        <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">Windows 프로그램</th>
+        <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">오늘</th>
+        <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">이번 주</th>
+        <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">이번 달</th>
+        <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">올해</th>
+        <th style="border:1px solid #c9d9e8;padding:9px;background:#edf5fc;">누적</th>
+      </tr></thead>
+      <tbody>
+        <tr data-win-program="maru_windows_player"><th style="border:1px solid #c9d9e8;padding:9px;text-align:left;">MARU Media Player (Windows)</th><td data-col="day">—</td><td data-col="week">—</td><td data-col="month">—</td><td data-col="year">—</td><td data-col="total">—</td></tr>
+        <tr data-win-program="maru_capture_windows"><th style="border:1px solid #c9d9e8;padding:9px;text-align:left;">MARU Capture (Windows)</th><td data-col="day">—</td><td data-col="week">—</td><td data-col="month">—</td><td data-col="year">—</td><td data-col="total">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <style>#maru-win-download-table tbody td{border:1px solid #c9d9e8;padding:9px;text-align:center;font-variant-numeric:tabular-nums}</style>
+  <div style="font-size:12px;color:#546c83;margin:12px 0 4px;">최근 30일 국가별 다운로드 요청</div>
+  <div id="maru-win-download-countries" style="font-size:12px;line-height:1.8;">집계 대기</div>
+  <div id="maru-win-download-status" role="status" style="font-size:12px;color:#476783;margin-top:10px;">집계 대기</div>
+</section>
+<script defer src="/assets/js/admin-maru-download-stats.js?v=20261101-1"></script>
 <script id="maru-player-net-profit-script">
 (function(){
   'use strict';
