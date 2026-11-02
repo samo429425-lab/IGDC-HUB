@@ -1,0 +1,4 @@
+"use strict";
+const {buildRegistry}=require("./lib/search-exposure/registry");
+function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+exports.handler=async()=>{const r=buildRegistry();const lines=['<?xml version="1.0" encoding="UTF-8"?>','<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'];for(const t of r.targets){if(!/^https:\/\/igdcglobal\.com\//i.test(t.url))continue;lines.push('  <url>',`    <loc>${esc(t.url)}</loc>`);if(t.updatedAt&&Number.isFinite(Date.parse(t.updatedAt)))lines.push(`    <lastmod>${new Date(t.updatedAt).toISOString()}</lastmod>`);lines.push('  </url>');}lines.push('</urlset>');return{statusCode:200,headers:{"content-type":"application/xml; charset=utf-8","cache-control":"public,max-age=1800,s-maxage=1800","x-igdc-search-registry":r.hash},body:lines.join("\n")+"\n"};};

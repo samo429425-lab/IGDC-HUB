@@ -1,0 +1,5 @@
+"use strict";
+const https=require("https");
+function postJson(hostname,pathName,body){return new Promise(resolve=>{const data=JSON.stringify(body);const req=https.request({hostname,path:pathName,method:"POST",headers:{"content-type":"application/json; charset=utf-8","content-length":Buffer.byteLength(data)}},res=>{let s="";res.on("data",d=>s+=d);res.on("end",()=>resolve({ok:res.statusCode>=200&&res.statusCode<300,statusCode:res.statusCode,body:s.slice(0,500)}));});req.on("error",e=>resolve({ok:false,error:e.message}));req.write(data);req.end();});}
+async function submit(urls){const key=String(process.env.INDEXNOW_KEY||"").trim();if(!key)return{adapter:"indexnow",status:"disabled",reason:"INDEXNOW_KEY missing"};const list=[...new Set((urls||[]).filter(u=>/^https:\/\/igdcglobal\.com\//i.test(u)))].slice(0,10000);if(!list.length)return{adapter:"indexnow",status:"noop",count:0};const r=await postJson("api.indexnow.org","/indexnow",{host:"igdcglobal.com",key,key,keyLocation:`https://igdcglobal.com/${key}.txt`,urlList:list});return{adapter:"indexnow",status:r.ok?"submitted":"failed",count:list.length,http:r};}
+module.exports={submit};
