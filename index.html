@@ -5,6 +5,51 @@
 <style id="igdc-social-menu-country-prehide">
 nav a[data-page-index="3"] {display:none!important;pointer-events:none!important;}
 </style>
+<style id="igdc-media-public-navigation-pause">
+/* Media visibility only: preserve data-page-index, href, loadPage and admin link. */
+html:not([data-igdc-media-menu-view="admin"]) nav a[data-page-index="4"] {
+  display:none!important;
+}
+</style>
+<script id="igdc-media-public-navigation-state">
+(function(){
+  'use strict';
+  var root=document.documentElement;
+  var frame=null;
+  function isAdmin(value){
+    try {
+      return /(?:^|\/)admin(?:\.html)?\/?$/i.test(new URL(String(value||''),location.origin).pathname);
+    } catch(_e) { return false; }
+  }
+  function frameLocation(){
+    if(!frame)frame=document.getElementById('mainFrame');
+    if(!frame)return '';
+    try {
+      var url=frame.contentWindow&&frame.contentWindow.location;
+      if(url&&url.href&&url.href!=='about:blank')return url.href;
+    }catch(_e){}
+    return frame.getAttribute('src')||'';
+  }
+  function refresh(){
+    var current=frameLocation();
+    var admin=isAdmin(current)||(!current&&isAdmin(location.pathname));
+    root.setAttribute('data-igdc-media-menu-view',admin?'admin':'public');
+  }
+  function init(){
+    frame=document.getElementById('mainFrame');
+    if(frame){
+      frame.addEventListener('load',refresh);
+      new MutationObserver(refresh).observe(frame,{attributes:true,attributeFilter:['src']});
+    }
+    refresh();
+  }
+  root.setAttribute('data-igdc-media-menu-view','public');
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
+  window.addEventListener('popstate',refresh);
+  /* Links and iframe navigation are intentionally NOT intercepted. */
+})();
+</script>
 <script>document.documentElement.setAttribute('data-igdc-social-menu-country','pending');</script>
 <script defer src="/assets/js/igdc-social-menu-country-gate.js?v=20261031-public-pause"></script>
 <!-- Supabase inline injection (vars + init) -->
