@@ -671,5 +671,29 @@
     "D": "publication is separate and administrator-confirmed",
     "manualAndAdminLockedNeverRetroactivelyChanged": true,
     "temporaryAccessRestrictedNotDead": true
+  },
+  "foreignSupplierSafety": {
+    "mode": "automated_public_source_checks_and_fail_closed_publication",
+    "appliesTo": "new_foreign_product_candidates_first_registered_by_the_server_after_this_patch",
+    "merchantDocumentSubmissionRequired": false,
+    "verificationMethod": "public_web_inspection_official_directory_and_external_source_crosscheck",
+    "websiteClaimsAloneAreNotProof": true,
+    "publicSupplierIdentityCrosscheckRequired": true,
+    "liveCountrySpecificShippingPolicyRequired": true,
+    "liveReturnRefundPolicyRequired": true,
+    "liveCustomerSupportPolicyRequired": true,
+    "confirmedFraudPhishingImpersonationBlocked": true,
+    "unclearFraudHistoryMustNotBeMarkedSafe": true,
+    "unverifiedSellerOrPolicyRemainsPrivate": true,
+    "neverPromoteAutomatically": true,
+    "administratorReviewRequired": true,
+    "preserveExistingAssignmentsAndPublishedProducts": true,
+    "cannotTreatAdministratorFrontMatchAsServiceProof": true,
+    "minimumTrustScoreCannotOverrideMissingChecks": true,
+    "existingCountryCodesProtected": "ALL_COUNTRIES_WITH_EXISTING_IP_SETTINGS_OR_LEDGER_RECORDS",
+    "enforcementScoping": "durable_first_insert_marker_not_country_code_or_publish_requested_alone",
+    "doNotRetroactivelyApplyToExistingProducts": true,
+    "protectPreviouslyConfiguredCountryAndRegionSettings": true,
+    "doNotModifyExistingAssignmentsSnapshotsOrPublicCards": true
   }
 }

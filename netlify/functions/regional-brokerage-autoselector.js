@@ -482,7 +482,31 @@ async function runSanmaruDiscovery(event,geo,targetLimit){
 }
 
 function safeHttpUrl(raw){
-  try{const u=new URL(raw);if(u.protocol!=="https:"&&u.protocol!=="http:")return null;const host=u.hostname.toLowerCase();if(!host||host==="localhost"||host.endsWith(".local")||/^\d{1,3}(\.\d{1,3}){3}$/.test(host)||host.includes(":"))return null;return u;}catch(_e){return null;}
+  try{
+    const u=new URL(raw);
+    if(u.protocol!=="https:"&&u.protocol!=="http:")return null;
+    if(u.username||u.password||!["","80","443"].includes(u.port))return null;
+    const host=u.hostname.toLowerCase().replace(/\.$/,"");
+    // IP literals (including alternative numeric IPv4 notations), internal
+    // domains and metadata endpoints must never be requested by the collector.
+    if(!host||host==="localhost"||/(?:^|\.)(?:localhost|local|internal|test|invalid|onion)$/.test(host)||
+       /^\d{1,3}(\.\d{1,3}){3}$/.test(host)||host.includes(":")||host==="metadata.google.internal")return null;
+    return u;
+  }catch(_e){return null;}
+}
+async function guardedSupplierFetch(url,controller,userAgent){
+  let current=safeHttpUrl(url),initial=current;
+  if(!current)throw new Error("SUPPLIER_URL_NOT_PUBLIC");
+  for(let hop=0;hop<4;hop+=1){
+    const response=await fetch(current.toString(),{redirect:"manual",signal:controller.signal,headers:{"user-agent":userAgent}});
+    if(![301,302,303,307,308].includes(response.status))return response;
+    const location=response.headers.get("location");
+    let next=null;try{next=safeHttpUrl(new URL(location,current).toString());}catch(_e){}
+    if(!next||!sameSite(initial.toString(),next.toString())||
+       (current.protocol==="https:"&&next.protocol!=="https:"))throw new Error("SUPPLIER_REDIRECT_UNSAFE");
+    current=next;
+  }
+  throw new Error("SUPPLIER_REDIRECT_LIMIT");
 }
 function htmlTextScore(value){
   const t=String(value||"");
@@ -515,20 +539,75 @@ function htmlTextScore(value){
 function policyPageUrls(html,baseUrl){
   const base=safeHttpUrl(baseUrl);if(!base)return[];
   const out=[],seen=new Set();const rx=/<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;let m;
+  const shipping=/shipping|delivery|dispatch|배송|配達|配送|livraison|lieferung|env[ií]o|送貨|giao|จัดส่ง|teslimat/i;
+  const returns=/returns?|refund|exchange|반품|환불|返品|返金|退貨|退款|devoluc|reembolso|retour|rückgabe|rimborso|استرداد|वापसी|ফেরত|คืนเงิน|iade/i;
+  const support=/support|contact|customer|service|고객|문의|客服|お問い合わせ|kundenservice|assistenza|поддержка|دعم|ग्राहक|layan|khách|บริการลูกค้า/i;
   while((m=rx.exec(String(html||"")))){
     const label=stripHtml(m[2]);const href=text(m[1]);if(!POLICY_LINK_TEXT_RX.test(label+" "+href))continue;
     let u;try{u=new URL(href,base.toString());}catch(_e){continue;}
     if(!sameSite(base.toString(),u.toString())||!["http:","https:"].includes(u.protocol))continue;
-    u.hash="";const key=u.toString();if(seen.has(key)||key===base.toString())continue;seen.add(key);out.push(key);if(out.length>=4)break;
+    u.hash="";const key=u.toString();if(seen.has(key)||key===base.toString())continue;seen.add(key);
+    const hay=label+" "+u.pathname;
+    out.push({url:key,kind:shipping.test(hay)?"shipping":returns.test(hay)?"returns":support.test(hay)?"support":"other"});
+    if(out.length>=30)break;
   }
-  return out;
+  // Do not let four privacy/legal pages hide the actual delivery/refund/help
+  // policies from the bounded automated check.
+  const selected=[],used=new Set();for(const kind of ["shipping","returns","support","other"]){
+    const match=out.find(row=>row.kind===kind&&!used.has(row.url));if(match){selected.push(match.url);used.add(match.url);}
+  }
+  for(const item of out){if(selected.length>=4)break;if(!used.has(item.url)){selected.push(item.url);used.add(item.url);}}
+  return selected.slice(0,4);
 }
 async function fetchPolicyText(url,controller){
   try{
-    const response=await fetch(url,{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-BrokerageVerifier/1.2 (+https://igdcglobal.com)"}});
-    if(!response.ok)return"";const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return"";
-    const length=Number(response.headers.get("content-length")||0);if(length>250000)return"";return(await response.text()).slice(0,250000);
-  }catch(_e){return"";}
+    const response=await guardedSupplierFetch(url,controller,"IGDC-MARU-BrokerageVerifier/1.2 (+https://igdcglobal.com)");
+    if(!response.ok)return null;
+    const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return null;
+    const length=Number(response.headers.get("content-length")||0);if(length>250000)return null;
+    const html=(await response.text()).slice(0,250000), content=stripHtml(html.replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi," ")).replace(/\s+/g," ").trim();
+    // A live policy link is observable; it is not evidence that the merchant
+    // actually honours the policy. Do not treat HTTP errors or thin placeholders
+    // as a successfully checked policy.
+    return content.length>=100 ? {url:safeHttpUrl(response.url||url).toString(),content} : null;
+  }catch(_e){return null;}
+}
+function publicSellerPolicyChecks(pages, supplierUrl, rawSource){
+  const results={shipping:null,returns:null,refund:null,support:null};
+  const checks={
+    shipping:/shipping|delivery|dispatch|fulfil|ship[-_ ]?to|배송|배달|出荷|発送|配送|送貨|送货|env[ií]o|entrega|livraison|lieferung|versand|spedizione|bezorging|доставка|شحن|توصيل|डिलीवरी|বিতরণ|pengiriman|giao|จัดส่ง|teslimat|usafirishaji/i,
+    returns:/return|exchange|refund|cancell|반품|환불|교환|返品|返金|退貨|退款|devoluci|reembolso|retour|remboursement|rückgabe|erstattung|rimborso|возврат|استرداد|إرجاع|वापसी|रिफंड|ফেরত|pengembalian|hoàn|คืนสินค้า|คืนเงิน|iade|marejesho/i,
+    refund:/refund|reimburse|환불|返金|退款|reembolso|remboursement|erstattung|rimborso|возмещени|استرداد|रिफंड|ফেরত|pengembalian|hoàn tiền|คืนเงิน|geri.?ödeme/i,
+    support:/support|contact|help|customer|service|고객|문의|客服|お問い合わせ|atenci[oó]n|service client|kundendienst|kundenservice|assistenza|klantenservice|поддержка|دعم|خدمة العملاء|ग्राहक|সহায়তা|layanan pelanggan|khách hàng|บริการลูกค้า|müşteri|huduma/i
+  };
+  for(const page of pages){
+    if(!page||!sameSite(supplierUrl,page.url))continue;
+    const urlText=new URL(page.url).pathname.replace(/[-_]+/g," ");
+    const words=htmlTextScore(page.content);
+    for(const kind of Object.keys(results)){
+      const relevant=checks[kind].test(urlText);
+      // Inspect actual fetched policy body, not just a search snippet or
+      // one 'refund' keyword on the merchant homepage.
+      const hasDetails=kind==="shipping"?words.shipping&&(/(?:days?|hours?|weeks?|business|domestic|international|country|region|dispatch|shipping cost|배송비|기간|지역|送料|手数料|entrega|d[ií]as|jours|Tage|дней|أيام|दिन|hari|ngày|วัน)/i.test(page.content))
+        :kind==="returns"?words.returns&&words.refund
+        :kind==="refund"?words.refund&&words.returns
+        :words.service&&words.contactChannel;
+      if(relevant&&hasDetails&&!results[kind])results[kind]=page.url;
+    }
+  }
+  const source=plain(rawSource);
+  const directoryUrl=safeHttpUrl(source.directoryUrl);
+  // A directory bridge must have been produced by our real live directory
+  // extraction, not by a merchant's self-declared registry flag.
+  const directoryCorroborated=source.source==="official_directory_bridge" && !!directoryUrl &&
+    !sameSite(directoryUrl.toString(),supplierUrl);
+  return {schema:"public-seller-checks.v1",method:"automatic_public_page_inspection",sellerDocumentsRequested:false,
+    policyPagesInspected:pages.length,checkedPolicyUrls:pages.map(x=>x.url),
+    shippingPolicyUrl:results.shipping,returnsPolicyUrl:results.returns,refundPolicyUrl:results.refund,supportPolicyUrl:results.support,
+    externalDirectoryLink:directoryCorroborated?directoryUrl.toString():null,
+    sellerIdentityEvidence:directoryCorroborated?"external_public_directory_link":"seller_site_claims_only",
+    fraudHistoryStatus:"unverified_not_cleared",performanceStatus:"unverified_not_guaranteed",
+    unknownRiskMustRemainPending:true};
 }
 function flattenJsonLd(value,out){if(!value)return;if(Array.isArray(value)){value.forEach(v=>flattenJsonLd(v,out));return;}if(typeof value!=="object")return;out.push(value);if(Array.isArray(value["@graph"]))flattenJsonLd(value["@graph"],out);}
 function jsonLdEvidence(html,geo){
@@ -594,6 +673,10 @@ function researchCandidateShell(item,geo,status,error){
     supplierReviewEligible:false,supplierResearchEligible:researchEligible,trustEvidenceReady:false,provisionalTrustScore:researchEligible?Math.max(20,Math.min(55,commerceHeuristicScore(item)+28)):0,
     researchStatus:text(status)||"page_check_pending",researchError:text(error).slice(0,180)||null,policyPagesInspected:0,policyUrls:[],
     legalVerificationComplete:false,contractVerificationComplete:false,deliveryPerformanceVerified:false,returnRefundPerformanceVerified:false,supportPerformanceVerified:false,
+    publicDirectoryCorroborated:false,publicCountryScopeCorroborated:false,publicShippingPolicyVerified:false,publicReturnRefundPolicyVerified:false,publicCustomerSupportVerified:false,
+    publicPolicyChecks:{schema:"public-seller-checks.v1",method:"automatic_public_page_inspection",sellerDocumentsRequested:false,
+      sellerIdentityEvidence:"unverified",fraudHistoryStatus:"unverified_not_cleared",performanceStatus:"unverified_not_guaranteed"},
+    evidenceGrade:"unverified_public_claims",independentSellerVerified:false,
     privateQueueOnly:true,publicEligible:false
   });
   evidence.researchMissingEvidence=researchMissingEvidence(evidence);
@@ -607,7 +690,7 @@ async function inspectCandidate(item,geo,params){
   let timer=null;
   try{
     const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,PAGE_CHECK_TIMEOUT,3500,9000),controller=new AbortController();timer=setTimeout(()=>controller.abort(),timeoutMs);
-    const response=await fetch(u.toString(),{redirect:"follow",signal:controller.signal,headers:{"user-agent":"IGDC-MARU-BrokerageVerifier/1.3 (+https://igdcglobal.com)"}});
+    const response=await guardedSupplierFetch(u.toString(),controller,"IGDC-MARU-BrokerageVerifier/1.3 (+https://igdcglobal.com)");
     if(isAccessChallengeUrl(response.url||u.toString()))return researchCandidateShell(item,geo,"supplier_access_challenge",null);
     if(!response.ok)return researchCandidateShell(item,geo,"page_http_"+response.status,null);
     const finalUrl=safeHttpUrl(response.url||u.toString());if(!finalUrl)return researchCandidateShell(item,geo,"redirect_url_invalid",null);
@@ -617,7 +700,8 @@ async function inspectCandidate(item,geo,params){
     if(isRestrictedProductHtml(html))return researchCandidateShell(item,geo,"supplier_access_restricted_html",null);
     const policyUrls=policyPageUrls(html,finalUrl.toString());
     const policyPages=(await Promise.all(policyUrls.map(url=>fetchPolicyText(url,controller)))).filter(Boolean);
-    const combinedHtml=[html].concat(policyPages).join("\n");
+    const policyCheck=publicSellerPolicyChecks(policyPages,finalUrl.toString(),item&&item.payload);
+    const combinedHtml=[html].concat(policyPages.map(page=>page.content)).join("\n");
     const words=htmlTextScore(combinedHtml),ld=jsonLdEvidence(html,geo),marketplace=Core.isMarketplace(item,finalUrl.toString());
     const responsibleEntity=(words.supplierRole||ld.org)&&(words.official||ld.org);
     const directSales=words.directSales||ld.product||ld.offer;
@@ -640,11 +724,15 @@ async function inspectCandidate(item,geo,params){
       official:words.official||ld.org,responsibleEntity,directSales,payment:words.payment,secureTransport,securePaymentSignal:words.securePayment,
       shipping:words.shipping,tracking:words.tracking,deliveryCommitment:words.deliveryCommitment,returns:words.returns,refund:words.refund,exchange:words.exchange,
       service:words.service,contactChannel:words.contactChannel,warranty:words.warranty,termsPrivacy:words.termsPrivacy,legalIdentity:words.legalIdentity||ld.org,
-      affiliatePotential:words.affiliatePotential,catalogBreadth:words.catalogBreadth,policyPagesInspected:policyPages.length,policyUrls:policyUrls.slice(0,4),
+      affiliatePotential:words.affiliatePotential,catalogBreadth:words.catalogBreadth,policyPagesInspected:policyPages.length,policyUrls:policyPages.map(page=>page.url),
+      publicPolicyChecks:policyCheck,publicDirectoryCorroborated:!!policyCheck.externalDirectoryLink,publicCountryScopeCorroborated:ld.matchCountry===true,
+      publicShippingPolicyVerified:!!policyCheck.shippingPolicyUrl,publicReturnRefundPolicyVerified:!!(policyCheck.returnsPolicyUrl&&policyCheck.refundPolicyUrl),
+      publicCustomerSupportVerified:!!policyCheck.supportPolicyUrl,
       marketplace,majorPlatform:marketplace,jsonLdOrganization:ld.org,jsonLdProduct:ld.product,jsonLdOffer:ld.offer,supplierType:typeCode,
       supplierReviewEligible:reviewEligible,supplierResearchEligible:researchEligible,trustEvidenceReady,provisionalTrustScore,
       researchStatus:reviewEligible?"evidence_ready_for_review":"evidence_incomplete",researchError:null,
       legalVerificationComplete:false,contractVerificationComplete:false,deliveryPerformanceVerified:false,returnRefundPerformanceVerified:false,supportPerformanceVerified:false,
+      evidenceGrade:policyPages.length?"public_policy_pages_checked_claims_unconfirmed":"site_claims_only",independentSellerVerified:false,
       privateQueueOnly:true,publicEligible:false
     });
     evidence.researchMissingEvidence=researchMissingEvidence(evidence);

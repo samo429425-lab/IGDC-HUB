@@ -20,6 +20,7 @@ const NonPgRevenue = require("./nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./affiliate-program-registry.v1");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
 const ProductRanking = require("./commerce-product-ranking.v1");
+const CommerceHardRisk = require("./commerce-hard-risk.v1");
 
 const VERSION = "commerce-candidate-intake-v1.10.0-authoritative-board-transport";
 const POLICY_FILE = "commerce-candidate-policy.v1.json";
@@ -313,6 +314,9 @@ function administratorFrontSafety(item){
   const reasons=[];
   const payload=plain(item), risk=plain(payload.risk), assessmentRisk=plain(payload.riskAssessment), runtime=plain(payload.runtimeValidation), queueControl=plain(payload.queueControl);
   const blockers=unique([].concat(array(risk.blockers),array(assessmentRisk.blockers),array(payload.riskBlockers),array(plain(payload.commerceCandidate).riskBlockers)).map(lower).filter(Boolean));
+  // Confirmed fraud/impersonation flags remain hard-denied even when an
+  // administrator has already selected an exact section and requested release.
+  CommerceHardRisk.collect(payload).forEach(reason=>reasons.push("HARD_RISK:"+reason));
   if(queueControl.permanentExcluded===true) reasons.push("PERMANENTLY_EXCLUDED");
   if(lower(runtime.state)==="dead" || runtime.dead===true) reasons.push("RUNTIME_PRODUCT_UNAVAILABLE");
   if(payload.productPageLive===false || risk.explicitUnavailable===true || assessmentRisk.explicitUnavailable===true) reasons.push("PRODUCT_PAGE_UNAVAILABLE");
@@ -342,6 +346,13 @@ function administratorMarketRecord(item,countryInput,regionInput){
     return array(record&&record.regions).map(value=>normalizeRegion(value,country)).includes(region);
   });
   if(existing)return Object.assign({},clone(existing),{country,active:true,nationwide:region==="NATIONWIDE",regions:region==="NATIONWIDE"?[]:[region],verifiedAt:first(existing.verifiedAt,plain(item&&item.administratorFrontMatchAuthority).verifiedAt,now())});
+  // Only a newly registered overseas product is subject to the extra public
+  // cross-check gate. Never change pre-existing Front Match behaviour for ANY
+  // IP country, whether KR, US, JP or an already configured market elsewhere.
+  const frontAuthority=plain(item&&item.administratorFrontMatchAuthority);
+  const newSafety=plain(item&&item.foreignSupplierSafety);
+  if(newSafety.schema==="igdc-foreign-new-product-safety.v1" && newSafety.required===true &&
+     normalizeCountry(newSafety.country)===country && frontAuthority.existingPublished!==true) return null;
   const destination=productDestination(item),seller=plain(item&&item.sellerResponsibility),proofUrl=safeHttpsUrl(first(sourceUrl(item),seller.supportUrl,destination));
   const sellerName=first(seller.legalEntity,item&&item.supplierName,sourceName(item),"External seller");
   const proof=(kind)=>({verified:true,evidenceUrl:proofUrl||destination,evidence:["Authenticated administrator Front Match confirms the external seller remains responsible for "+kind+"; IGDC is only the referral/discovery surface."]});
@@ -544,8 +555,16 @@ function candidateDecision(item, index, tier, origin, policy, affiliateRegistry)
     "IMAGE_NOT_HTTPS",
     "PSOM_PLACEMENT_MISSING"
   ]);
+  const authority=plain(item&&item.administratorFrontMatchAuthority);
+  const requestedCountry=effectiveAdminAuthority.country;
+  const newSafety=plain(item&&item.foreignSupplierSafety);
+  const overseasUnverified=explicitAdministratorFrontMatch && !!requestedCountry && requestedCountry!=="KR" &&
+    newSafety.schema==="igdc-foreign-new-product-safety.v1" && newSafety.required===true &&
+    normalizeCountry(newSafety.country)===requestedCountry &&
+    authority.existingPublished!==true && authority.foreignEvidenceVerified!==true;
   const effectiveReasons=explicitAdministratorFrontMatch
-    ? (bridgeAuthority.ok===true?[]:reasons.filter(reason=>adminStructuralReasons.has(reason)))
+    ? unique((bridgeAuthority.ok===true?[]:reasons.filter(reason=>adminStructuralReasons.has(reason)))
+      .concat(adminSafety.reasons,overseasUnverified?["FOREIGN_NEW_SELLER_INDEPENDENT_VERIFICATION_REQUIRED"]:[]))
     : reasons.slice();
   const releaseEligible=effectiveReasons.length===0;
   const profitability=profitabilityAssessment(item,tier,effectiveRevenue);

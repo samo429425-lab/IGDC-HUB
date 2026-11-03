@@ -22,6 +22,7 @@ const path = require("path");
 const crypto = require("crypto");
 const IpSlotPolicy = require("./ip-slot-policy.v1");
 const MarketSaleScope = require("./market-sale-scope.v1");
+const CommerceHardRisk = require("./commerce-hard-risk.v1");
 const CommerceCandidateIntake = require("./commerce-candidate-intake.v1");
 const PublicSnapshot = require("./public-snapshot-sanitizer.v1");
 const ProductImage = require("./commerce-product-image-integrity.v1");
@@ -488,6 +489,9 @@ function validateCandidate(raw, index, context) {
   const sections = uniq(normalizedSections);
   if (sections.length !== 1) reasons.push(sections.length ? "SECTION_MAPPING_CONFLICT" : "SECTION_MAPPING_MISSING");
   const section = sections[0] || "";
+  if (productBearingRoute(page, section) || isObject(item.commerceCandidate)) {
+    CommerceHardRisk.collect(item).forEach(reason => reasons.push("CONFIRMED_COMMERCE_DANGER:" + reason));
+  }
   if (page && section && !(context.registry.pages.get(page) || new Set()).has(section)) reasons.push("SECTION_NOT_IN_PSOM_PAGE");
   if (page && section && productBearingRoute(page, section) && !specificProductUrl(destination)) reasons.push("PRODUCT_DETAIL_DESTINATION_REQUIRED");
   if (Number.isNaN(requested)) reasons.push("SLOT_MAPPING_CONFLICT");
@@ -548,6 +552,7 @@ function validateCandidate(raw, index, context) {
   if (explicitAdminPublication) {
     const structuralAdminReasons = new Set([
       "TITLE_MISSING","DESTINATION_NOT_HTTPS","IMAGE_NOT_HTTPS","PLACEHOLDER_OR_SAMPLE","DESTINATION_HOST_UNSAFE",
+      "SOURCE_DOMAIN_DENIED","DESTINATION_DOMAIN_DENIED","DESTINATION_TLD_DENIED","BLOCKLIST_PATTERN_MATCH",
       "PAGE_MAPPING_CONFLICT","PAGE_MAPPING_MISSING","PAGE_NOT_IN_PSOM","SECTION_MAPPING_CONFLICT","SECTION_MAPPING_MISSING","SECTION_NOT_IN_PSOM_PAGE",
       "SLOT_MAPPING_CONFLICT","SLOT_OUT_OF_CAPACITY","COUNTRY_REQUIRES_ISO_3166_ALPHA2","REGION_MISSING_OR_INVALID",
       "GLOBAL_SCOPE_NOT_EXPLICIT","GLOBAL_REGION_NOT_EXPLICIT","IP_SLOT_GLOBAL_SCOPE_FORBIDDEN","COMMERCE_CANDIDATE_RELEASE_ENVELOPE_MISSING","COMMERCE_CANDIDATE_PROVENANCE_MISSING"
@@ -557,7 +562,8 @@ function validateCandidate(raw, index, context) {
       // IP class/profile/market-evidence checks are upstream eligibility policy,
       // not post-board publication checks.  The only IP reason retained here is
       // IP_SLOT_GLOBAL_SCOPE_FORBIDDEN, which is already in structuralAdminReasons.
-      if (!structuralAdminReasons.has(reason)) reasons.splice(i,1);
+      if (!structuralAdminReasons.has(reason) && !reason.startsWith("CONFIRMED_COMMERCE_DANGER:")
+          && !reason.startsWith("RISK_LEVEL_NOT_PUBLISHABLE:")) reasons.splice(i,1);
     }
   }
 

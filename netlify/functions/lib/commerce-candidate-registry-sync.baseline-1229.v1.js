@@ -379,32 +379,58 @@ const SERVICE_EVIDENCE_RX = Object.freeze({
   returns: /(?:returns?|refunds?|exchange|cancell?ation|반품|교환|환불|返品|返金|交換|退貨|退款|换货|devoluci[oó]n|reembolso|retour|remboursement|rückgabe|erstattung|reso|rimborso|retourneren|terugbetaling|возврат|возмещение|إرجاع|استرداد|वापसी|रिफंड|ফেরত|রিফান্ড|واپسی|ریفنڈ|pengembalian|refund|hoàn\s*trả|คืนสินค้า|คืนเงิน|iade|geri\s*ödeme|marejesho)/i,
   support: /(?:customer\s*(?:service|support|care)|support|contact|help\s*center|고객센터|고객지원|문의|客服|客户服务|カスタマーサポート|お問い合わせ|atenci[oó]n\s+al\s+cliente|servicio\s+al\s+cliente|service\s+client|kundendienst|kundenservice|servizio\s+clienti|klantenservice|поддержка|служба\s+поддержки|خدمة\s+العملاء|دعم|ग्राहक\s+सेवा|সহায়তা|کسٹمر\s+سروس|layanan\s+pelanggan|khách\s+hàng|บริการลูกค้า|müşteri\s+hizmetleri|huduma\s+kwa\s+wateja)/i
 });
-function serviceEvidenceRows(rows, kind){
+function serviceEvidenceRows(rows, kind, strictForeign){
   const rx=SERVICE_EVIDENCE_RX[kind];
   return array(rows).filter(verifiedEvidenceRow).filter((row)=>{
     // Evidence notes can contain negations such as "does not assert delivery".
     // Classify only by the evidence type and the policy URL itself so a generic
     // administrator note can never become a false service verification.
-    const hay=[row&&row.evidence_type,row&&row.evidence_url].map(text).join(" ");
+    const hay=strictForeign?text(row&&row.evidence_type):[row&&row.evidence_type,row&&row.evidence_url].map(text).join(" ");
     return !!(rx&&rx.test(hay));
   });
 }
-function serviceProof(kind, explicitUrl, evidence, evidenceRows){
+function serviceProof(kind, explicitUrl, evidence, evidenceRows, strictForeign){
   const direct=safeUrl(explicitUrl);
-  const rows=serviceEvidenceRows(evidenceRows,kind);
+  const rows=serviceEvidenceRows(evidenceRows,kind,strictForeign);
   const rowUrl=first.apply(null,rows.map(row=>safeUrl(row&&row.evidence_url)));
-  const proofUrl=direct||rowUrl||"";
+  // For a NEW overseas market a URL entered in a candidate or an admin
+  // assignment is a claim, not proof. Require a verified, service-specific
+  // evidence ledger record; no homepage/checkout/synthetic marker substitute.
+  const proofUrl=strictForeign?(rowUrl||""):(direct||rowUrl||"");
   const notes=unique([text(evidence)].concat(rows.flatMap(row=>[text(row&&row.evidence_type),text(row&&row.note)])).filter(Boolean));
-  // A generic supplier/product URL plus a broad administrator note is not
-  // shipping/return/support proof.  Research remains broad, but public market
-  // evidence is verified only by an explicit policy URL or a verified
-  // service-specific evidence row.
-  const verified=!!proofUrl && (!!direct || rows.length>0);
+  const verified=!!proofUrl && (strictForeign?rows.length>0:!!direct||rows.length>0);
   return { verified, evidenceUrl:proofUrl||null, evidence:verified?notes:[] };
+}
+function publicSellerCrosscheck(rows,supplierUrl){
+  let supplierHost="";try{supplierHost=new URL(supplierUrl).hostname.toLowerCase().replace(/^www\./,"");}catch(_e){}
+  const externallySourced=row=>{
+    if(!verifiedEvidenceRow(row))return false;
+    try{const host=new URL(row.evidence_url).hostname.toLowerCase().replace(/^www\./,"");
+      return !!host && !!supplierHost && host!==supplierHost && !host.endsWith("."+supplierHost) && !supplierHost.endsWith("."+host);
+    }catch(_e){return false;}
+  };
+  // Evidence can be gathered from publicly accessible company directories,
+  // government registries or independently verified outbound seller listings.
+  // The seller need not send IGDC business certificates or documents.
+  const identity=array(rows).some(row=>externallySourced(row)&&/(?:business[_ -]?registr|company[_ -]?registr|merchant[_ -]?licen|legal[_ -]?identity|public[_ -]?(?:supplier|seller|merchant)[_ -]?(?:directory|listing)|verified[_ -]?public[_ -]?seller|사업자등록|법인등기|상업등기|공개[_ -]?업체[_ -]?목록)/i.test(text(row&&row.evidence_type)));
+  const refund=array(rows).some(row=>verifiedEvidenceRow(row)&&/(?:refund|reimburse|return[_ -]?refund|환불|返金|退款|reembolso|remboursement|rückerstattung|rimborso|возмещени|استرداد|คืนเงิน)/i.test(text(row&&row.evidence_type)));
+  return {identity,refund,method:"public_source_crosscheck",sellerDocumentsRequested:false};
+}
+// Only newly inserted overseas product candidates that carry the durable
+// server-issued research marker receive the strict new-publication gate.
+// Existing configured IP countries (KR and every other country alike) and
+// their already recorded cards are never reclassified merely by nationality.
+function needsNewForeignSafety(candidate,country){
+  const payload=sourcePayload(candidate),scope=plain(payload.foreignSupplierSafety);
+  return text(candidate&&candidate.source_ref)===PRODUCT_RESEARCH_SOURCE_REF &&
+    scope.schema==="igdc-foreign-new-product-safety.v1" && scope.required===true &&
+    !!country && country!=="KR" && MarketSaleScope.normalizeCountry(scope.country)===country;
 }
 function marketRecord(candidate, availability, evidenceRows, options){
   const payload=sourcePayload(candidate), adminExternalSeller=plain(options).administratorExternalSeller===true, supplier=supplierIdentity(candidate,payload);
   const country=MarketSaleScope.normalizeCountry(availability.country_code);
+  const strictForeign=needsNewForeignSafety(candidate,country) && plain(options).existingPublished!==true;
+  const verifiedSellerProof=strictForeign?publicSellerCrosscheck(evidenceRows,supplier.url):null;
   const region=MarketSaleScope.normalizeRegion(availability.region_code,country);
   const nationwide=!region || region==="NATIONWIDE";
   const legalBasis=text(availability.legal_basis);
@@ -414,6 +440,7 @@ function marketRecord(candidate, availability, evidenceRows, options){
   const commonUrl=evidenceUrl||verifiedEvidence[0]||"";
   const seller=plain(payload.sellerResponsibility);
   const administratorServiceProof=(kind,existing)=>{
+    if(strictForeign) return existing; // Never manufacture overseas proof from a homepage.
     if(existing&&existing.verified===true) return existing;
     if(!adminExternalSeller) return existing;
     const url=safeUrl(first(supplier.url,commonUrl,exactProductDestination(candidate,payload)));
@@ -423,9 +450,12 @@ function marketRecord(candidate, availability, evidenceRows, options){
       evidence:unique([legalBasis,deliveryEvidence,"Authenticated administrator Front Match confirms that the selected external seller remains responsible for "+kind+" in this market; IGDC does not provide that service."])
     };
   };
-  const shippingProof=administratorServiceProof("delivery/fulfillment",serviceProof("shipping",payload.shippingPolicyUrl,first(deliveryEvidence,legalBasis),evidenceRows));
-  const returnsProof=administratorServiceProof("returns/refunds",serviceProof("returns",payload.returnsPolicyUrl,first(legalBasis,deliveryEvidence),evidenceRows));
-  const supportProof=administratorServiceProof("customer support",serviceProof("support",payload.supportUrl,first(legalBasis,deliveryEvidence),evidenceRows));
+  const shippingProof=administratorServiceProof("delivery/fulfillment",serviceProof("shipping",payload.shippingPolicyUrl,first(deliveryEvidence,legalBasis),evidenceRows,strictForeign));
+  const returnsProof=administratorServiceProof("returns/refunds",serviceProof("returns",payload.returnsPolicyUrl,first(legalBasis,deliveryEvidence),evidenceRows,strictForeign));
+  const supportProof=administratorServiceProof("customer support",serviceProof("support",payload.supportUrl,first(legalBasis,deliveryEvidence),evidenceRows,strictForeign));
+  // Check publicly gathered policy and identity sources, never supplier-
+  // submitted paperwork or a fictitious "no fraud" certification.
+  if(strictForeign && !verifiedSellerProof.refund) returnsProof.verified=false;
   return {
     country,
     // The DB stores nationwide as the explicit NATIONWIDE sentinel.  Preserve
@@ -442,7 +472,11 @@ function marketRecord(candidate, availability, evidenceRows, options){
     // identity, product destination, image, scope availability and hard-risk
     // state.  That authenticated Front Match is authoritative evidence that
     // the external seller (not IGDC) remains responsible for this listing.
-    sellerResponsibility:{verified:adminExternalSeller?true:bool(first(seller.verified,true)),legalEntity:first(seller.legalEntity,supplier.name,payload.sellerLegalEntity,payload.sellerName,plain(payload.supplier).name,candidate.title),supportUrl:safeUrl(first(seller.supportUrl,payload.supportUrl,supplier.url,commonUrl))||null},
+    sellerResponsibility:{
+      verified:strictForeign?(verifiedSellerProof.identity && !!first(seller.legalEntity,payload.sellerLegalEntity,payload.sellerName)):adminExternalSeller?true:bool(first(seller.verified,true)),
+      legalEntity:strictForeign?first(seller.legalEntity,payload.sellerLegalEntity,payload.sellerName):first(seller.legalEntity,supplier.name,payload.sellerLegalEntity,payload.sellerName,plain(payload.supplier).name,candidate.title),
+      supportUrl:safeUrl(first(seller.supportUrl,payload.supportUrl,supplier.url,commonUrl))||null
+    },
     source:{name:"global-slot-console",url:first(supplier.url,safeUrl(candidate.official_url))||null},
     evidence:unique([legalBasis,deliveryEvidence].concat(verifiedEvidence))
   };
@@ -487,7 +521,13 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const storedSettlementMode=lower(first(payloadContract.settlementMode,payloadDirect.settlementMode));
   const directPayable=["advertising","brokerage","lead","referral","sponsor"].includes(revenueType) && !!revenueProvider && !!revenueId && disclosureReady && payoutBasisVerified && !!storedSettlementMode;
   const settlementMode=directPayable?storedSettlementMode:(trafficOnly?"traffic_only":"provider_program");
-  const markets=(availabilityRows||[]).map(row=>marketRecord(candidate,row,evidenceRows,{administratorExternalSeller:adminExternalSeller}));
+  const existingPublished=["matched","published","active"].includes(lower(assignmentInfo.publication_status));
+  // A first-time publish_requested row is NOT evidence of an established card.
+  // Conversely a pre-existing foreign card may also be publish_requested;
+  // only the durable first-insert marker differentiates them safely.
+  const assignmentCountry=MarketSaleScope.normalizeCountry(assignmentInfo.country_code);
+  const newForeignSafety=needsNewForeignSafety(candidate,assignmentCountry) && !existingPublished;
+  const markets=(availabilityRows||[]).map(row=>marketRecord(candidate,row,evidenceRows,{administratorExternalSeller:adminExternalSeller,existingPublished}));
   const pageMap={home:"home",distribution:"distribution",network:"network",tour:"tour",social:"social"};
   const page=pageMap[first(frontEnvelope&&frontEnvelope.page,assignmentInfo.hub_key)]||text(payload.page);
   // The selected Global Slot assignment is the authoritative publication
@@ -514,9 +554,13 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
   const rawPrice=first(frontEnvelope&&frontEnvelope.price,card.price,payload.price,payload.salePrice,payload.currentPrice);
   const rawCurrency=first(frontEnvelope&&frontEnvelope.priceCurrency,card.priceCurrency,card.currency,payload.priceCurrency,payload.currency);
   const authorityCountry=MarketSaleScope.normalizeCountry(assignmentInfo.country_code), authorityRegion=MarketSaleScope.normalizeRegion(first(assignmentInfo.region_code,"NATIONWIDE"),authorityCountry)||"NATIONWIDE";
+  const foreignEvidenceVerified=markets.some(record=>record.country===authorityCountry &&
+    record.shipping&&record.shipping.verified===true && record.returns&&record.returns.verified===true &&
+    record.support&&record.support.verified===true && record.sellerResponsibility&&record.sellerResponsibility.verified===true);
   const administratorFrontMatchAuthority=adminExternalSeller?{
     schema:"igdc-administrator-front-match-authority.v1",verified:true,assignmentId:text(assignmentInfo.id),publicationStatus:adminExternalSeller?"publish_requested":lower(assignmentInfo.publication_status),
     page,section,country:authorityCountry,region:authorityRegion,externalSeller:true,noIgdcCheckout:true,noIgdcPayment:true,
+    existingPublished,foreignEvidenceVerified,
     verifiedAt:first(frontEnvelope&&frontEnvelope.requestedAt,assignmentInfo.updated_at,candidate.updated_at,now()),verificationSource:frontEnvelope?"gslot-slot-assignment-front-authority-envelope":"canonical-global-slot-relations",authorityEnvelopeDigest:frontEnvelope&&frontEnvelope.digest||undefined
   }:undefined;
   const administratorSelectionDigest=adminExternalSeller?sha256([
@@ -557,6 +601,10 @@ function compactPayload(candidate, assignment, availabilityRows, revenueRows, ev
     orderReady:bool(first(payload.orderReady,administratorValidatedOrderPath)),
     searchBankContract:Object.assign({},plain(payload.searchBankContract),{frontSupplyAllowed:true,searchBankEligible:true,snapshotEligible:true,indexEligible:true,orderReady:bool(first(plain(payload.searchBankContract).orderReady,administratorValidatedOrderPath)),lastVerifiedAt:first(plain(payload.runtimeValidation).checkedAt,candidate.updated_at,plain(payload.searchBankContract).lastVerifiedAt),trustScore:Number(plain(payload.searchBankContract).trustScore||payload.trustScore||75),trustTier:first(plain(payload.searchBankContract).trustTier,payload.trustTier,"A"),officialSource:adminExternalSeller?true:bool(first(plain(payload.searchBankContract).officialSource,payload.officialSource,true)),producerVerified:bool(first(plain(payload.searchBankContract).producerVerified,payload.producerVerified,true)),marketAvailability:{markets}}),
     marketAvailability:{markets},
+    // Propagated by the trusted Registry bridge; legacy candidates omit this.
+    foreignSupplierSafety:newForeignSafety?{
+      schema:"igdc-foreign-new-product-safety.v1",country:assignmentCountry,required:true
+    }:undefined,
     administratorFrontMatchAuthority,
     administratorFrontMatchRecord:frontEnvelope?{schema:frontEnvelope.schema,candidateId:frontEnvelope.candidateId,title:frontEnvelope.title,productUrl:frontEnvelope.productUrl,imageUrl:frontEnvelope.imageUrl,supplierName:frontEnvelope.supplierName||undefined,supplierUrl:frontEnvelope.supplierUrl||undefined,price:frontEnvelope.price==null?undefined:frontEnvelope.price,priceCurrency:frontEnvelope.priceCurrency||undefined,availability:frontEnvelope.availability==null?undefined:frontEnvelope.availability,page:frontEnvelope.page,section:frontEnvelope.sectionKey,country:frontEnvelope.country,region:frontEnvelope.region,digest:frontEnvelope.digest}:undefined,
     directCommerceListing:Object.assign({},plain(payload.directCommerceListing),{

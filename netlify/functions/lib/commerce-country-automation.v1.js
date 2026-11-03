@@ -592,7 +592,15 @@ function evidenceProjection(item) {
     researchMissingEvidence: array(evidence.researchMissingEvidence),
     supplyLane: first(sourcePayload.supplyLane, evidence.supplyLane) || "general",
     discoverySource: first(sourcePayload.source, item && item.source, item && item.provider) || null,
-    officialDirectoryUrl: first(sourcePayload.directoryUrl) || null
+    officialDirectoryUrl: first(sourcePayload.directoryUrl) || null,
+    automatedInspection: evidence.automated === true,
+    targetCountry,
+    publicDirectoryCorroborated: evidence.publicDirectoryCorroborated === true,
+    publicCountryScopeCorroborated: evidence.publicCountryScopeCorroborated === true,
+    publicShippingPolicyVerified: evidence.publicShippingPolicyVerified === true,
+    publicReturnRefundPolicyVerified: evidence.publicReturnRefundPolicyVerified === true,
+    publicCustomerSupportVerified: evidence.publicCustomerSupportVerified === true,
+    publicPolicyChecks: plain(evidence.publicPolicyChecks)
   };
 }
 function trustTier(score, hardGatePassed, approvalReady) {
@@ -737,6 +745,19 @@ function deterministicAssessment(items) {
       legal_identity: ev.legalIdentity
     };
     const missingEvidence = Object.entries(required).filter(([, value]) => value !== true).map(([name]) => name);
+    // The crawler checks publicly accessible pages and any independently
+    // discovered directory link. It does NOT request merchant paperwork and
+    // does not claim that an unchecked fraud history is clean. A merchant's
+    // self-written slogans are never enough for new overseas qualification.
+    if (ev.automatedInspection && ev.targetCountry && ev.targetCountry !== "KR") {
+      for (const [code, verified] of [
+        ["public_directory_seller_crosscheck", ev.publicDirectoryCorroborated],
+        ["fetched_shipping_policy", ev.publicShippingPolicyVerified],
+        ["fetched_return_refund_policy", ev.publicReturnRefundPolicyVerified],
+        ["fetched_customer_support_policy", ev.publicCustomerSupportVerified]
+      ]) if (!verified) missingEvidence.push(code);
+      if (!ev.publicCountryScopeCorroborated) missingEvidence.push("seller_target_country_not_corroborated");
+    }
     if (ev.marketplace) missingEvidence.unshift("major_marketplace_or_aggregator");
     const hardGatePassed = !ev.marketplace && missingEvidence.length === 0 && trustScore >= TRUST_POLICY.minimumTrustScore;
     const performanceMissing = [
@@ -3102,7 +3123,7 @@ async function persistLatestProductValidationDisposition(actorId,scope,productIn
   if(protectedState)return{status:"protected",decision:priorDecision||decision,candidateId:text(existing&&existing.id)||candidateId,reason:"existing_downstream_or_administrator_state_preserved"};
   if(existing&&array(await SlotStore.select("gslot_slot_assignments","select=id&candidate_id=eq."+encodeURIComponent(text(existing.id))+"&limit=1")).length)
     return{status:"protected",decision:priorDecision||decision,candidateId:text(existing.id),reason:"existing_assignment_preserved"};
-  const base=productCandidatePayload(actorId,scope,product,"research_pending"),payload=Object.assign({},prior,base),finalId=text(existing&&existing.id)||candidateId;
+  const base=preserveOrMarkNewForeignCandidate(productCandidatePayload(actorId,scope,product,"research_pending"),scope,existing),payload=Object.assign({},prior,base),finalId=text(existing&&existing.id)||candidateId;
   payload.id=finalId;payload.slotDecision=decision;payload.approvedPlacement=null;payload.selectedPlacement=null;payload.placement=null;payload.publicPublication=false;payload.automaticImport=false;
   payload.queueControl=Object.assign({},priorQueue,{schema:"igdc-private-product-queue-control.v1",action:decision,hiddenFromCountryQueue:true,permanentExcluded:false,rediscoveryAllowed:true,automaticValidationDisposition:true,validationReason:text(disposition.reason),validationBlockers:array(disposition.blockers),validationReviewGaps:array(disposition.reviewGaps),decidedAt:now,decidedBy:text(actorId)||"administrator"});
   payload.review=Object.assign({},plain(prior.review),{state:decision==="reject"?"validation_rejected":"validation_hold",decidedAt:now,decidedBy:text(actorId)||"administrator",reason:text(disposition.reason)});
@@ -3815,6 +3836,25 @@ function productCandidateId(scope, product) {
   const identity=productQueueIdentity(product);
   return identity?"country_product_"+sha256(scope.country+"|"+scope.region+"|"+identity).slice(0,24):"";
 }
+// Safety applicability is based on whether the durable candidate is NEW, not
+// on a KR-only exception or a guess from its publish_requested status.
+// A previously stored candidate in ANY IP country retains its established
+// settings and assignment. This marker is only written by server-side inserts.
+function preserveOrMarkNewForeignCandidate(payload, scope, existing) {
+  const prior=plain(existing&&existing.source_payload);
+  const priorScope=plain(prior.foreignSupplierSafety);
+  if(existing){
+    if(priorScope.schema==="igdc-foreign-new-product-safety.v1") payload.foreignSupplierSafety=priorScope;
+    return payload;
+  }
+  if(normalizeCountry(scope&&scope.country)&&normalizeCountry(scope.country)!=="KR"){
+    payload.foreignSupplierSafety={schema:"igdc-foreign-new-product-safety.v1",
+      country:normalizeCountry(scope.country),region:normalizeRegion(scope.region||"NATIONWIDE",scope.country)||"NATIONWIDE",
+      registeredAt:iso(),source:"server_first_insert_product_research",required:true,
+      publicInformationCrosscheck:true,merchantDocumentSubmissionRequired:false};
+  }
+  return payload;
+}
 function productCandidatePayload(actorId, scope, product, decision) {
   const selected = decision === "slot_candidate", managementControl = Object.assign({},plain(product.managementControl)), aiSelected = selected && lower(managementControl.source) === "ai_automation";
   if (plain(managementControl.latestResearchHandoff).completed !== true) {
@@ -3949,7 +3989,7 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
       if(assigns.length)return{status:'research_reserve_deferred',candidateId:null,registered:false,reserve:Object.assign({},reservePlan,{reason:'replacement_has_assignment'})};
     }
   }
-  const payload = productCandidatePayload(actorId, scope, product, "research_pending");
+  const payload = preserveOrMarkNewForeignCandidate(productCandidatePayload(actorId, scope, product, "research_pending"),scope,existing);
   if (existing) {
     // Research discovery may refresh non-authoritative product evidence, but it
     // must NOT undo a prior management handoff or reset an operator queue state.
@@ -4076,7 +4116,7 @@ async function syncProductCandidateQueue(actorId, scope, product, decision, opti
        throw Object.assign(new Error("product_management_state_not_confirmed:"+candidateId),{statusCode:409});
     return { status: decision === "undecided" ? "private_candidate_restored_to_research" : (decision === "purge" ? "private_candidate_permanently_suppressed" : "private_candidate_" + status), candidateId };
   }
-  const payload = productCandidatePayload(actorId, scope, product, "slot_candidate");
+  const payload = preserveOrMarkNewForeignCandidate(productCandidatePayload(actorId, scope, product, "slot_candidate"),scope,existing);
   if(existing){
     payload.managementControl=Object.assign({},plain(payload.managementControl),plain(plain(existing.source_payload).managementControl));
     payload.researchRegistration=Object.assign({},plain(plain(existing.source_payload).researchRegistration));
@@ -5500,7 +5540,7 @@ async function restoreVerifiedLatestCandidate(actor,scope,sourceInput,proofInput
     inspectionComplete:true,productPageLive:true,sameSupplierSite:true,
     researchStatus:"ready_for_admin_review"
   });
-  const now=iso(),base=productCandidatePayload(actor,scope,checked,"research_pending");
+  const now=iso(),base=preserveOrMarkNewForeignCandidate(productCandidatePayload(actor,scope,checked,"research_pending"),scope,existing);
   // The stored selection proposal stays informational only.  No 20-section
   // assignment is made by this explicit unassigned-queue registration.
   const payload=existing?Object.assign({},old):base;

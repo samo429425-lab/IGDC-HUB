@@ -12,6 +12,7 @@
 
 const crypto = require("crypto");
 const ProfitabilityGate = require("./commerce-profitability-gate.v1");
+const CommerceHardRisk = require("./commerce-hard-risk.v1");
 
 const VERSION = "commerce-product-ranking-v1.22.7-section-local-ranking-preserve-placement-v20261017";
 
@@ -815,7 +816,7 @@ function supplierAssessment(rowInput) {
   }
   const blockers = [], concerns = [];
   if (!evidenceReady) blockers.push("supplier_evidence_not_ready");
-  if (["reject", "exclude", "suppressed"].includes(decision)) blockers.push("supplier_rejected_or_excluded");
+  if (["reject", "exclude", "suppressed", "blocked", "blacklisted", "permanent_excluded", "fraud"].includes(decision)) blockers.push("supplier_rejected_or_excluded");
   if (!approvalReady) concerns.push("supplier_approval_pending");
   if (trustScore < 82) concerns.push("supplier_trust_below_public_threshold");
   if (reliabilityEvidence && Number.isFinite(defectRate) && defectRate > 0.12) blockers.push("verified_defect_rate_too_high");
@@ -843,6 +844,7 @@ function supplierAssessment(rowInput) {
 function riskAssessment(rowInput) {
   const row = plain(rowInput), url = canonicalProductUrl(first(row.productUrl, row.url)), image = safeProductImageUrl(first(row.imageUrl, row.imageOriginalUrl));
   const name = first(row.productName, row.title), blockers = [], concerns = [];
+  CommerceHardRisk.collect(row).forEach(reason => blockers.push("confirmed_commerce_danger:" + reason));
   const specificUrl = isSpecificProductUrl(url), genericName = isGenericProductName(name), sameSupplier = row.sameSupplierSite !== false && (!row.supplierSiteUrl || sameSite(row.supplierSiteUrl, url));
   const inspected = row.inspectionComplete === true, live = row.productPageLive !== false, ready = text(row.researchStatus) === "ready_for_admin_review";
   const productEvidence = row.jsonLdProduct === true || row.offerPresent === true || !!productIdFromUrl(url);
