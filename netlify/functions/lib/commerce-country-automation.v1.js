@@ -321,7 +321,7 @@ function settingId(scopeType, input) {
 }
 function mode(value, fallback) {
   const out = lower(value);
-  return ["inherit", "auto", "manual", "off"].includes(out) ? out : (fallback || "inherit");
+  return ["inherit", "auto", "manual", "off", "selected"].includes(out) ? out : (fallback || "inherit");
 }
 function sanitizeSetting(input) {
   const raw = plain(input);
@@ -341,6 +341,13 @@ function sanitizeSetting(input) {
     if (!valid) { const error = new Error("선택 국가의 공식 주·성·지역 코드를 찾을 수 없습니다."); error.statusCode = 400; throw error; }
   }
   const settingMode = mode(raw.mode, scopeType === "master" ? "off" : "inherit");
+  if (settingMode === "selected" && scopeType !== "master") {
+    const error = new Error("선택 국가 운영 모드는 전 세계 예약 자동화에서만 사용할 수 있습니다."); error.statusCode = 400; throw error;
+  }
+  const selectedCountryCodes = scopeType === "master" && settingMode === "selected" ? validatedAutomationCountries(raw.selectedCountryCodes) : [];
+  if (settingMode === "selected" && !selectedCountryCodes.length) {
+    const error = new Error("예약 자동화 대상 국가를 최소 1개 선택해 주세요."); error.statusCode = 400; throw error;
+  }
   return {
     scopeType, regionGroup: scopeType === "region" ? regionGroup : (countryRow(countryCode) && countryRow(countryCode).regionGroup) || null,
     countryCode: countryCode || null, subdivisionCode: subdivisionCode || null,
@@ -348,12 +355,30 @@ function sanitizeSetting(input) {
     // Only the master can constrain the hourly scheduler to one selected scope.
     selectedCountryCode: scopeType === "master" && settingMode === "manual" ? normalizeCountry(raw.selectedCountryCode) || null : null,
     selectedSubdivisionCode: scopeType === "master" && settingMode === "manual" ? text(raw.selectedSubdivisionCode || "NATIONWIDE").toUpperCase() : null,
+    selectedCountryCodes,
     intervalDays: normalizeIntervalDays(raw.intervalDays),
     expandSubdivisions: raw.expandSubdivisions === true,
     maxCandidates: Math.round(clamp(raw.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES)),
     // The operator directive is a search hint, not a trust/safety override.
     researchDirective: ["country", "subdivision"].includes(scopeType) ? text(raw.researchDirective).slice(0, 1200) : ""
   };
+}
+function validatedAutomationCountries(input) {
+  if (!Array.isArray(input) || input.length > registry().countries.length) {
+    const error = new Error("자동화 국가 선택 목록이 올바르지 않습니다."); error.statusCode = 400; throw error;
+  }
+  const out = [], seen = new Set();
+  for (const raw of input) {
+    if (typeof raw !== "string" || !/^[A-Za-z]{2}$/.test(raw.trim())) {
+      const error = new Error("자동화 대상 국가 코드는 두 글자 ISO 코드여야 합니다."); error.statusCode = 400; throw error;
+    }
+    const code = raw.trim().toUpperCase(), country = countryRow(code);
+    if (!country || country.enabled === false || !country.ipResolvable || code === "KP") {
+      const error = new Error("지원하지 않는 자동화 국가 코드입니다: " + code); error.statusCode = 400; throw error;
+    }
+    if (!seen.has(code)) { seen.add(code); out.push(code); }
+  }
+  return out;
 }
 function rowToSetting(row) {
   const rule = plain(row && row.rule);
@@ -364,6 +389,7 @@ function rowToSetting(row) {
     mode: mode(rule.mode, row && row.enabled === false ? "off" : "inherit"), enabled: row && row.enabled !== false,
     selectedCountryCode: lower(rule.scopeType)==="master" ? normalizeCountry(rule.selectedCountryCode) || null : null,
     selectedSubdivisionCode: lower(rule.scopeType)==="master" ? text(rule.selectedSubdivisionCode || "NATIONWIDE").toUpperCase() : null,
+    selectedCountryCodes: lower(rule.scopeType)==="master" ? array(rule.selectedCountryCodes).filter((code)=>countryRow(code)).map(normalizeCountry) : [],
     intervalDays: normalizeIntervalDays(rule.intervalDays),
     expandSubdivisions: rule.expandSubdivisions === true, maxCandidates: Math.round(clamp(rule.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES)),
     researchDirective: ["country", "subdivision"].includes(lower(rule.scopeType)) ? text(rule.researchDirective).slice(0, 1200) : "",
@@ -398,12 +424,18 @@ function effectiveSetting(state, countryCode, subdivisionCode) {
   for (const item of chain) { if (item.mode && item.mode !== "inherit") { selected = item; break; } }
   selected = selected || state.master;
   const activeChain = chain.filter((item) => item && item.mode && item.mode !== "inherit");
+  // The dedicated automation whitelist is a temporary scheduling overlay.
+  // It never rewrites a country's original mode, evidence, or placement ledger.
+  // Keep explicit subdivision OFF rules in force for expanded countries.
+  const inSelectedMode = state.master.mode === "selected";
+  const selectedForAutomation = inSelectedMode && array(state.master.selectedCountryCodes).includes(country.code);
+  const overlayMode = inSelectedMode ? (!selectedForAutomation ? "off" : (subdivision && subdivision.mode === "off" ? "off" : "auto")) : null;
   const intervalSource = activeChain.find((item) => item && item.intervalDays) || state.master;
   const candidateSource = activeChain.find((item) => item && item.maxCandidates) || state.master;
   // Research directives follow the selected geographic scope, even if its mode is "inherit".
   const directiveSource = chain.find((item) => item && ["country", "subdivision"].includes(item.scopeType) && text(item.researchDirective));
   return {
-    mode: selected.mode || "off", enabled: selected.mode === "auto", sourceId: selected.id,
+    mode: overlayMode || selected.mode || "off", enabled: overlayMode ? overlayMode === "auto" : selected.mode === "auto", sourceId: inSelectedMode ? state.master.id : selected.id,
     intervalDays: intervalSource.intervalDays || DEFAULT_INTERVAL_DAYS,
     maxCandidates: candidateSource.maxCandidates || DEFAULT_MAX_CANDIDATES,
     researchDirective: directiveSource ? text(directiveSource.researchDirective).slice(0, 1200) : "",
@@ -436,13 +468,14 @@ async function saveSetting(actorId, input) {
 function operatingStatus(stateInput) {
   const state = stateInput || { master: { mode: "off" }, map: new Map(), settings: [] };
   const masterMode = state.master && state.master.mode || "off";
-  const profile = masterMode === "auto" ? "global_auto" : masterMode === "off" ? "global_pause" : "country_auto";
+  const profile = masterMode === "auto" ? "global_auto" : masterMode === "off" ? "global_pause" : masterMode === "selected" ? "selected_auto" : "country_auto";
   let autoCountries = 0;
   if (masterMode === "auto") {
     for (const country of registry().countries) {
       if (effectiveSetting(state, country.code, "").mode === "auto") autoCountries += 1;
     }
   } else if(masterMode === "manual" && countryRow(state.master.selectedCountryCode)) autoCountries=1;
+  else if(masterMode === "selected") autoCountries = array(state.master.selectedCountryCodes).filter(code => { const row=countryRow(code);return row && row.enabled !== false && row.ipResolvable; }).length;
   return {
     profile,
     masterMode,
@@ -450,7 +483,8 @@ function operatingStatus(stateInput) {
     autoCountryCount: autoCountries,
     schedule: "hourly-due-check",
     scopesPerSchedulerRun: Math.round(clamp(process.env.IGDC_COUNTRY_AUTOMATION_SCOPES_PER_RUN, 1, MAX_SCOPES_PER_RUN, DEFAULT_SCOPES_PER_RUN)),
-    childOverrides: state.settings.filter((row) => row && row.scopeType !== "master" && row.mode && row.mode !== "inherit").length
+    childOverrides: state.settings.filter((row) => row && row.scopeType !== "master" && row.mode && row.mode !== "inherit").length,
+    selectedCountryCodes: masterMode === "selected" ? array(state.master.selectedCountryCodes) : []
   };
 }
 
@@ -489,8 +523,28 @@ async function resetScopedOverrides(actorId, rowsInput) {
 
 async function applyOperatingPreset(actorId, presetInput, scopeInput) {
   const preset = lower(presetInput);
-  if (!["global_auto", "global_pause", "country_auto", "country_pause"].includes(preset)) {
+  if (!["global_auto", "global_pause", "country_auto", "country_pause", "selected_countries_auto", "selected_countries_pause"].includes(preset)) {
     const error = new Error("지원하지 않는 운영 전환 설정입니다."); error.statusCode = 400; throw error;
+  }
+  if (preset === "selected_countries_auto" || preset === "selected_countries_pause") {
+    const selected = validatedAutomationCountries(plain(scopeInput).countryCodes);
+    if (!selected.length) { const error = new Error("자동화할 국가를 체크해 주세요."); error.statusCode = 400; throw error; }
+    const before = await configState();
+    if (!before.storageAvailable) { const error = new Error("자동화 설정 원장을 읽을 수 없어 변경을 중지했습니다."); error.statusCode = 503; throw error; }
+    const previous = before.master.mode === "selected" ? validatedAutomationCountries(array(before.master.selectedCountryCodes)) : [];
+    if (preset === "selected_countries_pause" && before.master.mode !== "selected") {
+      const error = new Error("현재 선택 국가 예약 운영 상태가 아닙니다. 먼저 상단에서 대상 국가 자동화를 시작해 주세요."); error.statusCode = 409; throw error;
+    }
+    const removed = new Set(selected);
+    const next = preset === "selected_countries_auto"
+      ? Array.from(new Set(previous.concat(selected)))
+      : previous.filter(code => !removed.has(code));
+    await saveSetting(actorId, { scopeType: "master", mode: next.length ? "selected" : "off", selectedCountryCodes: next, intervalDays: before.master.intervalDays || DEFAULT_INTERVAL_DAYS, maxCandidates: before.master.maxCandidates || DEFAULT_MAX_CANDIDATES });
+    const after = await configState();
+    return { ok: true, reportType: "igdc-selected-country-scheduled-automation", version: VERSION, preset,
+      requestedCountries: selected, activeCountries: array(after.master.selectedCountryCodes),
+      operatingStatus: operatingStatus(after), existingCountryAndRegionSettingsPreserved: true,
+      reservationOnly: true, automaticProductPublication: false, manualDecisionPrecedence: true };
   }
   if (preset === "country_auto" || preset === "country_pause") {
     const input=plain(scopeInput), country=normalizeCountry(input.countryCode||input.country), info=countryRow(country);
@@ -7396,12 +7450,14 @@ function due(lastRunAt, intervalDays) {
 }
 async function dueScopes(limitInput) {
   const state = await configState();
-  if (state.master.mode !== "auto" && state.master.mode !== "manual") return { state, scopes: [], dueCount: 0 };
+  if (!["auto", "manual", "selected"].includes(state.master.mode)) return { state, scopes: [], dueCount: 0 };
   const selectedCountryOnly=state.master.mode==="manual"?normalizeCountry(state.master.selectedCountryCode):"";
   if(state.master.mode==="manual"&&!countryRow(selectedCountryOnly))return {state,scopes:[],dueCount:0};
   const selectedRegionOnly=state.master.mode==="manual"?text(state.master.selectedSubdivisionCode||"NATIONWIDE").toUpperCase():"";
   const scopes = [];
   for (const country of registry().countries) {
+    if(state.master.mode==="selected" && !array(state.master.selectedCountryCodes).includes(country.code))continue;
+    if(country.enabled===false || !country.ipResolvable)continue;
     if(selectedCountryOnly && country.code!==selectedCountryOnly)continue;
     const countryEffective = effectiveSetting(state, country.code, "");
     if (state.master.mode==="manual" && selectedRegionOnly && selectedRegionOnly!=="NATIONWIDE"){

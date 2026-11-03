@@ -198,7 +198,7 @@ function policyScopeFromInput(raw){
 function catalog(state){
   const reg=Automation.registry();
   return {ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY,policyDiscussionVersion:PolicyDiscussion.VERSION,registry:{schema:reg.schema,version:reg.version,regions:reg.regions,excludedCountryCodes:["KP"],countryCount:reg.countries.length},countries:reg.countries.map((country)=>({
-    code:country.code,nameKo:country.nameKo,nameEn:country.nameEn,regionGroup:country.regionGroup,enabled:country.enabled!==false,requiresSubdivision:country.requiresSubdivision===true,subdivisionType:country.subdivisionType||null,subdivisions:country.subdivisions||[],effective:Automation.effectiveSetting(state,country.code,"")
+    code:country.code,nameKo:country.nameKo,nameEn:country.nameEn,regionGroup:country.regionGroup,enabled:country.enabled!==false,ipResolvable:country.ipResolvable===true,requiresSubdivision:country.requiresSubdivision===true,subdivisionType:country.subdivisionType||null,subdivisions:country.subdivisions||[],effective:Automation.effectiveSetting(state,country.code,"")
   })),settings:state.settings,storage:{available:state.storageAvailable,error:state.storageError||null},master:state.master,operatingStatus:Automation.operatingStatus(state)};
 }
 
