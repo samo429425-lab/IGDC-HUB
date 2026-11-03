@@ -739,7 +739,7 @@
   if (window.__IGDC_COMMERCE_SAFETY_NOTICE_LOADED__) return;
   window.__IGDC_COMMERCE_SAFETY_NOTICE_LOADED__ = true;
   var tag = document.createElement('script');
-  tag.src = '/assets/js/igdc-commerce-safety-notice.js?v=20261103b';
+  tag.src = '/assets/js/igdc-commerce-safety-notice.js?v=20261103c';
   tag.async = true;
   (document.head || document.documentElement).appendChild(tag);
 })();

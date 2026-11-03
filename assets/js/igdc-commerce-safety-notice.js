@@ -103,11 +103,11 @@
       '.igdc-commerce-notice-row--home{margin:0 0 12px 0;}',
       '.igdc-commerce-notice-row--distribution{margin:0 0 20px 0;}',
       '.igdc-commerce-notice-row>.shopping-title,.igdc-commerce-notice-row>.page-title{flex:0 0 auto;margin:0!important;white-space:nowrap;}',
-      '#igdc-commerce-safety-notice{box-sizing:border-box;min-width:0;flex:1 1 auto;display:flex;align-items:baseline;justify-content:flex-end;gap:0 6px;padding:4px 8px;max-width:100%;background:#f7f9fc;border:1px solid #e8edf3;border-radius:5px;color:#4c596a;font-size:12px;line-height:1.4;text-align:right;overflow-wrap:anywhere;}',
+      '#igdc-commerce-safety-notice{box-sizing:border-box;min-width:0;flex:1 1 auto;display:flex;align-items:flex-start;justify-content:flex-start;gap:0 9px;padding:4px 8px;max-width:100%;background:#f3f7fd;border:1px solid #dce8f5;border-radius:5px;color:#082b60;font-size:16px;font-weight:500;line-height:1.45;text-align:left;overflow-wrap:anywhere;}',
       '#igdc-commerce-safety-notice[dir="rtl"]{direction:rtl;text-align:right;unicode-bidi:plaintext;}',
-      '#igdc-commerce-safety-notice .igdc-commerce-safety-notice-title{font-weight:700;white-space:nowrap;color:#32445b;}',
-      '#igdc-commerce-safety-notice .igdc-commerce-safety-notice-body{min-width:0;}',
-      '@media(max-width:820px){.igdc-commerce-notice-row{flex-wrap:wrap;gap:4px;}.igdc-commerce-notice-row>.shopping-title,.igdc-commerce-notice-row>.page-title{flex-basis:100%;}#igdc-commerce-safety-notice{font-size:12px;padding:4px 7px;text-align:start;justify-content:flex-start;}}'
+      '#igdc-commerce-safety-notice .igdc-commerce-safety-notice-title{font-weight:700;white-space:nowrap;color:#082b60;}',
+      '#igdc-commerce-safety-notice .igdc-commerce-safety-notice-body{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;align-items:stretch;gap:2px;word-break:keep-all;}',
+      '@media(max-width:820px){.igdc-commerce-notice-row{flex-wrap:wrap;gap:4px;}.igdc-commerce-notice-row>.shopping-title,.igdc-commerce-notice-row>.page-title{flex-basis:100%;}#igdc-commerce-safety-notice{font-size:15px;padding:5px 7px;text-align:start;justify-content:flex-start;}}'
     ].join('');
     (document.head || document.documentElement).appendChild(style);
   }
@@ -134,10 +134,32 @@
     heading.className = 'igdc-commerce-safety-notice-title';
     var detail = document.createElement('span');
     detail.className = 'igdc-commerce-safety-notice-body';
+    var firstLine = document.createElement('span');
+    firstLine.className = 'igdc-commerce-safety-notice-primary';
+    var secondLine = document.createElement('span');
+    secondLine.className = 'igdc-commerce-safety-notice-secondary';
+    detail.appendChild(firstLine);
+    detail.appendChild(secondLine);
     section.appendChild(heading);
     section.appendChild(detail);
     row.appendChild(section);
     return section;
+  }
+
+  function splitNoticeSentences(locale, message) {
+    // Explicit semantic line break after the introductory seller-linking statement.
+    // Keep the translation intact and preserve the remainder as the second block.
+    if (locale === 'th') {
+      var thaiBreak = message.indexOf(' ผู้ขายรับผิดชอบ');
+      if (thaiBreak > 0) return [message.slice(0, thaiBreak).trim(), message.slice(thaiBreak).trim()];
+    }
+    var end = message.search(/[。।۔]|\.(?=\s|$)/);
+    if (end >= 0) {
+      var first = message.slice(0, end + 1).trim();
+      var second = message.slice(end + 1).trim();
+      if (second) return [first, second];
+    }
+    return [message, ''];
   }
 
   function render() {
@@ -151,7 +173,13 @@
     var title = section.querySelector('.igdc-commerce-safety-notice-title');
     var detail = section.querySelector('.igdc-commerce-safety-notice-body');
     if (title && title.textContent !== words[0]) title.textContent = words[0];
-    if (detail && detail.textContent !== words[1]) detail.textContent = words[1];
+    if (detail) {
+      var parts = splitNoticeSentences(locale, words[1]);
+      var primary = detail.querySelector('.igdc-commerce-safety-notice-primary');
+      var secondary = detail.querySelector('.igdc-commerce-safety-notice-secondary');
+      if (primary && primary.textContent !== parts[0]) primary.textContent = parts[0];
+      if (secondary && secondary.textContent !== parts[1]) secondary.textContent = parts[1];
+    }
   }
 
   function selectLanguage(value) {
