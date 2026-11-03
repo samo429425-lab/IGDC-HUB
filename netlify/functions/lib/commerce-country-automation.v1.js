@@ -3305,7 +3305,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   const reserveDeferred=new Set(array(runtime.partialQueueReserveDeferredIdentities).map(text).filter(Boolean));
   const summary={created:0,updated:0,preserved:0,skipped:0,failed:0,reserveDeferred:0,reserveReplaced:0},stagedCandidateIds=new Set();let firstFailed=null;
   for(let offset=0;offset<batch.length;offset+=(reserveManaged?1:PRODUCT_PARTIAL_STAGE_CONCURRENCY)){
-    const group=batch.slice(offset,offset+(reserveManaged?1:PRODUCT_PARTIAL_STAGE_CONCURRENCY)),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product,{allowAdministratorReviewQueue:manualReviewQueue,restoreReviewableExisting:explicitManualQueue,reserveRows})));
+    const group=batch.slice(offset,offset+(reserveManaged?1:PRODUCT_PARTIAL_STAGE_CONCURRENCY)),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product,{allowAdministratorReviewQueue:manualReviewQueue,restoreReviewableExisting:explicitManualQueue,reserveRows,privateAutomaticNewOnly:lower(input&&input.source)==='scheduled_auto'})));
     for(let i=0;i<settled.length;i++){const result=settled[i],entry=group[i];if(result.status!=="fulfilled"){summary.failed+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}const state=text(result.value&&result.value.status),candidateId=text(result.value&&result.value.candidateId),registered=result.value&&result.value.registered===true;if(!registered){summary.skipped+=1;
         if(state==='research_reserve_deferred'){reserveDeferred.add(entry.identity);summary.reserveDeferred+=1;continue;}
         if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}if(/created/.test(state))summary.created+=1;else if(/updated/.test(state))summary.updated+=1;else summary.preserved+=1;
@@ -4023,6 +4023,15 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
   }
 
   if(existing&&!heldCandidateMatchesScope(existing,scope))return{status:"cross_market_candidate_id_rejected",candidateId:null,registered:false,reason:"candidate_scope_mismatch"};
+  // Scheduled automatic research may CREATE its own new private candidates but
+  // must never rewrite, archive, replace or reassign an older candidate owned
+  // by an administrator or a previous country research cycle.  Treat an
+  // existing candidate as already reconciled so the staging cursor can move
+  // forward without getting trapped retrying the preserved row forever.
+  if (options.privateAutomaticNewOnly === true && existing) return {
+    status: "research_preview_preserved_existing_immutable", candidateId,
+    registered: true, preserved: true, currentStatus: text(existing.status)
+  };
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, registered:false, currentStatus: text(existing.status) };
   const existingPayload = plain(existing && existing.source_payload), operatorDecision = lower(existingPayload.slotDecision), permanentExcluded = plain(existingPayload.queueControl).permanentExcluded === true;
   if(existing&&permanentExcluded)return { status: "operator_state_preserved", candidateId, registered:false, currentStatus: text(existing.status), decision: "purge", approvedPlacement: plain(existingPayload.approvedPlacement) };
@@ -4037,6 +4046,12 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
     reservePlan=ProductReserve.decision(options.reserveRows,product,{frontCapacities:options.frontCapacities});
     if(reservePlan.action==='defer')return{status:'research_reserve_deferred',candidateId:null,registered:false,reserve:reservePlan};
     if(reservePlan.action==='replace'){
+      // Scheduled automation is append-only: an older private research record
+      // may be reviewed or removed only through explicit administrator action.
+      if (options.privateAutomaticNewOnly === true) return {
+        status:'research_reserve_deferred',candidateId:null,registered:false,
+        reserve:Object.assign({},reservePlan,{reason:'scheduled_automation_never_replaces_prior_candidate'})
+      };
       const older=options.reserveRows.find(row=>text(row&&row.id)===reservePlan.replacementId);
       if(!older||ProductReserve.protectedRow(older))return{status:'research_reserve_deferred',candidateId:null,registered:false,reserve:reservePlan};
       const assigns=array(await SlotStore.select('gslot_slot_assignments','select=id&candidate_id=eq.'+encodeURIComponent(reservePlan.replacementId)+'&limit=1'));
@@ -5082,6 +5097,15 @@ async function productCandidatePsomPlace(actorId, input) {
       if (!Object.keys(row).length || text(row.source_ref) !== PRODUCT_SOURCE_REF) { results.push({candidateId:id,assigned:false,error:"candidate_not_found"}); continue; }
       if (!heldCandidateMatchesScope(row,scope)) { results.push({candidateId:id,assigned:false,error:"candidate_outside_selected_country_region"}); continue; }
       const payload = Object.assign({}, plain(row.source_payload)), current = lower(payload.slotDecision || "undecided");
+      // The scheduled AI is not an administrator: unlike an explicit operator
+      // PSOM click, it cannot override a human lock or take over a candidate
+      // created/staged by another actor, even if its ID was queued earlier.
+      if(actor === "scheduled-country-product-ai" &&
+        (plain(payload.managementControl).administratorLocked === true ||
+         text(plain(payload.pipeline).promotedBy) !== actor)) {
+        results.push({candidateId:id,assigned:false,error:"existing_or_administrator_candidate_preserved"});
+        continue;
+      }
       if (["hold","reject","purge","removed"].includes(current) || plain(payload.queueControl).permanentExcluded === true) { results.push({candidateId:id,assigned:false,error:"candidate_excluded"}); continue; }
       // Administrator/manual decisions always outrank automatic PSOM placement.
       // A bulk AI click must never silently rewrite a manually fixed section or
@@ -7480,6 +7504,52 @@ async function dueScopes(limitInput) {
   const limit = Math.round(clamp(limitInput || process.env.IGDC_COUNTRY_AUTOMATION_SCOPES_PER_RUN, 1, MAX_SCOPES_PER_RUN, DEFAULT_SCOPES_PER_RUN));
   return { state, scopes: scopes.slice(0, limit), dueCount: scopes.length };
 }
+// Scheduled PRODUCT research uses the same active country/IP whitelist as
+// supplier discovery, but is not limited to supplier discovery's 3.5-day due
+// queue.  Every active market has a separate durable research/PSOM checkpoint.
+async function autoProductScopes() {
+  const state=await configState();
+  if(!state.storageAvailable)throw Object.assign(new Error("automation_settings_unavailable"),{statusCode:503});
+  if(!["auto","selected","manual"].includes(state.master.mode))return{mode:state.master.mode,scopes:[]};
+  const selected=state.master.mode==="selected"?new Set(array(state.master.selectedCountryCodes)):null;
+  const manual=state.master.mode==="manual"?normalizeCountry(state.master.selectedCountryCode):"";
+  const manualRegion=state.master.mode==="manual"?text(state.master.selectedSubdivisionCode||"NATIONWIDE").toUpperCase():"NATIONWIDE";
+  if(state.master.mode==="manual"&&!countryRow(manual))return{mode:state.master.mode,scopes:[]};
+  const scopes=[];
+  for(const country of registry().countries){
+    if(country.enabled===false||!country.ipResolvable||country.code==="KP")continue;
+    if(selected&&!selected.has(country.code))continue;
+    if(manual&&manual!==country.code)continue;
+    if(manual&&manualRegion!=="NATIONWIDE"){
+      const setting=effectiveSetting(state,country.code,manualRegion);
+      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastRunAt||null});
+      continue;
+    }
+    const effective=effectiveSetting(state,country.code,"");
+    if(effective.mode!=="auto")continue;
+    if(country.requiresSubdivision&&effective.expandSubdivisions===true&&array(country.subdivisions).length){
+      for(const region of country.subdivisions){
+        const child=effectiveSetting(state,country.code,region.code);
+        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastRunAt||null});
+      }
+    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastRunAt||null});
+  }
+  return{mode:state.master.mode,scopes};
+}
+
+// Use the stored research job only: never synthesize a replacement job from
+// existing product candidates when deciding whether automation owns the work.
+async function autoProductJobCheckpoint(input){
+  const scope=researchScope(input),stored=array(await SlotStore.select("gslot_policies",
+    "select=id,rule,updated_by&id=eq."+encodeURIComponent(productJobId(scope))+"&limit=1"))[0],
+    job=plain(stored&&stored.rule),runtime=await productRuntimeRule(scope);
+  return{jobId:text(job.jobId)||null,status:text(job.status)||"not_started",
+    resultCount:Number(job.resultCount||array(job.products).length||0),
+    updatedBy:text(stored&&stored.updated_by)||null,
+    paused:runtime.pauseRequested===true&&(!text(runtime.jobId)||text(runtime.jobId)===text(job.jobId)),
+    startedAt:text(job.startedAt)||null};
+}
+
 async function schedulerRun(event) {
   const dueResult = await dueScopes(); const startedAt = iso();
   const settled = await Promise.allSettled(dueResult.scopes.map((scope) => runScope({ event, countryCode: scope.countryCode, subdivisionCode: scope.subdivisionCode, actorId: "scheduled-automation", trigger: "scheduled-hourly", force: false, dryRun: false })));
@@ -7519,5 +7589,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, autoProductScopes, autoProductJobCheckpoint, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
 };

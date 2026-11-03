@@ -151,7 +151,7 @@
 
   <section class="panel">
     <h2>전 세계 예약 자동화</h2>
-    <div class="small">현재 접속 IP 또는 관리자 선택 국가의 수동 점검과 개별 설정은 아래 국가·지역 점검에서 그대로 수행합니다. 상단에서 전 세계 전체 또는 별도 선택창에서 체크한 국가만 책임 공급업체 예약 자동화를 시작·중지할 수 있습니다. 아래 국가·지역 관리 목록의 선택값은 예약 자동화 대상에 영향을 주지 않습니다. 이 예약은 상품 공개·20개 섹션 자동 게재를 승인하지 않으며, 개별 상품 검증·PSOM 배치·SearchBank·Snapshot의 안전 조건은 별도로 유지합니다. 전 세계 자동 시작은 기존 권역·국가·지역 예외를 상속 상태로 정리한 뒤 지원국 전체를 순환 예약하며 북한(KP)은 제외합니다.</div>
+    <div class="small">현재 접속 IP 또는 관리자 선택 국가의 수동 점검과 개별 설정은 아래 국가·지역 점검에서 그대로 수행합니다. 상단에서 전 세계 전체 또는 별도 선택창에서 체크한 국가만 공급업체 조사 → 상품 리서치·검증 → AI/PSOM 20개 섹션 비공개 1차 배치까지 예약 자동화할 수 있습니다. 아래 국가·지역 관리 목록의 선택값은 예약 자동화 대상에 영향을 주지 않습니다. 자동화의 1차 PSOM 배치는 관리자 최종 확정이나 프론트 공개가 아닙니다. Front Match·SearchBank·Snapshot 공개 및 최종 검증은 관리자가 별도로 진행합니다. 선택 국가 자동 중지는 예약만 중단하며 이미 수집·배치된 결과를 삭제하거나 초기화하지 않습니다. 전 세계 자동 시작은 기존 권역·국가·지역 예외를 상속 상태로 정리한 뒤 지원국 전체를 순환 예약하며 북한(KP)은 제외합니다.</div>
     <div class="operation-actions">
       <button id="globalAutoModeBtn" type="button">전 세계 자동 시작</button>
       <button id="autoCountryPickerOpenBtn" type="button" class="ghost" aria-haspopup="dialog" aria-controls="autoCountryPicker">자동화 대상 국가 선택</button>
@@ -171,6 +171,7 @@
   <div id="autoCountryPicker" class="auto-country-picker hidden" role="dialog" aria-modal="true" aria-labelledby="autoCountryPickerTitle" tabindex="-1">
     <div class="auto-country-picker-sheet">
       <div class="auto-country-picker-head"><h2 id="autoCountryPickerTitle">예약 자동화 국가 선택</h2><button id="autoCountryPickerCloseBtn" type="button" class="secondary">닫기</button></div>
+      <div id="autoCountryPickerHelp" class="small">자동화할 국가를 체크해 주세요. 아래쪽 IP별 국가 관리 목록과는 별개입니다.</div>
       <label for="autoCountryRegionSelect">권역</label>
       <select id="autoCountryRegionSelect" aria-label="자동화 대상 권역 선택"></select>
       <div class="auto-country-picker-tools"><button id="autoCountryRegionAllBtn" type="button" class="ghost">이 권역 전체 선택</button><button id="autoCountryRegionClearBtn" type="button" class="ghost">이 권역 선택 해제</button><span id="autoCountryPickerCount" class="small" aria-live="polite">0개 국가 선택</span></div>
