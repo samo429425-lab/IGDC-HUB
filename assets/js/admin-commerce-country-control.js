@@ -4472,28 +4472,39 @@
     try{var data=await api(CONTROL,'market_signal_apply','POST',{}, {report:lastSignalReport});show('AI 세계·권역 권고를 품목군 탐색 비중에 반영했습니다. 신뢰도·업체 승인·상품 공개 조건은 변경하지 않았습니다.','ok');var status=await api(CONTROL,'signal_status','GET',{regionGroup:selectedRegion});renderActiveSignals(status);presentJson({reportType:lastSignalReport.reportType,scope:lastSignalReport.scope,generatedAt:new Date().toISOString(),appliedResult:data,sourceReport:lastSignalReport});}catch(e){$('applySignalBtn').disabled=!(lastSignalReport.apply&&lastSignalReport.apply.eligible);show(text(e.message)||'AI 권고 반영에 실패했습니다.','fail');}
   }
 
-  // Automation target selection is independent of the lower IP/market management scope.
-  // Start: all eligible countries. Stop: ONLY currently active selected-mode countries.
+  // The automation picker is independent from the lower IP/market management scope.
+  // Start lists only countries NOT already reserved; stop lists ONLY live reserved countries.
   var autoCountrySelection={},autoCountryPickerBeforeOpen={},autoCountryPickerOpen=false;
-  var autoCountryPickerMode='start',autoCountryStopSelection={},autoCountryStopActiveCodes=[],autoCountryStopLoading=false,autoCountryStopApplying=false;
+  var autoCountryPickerMode='start',autoCountryStartLoading=false,autoCountryStopSelection={},autoCountryStopActiveCodes=[],autoCountryStopLoading=false,autoCountryStopApplying=false;
   function automationCountryChoices(){return countries.filter(function(c){return c&&c.code!=='KP'&&c.enabled!==false&&c.ipResolvable===true;});}
-  function automationSelectedCodes(){return automationCountryChoices().map(function(c){return c.code;}).filter(function(code){return autoCountrySelection[code]===true;});}
+  function automationActiveCountryCodes(){
+    var master=catalog&&catalog.master||{},eligible=automationCountryChoices();
+    if(master.mode==='auto')return eligible.map(function(c){return c.code;});
+    if(master.mode!=='selected')return [];
+    var active={};(Array.isArray(master.selectedCountryCodes)?master.selectedCountryCodes:[]).forEach(function(code){active[text(code).toUpperCase()]=true;});
+    return eligible.filter(function(c){return active[c.code]===true;}).map(function(c){return c.code;});
+  }
+  function automationStartChoices(){
+    var active={};automationActiveCountryCodes().forEach(function(code){active[code]=true;});
+    return automationCountryChoices().filter(function(c){return active[c.code]!==true;});
+  }
+  function automationSelectedCodes(){return automationStartChoices().map(function(c){return c.code;}).filter(function(code){return autoCountrySelection[code]===true;});}
   function automationStopChoices(){
     var active={};autoCountryStopActiveCodes.forEach(function(code){active[code]=true;});
     return automationCountryChoices().filter(function(c){return active[c.code]===true;});
   }
   function automationStopSelectedCodes(){return automationStopChoices().map(function(c){return c.code;}).filter(function(code){return autoCountryStopSelection[code]===true;});}
-  function automationPickerChoices(){return autoCountryPickerMode==='stop'?automationStopChoices():automationCountryChoices();}
+  function automationPickerChoices(){return autoCountryPickerMode==='stop'?automationStopChoices():automationStartChoices();}
   function renderAutoCountrySelectionState(){
-    var codes=automationSelectedCodes(),el=$('autoCountrySelectionState'),active=catalog&&catalog.master&&catalog.master.mode==='selected'?catalog.master.selectedCountryCodes||[]:[];
-    if(el)el.textContent='자동화 대상 체크 '+codes.length+'개 · 현재 예약 운영 '+active.length+'개 국가';
-    var count=$('autoCountryPickerCount');if(count)count.textContent=autoCountryPickerMode==='stop'?'중지할 국가 '+automationStopSelectedCodes().length+'개 체크 · 가동 중 '+autoCountryStopActiveCodes.length+'개':'자동화 대상 '+codes.length+'개 선택';
+    var codes=automationSelectedCodes(),el=$('autoCountrySelectionState'),active=automationActiveCountryCodes(),remaining=automationStartChoices().length;
+    if(el)el.textContent='새로 선택 '+codes.length+'개 · 예약 가동 '+active.length+'개 국가 · 시작 가능 '+remaining+'개 국가';
+    var count=$('autoCountryPickerCount');if(count)count.textContent=autoCountryPickerMode==='stop'?'중지할 국가 '+automationStopSelectedCodes().length+'개 체크 · 가동 중 '+autoCountryStopActiveCodes.length+'개':'새로 자동화할 국가 '+codes.length+'개 선택 · 선택 가능 '+remaining+'개';
   }
   function renderAutoCountryList(){
     var select=$('autoCountryRegionSelect'),regionId=select&&select.value||'all',list=$('autoCountryCheckboxList');if(!list)return;
     var rows=automationPickerChoices().filter(function(c){return regionId==='all'||c.regionGroup===regionId;});
     var selected=autoCountryPickerMode==='stop'?autoCountryStopSelection:autoCountrySelection;
-    list.innerHTML=rows.map(function(c){return '<label><input type="checkbox" data-automation-country="'+esc(c.code)+'" value="'+esc(c.code)+'" '+(selected[c.code]?'checked':'')+'><span>'+esc(c.nameKo||c.nameEn||c.code)+' · '+esc(c.code)+'</span></label>';}).join('')||'<span class="small">'+(autoCountryPickerMode==='stop'?'이 권역에 자동화가 켜진 국가는 없습니다.':'지원되는 국가가 없습니다.')+'</span>';
+    list.innerHTML=rows.map(function(c){return '<label><input type="checkbox" data-automation-country="'+esc(c.code)+'" value="'+esc(c.code)+'" '+(selected[c.code]?'checked':'')+'><span>'+esc(c.nameKo||c.nameEn||c.code)+' · '+esc(c.code)+'</span></label>';}).join('')||'<span class="small">'+(autoCountryPickerMode==='stop'?'이 권역에 자동화가 켜진 국가는 없습니다.':'이 권역에서 새로 시작할 국가가 없습니다. 이미 예약된 국가는 시작 목록에서 제외됩니다.')+'</span>';
     renderAutoCountrySelectionState();
   }
   function refreshAutoCountryPickerRegions(){
@@ -4522,16 +4533,27 @@
       $('autoCountryPickerConfirmBtn').classList.toggle('danger',stopping);
     }
     if($('autoCountryCheckboxList'))$('autoCountryCheckboxList').setAttribute('aria-label',stopping?'현재 자동화 가동 국가 중 중지 대상 선택':'권역별 자동화 대상 국가');
-    if($('autoCountryPickerHelp'))$('autoCountryPickerHelp').textContent=stopping?'현재 예약 자동화가 켜진 국가만 표시합니다. 중지할 국가만 체크하세요. 기존 리서치·배정 기록은 삭제되지 않습니다.':'자동화할 국가를 체크해 주세요. 아래쪽 IP별 국가 관리 목록과는 별개입니다.';
+    if($('autoCountryPickerHelp'))$('autoCountryPickerHelp').textContent=stopping?'현재 예약 자동화가 켜진 국가만 표시합니다. 중지할 국가만 체크하세요. 기존 리서치·배정 기록은 삭제되지 않습니다.':'아직 자동화하지 않은 국가만 표시합니다. 시작된 국가는 이 목록에서 빠지며, 아래쪽 IP별 국가 관리와는 별개입니다.';
   }
   function showAutoCountryPicker(){
     refreshAutoCountryPickerRegions();$('autoCountryPicker').classList.remove('hidden');document.body.style.overflow='hidden';autoCountryPickerOpen=true;$('autoCountryRegionSelect').focus();
   }
-  function openAutoCountryPicker(){
+  async function openAutoCountryPicker(){
     if(!regions.length||!countries.length){show('국가 목록을 불러온 후 선택해 주세요.','warn');return;}
-    if(autoCountryPickerOpen)return;
-    autoCountryPickerMode='start';autoCountryPickerBeforeOpen=Object.assign({},autoCountrySelection);
-    setAutoCountryPickerPresentation('start');showAutoCountryPicker();
+    if(autoCountryPickerOpen||autoCountryStartLoading)return;
+    autoCountryStartLoading=true;
+    var button=$('autoCountryPickerOpenBtn');if(button)button.disabled=true;
+    try{
+      // Read the live master reservation, not the lower selected market or a stale UI checkbox.
+      var live=await api(CONTROL,'catalog','GET',{});
+      if(!live||!live.master)throw new Error('예약 운영 상태를 확인하지 못했습니다.');
+      if(catalog){catalog.master=live.master;if(live.operatingStatus)catalog.operatingStatus=live.operatingStatus;}
+      var available={};automationStartChoices().forEach(function(c){available[c.code]=true;});
+      Object.keys(autoCountrySelection).forEach(function(code){if(!available[code])delete autoCountrySelection[code];});
+      autoCountryPickerMode='start';autoCountryPickerBeforeOpen=Object.assign({},autoCountrySelection);
+      setAutoCountryPickerPresentation('start');showAutoCountryPicker();
+    }catch(e){show('자동화 예약 현황을 불러오지 못했습니다: '+text(e.message),'fail');}
+    finally{autoCountryStartLoading=false;if(button)button.disabled=false;}
   }
   async function openAutoCountryStopPicker(){
     if(autoCountryPickerOpen||autoCountryStopLoading)return;
@@ -4559,7 +4581,13 @@
     var applied=false;
     try{applied=await applyOperatingPreset('selected_countries_pause',picked);}
     finally{autoCountryStopApplying=false;if(confirmBtn)confirmBtn.disabled=false;}
-    if(applied)closeAutoCountryPicker(true);
+    if(applied){
+      // Keep the stop window current: successfully stopped countries disappear immediately.
+      autoCountryStopActiveCodes=automationActiveCountryCodes();
+      autoCountryStopSelection={};
+      if(!autoCountryStopActiveCodes.length)closeAutoCountryPicker(true);
+      else refreshAutoCountryPickerRegions();
+    }
   }
   function wireAutoCountryPicker(){
     if(!$('autoCountryPickerOpenBtn'))return;
@@ -4597,6 +4625,12 @@
       var bodyScope=(preset==='selected_countries_auto'||preset==='selected_countries_pause')?{countryCodes:Array.isArray(pickedOverride)?pickedOverride:automationSelectedCodes()}:{countryCode:selectedCountry||'',subdivisionCode:selectedSubdivision||'NATIONWIDE'};
       var data=await api(CONTROL,'operating_preset_apply','POST',{}, {preset:preset,scope:bodyScope});
       presentJson(data);
+      // Immediately reflect the successful server reservation; do not rely on cached checks.
+      if((preset==='selected_countries_auto'||preset==='selected_countries_pause')&&Array.isArray(data&&data.activeCountries)&&catalog){
+        catalog.master=Object.assign({},catalog.master||{}, {
+          mode:data.activeCountries.length?'selected':'off',selectedCountryCodes:data.activeCountries.slice()
+        });
+      }
       await reloadData(false);
       if(preset==='selected_countries_auto'){autoCountrySelection={};renderAutoCountrySelectionState();}
       var messages={selected_countries_auto:'체크한 국가에 공급업체·상품 리서치 및 PSOM 비공개 1차 자동 배치를 예약했습니다. 기존 국가의 설정·배정은 보존합니다.',selected_countries_pause:'체크한 국가의 후속 자동화 예약을 중지했습니다. 이미 수집한 후보·배정은 유지됩니다.',global_auto:'지원되는 전 세계 국가의 책임 공급업체 자동 조사를 주 2회(84시간)로 설정했습니다. 시간당 순환 처리되며 기존 후보와 관리자 기록은 보존됩니다. 상품 리서치·PSOM 비공개 1차 배치는 예약으로 이어지며 최종 게재는 별도 관리자 승인 대상입니다.',global_pause:'전체 예약 자동화를 중지했습니다. 기존 후보·점검 기록과 국가별 세부 설정은 보존됩니다.',country_auto:'선택 국가·지역의 책임 공급업체 예약 자동화를 시작했습니다. 상품 리서치·PSOM 비공개 1차 배치는 예약으로 이어지며 프론트 게재는 별도 관리자 승인 대상입니다.',country_pause:'선택 국가·지역 예약 자동화를 중지했습니다. 원장·관리자 고정은 유지됩니다.'};
