@@ -119,3 +119,14 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
   else boot();
 })();
+
+/* Commerce safety notice: one shared 30-language view, no localized HTML edits. */
+(function () {
+  'use strict';
+  if (window.__IGDC_COMMERCE_SAFETY_NOTICE_LOADED__) return;
+  window.__IGDC_COMMERCE_SAFETY_NOTICE_LOADED__ = true;
+  var tag = document.createElement('script');
+  tag.src = '/assets/js/igdc-commerce-safety-notice.js?v=20261103b';
+  tag.async = true;
+  (document.head || document.documentElement).appendChild(tag);
+})();
