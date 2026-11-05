@@ -1440,8 +1440,15 @@ async function updateRunState(scope, currentSetting, report, actorId) {
   const sanitized = sanitizeSetting(input); const id = settingId(scopeType, sanitized);
   const existingRows = await policyRows(); const existing = existingRows.find((row) => text(row.id) === id);
   const oldRule = plain(existing && existing.rule);
-  const summary = { runId: report.runId, trigger: report.trigger, startedAt: report.startedAt, finishedAt: report.finishedAt, collected: report.summary.collected, considered: report.summary.considered, researchCandidates: report.summary.researchCandidates, evidenceReady: report.summary.evidenceReady, ranked: report.summary.ranked, created: report.summary.created, updated: report.summary.updated, held: report.summary.held, manualPreserved: report.summary.manualPreserved, provider: report.ai.provider, error: report.error || null };
-  const rule = Object.assign({}, oldRule, sanitized, { schema: VERSION, lastRunAt: report.finishedAt, lastRunSummary: summary, updatedAt: report.finishedAt, updatedBy: text(actorId) || "scheduled-automation" });
+  const failedWrites = Number(plain(report.summary).persistenceFailed || 0);
+  const completed = report.ok === true && !report.error && failedWrites === 0;
+  const summary = { runId: report.runId, trigger: report.trigger, startedAt: report.startedAt, finishedAt: report.finishedAt, collected: report.summary.collected, considered: report.summary.considered, researchCandidates: report.summary.researchCandidates, evidenceReady: report.summary.evidenceReady, ranked: report.summary.ranked, created: report.summary.created, updated: report.summary.updated, held: report.summary.held, manualPreserved: report.summary.manualPreserved, persistenceFailed: failedWrites, provider: report.ai.provider, error: report.error || null, completed };
+  // lastRunAt drives the 3.5-day scheduler.  Never advance that success marker
+  // for a failed/partial save; otherwise unsaved findings remain hidden until
+  // the next long research interval after a deploy or transient DB outage.
+  const progress = { schema: VERSION, lastAttemptAt: report.finishedAt, lastAttemptSummary: summary, updatedAt: report.finishedAt, updatedBy: text(actorId) || "scheduled-automation" };
+  if (completed) { progress.lastRunAt = report.finishedAt; progress.lastRunSummary = summary; }
+  const rule = Object.assign({}, oldRule, sanitized, progress);
   const row = { id, name: scopeType === "country" ? "국가 책임 공급업체 발굴 자동화" : "주·성·지역 책임 공급업체 발굴 자동화", scope_hub: "country-commerce-control", scope_country: scope.country, scope_region: scopeType === "subdivision" ? scope.region : null, enabled: sanitized.mode !== "off", rule, updated_at: report.finishedAt, updated_by: text(actorId) || "scheduled-automation" };
   if (!existing) row.created_at = report.finishedAt;
   await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=representation");
@@ -1463,7 +1470,17 @@ async function saveResearchJob(job, actorId) {
   const now = iso(); job.updatedAt = now;
   const row = { id: researchJobId(job.scope), name: "국가 책임 공급업체 단계별 리서치 작업", scope_hub: "country-supplier-research-job", scope_country: job.scope.country, scope_region: job.scope.region === "NATIONWIDE" ? null : job.scope.region, enabled: !["complete","committed","cancelled"].includes(job.status), rule: job, updated_at: now, updated_by: text(actorId) || "country-research-orchestrator" };
   if (!job.createdAt) { job.createdAt = now; row.created_at = now; }
-  await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=representation");
+  // A new deploy must never report a checkpoint as saved if the database did
+  // not return the same country/job identity.  Keep the previous checkpoint
+  // available when a write is rejected or routed to a wrong scope.
+  const written = array(await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=representation"))[0];
+  const savedRule = plain(written && written.rule);
+  if (!written || text(written.id) !== row.id ||
+      text(written.scope_country) !== job.scope.country ||
+      text(savedRule.jobId) !== text(job.jobId)) {
+    const error = new Error("SUPPLIER_RESEARCH_CHECKPOINT_NOT_CONFIRMED");
+    error.statusCode = 503; throw error;
+  }
   return job;
 }
 function manualSupplierRegistryId(scope) { return MANUAL_SUPPLIER_PREFIX + lower(scope.country) + "_" + lower(scope.region || "NATIONWIDE").replace(/[^a-z0-9_-]/g, "_"); }
@@ -1800,6 +1817,22 @@ function expandSupplierResearchRounds(planInput,scopeInput,roundsInput){
   return plan;
 }
 
+async function archiveSupplierResearchCycle(job, actorId) {
+  if (!job || !text(job.jobId)) return;
+  const scope = plain(job.scope), now = iso();
+  if (!scope.country || !scope.region) {
+    const error = new Error("SUPPLIER_RESEARCH_ARCHIVE_SCOPE_MISSING");
+    error.statusCode = 409; throw error;
+  }
+  const id = "country_supplier_research_archive_" + sha256(scope.country + "|" + scope.region + "|" + job.jobId).slice(0, 32);
+  const rule = Object.assign({}, job, { archivedAt: now, archiveReason: "new_cycle_non_destructive_checkpoint_preservation", archivedBy: text(actorId) || "scheduled-automation" });
+  const row = { id, name: "보존된 국가별 공급업체 리서치 주기", scope_hub: "country-supplier-research-archive", scope_country: scope.country, scope_region: scope.region === "NATIONWIDE" ? null : scope.region, enabled: false, rule, updated_at: now, updated_by: text(actorId) || "scheduled-automation" };
+  const stored = array(await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=representation"))[0];
+  if (!stored || text(stored.id) !== id || text(plain(stored.rule).jobId) !== text(job.jobId)) {
+    const error = new Error("SUPPLIER_RESEARCH_ARCHIVE_NOT_CONFIRMED");
+    error.statusCode = 503; throw error;
+  }
+}
 async function beginResearchJob(actorId, input, event) {
   const raw=plain(input),scope=researchScope(raw),state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),existing=await researchJobRule(scope),context=await researchContext(scope),researchRounds=supplierResearchRoundCount(raw);
   // A run may resume only when the operating/policy signature is unchanged.
@@ -1814,11 +1847,18 @@ async function beginResearchJob(actorId, input, event) {
     marketSignal:{active:context.marketSignalPlan&&context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan&&context.marketSignalPlan.categoryWeights)}
   }));
   const existingStatus=lower(existing&&existing.status), forceNewRun=raw.restart===true||raw.forceNewRun===true;
+  // Protect a saved checkpoint from a future deployment whose schema differs.
+  // An incompatible stored job must be migrated deliberately, never silently replaced.
+  if (existing && existing.schema !== RESEARCH_JOB_SCHEMA) {
+    const error = new Error("SUPPLIER_RESEARCH_EXISTING_SCHEMA_REVIEW_REQUIRED");
+    error.statusCode = 409; throw error;
+  }
   const resumableExisting=existing&&existing.schema===RESEARCH_JOB_SCHEMA&&existing.manualOnly!==true&&!["complete","committed","cancelled","failed"].includes(existingStatus)&&text(existing.researchSignature)===researchSignature;
   if(resumableExisting&&!forceNewRun)return publicResearchJob(existing);
 
-  let persistedSupplierRows=[];
-  try{persistedSupplierRows=await listAutomationCandidates(scope.country,scope.region);}catch(_persistedSupplierReadError){persistedSupplierRows=[];}
+  // Failed scope reads are NOT an empty supplier portfolio.  If the database
+  // is temporarily unavailable, do not start a fresh cycle over a false zero.
+  const persistedSupplierRows = await listAutomationCandidates(scope.country, scope.region);
   // Load durable URL/domain suppression before rebuilding the preserved active
   // line-up.  This prevents a legacy DB row that still says approval_pending
   // from being resurrected after the operator blocked/purged that supplier.
@@ -1838,6 +1878,7 @@ async function beginResearchJob(actorId, input, event) {
   const initialStatus=newCandidateTarget<=0?"complete":(array(plan.tasks).length?"searching":"inspecting");
   const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
   if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
+  if (existing && text(existing.jobId) !== text(job.jobId)) await archiveSupplierResearchCycle(existing, actorId);
   await saveResearchJob(job,actorId);return publicResearchJob(job);
 }
 async function researchJobStatus(input) { const scope = researchScope(input); return publicResearchJob(await researchJobRule(scope)); }
@@ -2089,12 +2130,18 @@ async function persistedProductRows(scope) {
     }
     if(rows.length>=PRODUCT_PORTFOLIO_LIMIT)break;
   }
-  if(!anyQuerySucceeded)return[];
+  if(!anyQuerySucceeded){
+    const error=new Error("PRODUCT_CANDIDATE_LEDGER_READ_FAILED_NOT_EMPTY");
+    error.statusCode=503;throw error;
+  }
   return rows.map((row)=>restoredProductFromCandidate(row,scope)).filter(Boolean).slice(0,PRODUCT_PORTFOLIO_LIMIT);
 }
 async function loadProductResearchJob(input) {
   const scope=input&&input.country&&input.region&&input.regionGroup?input:researchScope(input),stored=await productJobRule(scope);
   const forceLedgerRecovery=plain(input).recoverCandidateLedger===true;
+  // Future deploys may change the serialized job schema.  Never translate an
+  // unknown saved checkpoint into an apparently empty new job and overwrite it.
+  if(stored&&stored.schema!==PRODUCT_JOB_SCHEMA)return stored;
   /* The saved product job is the primary working ledger.  Reading every
      gslot candidate and its large source_payload on every status/front request
      becomes a 502/504 risk once the private queue grows into the hundreds.
@@ -2755,9 +2802,18 @@ async function archiveProductResearchCycle(job, actorId){
     scope_country:scope.country,scope_region:scope.region==="NATIONWIDE"?null:scope.region,
     enabled:false,rule:storageSafeJsonValue(archived,0),updated_at:now,updated_by:text(actorId)||"administrator"
   },"resolution=merge-duplicates,return=minimal");
+  const check=array(await SlotStore.select("gslot_policies","select=id,scope_country,scope_region&id=eq."+encodeURIComponent(id)+"&limit=1"))[0];
+  if(!check||text(check.id)!==id||text(check.scope_country)!==text(scope.country)||
+     text(check.scope_region||"NATIONWIDE")!==text(scope.region)){
+    const error=new Error("PRODUCT_RESEARCH_ARCHIVE_NOT_CONFIRMED");error.statusCode=503;throw error;
+  }
 }
 async function beginProductResearchJob(actorId, input) {
   const raw=plain(input),scope=researchScope(raw),existing=await loadProductResearchJob(scope);
+  if (existing && existing.schema !== PRODUCT_JOB_SCHEMA) {
+    const error = new Error("PRODUCT_RESEARCH_EXISTING_SCHEMA_REVIEW_REQUIRED");
+    error.statusCode = 409; throw error;
+  }
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&raw.retryStaging===true){
     // Compatibility with older admin clients: a retry-staging begin no longer
     // starts an automatic writer.  It simply reopens the stored research cycle
@@ -2901,6 +2957,13 @@ async function beginProductResearchJob(actorId, input) {
   const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchFocusPolicyVersion:focusPolicyVersion,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,supplierRefreshCursor:nextSupplierRefreshCursor,refreshedSupplierSourceCount:refreshing.length,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,gapSupplierSourceCount,skippedKnownSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,zeroProductSupplierKeys:Array.from(priorGapKeys),supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,discoveryStorage:"chunked_v1",discoveryResultCount:0,discoveryChunkCount:0,discoveryIdentities:[],rawProducts:[],rawProductCount:0,inspectionStorage:"discovery_chunks_v1",inspectionPool:[],inspectionProcessedBase:0,inspectionTotalCount:0,inspectCursor:0,productInspectionRetryRefs:[],productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],resultStorage:"chunked_v1",resultCount:0,resultChunkCount:0,resultIdentities:[],resultStats:summarizeProductResultRows([]),products:[],preservedProductIdentities:[],currentCycleTouchedIdentities:[],stagePool:[],stagePoolFormat:"result_cursor_v1",stageTotalCount:0,stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},partialQueueStagedIdentities:[],partialQueueLast:null,trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,gapSupplierSources:gapSupplierSourceCount,skippedKnownSupplierSources:skippedKnownSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,storage:"country_region_chunked_v1",chunkSize:PRODUCT_CHUNK_SIZE,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; explicit_full_rescan; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; skip_successfully_researched_suppliers; research_new_and_gap_suppliers_only; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA)await archiveProductResearchCycle(existing,actorId);
   await saveProductJob(job,actorId);
+  // The job row is the only resumable head for this country.  Confirm the new
+  // head exists BEFORE switching its runtime pointer; otherwise the admin UI
+  // could show an empty new cycle while the previous results appear lost.
+  const confirmedJob=await productJobRule(scope);
+  if(!confirmedJob||text(confirmedJob.jobId)!==text(job.jobId)){
+    const error=new Error("PRODUCT_RESEARCH_NEW_CYCLE_CHECKPOINT_NOT_CONFIRMED");error.statusCode=503;throw error;
+  }
   await saveProductRuntime(scope,actorId,{jobId:job.jobId,pauseRequested:false,paused:false,pauseMode:"manual",pauseRequestedAt:null,resumedAt:null,partialQueueScanCursor:0,partialQueueStagedIdentities:[],partialQueueUnstagedIdentities:[],partialQueueReserveDeferredIdentities:[],latestResearchDeletedIdentities:[],partialQueueLast:null,checkpoint:productRuntimeCheckpoint(compactProductResearchStep(job),scope)});
   // product_research_begin only needs to return progress metadata.  Returning
   // the full historical product payload recreates the exact large-response
@@ -7076,7 +7139,10 @@ async function runScope(options) {
       });
     }
     if (report.persistenceErrors.length) {
-      report.storageWarning = report.summary.persistenceFailed + "개 후보 저장이 실패했지만 리서치·AI 평가 결과는 응답과 JSON에 보존했습니다.";
+      report.ok = false;
+      report.errorCode = "PARTIAL_SUPPLIER_PERSISTENCE_FAILURE";
+      report.error = report.summary.persistenceFailed + "개 후보가 저장되지 않았습니다. 해당 국가의 다음 예약에서 재확인이 필요합니다.";
+      report.storageWarning = report.summary.persistenceFailed + "개 후보 저장 실패: 서버 DB에 저장된 것으로 표시하지 않습니다.";
     }
   } catch (error) {
     report.ok = false; report.error = text(error && error.message); report.errorCode = text(error && error.code) || null;
@@ -7279,15 +7345,17 @@ async function listAutomationCandidates(countryCode, regionCode) {
     }
     return rows;
   }
-  let rows=[];
-  try{rows=await scopedRows("->aiAutomation->>country","->aiAutomation->>region");}
-  catch(primaryError){
-    // Older persisted rows also carry the same explicit target scope at the
-    // payload root.  Use that exact-scope fallback; never fall back to a global
-    // full-ledger scan merely because one JSON-path projection failed.
-    try{rows=await scopedRows("->>targetCountry","->>targetRegion");}
-    catch(_legacyError){throw primaryError;}
+  // Mixed-generation supplier records can use either scope location.
+  // A successful empty read of the newer path is NOT proof that the older
+  // country-local records are absent.  Never restart a country on a partial
+  // scope scan; both reads must complete before treating zero as genuine.
+  const currentRows=await scopedRows("->aiAutomation->>country","->aiAutomation->>region");
+  const legacyRows=await scopedRows("->>targetCountry","->>targetRegion");
+  const byId=new Map();
+  for(const row of array(currentRows).concat(array(legacyRows))){
+    const id=text(row&&row.id);if(id&&!byId.has(id))byId.set(id,row);
   }
+  const rows=Array.from(byId.values());
   return array(rows).filter((row) => {
     const payload=plain(row&&row.source_payload),automation=plain(payload.aiAutomation);
     const rowCountry=normalizeCountry(first(automation.country,payload.targetCountry)),rowRegion=normalizeRegion(first(automation.region,payload.targetRegion,"NATIONWIDE"),rowCountry)||"NATIONWIDE";
