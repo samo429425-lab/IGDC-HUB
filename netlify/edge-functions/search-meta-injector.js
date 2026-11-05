@@ -107,6 +107,13 @@ export default async function handler(request, context) {
   if (request.method !== "GET" && request.method !== "HEAD") return context.next();
   const url = new URL(request.url);
   if (BOT_SKIP.some(p => url.pathname.startsWith(p))) return context.next();
+  if (/\/search(?:\.html)?\/?$/i.test(url.pathname)) {
+    const response = await context.next();
+    const headers = new Headers(response.headers);
+    headers.set("x-robots-tag", "noindex, follow");
+    headers.set("x-igdc-search-meta", "central-v2:search:noindex");
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  }
   const page = pageTypeFromPath(url.pathname);
   if (!page) return context.next();
 

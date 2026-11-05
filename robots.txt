@@ -20,4 +20,6 @@ Disallow: /sw-nuke.html
 Sitemap: https://igdcglobal.com/sitemap.xml
 
 # Published-only product detail pages; no candidate or sample products.
-Sitemap: https://igdcglobal.com/.netlify/functions/igdc-organic-catalog?mode=sitemap
+
+# Dynamic public product/media search sitemap
+Sitemap: https://igdcglobal.com/sitemap-global.xml

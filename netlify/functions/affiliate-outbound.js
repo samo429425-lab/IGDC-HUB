@@ -19,6 +19,7 @@ const Contract = require("./lib/nonpg-revenue-contract.core.v1");
 const AffiliateRegistry = require("./lib/affiliate-program-registry.v1");
 
 const SNAPSHOTS = [
+  "netlify/functions/data/search-exposure.public.json",
   "data/search-bank.snapshot.json",
   "netlify/functions/data/search-bank.snapshot.json",
   "netlify/functions/search-bank.snapshot.json",
@@ -50,6 +51,13 @@ function collect(doc){
   }
   return out;
 }
+function normalizeMarket(value){ const code=String(value||"").trim().toUpperCase(); return /^[A-Z]{2}$/.test(code)?code:""; }
+function marketVariant(item, market){
+  const cc=normalizeMarket(market); if(!item||!cc)return item;
+  const routes=item.searchMarkets&&typeof item.searchMarkets==="object"?item.searchMarkets:{};
+  const route=routes[cc]; if(!route||typeof route!=="object")return item;
+  return Object.assign({},item,route,{country:cc,searchMarketCountry:cc});
+}
 function findItem(id){
   const seen=new Set();
   for(const rel of SNAPSHOTS) for(const file of rootCandidates(rel)){
@@ -61,25 +69,57 @@ function findItem(id){
 }
 function plain(statusCode,body){ return {statusCode,headers:{"content-type":"text/plain; charset=utf-8","cache-control":"no-store, private"},body}; }
 function published(item){ return !!(item && item.canonicalPublication && item.canonicalPublication.status==="published" && item.commerceCandidatePublication); }
-function candidateCountries(item){ const values=[item&&item.country,item&&item.placement&&item.placement.country,item&&item.ipSlot&&item.ipSlot.marketCountry]; return Array.from(new Set(values.map(v=>String(v||"").trim().toUpperCase()).filter(v=>/^[A-Z]{2}$/.test(v)))); }
+function candidateCountries(item, requestedMarket){ const values=[requestedMarket,item&&item.searchMarketCountry,item&&item.country,item&&item.placement&&item.placement.country,item&&item.ipSlot&&item.ipSlot.marketCountry]; return Array.from(new Set(values.map(v=>String(v||"").trim().toUpperCase()).filter(v=>/^[A-Z]{2}$/.test(v)))); }
+function callbackPartners(){
+  try{
+    const parsed=JSON.parse(process.env.IGDC_AFFILIATE_PARTNERS_JSON||"[]");
+    const list=Array.isArray(parsed)?parsed:(parsed&&Array.isArray(parsed.providers)?parsed.providers:[]);
+    return list.filter(x=>x&&typeof x==="object"&&x.active===true);
+  }catch(_e){ return []; }
+}
+function callbackFor(providerId){
+  const id=Contract.cleanId(providerId);
+  if(!id) return null;
+  return callbackPartners().find(x=>Contract.cleanId(x.id||x.providerId)===id)||null;
+}
+function callbackRequired(affiliate){
+  const mode=String(affiliate&&affiliate.conversionMode||"").trim().toLowerCase();
+  return ["postback","webhook","provider_callback","callback"].includes(mode);
+}
 
 exports.handler=async(event)=>{
   const id=Contract.cleanId(event&&event.queryStringParameters&&event.queryStringParameters.id);
   if(!id) return plain(400,"Missing released commerce listing id");
-  const item=findItem(id);
+  const requestedMarket=normalizeMarket(event&&event.queryStringParameters&&event.queryStringParameters.market);
+  const baseItem=findItem(id);
+  const item=marketVariant(baseItem,requestedMarket);
   if(!item || !published(item)) return plain(404,"Released commerce listing not found");
+  if(requestedMarket && !(item.searchMarketCountry===requestedMarket || (item.placement&&String(item.placement.country||"").toUpperCase()===requestedMarket))) return plain(404,"Released commerce market listing not found");
   const registry=AffiliateRegistry.load(process.cwd());
   if(!registry.ok) return plain(503,"Outbound policy registry is unavailable");
-  const route=AffiliateRegistry.routeForItem(item,registry,candidateCountries(item));
+  const route=AffiliateRegistry.routeForItem(item,registry,candidateCountries(item,requestedMarket));
   if(!route.ok) return plain(409,"Outbound route is no longer approved");
   const releasedRoute=item.outboundRoute||{};
   if(releasedRoute.mode!==AffiliateRegistry.publicRoute(route).mode) return plain(409,"Outbound route release evidence diverged");
 
   if(route.kind==="affiliate"){
     const affiliate=Contract.affiliateForItem(item);
-    const destination=Contract.decorateAffiliateUrl(affiliate.trackingUrl,{affiliate,allowedHost:affiliate.trackingHost,referralId:id,itemId:id,source:"affiliate-outbound",campaign:"igdc_affiliate",clickSigningSecret:process.env.IGDC_AFFILIATE_CLICK_SIGNING_SECRET||""});
+    const callback=callbackFor(affiliate.providerId);
+    const mustCallback=callbackRequired(affiliate);
+    const clickSecret=String(process.env.IGDC_AFFILIATE_CLICK_SIGNING_SECRET||"").trim();
+    if(mustCallback&&!callback) return plain(503,"Affiliate conversion callback is not configured");
+    if((mustCallback||callback)&&!clickSecret) return plain(503,"Affiliate click attribution signing is unavailable");
+    const destination=Contract.decorateAffiliateUrl(affiliate.trackingUrl,{affiliate,allowedHost:affiliate.trackingHost,referralId:id,itemId:id,source:"affiliate-outbound",campaign:"igdc_affiliate",clickSigningSecret:clickSecret});
     if(!destination) return plain(409,"Affiliate destination is unavailable");
-    return {statusCode:302,headers:{Location:destination,"cache-control":"no-store, private","referrer-policy":"strict-origin-when-cross-origin","x-igdc-outbound-mode":"approved_manual_affiliate","x-igdc-revenue-state":"provider-approved-affiliate","x-igdc-affiliate-provider":affiliate.providerId||""},body:""};
+    let attribution="provider_tracking_link";
+    if(mustCallback||callback){
+      try{
+        const u=new URL(destination), param=String(affiliate.clickIdParam||"").trim();
+        if(!param||!u.searchParams.get(param)) return plain(503,"Affiliate click attribution token was not attached");
+        attribution="signed_click";
+      }catch(_e){ return plain(409,"Affiliate destination is unavailable"); }
+    }
+    return {statusCode:302,headers:{Location:destination,"cache-control":"no-store, private","referrer-policy":"strict-origin-when-cross-origin","x-igdc-outbound-mode":"approved_manual_affiliate","x-igdc-revenue-state":"provider-approved-affiliate","x-igdc-affiliate-provider":affiliate.providerId||"","x-igdc-affiliate-attribution":attribution},body:""};
   }
 
   const destination=Contract.httpsUrl(item.url||item.externalProductUrl||"");
