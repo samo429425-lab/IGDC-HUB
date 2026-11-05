@@ -948,17 +948,53 @@ async function candidateRowsByIds(ids) {
   }
   return out;
 }
-async function existingNonAiCandidateByUrl(url) {
+// A seller may legitimately serve multiple countries. A manual or partner
+// registration in market A must not suppress market B's supplier discovery.
+// Unknown/missing market evidence is never treated as proof of a match.
+function nonAiSupplierCandidateMatchesScope(row, scope) {
+  const payload = plain(row && row.source_payload), automation = plain(payload.aiAutomation),
+    profile = plain(payload.supplierProfile), market = plain(payload.marketScope),
+    supply = plain(payload.countrySupply);
+  const references = [
+    [payload.targetCountry, payload.targetRegion],
+    [automation.country, automation.region],
+    [profile.targetCountry, profile.targetRegion],
+    [market.marketCountry, market.marketRegion],
+    [supply.country || supply.countryCode, supply.region || supply.regionCode]
+  ];
+  const declared = references.filter(([rawCountry]) => !!text(rawCountry));
+  if (!declared.length) return false;
+  // Conflicting country evidence inside one legacy record is not safe to
+  // interpret as belonging to either market. Leave it for manual review.
+  return declared.every(([rawCountry, rawRegion]) => {
+    const country = normalizeCountry(rawCountry);
+    if (!country || country !== scope.country) return false;
+    const region = normalizeRegion(rawRegion || 'NATIONWIDE', country) || 'NATIONWIDE';
+    return region === scope.region || (scope.region !== 'NATIONWIDE' && region === 'NATIONWIDE');
+  });
+}
+async function existingNonAiCandidateByUrl(url, scope) {
   if (!url) return null;
-  const rows = await SlotStore.select("gslot_candidates", "select=id,status,source_ref,official_url,source_payload&official_url=eq." + encodeURIComponent(url) + "&limit=20");
-  return array(rows).find((row) => text(row && row.source_ref) !== SOURCE_REF) || null;
+  // A common marketplace or distributor may have valid entries in numerous
+  // countries. Page the URL matches, compare the target market and NEVER
+  // use an entry from another market as a dedup/blocking decision.
+  const pageSize=200;
+  for(let offset=0;offset<3000;offset+=pageSize){
+    const rows=array(await SlotStore.select('gslot_candidates',
+      'select=id,status,source_ref,official_url,source_payload&official_url=eq.'+encodeURIComponent(url)+
+      '&order=id.asc&limit='+pageSize+'&offset='+offset));
+    const same=rows.find(row=>text(row&&row.source_ref)!==SOURCE_REF&&nonAiSupplierCandidateMatchesScope(row,scope));
+    if(same)return same;
+    if(rows.length<pageSize)return null;
+  }
+  throw Object.assign(new Error('supplier_same_url_scope_lookup_incomplete'),{statusCode:503});
 }
 async function persistCandidate(item, assessment, scope, actorId, manualIds, manualRows) {
   const url = itemUrl(item); const title = itemTitle(item); if (!url || !title) return { status: "skipped", reason: "supplier_title_or_https_url_missing" };
   const deterministicId = "country_supplier_" + sha256(scope.country + "|" + scope.region + "|" + url).slice(0, 24);
   if (manualIds.has(deterministicId)) return { status: "manual_preserved", candidateId: deterministicId };
   for (const row of manualRows.values()) { if (safeUrl(row && row.official_url) === url) return { status: "manual_preserved", candidateId: text(row.id) }; }
-  const existingManual = await existingNonAiCandidateByUrl(url);
+  const existingManual = await existingNonAiCandidateByUrl(url, scope);
   if (existingManual) return { status: "existing_non_ai_preserved", candidateId: text(existingManual.id) };
   const now = iso(); const privateDiscovery = item && item.igdcPrivateReviewOnly === true;
   const profile = Object.assign({}, plain(item && item.supplierProfile), {
@@ -1052,6 +1088,10 @@ async function persistCandidate(item, assessment, scope, actorId, manualIds, man
   });
   const existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,created_at&limit=1&id=eq." + encodeURIComponent(deterministicId)))[0];
   if (existing && text(existing.source_ref) !== SOURCE_REF) return { status: "existing_non_ai_preserved", candidateId: deterministicId };
+  if (existing && !nonAiSupplierCandidateMatchesScope(existing, scope)) return {
+    status: "supplier_market_scope_conflict_preserved", candidateId: null,
+    reason: "existing_supplier_scope_mismatch"
+  };
   const operatorDecision = text(existing && existing.source_payload && existing.source_payload.aiAutomation && existing.source_payload.aiAutomation.operatorDecision);
   if (existing && operatorDecision) return { status: "operator_state_preserved", candidateId: deterministicId, currentStatus: text(existing.status), operatorDecision };
   if (existing && !["approval_pending", "hold"].includes(lower(existing.status))) return { status: "operator_state_preserved", candidateId: deterministicId, currentStatus: text(existing.status) };
@@ -3085,7 +3125,7 @@ async function durableProductCandidate(scope,product,candidateIdInput){
   if(candidateId){
     try{
       const row=array(await SlotStore.select("gslot_candidates","select=id,official_url,status,source_ref,source_payload&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0];
-      if(row&&text(row.source_ref)===PRODUCT_SOURCE_REF)return row;
+      if(row&&text(row.source_ref)===PRODUCT_SOURCE_REF&&heldCandidateMatchesScope(row,scope))return row;
     }catch(_error){}
   }
   return registeredProductCandidateByUrl(product,scope);
@@ -3171,6 +3211,7 @@ async function persistLatestProductValidationDisposition(actorId,scope,productIn
   if(!candidateId)return{status:"failed",decision,error:"missing_product_identity"};
   let existing=array(await SlotStore.select("gslot_candidates","select=id,status,source_ref,source_payload,official_url,thumbnail_url,title&id=eq."+encodeURIComponent(candidateId)+"&limit=1"))[0];
   if(!existing){const currentUrl=productUrl(product);if(currentUrl)existing=await registeredProductCandidateByUrl(product,scope);}
+  if(existing&&!heldCandidateMatchesScope(existing,scope))return{status:"protected",decision,candidateId:null,reason:"cross_market_candidate_preserved"};
   if(existing&&text(existing.source_ref)!==PRODUCT_SOURCE_REF)return{status:"protected",decision,candidateId:text(existing.id)||candidateId,reason:"existing_non_product_candidate_preserved"};
   const prior=plain(existing&&existing.source_payload),priorDecision=lower(prior.slotDecision),priorControl=plain(prior.managementControl),priorQueue=plain(prior.queueControl),front=plain(prior.frontPublication),frontStatus=lower(front.status);
   const protectedState=plain(priorControl.latestResearchHandoff).completed===true||priorQueue.permanentExcluded===true||priorControl.administratorLocked===true||lower(priorControl.source)==="administrator"||priorDecision==="slot_candidate"||["queued","publish_requested","matched","published","active","unpublish_requested"].includes(frontStatus);
@@ -3416,7 +3457,7 @@ async function stageCurrentProductResearchQueueLegacy(actorId, input) {
         let candidateId = productCandidateId(scope, product), candidate = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,official_url&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
         if (!candidate) {
           const currentUrl = productUrl(product);
-          if (currentUrl) candidate = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,official_url&source_ref=eq." + encodeURIComponent(PRODUCT_SOURCE_REF) + "&official_url=eq." + encodeURIComponent(currentUrl) + "&limit=1"))[0];
+          if (currentUrl) candidate = await registeredProductCandidateByUrl(product,scope);
           if (candidate) candidateId = text(candidate.id);
         }
         if (!candidate || text(candidate.source_ref) !== PRODUCT_SOURCE_REF) { skipped += 1; handled.delete(identity); explicitlyUnstaged.add(identity); details.push({ productId:text(product.id), candidateId:candidateId||null, status:"not_registered" }); continue; }
@@ -4140,6 +4181,12 @@ async function syncProductResearchPreview(actorId, scope, productInput, optionsI
 async function syncProductCandidateQueue(actorId, scope, product, decision, optionsInput) {
   const candidateId = productCandidateId(scope, product);
   const existing = array(await SlotStore.select("gslot_candidates", "select=id,status,source_ref,source_payload,updated_at&id=eq." + encodeURIComponent(candidateId) + "&limit=1"))[0];
+  // The product ID may originate from research metadata. Never allow a
+  // country/region A job to overwrite country/region B's existing product.
+  if (existing && !heldCandidateMatchesScope(existing, scope)) return {
+    status: 'cross_market_candidate_id_rejected', candidateId: null, preserved: true,
+    reason: 'candidate_scope_mismatch'
+  };
   if (existing && text(existing.source_ref) !== PRODUCT_SOURCE_REF) return { status: "existing_non_auto_candidate_preserved", candidateId, currentStatus: text(existing.status) };
   // A stale research identity can refer to an already placed durable product
   // under a DIFFERENT candidate id. Never create a duplicate by URL in AI sync.
@@ -5273,13 +5320,23 @@ async function replacementProductExclusions(scope,candidateIdInput){
   }catch(_e){}
   return{urls,identities};
 }
-async function replacementProductAlreadyInLedger(productInput,candidateIdInput){
-  const candidateId=text(candidateIdInput),url=ProductRanking.canonicalProductUrl(productUrl(productInput));if(!url)return{duplicate:true,reason:"replacement_url_missing"};
+async function replacementProductAlreadyInLedger(scope,productInput,candidateIdInput){
+  // The same genuine product may be sold in multiple countries. Only a
+  // second registration IN THIS market should block a replacement.
+  const candidateId=text(candidateIdInput),url=ProductRanking.canonicalProductUrl(productUrl(productInput));
+  if(!url)return{duplicate:true,reason:"replacement_url_missing"};
   try{
-    const rows=await SlotStore.select("gslot_candidates","select=id,official_url,status,source_ref,source_payload&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(url)+"&limit=20");
-    const duplicate=array(rows).find(row=>text(row&&row.id)!==candidateId);
-    return{duplicate:!!duplicate,reason:duplicate?"replacement_already_in_global_ledger":null,candidateId:duplicate?text(duplicate.id):null};
-  }catch(_error){return{duplicate:true,reason:"global_duplicate_check_unavailable",inconclusive:true};}
+    const pageSize=300;
+    // A popular shared marketplace URL can have many country records.
+    // Do not mistake the first N foreign records for this market's data.
+    for(let offset=0;offset<3000;offset+=pageSize){
+      const rows=array(await SlotStore.select("gslot_candidates","select=id,official_url,status,source_ref,source_payload&source_ref=eq."+encodeURIComponent(PRODUCT_SOURCE_REF)+"&official_url=eq."+encodeURIComponent(url)+"&order=id.asc&limit="+pageSize+"&offset="+offset));
+      const duplicate=rows.find(row=>text(row&&row.id)!==candidateId&&heldCandidateMatchesScope(row,scope));
+      if(duplicate)return{duplicate:true,reason:"replacement_already_in_market_ledger",candidateId:text(duplicate.id)};
+      if(rows.length<pageSize)return{duplicate:false,reason:null,candidateId:null};
+    }
+    return{duplicate:true,reason:"market_duplicate_lookup_incomplete",inconclusive:true};
+  }catch(_error){return{duplicate:true,reason:"market_duplicate_check_unavailable",inconclusive:true};}
 }
 // A valid supplier catalogue does not prove that an arbitrary replacement is the
 // ORIGINAL held product. Only an immutable product reference may auto-repair the
@@ -5337,7 +5394,7 @@ async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
     const resolved=ProductRanking.canonicalProductUrl(productUrl(verified)),finalUrl=safeUrl(first(verified&&verified.verifiedDetailPageUrl,resolved));
     if(!verified||!candidateRuntimeHealth(verified).live||verified.inspectionComplete!==true||verified.sameSupplierSite===false||!productImageUrl(verified)||!ProductRanking.isSpecificProductUrl(resolved))continue;
     if(!heldRecoveryReferenceMatches(currentUrl,resolved)||!heldRecoveryReferenceMatches(currentUrl,finalUrl))continue;
-    const globalCheck=await replacementProductAlreadyInLedger(verified,text(candidate.id));if(globalCheck.duplicate===true)continue;
+    const globalCheck=await replacementProductAlreadyInLedger(scope,verified,text(candidate.id));if(globalCheck.duplicate===true)continue;
     return{ok:true,kind:"same_product_url_repair",product:verified,source,currentUrl,recoveredUrl:resolved,verifiedDetailPageUrl:finalUrl,suggestions:[],checkedVariants:variants.length};
   }
   // Supplier discovery is intentionally independent of regional brand names.
@@ -5369,7 +5426,7 @@ async function recoverHeldCandidateProduct(candidateInput,scope,optionsInput){
       return !!url&&sameSupplierSite(source.supplierSiteUrl,url)&&!exclusions.urls.has(url)&&(!identity||!exclusions.identities.has(identity));
     });
     for(const live of liveRows){
-      const globalCheck=await replacementProductAlreadyInLedger(live,text(candidate.id));if(globalCheck.duplicate===true)continue;
+      const globalCheck=await replacementProductAlreadyInLedger(scope,live,text(candidate.id));if(globalCheck.duplicate===true)continue;
       const resolved=ProductRanking.canonicalProductUrl(productUrl(live)),finalUrl=safeUrl(first(live.verifiedDetailPageUrl,resolved));
       if(heldRecoveryReferenceMatches(currentUrl,resolved)&&heldRecoveryReferenceMatches(currentUrl,finalUrl)){
         return{ok:true,kind:"same_product_reference_recovered",product:live,source,currentUrl,recoveredUrl:resolved,suggestions,checkedVariants:variants.length};
@@ -5433,7 +5490,7 @@ async function twoStepHeldProductRecovery(candidateInput,scope,sourceInput,curre
     catch(_error){attempts.push("historical_url_inspection_network_failure");}
     if(verifiedHeldInspection(inspected,current,historical.url)){
       const recoveredUrl=ProductRanking.canonicalProductUrl(productUrl(inspected));
-      const duplicate=await replacementProductAlreadyInLedger(inspected,text(candidate.id));
+      const duplicate=await replacementProductAlreadyInLedger(scope,inspected,text(candidate.id));
       if(duplicate.duplicate!==true)return{verified:true,url:recoveredUrl,product:inspected,source:historical.source,previousUrl:current};
       attempts.push(duplicate.reason||"duplicate_product_url");
     }else attempts.push("historical_original_url_not_live_verified");
@@ -5816,7 +5873,7 @@ async function productVerifiedReviewAction(actorId,input){
         if(proof.urlRepaired===true){
           // A repaired original can only be reused with its still-unexpired
           // evidence. Reject another candidate already using this live URL.
-          const duplicate=await replacementProductAlreadyInLedger({productUrl:fixed},id);
+          const duplicate=await replacementProductAlreadyInLedger(scope,{productUrl:fixed},id);
           if(duplicate.duplicate===true){results.push({id,state:"skipped",reason:duplicate.reason||"recovered_url_duplicate"});continue;}
           const historical=historicalHeldOriginal(candidate);
           if(proof.recoverySource==="historical_exact_candidate_id_and_title"){
@@ -7420,7 +7477,7 @@ async function applyMaintenanceReplacement(actorId,entryInput){
   if(contractSupplier&&!sameSupplierSite(first(inspected.supplierSiteUrl,entry.supplierSiteUrl),originalSupplierRoot))
     return{ok:false,reason:"administrator_supplier_cross_seller_replacement_requires_review",keepQueue:true,contractSupplierProtected:true};
   const exclusions=await replacementProductExclusions(scope,candidateId),replacementUrl=ProductRanking.canonicalProductUrl(productUrl(inspected)),replacementIdentity=ProductRanking.productIdentity(inspected);if(!replacementUrl||exclusions.urls.has(replacementUrl)||(replacementIdentity&&exclusions.identities.has(replacementIdentity)))return{ok:false,reason:"replacement_duplicate_or_existing",dropQueue:true};
-  const globalDuplicate=await replacementProductAlreadyInLedger(inspected,candidateId);if(globalDuplicate.duplicate===true)return{ok:false,reason:globalDuplicate.reason||"replacement_duplicate_or_existing",keepQueue:globalDuplicate.inconclusive===true,dropQueue:globalDuplicate.inconclusive!==true};
+  const globalDuplicate=await replacementProductAlreadyInLedger(scope,inspected,candidateId);if(globalDuplicate.duplicate===true)return{ok:false,reason:globalDuplicate.reason||"replacement_duplicate_or_existing",keepQueue:globalDuplicate.inconclusive===true,dropQueue:globalDuplicate.inconclusive!==true};
   const title=first(inspected.productName,inspected.title,entry.title),image=productImageUrl(inspected),now=iso(),card=candidateRuntimeCard(payload,inspected),supplierName=first(inspected.supplierName,plain(payload.supplier).name,payload.supplierName),supplierUrl=first(inspected.supplierSiteUrl,plain(payload.supplier).officialUrl,payload.supplierSiteUrl,entry.supplierSiteUrl);
   payload.title=title;payload.productName=title;payload.sourceTitle=first(inspected.sourceTitle,title);payload.url=productUrl(inspected);payload.externalProductUrl=productUrl(inspected);payload.productUrl=productUrl(inspected);payload.sourcePageUrl=safeUrl(first(inspected.sourcePageUrl,payload.sourcePageUrl))||payload.sourcePageUrl||null;payload.verifiedDetailPageUrl=safeUrl(first(inspected.verifiedDetailPageUrl,payload.productUrl))||payload.productUrl;payload.image=image;payload.thumb=image;payload.imageUrl=image;payload.price=first(inspected.price,payload.price);payload.priceCurrency=first(inspected.priceCurrency,payload.priceCurrency);payload.availability=first(inspected.availability,payload.availability);payload.productIdentity=replacementIdentity||payload.productIdentity;payload.productCard=card;payload.productPageLive=true;payload.sameSupplierSite=true;payload.inspectionComplete=true;payload.researchStatus=first(inspected.researchStatus,"ready_for_admin_review");
   payload.researchReadiness=Object.assign({},plain(payload.researchReadiness),{stage:payload.researchStatus,productPageLive:true,inspectionComplete:true,productCard:card,lastVerifiedAt:now});payload.runtimeValidation={schema:"igdc-product-runtime-validation.v3",source:"global_daily_maintenance_replacement",checkedAt:now,checkedBy:actor,state:"live",live:true,dead:false,inconclusive:false,reasons:["maintenance_replacement_verified"],exactProductUrl:payload.productUrl,imageUrl:image};payload.productMapping=Object.assign({},plain(payload.productMapping),{productIdentity:replacementIdentity||plain(payload.productMapping).productIdentity,lastMaintenanceReplacementAt:now});payload.maintenanceReplacement={schema:MAINTENANCE_QUEUE_SCHEMA,appliedAt:now,appliedBy:actor,previousProductUrl:currentCanonical||null,replacementProductUrl:payload.productUrl,samePageSectionPreserved:true,publicPublication:false};

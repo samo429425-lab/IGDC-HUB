@@ -685,23 +685,53 @@
     function candidateLedgerProductData(queueData){var rows=Array.isArray(queueData&&queueData.candidates)?queueData.candidates:[],products=rows.map(candidateLedgerProductRow).filter(function(row){var d=productDecision(row);return d!=='removed_from_list'&&d!=='removed'&&d!=='dismiss';}),summary={privateResearchQueueEligible:products.length,privateResearchQueueStaged:products.length,discovered:products.length,inspected:products.filter(function(row){return row.inspectionComplete===true;}).length,withImage:products.filter(function(row){return!!row.imageUrl;}).length,readyForAdminReview:products.filter(function(row){return!!row.productUrl;}).length,slotCandidates:products.filter(function(row){return productDecision(row)==='slot_candidate';}).length,held:products.filter(function(row){return productDecision(row)==='hold';}).length,rejected:products.filter(function(row){var d=productDecision(row);return d==='reject'||d==='purge';}).length};return{ok:true,candidateLedger:true,reportType:'igdc-candidate-ledger-product-control-snapshot',status:'candidate_ledger',scope:scopeSnapshot(),products:products,summary:summary,progress:{stage:'candidate_ledger',discovery:{done:0,total:0},inspection:{done:summary.inspected,total:products.length},privateQueue:{done:products.length,total:products.length,summary:{eligible:products.length,created:0,updated:0,preserved:products.length,failed:0}},resumable:false},pipeline:{version:'candidate-ledger-control-v2',canonicalSlotDecision:true,removedRowsHidden:true,automaticPrivateResearchStaging:false,automaticPublicPublication:false,nextGate:'administrator_product_selection_and_front_match'}};}
 
   function candidateLedgerViewActive(){return productRows.some(function(row){return row&&row.ledgerSource==='candidate';});}
+  function managementLedgerReadState(message,isError){
+    var anchor=$('productGrid')||$('productSectionList'),id='igdc-management-ledger-load-state';
+    if(!anchor||!anchor.parentNode)return;
+    var el=$(id);
+    if(!el){el=document.createElement('div');el.id=id;el.className='small';
+      el.style.cssText='margin:8px 0;padding:8px 10px;border-radius:6px;border:1px solid #496981';
+      anchor.parentNode.insertBefore(el,anchor);}
+    el.style.color=isError?'#ffbf9c':'#bdddf9';el.style.background=isError?'#46221a':'#102940';
+    el.textContent=message||'';el.hidden=!message;
+  }
   async function refreshCandidateLedgerProducts(options){
     latestOverviewLedgerComplete=false;
-    options=options||{};var requested=scopeSnapshot('direct-management-ledger'),requestedKey=scopeKey(requested),all=[],seen={},offset=0,pages=0,pageSize=Math.max(25,Math.min(125,Number(options.pageSize||75))),partialError=null,source='direct_management_ledger';
+    options=options||{};var requested=scopeSnapshot('direct-management-ledger'),requestedKey=scopeKey(requested),all=[],seen={},offset=0,pages=0,pageSize=Math.max(25,Math.min(125,Number(options.pageSize||75))),partialError=null,source='indexed_scoped_management_ledger',indexedRead=true,phase='payload',hasMore=false;
+    if(options.frontSyncPreflight!==true&&options.readOnlyLedgerRefresh!==true)managementLedgerReadState('조회 국가 '+requested.country+' · 지역 '+requested.region+' · 관리자 상품 후보 원장을 읽고 있습니다. 프론트 실상품 수는 방문자 IP 기준이므로 서로 다를 수 있습니다.',false);
     while(pages<250){
       if(scopeKey()!==requestedKey)throw new Error('상품 후보 원장 로딩 중 선택 범위가 변경됐습니다.');
       var page=null,lastError=null;
       for(var attempt=0;attempt<3&&!page;attempt++){
-        try{var adaptiveSize=attempt===0?pageSize:(attempt===1?Math.max(35,Math.floor(pageSize*0.65)):25);page=await api(MANAGEMENT_LEDGER,'list','GET',{country:requested.country,region:requested.region,offset:offset,limit:adaptiveSize},null,18000);}
-        catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
+        try{
+          var adaptiveSize=attempt===0?pageSize:(attempt===1?Math.max(35,Math.floor(pageSize*0.65)):25);
+          page=await api(MANAGEMENT_LEDGER,'list','GET',{country:requested.country,region:requested.region,offset:offset,limit:adaptiveSize,mode:indexedRead?'scoped_indexed_v1':'legacy_global_scan',phase:indexedRead?phase:null},null,22000);
+        }catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
       }
-      if(!page){partialError=lastError||new Error('상품 관리 원장 전용 조회가 중단되었습니다.');break;}
+      if(!page){
+        // Old deployments can lack the indexed endpoint. Fall back to the
+        // existing complete scan ONLY before accepting any new cursor.
+        if(indexedRead&&pages===0){indexedRead=false;source='direct_management_ledger_legacy';offset=0;phase='payload';continue;}
+        partialError=lastError||new Error('상품 관리 원장 전용 조회가 중단되었습니다.');break;
+      }
+      if(indexedRead&&text(page.pagination&&page.pagination.mode)!=='scoped_market_and_assignment_v1'){
+        // An old server silently ignoring mode is still a valid legacy reader.
+        if(pages===0){indexedRead=false;source='direct_management_ledger_legacy';offset=0;continue;}
+        partialError=new Error('상품 관리 원장 조회 방식이 중간에 변경되었습니다.');break;
+      }
       pages+=1;var rows=Array.isArray(page.candidates)?page.candidates:[];rows.forEach(function(row){var id=text(row&&row.candidateId||row&&row.id);if(!id||seen[id])return;seen[id]=true;all.push(row);});
-      var pg=page.pagination||{},hasMore=pg.hasMore===true,next=Number(pg.nextOffset);
-      // Preserve the complete visible administrator board while reading all
-      // durable pages. A partial first page must NEVER deactivate the 20 sections.
-      // Commit the new view only after the final cursor succeeds.
-      if(!hasMore)break;if(!Number.isFinite(next)||next<=offset){partialError=new Error('상품 관리 원장 페이지 커서가 반복되었습니다.');break;}offset=next;
+      var pg=page.pagination||{};hasMore=pg.hasMore===true;var next=Number(pg.nextOffset),nextPhase=text(pg.nextPhase||phase);
+      if(options.frontSyncPreflight!==true&&options.readOnlyLedgerRefresh!==true&&pages%3===0)managementLedgerReadState('선택 국가 '+requested.country+' 상품 원장 '+all.length+'건 조회 중 · '+pages+'회차 · 완료 후 전체 목록을 표시합니다.',false);
+      // Partial pages must never activate administrator placement or Front Match.
+      if(!hasMore)break;
+      if(indexedRead){
+        if(['payload','assignment'].indexOf(nextPhase)<0||!Number.isSafeInteger(next)||next<0||(nextPhase===phase&&next<=offset)){
+          partialError=new Error('상품 관리 원장 국가별 페이지 커서가 반복되었습니다.');break;
+        }
+        phase=nextPhase;offset=next;
+      }else{
+        if(!Number.isFinite(next)||next<=offset){partialError=new Error('상품 관리 원장 페이지 커서가 반복되었습니다.');break;}offset=next;
+      }
     }
     if(pages>=250&&hasMore&&!partialError)partialError=new Error('상품 후보 원장 페이지 제한에 도달해 전체 목록이 아직 완성되지 않았습니다.');
     /* Compatibility fallback only. The ordinary screen no longer depends on the
@@ -717,8 +747,11 @@
         if(fallbackRows.length){all=fallbackRows;partialError=null;source='review_snapshot_fallback';}
       }catch(_fallbackError){}
     }
-    if(!all.length&&partialError)throw partialError;
-    var directComplete=!partialError&&source==='direct_management_ledger',q={ok:directComplete,candidates:all,pagination:{loadedPages:pages,loadedItems:all.length,complete:directComplete,source:source,partial:!directComplete,error:partialError?text(partialError&&partialError.message):null}};
+    if(partialError){
+      if(options.frontSyncPreflight!==true&&options.readOnlyLedgerRefresh!==true)managementLedgerReadState('국가 '+requested.country+' · 지역 '+requested.region+' 관리자 상품 원장 조회를 완료하지 못했습니다: '+text(partialError.message)+' · 기존 상품과 배정은 변경되지 않았습니다. 선택 범위 읽기로 재시도해 주세요.',true);
+      throw partialError;
+    }
+    var directComplete=!partialError&&source!=='review_snapshot_fallback',q={ok:directComplete,candidates:all,pagination:{loadedPages:pages,loadedItems:all.length,complete:directComplete,source:source,partial:!directComplete,error:partialError?text(partialError&&partialError.message):null}};
     var data=candidateLedgerProductData(q);data.candidateRows=q.candidates.slice();data.pipeline=Object.assign({},data.pipeline||{},{directManagementLedger:true,ledgerLoadComplete:directComplete,loadedPages:pages,loadedItems:all.length,source:source,partialError:partialError?text(partialError&&partialError.message):null});
     // Product research may READ this ledger, but must never replace the visible
     // 20-section administrator board with a partial page or research result.
@@ -735,7 +768,14 @@
       // latest research and all thumbnail cards just to prepare Front Match.
       productRows=Array.isArray(data.products)?data.products:[];return data;
     }
-    if(options.readOnlyLedgerRefresh!==true){renderQueue(q.candidates);renderProducts(data.products||[]);}
+    if(options.readOnlyLedgerRefresh!==true){
+      renderQueue(q.candidates);renderProducts(data.products||[]);
+      var frontCount=PRODUCT_SECTIONS.reduce(function(sum,section){return sum+currentFrontCount(section.key);},0);
+      if(options.frontSyncPreflight!==true)managementLedgerReadState(
+        data.products.length?'국가 '+requested.country+' · 지역 '+requested.region+' · 관리자 상품 원장 '+data.products.length+'건 조회 완료 · '+pages+'회차':
+          (frontCount?'국가 '+requested.country+' · 지역 '+requested.region+'의 관리자 원장 0건 · 현재 접속 IP의 공개 실상품 '+frontCount+'건과 비교하려면 두 범위를 먼저 일치시켜야 합니다. 조회 실패 여부도 확인해 주세요.':'국가 '+requested.country+' · 지역 '+requested.region+'에 등록된 관리자 상품 후보가 없습니다.'),
+        !data.products.length&&frontCount>0);
+    }
     var currentStatus=text(lastProductJson&&lastProductJson.status),hasResearchState=!!lastProductJson&&currentStatus&&currentStatus!=='candidate_ledger'&&currentStatus!=='not_started',preserve=options.preserveResearchReport===true||(options.preserveResearchReport!==false&&hasResearchState);
     if(preserve){saveReviewSnapshot();if(partialError)throw partialError;return data;}lastProductJson=data;rememberReport('product',data);renderProductProgress(data);saveReviewSnapshot();if(partialError)throw partialError;return data;
   }

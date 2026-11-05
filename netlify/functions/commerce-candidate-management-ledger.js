@@ -10,7 +10,7 @@ const SlotStore=require("./lib/global-slot-console-supabase");
 const MarketSaleScope=require("./lib/market-sale-scope.v1");
 const ProductPipeline=require("./lib/commerce-product-pipeline-state.v1");
 
-const VERSION="commerce-candidate-management-ledger-v1.6.0-section-scoped-front-preflight";
+const VERSION="commerce-candidate-management-ledger-v1.6.1-market-indexed-admin-read";
 const READ_ROLES=new Set(["owner","admin","site_manager","site_manager_director","director","commerce_manager"]);
 // The ranking engine and administrator-placement authority accept both sources.
 // A candidate in either source must remain findable on the ordinary board.
@@ -88,6 +88,79 @@ function compact(candidate,assignmentRowsInput,country,region){
   live.managementProjection="direct_source_ref";return live;
 }
 async function selectPage(query){return SlotStore.request(SlotStore.rest("gslot_candidates",query),{method:"GET"});}
+
+// Fast read-only administrator listing. The old global RAW scan below remains
+// available as a compatibility fallback, but must not be the default for a
+// country board once dozens of automated country ledgers coexist.
+// Search every recognized *payload scope* shape, and then the durable section
+// assignments in a second cursor phase. Neither phase can write to Supabase.
+function scopedPayloadFilters(country,region){
+  const scopeKeys=[country+"-NATIONWIDE"];
+  if(region!=="NATIONWIDE")scopeKeys.push(country+"-"+region);
+  const objects=scopeKeys.map(key=>({marketKeys:[key]}));
+  objects.push({marketScope:{marketCountry:country}}, {marketScope:{country}},
+    {countrySupply:{country}}, {countrySupply:{countryCode:country}},
+    {countrySupply:{targetMarket:country}},
+    {approvedPlacement:{country}}, {approvedPlacement:{countryCode:country}},
+    {selectedPlacement:{country}}, {selectedPlacement:{countryCode:country}},
+    {primaryPlacement:{country}}, {primaryPlacement:{countryCode:country}},
+    {placement:{country}}, {placement:{countryCode:country}},
+    {targetCountry:country}, {countryCode:country});
+  return "or=("+objects.map(value=>"source_payload.cs."+encodeURIComponent(JSON.stringify(value))).join(",")+")";
+}
+async function hydrateManagementCandidates(rawRows,country,region){
+  const all=array(rawRows),byId=new Map(),ids=Array.from(new Set(all.map(row=>text(row&&row.id)).filter(Boolean)));
+  for(let start=0;start<ids.length;start+=70){
+    const part=ids.slice(start,start+70),query="select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,created_at,updated_at"+
+      "&candidate_id=in.("+part.map(encodeURIComponent).join(",")+")&limit=5000";
+    const assigned=array(await SlotStore.select("gslot_slot_assignments",query));
+    if(assigned.length>=5000)throw new Error("management_scoped_assignment_incomplete");
+    for(const relation of assigned){const id=text(relation&&relation.candidate_id);if(!byId.has(id))byId.set(id,[]);byId.get(id).push(relation);}
+  }
+  return all.map(row=>{
+    const matching=(byId.get(text(row.id))||[]).filter(relation=>relationMatches(relation,country,region));
+    const record=compact(row,matching,country,region);
+    if(!scopeMatch(plain(row.source_payload),country,region)){
+      if(!matching.length)return null;
+      record.ledgerScopeSource="assignment";record.ledgerScopeConflict=true;
+    }
+    return record;
+  }).filter(Boolean);
+}
+async function scopedIndexedPage(country,region,params){
+  const limit=Math.max(25,Math.min(125,Number(params.limit)||75)),offset=Math.max(0,Number(params.offset)||0),phase=text(params.phase||"payload");
+  if(!["payload","assignment"].includes(phase)||!Number.isSafeInteger(offset))throw new Error("invalid_scoped_management_cursor");
+  const fields="id,kind,title,official_url,status,source_ref,thumbnail_url,description,owner_note,source_payload,created_at,updated_at";
+  let raw=[],candidates=[];
+  if(phase==="payload"){
+    const refs="source_ref=in.("+PRODUCT_SOURCE_REFS.map(encodeURIComponent).join(",")+")";
+    const query="select="+fields+"&"+refs+"&"+scopedPayloadFilters(country,region)+"&order=id.asc&limit="+limit+"&offset="+offset;
+    raw=array(await selectPage(query));
+    candidates=await hydrateManagementCandidates(raw,country,region);
+  }else{
+    const regions=["NATIONWIDE"];
+    if(region!=="NATIONWIDE")regions.push(region);
+    const query="select=id,candidate_id,country_code,region_code"+
+      "&country_code=eq."+encodeURIComponent(country)+"&region_code=in.("+regions.map(encodeURIComponent).join(",")+")"+
+      "&order=id.asc&limit="+limit+"&offset="+offset;
+    raw=array(await SlotStore.select("gslot_slot_assignments",query));
+    const ids=Array.from(new Set(raw.map(row=>text(row.candidate_id)).filter(Boolean))),found=[];
+    for(let start=0;start<ids.length;start+=70){
+      const chunk=ids.slice(start,start+70),rows=array(await SlotStore.select("gslot_candidates",
+        "select="+fields+"&id=in.("+chunk.map(encodeURIComponent).join(",")+")&limit="+chunk.length));
+      found.push(...rows.filter(row=>PRODUCT_SOURCE_REFS.includes(text(row.source_ref))));
+    }
+    candidates=await hydrateManagementCandidates(found,country,region);
+  }
+  const hasMoreInPhase=raw.length===limit;
+  const nextPhase=hasMoreInPhase?phase:(phase==="payload"?"assignment":null);
+  const hasMore=!!nextPhase;
+  return {ok:true,version:VERSION,scope:{country,region},candidates,
+    pagination:{offset,limit,returned:candidates.length,scanned:raw.length,phase,
+      hasMore,nextPhase,nextOffset:hasMoreInPhase?offset+raw.length:0,
+      mode:"scoped_market_and_assignment_v1",complete:!hasMore},
+    safety:{readOnly:true,mutatesDatabase:false,source:"market_scoped_payload_and_durable_assignment",noGlobalScan:true}};
+}
 
 // Read-only section-scoped Front Match preflight. The assignment ledger and
 // payload placement are BOTH read: a detached payload candidate is never
@@ -172,6 +245,10 @@ exports.handler=async function(event){
       const keys=text(q.sectionKeys).split(",").filter(Boolean);
       if(!keys.length||keys.length>4||new Set(keys).size!==keys.length||keys.some(key=>!FRONT_SECTION_KEYS.has(key)))return json(400,{ok:false,error:"invalid_selected_front_sections"});
       const result=await sectionFrontMatchPreflight(country,region,keys);
+      result.runtime={totalMs:Date.now()-started};return json(200,result);
+    }
+    if(q.mode==="scoped_indexed_v1") {
+      const result=await scopedIndexedPage(country,region,q);
       result.runtime={totalMs:Date.now()-started};return json(200,result);
     }
     const limit=Math.max(25,Math.min(125,Number(q.limit||q.pageSize)||75)),offset=Math.max(0,Number(q.offset)||0);
