@@ -393,7 +393,12 @@ function rowToSetting(row) {
     intervalDays: normalizeIntervalDays(rule.intervalDays),
     expandSubdivisions: rule.expandSubdivisions === true, maxCandidates: Math.round(clamp(rule.maxCandidates, 1, 50, DEFAULT_MAX_CANDIDATES)),
     researchDirective: ["country", "subdivision"].includes(lower(rule.scopeType)) ? text(rule.researchDirective).slice(0, 1200) : "",
-    lastRunAt: text(rule.lastRunAt) || null, lastRunSummary: plain(rule.lastRunSummary), updatedAt: text(row && row.updated_at) || null
+    lastRunAt: text(rule.lastRunAt) || null, lastRunSummary: plain(rule.lastRunSummary),
+    // Attempt time rotates retry priority; durable time allows product research
+    // on actually saved supplier rows without falsely marking a partial run complete.
+    lastAttemptAt: text(rule.lastAttemptAt) || null,
+    lastDurableSupplierAt: text(rule.lastDurableSupplierAt) || null,
+    updatedAt: text(row && row.updated_at) || null
   };
 }
 async function policyRows() {
@@ -441,6 +446,8 @@ function effectiveSetting(state, countryCode, subdivisionCode) {
     researchDirective: directiveSource ? text(directiveSource.researchDirective).slice(0, 1200) : "",
     expandSubdivisions: !!(countrySetting && countrySetting.expandSubdivisions),
     lastRunAt: (subdivision || countrySetting || {}).lastRunAt || null,
+    lastAttemptAt: (subdivision || countrySetting || {}).lastAttemptAt || null,
+    lastDurableSupplierAt: (subdivision || countrySetting || {}).lastDurableSupplierAt || null,
     lastRunSummary: (subdivision || countrySetting || {}).lastRunSummary || {},
     chain: chain.map((item) => ({ id: item.id, mode: item.mode }))
   };
@@ -1447,6 +1454,13 @@ async function updateRunState(scope, currentSetting, report, actorId) {
   // for a failed/partial save; otherwise unsaved findings remain hidden until
   // the next long research interval after a deploy or transient DB outage.
   const progress = { schema: VERSION, lastAttemptAt: report.finishedAt, lastAttemptSummary: summary, updatedAt: report.finishedAt, updatedBy: text(actorId) || "scheduled-automation" };
+  // Distinguish a fully successful supplier refresh from a partial run that
+  // nevertheless committed usable country-local supplier records. Only the
+  // former satisfies the 84-hour refresh timer. The latter may still feed the
+  // separate private product research/PSOM worker, which revalidates sources.
+  const persistedCount = Number(report.summary.created || 0) + Number(report.summary.updated || 0) +
+    Number(report.summary.held || 0) + Number(report.summary.manualPreserved || 0);
+  if (persistedCount > 0) progress.lastDurableSupplierAt = report.finishedAt;
   if (completed) { progress.lastRunAt = report.finishedAt; progress.lastRunSummary = summary; }
   const rule = Object.assign({}, oldRule, sanitized, progress);
   const row = { id, name: scopeType === "country" ? "국가 책임 공급업체 발굴 자동화" : "주·성·지역 책임 공급업체 발굴 자동화", scope_hub: "country-commerce-control", scope_country: scope.country, scope_region: scopeType === "subdivision" ? scope.region : null, enabled: sanitized.mode !== "off", rule, updated_at: report.finishedAt, updated_by: text(actorId) || "scheduled-automation" };
@@ -7599,6 +7613,8 @@ function due(lastRunAt, intervalDays) {
 }
 async function dueScopes(limitInput) {
   const state = await configState();
+  // A failed DB policy read must not masquerade as an operator-requested OFF.
+  if (!state.storageAvailable) throw Object.assign(new Error("automation_settings_read_failed:" + (state.storageError || "unknown")), { statusCode:503 });
   if (!["auto", "manual", "selected"].includes(state.master.mode)) return { state, scopes: [], dueCount: 0 };
   const selectedCountryOnly=state.master.mode==="manual"?normalizeCountry(state.master.selectedCountryCode):"";
   if(state.master.mode==="manual"&&!countryRow(selectedCountryOnly))return {state,scopes:[],dueCount:0};
@@ -7625,7 +7641,17 @@ async function dueScopes(limitInput) {
       scopes.push({ countryCode: country.code, subdivisionCode: "NATIONWIDE", effective: countryEffective });
     }
   }
-  scopes.sort((a, b) => Date.parse(a.effective.lastRunAt || 0) - Date.parse(b.effective.lastRunAt || 0) || a.countryCode.localeCompare(b.countryCode) || a.subdivisionCode.localeCompare(b.subdivisionCode));
+  // Use the last ATTEMPT for queue fairness (not just last SUCCESS).
+  // Otherwise, after a partial supplier save the same 12 failing countries
+  // stay first forever, starving the other selected markets. Keep lastRunAt
+  // for 84-hour DUE eligibility: this changes ordering only, never approval.
+  const attemptedAt = (scope) => {
+    const effective = plain(scope.effective);
+    const attempt = Date.parse(text(effective.lastAttemptAt));
+    const success = Date.parse(text(effective.lastRunAt));
+    return Math.max(Number.isFinite(attempt) ? attempt : 0, Number.isFinite(success) ? success : 0);
+  };
+  scopes.sort((a, b) => attemptedAt(a) - attemptedAt(b) || a.countryCode.localeCompare(b.countryCode) || a.subdivisionCode.localeCompare(b.subdivisionCode));
   const limit = Math.round(clamp(limitInput || process.env.IGDC_COUNTRY_AUTOMATION_SCOPES_PER_RUN, 1, MAX_SCOPES_PER_RUN, DEFAULT_SCOPES_PER_RUN));
   return { state, scopes: scopes.slice(0, limit), dueCount: scopes.length };
 }
@@ -7647,7 +7673,7 @@ async function autoProductScopes() {
     if(manual&&manual!==country.code)continue;
     if(manual&&manualRegion!=="NATIONWIDE"){
       const setting=effectiveSetting(state,country.code,manualRegion);
-      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastRunAt||null});
+      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastDurableSupplierAt||setting.lastRunAt||null});
       continue;
     }
     const effective=effectiveSetting(state,country.code,"");
@@ -7655,9 +7681,9 @@ async function autoProductScopes() {
     if(country.requiresSubdivision&&effective.expandSubdivisions===true&&array(country.subdivisions).length){
       for(const region of country.subdivisions){
         const child=effectiveSetting(state,country.code,region.code);
-        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastRunAt||null});
+        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastDurableSupplierAt||child.lastRunAt||null});
       }
-    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastRunAt||null});
+    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastDurableSupplierAt||effective.lastRunAt||null});
   }
   return{mode:state.master.mode,scopes};
 }
