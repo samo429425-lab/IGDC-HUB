@@ -9,7 +9,7 @@
   var $=function(id){return document.getElementById(id);};
   var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(ch){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];});};
   var text=function(v){return String(v==null?'':v).trim();};
-  var state=$('state'), notice=$('notice'), diagnosticCache=null, dashboardCache=null, acceptedToken='', acceptedSession=null, resolvingSession=null, candidateStore={}, selectedCandidateId='', refreshPromise=null, lastRefreshAt=0;
+  var state=$('state'), notice=$('notice'), diagnosticCache=null, dashboardCache=null, acceptedToken='', acceptedSession=null, resolvingSession=null, candidateStore={}, selectedCandidateId='', refreshPromise=null, lastRefreshAt=0, candidateRowsCache=[], candidatePageIndex=0, candidateListOpen=false, CANDIDATE_PAGE_SIZE=10;
   var TOKEN_KEYS=['osauth.tokens.v2','osauth.tokens.v1','igdc.tokens','igdc_auth_tokens','auth0_tokens','auth0spa','igdc_id_token','id_token','auth0_id_token'];
 
   function scopeContext(){
@@ -190,11 +190,53 @@
     });
     return rows.length?rows.join('\n'):'-';
   }
+  // Publicity state is NEVER changed here: this is administrator-only list presentation.
+  // Keep the backend's 120-row bounded lookup for summary and review, but render at
+  // most 10 rows only after the administrator explicitly opens the list.
   function renderRows(candidates){
-    var tbody=$('candidateRows'),list=Array.isArray(candidates)?candidates:[];candidateStore={};
+    var list=Array.isArray(candidates)?candidates:[];
+    candidateRowsCache=list;candidateStore={};
     list.forEach(function(row){if(row&&row.candidateId)candidateStore[row.candidateId]=row;});
-    if(!list.length){tbody.innerHTML='<tr><td colspan="10" class="empty">현재 표시할 비공개 후보가 없습니다. 상품 상세 URL과 공급업체 식별이 가능한 리서치 후보는 정보 보완 상태라도 이 대기열에 먼저 나타나야 합니다.</td></tr>';$('tablePanel').classList.remove('hidden');$('candidateActionPanel').classList.add('hidden');return;}
-    tbody.innerHTML=list.map(function(c){
+    $('candidateListCount').textContent='후보 '+list.length+'건';
+    if(candidatePageIndex*CANDIDATE_PAGE_SIZE>=list.length)candidatePageIndex=Math.max(0,Math.ceil(list.length/CANDIDATE_PAGE_SIZE)-1);
+    $('tablePanel').classList.remove('hidden');
+    renderCandidateList();
+  }
+  function renderCandidateList(){
+    var body=$('candidateListContent'),toggle=$('candidateListToggleBtn');
+    body.classList.toggle('hidden',!candidateListOpen);
+    toggle.textContent=candidateListOpen?'상품 목록 닫기':'상품 목록 열기';
+    toggle.setAttribute('aria-expanded',String(candidateListOpen));
+    if(!candidateListOpen){
+      $('candidateRows').innerHTML='';
+      $('candidateActionPanel').classList.add('hidden');
+      return;
+    }
+    renderCandidatePage();
+  }
+  function setCandidateListOpen(open){
+    candidateListOpen=!!open;
+    if(!candidateListOpen){selectedCandidateId='';candidatePageIndex=0;}
+    renderCandidateList();
+  }
+  function changeCandidatePage(delta){
+    var maxPage=Math.max(0,Math.ceil(candidateRowsCache.length/CANDIDATE_PAGE_SIZE)-1);
+    candidatePageIndex=Math.max(0,Math.min(maxPage,candidatePageIndex+delta));
+    selectedCandidateId='';$('candidateActionPanel').classList.add('hidden');
+    renderCandidatePage();
+  }
+  function renderCandidatePage(){
+    var tbody=$('candidateRows'),list=candidateRowsCache,maxPage=Math.max(0,Math.ceil(list.length/CANDIDATE_PAGE_SIZE)-1);
+    candidatePageIndex=Math.min(candidatePageIndex,maxPage);
+    var start=candidatePageIndex*CANDIDATE_PAGE_SIZE,pageRows=list.slice(start,start+CANDIDATE_PAGE_SIZE);
+    $('candidatePrevBtn').disabled=candidatePageIndex<=0;
+    $('candidateNextBtn').disabled=candidatePageIndex>=maxPage;
+    $('candidatePageStatus').textContent=list.length?(start+1)+'–'+(start+pageRows.length)+' / '+list.length+'건 · 페이지 '+(candidatePageIndex+1)+'/'+(maxPage+1):'표시할 후보 0건';
+    if(!list.length){
+      tbody.innerHTML='<tr><td colspan="10" class="empty">현재 표시할 비공개 후보가 없습니다. 상품 상세 URL과 공급업체 식별이 가능한 리서치 후보는 정보 보완 상태라도 이 대기열에 먼저 나타나야 합니다.</td></tr>';
+      $('candidateActionPanel').classList.add('hidden');return;
+    }
+    tbody.innerHTML=pageRows.map(function(c){
       var p=c.placement||{},r=c.revenue||{},v=c.review||{},rank=c.ranking||{},card=c.productCard||{},supplier=c.supplier||{},ready=c.researchReadiness||{};
       var reasons=readinessReasons(c);
       var image=card.image?'<img src="'+esc(card.image)+'" alt="" style="width:70px;height:70px;object-fit:cover;border-radius:8px;float:left;margin:0 9px 6px 0">':'';
@@ -202,13 +244,15 @@
       var readiness=ready.promotionEligible===true?'<span class="pill release">승인 진행 가능</span>':'<span class="pill hold">정보 보완 필요</span>';
       return '<tr><td>'+image+'<strong>'+esc(card.title||c.title||'-')+'</strong><br><span class="small">'+esc(card.priceDisplay||'판매처에서 현재 가격 확인')+' · '+esc(card.supplierName||supplier.name||'-')+'</span>'+(links?'<br><span class="small">'+links+'</span>':'')+'<br><span class="small mono">'+esc(c.candidateId||'-')+'</span><div style="clear:both"></div></td><td><span class="pill '+tierClass(c.sourceTier)+'">'+esc(labelTier(c.sourceTier))+'</span></td><td>'+statusPill(c)+'<br>'+readiness+'<br><span class="small">다음: '+esc(v.nextGate||ready.nextGate||'-')+'</span></td><td>'+proposalHtml(c,p)+'</td><td>'+esc((c.marketKeys||[]).join(', ')||'-')+'</td><td>'+esc(c.essentialClass||'-')+'</td><td><span class="mono">'+esc(r.type||'-')+'</span><br><span class="small">상태: '+esc(r.monetizationState||'-')+' · 계약: '+esc(r.contractId||'-')+' · 검토: '+esc(v.state||'-')+'</span><br><span class="small">결제: 외부 판매처</span></td><td><strong>'+esc(number(rank.finalScore).toFixed(2))+'</strong><br><span class="small">생활 '+esc(rank.essentiality||0)+' · 신뢰 '+esc(rank.sellerTrust||0)+' · 수익 '+esc(rank.revenueCertainty||0)+'</span></td><td class="reason">'+esc(reasons).replace(/\n/g,'<br>')+'</td><td><button type="button" class="manage-btn" data-manage-candidate="'+esc(c.candidateId||'')+'">다음 단계 관리</button></td></tr>';
     }).join('');
-    $('tablePanel').classList.remove('hidden');
     Array.prototype.forEach.call(tbody.querySelectorAll('[data-manage-candidate]'),function(button){button.addEventListener('click',function(){selectCandidate(button.getAttribute('data-manage-candidate'));});});
-    if(selectedCandidateId&&candidateStore[selectedCandidateId])selectCandidate(selectedCandidateId);
+    // A refresh keeps the selected item only while it is present on the visible page.
+    if(selectedCandidateId&&pageRows.some(function(row){return row&&row.candidateId===selectedCandidateId;})){
+      if(!$('candidateActionPanel').classList.contains('hidden'))selectCandidate(selectedCandidateId,false);
+    }else{$('candidateActionPanel').classList.add('hidden');selectedCandidateId='';}
   }
   function setValue(id,value){var el=$(id);if(el)el.value=value==null?'':String(value);}
   function selectedCandidate(){return candidateStore[selectedCandidateId]||null;}
-  function selectCandidate(id){
+  function selectCandidate(id,scrollToEditor){
     var row=candidateStore[id];if(!row)return;selectedCandidateId=id;
     var p=row.placement||{},card=row.productCard||{},review=row.review||{},ready=row.researchReadiness||{};
     $('candidateActionPanel').classList.remove('hidden');
@@ -223,7 +267,7 @@
     var placementKey=text(p.sectionKey||p.section||p.slot),frontStatus=text(p.publicationStatus||row.frontPublication&&row.frontPublication.status||'');
     if($('frontMatchState'))$('frontMatchState').textContent='현재 배정: '+(placementKey?((text(p.page)||'-')+' / '+placementKey):'배정 미완료')+' · 프론트 상태: '+(frontStatus||'미매칭');
     if($('frontMatchBtn'))$('frontMatchBtn').disabled=!placementKey;if($('frontUnmatchBtn'))$('frontUnmatchBtn').disabled=!placementKey;
-    $('candidateActionPanel').scrollIntoView({behavior:'smooth',block:'start'});
+    if(scrollToEditor!==false)$('candidateActionPanel').scrollIntoView({behavior:'smooth',block:'start'});
   }
   async function runWrite(action,body,success){
     if(!selectedCandidateId){show('먼저 관리할 상품 후보를 선택해 주세요.','warn');return null;}
@@ -324,6 +368,9 @@
   }
   function back(){var q=new URLSearchParams(location.search);var p=q.get('returnPath');location.href=p&&p.charAt(0)==='/'?p:'/admin.html';}
   function init(){
+    $('candidateListToggleBtn').addEventListener('click',function(){setCandidateListOpen(!candidateListOpen);});
+    $('candidatePrevBtn').addEventListener('click',function(){changeCandidatePage(-1);});
+    $('candidateNextBtn').addEventListener('click',function(){changeCandidatePage(1);});
     $('refreshBtn').addEventListener('click',function(){refresh(true).catch(function(){});});$('diagnosticBtn').addEventListener('click',diagnostic);$('downloadDiagnosticBtn').addEventListener('click',downloadDiagnostic);$('goLiveAuditBtn').addEventListener('click',goLiveAudit);$('sectionManagerBtn').addEventListener('click',openSectionManager);$('returnBtn').addEventListener('click',back);wireCandidateActions();
     document.addEventListener('igdc:member-auth-ready',function(){acceptedToken='';acceptedSession=null;if(Date.now()-lastRefreshAt>3000)refresh(false).catch(function(){});});
     window.addEventListener('pageshow',function(event){if(event.persisted===true){acceptedToken='';acceptedSession=null;refresh(false).catch(function(){});}});
