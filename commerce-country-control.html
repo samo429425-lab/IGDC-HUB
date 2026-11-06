@@ -156,6 +156,7 @@
       <button id="globalAutoModeBtn" type="button">전 세계 자동 시작</button>
       <button id="autoCountryPickerOpenBtn" type="button" class="ghost" aria-haspopup="dialog" aria-controls="autoCountryPicker">자동화 대상 국가 선택</button>
       <button id="selectedCountryAutoBtn" type="button" class="secondary">선택 국가 예약 자동 시작</button>
+      <button id="selectedCountryResumeBtn" type="button" class="secondary" title="서버에 이미 저장된 선택 국가 목록으로 자동화 예약을 다시 확인합니다. 새 국가를 선택하거나 기존 자료를 초기화하지 않습니다.">기존 선택 국가 자동화 재개</button>
       <button id="selectedCountryAutoStopBtn" type="button" class="secondary">선택 국가 자동 중지</button>
       <button id="globalPauseBtn" type="button" class="danger">전체 자동 중지</button>
       <button id="globalSituationBtn" type="button" class="secondary">상황 점검</button>
@@ -664,7 +665,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=igdc-revenue-visible-three-step-20261101"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=igdc-selected-auto-resume-20261107"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20261025-paged-exclusion-v1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>
