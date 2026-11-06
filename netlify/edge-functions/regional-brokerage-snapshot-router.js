@@ -40,7 +40,7 @@ const snapshotVerificationsInFlight = new Map();
 // policy, country, region, source path and exact SHA-256 (verifiedCacheKey).
 // In-memory only: never allow a CDN/public browser cache to reuse one country's
 // product list in another country. Bounded storage is important for 249 markets.
-const PROJECTION_CACHE_TTL_MS = 60 * 1000;
+const PROJECTION_CACHE_TTL_MS = 5 * 60 * 1000;
 const PROJECTION_CACHE_MAX_ENTRIES = 24;
 const PROJECTION_CACHE_MAX_BYTES = 8 * 1024 * 1024;
 const projectionCache = new Map();
@@ -75,7 +75,7 @@ function putProjection(key, bytes) {
   }
 }
 
-const VERIFIED_CACHE_TTL_MS = 60 * 1000;
+const VERIFIED_CACHE_TTL_MS = 5 * 60 * 1000;
 const VERIFIED_CACHE_MAX_ENTRIES = 12;
 const VERIFIED_CACHE_MAX_BYTES = 16 * 1024 * 1024;
 const verifiedSnapshotCache = new Map();
@@ -405,9 +405,9 @@ function initialDistributionCard(card) {
   }
   return out;
 }
-function initialDistributionView(bytes, limit, view = "initial") {
+function initialDistributionView(bytes, limit, view = "initial", verifiedDoc = null) {
   try {
-    const doc = JSON.parse(new TextDecoder().decode(bytes));
+    const doc = verifiedDoc || JSON.parse(new TextDecoder().decode(bytes));
     const sections = doc && doc.pages && doc.pages.distribution && doc.pages.distribution.sections;
     if (!sections || typeof sections !== "object") return null;
     const max = Math.max(1, Math.min(100, Number(limit) || 20));
@@ -466,9 +466,9 @@ function projectedFrontCard(card) {
   }
   return out;
 }
-function frontPageView(bytes, page) {
+function frontPageView(bytes, page, verifiedDoc = null) {
   try {
-    const doc = JSON.parse(new TextDecoder().decode(bytes));
+    const doc = verifiedDoc || JSON.parse(new TextDecoder().decode(bytes));
     let out = null;
     if (page === "home") {
       const sections = doc && doc.pages && doc.pages.home && doc.pages.home.sections;
@@ -489,9 +489,9 @@ function frontPageView(bytes, page) {
   } catch (_e) { return null; }
 }
 
-function socialRightPanelView(bytes) {
+function socialRightPanelView(bytes, verifiedDoc = null) {
   try {
-    const doc = JSON.parse(new TextDecoder().decode(bytes));
+    const doc = verifiedDoc || JSON.parse(new TextDecoder().decode(bytes));
     const sections = doc && doc.pages && doc.pages.social && doc.pages.social.sections;
     const raw = sections && sections.rightPanel;
     const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.slots) ? raw.slots : []);
@@ -597,10 +597,10 @@ export default async function canonicalIpSlotSnapshotRouter(request, context) {
     const existing = getProjection(projectionKey);
     let compact = existing;
     if (!compact) {
-      if (wantsInitialDistribution) compact = initialDistributionView(published.bytes, 20);
-      else if (wantsDistributionCards) compact = initialDistributionView(published.bytes, 100, "cards");
-      else if (wantsSocialRightPanel) compact = socialRightPanelView(published.bytes);
-      else compact = frontPageView(published.bytes, page);
+      if (wantsInitialDistribution) compact = initialDistributionView(published.bytes, 20, "initial", published.doc);
+      else if (wantsDistributionCards) compact = initialDistributionView(published.bytes, 100, "cards", published.doc);
+      else if (wantsSocialRightPanel) compact = socialRightPanelView(published.bytes, published.doc);
+      else compact = frontPageView(published.bytes, page, published.doc);
       if (compact) putProjection(projectionKey, compact);
     }
     if (compact) responseBytes = compact;

@@ -348,6 +348,10 @@
     }
   }
 
+  // Start the canonical IP-scoped Tour request while the document is parsing.
+  // This promise is page-local; failures may retry on the existing load trigger.
+  let initialTourSnapshotPromise = fetchJson(SNAPSHOT_URL);
+
   function disablePsomThumbGrid() {
     const grids = document.querySelectorAll('.thumb-grid[data-psom-key="tour"]');
     grids.forEach(function(grid){
@@ -664,7 +668,8 @@
     disablePsomThumbGrid();
     installExternalTopNavigation();
 
-    const snap = await fetchJson(SNAPSHOT_URL);
+    const snap = await initialTourSnapshotPromise;
+    if (!snap) initialTourSnapshotPromise = fetchJson(SNAPSHOT_URL);
     let items = [];
 
     // Keep both halves of the Tour snapshot: primary items + reserve slots.
