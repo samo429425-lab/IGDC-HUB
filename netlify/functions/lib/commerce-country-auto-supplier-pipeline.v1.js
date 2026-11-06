@@ -86,10 +86,24 @@ function create(deps) {
       await recheck(s);
       const started=await automation.beginResearchJob(ACTOR,input(s,{researchRounds:RESEARCH_ROUNDS_PER_JOB,researchRoundIndex:Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1)}));
       if(!txt(started&&started.jobId))throw new Error('supplier_research_start_without_job');
-      return Object.assign(state,{jobId:started.jobId,phase:['complete','committed'].includes(started.status)?'committing':'researching',rounds:RESEARCH_ROUNDS,startedAt:started.startedAt||clock(),lastResult:'five_round_supplier_research_started_round_'+String(Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1))});
+      return Object.assign(state,{jobId:started.jobId,lastProgressiveSearchCursor:0,phase:['complete','committed'].includes(started.status)?'committing':'researching',rounds:RESEARCH_ROUNDS,startedAt:started.startedAt||clock(),lastResult:'five_round_supplier_research_started_round_'+String(Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1))});
     }
     if(state.phase==='researching') {
       if(job.status==='complete'||job.status==='committed')return Object.assign(state,{phase:'committing',lastResult:'supplier_research_complete'});
+      // During long multi-query discovery, persist verified PRIVATE leads in
+      // small batches instead of waiting for every query of all five rounds.
+      // This never truncates searchTasks or advances the completed-round count.
+      if(job.status==='searching' && Number(job.searchCursor||0)>0 &&
+         Number(job.searchCursor||0)>=Number(state.lastProgressiveSearchCursor||0)+3 &&
+         typeof automation.progressivePrivateSupplierCommit==='function') {
+        await recheck(s);
+        const staged=await automation.progressivePrivateSupplierCommit(ACTOR,input(s));
+        state.lastProgressiveSearchCursor=Number(job.searchCursor||0);
+        state.progressiveInspected=Number(state.progressiveInspected||0)+Number(staged.inspected||0);
+        state.progressivePersisted=Number(state.progressivePersisted||0)+Number(staged.persisted||0);
+        state.progressiveUsableSuppliers=Number(staged.usableSuppliers||state.progressiveUsableSuppliers||0);
+        if(Number(staged.persisted||0)>0)return Object.assign(state,{lastResult:'supplier_progressive_private_leads_staged_search_continues'});
+      }
       await recheck(s);
       const result=await automation.advanceResearchJob(ACTOR,input(s));
       return Object.assign(state,{phase:['complete','committed'].includes(result.status)?'committing':'researching',lastResult:'supplier_step_'+txt(result.status)});

@@ -31,7 +31,7 @@
 # Checkpointed private product research -> PSOM for AUTOMATED IP markets only.
 # Runs separately from supplier discovery and never auto-publishes.
 [functions."commerce-country-product-ai-scheduler"]
-  schedule = "7,22,37,52 * * * *"
+  schedule = "*/2 * * * *"
 
 # Apply only the latest administrator-stored, policy-gated media snapshot
 # release inside the Netlify build workspace before production deployment.
