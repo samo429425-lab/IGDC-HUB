@@ -302,6 +302,10 @@ function makePipeline(deps) {
     if(!arr(plan.scopes).length)return {ok:true,version:VERSION,masterMode:plan.mode,activeScopes:0,processed:0,results:[],safety:{stoppedDoesNotDelete:true,publicPublication:false}};
     const previous=new Map((await rows()).map(row=>[txt(row.id),obj(row.rule)]));
     const choices=arr(plan.scopes).filter(s=>{
+      // Legacy hourly lastRunAt is not proof of inspected, durable suppliers.
+      // Wait for supplier worker's verified country-local completion marker
+      // before creating any NEW product checkpoint or starting product search.
+      if (!txt(s.supplierLastRunAt)) return false;
       const st=previous.get(idFor(s))||{};
       if(st.operatorAutoPause===true || (st.phase==='manual_job_preserved'&&st.autoTakeover!==true))return false;
       // Do not repeatedly poll a completed market while nothing changed.

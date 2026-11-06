@@ -23,6 +23,7 @@ const ProductRanking = require("./commerce-product-ranking.v1");
 const ProductReserve = require("./commerce-product-research-reserve.v1");
 const PSOMRankCompare = require("./commerce-product-psom-rank-compare.v1");
 const ProductDetailQuality = require("./commerce-product-detail-quality.v1");
+const CommerceHardRisk = require("./commerce-hard-risk.v1");
 const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 const AdminPlacementGuard = require("./commerce-admin-placement-guard.v1");
 const OriginalProductEvidence = require("./igdc-original-product-url-evidence-20261013-all-safe.json");
@@ -725,6 +726,8 @@ function trustRating10(score) {
   return 1;
 }
 function policyRecommendation(assessment) {
+  // A reported danger signal requires administrator review, not automatic deletion.
+  if (array(assessment && assessment.confirmedRiskSignals).length) return "hold";
   const score = Number(assessment && (assessment.trustScore || assessment.score) || 0);
   if (assessment && assessment.approvalReady === true && score >= 92) return "priority_verification";
   if (assessment && assessment.hardGatePassed === true && score >= 90) return "priority_verification";
@@ -772,8 +775,10 @@ function fallbackAiNarrative(assessment, evidence) {
   ];
   for (const row of verified) { if (row[0] === true) strengths.push(row[1]); if (strengths.length >= 5) break; }
   if (assessment && assessment.approvalReady === true && strengths.length < 5) strengths.push("운영 실적 검증 완료");
-  const concerns = missing.concat(performance).slice(0, 5);
-  const nextChecks = performance.length ? performance : (missing.length ? missing : ["정기 재검증 일정과 공개 조건 최종 확인"]);
+  const riskSignals = array(assessment && assessment.confirmedRiskSignals);
+  const riskWarning = riskSignals.length ? ["사기·위조 관련 위험 표시: " + riskSignals.slice(0, 3).join(", ")] : [];
+  const concerns = riskWarning.concat(missing, performance).slice(0, 5);
+  const nextChecks = riskSignals.length ? ["위험 표시의 원본 증거·판매 주체·상품 진위를 관리자 확인 후 해제"] : (performance.length ? performance : (missing.length ? missing : ["정기 재검증 일정과 공개 조건 최종 확인"]));
   return {
     summary: text(assessment && assessment.reason).slice(0, 300),
     strengths: strengths.length ? strengths : ["확인된 강점 증빙 없음"],
@@ -784,6 +789,8 @@ function fallbackAiNarrative(assessment, evidence) {
 function deterministicAssessment(items) {
   return items.map((item, index) => {
     const ev = evidenceProjection(item);
+    // Check explicit structured risk flags only; never infer fraud from geography or language.
+    const confirmedRiskSignals = CommerceHardRisk.collect(item);
     const weighted =
       (ev.official ? 5 : 0) + (ev.responsibleEntity ? 12 : 0) + (ev.directSales ? 10 : 0) +
       (ev.payment ? 8 : 0) + (ev.secureTransport ? 5 : 0) + (ev.shipping ? 8 : 0) +
@@ -820,7 +827,7 @@ function deterministicAssessment(items) {
       if (!ev.publicCountryScopeCorroborated) missingEvidence.push("seller_target_country_not_corroborated");
     }
     if (ev.marketplace) missingEvidence.unshift("major_marketplace_or_aggregator");
-    const hardGatePassed = !ev.marketplace && missingEvidence.length === 0 && trustScore >= TRUST_POLICY.minimumTrustScore;
+    const hardGatePassed = !confirmedRiskSignals.length && !ev.marketplace && missingEvidence.length === 0 && trustScore >= TRUST_POLICY.minimumTrustScore;
     const performanceMissing = [
       ["legal_verification", ev.legalVerificationComplete],
       ["contract_verification", ev.contractVerificationComplete],
@@ -839,7 +846,8 @@ function deterministicAssessment(items) {
     const tier = trustTier(trustScore, hardGatePassed, approvalReady);
     const decision = approvalReady && !privateDiscovery ? "candidate" : "hold";
     let reason;
-    if (ev.marketplace) reason = "대형 마켓플레이스·중개 집합몰은 책임 공급업체 직접거래 후보에서 제외합니다.";
+    if (confirmedRiskSignals.length) reason = "사기·위조 등 위험 표시가 있어 관리자 확인 전 비공개 보류합니다: " + confirmedRiskSignals.slice(0, 5).join(", ");
+    else if (ev.marketplace) reason = "대형 마켓플레이스·중개 집합몰은 책임 공급업체 직접거래 후보에서 제외합니다.";
     else if (!hardGatePassed) reason = "필수 신뢰 증빙이 부족하여 비공개 보류합니다: " + missingEvidence.join(", ");
     else if (!performanceGatePassed) reason = "공개 정책 신뢰 게이트는 통과했지만 법인·계약·배송·반품환불·고객지원 실적 검증 전이므로 비공개 보류합니다.";
     else if (privateDiscovery) reason = "신뢰 검증을 통과한 책임 공급업체 후보이나 관리자 인증과 상품별 선별 전에는 비공개 보류합니다.";
@@ -847,7 +855,7 @@ function deterministicAssessment(items) {
     const baseAssessment = {
       index, decision, score: trustScore, trustScore, commercialScore, trustTier: tier,
       hardGatePassed, performanceGatePassed, approvalReady,
-      missingEvidence, performanceMissing, reason
+      confirmedRiskSignals, missingEvidence, performanceMissing, reason
     };
     const recommendation = policyRecommendation(baseAssessment);
     const narrative = fallbackAiNarrative(baseAssessment, ev);
@@ -1036,6 +1044,7 @@ async function persistCandidate(item, assessment, scope, actorId, manualIds, man
     trustScore: Number(assessment.trustScore || assessment.score || 0),
     commercialScore: Number(assessment.commercialScore || 0),
     trustTier: text(assessment.trustTier) || "insufficient_evidence",
+    confirmedRiskSignals: array(assessment.confirmedRiskSignals),
     rating10: Number(assessment.rating10 || trustRating10(assessment.trustScore || assessment.score)),
     recommendation: text(assessment.recommendation) || policyRecommendation(assessment),
     recommendationLabel: text(assessment.recommendationLabel) || recommendationLabel(assessment.recommendation),
@@ -1081,6 +1090,7 @@ async function persistCandidate(item, assessment, scope, actorId, manualIds, man
       rank: Number(assessment.rank || 0) || null,
       decision: assessment.decision, score: assessment.trustScore || assessment.score, trustScore: assessment.trustScore || assessment.score,
       commercialScore: assessment.commercialScore || 0, trustTier: assessment.trustTier || "insufficient_evidence",
+      confirmedRiskSignals: array(assessment.confirmedRiskSignals),
       rating10: Number(assessment.rating10 || trustRating10(assessment.trustScore || assessment.score)),
       recommendation: text(assessment.recommendation) || policyRecommendation(assessment),
       recommendationLabel: text(assessment.recommendationLabel) || recommendationLabel(assessment.recommendation),
@@ -1155,6 +1165,8 @@ function previewCandidateToItem(rowInput, scope) {
     title,
     url,
     supplierOfficialUrl: url,
+    // Preserve structured danger flags through the existing private preview-commit path.
+    confirmedRiskSignals: array(row.confirmedRiskSignals),
     description: text(row.aiSummary || plain(row.aiAssessment).summary || row.reason).slice(0, 2000) || null,
     targetCountry: scope.country,
     targetRegion: scope.region,
@@ -1390,6 +1402,7 @@ async function commitPreviewCandidates(actorId, input) {
       strengths: assessment.strengths,
       concerns: assessment.concerns,
       nextChecks: assessment.nextChecks,
+      confirmedRiskSignals: array(assessment.confirmedRiskSignals),
       aiAssessment: {
         scale: "1_to_10",
         rating10: assessment.rating10,
@@ -1680,6 +1693,11 @@ function mergeSupplierBlocked(existing,incoming,blockedKeys,max){
   return out;
 }
 function retryableResearchStatus(status) { return /timeout|abort|aborted|network|http_(408|409|425|429|5\d\d)/i.test(text(status)); }
+function supplierExplicitDanger(row) {
+  // Flagged suppliers remain privately visible for administrator review but
+  // cannot unlock product research until the recorded danger is resolved.
+  return CommerceHardRisk.collect(row).length > 0 || array(row && row.confirmedRiskSignals).length > 0;
+}
 function stagedCandidateRow(entry, rank) {
   const item = entry.item, assessment = Object.assign({}, entry.assessment, { rank });
   return {
@@ -1687,6 +1705,7 @@ function stagedCandidateRow(entry, rank) {
     supplierType: text(item && item.supplierProfile && item.supplierProfile.type) || "unclassified",
     title: itemTitle(item), url: researchCandidateUrl(item), collectionStage: "responsible_supplier_persisted_research",
     productImport: false, transactionAtSupplier: true, decision: assessment.decision,
+    confirmedRiskSignals: array(assessment.confirmedRiskSignals),
     score: assessment.trustScore || assessment.score, trustScore: assessment.trustScore || assessment.score,
     commercialScore: assessment.commercialScore || 0, trustTier: assessment.trustTier,
     rating10: Number(assessment.rating10 || trustRating10(assessment.trustScore || assessment.score)),
@@ -1931,6 +1950,21 @@ async function advanceResearchJob(actorId, input, event) {
         const result = await RegionalSelector.searchSupplierResearchStep(event || {}, Object.assign({}, selectorInput, { task, externalFallback, limit: Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES), timeoutMs: 7000 }));
         const novelItems=filterKnownSupplierItems(result.items,new Set(array(job.knownSupplierKeys)));
         job.supplierHoldingCandidates=mergeSupplierHolding(job.supplierHoldingCandidates,novelItems,job.blockedSupplierKeys,300); job.supplierBlockedCandidates=mergeSupplierBlocked(job.supplierBlockedCandidates,novelItems,job.blockedSupplierKeys,300); job.rawCandidates = mergeResearchItems(job.rawCandidates, novelItems, SUPPLIER_RAW_LIMIT, job.blockedSupplierKeys); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0), returned:Number(array(result.items).length), novel:Number(novelItems.length), duplicateExistingSkipped:Math.max(0,array(result.items).length-novelItems.length) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
+        // A provider-level Google Custom Search 403 is a configuration/permission
+        // denial, not a transient 429. Repeating the same blocked Google calls
+        // dozens of times delays the usable Sanmaru fallback and wastes quota.
+        // Only the autonomous job skips its *remaining* Google tasks; this
+        // never invents a supplier and a fresh research cycle retries Google.
+        if (text(actorId)==='scheduled-automation' && task.lane==='google' &&
+            lower(result.status)==='http_403' &&
+            /does not have (?:the )?access to custom search json api/i.test(text(result.detail))) {
+          const prefix=job.searchTasks.slice(0,job.searchCursor);
+          const tail=job.searchTasks.slice(job.searchCursor);
+          const retained=tail.filter(row=>plain(row).lane!=='google');
+          job.searchTasks=prefix.concat(retained);
+          job.trace=array(job.trace).concat([{at:iso(),source:'google',status:'provider_permission_denied_remaining_google_tasks_skipped',skippedTasks:tail.length-retained.length,provider:'google',fallback:'sanmaru',operatorAction:'enable_custom_search_json_api_for_google_project'}]);
+          job.providerWarnings=Object.assign({},plain(job.providerWarnings),{googleCsePermissionDenied:true});
+        }
         if (retryableResearchStatus(result.status) && Number(task.attempt || 0) < 1) job.searchTasks.push(Object.assign({}, task, { attempt: Number(task.attempt || 0) + 1, retryOf: Number(job.searchCursor || 0) - 1 }));
         if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.newCandidateTarget||job.effective && job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES) * 2)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       }
@@ -2905,9 +2939,9 @@ async function beginProductResearchJob(actorId, input) {
   // administrator removing the supplier from the private candidate list.
   // Exclude only truly disabled/blocked/rejected durable rows, while preserving
   // an explicit administrator operator hold as inactive.
-  const inactiveSupplierStatuses=new Set(["blocked","suppressed","rejected","reject","disabled","excluded"]);
-  const inactiveOperatorDecisions=new Set(["hold","held","blocked","suppressed","rejected","reject","disabled","excluded"]);
-  const currentDurableRows=array(durableSupplierRows).filter((row)=>!inactiveSupplierStatuses.has(lower(row&&row.status))&&!inactiveOperatorDecisions.has(lower(plain(row&&row.ai).operatorDecision)));
+  const inactiveSupplierStatuses=new Set(["blocked","suppressed","rejected","reject","disabled","excluded","removed","purged"]);
+  const inactiveOperatorDecisions=new Set(["hold","held","blocked","suppressed","rejected","reject","disabled","excluded","dismiss","remove_from_list","purge"]);
+  const currentDurableRows=array(durableSupplierRows).filter((row)=>!inactiveSupplierStatuses.has(lower(row&&row.status))&&!inactiveOperatorDecisions.has(lower(plain(row&&row.ai).operatorDecision))&&!supplierExplicitDanger(row));
   // Supplier registrations are persisted to the *active* supplier-research
   // job as vetted candidates even while its search/inspection is unfinished.
   // Read that private candidate list now, not only after complete/commit.
@@ -2918,7 +2952,7 @@ async function beginProductResearchJob(actorId, input) {
   const supplierBlockedKeys=array(supplierJob&&supplierJob.blockedSupplierKeys);
   const supplierRows=currentDurableRows.concat(activeReviewRows.filter((row)=>{
     const action=lower(first(row&&row.operatorDecision,plain(row&&row.ai).operatorDecision));
-    return !inactiveOperatorDecisions.has(action)&&!inactiveSupplierStatuses.has(lower(row&&row.status))&&supplierSurfaceDisposition(row,supplierBlockedKeys).state!=="blocked";
+    return !inactiveOperatorDecisions.has(action)&&!inactiveSupplierStatuses.has(lower(row&&row.status))&&!supplierExplicitDanger(row)&&supplierSurfaceDisposition(row,supplierBlockedKeys).state!=="blocked";
   }));
   if(!supplierRows.length){const error=new Error("책임 공급업체 비공개 후보 원장에 상품 리서치할 활성 공급업체가 없습니다.");error.statusCode=409;throw error;}
   const sourcePool=[],seenSupplierSites=new Set();
@@ -7448,6 +7482,7 @@ async function listAutomationCandidates(countryCode, regionCode) {
         policyPagesInspected: Number(evidence.policyPagesInspected || 0)
       },
       intermediary: contract, productImport: false, ai: automation,
+      confirmedRiskSignals: array(first(automation.confirmedRiskSignals,trust.confirmedRiskSignals,payload.confirmedRiskSignals)),
       supplierType:text(profile.type||evidence.supplierType)||"unclassified", trustScore:Number(trust.trustScore||trust.score||automation.trustScore||automation.score||0), score:Number(trust.trustScore||trust.score||automation.trustScore||automation.score||0), commercialScore:Number(trust.commercialScore||automation.commercialScore||0), hardGatePassed:trust.hardGatePassed===true||evidence.supplierReviewEligible===true, approvalReady:trust.approvalReady===true, recommendation:text(automation.recommendation||trust.recommendation)||null,
       adminPinned:automation.adminPinned===true||profile.adminPinned===true, manualPinned:automation.manualPinned===true||profile.manualPinned===true, manualRegistered:automation.manualRegistered===true||profile.manualRegistered===true, manualSupplierId:text(automation.manualSupplierId||profile.manualSupplierId)||null, affiliateSettlement:plain(payload.affiliateSettlement), productPageUrl:safeUrl(payload.productPageUrl)||null, sourceCandidateUrl:safeUrl(payload.sourceCandidateUrl)||null,
       createdAt: text(row.created_at) || null, updatedAt: text(row.updated_at) || null
@@ -7720,7 +7755,7 @@ async function autoProductScopes() {
     if(manual&&manual!==country.code)continue;
     if(manual&&manualRegion!=="NATIONWIDE"){
       const setting=effectiveSetting(state,country.code,manualRegion);
-      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastDurableSupplierAt||setting.lastRunAt||null});
+      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastDurableSupplierAt||null});
       continue;
     }
     const effective=effectiveSetting(state,country.code,"");
@@ -7728,9 +7763,9 @@ async function autoProductScopes() {
     if(country.requiresSubdivision&&effective.expandSubdivisions===true&&array(country.subdivisions).length){
       for(const region of country.subdivisions){
         const child=effectiveSetting(state,country.code,region.code);
-        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastDurableSupplierAt||child.lastRunAt||null});
+        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastDurableSupplierAt||null});
       }
-    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastDurableSupplierAt||effective.lastRunAt||null});
+    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastDurableSupplierAt||null});
   }
   return{mode:state.master.mode,scopes};
 }
@@ -7757,10 +7792,18 @@ async function recordScheduledSupplierCompletion(input){
   if(!requested||checkpoint.jobId!==requested||checkpoint.updatedBy!=="scheduled-automation"||!['complete','committed'].includes(checkpoint.status)){
     const error=new Error("scheduled_supplier_commit_checkpoint_not_confirmed");error.statusCode=409;throw error;
   }
+  // This signal starts PRIVATE product research, not public seller approval.
+  // Reuse the exact durable-source eligibility of beginProductResearchJob:
+  // an official usable seller URL, no administrator hold/rejection and no
+  // recorded fraud/counterfeit flag. Missing release paperwork is NOT fraud.
+  // Waiting for approvalReady/contract/performance here could otherwise keep
+  // all new countries at zero product research despite genuine private leads.
+  const inactiveStatuses=new Set(['blocked','suppressed','rejected','reject','disabled','excluded','removed','purged']);
+  const inactiveDecisions=new Set(['hold','held','blocked','suppressed','rejected','reject','disabled','excluded','dismiss','remove_from_list','purge']);
   const rows=await listAutomationCandidates(scope.country,scope.region),active=rows.filter(row=>
-    !['hold','held','blocked','suppressed','removed','rejected','disabled','excluded'].includes(lower(row.status))&&
-    !['hold','held','blocked','suppressed','removed','rejected','disabled','excluded'].includes(lower(plain(row.ai).operatorDecision))&&
-    !!safeUrl(row.url));
+    !inactiveStatuses.has(lower(row.status))&&
+    !inactiveDecisions.has(lower(first(row&&row.operatorDecision,plain(row.ai).operatorDecision,plain(row.supplier).operatorReviewState)))&&
+    !supplierExplicitDanger(row) && !!productSupplierSource(row));
   const kind=scope.region==='NATIONWIDE'?"country":"subdivision";
   const id=settingId(kind,{countryCode:scope.country,subdivisionCode:scope.region});
   const policy=array(await policyRows()).find(row=>text(row.id)===id),oldRule=plain(policy&&policy.rule),t=iso();
@@ -7774,7 +7817,10 @@ async function recordScheduledSupplierCompletion(input){
     if(newlySaved>0||!text(oldRule.lastDurableSupplierAt))rule.lastDurableSupplierAt=t;
     rule.lastRunAt=t;rule.lastRunSummary=Object.assign({},rule.lastAttemptSummary,{completed:true});
   }
-  // Do not reset the previous successful timestamp after an empty cycle.
+  // Keep durable seller records unchanged, but do not unlock product research
+  // based on a stale timestamp when no supplier still passes the safety gate.
+  if (!active.length) rule.lastDurableSupplierAt=null;
+  // Preserve the last completed *attempt* for diagnostics; do not grant private product research without a current usable supplier.
   const row={id,name:'국가 책임 공급업체 발굴 자동화',scope_hub:'country-commerce-control',scope_country:scope.country,scope_region:kind==='subdivision'?scope.region:null,enabled:true,rule,updated_at:t,updated_by:'scheduled-automation'};
   if(!policy)row.created_at=t;
   const saved=array(await SlotStore.insert('gslot_policies',row,'resolution=merge-duplicates,return=representation'));

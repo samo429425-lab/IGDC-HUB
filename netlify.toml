@@ -22,6 +22,12 @@
 [functions."commerce-country-ai-scheduler"]
   schedule = "@hourly"
 
+# Checkpointed supplier discovery is the FIRST stage of selected-country automation.
+# Declare the schedule here as well as in the function module so deployment
+# discovers this worker even when the code-level schedule is not picked up.
+[functions."commerce-country-supplier-research-scheduler"]
+  schedule = "* * * * *"
+
 # Checkpointed private product research -> PSOM for AUTOMATED IP markets only.
 # Runs separately from supplier discovery and never auto-publishes.
 [functions."commerce-country-product-ai-scheduler"]

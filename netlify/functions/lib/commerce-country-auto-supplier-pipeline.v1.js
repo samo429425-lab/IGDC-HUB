@@ -9,7 +9,7 @@ const VERSION = 'igdc-country-supplier-staged-auto.v1';
 const ACTOR = 'scheduled-automation';
 const HUB = 'country-supplier-staged-auto';
 const LEASE_MS = 9 * 60 * 1000;
-const MAX_SCOPES = 4; // Four independent country checkpoints per scheduled tick; each performs one bounded step.
+const MAX_SCOPES = 8; // Country-local fair rotation, bounded parallel work per minute (<= 12).
 const RESEARCH_ROUNDS = 5; // Country scheduled automation always completes five distinct research rounds.
 const NO_RESULT_RETRY_MS = 6 * 60 * 60 * 1000;
 const SUPPLIER_REFRESH_MS = 84 * 60 * 60 * 1000;
@@ -75,7 +75,7 @@ function create(deps) {
       if(ts(state.nextCycleAt)>ts(clock()))return Object.assign(state,{lastResult:'next_research_cycle_scheduled'});
       state.phase='idle';state.jobId=null;state.roundsCompleted=0;
     }
-    if(job.jobId && !state.jobId && job.updatedBy===ACTOR && ['searching','inspecting','ranking','complete'].includes(job.status)) {
+    if(job.jobId && !state.jobId && job.jobId!==state.lastCommittedJobId && job.updatedBy===ACTOR && ['searching','inspecting','ranking','complete','committed'].includes(job.status)) {
       state.jobId=job.jobId;state.phase=job.status==='complete'?'committing':'researching';
     }
     if(state.jobId&&job.jobId&&state.jobId!==job.jobId) {
@@ -114,16 +114,19 @@ function create(deps) {
       let fill={unavailable:true};
       if(have){try{fill=await require('./commerce-country-auto-product-pipeline.v1').makePipeline().sectionFill(s);}catch(error){fill={unavailable:true,error:txt(error&&error.message||error)};}}
       const completedRounds=Math.min(RESEARCH_ROUNDS,Math.max(0,Number(state.roundsCompleted||0))+Math.max(1,Number(job.researchRounds||1)));
+      // The same completed persistent job must never count as the next search
+      // round after this checkpoint moves back to idle.
+      const committedJobId=txt(state.jobId);
       // Each round commits its verified supplier list; product research may start
       // immediately. The next research round has a new job/checkpoint, without
       // overwriting prior suppliers, manual locks, or exclusions.
       if(completedRounds<RESEARCH_ROUNDS) return Object.assign(state,{
-        phase:'idle',jobId:null,roundsCompleted:completedRounds,completedAt:clock(),
+        phase:'idle',jobId:null,lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,completedAt:clock(),
         sectionFill:fill,committedSuppliers:savedCount,activeSupplierCount:have,
         lastResult:have?'supplier_round_saved_product_research_unlocked':'supplier_round_complete_retry_next_round'
       });
       const incomplete=!have||fill.fullTargetComplete!==true;
-      return Object.assign(state,{phase:'cooldown',roundsCompleted:completedRounds,completedAt:clock(),sectionFill:fill,
+      return Object.assign(state,{phase:'cooldown',lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,completedAt:clock(),sectionFill:fill,
         nextCycleAt:new Date(ts(clock())+(incomplete?NO_RESULT_RETRY_MS:SUPPLIER_REFRESH_MS)).toISOString(),
         lastResult:have?'supplier_five_rounds_complete_product_worker_eligible':'five_rounds_no_verified_supplier_retry_scheduled',committedSuppliers:savedCount,activeSupplierCount:have});
     }
@@ -131,11 +134,22 @@ function create(deps) {
   }
   async function runScope(s) {
     const claimed=await claim(s);if(!claimed)return{scope:key(s),skipped:'already_running'};
-    let state=Object.assign({},claimed.rule),failure=null;
-    try { await recheck(s);state=await advance(s,state); }
+    let state=Object.assign({},claimed.rule),failure=null,steps=0;
+    try {
+      // At most two country-local steps per minute. Do not start a second
+      // network search after a slow first one: scheduled function executions
+      // have a short hard timeout, and every step must leave a durable cursor.
+      const begin=Date.now();
+      for(let i=0;i<2;i++){
+        if(i>0&&(Date.now()-begin>11000||['manual_preserved','cooldown'].includes(state.phase)||state.operatorAutoPause===true))break;
+        await recheck(s);
+        state=await advance(s,state);steps++;
+        if(['manual_preserved','cooldown'].includes(state.phase)||state.operatorAutoPause===true)break;
+      }
+    }
     catch(e) {failure=txt(e&&e.message||e);state.lastResult=e&&e.stopped?'country_paused_without_data_loss':'supplier_step_failed_checkpoint_preserved';state.errors=arr(state.errors).concat([{at:clock(),phase:state.phase,error:failure}]).slice(-24);}
     const stored=await release(s,claimed,state);
-    return{scope:key(s),ok:!failure,phase:stored.phase,jobId:stored.jobId||null,rounds:stored.rounds,lastResult:stored.lastResult,error:failure,publicPublication:false};
+    return{scope:key(s),ok:!failure,phase:stored.phase,jobId:stored.jobId||null,rounds:stored.rounds,lastResult:stored.lastResult,stepsAdvanced:steps,error:failure,publicPublication:false};
   }
   async function setTakeover(actor,s,enabled) {
     if(!['string','number'].includes(typeof actor)||!txt(actor))throw new Error('administrator_required');

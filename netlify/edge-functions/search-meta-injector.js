@@ -103,6 +103,28 @@ function metadataBlock(url, page, lang) {
   ].join("\n");
 }
 
+/*
+ * First paint fast-path: ordinary visitors must not wait for the entire HTML
+ * response (including >400 KB Home <head>) to be buffered and reserialized.
+ * Crawlers and social preview agents keep the existing server-side SEO rewrite.
+ * This changes no Snapshot/IP routing, country policy, Front Match or page code.
+ */
+function isInteractiveBrowserNavigation(request) {
+  const h = request && request.headers;
+  if (!h || typeof h.get !== "function") return false;
+  const ua = String(h.get("user-agent") || "");
+  // Exclude all recognized search/social agents even if they impersonate Chrome
+  // and send ordinary browser navigation headers.
+  if (/(?:bot|crawl|spider|slurp|preview|facebookexternalhit|linkedin|telegram|whatsapp|discord|applebot|yandex|semrush|ahrefs|pinterest|google-inspectiontool)/i.test(ua)) return false;
+  const mode = String(h.get("sec-fetch-mode") || "").toLowerCase();
+  const dest = String(h.get("sec-fetch-dest") || "").toLowerCase();
+  if (mode === "navigate" && (dest === "document" || dest === "iframe")) return true;
+  // Older Safari/embedded desktop/mobile browsers may omit Fetch Metadata.
+  // Only recognize actual browser-shaped user agents, not generic clients.
+  return /Mozilla\/5\.0/i.test(ua) &&
+    /(?:Chrome\/|CriOS\/|Firefox\/|FxiOS\/|Safari\/|Edg\/|OPR\/)/i.test(ua);
+}
+
 export default async function handler(request, context) {
   if (request.method !== "GET" && request.method !== "HEAD") return context.next();
   const url = new URL(request.url);
@@ -116,6 +138,9 @@ export default async function handler(request, context) {
   }
   const page = pageTypeFromPath(url.pathname);
   if (!page) return context.next();
+  // Browser navigation and iframe navigation remain streaming; never call
+  // response.text(), so first paint is not blocked by SEO metadata rewriting.
+  if (isInteractiveBrowserNavigation(request)) return context.next();
 
   const response = await context.next();
   const type = String(response.headers.get("content-type") || "").toLowerCase();
