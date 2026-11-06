@@ -9,6 +9,7 @@ const VERSION = 'igdc-country-supplier-staged-auto.v1';
 const ACTOR = 'scheduled-automation';
 const HUB = 'country-supplier-staged-auto';
 const LEASE_MS = 9 * 60 * 1000;
+const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Brief concurrency yield, never a country-wide permanent pause.
 const MAX_SCOPES = 8; // Country-local fair rotation, bounded parallel work per minute (<= 12).
 const RESEARCH_ROUNDS = 5; // Country scheduled automation always completes five distinct research rounds.
 const NO_RESULT_RETRY_MS = 6 * 60 * 60 * 1000;
@@ -59,16 +60,36 @@ function create(deps) {
     return rule;
   }
   async function recheck(s) { const live=await automation.autoProductScopes();if(!arr(live.scopes).some(x=>key(x)===key(s)))throw Object.assign(new Error('country_automation_paused'),{stopped:true}); }
+  // Administrator research-button clicks are NOT country automation bans.
+  // Yield briefly to an active administrator to avoid racing a single shared
+  // job checkpoint; keep every manual-pinned supplier/decision in its own ledger.
+  async function humanResearchIsActive(s) {
+    const id='igdc_supplier_research_job_'+txt(s.countryCode).toLowerCase()+'_'+reg(s).toLowerCase().replace(/[^a-z0-9_-]/g,'_');
+    const row=arr(await store.select('gslot_policies','select=updated_at,updated_by&id=eq.'+encodeURIComponent(id)+'&limit=1'))[0];
+    return !!row && txt(row.updated_by)!==ACTOR && ts(row.updated_at)>0 &&
+      ts(clock())-ts(row.updated_at)<RECENT_ADMIN_EDIT_MS;
+  }
   async function advance(s,current) {
     const state=Object.assign({phase:'idle',autoTakeover:false,operatorAutoPause:false,rounds:RESEARCH_ROUNDS},current);
     if(state.operatorAutoPause===true)return Object.assign(state,{lastResult:'administrator_automation_paused_checkpoint_preserved'});
     const job=await automation.autoSupplierJobCheckpoint(input(s));
-    const owned=!!txt(state.jobId)&&txt(state.jobId)===txt(job.jobId)&&txt(job.updatedBy)===ACTOR;
-    // A manually edited active job must never be advanced by a scheduler,
-    // even after an earlier approval to take over a *completed* job.
-    if(job.jobId && !owned && job.updatedBy!==ACTOR) {
-      if(!state.autoTakeover)return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,lastResult:'manual_supplier_job_preserved'});
-      if(!['complete','committed'].includes(job.status))return Object.assign(state,{phase:'manual_preserved',lastResult:'manual_supplier_job_still_active'});
+    // The research checkpoint is shared for a country, but protection is per
+    // manually pinned/held/blocked SUPPLIER, never per country. A manual search
+    // click alone must not remove the country from scheduled rotation.
+    if(job.jobId && job.updatedBy!==ACTOR){
+      if(job.manualOnly===true)return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,lastResult:'explicit_manual_only_job_preserved'});
+      if(await humanResearchIsActive(s))return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,lastResult:'recent_administrator_edit_yield_auto_retry'});
+      if(job.status==='committed'){
+        // The administrator already completed this historical job. Its saved
+        // candidates and decisions remain in the ledger; start a fresh round.
+        state.lastCommittedJobId=job.jobId;state.jobId=null;state.phase='idle';
+      }else if(['searching','inspecting','ranking','complete'].includes(job.status)){
+        // Continue the SAME search cursor rather than replacing work that the
+        // administrator started. The next persisted step is scheduler-owned.
+        state.jobId=job.jobId;
+        state.phase=job.status==='complete'?'committing':'researching';
+        state.lastProgressiveSearchCursor=0;
+      }
     }
     if(state.phase==='manual_preserved')state.phase='idle';
     if(state.phase==='cooldown') {
@@ -80,7 +101,7 @@ function create(deps) {
     }
     if(state.jobId&&job.jobId&&state.jobId!==job.jobId) {
       if(job.updatedBy===ACTOR){state.jobId=job.jobId;state.phase=['complete','committed'].includes(job.status)?'committing':'researching';}
-      else return Object.assign(state,{phase:'manual_preserved',autoTakeover:false,protectedJobId:job.jobId,lastResult:'human_restarted_supplier_research_preserved'});
+      else return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,lastResult:'research_job_changed_during_step_retry_next_tick'});
     }
     if(state.phase==='idle') {
       await recheck(s);
@@ -93,7 +114,7 @@ function create(deps) {
       // During long multi-query discovery, persist verified PRIVATE leads in
       // small batches instead of waiting for every query of all five rounds.
       // This never truncates searchTasks or advances the completed-round count.
-      if(job.status==='searching' && Number(job.searchCursor||0)>0 &&
+      if(job.status==='searching' && job.updatedBy===ACTOR && Number(job.searchCursor||0)>0 &&
          Number(job.searchCursor||0)>=Number(state.lastProgressiveSearchCursor||0)+3 &&
          typeof automation.progressivePrivateSupplierCommit==='function') {
         await recheck(s);
@@ -179,7 +200,7 @@ function create(deps) {
     const plan=await automation.autoProductScopes();const active=arr(plan.scopes);
     if(!active.length)return{ok:true,version:VERSION,activeScopes:0,processed:0,results:[]};
     const previous=new Map((await rows()).map(x=>[txt(x.id),obj(x.rule)]));
-    const choices=active.filter(s=>{const state=previous.get(idFor(s))||{};return state.operatorAutoPause!==true && !(state.phase==='manual_preserved'&&state.autoTakeover!==true) && !(state.phase==='cooldown'&&ts(state.nextCycleAt)>ts(clock()));})
+    const choices=active.filter(s=>{const state=previous.get(idFor(s))||{};return state.operatorAutoPause!==true && !(state.phase==='cooldown'&&ts(state.nextCycleAt)>ts(clock()));})
       .sort((a,b)=>ts((previous.get(idFor(a))||{}).lastStepAt)-ts((previous.get(idFor(b))||{}).lastStepAt)||key(a).localeCompare(key(b))).slice(0,MAX_SCOPES);
     // Independent leases allow concurrent country steps, without overwriting
     // another country's research or an administrator selection.

@@ -12,6 +12,7 @@ const VERSION = 'igdc-country-product-ai-private-pipeline.v1';
 const HUB = 'country-product-ai-private-pipeline';
 const ACTOR = 'scheduled-country-product-ai';
 const LEASE_MS = 9 * 60 * 1000;
+const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Only a short concurrency yield for administrator edits.
 const MAX_SCOPES = 3; // Fair rotation across active markets; bounded by each country lease.
 const PSOM_BATCH = 3;
 const CANDIDATE_SCAN = 24;
@@ -93,6 +94,14 @@ function makePipeline(deps) {
   async function recheck(scope) {
     const live = await automation.autoProductScopes();
     if (!isActive(scope, live)) throw Object.assign(new Error('country_automation_paused_before_write'), { stopped: true });
+  }
+  // A manually STARTED product search is not a country-wide stop. Preserve
+  // actual administrator decisions in the downstream candidate/PSOM guards.
+  async function humanResearchIsActive(scope) {
+    const id='igdc_product_research_job_'+txt(scope.countryCode).toLowerCase()+'_'+region(scope).toLowerCase().replace(/[^a-z0-9_-]/g,'_');
+    const row=arr(await store.select('gslot_policies','select=updated_at,updated_by&id=eq.'+encodeURIComponent(id)+'&limit=1'))[0];
+    return !!row && txt(row.updated_by)!==ACTOR && ts(row.updated_at)>0 &&
+      ts(clock())-ts(row.updated_at)<RECENT_ADMIN_EDIT_MS;
   }
   function candidateMatchesScope(row, scope) {
     const payload = obj(row.source_payload), market = obj(payload.marketScope), supply = obj(payload.countrySupply);
@@ -177,24 +186,22 @@ function makePipeline(deps) {
     const thisJob = txt(state.jobId);
     const isOwned = thisJob && checkpoint.jobId === thisJob;
     if (checkpoint.paused && !(state.autoTakeover && ['complete','committed'].includes(checkpoint.status))) return Object.assign(state,{ lastResult:'research_manually_paused_preserved' });
-    if (isOwned && checkpoint.updatedBy && checkpoint.updatedBy !== ACTOR)
-      return Object.assign(state,{phase:'manual_job_preserved',autoTakeover:false,lastResult:'administrator_updated_product_job_preserved'});
-    if (checkpoint.jobId && !isOwned) {
-      if(checkpoint.updatedBy===ACTOR && !state.jobId) {
-        // Recover a scheduler-created product job after checkpoint rollback or
-        // partial deployment without overwriting the actual research results.
-        state.jobId=checkpoint.jobId;state.autoJobStartedAt=checkpoint.startedAt||clock();
-        state.phase=checkpoint.status==='complete'?'staging':'researching';
-      }else{
-        // An ACTIVE administrator job is immutable to the scheduler. A
-        // completed manual cycle requires an explicit country handover.
-        if (!state.autoTakeover || !['complete','committed'].includes(checkpoint.status))
-          return Object.assign(state,{phase:'manual_job_preserved',lastResult:state.autoTakeover?'manual_product_job_still_active':'existing_or_replaced_product_job_preserved',protectedJobId:checkpoint.jobId});
-        state.phase='idle';state.jobId=null;state.pendingPlacementIds=[];state.reconcileCursor='';
-        state.fullRescanNeeded=true;
-      }
+    if(checkpoint.jobId && checkpoint.updatedBy && checkpoint.updatedBy!==ACTOR){
+      if(await humanResearchIsActive(scope))return Object.assign(state,{phase:'manual_job_preserved',lastResult:'recent_administrator_edit_yield_auto_retry',protectedJobId:checkpoint.jobId});
     }
-    if(state.phase==='manual_job_preserved')state.phase='idle';
+    if(checkpoint.jobId && !isOwned){
+      // Resume the exact existing job/cursor. A human clicking Start does not
+      // disable all other research for that country; never delete that job.
+      state.jobId=checkpoint.jobId;
+      state.autoJobStartedAt=checkpoint.startedAt||clock();
+      state.phase=['complete','committed'].includes(checkpoint.status)?'staging':'researching';
+      state.lastStagedResultCount=0;
+      state.pendingPlacementIds=[];
+      state.reconcileCursor='';
+    }else if(state.phase==='manual_job_preserved'){
+      // The 90-second manual edit window expired. Resume existing work.
+      state.phase=['complete','committed'].includes(checkpoint.status)?'staging':'researching';
+    }
     if (state.phase === 'complete') {
       const active = configuredScopeMap(await automation.autoProductScopes()).get(scopeKey(scope));
       const supplierUpdated = ts(active && active.supplierLastRunAt) > ts(state.lastSupplierRunAt);
@@ -305,9 +312,11 @@ function makePipeline(deps) {
       // Legacy hourly lastRunAt is not proof of inspected, durable suppliers.
       // Wait for supplier worker's verified country-local completion marker
       // before creating any NEW product checkpoint or starting product search.
-      if (!txt(s.supplierLastRunAt)) return false;
       const st=previous.get(idFor(s))||{};
-      if(st.operatorAutoPause===true || (st.phase==='manual_job_preserved'&&st.autoTakeover!==true))return false;
+      // An existing manually-started product job may continue its private
+      // research even when a supplier completion timestamp is not yet present.
+      if (!txt(s.supplierLastRunAt) && !txt(st.jobId)) return false;
+      if(st.operatorAutoPause===true)return false;
       // Do not repeatedly poll a completed market while nothing changed.
       const supplier=arr(plan.scopes).find(p=>scopeKey(p)===scopeKey(s));
       if(st.phase==='complete'&&ts(st.nextRefreshAt)>ts(clock())&&ts(supplier&&supplier.supplierLastRunAt)<=ts(st.lastSupplierRunAt))return false;
