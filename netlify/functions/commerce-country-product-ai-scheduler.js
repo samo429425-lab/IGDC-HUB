@@ -5,6 +5,6 @@ function json(code, data) { return { statusCode:code, headers:{'content-type':'a
 // the manually operated country/IP selector or invoke Front Match.
 exports.config = { schedule:'7,22,37,52 * * * *' };
 exports.handler = async function () {
-  try { return json(200, await Pipeline.run()); }
+  try { const result=await Pipeline.run(); return json(result.ok===false?500:200,result); }
   catch (e) { return json(500, {ok:false,version:Pipeline.VERSION,error:String(e&&e.message||e)}); }
 };

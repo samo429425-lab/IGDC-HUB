@@ -2,6 +2,8 @@
 
 const AdminSession = require("./lib/global-slot-console-auth");
 const Automation = require("./lib/commerce-country-automation.v1");
+const SupplierStaged = require("./lib/commerce-country-auto-supplier-pipeline.v1");
+const ProductStaged = require("./lib/commerce-country-auto-product-pipeline.v1");
 const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
 const PolicyDiscussion = require("./lib/commerce-policy-discussion.v1");
 const ProductGoLiveAudit = require("./product-go-live-audit");
@@ -390,6 +392,22 @@ exports.handler=async function(event){
       const recorded=await Automation.recordProductFrontSync(actorId,request,Object.assign({},batchResult,{refresh:refresh||batchResult.refresh||null,repairUnpublish:repairUnpublish||batchResult.repairUnpublish||null}),loadedJob);
       const guardRestore={ok:true,restored:[],failures:[],skipped:true,reason:"front_candidate_ledger_read_only"};if(recorded&&recorded.frontSyncResult)recorded.frontSyncResult.adminPlacementGuard=guardRestore;
       return json(200,recorded);
+    }
+    if(action==="automation_research_takeover"){
+      // An explicit write-role administrator decision is required. This only
+      // releases the COUNTRY JOB handover; manual supplier/product pins stay.
+      const enabled=body.enabled===true;
+      const country=text(body.countryCode).toUpperCase(),region=text(body.subdivisionCode||"NATIONWIDE").toUpperCase();
+      const info=Automation.countryRow(country);
+      if(!info||country==="KP"||(region!=="NATIONWIDE"&&!(info.subdivisions||[]).some(r=>r.code===region)))return json(400,{ok:false,error:"지원되는 국가·지역을 선택하세요."});
+      const scope={countryCode:country,subdivisionCode:region};
+      const details=[];
+      for(const [kind,apply] of [["supplier",()=>SupplierStaged.setTakeover(actorId,scope,enabled)],["product",()=>ProductStaged.setTakeover(actorId,scope,enabled)]]){
+        try{details.push({kind,...await apply()});}
+        catch(e){details.push({kind,ok:false,error:text(e&&e.message||e)});}
+      }
+      const ok=details.every(row=>row.ok===true);
+      return json(ok?200:409,{ok,scope,enabled,details,manualPinnedSupplierAndProductDataPreserved:true,noAutomaticFrontMatch:true});
     }
     if(action==="setting_save")return json(200,{ok:true,version:Automation.VERSION,setting:await Automation.saveSetting(actorId,body.setting||body)});
     if(action==="operating_preset_apply")return json(200,await Automation.applyOperatingPreset(actorId,body.preset,body.scope||{}));
