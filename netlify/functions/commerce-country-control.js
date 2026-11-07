@@ -2,6 +2,7 @@
 
 const AdminSession = require("./lib/global-slot-console-auth");
 const Automation = require("./lib/commerce-country-automation.v1");
+const AutoBottleneck = require("./lib/commerce-automation-bottleneck-diagnostic.v1");
 const SupplierStaged = require("./lib/commerce-country-auto-supplier-pipeline.v1");
 const ProductStaged = require("./lib/commerce-country-auto-product-pipeline.v1");
 const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
@@ -217,6 +218,19 @@ exports.handler=async function(event){
     if(action==="catalog")return json(200,catalog(state));
     if(action==="diagnostic")return json(200,Automation.diagnostic(state));
     if(action==="global_control_diagnostic")return json(200,await Automation.globalControlDiagnostic());
+    if(action==="auto_bottleneck_diagnostic")return json(200,await AutoBottleneck.run({focusCountry:query.focusCountry,focusRegion:query.focusRegion}));
+    if(action==="include_kr_selected_research"){
+      if(method!=="POST")return json(405,{ok:false,error:"POST 관리자 작업만 허용됩니다."});
+      const latest=await Automation.configState();
+      if(!latest.storageAvailable)return json(503,{ok:false,error:"현재 국가 설정 원장을 확인할 수 없습니다."});
+      if(latest.master.mode!=="selected")return json(409,{ok:false,error:"선택 국가 예약 가동 상태일 때만 한국 AI 조사를 추가할 수 있습니다. 다른 운영 모드를 임의로 변경하지 않습니다."});
+      const current=Array.isArray(latest.master.selectedCountryCodes)?latest.master.selectedCountryCodes:[];
+      if(current.includes("KR"))return json(200,{ok:true,alreadyIncluded:true,selectedCountryCount:current.length,koreaResearchScheduled:true,manualPinnedPreserved:true});
+      const applied=await Automation.applyOperatingPreset(actorId,"selected_countries_auto",{countryCodes:["KR"]});
+      const actual=Array.isArray(applied.activeCountries)?applied.activeCountries:[];
+      if(!actual.includes("KR"))return json(409,{ok:false,error:"한국이 예약 국가 목록에 반영되지 않았습니다. 전체 관제 JSON 확인 필요."});
+      return json(200,{ok:true,alreadyIncluded:false,selectedCountryCount:actual.length,koreaResearchScheduled:true,manualPinnedPreserved:true,automaticFrontPublication:false,operation:"existing_selection_plus_kr_only"});
+    }
     if(action==="signal_status"){
       const regionGroup=text(query.regionGroup||body.regionGroup);
       if(regionGroup&&!Automation.regionRow(regionGroup)){const error=new Error("권역을 찾을 수 없습니다.");error.statusCode=400;throw error;}

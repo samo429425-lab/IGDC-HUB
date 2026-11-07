@@ -374,7 +374,7 @@ function validatedAutomationCountries(input) {
       const error = new Error("자동화 대상 국가 코드는 두 글자 ISO 코드여야 합니다."); error.statusCode = 400; throw error;
     }
     const code = raw.trim().toUpperCase(), country = countryRow(code);
-    if (!country || country.enabled === false || !country.ipResolvable || code === "KP") {
+    if (!country || country.enabled === false || code === "KP") {
       const error = new Error("지원하지 않는 자동화 국가 코드입니다: " + code); error.statusCode = 400; throw error;
     }
     if (!seen.has(code)) { seen.add(code); out.push(code); }
@@ -434,14 +434,22 @@ function effectiveSetting(state, countryCode, subdivisionCode) {
   // It never rewrites a country's original mode, evidence, or placement ledger.
   // Keep explicit subdivision OFF rules in force for expanded countries.
   const inSelectedMode = state.master.mode === "selected";
+  const inGlobalMode = state.master.mode === "auto";
   const selectedForAutomation = inSelectedMode && array(state.master.selectedCountryCodes).includes(country.code);
-  const overlayMode = inSelectedMode ? (!selectedForAutomation ? "off" : (subdivision && subdivision.mode === "off" ? "off" : "auto")) : null;
+  // Global and selected reservations share ONE country-local research pipeline.
+  // Administrator research never depends on a visitor IP being resolvable.
+  // An explicit operator OFF at the region, country or subdivision remains a
+  // genuine pause. Its saved settings are not reset by global-start.
+  const explicitlyPaused = [subdivision,countrySetting,region].some(item => item && item.mode === "off");
+  const overlayMode = (inSelectedMode || inGlobalMode)
+    ? ((inSelectedMode && !selectedForAutomation) || explicitlyPaused ? "off" : "auto") : null;
   const intervalSource = activeChain.find((item) => item && item.intervalDays) || state.master;
   const candidateSource = activeChain.find((item) => item && item.maxCandidates) || state.master;
   // Research directives follow the selected geographic scope, even if its mode is "inherit".
   const directiveSource = chain.find((item) => item && ["country", "subdivision"].includes(item.scopeType) && text(item.researchDirective));
   return {
-    mode: overlayMode || selected.mode || "off", enabled: overlayMode ? overlayMode === "auto" : selected.mode === "auto", sourceId: inSelectedMode ? state.master.id : selected.id,
+    mode: overlayMode || selected.mode || "off", enabled: overlayMode ? overlayMode === "auto" : selected.mode === "auto", sourceId: inSelectedMode || inGlobalMode ? state.master.id : selected.id,
+    automationPausedByAdministrator: explicitlyPaused, adminResearchIndependentOfIp: true,
     intervalDays: intervalSource.intervalDays || DEFAULT_INTERVAL_DAYS,
     maxCandidates: candidateSource.maxCandidates || DEFAULT_MAX_CANDIDATES,
     researchDirective: directiveSource ? text(directiveSource.researchDirective).slice(0, 1200) : "",
@@ -460,6 +468,12 @@ async function saveSetting(actorId, input) {
   const existing = existingRows.find((row) => text(row.id) === id);
   const oldRule = plain(existing && existing.rule);
   const rule = Object.assign({}, oldRule, setting, { schema: VERSION, updatedBy: text(actorId) || "administrator", updatedAt: iso() });
+  // Preserve the last explicit selected-country list while switching the master
+  // to global/pause.  It is NOT active outside selected mode and is never
+  // silently reactivated, but operators do not lose their 92-country choices.
+  if (setting.scopeType === "master" && setting.mode !== "selected" && Array.isArray(oldRule.selectedCountryCodes)) {
+    rule.selectedCountryCodes = validatedAutomationCountries(oldRule.selectedCountryCodes);
+  }
   const labels = {
     master: "전체 국가 책임 공급업체 발굴 자동화", region: "권역 책임 공급업체 발굴 자동화", country: "국가 책임 공급업체 발굴 자동화", subdivision: "주·성·지역 책임 공급업체 발굴 자동화"
   };
@@ -482,14 +496,22 @@ function operatingStatus(stateInput) {
     for (const country of registry().countries) {
       if (effectiveSetting(state, country.code, "").mode === "auto") autoCountries += 1;
     }
-  } else if(masterMode === "manual" && countryRow(state.master.selectedCountryCode)) autoCountries=1;
-  else if(masterMode === "selected") autoCountries = array(state.master.selectedCountryCodes).filter(code => { const row=countryRow(code);return row && row.enabled !== false && row.ipResolvable; }).length;
+  } else if(masterMode === "manual" && countryRow(state.master.selectedCountryCode)) {
+    const selected=countryRow(state.master.selectedCountryCode);
+    autoCountries=selected.enabled!==false && effectiveSetting(state,selected.code,state.master.selectedSubdivisionCode||"").mode==="auto" ? 1 : 0;
+  } else if(masterMode === "selected") autoCountries = array(state.master.selectedCountryCodes).filter(code => {
+    const row=countryRow(code);
+    return row && row.enabled!==false && effectiveSetting(state,code,"").mode==="auto";
+  }).length;
   return {
     profile,
     masterMode,
     supportedCountryCount: registry().countries.length,
     autoCountryCount: autoCountries,
     schedule: "hourly-due-check",
+    registryCountryParity: registry().countries.length,
+    selectedAutoOnlyWhenSelectedMode: true,
+    administratorResearchIgnoresVisitorIp: true,
     scopesPerSchedulerRun: Math.round(clamp(process.env.IGDC_COUNTRY_AUTOMATION_SCOPES_PER_RUN, 1, MAX_SCOPES_PER_RUN, DEFAULT_SCOPES_PER_RUN)),
     childOverrides: state.settings.filter((row) => row && row.scopeType !== "master" && row.mode && row.mode !== "inherit").length,
     selectedCountryCodes: masterMode === "selected" ? array(state.master.selectedCountryCodes) : []
@@ -577,10 +599,19 @@ async function applyOperatingPreset(actorId, presetInput, scopeInput) {
     const after=await configState();
     return{ok:true,reportType:"igdc-country-automation-operating-preset",version:VERSION,preset,scope:{country,region},operatingStatus:operatingStatus(after),reservationOnly:true,automaticProductPublication:false,manualDecisionPrecedence:true};
   }
-  const rows = await policyRows();
-  const clearedOverrides = preset === "global_auto" ? await resetScopedOverrides(actorId, rows) : 0;
+  // Do not turn a failed policy read into a destructive reset.  Global mode
+  // overlays the same country-local automation engine onto all enabled registry
+  // countries; it never overwrites regional/country/subdivision settings.
+  const before = await configState();
+  if (!before.storageAvailable) {
+    const error = new Error("국가별 설정 저장 공간을 확인하지 못해 전 세계 운영 전환을 중지했습니다.");
+    error.statusCode = 503; throw error;
+  }
+  const clearedOverrides = 0;
   const masterMode = preset === "global_auto" ? "auto" : "off";
-  await saveSetting(actorId, { scopeType: "master", mode: masterMode, intervalDays: DEFAULT_INTERVAL_DAYS, maxCandidates: DEFAULT_MAX_CANDIDATES });
+  await saveSetting(actorId, { scopeType: "master", mode: masterMode,
+    intervalDays: before.master.intervalDays || DEFAULT_INTERVAL_DAYS,
+    maxCandidates: before.master.maxCandidates || DEFAULT_MAX_CANDIDATES });
   const state = await configState();
   return {
     ok: true,
@@ -590,15 +621,22 @@ async function applyOperatingPreset(actorId, presetInput, scopeInput) {
     appliedBy: text(actorId) || "administrator",
     preset,
     clearedScopedOverrides: clearedOverrides,
+    preservedScopedOverrides: state.settings.filter(row=>row.scopeType!=="master").length,
+    selectedCountryListPreservedButInactiveOutsideSelectedMode: true,
+    registryCountryCount: registry().countries.length,
     operatingStatus: operatingStatus(state),
     safeguards: {
       supportedCountriesOnly: true,
       excludedCountryCodes: ["KP"],
+      administratorAutomationIgnoresVisitorIp: true,
+      fullCountryRegistryEligibleForAutomation: registry().countries.length,
       privateSupplierQueueOnly: true,
       productAutomaticImport: false,
       publicAutomaticPublication: false,
       paymentAutomaticExecution: false,
       countryManagerOverridesCanBeAddedLater: true,
+      existingScopedOverridesPreserved: true,
+      adminAutomationIndependentOfVisitorIp: true,
       pausePreservesScopedSettings: true
     }
   };
@@ -7708,7 +7746,7 @@ async function dueScopes(limitInput) {
   const scopes = [];
   for (const country of registry().countries) {
     if(state.master.mode==="selected" && !array(state.master.selectedCountryCodes).includes(country.code))continue;
-    if(country.enabled===false || !country.ipResolvable)continue;
+    if(country.enabled===false)continue;
     if(selectedCountryOnly && country.code!==selectedCountryOnly)continue;
     const countryEffective = effectiveSetting(state, country.code, "");
     if (state.master.mode==="manual" && selectedRegionOnly && selectedRegionOnly!=="NATIONWIDE"){
@@ -7754,7 +7792,7 @@ async function autoProductScopes() {
   if(state.master.mode==="manual"&&!countryRow(manual))return{mode:state.master.mode,scopes:[]};
   const scopes=[];
   for(const country of registry().countries){
-    if(country.enabled===false||!country.ipResolvable||country.code==="KP")continue;
+    if(country.enabled===false||country.code==="KP")continue;
     if(selected&&!selected.has(country.code))continue;
     if(manual&&manual!==country.code)continue;
     if(manual&&manualRegion!=="NATIONWIDE"){
