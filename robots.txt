@@ -23,3 +23,6 @@ Sitemap: https://igdcglobal.com/sitemap.xml
 
 # Dynamic public product/media search sitemap
 Sitemap: https://igdcglobal.com/sitemap-global.xml
+
+# IGDC independent search discovery (does not change other routes)
+Sitemap: https://igdcglobal.com/.netlify/functions/igdc-amplify-sitemap
