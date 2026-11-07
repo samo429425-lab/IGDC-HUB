@@ -2,7 +2,7 @@
  * Scope:
  *   - Network Hub main marketplace .link-btn links
  *   - Tour main service .link-btn links
- *   - Blockchain .bc-tile links on every front page
+ *   - Blockchain .bc-tile links navigate in the top-level browser (never inside the contained viewer)
  *
  * v2 refinements:
  *   - Immediate direct-frame start (no frame-policy preflight stall)
@@ -117,7 +117,7 @@
     var href = isHttpUrl(a.getAttribute('href') || a.href || '');
     if (!href) return null;
 
-    if (a.matches('.bc-tile')) return { anchor: a, href: href, kind: 'blockchain' };
+    if (a.matches('.bc-tile')) return { anchor: a, href: href, kind: 'blockchain-direct' };
     if (isNetworkOrTourPage() && a.matches('.link-btn')) {
       return {
         anchor: a,
@@ -762,6 +762,22 @@
     ev.preventDefault();
     ev.stopPropagation();
     if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+
+    /* Blockchain services are interactive Web3 apps and must not be forced
+     * through the contained iframe/proxy. Navigate the real browser tab so the
+     * browser's native Back button returns to the IGDC page. */
+    if (found.kind === 'blockchain-direct') {
+      var navWindow = global;
+      try {
+        if (global.top && global.top !== global && global.top.location.origin === global.location.origin) {
+          navWindow = global.top;
+        }
+      } catch (e) {}
+      try { navWindow.location.assign(found.href); }
+      catch (e) { try { navWindow.location.href = found.href; } catch (_) {} }
+      return;
+    }
+
     open(found.href, { label: textOf(found.anchor), kind: found.kind });
   }, true);
 
