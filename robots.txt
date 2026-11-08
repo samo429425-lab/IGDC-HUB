@@ -26,3 +26,6 @@ Sitemap: https://igdcglobal.com/sitemap-global.xml
 
 # IGDC independent search discovery (does not change other routes)
 Sitemap: https://igdcglobal.com/.netlify/functions/igdc-amplify-sitemap
+
+# Optional flat Baidu discovery; registration/verification is managed by the site owner.
+Sitemap: https://igdcglobal.com/.netlify/functions/igdc-amplify-baidu-sitemap

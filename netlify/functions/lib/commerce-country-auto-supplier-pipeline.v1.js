@@ -12,7 +12,12 @@ const LEASE_MS = 3 * 60 * 1000; // Worker timeouts recover without a nine-minute
 const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Brief concurrency yield, never a country-wide permanent pause.
 const MAX_SCOPES = 8; // Country-local fair rotation, bounded parallel work per minute (<= 12).
 const RESEARCH_ROUNDS = 5; // Country scheduled automation always completes five distinct research rounds.
-const NO_RESULT_RETRY_MS = 6 * 60 * 60 * 1000;
+// Checkpoints run each scheduled tick while a country is being researched.
+// These gaps apply ONLY after a complete five-round search has exhausted its
+// current provider/source plan without filling the PRIVATE country board.
+// They are NOT the 84-hour recurring maintenance interval.
+const UNDERFILLED_RETRY_MS = 15 * 60 * 1000;
+const NO_RESULT_RETRY_MS = 30 * 60 * 1000;
 const SUPPLIER_REFRESH_MS = 84 * 60 * 60 * 1000;
 const RESEARCH_ROUNDS_PER_JOB = 1; // Persist reviewed suppliers after each completed round, not after all five rounds.
 function arr(v) { return Array.isArray(v) ? v : []; }
@@ -24,6 +29,17 @@ function reg(s) { return txt(s.subdivisionCode || 'NATIONWIDE').toUpperCase(); }
 function key(s) { return txt(s.countryCode).toUpperCase() + '|' + reg(s); }
 function idFor(s) { return 'igdc_supplier_staged_auto_' + txt(s.countryCode).toLowerCase() + '_' + reg(s).toLowerCase().replace(/[^a-z0-9_-]/g, '_'); }
 function input(s,extra) { return Object.assign({countryCode:s.countryCode,subdivisionCode:reg(s),scopeAuthority:'administrator-selected',ignoreRequestGeo:true},extra||{}); }
+// Existing database checkpoints may still contain a SIX-HOUR nextCycleAt
+// written by an older deploy. Shorten only an unfilled market's old wait;
+// never shortcut 84-hour full-board maintenance or erase its job cursor.
+function eligibleCycleAt(state) {
+  const saved=ts(obj(state).nextCycleAt),finished=ts(obj(state).completedAt)||ts(obj(state).lastStepAt);
+  if(!saved||!finished)return saved;
+  const full=Number(obj(state).activeSupplierCount||0)>0&&obj(obj(state).sectionFill).fullTargetComplete===true;
+  if(full)return saved;
+  const gap=Number(obj(state).activeSupplierCount||0)>0?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS;
+  return Math.min(saved,finished+gap);
+}
 function create(deps) {
   const automation=deps&&deps.automation||Automation;
   const store=deps&&deps.store||Store;
@@ -98,7 +114,9 @@ function create(deps) {
     }
     if(state.phase==='manual_preserved')state.phase='idle';
     if(state.phase==='cooldown') {
-      if(ts(state.nextCycleAt)>ts(clock()))return Object.assign(state,{lastResult:'next_research_cycle_scheduled'});
+      const eligible=eligibleCycleAt(state);
+      if(eligible&&eligible!==ts(state.nextCycleAt))state.nextCycleAt=new Date(eligible).toISOString();
+      if(eligible>ts(clock()))return Object.assign(state,{lastResult:'next_research_cycle_scheduled'});
       state.phase='idle';state.jobId=null;state.roundsCompleted=0;
     }
     if(job.jobId && !state.jobId && job.jobId!==state.lastCommittedJobId && job.updatedBy===ACTOR && ['searching','inspecting','ranking','complete','committed'].includes(job.status)) {
@@ -148,7 +166,13 @@ function create(deps) {
       // worker's durable start gate. An empty search never marks the cycle as
       // a successfully discovered supplier portfolio.
       const owned=await automation.autoSupplierJobCheckpoint(input(s));
-      if(owned.jobId!==state.jobId||owned.updatedBy!==ACTOR||owned.status!=='committed'){
+      // An exhausted search may legitimately contain zero new candidates.
+      // commitResearchJob is intentionally not called in that case; its
+      // checkpoint stays "complete" rather than "committed". Count this as a
+      // finished EMPTY round, not an operator takeover or a permanent error.
+      const emptyComplete=Number(job.candidateCount||0)===0&&owned.status==='complete';
+      if(owned.jobId!==state.jobId||owned.updatedBy!==ACTOR||
+         (!emptyComplete&&owned.status!=='committed')){
         // An administrator may have committed/updated the same job between
         // checkpoints. Preserve it and start a new scheduler cycle later,
         // rather than repeatedly failing the country on a 409 handover.
@@ -174,10 +198,16 @@ function create(deps) {
         sectionFill:fill,committedSuppliers:savedCount,activeSupplierCount:have,
         lastResult:have?'supplier_round_saved_product_research_unlocked':'supplier_round_complete_retry_next_round'
       });
-      const incomplete=!have||fill.fullTargetComplete!==true;
+      // Weekly twice is MAINTENANCE only after ALL real 20-section private
+      // placements are at target. Underfilled markets automatically begin
+      // another durable five-round cycle. Exhausted/empty providers receive a
+      // modest quota-safe retry gap; no browser session is needed.
+      const full=have>0&&fill.fullTargetComplete===true;
+      const gap=full?SUPPLIER_REFRESH_MS:(have?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS);
       return Object.assign(state,{phase:'cooldown',lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,completedAt:clock(),sectionFill:fill,
-        nextCycleAt:new Date(ts(clock())+(incomplete?NO_RESULT_RETRY_MS:SUPPLIER_REFRESH_MS)).toISOString(),
-        lastResult:have?'supplier_five_rounds_complete_product_worker_eligible':'five_rounds_no_verified_supplier_retry_scheduled',committedSuppliers:savedCount,activeSupplierCount:have});
+        fillPhase:full?'maintenance':'initial_fill',targetReached:full,
+        nextCycleAt:new Date(ts(clock())+gap).toISOString(),
+        lastResult:full?'private_board_full_weekly_twice_maintenance':have?'private_board_underfilled_continue_after_source_retry':'no_verified_supplier_continue_after_provider_retry',committedSuppliers:savedCount,activeSupplierCount:have});
     }
     return Object.assign(state,{phase:'idle',lastResult:'supplier_unknown_phase_safely_reset'});
   }
@@ -193,10 +223,23 @@ function create(deps) {
         if(i>0&&(Date.now()-begin>11000||['manual_preserved','cooldown'].includes(state.phase)||state.operatorAutoPause===true))break;
         await recheck(s);
         state=await advance(s,state);steps++;
+        // Successful cursor advance invalidates any prior transient failure.
+        state.nextRetryAt=null;
         if(['manual_preserved','cooldown'].includes(state.phase)||state.operatorAutoPause===true)break;
       }
     }
-    catch(e) {failure=txt(e&&e.message||e);state.lastResult=e&&e.stopped?'country_paused_without_data_loss':'supplier_step_failed_checkpoint_preserved';state.errors=arr(state.errors).concat([{at:clock(),phase:state.phase,error:failure}]).slice(-24);}
+    catch(e) {
+      failure=txt(e&&e.message||e);
+      state.lastResult=e&&e.stopped?'country_paused_without_data_loss':'supplier_step_failed_checkpoint_preserved';
+      if(!(e&&e.stopped)){
+        // Persist the SAME job/cursor. Retry 429/403 less aggressively without
+        // pausing other countries or mistaking an API outage for a full board.
+        const wait=/\b429\b|rate.limit|quota/i.test(failure)?10*60*1000:
+          /\b403\b|permission.denied|no.access/i.test(failure)?20*60*1000:2*60*1000;
+        state.nextRetryAt=new Date(ts(clock())+wait).toISOString();
+      }
+      state.errors=arr(state.errors).concat([{at:clock(),phase:state.phase,error:failure}]).slice(-24);
+    }
     const stored=await release(s,claimed,state);
     return{scope:key(s),ok:!failure,phase:stored.phase,jobId:stored.jobId||null,rounds:stored.rounds,lastResult:stored.lastResult,stepsAdvanced:steps,error:failure,publicPublication:false};
   }
@@ -214,7 +257,10 @@ function create(deps) {
     const plan=await automation.autoProductScopes();const active=arr(plan.scopes);
     if(!active.length)return{ok:true,version:VERSION,activeScopes:0,processed:0,results:[]};
     const previous=new Map((await rows()).map(x=>[txt(x.id),obj(x.rule)]));
-    const choices=active.filter(s=>{const state=previous.get(idFor(s))||{};return state.operatorAutoPause!==true && !(state.phase==='cooldown'&&ts(state.nextCycleAt)>ts(clock()));})
+    const choices=active.filter(s=>{const state=previous.get(idFor(s))||{};
+      return state.operatorAutoPause!==true &&
+        !(state.phase==='cooldown'&&eligibleCycleAt(state)>ts(clock())) &&
+        !(ts(state.nextRetryAt)>ts(clock()));})
       .sort((a,b)=>ts((previous.get(idFor(a))||{}).lastStepAt)-ts((previous.get(idFor(b))||{}).lastStepAt)||key(a).localeCompare(key(b))).slice(0,MAX_SCOPES);
     // Independent leases allow concurrent country steps, without overwriting
     // another country's research or an administrator selection.

@@ -20,7 +20,10 @@ const CANDIDATE_SCAN = 24;
 // then build to 100. Never create fake candidates to meet those targets.
 const MIN_PER_SECTION = 20;
 const TARGET_PER_SECTION = 100;
-const REFRESH_UNDERFILLED_MS = 6 * 60 * 60 * 1000;
+// After a complete product-source pass, underfilled private boards remain
+// in initial-fill mode. Revisit fresh sources promptly (with bounded provider
+// backoff), not at the 84-hour maintenance cadence reserved for full boards.
+const REFRESH_UNDERFILLED_MS = 15 * 60 * 1000;
 const REFRESH_FULL_MS = 84 * 60 * 60 * 1000;
 const SECTION_KEYS = Object.freeze([
   'home|home_1','home|home_2','home|home_3','home|home_4','home|home_5','home|home_6',
@@ -46,6 +49,13 @@ function safeErrors(before, input) { return arr(before).concat([input]).slice(-M
 function isActive(scope, live) { return arr(live && live.scopes).some(s => s.countryCode === scope.countryCode && region(s) === region(scope)); }
 function scopeKey(scope) { return scope.countryCode + '|' + region(scope); }
 function configuredScopeMap(plan) { return new Map(arr(plan && plan.scopes).map(s => [scopeKey(s), s])); }
+// Normalize a persisted six-hour gap from older deployments, while keeping
+// the original checkpoint and the full-board 84-hour maintenance window.
+function eligibleRefreshAt(state) {
+  const saved=ts(obj(state).nextRefreshAt),finished=ts(obj(state).completedAt)||ts(obj(state).lastStepAt);
+  if(!saved||!finished||obj(obj(state).sectionFill).fullTargetComplete===true)return saved;
+  return Math.min(saved,finished+REFRESH_UNDERFILLED_MS);
+}
 
 function makePipeline(deps) {
   const automation = (deps && deps.automation) || Automation;
@@ -205,7 +215,9 @@ function makePipeline(deps) {
     if (state.phase === 'complete') {
       const active = configuredScopeMap(await automation.autoProductScopes()).get(scopeKey(scope));
       const supplierUpdated = ts(active && active.supplierLastRunAt) > ts(state.lastSupplierRunAt);
-      const refreshDue = !ts(state.nextRefreshAt) || ts(clock())>=ts(state.nextRefreshAt);
+      const nextEligible=eligibleRefreshAt(state);
+      if(nextEligible&&nextEligible!==ts(state.nextRefreshAt))state.nextRefreshAt=new Date(nextEligible).toISOString();
+      const refreshDue = !nextEligible || ts(clock())>=nextEligible;
       if(!supplierUpdated&&!refreshDue)return Object.assign(state,{lastResult:'awaiting_new_supplier_or_next_gap_refresh'});
       // Refresh even the same durable supplier portfolio when section slots
       // are underfilled; existing manual and canonical assignments remain held.
@@ -221,7 +233,14 @@ function makePipeline(deps) {
       // A same-ID completion with zero fresh sources must not restage older
       // products, nor reset the management ledger.
       if(started.jobId===checkpoint.jobId&&started.status==='complete'){
-        return Object.assign(state,{phase:'complete',jobId:started.jobId,nextRefreshAt:new Date(ts(clock())+REFRESH_UNDERFILLED_MS).toISOString(),lastResult:'no_new_product_sources_wait_next_gap_research'});
+        // A source-empty cycle cannot decide board completion from job status.
+        // Recheck the country's actual PRIVATE canonical assignments before
+        // choosing between initial-fill retries and 84-hour maintenance.
+        const fill=await sectionFill(scope),full=fill.fullTargetComplete===true;
+        return Object.assign(state,{phase:'complete',jobId:started.jobId,sectionFill:fill,
+          nextRefreshAt:new Date(ts(clock())+(full?REFRESH_FULL_MS:REFRESH_UNDERFILLED_MS)).toISOString(),
+          fillPhase:full?'maintenance':'initial_fill',targetReached:full,
+          lastResult:full?'private_board_full_weekly_twice_maintenance':'no_new_product_sources_initial_fill_retry_scheduled'});
       }
       return Object.assign(state, { phase:txt(started.status)==='complete'?'staging':'researching', jobId:started.jobId,autoJobStartedAt:started.startedAt||clock(),lastSupplierRunAt:selected.supplierLastRunAt,fullRescanNeeded:false,reconcileCursor:'',pendingPlacementIds:[],stagingComplete:false,lastStagedResultCount:0,nextPhaseAfterPlacement:null,lastResult:'product_research_started' });
     }
@@ -274,8 +293,10 @@ function makePipeline(deps) {
       else if(batch.complete){
         const fill=await sectionFill(scope);
         next.phase='complete';next.completedAt=clock();next.sectionFill=fill;
+        next.fillPhase=fill.fullTargetComplete?'maintenance':'initial_fill';
+        next.targetReached=fill.fullTargetComplete===true;
         next.nextRefreshAt=new Date(ts(clock())+(fill.fullTargetComplete?REFRESH_FULL_MS:REFRESH_UNDERFILLED_MS)).toISOString();
-        next.lastResult=fill.fullTargetComplete?'private_psom_full_target_complete_waiting_admin_front_match':'private_psom_partial_slots_continuous_research_scheduled';
+        next.lastResult=fill.fullTargetComplete?'private_psom_full_target_complete_waiting_admin_front_match':'private_psom_partial_slots_initial_fill_retry_scheduled';
       }
       return next;
     }
@@ -311,7 +332,7 @@ function makePipeline(deps) {
     // Stop is never a reset, including if a selected-country pause happens
     // between two DB calls. Keep pending candidate IDs and research cursors.
     await release(scope,claimed,update);
-    return { scope:scopeKey(scope),ok:result!=='step_failed_checkpoint_preserved',phase:txt(update.phase),jobId:txt(update.jobId)||null,result,placed:Number(update.placed||0),reviewRequired:Number(update.reviewRequired||0),pendingPlacement:arr(update.pendingPlacementIds).length,sectionFill:obj(update.sectionFill),nextRefreshAt:update.nextRefreshAt||null,publicPublication:false };
+    return { scope:scopeKey(scope),ok:result!=='step_failed_checkpoint_preserved',phase:txt(update.phase),jobId:txt(update.jobId)||null,result,placed:Number(update.placed||0),reviewRequired:Number(update.reviewRequired||0),pendingPlacement:arr(update.pendingPlacementIds).length,sectionFill:obj(update.sectionFill),nextRefreshAt:update.nextRefreshAt||null,fillPhase:txt(update.fillPhase)||null,targetReached:update.targetReached===true,publicPublication:false };
   }
   async function run() {
     const plan=await automation.autoProductScopes();
@@ -330,7 +351,7 @@ function makePipeline(deps) {
          ts(s.supplierLastRunAt)<=ts(st.retrySupplierAt))return false;
       // Do not repeatedly poll a completed market while nothing changed.
       const supplier=arr(plan.scopes).find(p=>scopeKey(p)===scopeKey(s));
-      if(st.phase==='complete'&&ts(st.nextRefreshAt)>ts(clock())&&ts(supplier&&supplier.supplierLastRunAt)<=ts(st.lastSupplierRunAt))return false;
+      if(st.phase==='complete'&&eligibleRefreshAt(st)>ts(clock())&&ts(supplier&&supplier.supplierLastRunAt)<=ts(st.lastSupplierRunAt))return false;
       return true;
     }).sort((a,b)=>ts(previous.get(idFor(a))&&previous.get(idFor(a)).lastStepAt)-ts(previous.get(idFor(b))&&previous.get(idFor(b)).lastStepAt)||scopeKey(a).localeCompare(scopeKey(b))).slice(0,MAX_SCOPES);
     // Independent country leases permit bounded parallel research without
