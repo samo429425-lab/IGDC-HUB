@@ -11,7 +11,7 @@ const MarketSaleScope = require('./market-sale-scope.v1');
 const VERSION = 'igdc-country-product-ai-private-pipeline.v1';
 const HUB = 'country-product-ai-private-pipeline';
 const ACTOR = 'scheduled-country-product-ai';
-const LEASE_MS = 9 * 60 * 1000;
+const LEASE_MS = 3 * 60 * 1000; // Country checkpoint resumes after a killed invocation.
 const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Only a short concurrency yield for administrator edits.
 const MAX_SCOPES = 3; // Fair rotation across active markets; bounded by each country lease.
 const PSOM_BATCH = 3;
@@ -92,8 +92,8 @@ function makePipeline(deps) {
     return data;
   }
   async function recheck(scope) {
-    const live = await automation.autoProductScopes();
-    if (!isActive(scope, live)) throw Object.assign(new Error('country_automation_paused_before_write'), { stopped: true });
+    const live=await automation.autoScopeStatus(inputFor(scope));
+    if(live.active!==true)throw Object.assign(new Error('country_automation_paused_before_write:'+txt(live.reason)),{stopped:true});
   }
   // A manually STARTED product search is not a country-wide stop. Preserve
   // actual administrator decisions in the downstream candidate/PSOM guards.
@@ -294,8 +294,17 @@ function makePipeline(deps) {
       if(err && err.stopped) result='paused_checkpoint_preserved';
       else {
         result='step_failed_checkpoint_preserved';
-        update.errors = safeErrors(update.errors,{at:clock(),stage:txt(update.phase),reason:txt(err&&err.message||err)});
+        const reason=txt(err&&err.message||err);
+        update.errors = safeErrors(update.errors,{at:clock(),stage:txt(update.phase),reason});
         update.failures=Number(update.failures||0)+1;
+        // No eligible seller URL is a recoverable input gap, not a reason to
+        // hammer the same empty ledger every two minutes in 90 countries.
+        // A new durable supplier marker invalidates the backoff immediately.
+        if(/활성 공급업체가 없습니다|공식 판매 출처 URL이 없습니다|supplier_discovery_not_yet_durably_saved/.test(reason)){
+          update.nextRetryAt=new Date(ts(clock())+30*60*1000).toISOString();
+          update.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
+          update.lastErrorReason=reason;
+        }
       }
       update.lastResult=result;
     }
@@ -317,6 +326,8 @@ function makePipeline(deps) {
       // research even when a supplier completion timestamp is not yet present.
       if (!txt(s.supplierLastRunAt) && !txt(st.jobId)) return false;
       if(st.operatorAutoPause===true)return false;
+      if(ts(st.nextRetryAt)>ts(clock())&&
+         ts(s.supplierLastRunAt)<=ts(st.retrySupplierAt))return false;
       // Do not repeatedly poll a completed market while nothing changed.
       const supplier=arr(plan.scopes).find(p=>scopeKey(p)===scopeKey(s));
       if(st.phase==='complete'&&ts(st.nextRefreshAt)>ts(clock())&&ts(supplier&&supplier.supplierLastRunAt)<=ts(st.lastSupplierRunAt))return false;

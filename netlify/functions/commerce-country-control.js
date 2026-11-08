@@ -214,9 +214,10 @@ exports.handler=async function(event){
     if(action==="session")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,session:{authenticated:true,roles:roleList(actor),write:roleList(actor).some((role)=>WRITE_ROLES.has(role))}});
     if(action==="geo")return json(200,normalizeGeo(event));
     if(action==="trust_policy")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY});
-    const state=await Automation.configState();
-    if(action==="catalog")return json(200,catalog(state));
-    if(action==="diagnostic")return json(200,Automation.diagnostic(state));
+    // Research steps already read their own saved country scope. Avoid an
+    // unrelated country-wide settings query on each checkpoint request.
+    if(action==="catalog")return json(200,catalog(await Automation.configState()));
+    if(action==="diagnostic")return json(200,Automation.diagnostic(await Automation.configState()));
     if(action==="global_control_diagnostic")return json(200,await Automation.globalControlDiagnostic());
     if(action==="auto_bottleneck_diagnostic")return json(200,await AutoBottleneck.run({focusCountry:query.focusCountry,focusRegion:query.focusRegion}));
     if(action==="include_kr_selected_research"){
@@ -259,6 +260,7 @@ exports.handler=async function(event){
         const valid=Array.isArray(country.subdivisions)&&country.subdivisions.some((item)=>text(item&&item.code).toUpperCase()===region);
         if(!valid){const error=new Error("선택 국가의 공식 주·성·지역 범위를 찾을 수 없습니다.");error.statusCode=400;throw error;}
       }
+      const state=await Automation.configState();
       return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY,country,effective:Automation.effectiveSetting(state,countryCode,region==="NATIONWIDE"?"":region),marketSignals:await MarketSignals.signalStatus(country.regionGroup),candidates:await Automation.listAutomationCandidates(countryCode,region)});
     }
     if(method!=="POST")return json(405,{ok:false,error:"method_not_allowed"});

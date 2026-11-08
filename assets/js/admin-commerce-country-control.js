@@ -4800,6 +4800,10 @@
     researchStopRequested=false;researchLoopActive=true;
     if(btn){btn.disabled=true;btn.textContent='검색 시작 처리 중';}
     setButtonEnabled('researchPauseBtn',true);setButtonEnabled('runNowBtn',false);
+    function checkpointMark(row){
+      var p=row&&row.progress||{},s=p.search||{},i=p.inspection||{},r=p.ranking||{};
+      return [text(row&&row.jobId),text(row&&row.status),Number(s.done||0),Number(i.done||0),Number(r.done||0)].join('|');
+    }
     function researchPhase(label){
       activePhase=label;
       if(progress)progress.textContent=lastVerifiedProgress?('업체 리서치 · '+label+' · '+lastVerifiedProgress):('업체 리서치 · '+label+' · 검색/증빙/AI 평가 수치는 서버에서 실제 작업을 시작한 후 갱신됩니다.');
@@ -4834,7 +4838,38 @@
         if(!data.scope)data.scope=requested;else{data.scope.source=requested.source;data.scope.detectedGeo=requested.detectedGeo;}lastCountryPreview=data;rememberReport('country',data);renderResearchProgress(data);lastVerifiedProgress=progress?progress.textContent:'';renderSummary(data,{candidates:data.candidates||[]},'단계별 리서치 진행');if((Array.isArray(data.candidates)&&data.candidates.length)||(Array.isArray(data.holdingCandidates)&&data.holdingCandidates.length)||(Array.isArray(data.blockedCandidates)&&data.blockedCandidates.length))renderAi(data.candidates||[],data.holdingCandidates||[],data.blockedCandidates||[]);saveReviewSnapshot();
         if(data.status==='complete'||data.status==='committed'){var hasCandidates=Array.isArray(data.candidates)&&data.candidates.length>0;setButtonEnabled('runNowBtn',hasCandidates);setButtonEnabled('productResearchBtn',hasCandidates);if(hasCandidates&&(Number(data.summary&&data.summary.newRanked||0)>0||!lastProductJson||lastProductJson.status==='not_started')){autoProductAfter=true;if($('productResearchState'))$('productResearchState').textContent='공급업체 리서치를 완료했습니다. 실제 상품 이미지·상품명·원본 링크 리서치를 자동으로 이어서 시작합니다.';}show(hasCandidates?'모든 계획 검색·업체 증빙·AI 신뢰 평가를 완료했습니다. 이어서 실제 상품 이미지·원본 링크 리서치를 시작합니다.':'단계별 리서치는 완료됐지만 실행할 책임 공급업체 후보가 없습니다. JSON의 검색 경로와 제외 근거를 확인해 주세요.',hasCandidates?'ok':'warn');break;}
         if(researchStopRequested){show('진행을 일시정지했습니다. 지금까지의 검색·증빙 결과는 관리 DB에 보존됐으며 같은 버튼으로 이어서 진행합니다.','warn');break;}
-        await new Promise(function(resolve){setTimeout(resolve,250);});researchPhase('서버 검색·증빙·AI 평가 다음 단계 요청 중');data=await api(CONTROL,'research_step','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,jobId:data.jobId,scopeAuthority:'administrator-selected',ignoreRequestGeo:true},80000);
+        await new Promise(function(resolve){setTimeout(resolve,250);});researchPhase('서버 검색·증빙·AI 평가 다음 단계 요청 중');
+        var beforeStep=data;
+        try{data=await api(CONTROL,'research_step','POST',{}, {countryCode:requested.country,subdivisionCode:requested.region,jobId:beforeStep.jobId,scopeAuthority:'administrator-selected',ignoreRequestGeo:true},80000);}
+        catch(stepError){
+          // A gateway timeout is ambiguous: the worker may have written the
+          // next checkpoint before the HTTP response failed. Never replay an
+          // unconfirmed POST; read the durable cursor first.
+          var statusCode=Number(stepError&&stepError.status)||0;
+          if(statusCode!==502&&statusCode!==503&&statusCode!==504)throw stepError;
+          researchPhase('서버 시간 초과 · 저장된 진행 위치 확인 중');
+          var recovered=null;
+          for(var check=0;check<2;check++){
+            await new Promise(function(resolve){setTimeout(resolve,check===0?1500:3000);});
+            if(scopeKey()!==requestedKey||researchStopRequested)break;
+            try{
+              var checkpoint=await api(CONTROL,'research_status','GET',{country:requested.country,region:requested.region},null,12000);
+              if(checkpoint&&checkpoint.jobId===beforeStep.jobId){
+                recovered=checkpoint;
+                if(checkpointMark(checkpoint)!==checkpointMark(beforeStep))break;
+              }
+            }catch(_checkError){}
+          }
+          if(recovered&&checkpointMark(recovered)!==checkpointMark(beforeStep)){
+            data=recovered;
+            researchPhase('시간 초과 후 저장된 단계에서 정상 이어가기');
+          }else{
+            // The browser cannot confirm if the prior server work is still
+            // running. Do not initiate an overlapping research_step.
+            if(recovered){lastCountryPreview=recovered;rememberReport('country',recovered);}
+            throw stepError;
+          }
+        }
       }
     }catch(e){
       var failedPhase=activePhase,reason=text(e&&e.message)||'알 수 없는 오류';
@@ -4842,13 +4877,21 @@
       // waiting indefinitely for a second status read or showing stale counts.
       if(progress)progress.textContent='업체 리서치 시작 실패 · 중단 단계: '+failedPhase+' · 사유: '+reason+' · 기존 후보 원장은 변경하지 않았습니다.';
       show('업체 검색 중단 단계: '+failedPhase+' · '+reason,'fail');
+      var savedCheckpoint=null;
       if(requested&&requested.country){
         try{
           var saved=await api(CONTROL,'research_status','GET',{country:requested.country,region:requested.region},null,12000);
-          if(saved&&saved.jobId){lastCountryPreview=saved;rememberReport('country',saved);}
+          if(saved&&saved.jobId){lastCountryPreview=saved;rememberReport('country',saved);savedCheckpoint=saved;}
         }catch(_statusError){}
       }
-      if(progress)progress.textContent='업체 리서치 시작 실패 · 중단 단계: '+failedPhase+' · 사유: '+reason+' · 기존 후보 원장은 유지됩니다.';
+      var isTimeout=[502,503,504].includes(Number(e&&e.status)||0);
+      if(savedCheckpoint&&isTimeout){
+        var p=savedCheckpoint.progress||{},sc=p.search||{},ins=p.inspection||{},rank=p.ranking||{};
+        var marker=savedCheckpoint.status==='searching'?'검색 '+Number(sc.done||0)+'/'+Number(sc.total||0):savedCheckpoint.status==='inspecting'?'업체 검사 '+Number(ins.done||0)+'/'+Number(ins.total||0):'AI 평가 '+Number(rank.done||0)+'/'+Number(rank.total||0);
+        var message='서버 응답 시간 초과. 작업 기록은 '+marker+' 단계까지 저장돼 있습니다. 같은 국가에서 「새 책임 공급업체 검색」을 다시 누르면 저장된 작업을 이어갈 수 있습니다. 신규 작업으로 초기화하지 마세요.';
+        if(progress)progress.textContent=message;
+        show(message,'warn');
+      }else if(progress)progress.textContent='업체 리서치 중단 단계: '+failedPhase+' · 사유: '+reason+' · 기존 후보 원장은 유지됩니다.';
     }finally{
       researchLoopActive=false;
       if(btn){btn.disabled=false;btn.textContent='새 책임 공급업체 검색';}

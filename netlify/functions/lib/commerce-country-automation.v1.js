@@ -1542,11 +1542,19 @@ async function saveResearchJob(job, actorId) {
   // A new deploy must never report a checkpoint as saved if the database did
   // not return the same country/job identity.  Keep the previous checkpoint
   // available when a write is rejected or routed to a wrong scope.
-  const written = array(await SlotStore.insert("gslot_policies", row, "resolution=merge-duplicates,return=representation"))[0];
-  const savedRule = plain(written && written.rule);
+  // A full returned `rule` duplicates a potentially multi-MB checkpoint on
+  // every 1-step request. Ask PostgREST for only the persisted identity.
+  // This retains the existing upsert and its jobId read-after-write guard.
+  const stored = await SlotStore.request(SlotStore.rest("gslot_policies",
+    "select=id,scope_country,stored_job_id:rule->>jobId"), {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify([row])
+  });
+  const written = array(stored)[0];
   if (!written || text(written.id) !== row.id ||
       text(written.scope_country) !== job.scope.country ||
-      text(savedRule.jobId) !== text(job.jobId)) {
+      text(written.stored_job_id) !== text(job.jobId)) {
     const error = new Error("SUPPLIER_RESEARCH_CHECKPOINT_NOT_CONFIRMED");
     error.statusCode = 503; throw error;
   }
@@ -2810,7 +2818,16 @@ function productSupplierSource(row) {
   // market, evidence, revenue and explicit administrator Front Match gates.
   if(!url||decision==="reject")return null;
   let parsed=null;try{parsed=new URL(url);}catch(_error){return null;}
-  const host=lower(parsed.hostname),pathName=lower(parsed.pathname),combined=lower(title+" "+url);
+  const host=lower(parsed.hostname).replace(/^www\./,''),pathName=lower(parsed.pathname),combined=lower(title+" "+url);
+  // A general search-portal homepage is not an official seller.  Prior country
+  // ledgers contained generic Google searches that later produced Google
+  // Calendar as a supposed PH/GB retail product. Never delete those rows;
+  // simply do not feed an unverified search portal into private product search.
+  // Explicit administrator-specified suppliers remain under administrator care.
+  const verifiedByOperator=row&&(
+    row.manualRegistered===true||row.manualPinned===true||row.adminPinned===true);
+  const searchPortal=/^(?:google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.yahoo\.com)$/.test(host);
+  if(searchPortal&&!verifiedByOperator&&(!pathName||pathName==='/'||/^\/(?:search|url|shopping)(?:\/|$)/.test(pathName)))return null;
   if(/\.(?:pdf|hwp|hwpx|docx?|xlsx?|pptx?|zip|rar|7z)(?:$|[?#])/i.test(url))return null;
   if(/(?:\/attachment\/|\/filedownload|\/download(?:\/|\?|$)|\/board(?:\/|\?|$)|\/article(?:\/|\?|$)|\/news(?:\/|\?|$)|\/press(?:\/|\?|$)|\/blog(?:\/|\?|$)|bo_table=|boardid=)/i.test(pathName+parsed.search))return null;
   if(/(?:hera\d+\.|magicseller\.|tistory\.|blogspot\.|wordpress\.|news\.|press\.|media\.)/i.test(host))return null;
@@ -3454,6 +3471,9 @@ async function routeBlockedLatestProducts(actorId,scope,rowsInput){
 }
 
 async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime,scope,operation){
+  // The chunked staging path is called directly before the outer staging
+  // function's local pause flag exists. Resolve it from this job's checkpoint.
+  const durablePaused=runtime.pauseRequested===true&&(!text(runtime.jobId)||text(runtime.jobId)===text(job.jobId));
   const requestedIds=new Set(array(input&&input.productIds).map(text).filter(Boolean).slice(0,100)),hasSelection=requestedIds.size>0||array(input&&input.productRefs).length>0,handled=new Set(array(runtime.partialQueueStagedIdentities).map(text).filter(Boolean)),explicitlyUnstaged=new Set(array(runtime.partialQueueUnstagedIdentities).map(text).filter(Boolean));
   if(operation==="purge"){
     if(!hasSelection){const error=new Error("영구 제외할 최신 상품을 선택하세요.");error.statusCode=400;throw error;}
@@ -7812,6 +7832,40 @@ async function autoProductScopes() {
   return{mode:state.master.mode,scopes};
 }
 
+// A scheduled step checks one explicit country/region, not the whole 249-market
+// catalog.  An old recheck used autoProductScopes() here, reading every policy
+// rule repeatedly during the same invocation.  This read is fresh (no cache),
+// so an administrator STOP still takes effect before the next private write.
+async function autoScopeStatus(input) {
+  const requested=plain(input),code=normalizeCountry(requested.countryCode||requested.country);
+  const country=countryRow(code),subdivision=text(requested.subdivisionCode||requested.region||'NATIONWIDE').toUpperCase();
+  if(!country||country.enabled===false||country.code==='KP')return{active:false,reason:'unsupported_or_disabled_country'};
+  if(subdivision!=='NATIONWIDE'&&!array(country.subdivisions).some(row=>row.code===subdivision))return{active:false,reason:'invalid_subdivision'};
+  const ids=[settingId('master',{}),settingId('region',{regionGroup:country.regionGroup}),
+    settingId('country',{countryCode:country.code})];
+  if(subdivision!=='NATIONWIDE')ids.push(settingId('subdivision',{countryCode:country.code,subdivisionCode:subdivision}));
+  // Do not mask storage failures as an operator-initiated stop.
+  const rows=array(await SlotStore.select('gslot_policies',
+    'select=id,scope_country,scope_region,enabled,rule,updated_at&'+
+    'id=in.('+ids.map(encodeURIComponent).join(',')+')&limit='+ids.length));
+  const settings=rows.map(rowToSetting),map=new Map(settings.map(row=>[row.id,row]));
+  const master=map.get(settingId('master',{}));
+  if(!master)return{active:false,reason:'master_not_saved'};
+  if(!['auto','manual','selected'].includes(master.mode))return{active:false,reason:'master_stopped'};
+  if(master.mode==='selected'&&!array(master.selectedCountryCodes).includes(country.code))return{active:false,reason:'not_selected'};
+  if(master.mode==='manual'&&master.selectedCountryCode!==country.code)return{active:false,reason:'other_manual_country'};
+  const state={master,map};
+  if(master.mode==='manual'&&text(master.selectedSubdivisionCode||'NATIONWIDE').toUpperCase()!=='NATIONWIDE'){
+    const only=text(master.selectedSubdivisionCode).toUpperCase();
+    return{active:only===subdivision&&effectiveSetting(state,country.code,only).mode==='auto',reason:'manual_subdivision'};
+  }
+  const overall=effectiveSetting(state,country.code,'');
+  if(overall.mode!=='auto')return{active:false,reason:'country_setting_off'};
+  const expanded=country.requiresSubdivision&&overall.expandSubdivisions===true&&array(country.subdivisions).length>0;
+  if(expanded)return{active:subdivision!=='NATIONWIDE'&&effectiveSetting(state,country.code,subdivision).mode==='auto',reason:'expanded_subdivisions'};
+  return{active:subdivision==='NATIONWIDE',reason:'nationwide'};
+}
+
 // Use the stored research job only: never synthesize a replacement job from
 // existing product candidates when deciding whether automation owns the work.
 // Small, read-only job checkpoint for scheduled supplier continuation.
@@ -7850,7 +7904,7 @@ async function recordScheduledSupplierCompletion(input){
     !supplierExplicitDanger(row) && !!productSupplierSource(row));
   const kind=scope.region==='NATIONWIDE'?"country":"subdivision";
   const id=settingId(kind,{countryCode:scope.country,subdivisionCode:scope.region});
-  const policy=array(await policyRows()).find(row=>text(row.id)===id),oldRule=plain(policy&&policy.rule),t=iso();
+  const policy=array(await SlotStore.select('gslot_policies','select=id,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq.'+encodeURIComponent(id)+'&limit=1'))[0],oldRule=plain(policy&&policy.rule),t=iso();
   const setting=policy?Object.assign({},oldRule):sanitizeSetting({scopeType:kind,countryCode:scope.country,subdivisionCode:scope.region,mode:'inherit'});
   const rule=Object.assign({},setting,{schema:VERSION,lastAttemptAt:t,lastAttemptSummary:{source:progressive?'scheduled_progressive_private_supplier':'scheduled_staged_research',jobId:requested,activeSupplierCount:active.length,created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds},updatedAt:t,updatedBy:'scheduled-automation'});
   const newlySaved=Math.max(0,Number(plain(input).recordedSuppliers||0));
@@ -7977,5 +8031,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, autoProductScopes, autoSupplierJobCheckpoint, recordScheduledSupplierCompletion, progressivePrivateSupplierCommit, autoProductJobCheckpoint, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, autoProductScopes, autoScopeStatus, autoSupplierJobCheckpoint, recordScheduledSupplierCompletion, progressivePrivateSupplierCommit, autoProductJobCheckpoint, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
 };

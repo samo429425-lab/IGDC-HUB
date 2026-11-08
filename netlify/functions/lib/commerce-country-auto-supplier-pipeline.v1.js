@@ -8,7 +8,7 @@ const Store = require('./global-slot-console-supabase');
 const VERSION = 'igdc-country-supplier-staged-auto.v1';
 const ACTOR = 'scheduled-automation';
 const HUB = 'country-supplier-staged-auto';
-const LEASE_MS = 9 * 60 * 1000;
+const LEASE_MS = 3 * 60 * 1000; // Worker timeouts recover without a nine-minute country stall.
 const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Brief concurrency yield, never a country-wide permanent pause.
 const MAX_SCOPES = 8; // Country-local fair rotation, bounded parallel work per minute (<= 12).
 const RESEARCH_ROUNDS = 5; // Country scheduled automation always completes five distinct research rounds.
@@ -59,7 +59,12 @@ function create(deps) {
     if(written.length!==1)throw new Error('supplier_checkpoint_revision_conflict');
     return rule;
   }
-  async function recheck(s) { const live=await automation.autoProductScopes();if(!arr(live.scopes).some(x=>key(x)===key(s)))throw Object.assign(new Error('country_automation_paused'),{stopped:true}); }
+  async function recheck(s) {
+    // Fresh country-only policy read: honor immediate operator stops without
+    // reading all markets before every one of several scheduler steps.
+    const live=await automation.autoScopeStatus(input(s));
+    if(live.active!==true)throw Object.assign(new Error('country_automation_paused:'+txt(live.reason)),{stopped:true});
+  }
   // Administrator research-button clicks are NOT country automation bans.
   // Yield briefly to an active administrator to avoid racing a single shared
   // job checkpoint; keep every manual-pinned supplier/decision in its own ledger.
@@ -142,6 +147,15 @@ function create(deps) {
       // The country-local supplier ledger, not a research count, is the product
       // worker's durable start gate. An empty search never marks the cycle as
       // a successfully discovered supplier portfolio.
+      const owned=await automation.autoSupplierJobCheckpoint(input(s));
+      if(owned.jobId!==state.jobId||owned.updatedBy!==ACTOR||owned.status!=='committed'){
+        // An administrator may have committed/updated the same job between
+        // checkpoints. Preserve it and start a new scheduler cycle later,
+        // rather than repeatedly failing the country on a 409 handover.
+        return Object.assign(state,{phase:'manual_preserved',jobId:null,
+          protectedJobId:owned.jobId||state.jobId,
+          lastResult:'supplier_checkpoint_changed_before_durable_handoff'});
+      }
       const recorded=await automation.recordScheduledSupplierCompletion(input(s,{jobId:state.jobId,recordedSuppliers:savedCount}));
       const have=Number(recorded&&recorded.activeSupplierCount||0);
       // The supplier crawl also revisits markets while their PRIVATE 20-section
