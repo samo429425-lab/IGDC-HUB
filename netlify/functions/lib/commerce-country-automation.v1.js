@@ -28,6 +28,9 @@ const ProductPipeline = require("./commerce-product-pipeline-state.v1");
 const AdminPlacementGuard = require("./commerce-admin-placement-guard.v1");
 const OriginalProductEvidence = require("./igdc-original-product-url-evidence-20261013-all-safe.json");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
+const SupplierSourceGuard = require("./commerce-supplier-source-guard.v1");
+const CountryLogistics = require("./commerce-country-logistics-evidence.v1");
+const InternationalSafety = require("./commerce-international-distribution-safety.v1");
 
 const VERSION = "commerce-country-automation-v3.40.0-country-scoped-reserve-quality-guard";
 const POLICY_PREFIX = "igdc_country_automation_";
@@ -398,7 +401,6 @@ function rowToSetting(row) {
     // Attempt time rotates retry priority; durable time allows product research
     // on actually saved supplier rows without falsely marking a partial run complete.
     lastAttemptAt: text(rule.lastAttemptAt) || null,
-    lastAttemptSummary: plain(rule.lastAttemptSummary),
     lastDurableSupplierAt: text(rule.lastDurableSupplierAt) || null,
     updatedAt: text(row && row.updated_at) || null
   };
@@ -457,7 +459,6 @@ function effectiveSetting(state, countryCode, subdivisionCode) {
     expandSubdivisions: !!(countrySetting && countrySetting.expandSubdivisions),
     lastRunAt: (subdivision || countrySetting || {}).lastRunAt || null,
     lastAttemptAt: (subdivision || countrySetting || {}).lastAttemptAt || null,
-    lastAttemptSummary: (subdivision || countrySetting || {}).lastAttemptSummary || {},
     lastDurableSupplierAt: (subdivision || countrySetting || {}).lastDurableSupplierAt || null,
     lastRunSummary: (subdivision || countrySetting || {}).lastRunSummary || {},
     chain: chain.map((item) => ({ id: item.id, mode: item.mode }))
@@ -702,7 +703,10 @@ function evidenceProjection(item) {
     publicShippingPolicyVerified: evidence.publicShippingPolicyVerified === true,
     publicReturnRefundPolicyVerified: evidence.publicReturnRefundPolicyVerified === true,
     publicCustomerSupportVerified: evidence.publicCustomerSupportVerified === true,
-    publicPolicyChecks: plain(evidence.publicPolicyChecks)
+    publicPolicyChecks: plain(evidence.publicPolicyChecks),
+    countryLogistics:plain(evidence.countryLogistics),inspectedUrl:text(evidence.inspectedUrl)||null,
+    inspectedAt:text(evidence.inspectedAt)||null,
+    sellerAddressCountryClaim:text(plain(evidence.countryLogistics).sellerAddressCountryClaim)||null
   };
 }
 function trustTier(score, hardGatePassed, approvalReady) {
@@ -1046,6 +1050,7 @@ async function existingNonAiCandidateByUrl(url, scope) {
 }
 async function persistCandidate(item, assessment, scope, actorId, manualIds, manualRows) {
   const url = itemUrl(item); const title = itemTitle(item); if (!url || !title) return { status: "skipped", reason: "supplier_title_or_https_url_missing" };
+  if(SupplierSourceGuard.reason(url))return{status:"skipped",reason:"not_a_supplier_site:"+SupplierSourceGuard.reason(url)};
   const deterministicId = "country_supplier_" + sha256(scope.country + "|" + scope.region + "|" + url).slice(0, 24);
   if (manualIds.has(deterministicId)) return { status: "manual_preserved", candidateId: deterministicId };
   for (const row of manualRows.values()) { if (safeUrl(row && row.official_url) === url) return { status: "manual_preserved", candidateId: text(row.id) }; }
@@ -1105,6 +1110,7 @@ async function persistCandidate(item, assessment, scope, actorId, manualIds, man
   const payload = Object.assign({}, item, {
     id: deterministicId, entityKind: "responsible_supplier", title, url, supplierOfficialUrl: url, supplierProfile: profile, supplierTrust,
     targetCountry: scope.country, targetRegion: scope.region,
+    countryLogistics:Object.assign({},CountryLogistics.assess(scope.country,[],url),plain(item&&item.brokerageVerification&&item.brokerageVerification.countryLogistics)),
     productCatalogImportAllowed: false, productReferenceSelectionRequired: true,
     intermediaryContract,
     commerceCandidate: Object.assign({}, plain(item && item.commerceCandidate), {
@@ -1652,6 +1658,8 @@ function supplierDisplayTitle(item, host, normalizedFromDetail) {
 function supplierSurfaceDisposition(item, blockedKeysInput) {
   const originalUrl=researchCandidateUrl(item), blockedKeys=new Set(array(blockedKeysInput).map(text).filter(Boolean));
   if(!originalUrl) return {state:"holding",reason:"invalid_supplier_url",originalUrl:"",normalizedUrl:"",host:"",urlKey:"",hostKey:""};
+  const sourceProblem=SupplierSourceGuard.reason(originalUrl);
+  if(sourceProblem)return{state:"holding",reason:sourceProblem,originalUrl,normalizedUrl:"",host:"",urlKey:"",hostKey:""};
   let parsed; try { parsed=new URL(originalUrl); } catch (_error) { return {state:"holding",reason:"invalid_supplier_url",originalUrl,normalizedUrl:"",host:"",urlKey:"",hostKey:""}; }
   const host=parsed.hostname.toLowerCase().replace(/^www\./,""), hostKey="host:"+host, urlKey="url:"+sha256(originalUrl.toLowerCase()).slice(0,32);
   const rootUrl=parsed.protocol+"//"+parsed.host+"/", title=itemTitle(item), decoded=(decodeLoose(title+" "+parsed.pathname+" "+parsed.search)).toLowerCase();
@@ -1704,7 +1712,7 @@ function filterKnownSupplierItems(items, knownKeysInput) {
 }
 function persistedSupplierActive(row){
   const status=lower(row&&row.status);
-  return !!safeUrl(row&&row.url)&&!["hold","suppressed","rejected","blocked","disabled","purged"].includes(status);
+  return !!safeUrl(row&&row.url)&&!SupplierSourceGuard.reason(row&&row.url)&&!["hold","suppressed","rejected","blocked","disabled","purged"].includes(status);
 }
 function persistedSupplierResearchRow(rowInput){
   const row=plain(rowInput),evidence=plain(row.evidence),supplier=plain(row.supplier),trust=plain(row.trust),ai=plain(row.ai),url=safeUrl(row.url);
@@ -2811,14 +2819,16 @@ function supplierSpecificStorefrontUrl(value){
     return parsed.protocol+"//"+parsed.host+"/"+shop+"/";
   }catch(_error){return"";}
 }
-function productSupplierSource(row) {
+function productSupplierSource(row, marketCountry) {
   const url=researchCandidateUrl(row),evidence=plain(row&&row.evidence),title=text(row&&row.title),recommendation=lower(row&&row.recommendation),decision=lower(row&&row.decision);
   // Product discovery is a PRIVATE research stage.  A supplier that the
   // supplier engine explicitly marked research-eligible must be allowed to
   // contribute product references even while its stronger release evidence is
   // still incomplete.  Public release continues to use the downstream trust,
   // market, evidence, revenue and explicit administrator Front Match gates.
-  if(!url||decision==="reject")return null;
+  if(!url||decision==="reject"||SupplierSourceGuard.reason(url))return null;
+  const marketCheck=InternationalSafety.supplier(row,marketCountry);
+  if(marketCheck.privateProductResearchAllowed!==true)return null;
   let parsed=null;try{parsed=new URL(url);}catch(_error){return null;}
   const host=lower(parsed.hostname).replace(/^www\./,''),pathName=lower(parsed.pathname),combined=lower(title+" "+url);
   // A general search-portal homepage is not an official seller.  Prior country
@@ -2830,11 +2840,6 @@ function productSupplierSource(row) {
     row.manualRegistered===true||row.manualPinned===true||row.adminPinned===true);
   const searchPortal=/^(?:google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.yahoo\.com)$/.test(host);
   if(searchPortal&&!verifiedByOperator&&(!pathName||pathName==='/'||/^\/(?:search|url|shopping)(?:\/|$)/.test(pathName)))return null;
-  // Historical PH/GB failures attached Google Calendar/Chat help pages to
-  // unrelated sellers. They are NOT merchant storefronts or catalog sources.
-  // Preserve any explicitly registered operator source for manual review.
-  if(!verifiedByOperator&&(/^(?:workspace|calendar|chat|accounts|support)\.google\.com$/.test(host)||
-    (searchPortal&&/^\/(?:calendar|chat|accounts|support)(?:\/|$)/.test(pathName))))return null;
   if(/\.(?:pdf|hwp|hwpx|docx?|xlsx?|pptx?|zip|rar|7z)(?:$|[?#])/i.test(url))return null;
   if(/(?:\/attachment\/|\/filedownload|\/download(?:\/|\?|$)|\/board(?:\/|\?|$)|\/article(?:\/|\?|$)|\/news(?:\/|\?|$)|\/press(?:\/|\?|$)|\/blog(?:\/|\?|$)|bo_table=|boardid=)/i.test(pathName+parsed.search))return null;
   if(/(?:hera\d+\.|magicseller\.|tistory\.|blogspot\.|wordpress\.|news\.|press\.|media\.)/i.test(host))return null;
@@ -2845,6 +2850,7 @@ function productSupplierSource(row) {
   // Do not impose an additional supplier-count / HTTPS-evidence / marketplace
   // gate here; the downstream public-release pipeline keeps its own trust,
   // market, safety, evidence, revenue and administrator Front Match gates.
+  const logistics=plain(first(row&&row.countryLogistics,plain(row&&row.supplier).countryLogistics,plain(row&&row.evidence).countryLogistics));
   const privateResearchEligible=true;
   const releaseEvidenceReady=evidence.supplierReviewEligible===true||(evidence.official===true&&evidence.responsibleEntity===true&&evidence.directSales===true&&evidence.legalIdentity===true&&evidence.contactChannel===true&&evidence.marketplace!==true);
   const designated=safeUrl(first(row&&row.productPageUrl,row&&row.sourceCandidateUrl));parsed.pathname="/";parsed.search="";parsed.hash="";
@@ -2859,7 +2865,7 @@ function productSupplierSource(row) {
     /(?:웹툰|웹소설|전자책|디지털만화|출판사|전자서점|webtoon|webcomic|ebook|e-book|digital[ -]?(?:book|comic)|publisher|manga)/i.test(supplierText)?"digital_books_focus":
     /(?:소형가전|미니가전|주방가전|가습기|제습기|공기청정기|에어프라이어|청소기|small[ -]?appliance|humidifier|dehumidifier|air[ -]?purifier|kitchen[ -]?appliance)/i.test(supplierText)?"small_appliance_focus":
     /(?:모바일 액세서리|휴대폰 액세서리|스마트폰 케이스|보조배터리|무선충전|usb-c|magsafe|power[ -]?bank|phone[ -]?accessor|mobile[ -]?accessor)/i.test(supplierText)?"mobile_accessories_focus":recordedLane||"general";
-  return{supplierId:text(row&&[row.id,row.candidateId,row.manualSupplierId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl,url:supplierSiteUrl,supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),supplierRecommendation:recommendation,approvalReady:row&&row.approvalReady===true,sourceCandidateUrl,productPageUrl:sourceCandidateUrl,evidenceReady:releaseEvidenceReady,privateResearchOnly:releaseEvidenceReady!==true,supplyLane:recoveredLane,discoverySource:text(evidence.discoverySource),officialDirectoryUrl:text(evidence.officialDirectoryUrl),adminPinned:row&&row.adminPinned===true,manualRegistered:row&&row.manualRegistered===true,affiliateSettlement,affiliateStage:affiliateSettlement.stage,affiliatePriority:affiliateSettlement.stageRank,priorityScore:priority.score+affiliateSettlement.stageRank*400,priorityLabel:affiliateSettlement.stageRank>0?affiliateSettlement.stage+" · "+(priority.label||"제휴 사이트"):priority.label};
+  return{internationalSafety:marketCheck,supplierPolicyChecks:plain(evidence.publicPolicyChecks),sellerAddressCountryClaim:text(logistics.sellerAddressCountryClaim)||null,supplierId:text(row&&[row.id,row.candidateId,row.manualSupplierId].find(Boolean)),supplierName:title||parsed.hostname,supplierSiteUrl,url:supplierSiteUrl,supplierType:text(row&&row.supplierType||evidence.supplierType),trustScore:Number(row&&[row.trustScore,row.score].find(v=>v!=null)||0),supplierDecision:text(row&&row.decision),supplierRecommendation:recommendation,approvalReady:row&&row.approvalReady===true,sourceCandidateUrl,productPageUrl:sourceCandidateUrl,evidenceReady:releaseEvidenceReady,privateResearchOnly:releaseEvidenceReady!==true,supplyLane:recoveredLane,discoverySource:text(evidence.discoverySource),officialDirectoryUrl:text(evidence.officialDirectoryUrl),adminPinned:row&&row.adminPinned===true,manualRegistered:row&&row.manualRegistered===true,affiliateSettlement,countryLogistics:logistics,affiliateStage:affiliateSettlement.stage,affiliatePriority:affiliateSettlement.stageRank,priorityScore:priority.score+affiliateSettlement.stageRank*400,priorityLabel:affiliateSettlement.stageRank>0?affiliateSettlement.stage+" · "+(priority.label||"제휴 사이트"):priority.label};
 }
 function productSupplierSourceKey(source) {
   const raw=safeUrl(first(source&&source.supplierSiteUrl,source&&source.url,source&&source.sourceCandidateUrl));
@@ -3024,7 +3030,7 @@ async function beginProductResearchJob(actorId, input) {
   const sourcePool=[],seenSupplierSites=new Set();
   // Durable rows come first so the newest operator state/URL wins; the last
   // research-job rows are only a compatibility fallback for older records.
-  for(const row of supplierRows){const source=productSupplierSource(row);if(!source)continue;const key=productSupplierSourceKey(source);if(!key||seenSupplierSites.has(key))continue;seenSupplierSites.add(key);sourcePool.push(source);}
+  for(const row of supplierRows){const source=productSupplierSource(row,scope.country);if(!source)continue;const key=productSupplierSourceKey(source);if(!key||seenSupplierSites.has(key))continue;seenSupplierSites.add(key);sourcePool.push(source);}
   // No semantic cap on selected suppliers for product research. If 10, 27,
   // 48, 100 or more new suppliers are present, all unresearched suppliers enter
   // this job. advanceProductResearchJob still processes them incrementally so
@@ -3037,15 +3043,6 @@ async function beginProductResearchJob(actorId, input) {
   }
   const allSupplierSources=ProductReserve.interleaveSuppliers(sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||focusedProductResearchPriority(b)-focusedProductResearchPriority(a)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))));
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
-  // Scheduler starts product discovery after TEN *distinct, usable supplier
-  // sites*, while the supplier scheduler continues independently to 100/200.
-  // Do not retroactively stop an already running job or affect manual research.
-  const minAutoSources=Math.min(10,Math.max(0,Math.round(Number(raw.minEligibleSupplierSources)||0)));
-  const unfinished=existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!['complete','cancelled','failed'].includes(existing.status);
-  if(text(actorId)==='scheduled-country-product-ai'&&minAutoSources>0&&!unfinished&&allSupplierSources.length<minAutoSources){
-    const error=new Error('AUTO_PRODUCT_SUPPLIER_THRESHOLD_PENDING:'+allSupplierSources.length+'/'+minAutoSources);
-    error.statusCode=409;error.code='AUTO_PRODUCT_SUPPLIER_THRESHOLD_PENDING';throw error;
-  }
 
   const supplierLedgerSourceId=text(supplierJob&&supplierJob.jobId)||"durable_supplier_candidate_ledger";
   const priorResearchedKeys=researchedProductSupplierKeys(existing),priorGapKeys=productGapSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
@@ -3196,7 +3193,9 @@ async function fallbackDiscoverSupplierProducts(sourceInput, scopeInput) {
         let raw=fallbackDecodeHtml(m[1]).replace(/\\u002f/gi,'/').replace(/\\\//g,'/');let absolute='';try{absolute=new URL(raw,base).toString();}catch(_e){continue;}
         if(!fallbackLikelyProductUrl(absolute,supplierSiteUrl))continue;let key='';try{const u=new URL(absolute);u.hash='';key=lower(u.toString());}catch(_e){continue;}if(seen.has(key))continue;seen.add(key);
         const left=Math.max(0,m.index-900),right=Math.min(html.length,rx.lastIndex+1400),context=html.slice(left,right),nameMatch=context.match(/(?:data-(?:goods|product)-name|title|alt)\s*=\s*["']([^"']{2,220})["']/i),tagMatch=context.match(/<(?:strong|em|span|p|div|a)\b[^>]*>([^<>]{2,220})<\/(?:strong|em|span|p|div|a)>/i),name=fallbackDecodeHtml(first(nameMatch&&nameMatch[1],tagMatch&&tagMatch[1],'상품명 확인 중')).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,220)||'상품명 확인 중',imgMatch=context.match(/<img\b[^>]*(?:data-original|data-lazy-src|data-src|src)\s*=\s*["']([^"']+)["']/i);let image='';if(imgMatch){try{image=new URL(fallbackDecodeHtml(imgMatch[1]),base).toString();}catch(_e){image='';}}
-        found.push({id:'product_ref_fallback_'+sha256(key).slice(0,20),entityKind:'product_reference',productName:name,title:name,productUrl:absolute,url:absolute,imageUrl:image,imageOriginalUrl:image,imageSource:image?'fallback_product_context':'',supplierId:text(source.supplierId),supplierName:text(source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),supplierTrustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),supplierApprovalReady:source.approvalReady===true,supplierEvidenceReady:source.evidenceReady===true,sourcePageUrl:base,jsonLdProduct:false,offerPresent:false,provisionalName:name==='상품명 확인 중',productPageLive:null,sameSupplierSite:true,inspectionComplete:false,researchStatus:'discovered_fallback',slotDecision:'undecided',publicPublication:false,automaticImport:false});
+        found.push({id:'product_ref_fallback_'+sha256(key).slice(0,20),entityKind:'product_reference',productName:name,title:name,productUrl:absolute,url:absolute,imageUrl:image,imageOriginalUrl:image,imageSource:image?'fallback_product_context':'',supplierId:text(source.supplierId),supplierName:text(source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),supplierTrustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),supplierApprovalReady:source.approvalReady===true,supplierEvidenceReady:source.evidenceReady===true,countryLogistics:plain(source.countryLogistics),
+          supplierPolicyChecks:plain(source.supplierPolicyChecks),supplierOriginCountryClaim:text(source.sellerAddressCountryClaim||source.supplierOriginCountryClaim),
+          internationalSafety:plain(source.internationalSafety),sourcePageUrl:base,jsonLdProduct:false,offerPresent:false,provisionalName:name==='상품명 확인 중',productPageLive:null,sameSupplierSite:true,inspectionComplete:false,researchStatus:'discovered_fallback',slotDecision:'undecided',publicPublication:false,automaticImport:false});
         if(found.length>=80)break;
       }
       if(found.length>=80)break;
@@ -3255,7 +3254,9 @@ async function advanceProductResearchJob(actorId, input) {
           }catch(fallbackError){result=Object.assign({},result,{trace:Object.assign({},plain(result.trace),{fallbackDiscovery:true,fallbackCount:0,fallbackStatus:'error',fallbackDetail:text(fallbackError&&fallbackError.message)})});}
         }
         const sourceSettlement=normalizeAffiliateSettlement(source.affiliateSettlement,{existing:source.affiliateSettlement});
-        const discoveredItems=orderProductDiscoveryByPolicy(array(result.items).map((row)=>compactProductWorkingRow(Object.assign({},row,{affiliateSettlement:sourceSettlement,affiliateStage:sourceSettlement.stage,supplierAdminPinned:source.adminPinned===true,supplierManualRegistered:source.manualRegistered===true,manualSupplierId:text(source.manualSupplierId),supplierAffiliatePriority:sourceSettlement.stageRank}))),job.rankingContext);
+        const discoveredItems=orderProductDiscoveryByPolicy(array(result.items).map((row)=>compactProductWorkingRow(Object.assign({},row,{affiliateSettlement:sourceSettlement,affiliateStage:sourceSettlement.stage,supplierAdminPinned:source.adminPinned===true,supplierManualRegistered:source.manualRegistered===true,manualSupplierId:text(source.manualSupplierId),supplierAffiliatePriority:sourceSettlement.stageRank,countryLogistics:plain(source.countryLogistics),
+          supplierPolicyChecks:plain(source.supplierPolicyChecks),supplierOriginCountryClaim:text(source.sellerAddressCountryClaim),
+          internationalSafety:plain(source.internationalSafety)}))),job.rankingContext);
         if(job.discoveryStorage==="chunked_v1"){
           await appendProductChunkRows(job,"discovery",discoveredItems,actorId);
           job.rawProductCount=Math.max(Number(job.rawProductCount||0),Number(job.discoveryResultCount||0));
@@ -3859,9 +3860,13 @@ function productAdministratorLocked(rowInput) {
   const decision = lower(row.slotDecision || "undecided");
   return ["hold", "reject", "purge"].includes(decision) && !productAutomationManaged(row);
 }
-function productPrivateReviewAssessment(rowInput) {
+function productPrivateReviewAssessment(rowInput, marketCountry) {
   const row = plain(rowInput), risk = plain(row.riskAssessment), status = lower(row.researchStatus), blockers = array(risk.blockers).map(lower), warnings = [];
+  const globalGate=InternationalSafety.product(row,marketCountry);
+  if(globalGate.eligibleForAutomaticPrivatePlacement!==true)
+    return {eligible:false,hold:globalGate.sourceBlocked===true,reason:globalGate.reason,warnings:globalGate.blockers,safetyPolicyVersion:InternationalSafety.VERSION};
   if (PRIVATE_REVIEW_HARD_STATUSES.has(status) || row.productPageLive === false || risk.explicitUnavailable === true) return { eligible: false, hold: true, reason: "product_page_unavailable", warnings };
+  if (SupplierSourceGuard.reason(productUrl(row))) return { eligible: false, hold: true, reason: "source_service_not_product_seller", warnings };
   if (!ProductRanking.isSpecificProductUrl(productUrl(row))) return { eligible: false, hold: false, reason: "specific_product_page_not_verified", warnings };
   if (row.sameSupplierSite === false) return { eligible: false, hold: true, reason: "supplier_product_domain_mismatch", warnings };
   if (!productImageUrl(row)) return { eligible: false, hold: false, reason: "actual_product_image_not_verified", warnings };
@@ -3884,6 +3889,7 @@ function manualPrivatePlacementAssessment(rowInput) {
   const url = productUrl(row);
   if (!text(row.id)) return { eligible: false, reason: "missing_product_id", warnings };
   if (!url) return { eligible: false, reason: "missing_product_url", warnings };
+  if (SupplierSourceGuard.reason(url)) return { eligible: false, reason: "source_service_not_product_seller", warnings };
   if (PRIVATE_REVIEW_HARD_STATUSES.has(status) || row.productPageLive === false || risk.explicitUnavailable === true) return { eligible: false, reason: "product_page_unavailable", warnings };
   if (!ProductRanking.isSpecificProductUrl(url) && risk.specificProductUrl !== true) return { eligible: false, reason: "specific_product_page_not_verified", warnings };
   if (row.sameSupplierSite === false) return { eligible: false, reason: "supplier_product_domain_mismatch", warnings };
@@ -4194,6 +4200,7 @@ function productCandidatePayload(actorId, scope, product, decision) {
   }
   const placement = plain(product.approvedPlacement || product.selectedPlacement || product.primaryPlacement || array(product.sectionAssignments)[0]);
   const productUrlValue = productUrl(product), imageUrlValue = productImageUrl(product), readiness = ProductPipeline.researchReadiness(product), card = ProductPipeline.productCard(product);
+  const internationalMarketReview=InternationalSafety.product(product,scope.country);
   const placementRecord = { page: text(placement.page), section: text(placement.sectionKey || placement.section), country: scope.country, region: scope.region, proposalOnly: !selected, administratorSelected: selected && !aiSelected, aiSelected, publicationPending: selected, publicPublication: false };
   return {
     id: productCandidateId(scope, product), entityKind: "product_reference",
@@ -4203,8 +4210,10 @@ function productCandidatePayload(actorId, scope, product, decision) {
     price: text(product.price), priceCurrency: text(product.priceCurrency), availability: text(product.availability), productCard: card,
     page: placementRecord.page, channel: placementRecord.page, section: placementRecord.section, psom_key: placementRecord.section,
     placement: placementRecord, approvedPlacement: selected ? placementRecord : null, proposedPlacements: array(product.sectionAssignments), managementControl,
-    marketKeys: [scope.country + "-" + scope.region], marketScope: { marketCountry: scope.country, marketRegion: scope.region }, countrySupply: { country: scope.country, region: scope.region, localOnly: true, crossCountryFallback: false },
-    supplier: { id: text(product.supplierId), name: text(product.supplierName), officialUrl: text(product.supplierSiteUrl), type: text(product.supplierType), trustScore: Number(product.supplierTrustScore) || 0, evidenceReady: product.supplierEvidenceReady === true,
+    marketKeys: [scope.country + "-" + scope.region], marketScope: { marketCountry: scope.country, marketRegion: scope.region }, internationalSafety:Object.assign({},plain(product.internationalSafety),{schema:InternationalSafety.VERSION,automaticPrivatePlacementEligible:internationalMarketReview.eligibleForAutomaticPrivatePlacement,policyBlockers:internationalMarketReview.blockers,publicPublicationApproved:false}),
+    supplierPolicyChecks:plain(product.supplierPolicyChecks),countryLogistics:plain(product.countryLogistics),
+    countrySupply: { country: scope.country, region: scope.region, localOnly: true, crossCountryFallback: false, logisticsEvidence: plain(product.countryLogistics), crossBorderMarketApproval: false, actualCarrierAndVolumeEvidenceRequired: true },
+    supplier: { id: text(product.supplierId), name: text(product.supplierName), officialUrl: text(product.supplierSiteUrl), type: text(product.supplierType), trustScore: Number(product.supplierTrustScore) || 0, evidenceReady: product.supplierEvidenceReady === true, logisticsEvidence: plain(product.countryLogistics),
       adminPinned: product.supplierAdminPinned === true, manualRegistered: product.supplierManualRegistered === true, manualSupplierId: text(product.manualSupplierId) || null },
     productRanking: { version: ProductRanking.VERSION, rank: Number(product.rank) || null, score: Number(product.rankingScore) || 0, reviewPriority: text(product.valueAssessment && product.valueAssessment.reviewPriority), audienceDemandScore: Number(product.valueAssessment && product.valueAssessment.audience && product.valueAssessment.audience.audienceDemandScore) || 0, revenueOpportunityScore: Number(product.valueAssessment && product.valueAssessment.revenue && product.valueAssessment.revenue.revenueOpportunityScore) || 0, category: text(product.productCategory), categoryTags: array(product.productCategoryTags), duplicateGroupKey: text(product.duplicateGroupKey), familyKey: text(product.productFamilyKey), familyRepresentative: product.familyRepresentative !== false, familyVariantCount: Number(product.familyVariantCount) || 0, duplicateCount: Number(product.duplicateCount) || 1 },
     supplierAssessment: plain(product.supplierAssessment), riskAssessment: plain(product.riskAssessment), commercialAssessment: plain(product.commercialAssessment), valueAssessment: plain(product.valueAssessment), releaseReadiness: plain(product.releaseReadiness), researchReadiness: readiness,
@@ -4220,7 +4229,7 @@ function productCandidatePayload(actorId, scope, product, decision) {
 }
 function administratorReviewQueueEligible(productInput) {
   const product=plain(productInput),risk=plain(product.riskAssessment),url=productUrl(product);
-  if(product.inspectionComplete!==true||!url)return false;
+  if(product.inspectionComplete!==true||!url||SupplierSourceGuard.reason(url))return false;
   if(product.productPageLive===false||risk.explicitUnavailable===true||risk.specificProductUrl===false)return false;
   return true;
 }
@@ -4814,6 +4823,12 @@ function candidateRuntimeHealth(productInput) {
   if (!productImageUrl(product)) { reasons.push("actual_product_image_missing"); hardDead = true; }
   if (product.sameSupplierSite === false) { reasons.push("supplier_product_domain_mismatch"); hardDead = true; }
   if (risk.explicitUnavailable === true) { reasons.push("explicit_product_unavailable"); hardDead = true; }
+  // Stock rejection requires an explicit inspected availability value, not a
+  // vague seller snippet, price change, or a temporary 403/429 response.
+  const availability=lower(product.availability);
+  if(product.inspectionComplete===true && /(?:out\s*of\s*stock|sold\s*out|discontinued|품절|단종|agotado|épuisé|ausverkauft|esgotado)/i.test(availability)) {
+    reasons.push("explicit_out_of_stock");hardDead=true;
+  }
   if (product.productPageLive !== true) {
     reasons.push(status || "product_page_unavailable");
     if (!hardDead) inconclusive = inconclusiveStatuses.has(status) || /^http_5\d\d$/.test(status) || /^http_4\d\d$/.test(status);
@@ -4907,8 +4922,18 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
   }
   return options;
 }
-function candidateRuntimePlacementOptions(productInput, payloadInput) {
+function candidateRuntimePlacementOptions(productInput, payloadInput, marketCountryInput) {
   const product = plain(productInput), payload = plain(payloadInput), category = ProductRanking.classifyCategory(product), tourProfile = ProductRanking.tourRightProfile(product);
+  const market=first(marketCountryInput,plain(payload.marketScope).marketCountry,plain(payload.countrySupply).country,plain(payload.foreignSupplierSafety).country);
+  const overseasProof=InternationalSafety.product(Object.assign({},payload,product,{
+    marketScope:plain(payload.marketScope),countrySupply:plain(payload.countrySupply),
+    countryLogistics:Object.assign({},plain(payload.countryLogistics),plain(product.countryLogistics)),
+    supplierPolicyChecks:Object.assign({},plain(payload.supplierPolicyChecks),plain(product.supplierPolicyChecks)),
+    supplierEvidenceReady:product.supplierEvidenceReady===true||payload.supplierEvidenceReady===true,
+    inspectedAt:first(product.inspectedAt,product.lastVerifiedAt,plain(payload.runtimeValidation).checkedAt)
+  }),market);
+  if(overseasProof.eligibleForAutomaticPrivatePlacement!==true)
+    return {category,options:[],internationalSafety:overseasProof};
   const pureTourService = category.primary === "travel_local_services" || tourProfile.service === true;
   product.productCategory = category.primary; product.productCategoryTags = category.tags;
   const strictFallback = privateReviewFallbackAssignments(product);
@@ -5057,7 +5082,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
       }
     }
     const initialHealth = candidateRuntimeHealth(inspected), manualLocked = candidateRuntimeManualLock(existingPayload);
-    const automaticEvidenceReady = inspected.inspectionComplete===true && inspected.productPageLive===true &&
+    const automaticEvidenceReady = !SupplierSourceGuard.reason(productUrl(inspected)) && inspected.inspectionComplete===true && inspected.productPageLive===true &&
       !!productImageUrl(inspected) && !!productUrl(inspected) && ProductRanking.isSpecificProductUrl(productUrl(inspected)) &&
       !ProductRanking.isGenericProductName(first(inspected.productName,inspected.title,inspected.sourceTitle));
     // A site returning HTTP 200 is not proof of a sellable item. Without an
@@ -5065,7 +5090,7 @@ async function revalidateCandidateLedgerRows(actorId, input, candidateIdsInput, 
     const health = !validationOnly && !manualLocked && initialHealth.live && !automaticEvidenceReady
       ? Object.assign({},initialHealth,{inconclusive:true,live:false,ok:false,state:"inconclusive",reasons:array(initialHealth.reasons).concat(["automatic_product_evidence_incomplete"])})
       : initialHealth;
-    const priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
+    const priorLiveProof = candidateRuntimePriorLiveProof(existingPayload, sourceProduct), priorLiveFallback = health.inconclusive && priorLiveProof.ok, placementPlan = candidateRuntimePlacementOptions(inspected, existingPayload,scope.country), currentDecision = lower(existingPayload.slotDecision || sourceProduct.slotDecision || "undecided"), currentPlacement = plain(existingPayload.approvedPlacement || existingPayload.placement || sourceProduct.approvedPlacement), currentKey = productPlacementKey(currentPlacement), tourProfile = ProductRanking.tourRightProfile(inspected);
     // A product that reached C/D is immutable to automated revalidation.
     // Even explicit 404 can block publication, but must never demote the
     // administrator ledger or delete its slot while replacement is unresolved.
@@ -5270,7 +5295,7 @@ async function productCandidatePsomRankedReplace(actorId,input){
       if(!product){results.push({candidateId:id,assigned:false,error:'individual_product_url_missing'});failed++;continue;}
       const quality=ProductDetailQuality.evaluate(product);
       if(!quality.accepted){results.push({candidateId:id,assigned:false,error:'product_quality_review_required',reasons:quality.reasons});failed++;continue;}
-      const options=candidateRuntimePlacementOptions(product,payload),counts=normalizeProductSectionCounts(Object.fromEntries(PRODUCT_SECTION_KEYS.map(key=>[key,array(bySection.get(key)).filter(r=>lower(plain(r.source_payload).slotDecision)==='slot_candidate').length])));
+      const options=candidateRuntimePlacementOptions(product,payload,scope.country),counts=normalizeProductSectionCounts(Object.fromEntries(PRODUCT_SECTION_KEYS.map(key=>[key,array(bySection.get(key)).filter(r=>lower(plain(r.source_payload).slotDecision)==='slot_candidate').length])));
       const candidateOptions=array(options.options);
       let preferredOption=preferred?candidateOptions.find(option=>productPlacementKey(option)===preferred):null;
       if(preferred&&!preferredOption){results.push({candidateId:id,assigned:false,error:'selected_section_not_compatible_with_product',requestedSectionKey:preferred});failed++;continue;}
@@ -5413,7 +5438,7 @@ async function productCandidatePsomPlace(actorId, input) {
       const product = candidateRuntimeProduct(row, scope);
       if (!product) { results.push({candidateId:id,assigned:false,error:"candidate_product_payload_missing"}); continue; }
       product.candidateId = id; product.id = id;
-      const plan = candidateRuntimePlacementOptions(product, payload);
+      const plan = candidateRuntimePlacementOptions(product, payload,scope.country);
       let picked = null;
       if (preferredSectionKey) {
         picked = array(plan.options).find((option) => productPlacementKey(option) === preferredSectionKey) || null;
@@ -6369,8 +6394,9 @@ async function productAiAutomation(actorId, input) {
   const planningSource = placementBatch ? productAutomationPlanningSource(job).filter((row) => selectedProductIds.has(text(row && row.id))) : productAutomationPlanningSource(job);
   const portfolio = ProductRanking.buildPortfolio(planningSource, plain(job.rankingContext));
   const evaluatedByIdentity = new Map(array(portfolio.products).map((row) => {
-    const assessment = productPrivateReviewAssessment(row), combined = combinedProductAssignments(row);
-    return [ProductRanking.productIdentity(row), Object.assign({}, row, { sectionAssignments: combined, privatePlacementReviewEligible: assessment.eligible, privatePlacementReviewReason: assessment.reason, privatePlacementWarnings: assessment.warnings })];
+    const marketChecked=Object.assign({},row,{internationalSafety:Object.assign({},plain(row.internationalSafety),{targetCountry:scope.country})});
+    const assessment = productPrivateReviewAssessment(marketChecked,scope.country), combined = combinedProductAssignments(marketChecked);
+    return [ProductRanking.productIdentity(row), Object.assign({}, marketChecked, { sectionAssignments: combined, privatePlacementReviewEligible: assessment.eligible, privatePlacementReviewReason: assessment.reason, privatePlacementWarnings: assessment.warnings })];
   }));
   const currentRows = array(job.products), manualCounts = {};
   for (const key of PRODUCT_SECTION_KEYS) manualCounts[key] = 0;
@@ -7557,7 +7583,9 @@ async function listAutomationCandidates(countryCode, regionCode) {
         legalIdentity: evidence.legalIdentity === true, marketplace: evidence.marketplace === true,
         supplierReviewEligible: evidence.supplierReviewEligible === true, supplierResearchEligible: evidence.supplierResearchEligible === true,
         trustEvidenceReady: evidence.trustEvidenceReady === true, researchStatus: text(evidence.researchStatus) || null,
-        policyPagesInspected: Number(evidence.policyPagesInspected || 0)
+        policyPagesInspected: Number(evidence.policyPagesInspected || 0),
+        countryLogistics:plain(evidence.countryLogistics),
+        publicCountryScopeCorroborated:evidence.publicCountryScopeCorroborated===true
       },
       intermediary: contract, productImport: false, ai: automation,
       confirmedRiskSignals: array(first(automation.confirmedRiskSignals,trust.confirmedRiskSignals,payload.confirmedRiskSignals)),
@@ -7634,13 +7662,14 @@ function maintenanceReplacementRecord(candidateId,assignment,scope,currentProduc
   const product=plain(recovery&&recovery.product),url=productUrl(product),image=productImageUrl(product),title=first(product.productName,product.title),identity=ProductRanking.productIdentity(product),existing=plain(existingInput);
   return{candidateId,assignmentId:text(assignment&&assignment.id)||null,page:text(assignment&&assignment.hub_key)||null,sectionKey:text(assignment&&assignment.slot_key)||null,country:scope.country,region:scope.region,previousProductUrl:ProductRanking.canonicalProductUrl(productUrl(currentProduct))||productUrl(currentProduct)||null,replacementProductUrl:url,replacementCanonicalUrl:ProductRanking.canonicalProductUrl(url)||null,replacementProductIdentity:identity||null,title,image,price:first(product.price,currentProduct&&currentProduct.price),priceCurrency:first(product.priceCurrency,currentProduct&&currentProduct.priceCurrency),availability:first(product.availability,currentProduct&&currentProduct.availability),supplierSiteUrl:first(product.supplierSiteUrl,currentProduct&&currentProduct.supplierSiteUrl),queuedAt:first(existing.queuedAt,iso()),validatedAt:iso(),state:"maintenance_replacement_queue",publicPublication:false};
 }
-async function maintenancePublishedAssignments(cursorInput,limitInput){
+async function maintenancePublishedAssignments(cursorInput,limitInput,scopeInput){
   const cursor=text(cursorInput),limit=Math.max(1,Math.min(48,Number(limitInput)||MAINTENANCE_CHECK_BATCH));
   let query="select=id,candidate_id,hub_key,country_code,region_code,slot_key,state,publication_status,manual_pinned,priority,decision_note,updated_at,updated_by"+
     "&state=in.(approved,pinned)&publication_status=in.(publish_requested,published,matched,active,queued)";
+  const country=normalizeCountry(plain(scopeInput).country);if(country)query+="&country_code=eq."+encodeURIComponent(country);
   if(cursor)query+="&id=gt."+encodeURIComponent(cursor);
   query+="&order=id.asc&limit="+limit;
-  try{return array(await SlotStore.select("gslot_slot_assignments",query));}catch(_e){return[];}
+  try{return array(await SlotStore.select("gslot_slot_assignments",query));}catch(error){if(country)throw error;return[];}
 }
 async function inspectMaintenanceProducts(itemsInput,scopeByIdInput){
   const items=array(itemsInput),scopeById=scopeByIdInput instanceof Map?scopeByIdInput:new Map(),out=new Map(),chunks=[];
@@ -7675,6 +7704,67 @@ async function runMaintenanceLivenessPass(actorId){
   const lastAssignment=assignments[assignments.length-1];state.scanCursor=assignments.length<MAINTENANCE_CHECK_BATCH?"":text(lastAssignment&&lastAssignment.id);if(assignments.length<MAINTENANCE_CHECK_BATCH)state.lastScanCompletedAt=iso();state.lastLivenessPassAt=iso();state.lastLivenessPass={checked,dead,inconclusive,queued};state.lastUnresolvedSample=unresolved.slice(-100);await saveMaintenanceState(state,actor);
   return{ok:true,checked,dead,inconclusive,queued,scanCursor:state.scanCursor,cycleComplete:assignments.length<MAINTENANCE_CHECK_BATCH,privateQueue:true};
 }
+// A bounded, country-only administrator repair pass. A user click scans the
+// selected country's published assignments, never other countries. Each
+// replacement is revalidated again before applying and uses the same revision,
+// contract, identity and canonical assignment guards as scheduled maintenance.
+// The scan and apply phases are separate HTTP calls to avoid Netlify timeouts.
+async function runScopedMaintenanceRepair(actorId,input){
+  const actor=text(actorId)||"administrator",scope=researchScope(input),mode=lower(input&&input.mode)||"scan",cursor=text(input&&input.cursor);
+  if(!["scan","apply"].includes(mode))throw Object.assign(new Error("지원하지 않는 유지보수 단계"),{statusCode:400});
+  if(mode==="apply"){
+    const all=(await maintenanceQueueRecords()).filter(row=>normalizeCountry(row.country)===scope.country&&
+      PRODUCT_SECTION_KEYS.includes(text(row.page)+"|"+text(row.sectionKey))&&
+      (normalizeRegion(row.region||"NATIONWIDE",scope.country)||"NATIONWIDE")===scope.region)
+      .sort((a,b)=>text(a.policyId).localeCompare(text(b.policyId)));
+    const eligible=all.filter(row=>text(row.policyId)>cursor),batch=eligible.slice(0,3),applied=[],failed=[];
+    for(const entry of batch){
+      let result;try{result=await applyMaintenanceReplacement(actor,entry);}catch(error){result={ok:false,reason:text(error&&error.message||error)||"maintenance_apply_failed",keepQueue:true};}
+      if(result.ok===true){applied.push(result);await removeMaintenanceQueueRecord(entry);}
+      else{failed.push({candidateId:text(entry.candidateId),reason:text(result.reason)||"requires_review"});
+        if(result.dropQueue===true)await removeMaintenanceQueueRecord(entry);}
+    }
+    let dispatch=null;
+    if(applied.length){
+      const ids=applied.map(row=>text(row.candidateId)).filter(Boolean),state=await maintenanceStateRule();
+      // Keep the retry record BEFORE dispatch. A failed build request does not
+      // silently drop the already-validated database change.
+      state.pendingBuildCandidateIds=Array.from(new Set(array(state.pendingBuildCandidateIds).concat(ids)));
+      await saveMaintenanceState(state,actor);
+      try{dispatch=await ReleaseDispatch.dispatch({candidateId:ids[0],candidateIds:ids,assignmentId:null,actorId:actor,operation:"publish",candidateCount:ids.length,explicitAdminAuthorization:false,scheduledMaintenanceAuthorization:true,maintenanceBatch:true});}
+      catch(error){dispatch={queued:false,reason:text(error&&error.message||error)||"release_dispatch_failed"};}
+      if(dispatch&&dispatch.queued===true){const latest=await maintenanceStateRule();latest.pendingBuildCandidateIds=array(latest.pendingBuildCandidateIds).filter(id=>!ids.includes(id));latest.lastMaintenanceBuildDispatchAt=iso();latest.lastMaintenanceBuildDispatch=dispatch;await saveMaintenanceState(latest,actor);}
+    }
+    return{ok:true,reportType:"igdc-country-maintenance-apply",scope,mode,attempted:batch.length,applied:applied.length,failed,dispatch,buildPending:!!applied.length&&!(dispatch&&dispatch.queued===true),
+      nextCursor:batch.length?text(batch[batch.length-1].policyId):cursor,done:eligible.length<=batch.length,
+      otherCountriesTouched:false,administratorPinnedPreserved:true};
+  }
+  const raw=await maintenancePublishedAssignments(cursor,8,scope),nextCursor=raw.length?text(raw[raw.length-1].id):cursor;
+  const assignments=raw.filter(row=>{
+    const actual=maintenanceScopeFromAssignment(row);
+    return actual&&actual.country===scope.country&&actual.region===scope.region&&
+      PRODUCT_SECTION_KEYS.includes(text(row.hub_key)+"|"+text(row.slot_key))&&row.manual_pinned!==true;
+  });
+  const ids=Array.from(new Set(assignments.map(row=>text(row.candidate_id)).filter(Boolean))),candidates=await frontSyncSelectCandidates(ids),byId=new Map(candidates.map(row=>[text(row.id),row]));
+  const inputs=[],byScope=new Map();
+  for(const entry of assignments){const id=text(entry.candidate_id),row=plain(byId.get(id));if(!Object.keys(row).length||plain(plain(row.source_payload).managementControl).administratorLocked===true)continue;
+    const product=candidateRuntimeProduct(row,scope);if(!product)continue;product.candidateId=id;product.id=id;byScope.set(id,scope);inputs.push(product);}
+  const inspected=await inspectMaintenanceProducts(inputs,byScope),queue=await maintenanceQueueRecords(),queueById=new Map(queue.map(row=>[text(row.candidateId),row]));
+  const queuedUrls=new Set(queue.map(row=>ProductRanking.canonicalProductUrl(first(row.replacementCanonicalUrl,row.replacementProductUrl))).filter(Boolean));
+  const queuedIdentities=new Set(queue.map(row=>text(row.replacementProductIdentity)).filter(Boolean));
+  let checked=0,dead=0,inconclusive=0,queued=0;const unresolved=[];
+  for(const entry of assignments){const id=text(entry.candidate_id),row=plain(byId.get(id)),product=plain(inspected.get(id));if(!Object.keys(product).length)continue;
+    checked++;const health=candidateRuntimeHealth(product);if(health.inconclusive){inconclusive++;continue;}if(!health.dead)continue;dead++;
+    let recovery=null;try{recovery=await recoverHeldCandidateProduct(row,scope,{excludedCanonicalUrls:Array.from(queuedUrls),excludedProductIdentities:Array.from(queuedIdentities)});}catch(error){recovery={reason:text(error&&error.message||error)};}
+    if(recovery&&recovery.ok===true){const replacement=maintenanceReplacementRecord(id,entry,scope,product,recovery,queueById.get(id));
+      if(replacement.replacementCanonicalUrl){const saved=await saveMaintenanceQueueRecord(replacement,actor,queueById.get(id));queueById.set(id,saved||replacement);
+        queuedUrls.add(replacement.replacementCanonicalUrl);if(replacement.replacementProductIdentity)queuedIdentities.add(replacement.replacementProductIdentity);queued++;continue;}}
+    unresolved.push({candidateId:id,section:text(entry.hub_key)+"|"+text(entry.slot_key),reason:text(recovery&&recovery.reason)||"verified_replacement_not_found",needsManualReview:true});
+  }
+  return{ok:true,reportType:"igdc-country-maintenance-scan",scope,mode,checked,dead,inconclusive,queued,unresolved,
+    skippedPinned:raw.filter(r=>r.manual_pinned===true).length,nextCursor,done:raw.length<8,otherCountriesTouched:false,automaticFrontMatch:false};
+}
+
 function maintenancePublishDue(stateInput,queueInput){
   const state=plain(stateInput),queue=array(queueInput);if(!queue.length)return false;const last=Date.parse(text(state.lastGlobalMaintenancePublishAt));if(Number.isFinite(last))return Date.now()-last>=MAINTENANCE_PUBLISH_INTERVAL_MS;
   const oldest=Math.min(...queue.map(row=>Date.parse(text(row&&row.queuedAt||row&&row.policyUpdatedAt))).filter(Number.isFinite));return Number.isFinite(oldest)&&Date.now()-oldest>=MAINTENANCE_PUBLISH_INTERVAL_MS;
@@ -7690,10 +7780,22 @@ function maintenanceAssignmentStillOwnsSlot(assignmentInput,entryInput){
 async function applyMaintenanceReplacement(actorId,entryInput){
   const actor=text(actorId)||"scheduled-product-maintenance",entry=plain(entryInput),candidateId=text(entry.candidateId),scope={country:normalizeCountry(entry.country),region:normalizeRegion(entry.region||"NATIONWIDE",normalizeCountry(entry.country))||"NATIONWIDE"};if(!candidateId||!scope.country)return{ok:false,reason:"maintenance_entry_invalid",dropQueue:true};
   const assignment=await maintenanceAssignment(entry);if(!assignment||!maintenanceAssignmentStillOwnsSlot(assignment,entry))return{ok:false,reason:"assignment_changed_after_queue",dropQueue:true};
+  if(assignment.manual_pinned===true||lower(assignment.state)==="pinned")return{ok:false,reason:"administrator_pinned_assignment_protected",keepQueue:true};
+  // A single candidate can be reused in more than one section or country.
+  // Changing its shared product URL would also change a DIFFERENT pinned
+  // listing, even if the selected assignment itself is not pinned.
+  if(typeof frontSyncSelectByCandidate==="function"){
+    let siblings;
+    try{siblings=await frontSyncSelectByCandidate("gslot_slot_assignments","id,candidate_id,state,manual_pinned,hub_key,country_code,region_code,slot_key",[candidateId]);}
+    catch(error){return{ok:false,reason:"related_assignment_read_incomplete_protect_product",keepQueue:true};}
+    if(array(siblings).some(link=>link.manual_pinned===true||lower(link.state)==="pinned"))
+      return{ok:false,reason:"shared_candidate_has_administrator_pinned_assignment",keepQueue:true};
+  }
   const row=plain(array(await frontSyncSelectCandidates([candidateId]))[0]);if(!Object.keys(row).length)return{ok:false,reason:"candidate_missing",dropQueue:true};
   // A missing revision cannot be safely compared against an administrator edit.
   if(!text(row.updated_at)||!text(assignment.updated_at))return{ok:false,reason:"maintenance_revision_unavailable_requires_review",keepQueue:true};
   const originalPayload=plain(row.source_payload),payload=Object.assign({},originalPayload),current=candidateRuntimeProduct(row,scope);if(!current)return{ok:false,reason:"candidate_product_missing",dropQueue:true};
+  if(plain(originalPayload.managementControl).administratorLocked===true)return{ok:false,reason:"administrator_locked_product_protected",keepQueue:true};
   const currentCanonical=ProductRanking.canonicalProductUrl(productUrl(current)),queuedPrevious=ProductRanking.canonicalProductUrl(entry.previousProductUrl);if(queuedPrevious&&currentCanonical&&queuedPrevious!==currentCanonical)return{ok:false,reason:"candidate_changed_after_queue",dropQueue:true};
   let currentInspected=null;try{const res=await RegionalSelector.inspectProductResearchStep([Object.assign({},current,{candidateId,id:candidateId})],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});currentInspected=plain(array(res&&res.items)[0]);}catch(_e){currentInspected={};}
   const currentHealth=candidateRuntimeHealth(Object.keys(currentInspected).length?Object.assign({},current,currentInspected):Object.assign({},current,{productPageLive:false,inspectionComplete:false,researchStatus:"inspection_error"}));
@@ -7702,6 +7804,17 @@ async function applyMaintenanceReplacement(actorId,entryInput){
   const replacementSeed={productUrl:entry.replacementProductUrl,url:entry.replacementProductUrl,productName:entry.title,title:entry.title,imageUrl:entry.image,imageOriginalUrl:entry.image,supplierSiteUrl:entry.supplierSiteUrl,price:entry.price,priceCurrency:entry.priceCurrency,availability:entry.availability,candidateId,id:candidateId};
   let inspected=null;try{const res=await RegionalSelector.inspectProductResearchStep([replacementSeed],{country:scope.country,region:scope.region,timeoutMs:6000,allowSupplierRecovery:false});inspected=plain(array(res&&res.items)[0]);}catch(_e){inspected={};}
   const health=candidateRuntimeHealth(inspected);if(!health.live)return{ok:false,reason:health.inconclusive?"replacement_revalidation_inconclusive":"replacement_revalidation_failed",keepQueue:health.inconclusive===true,dropQueue:health.inconclusive!==true,reasons:health.reasons};
+  if(actor==="scheduled-product-maintenance"&&scope.country!=="KR"){
+    const foreign=InternationalSafety.product(Object.assign({},originalPayload,inspected,{
+      marketScope:{marketCountry:scope.country},
+      countryLogistics:plain(originalPayload.countryLogistics),
+      supplierPolicyChecks:plain(originalPayload.supplierPolicyChecks),
+      supplierEvidenceReady:originalPayload.supplierEvidenceReady===true,
+      inspectedAt:iso(),productPageLive:true,inspectionComplete:true
+    }),scope.country);
+    if(foreign.eligibleForAutomaticPrivatePlacement!==true)
+      return{ok:false,reason:"overseas_replacement_requires_market_policy_review:"+foreign.reason,keepQueue:true,policyVersion:InternationalSafety.VERSION};
+  }
   // An explicit top pin protects the selected PRODUCT, not just the section slot.
   // Never silently swap it for a different product during scheduled maintenance;
   // genuine safety/unavailability checks remain active and admin review stays possible.
@@ -7833,7 +7946,7 @@ async function autoProductScopes() {
     if(manual&&manual!==country.code)continue;
     if(manual&&manualRegion!=="NATIONWIDE"){
       const setting=effectiveSetting(state,country.code,manualRegion);
-      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastDurableSupplierAt||null,supplierCount:Number(plain(setting.lastAttemptSummary).activeSupplierCount||0),supplierRoundsCompleted:Number(plain(setting.lastAttemptSummary).supplierRoundsCompleted||0)});
+      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastDurableSupplierAt||null});
       continue;
     }
     const effective=effectiveSetting(state,country.code,"");
@@ -7841,9 +7954,9 @@ async function autoProductScopes() {
     if(country.requiresSubdivision&&effective.expandSubdivisions===true&&array(country.subdivisions).length){
       for(const region of country.subdivisions){
         const child=effectiveSetting(state,country.code,region.code);
-        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastDurableSupplierAt||null,supplierCount:Number(plain(child.lastAttemptSummary).activeSupplierCount||0),supplierRoundsCompleted:Number(plain(child.lastAttemptSummary).supplierRoundsCompleted||0)});
+        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastDurableSupplierAt||null});
       }
-    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastDurableSupplierAt||null,supplierCount:Number(plain(effective.lastAttemptSummary).activeSupplierCount||0),supplierRoundsCompleted:Number(plain(effective.lastAttemptSummary).supplierRoundsCompleted||0)});
+    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastDurableSupplierAt||null});
   }
   return{mode:state.master.mode,scopes};
 }
@@ -7917,32 +8030,44 @@ async function recordScheduledSupplierCompletion(input){
   const rows=await listAutomationCandidates(scope.country,scope.region),active=rows.filter(row=>
     !inactiveStatuses.has(lower(row.status))&&
     !inactiveDecisions.has(lower(first(row&&row.operatorDecision,plain(row.ai).operatorDecision,plain(row.supplier).operatorReviewState)))&&
-    !supplierExplicitDanger(row) && !!productSupplierSource(row));
-  // Count unique real supplier storefronts rather than raw search hits.
-  const activeSupplierKeys=new Set(active.map(row=>productSupplierSourceKey(productSupplierSource(row))).filter(Boolean));
-  const activeCount=activeSupplierKeys.size;
+    !supplierExplicitDanger(row) && !!productSupplierSource(row,scope.country));
+  // Research leads can unlock PRIVATE product discovery. Do not confuse their
+  // count with sellers whose public merchant/policy evidence was inspected.
+  // Both counts are exposed; only evidence-ready suppliers count to the
+  // 100/200 research target. Public trust remains separately gated.
+  const safetyAssessed=active.map(row=>InternationalSafety.supplier(row,scope.country));
+  const qualified=active.filter((row,index)=>scope.country==='KR'
+    ? plain(row.evidence).supplierReviewEligible===true&&Number(plain(row.evidence).policyPagesInspected||0)>0&&
+      plain(row.evidence).responsibleEntity===true&&plain(row.evidence).directSales===true
+    : safetyAssessed[index].overseasPolicyQualified===true);
+  const foreignPolicyPending=safetyAssessed.filter(check=>check.overseasPolicyQualified!==true).length,
+    crossBorderPending=safetyAssessed.filter(check=>check.crossBorder===true).length;
   const kind=scope.region==='NATIONWIDE'?"country":"subdivision";
   const id=settingId(kind,{countryCode:scope.country,subdivisionCode:scope.region});
   const policy=array(await SlotStore.select('gslot_policies','select=id,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq.'+encodeURIComponent(id)+'&limit=1'))[0],oldRule=plain(policy&&policy.rule),t=iso();
   const setting=policy?Object.assign({},oldRule):sanitizeSetting({scopeType:kind,countryCode:scope.country,subdivisionCode:scope.region,mode:'inherit'});
-  const rule=Object.assign({},setting,{schema:VERSION,lastAttemptAt:t,lastAttemptSummary:{source:progressive?'scheduled_progressive_private_supplier':'scheduled_staged_research',jobId:requested,activeSupplierCount:activeCount,created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds,supplierRoundsCompleted:Math.max(Number(plain(input).supplierRoundsCompleted||0),Number(plain(oldRule.lastAttemptSummary).supplierRoundsCompleted||0))},updatedAt:t,updatedBy:'scheduled-automation'});
+  const rule=Object.assign({},setting,{schema:VERSION,lastAttemptAt:t,lastAttemptSummary:{source:progressive?'scheduled_progressive_private_supplier':'scheduled_staged_research',jobId:requested,activeSupplierCount:active.length,qualifiedSupplierCount:qualified.length,foreignPolicyPending,crossBorderPending,
+    safetyPolicyVersion:InternationalSafety.VERSION,created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds},updatedAt:t,updatedBy:'scheduled-automation'});
   const newlySaved=Math.max(0,Number(plain(input).recordedSuppliers||0));
   // A zero-new-supplier pass may still see a pre-existing validated portfolio:
   // permit the initial product cycle, but don't force a full product rescan
   // after every subsequent empty/repeated research round.
-  if(activeCount){
+  if(active.length){
     if(newlySaved>0||!text(oldRule.lastDurableSupplierAt))rule.lastDurableSupplierAt=t;
     if(!progressive){rule.lastRunAt=t;rule.lastRunSummary=Object.assign({},rule.lastAttemptSummary,{completed:true});}
   }
   // Keep durable seller records unchanged, but do not unlock product research
   // based on a stale timestamp when no supplier still passes the safety gate.
-  if (!activeCount) rule.lastDurableSupplierAt=null;
+  if (!active.length) rule.lastDurableSupplierAt=null;
   // Preserve the last completed *attempt* for diagnostics; do not grant private product research without a current usable supplier.
   const row={id,name:'국가 책임 공급업체 발굴 자동화',scope_hub:'country-commerce-control',scope_country:scope.country,scope_region:kind==='subdivision'?scope.region:null,enabled:true,rule,updated_at:t,updated_by:'scheduled-automation'};
   if(!policy)row.created_at=t;
   const saved=array(await SlotStore.insert('gslot_policies',row,'resolution=merge-duplicates,return=representation'));
   if(!saved.length||text(saved[0].id)!==id)throw Object.assign(new Error('scheduled_supplier_setting_save_not_confirmed'),{statusCode:503});
-  return{ok:true,scope:{country:scope.country,region:scope.region},activeSupplierCount:activeCount,lastDurableSupplierAt:activeCount?t:null};
+  return{ok:true,scope:{country:scope.country,region:scope.region},activeSupplierCount:active.length,
+    qualifiedSupplierCount:qualified.length,foreignPolicyPending,crossBorderPending,
+    safetyPolicyVersion:InternationalSafety.VERSION,qualification:scope.country==='KR'?"public_merchant_and_policy_evidence_not_independent_fulfillment_verification":"overseas_seller_site_policy_and_local_market_evidence_only_not_fulfillment_certification",
+    lastDurableSupplierAt:active.length?t:null};
 }
 
 // Save a small batch of *inspected* private supplier leads before the full
@@ -8050,5 +8175,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, autoProductScopes, autoScopeStatus, autoSupplierJobCheckpoint, recordScheduledSupplierCompletion, progressivePrivateSupplierCommit, autoProductJobCheckpoint, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, autoProductScopes, autoScopeStatus, autoSupplierJobCheckpoint, recordScheduledSupplierCompletion, progressivePrivateSupplierCommit, autoProductJobCheckpoint, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, runScopedMaintenanceRepair, globalControlDiagnostic, diagnostic
 };

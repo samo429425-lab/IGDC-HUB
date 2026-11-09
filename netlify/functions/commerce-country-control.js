@@ -220,6 +220,18 @@ exports.handler=async function(event){
     if(action==="diagnostic")return json(200,Automation.diagnostic(await Automation.configState()));
     if(action==="global_control_diagnostic")return json(200,await Automation.globalControlDiagnostic());
     if(action==="auto_bottleneck_diagnostic")return json(200,await AutoBottleneck.run({focusCountry:query.focusCountry,focusRegion:query.focusRegion}));
+    if(action==="toggle_kr_selected_research"){
+      if(method!=="POST")return json(405,{ok:false,error:"POST 관리자 작업만 허용됩니다."});
+      const latest=await Automation.configState();
+      if(!latest.storageAvailable)return json(503,{ok:false,error:"국가 자동화 설정 원장을 읽을 수 없습니다."});
+      if(latest.master.mode!=="selected")return json(409,{ok:false,error:"선택 국가 예약 가동 상태에서만 한국 조사를 켜거나 끌 수 있습니다."});
+      const selected=Array.isArray(latest.master.selectedCountryCodes)?latest.master.selectedCountryCodes:[];
+      const enabled=selected.includes("KR");
+      const applied=await Automation.applyOperatingPreset(actorId,enabled?"selected_countries_pause":"selected_countries_auto",{countryCodes:["KR"]});
+      const nowCountries=Array.isArray(applied.activeCountries)?applied.activeCountries:[];
+      if(nowCountries.includes("KR")===enabled)throw Object.assign(new Error("한국 자동 조사 켜기·끄기 결과를 확인할 수 없습니다."),{statusCode:409});
+      return json(200,{ok:true,scope:"KR",koreaResearchScheduled:!enabled,selectedCountryCount:nowCountries.length,automaticFrontPublication:false,priorManualAndPinnedRecordsPreserved:true});
+    }
     if(action==="include_kr_selected_research"){
       if(method!=="POST")return json(405,{ok:false,error:"POST 관리자 작업만 허용됩니다."});
       const latest=await Automation.configState();
@@ -249,6 +261,16 @@ exports.handler=async function(event){
     if(action==="policy_effective"){
       const scope=policyScopeFromInput(Object.assign({scopeType:"country"},query,body));
       return json(200,await PolicyDiscussion.effectivePolicy(scope));
+    }
+    if(action==="country_run_report"){
+      const country=text(query.country||body.countryCode).toUpperCase(),region=text(query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE").toUpperCase();
+      const current=Automation.countryRow(country);if(!current)throw Object.assign(new Error("점검할 국가를 선택하세요."),{statusCode:400});
+      const scope={countryCode:country,subdivisionCode:region};
+      const [supplier,product,autoScope]=await Promise.allSettled([
+        Automation.autoSupplierJobCheckpoint(scope),Automation.autoProductJobCheckpoint(scope),Automation.autoScopeStatus(scope)
+      ]);
+      const result=(x)=>x.status==="fulfilled"?x.value:{error:text(x.reason&&x.reason.message||x.reason)};
+      return json(200,{ok:true,reportType:"igdc-country-execution-readonly",generatedAt:new Date().toISOString(),scope:{country,region},supplierCheckpoint:result(supplier),productCheckpoint:result(product),automationScope:result(autoScope),source:"country_durable_execution_checkpoints",internationalSafetyPolicy:require("./lib/commerce-international-distribution-safety.v1").POLICY,publicPublication:false});
     }
     if(action==="research_status")return json(200,await Automation.researchJobStatus({countryCode:query.country||body.countryCode,subdivisionCode:query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE"}));
     if(action==="product_research_status")return json(200,await Automation.productResearchJobStatus({countryCode:query.country||body.countryCode,subdivisionCode:query.region||body.subdivisionCode||body.regionCode||"NATIONWIDE",fast:query.fast||body.fast||false,compact:query.compact||body.compact||false}));
@@ -282,6 +304,8 @@ exports.handler=async function(event){
     if(action==="product_candidate_verified_psom_place")return json(200,await Automation.productCandidateVerifiedPsomPlace(actorId,body));
     if(action==="product_candidate_psom_ranked_replace")return json(200,await Automation.productCandidatePsomRankedReplace(actorId,body));
     if(action==="product_ai_automation")return json(200,await Automation.productAiAutomation(actorId,body));
+    if(action==="maintenance_repair")return json(200,await Automation.runScopedMaintenanceRepair(actorId,body));
+    if(action==="maintenance_replenish")return json(200,await ProductStaged.makePipeline().runScope({countryCode:text(body.countryCode||body.country).toUpperCase(),subdivisionCode:text(body.subdivisionCode||body.region||"NATIONWIDE").toUpperCase()}));
     if(action==="product_front_finalize"){
       const requestedOperation=lower(body.operation)==="unmatch"?"unmatch":(lower(body.operation)==="refresh"?"refresh":"match");
       const requestedCandidateIds=Array.from(new Set((Array.isArray(body.candidateIds)?body.candidateIds:[]).map(text).filter(Boolean))).slice(0,1800);

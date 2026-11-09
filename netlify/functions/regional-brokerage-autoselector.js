@@ -12,6 +12,8 @@
 
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
+const SupplierSourceGuard=require("./lib/commerce-supplier-source-guard.v1");
+const CountryLogistics=require("./lib/commerce-country-logistics-evidence.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
 const VERSION="regional-brokerage-autoselector-v2.10.2-product-media-evidence-guard";
@@ -372,6 +374,8 @@ function resultText(item){return [item&&item.title,item&&item.name,item&&item.su
 function obviousNonCommerceReason(item){
   const rawUrl=first(item&&item.url,item&&item.link);const u=safeHttpUrl(rawUrl);
   if(!u)return "invalid_url";
+  const supplierSourceProblem=SupplierSourceGuard.reason(u.toString());
+  if(supplierSourceProblem)return supplierSourceProblem;
   if(BLOCKED_DOCUMENT_EXT_RX.test(u.pathname+u.search))return "document_file";
   if(BLOCKED_REFERENCE_HOST_RX.test(u.hostname))return "reference_or_research_host";
   if(Core.isMarketplace(item,u.toString()))return "major_marketplace_or_aggregator";
@@ -403,6 +407,7 @@ function researchFirst(items){
     const reason=obviousNonCommerceReason(item);
     if(!reason)return true;
     if(!guidedResearchResult(item))return false;
+    if(SupplierSourceGuard.reason(first(item&&item.url,item&&item.link)))return false;
     return !["invalid_url","document_file","reference_or_research_host","major_marketplace_or_aggregator"].includes(reason);
   }).sort((a,b)=>commerceHeuristicScore(b)-commerceHeuristicScore(a));
 }
@@ -659,9 +664,10 @@ function researchMissingEvidence(evidence){
 }
 function researchCandidateShell(item,geo,status,error){
   const originalUrl=Core.externalUrl(item),u=safeHttpUrl(originalUrl);if(!u)return item;
+  const sourceBlock=SupplierSourceGuard.reason(u.toString());
   const marketplace=Core.isMarketplace(item,u.toString());const hay=resultText(item);
   const supplierSignal=SUPPLIER_TEXT_RX.test(hay);const commerceSignal=COMMERCE_TEXT_RX.test(hay)||commerceHeuristicScore(item)>=5;
-  const researchEligible=!marketplace&&!obviousNonCommerceReason(item)&&(supplierSignal||commerceSignal||guidedResearchResult(item));
+  const researchEligible=!sourceBlock&&!marketplace&&!obviousNonCommerceReason(item)&&(supplierSignal||commerceSignal||guidedResearchResult(item));
   const secureTransport=u.protocol==="https:";const detectedCountry=Core.normalizeCountry(item&&item.distributionMarketCountry||item&&item.sellerMarketCountry||item&&item.marketCountry||item&&item.country||item&&item.geo&&item.geo.country);
   const detectedRegion=Core.normalizeRegion(item&&item.distributionMarketRegion||item&&item.sellerRegion||item&&item.region||item&&item.geo&&item.geo.state,detectedCountry||geo.country);
   const evidence=Object.assign({},item&&item.brokerageVerification||{}, {
@@ -669,7 +675,7 @@ function researchCandidateShell(item,geo,status,error){
     official:/official|공식|직영|본사|회사소개|사업자/i.test(hay),responsibleEntity:supplierSignal,directSales:commerceSignal,payment:false,secureTransport,
     shipping:/배송|택배|delivery|shipping|출고/i.test(hay),returns:/반품|교환|return|exchange/i.test(hay),refund:/환불|refund/i.test(hay),
     service:/고객센터|문의|customer service|support|contact/i.test(hay),contactChannel:/전화|이메일|문의|contact|고객센터/i.test(hay),legalIdentity:/사업자|법인|회사|corporation|company/i.test(hay),
-    marketplace,majorPlatform:marketplace,supplierType:supplierSignal?"research_supplier":(guidedResearchResult(item)?"query_guided_research":"unclassified"),
+    marketplace,majorPlatform:marketplace,supplierSourceBlockReason:sourceBlock||null,supplierType:supplierSignal?"research_supplier":(guidedResearchResult(item)?"query_guided_research":"unclassified"),
     supplierReviewEligible:false,supplierResearchEligible:researchEligible,trustEvidenceReady:false,provisionalTrustScore:researchEligible?Math.max(20,Math.min(55,commerceHeuristicScore(item)+28)):0,
     researchStatus:text(status)||"page_check_pending",researchError:text(error).slice(0,180)||null,policyPagesInspected:0,policyUrls:[],
     legalVerificationComplete:false,contractVerificationComplete:false,deliveryPerformanceVerified:false,returnRefundPerformanceVerified:false,supportPerformanceVerified:false,
@@ -694,6 +700,7 @@ async function inspectCandidate(item,geo,params){
     if(isAccessChallengeUrl(response.url||u.toString()))return researchCandidateShell(item,geo,"supplier_access_challenge",null);
     if(!response.ok)return researchCandidateShell(item,geo,"page_http_"+response.status,null);
     const finalUrl=safeHttpUrl(response.url||u.toString());if(!finalUrl)return researchCandidateShell(item,geo,"redirect_url_invalid",null);
+    if(SupplierSourceGuard.reason(finalUrl.toString()))return researchCandidateShell(Object.assign({},item,{url:finalUrl.toString(),link:finalUrl.toString()}),geo,"discovery_host_redirect_blocked",null);
     const type=String(response.headers.get("content-type")||"");if(!/text\/html|application\/xhtml\+xml/i.test(type))return researchCandidateShell(item,geo,"non_html_page",type);
     const length=Number(response.headers.get("content-length")||0);if(length>550000)return researchCandidateShell(item,geo,"page_too_large",String(length));
     const html=(await response.text()).slice(0,550000);
@@ -701,8 +708,10 @@ async function inspectCandidate(item,geo,params){
     const policyUrls=policyPageUrls(html,finalUrl.toString());
     const policyPages=(await Promise.all(policyUrls.map(url=>fetchPolicyText(url,controller)))).filter(Boolean);
     const policyCheck=publicSellerPolicyChecks(policyPages,finalUrl.toString(),item&&item.payload);
+    const logisticsEvidence=CountryLogistics.assess(geo.country,policyPages,finalUrl.toString());
     const combinedHtml=[html].concat(policyPages.map(page=>page.content)).join("\n");
     const words=htmlTextScore(combinedHtml),ld=jsonLdEvidence(html,geo),marketplace=Core.isMarketplace(item,finalUrl.toString());
+    logisticsEvidence.sellerAddressCountryClaim=ld.country||null; logisticsEvidence.sellerAddressRegionClaim=ld.region||null;
     const responsibleEntity=(words.supplierRole||ld.org)&&(words.official||ld.org);
     const directSales=words.directSales||ld.product||ld.offer;
     const secureTransport=finalUrl.protocol==="https:";
@@ -725,7 +734,10 @@ async function inspectCandidate(item,geo,params){
       shipping:words.shipping,tracking:words.tracking,deliveryCommitment:words.deliveryCommitment,returns:words.returns,refund:words.refund,exchange:words.exchange,
       service:words.service,contactChannel:words.contactChannel,warranty:words.warranty,termsPrivacy:words.termsPrivacy,legalIdentity:words.legalIdentity||ld.org,
       affiliatePotential:words.affiliatePotential,catalogBreadth:words.catalogBreadth,policyPagesInspected:policyPages.length,policyUrls:policyPages.map(page=>page.url),
-      publicPolicyChecks:policyCheck,publicDirectoryCorroborated:!!policyCheck.externalDirectoryLink,publicCountryScopeCorroborated:ld.matchCountry===true,
+      publicPolicyChecks:policyCheck,countryLogistics:logisticsEvidence,
+      sellerMarketEvidence:{schema:"igdc-seller-market-claim.v1",targetCountry:geo.country,
+        sellerAddressCountryClaim:ld.country||null,verifiedLegalAddress:false,
+        crossBorderDeliveryIndependentlyVerified:false,ipBasedMarketAssumption:false},publicDirectoryCorroborated:!!policyCheck.externalDirectoryLink,publicCountryScopeCorroborated:ld.matchCountry===true,
       publicShippingPolicyVerified:!!policyCheck.shippingPolicyUrl,publicReturnRefundPolicyVerified:!!(policyCheck.returnsPolicyUrl&&policyCheck.refundPolicyUrl),
       publicCustomerSupportVerified:!!policyCheck.supportPolicyUrl,
       marketplace,majorPlatform:marketplace,jsonLdOrganization:ld.org,jsonLdProduct:ld.product,jsonLdOffer:ld.offer,supplierType:typeCode,
@@ -741,7 +753,7 @@ async function inspectCandidate(item,geo,params){
       targetCountry:geo.country,targetRegion:geo.region||"NATIONWIDE",detectedCountry:detectedCountry||null,detectedRegion:detectedRegion||null,
       directSales,handlesPayment:words.payment,handlesShipping:words.shipping,handlesReturns:words.returns,handlesRefunds:words.refund,handlesCustomerSupport:words.service,
       offersTracking:words.tracking,statesDeliveryCommitment:words.deliveryCommitment,offersWarrantyOrAfterSales:words.warranty,
-      catalogBreadthSignal:words.catalogBreadth,affiliatePotential:words.affiliatePotential,
+      catalogBreadthSignal:words.catalogBreadth,affiliatePotential:words.affiliatePotential,countryLogistics:logisticsEvidence,
       responsibleForTransaction:true,adminVerificationRequired:true,performanceVerificationRequired:true,productCatalogImportAllowed:false,
       researchStatus:evidence.researchStatus,researchMissingEvidence:evidence.researchMissingEvidence
     };
@@ -776,7 +788,7 @@ function privateReviewPool(rawItems,inspectedItems,geo,limit){
   for(const raw of researchFirst(rawItems||[])){
     const originalUrl=Core.externalUrl(raw),item=inspected.get(originalUrl)||researchCandidateShell(raw,geo,"page_check_pending",null);
     const evidence=item&&item.brokerageVerification||{},officialUrl=Core.externalUrl(item),profile=item&&item.supplierProfile||{};
-    if(!officialUrl||seen.has(officialUrl)||evidence.marketplace===true||(evidence.supplierReviewEligible!==true&&evidence.supplierResearchEligible!==true))continue;
+    if(!officialUrl||SupplierSourceGuard.reason(officialUrl)||seen.has(officialUrl)||evidence.marketplace===true||(evidence.supplierReviewEligible!==true&&evidence.supplierResearchEligible!==true))continue;
     const sourceText=lower([item.source,item.provider,item.sourceType,item.generatedBy].filter(Boolean).join(" "));
     if(/sanmaru-route|sanmaru-opening|provider-page-window|provider-window|search-route-hint/.test(sourceText))continue;
     const title=first(profile.name,item.title,item.name);if(!title)continue;
@@ -1307,6 +1319,10 @@ function productRowsFromHtml(html,pageUrl,supplier,max){
     supplierDecision:text(supplier&&supplier.supplierDecision),
     supplierApprovalReady:supplier&&supplier.approvalReady===true,
     supplierEvidenceReady:supplier&&supplier.evidenceReady===true,
+    countryLogistics:plain(supplier&&supplier.countryLogistics),
+    supplierPolicyChecks:plain(supplier&&supplier.supplierPolicyChecks),
+    supplierOriginCountryClaim:text(supplier&&supplier.supplierOriginCountryClaim),
+    internationalSafety:plain(supplier&&supplier.internationalSafety),
     supplyLane:text(supplier&&supplier.supplyLane)||"general",
     discoverySource:text(supplier&&supplier.discoverySource)||"official_public_page",
     officialDirectoryUrl:text(supplier&&supplier.officialDirectoryUrl),
@@ -1415,7 +1431,9 @@ async function discoverSupplierProductsStep(supplier,params){
     const initialUrls=[],initialSeen=new Set(),addSeed=(value)=>{const url=absoluteHttpUrl(supplierSiteUrl,value);if(!url||!sameSite(supplierSiteUrl,url))return;const key=lower(url);if(initialSeen.has(key))return;initialSeen.add(key);initialUrls.push(url);};
     addSeed(supplierSiteUrl);addSeed(source.sourceCandidateUrl);addSeed(source.productPageUrl);addSeed(source.sourcePageUrl);addSeed(source.categoryPageUrl);addSeed(source.catalogPageUrl);addSeed(source.productListUrl);for(const value of array(source.sourcePageUrls))addSeed(value);
     const boundedInitial=initialUrls.slice(0,8),initialPages=await Promise.all(boundedInitial.map(url=>fetchProductHtml(url,controller))),validInitial=initialPages.filter(page=>page.ok);if(!validInitial.length){const firstFailure=initialPages[0]||{},status=firstFailure.status||"unavailable",retryable=retryableProviderStatus(status);return{ok:true,items:[],retryable,trace:{source:"supplier-product-discovery",status,detail:firstFailure.detail||null,supplierSiteUrl,count:0,retryable,timeoutMs}};}
-    const supplierInfo={supplierId:text(source.supplierId),supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),trustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),approvalReady:source.approvalReady===true,evidenceReady:source.evidenceReady===true,supplyLane:text(source.supplyLane)||"general",discoverySource:text(source.discoverySource)||"official_public_page",officialDirectoryUrl:text(source.officialDirectoryUrl),referenceProductUrl:first(source.referenceProductUrl,source.currentProductUrl,source.invalidProductUrl)};
+    const supplierInfo={supplierId:text(source.supplierId),supplierName:first(source.title,source.name,source.supplierName),supplierSiteUrl,supplierType:text(source.supplierType),trustScore:Number(source.trustScore)||0,supplierDecision:text(source.supplierDecision),approvalReady:source.approvalReady===true,evidenceReady:source.evidenceReady===true,countryLogistics:plain(source.countryLogistics),supplierPolicyChecks:plain(source.supplierPolicyChecks),
+      supplierOriginCountryClaim:text(source.sellerAddressCountryClaim||source.supplierOriginCountryClaim),
+      internationalSafety:plain(source.internationalSafety),supplyLane:text(source.supplyLane)||"general",discoverySource:text(source.discoverySource)||"official_public_page",officialDirectoryUrl:text(source.officialDirectoryUrl),referenceProductUrl:first(source.referenceProductUrl,source.currentProductUrl,source.invalidProductUrl)};
     const crawlLimit=recoveryMode?10:24,targetImageProducts=recoveryMode?4:20,waveLimit=recoveryMode?4:6;
     let items=[],catalogPagesChecked=0;const crawlQueue=[],crawlSeen=new Set(boundedInitial.map(lower)),enqueueCatalog=(url,depth)=>{if(!url||depth>2)return;const key=lower(url);if(crawlSeen.has(key)||!sameSite(supplierSiteUrl,url))return;crawlSeen.add(key);crawlQueue.push({url,depth});};
     for(const page of validInitial){items=items.concat(productRowsFromHtml(page.html,page.url,supplierInfo,60));for(const url of catalogPageUrls(page.html,page.url,28))enqueueCatalog(url,1);}
@@ -1431,7 +1449,9 @@ async function discoverSupplierProductsStep(supplier,params){
       }
       if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)&&row&&row.imageUrl).length>=targetImageProducts)break;
     }
-    let sitemapCount=0;if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)).length<5){const sitemapUrls=await fetchProductSitemapUrls(supplierSiteUrl,controller,80);sitemapCount=sitemapUrls.length;for(const url of sitemapUrls){const priority=productPriorityInfo(supplierInfo.supplierName+" "+url);items.push({id:productIdSeed(url,"상품명 확인 중"),entityKind:"product_reference",productName:"상품명 확인 중",title:"상품명 확인 중",productUrl:url,url,imageUrl:"",imageOriginalUrl:"",imageSource:"sitemap_pending_inspection",videoUrl:"",videoContentUrl:"",videoEmbedUrl:"",videoThumbnailUrl:"",videoSource:"unresolved",supplierId:supplierInfo.supplierId,supplierName:supplierInfo.supplierName,supplierSiteUrl,supplierType:supplierInfo.supplierType,supplierTrustScore:supplierInfo.trustScore,supplierDecision:supplierInfo.supplierDecision,supplierApprovalReady:supplierInfo.approvalReady===true,supplierEvidenceReady:supplierInfo.evidenceReady===true,sourcePageUrl:supplierSiteUrl,jsonLdProduct:false,offerPresent:false,provisionalName:true,priorityScore:priority.score,priorityLabel:priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});}}
+    let sitemapCount=0;if(items.filter(row=>isProductDetailUrl(row&&row.productUrl)).length<5){const sitemapUrls=await fetchProductSitemapUrls(supplierSiteUrl,controller,80);sitemapCount=sitemapUrls.length;for(const url of sitemapUrls){const priority=productPriorityInfo(supplierInfo.supplierName+" "+url);items.push({id:productIdSeed(url,"상품명 확인 중"),entityKind:"product_reference",productName:"상품명 확인 중",title:"상품명 확인 중",productUrl:url,url,imageUrl:"",imageOriginalUrl:"",imageSource:"sitemap_pending_inspection",videoUrl:"",videoContentUrl:"",videoEmbedUrl:"",videoThumbnailUrl:"",videoSource:"unresolved",supplierId:supplierInfo.supplierId,supplierName:supplierInfo.supplierName,supplierSiteUrl,supplierType:supplierInfo.supplierType,supplierTrustScore:supplierInfo.trustScore,supplierDecision:supplierInfo.supplierDecision,supplierApprovalReady:supplierInfo.approvalReady===true,supplierEvidenceReady:supplierInfo.evidenceReady===true,countryLogistics:plain(supplierInfo.countryLogistics),
+      supplierPolicyChecks:plain(supplierInfo.supplierPolicyChecks),supplierOriginCountryClaim:text(supplierInfo.supplierOriginCountryClaim),
+      internationalSafety:plain(supplierInfo.internationalSafety),sourcePageUrl:supplierSiteUrl,jsonLdProduct:false,offerPresent:false,provisionalName:true,priorityScore:priority.score,priorityLabel:priority.label,productPageLive:true,sameSupplierSite:true,inspectionComplete:false,researchStatus:"discovered",slotDecision:"undecided",publicPublication:false,automaticImport:false});}}
     const dedup=[],seen=new Set();for(const row of items){const canonicalUrl=ProductRanking.canonicalProductUrl(row&&row.productUrl),identity=ProductRanking.productIdentity(row),key=canonicalUrl||identity;if(!key||seen.has(key)||!isProductDetailUrl(row.productUrl))continue;seen.add(key);dedup.push(row);if(dedup.length>=Math.max(10,Math.min(120,Number(params&&params.limit)||80)))break;}
     return{ok:true,items:dedup,retryable:false,trace:{source:"supplier-product-discovery",status:"ok",supplierName:supplierInfo.supplierName,supplierSiteUrl,seedPagesChecked:validInitial.length,sourceCandidateChecked:boundedInitial.length>1,catalogPagesChecked:validInitial.length+catalogPagesChecked,sitemapProductUrls:sitemapCount,count:dedup.length,retryable:false,timeoutMs}};
   }finally{clearTimeout(timer);}
