@@ -20,6 +20,11 @@ const UNDERFILLED_RETRY_MS = 15 * 60 * 1000;
 const NO_RESULT_RETRY_MS = 30 * 60 * 1000;
 const SUPPLIER_REFRESH_MS = 84 * 60 * 60 * 1000;
 const RESEARCH_ROUNDS_PER_JOB = 1; // Persist reviewed suppliers after each completed round, not after all five rounds.
+// Initial discovery goals are SOFT targets for DISTINCT usable, saved sellers;
+// never count raw search hits, invent vendors, or deny a small market's real sellers.
+const DEFAULT_SUPPLIER_GOAL = 100;
+const LARGE_SUPPLIER_GOAL = 200;
+function supplierGoal(scope){return txt(scope.countryCode).toUpperCase()==='US'?LARGE_SUPPLIER_GOAL:DEFAULT_SUPPLIER_GOAL;}
 function arr(v) { return Array.isArray(v) ? v : []; }
 function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
 function txt(v) { return v == null ? '' : String(v).trim(); }
@@ -35,9 +40,10 @@ function input(s,extra) { return Object.assign({countryCode:s.countryCode,subdiv
 function eligibleCycleAt(state) {
   const saved=ts(obj(state).nextCycleAt),finished=ts(obj(state).completedAt)||ts(obj(state).lastStepAt);
   if(!saved||!finished)return saved;
-  const full=Number(obj(state).activeSupplierCount||0)>0&&obj(obj(state).sectionFill).fullTargetComplete===true;
-  if(full)return saved;
-  const gap=Number(obj(state).activeSupplierCount||0)>0?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS;
+  const have=Number(obj(state).activeSupplierCount||0),goal=Number(obj(state).supplierGoal||DEFAULT_SUPPLIER_GOAL);
+  // A full section board is NOT a reason to stop supplier discovery below goal.
+  if(have>=goal)return Math.max(saved,finished+SUPPLIER_REFRESH_MS);
+  const gap=have>0?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS;
   return Math.min(saved,finished+gap);
 }
 function create(deps) {
@@ -180,13 +186,12 @@ function create(deps) {
           protectedJobId:owned.jobId||state.jobId,
           lastResult:'supplier_checkpoint_changed_before_durable_handoff'});
       }
-      const recorded=await automation.recordScheduledSupplierCompletion(input(s,{jobId:state.jobId,recordedSuppliers:savedCount}));
-      const have=Number(recorded&&recorded.activeSupplierCount||0);
-      // The supplier crawl also revisits markets while their PRIVATE 20-section
-      // board is under target, independent of the ordinary 84-hour refresh.
-      let fill={unavailable:true};
-      if(have){try{fill=await require('./commerce-country-auto-product-pipeline.v1').makePipeline().sectionFill(s);}catch(error){fill={unavailable:true,error:txt(error&&error.message||error)};}}
       const completedRounds=Math.min(RESEARCH_ROUNDS,Math.max(0,Number(state.roundsCompleted||0))+Math.max(1,Number(job.researchRounds||1)));
+      const recorded=await automation.recordScheduledSupplierCompletion(input(s,{jobId:state.jobId,recordedSuppliers:savedCount,supplierRoundsCompleted:completedRounds}));
+      const have=Number(recorded&&recorded.activeSupplierCount||0),goal=supplierGoal(s),targetReached=have>=goal;
+      // Supplier discovery has its own target. Products run in parallel from the
+      // first ten usable sellers, but 10 sellers NEVER terminates supplier research.
+      // Do not query/change PSOM or public slots from this supplier-only worker.
       // The same completed persistent job must never count as the next search
       // round after this checkpoint moves back to idle.
       const committedJobId=txt(state.jobId);
@@ -195,19 +200,18 @@ function create(deps) {
       // overwriting prior suppliers, manual locks, or exclusions.
       if(completedRounds<RESEARCH_ROUNDS) return Object.assign(state,{
         phase:'idle',jobId:null,lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,completedAt:clock(),
-        sectionFill:fill,committedSuppliers:savedCount,activeSupplierCount:have,
-        lastResult:have?'supplier_round_saved_product_research_unlocked':'supplier_round_complete_retry_next_round'
+        supplierGoal:goal,supplierTargetReached:targetReached,committedSuppliers:savedCount,activeSupplierCount:have,
+        lastResult:have>=10?'supplier_round_saved_product_parallel_eligible':have?'supplier_round_saved_collecting_first_ten':'supplier_round_complete_retry_next_round'
       });
-      // Weekly twice is MAINTENANCE only after ALL real 20-section private
-      // placements are at target. Underfilled markets automatically begin
-      // another durable five-round cycle. Exhausted/empty providers receive a
-      // modest quota-safe retry gap; no browser session is needed.
-      const full=have>0&&fill.fullTargetComplete===true;
-      const gap=full?SUPPLIER_REFRESH_MS:(have?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS);
-      return Object.assign(state,{phase:'cooldown',lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,completedAt:clock(),sectionFill:fill,
-        fillPhase:full?'maintenance':'initial_fill',targetReached:full,
+      // 84-hour maintenance starts ONLY when the supplier goal is met.
+      // Smaller countries retain their verified sellers; an exhausted round
+      // schedules a quota-safe follow-up, never a fake seller or a forced stop.
+      const gap=targetReached?SUPPLIER_REFRESH_MS:(have?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS);
+      return Object.assign(state,{phase:'cooldown',lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,completedAt:clock(),
+        supplierGoal:goal,supplierTargetReached:targetReached,
+        fillPhase:targetReached?'supplier_maintenance':'supplier_initial_fill',targetReached,
         nextCycleAt:new Date(ts(clock())+gap).toISOString(),
-        lastResult:full?'private_board_full_weekly_twice_maintenance':have?'private_board_underfilled_continue_after_source_retry':'no_verified_supplier_continue_after_provider_retry',committedSuppliers:savedCount,activeSupplierCount:have});
+        lastResult:targetReached?'supplier_target_reached_weekly_twice_maintenance':have?'supplier_below_target_continue_after_source_retry':'no_verified_supplier_continue_after_provider_retry',committedSuppliers:savedCount,activeSupplierCount:have});
     }
     return Object.assign(state,{phase:'idle',lastResult:'supplier_unknown_phase_safely_reset'});
   }

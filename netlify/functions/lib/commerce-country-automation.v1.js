@@ -398,6 +398,7 @@ function rowToSetting(row) {
     // Attempt time rotates retry priority; durable time allows product research
     // on actually saved supplier rows without falsely marking a partial run complete.
     lastAttemptAt: text(rule.lastAttemptAt) || null,
+    lastAttemptSummary: plain(rule.lastAttemptSummary),
     lastDurableSupplierAt: text(rule.lastDurableSupplierAt) || null,
     updatedAt: text(row && row.updated_at) || null
   };
@@ -456,6 +457,7 @@ function effectiveSetting(state, countryCode, subdivisionCode) {
     expandSubdivisions: !!(countrySetting && countrySetting.expandSubdivisions),
     lastRunAt: (subdivision || countrySetting || {}).lastRunAt || null,
     lastAttemptAt: (subdivision || countrySetting || {}).lastAttemptAt || null,
+    lastAttemptSummary: (subdivision || countrySetting || {}).lastAttemptSummary || {},
     lastDurableSupplierAt: (subdivision || countrySetting || {}).lastDurableSupplierAt || null,
     lastRunSummary: (subdivision || countrySetting || {}).lastRunSummary || {},
     chain: chain.map((item) => ({ id: item.id, mode: item.mode }))
@@ -2828,6 +2830,11 @@ function productSupplierSource(row) {
     row.manualRegistered===true||row.manualPinned===true||row.adminPinned===true);
   const searchPortal=/^(?:google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.yahoo\.com)$/.test(host);
   if(searchPortal&&!verifiedByOperator&&(!pathName||pathName==='/'||/^\/(?:search|url|shopping)(?:\/|$)/.test(pathName)))return null;
+  // Historical PH/GB failures attached Google Calendar/Chat help pages to
+  // unrelated sellers. They are NOT merchant storefronts or catalog sources.
+  // Preserve any explicitly registered operator source for manual review.
+  if(!verifiedByOperator&&(/^(?:workspace|calendar|chat|accounts|support)\.google\.com$/.test(host)||
+    (searchPortal&&/^\/(?:calendar|chat|accounts|support)(?:\/|$)/.test(pathName))))return null;
   if(/\.(?:pdf|hwp|hwpx|docx?|xlsx?|pptx?|zip|rar|7z)(?:$|[?#])/i.test(url))return null;
   if(/(?:\/attachment\/|\/filedownload|\/download(?:\/|\?|$)|\/board(?:\/|\?|$)|\/article(?:\/|\?|$)|\/news(?:\/|\?|$)|\/press(?:\/|\?|$)|\/blog(?:\/|\?|$)|bo_table=|boardid=)/i.test(pathName+parsed.search))return null;
   if(/(?:hera\d+\.|magicseller\.|tistory\.|blogspot\.|wordpress\.|news\.|press\.|media\.)/i.test(host))return null;
@@ -3030,6 +3037,15 @@ async function beginProductResearchJob(actorId, input) {
   }
   const allSupplierSources=ProductReserve.interleaveSuppliers(sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||focusedProductResearchPriority(b)-focusedProductResearchPriority(a)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))));
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
+  // Scheduler starts product discovery after TEN *distinct, usable supplier
+  // sites*, while the supplier scheduler continues independently to 100/200.
+  // Do not retroactively stop an already running job or affect manual research.
+  const minAutoSources=Math.min(10,Math.max(0,Math.round(Number(raw.minEligibleSupplierSources)||0)));
+  const unfinished=existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!['complete','cancelled','failed'].includes(existing.status);
+  if(text(actorId)==='scheduled-country-product-ai'&&minAutoSources>0&&!unfinished&&allSupplierSources.length<minAutoSources){
+    const error=new Error('AUTO_PRODUCT_SUPPLIER_THRESHOLD_PENDING:'+allSupplierSources.length+'/'+minAutoSources);
+    error.statusCode=409;error.code='AUTO_PRODUCT_SUPPLIER_THRESHOLD_PENDING';throw error;
+  }
 
   const supplierLedgerSourceId=text(supplierJob&&supplierJob.jobId)||"durable_supplier_candidate_ledger";
   const priorResearchedKeys=researchedProductSupplierKeys(existing),priorGapKeys=productGapSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
@@ -7817,7 +7833,7 @@ async function autoProductScopes() {
     if(manual&&manual!==country.code)continue;
     if(manual&&manualRegion!=="NATIONWIDE"){
       const setting=effectiveSetting(state,country.code,manualRegion);
-      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastDurableSupplierAt||null});
+      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastDurableSupplierAt||null,supplierCount:Number(plain(setting.lastAttemptSummary).activeSupplierCount||0),supplierRoundsCompleted:Number(plain(setting.lastAttemptSummary).supplierRoundsCompleted||0)});
       continue;
     }
     const effective=effectiveSetting(state,country.code,"");
@@ -7825,9 +7841,9 @@ async function autoProductScopes() {
     if(country.requiresSubdivision&&effective.expandSubdivisions===true&&array(country.subdivisions).length){
       for(const region of country.subdivisions){
         const child=effectiveSetting(state,country.code,region.code);
-        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastDurableSupplierAt||null});
+        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastDurableSupplierAt||null,supplierCount:Number(plain(child.lastAttemptSummary).activeSupplierCount||0),supplierRoundsCompleted:Number(plain(child.lastAttemptSummary).supplierRoundsCompleted||0)});
       }
-    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastDurableSupplierAt||null});
+    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastDurableSupplierAt||null,supplierCount:Number(plain(effective.lastAttemptSummary).activeSupplierCount||0),supplierRoundsCompleted:Number(plain(effective.lastAttemptSummary).supplierRoundsCompleted||0)});
   }
   return{mode:state.master.mode,scopes};
 }
@@ -7902,28 +7918,31 @@ async function recordScheduledSupplierCompletion(input){
     !inactiveStatuses.has(lower(row.status))&&
     !inactiveDecisions.has(lower(first(row&&row.operatorDecision,plain(row.ai).operatorDecision,plain(row.supplier).operatorReviewState)))&&
     !supplierExplicitDanger(row) && !!productSupplierSource(row));
+  // Count unique real supplier storefronts rather than raw search hits.
+  const activeSupplierKeys=new Set(active.map(row=>productSupplierSourceKey(productSupplierSource(row))).filter(Boolean));
+  const activeCount=activeSupplierKeys.size;
   const kind=scope.region==='NATIONWIDE'?"country":"subdivision";
   const id=settingId(kind,{countryCode:scope.country,subdivisionCode:scope.region});
   const policy=array(await SlotStore.select('gslot_policies','select=id,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq.'+encodeURIComponent(id)+'&limit=1'))[0],oldRule=plain(policy&&policy.rule),t=iso();
   const setting=policy?Object.assign({},oldRule):sanitizeSetting({scopeType:kind,countryCode:scope.country,subdivisionCode:scope.region,mode:'inherit'});
-  const rule=Object.assign({},setting,{schema:VERSION,lastAttemptAt:t,lastAttemptSummary:{source:progressive?'scheduled_progressive_private_supplier':'scheduled_staged_research',jobId:requested,activeSupplierCount:active.length,created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds},updatedAt:t,updatedBy:'scheduled-automation'});
+  const rule=Object.assign({},setting,{schema:VERSION,lastAttemptAt:t,lastAttemptSummary:{source:progressive?'scheduled_progressive_private_supplier':'scheduled_staged_research',jobId:requested,activeSupplierCount:activeCount,created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds,supplierRoundsCompleted:Math.max(Number(plain(input).supplierRoundsCompleted||0),Number(plain(oldRule.lastAttemptSummary).supplierRoundsCompleted||0))},updatedAt:t,updatedBy:'scheduled-automation'});
   const newlySaved=Math.max(0,Number(plain(input).recordedSuppliers||0));
   // A zero-new-supplier pass may still see a pre-existing validated portfolio:
   // permit the initial product cycle, but don't force a full product rescan
   // after every subsequent empty/repeated research round.
-  if(active.length){
+  if(activeCount){
     if(newlySaved>0||!text(oldRule.lastDurableSupplierAt))rule.lastDurableSupplierAt=t;
     if(!progressive){rule.lastRunAt=t;rule.lastRunSummary=Object.assign({},rule.lastAttemptSummary,{completed:true});}
   }
   // Keep durable seller records unchanged, but do not unlock product research
   // based on a stale timestamp when no supplier still passes the safety gate.
-  if (!active.length) rule.lastDurableSupplierAt=null;
+  if (!activeCount) rule.lastDurableSupplierAt=null;
   // Preserve the last completed *attempt* for diagnostics; do not grant private product research without a current usable supplier.
   const row={id,name:'국가 책임 공급업체 발굴 자동화',scope_hub:'country-commerce-control',scope_country:scope.country,scope_region:kind==='subdivision'?scope.region:null,enabled:true,rule,updated_at:t,updated_by:'scheduled-automation'};
   if(!policy)row.created_at=t;
   const saved=array(await SlotStore.insert('gslot_policies',row,'resolution=merge-duplicates,return=representation'));
   if(!saved.length||text(saved[0].id)!==id)throw Object.assign(new Error('scheduled_supplier_setting_save_not_confirmed'),{statusCode:503});
-  return{ok:true,scope:{country:scope.country,region:scope.region},activeSupplierCount:active.length,lastDurableSupplierAt:active.length?t:null};
+  return{ok:true,scope:{country:scope.country,region:scope.region},activeSupplierCount:activeCount,lastDurableSupplierAt:activeCount?t:null};
 }
 
 // Save a small batch of *inspected* private supplier leads before the full

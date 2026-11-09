@@ -14,7 +14,10 @@ const ACTOR = 'scheduled-country-product-ai';
 const LEASE_MS = 3 * 60 * 1000; // Country checkpoint resumes after a killed invocation.
 const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Only a short concurrency yield for administrator edits.
 const MAX_SCOPES = 3; // Fair rotation across active markets; bounded by each country lease.
-const PSOM_BATCH = 3;
+// Stage 1 is research -> latest research / private shared candidate ledger.
+// PSOM section placement is deliberately reserved for the administrator's
+// separate approval/section workflow; NEVER run it in this scheduled worker.
+const MIN_SUPPLIER_SOURCES = 10;
 const CANDIDATE_SCAN = 24;
 // Private country board targets: first 20 verified candidates per section,
 // then build to 100. Never create fake candidates to meet those targets.
@@ -227,8 +230,19 @@ function makePipeline(deps) {
     if (!state.jobId || state.phase === 'idle') {
       const selected = configuredScopeMap(await automation.autoProductScopes()).get(scopeKey(scope));
       if (!txt(selected && selected.supplierLastRunAt)) return Object.assign(state,{phase:'idle',lastResult:'supplier_discovery_not_yet_durably_saved'});
+      // The durable supplier marker is not a count. New product jobs wait for
+      // ten usable seller sites; current seller research continues in parallel.
+      // For legacy settings with unknown count, the server begin function
+      // checks the real country-local ledger before starting a new job.
+      const observedSuppliers=Number(selected.supplierCount||0);
+      // A small market may legitimately have fewer than ten usable suppliers.
+      // After a complete five-round survey, use its verified real sellers.
+      const surveyed=Number(selected.supplierRoundsCompleted||0)>=5;
+      if(observedSuppliers>0&&observedSuppliers<MIN_SUPPLIER_SOURCES&&!surveyed)
+        return Object.assign(state,{phase:'idle',lastResult:'waiting_for_ten_usable_suppliers',usableSuppliers:observedSuppliers});
+      const minimum=observedSuppliers>0&&surveyed?1:MIN_SUPPLIER_SOURCES;
       await recheck(scope);
-      const started = await automation.beginProductResearchJob(ACTOR, inputFor(scope, {compact:true,fullRescan:state.fullRescanNeeded===true}));
+      const started = await automation.beginProductResearchJob(ACTOR, inputFor(scope, {compact:true,fullRescan:state.fullRescanNeeded===true,minEligibleSupplierSources:minimum}));
       if (!txt(started && started.jobId)) throw new Error('auto_product_begin_no_job_id');
       // A same-ID completion with zero fresh sources must not restage older
       // products, nor reset the management ledger.
@@ -251,12 +265,14 @@ function makePipeline(deps) {
       if (Number(checkpoint.resultCount||0)>Number(state.lastStagedResultCount||0)) {
         await recheck(scope);
         const staged=await automation.stageCurrentProductResearchQueue(ACTOR,inputFor(scope,{jobId:state.jobId,source:'scheduled_auto',operation:'stage'}));
-        const part=obj(staged.partialQueue),ids=await verifiedNewIds(scope,state,part.candidateIds);
-        const next=Object.assign(state, {lastStagedResultCount:Number(checkpoint.resultCount||0),
+        const part=obj(staged.partialQueue);
+        // Saved research results remain visible in Latest Research, and
+        // inspected candidates are safely entered in the shared private ledger.
+        // Do not automatically select a PSOM section on behalf of the operator.
+        return Object.assign(state, {lastStagedResultCount:Number(checkpoint.resultCount||0),
           privateCandidatesStaged:Number(state.privateCandidatesStaged||0)+Number(part.created||0),latestStaging:part,
-          lastResult:'inspected_products_staged_without_waiting_for_complete_research'});
-        if(ids.length){next.pendingPlacementIds=ids;next.phase='placing';next.nextPhaseAfterPlacement='researching';}
-        return next;
+          awaitingAdminSectionReview:true,phase:'researching',
+          lastResult:'latest_research_private_candidates_staged_supplier_crawl_continues'});
       }
       await recheck(scope);
       const step = await automation.advanceProductResearchJob(ACTOR, inputFor(scope,{jobId:state.jobId,compact:true}));
@@ -266,39 +282,32 @@ function makePipeline(deps) {
       if (checkpoint.status !== 'complete') return Object.assign(state, {phase:'researching',lastResult:'research_not_complete'});
       await recheck(scope);
       const step = await automation.stageCurrentProductResearchQueue(ACTOR,inputFor(scope,{jobId:state.jobId,source:'scheduled_auto',operation:'stage'}));
-      const p=obj(step.partialQueue), ids=await verifiedNewIds(scope,state,p.candidateIds);
-      const next=Object.assign(state,{ stagingComplete:p.complete===true, lastResult:'private_candidates_staged', privateCandidatesStaged:Number(state.privateCandidatesStaged||0)+Number(p.created||0), latestStaging:p });
-      if(ids.length){next.pendingPlacementIds=ids;next.phase='placing';next.nextPhaseAfterPlacement=p.complete===true?'reconciling':'staging';}
-      else next.phase=p.complete===true?'reconciling':'staging';
-      return next;
-    }
-    if (state.phase === 'placing') {
-      const ids=arr(state.pendingPlacementIds).map(txt).filter(Boolean);
-      if (!ids.length) return Object.assign(state,{phase:txt(state.nextPhaseAfterPlacement)||(state.stagingComplete?'reconciling':'staging'),lastResult:'placement_queue_empty'});
-      const valid = await verifiedNewIds(scope,state,ids.slice(0,PSOM_BATCH));
-      if (!valid.length) return Object.assign(state,{pendingPlacementIds:ids.slice(PSOM_BATCH),lastResult:'existing_or_manually_decided_candidates_preserved'});
-      await recheck(scope);
-      const counts=await sectionCounts(scope);
-      const placed=await automation.productCandidatePsomPlace(ACTOR,inputFor(scope,{candidateIds:valid,balanceCounts:counts}));
-      const results=arr(placed.results), errors=results.filter(r=>r.assigned!==true).map(r=>({at:clock(),candidateId:txt(r.candidateId),reason:txt(r.error)||'review_required'}));
-      return Object.assign(state,{ pendingPlacementIds:ids.slice(PSOM_BATCH),placed:Number(state.placed||0)+results.filter(r=>r.assigned===true&&!r.preservedExisting).length, reviewRequired:Number(state.reviewRequired||0)+errors.length,errors:arr(state.errors).concat(errors).slice(-MAX_REPORT_ERRORS),lastResult:errors.length?'psom_private_placement_partial':'psom_private_placement_saved',phase:ids.length<=PSOM_BATCH?(txt(state.nextPhaseAfterPlacement)||(state.stagingComplete?'reconciling':'staging')):'placing' });
-    }
-    if (state.phase === 'reconciling') {
-      // Recovery for a crash *after* durable queue-stage commit but *before*
-      // saving pendingPlacementIds. Scan only NEW scheduler-created candidates
-      // from this job and never include preexisting/manual product rows.
-      const batch=await nextAutoCandidateBatch(scope,state);
-      const next=Object.assign(state,{reconcileCursor:batch.cursor,lastResult:'private_psom_reconcile_scan'});
-      if(batch.ids.length){next.pendingPlacementIds=batch.ids;next.phase='placing';next.stagingComplete=true;}
-      else if(batch.complete){
+      const p=obj(step.partialQueue);
+      const next=Object.assign(state,{stagingComplete:p.complete===true,
+        privateCandidatesStaged:Number(state.privateCandidatesStaged||0)+Number(p.created||0),latestStaging:p,
+        awaitingAdminSectionReview:true,lastResult:'latest_research_and_shared_candidate_ledger_updated',phase:'staging'});
+      if(p.complete===true){
         const fill=await sectionFill(scope);
         next.phase='complete';next.completedAt=clock();next.sectionFill=fill;
         next.fillPhase=fill.fullTargetComplete?'maintenance':'initial_fill';
         next.targetReached=fill.fullTargetComplete===true;
         next.nextRefreshAt=new Date(ts(clock())+(fill.fullTargetComplete?REFRESH_FULL_MS:REFRESH_UNDERFILLED_MS)).toISOString();
-        next.lastResult=fill.fullTargetComplete?'private_psom_full_target_complete_waiting_admin_front_match':'private_psom_partial_slots_initial_fill_retry_scheduled';
       }
       return next;
+    }
+    if (state.phase === 'placing' || state.phase === 'reconciling') {
+      // Upgrade in-flight checkpoints from older deployments WITHOUT losing
+      // any candidate rows: all pending IDs already live in the private ledger.
+      // We must not resume an old automatic PSOM placement here.
+      return Object.assign(state,{
+        phase:checkpoint.status==='complete'?'staging':'researching',
+        awaitingAdminSectionReview:true,
+        deferredLegacyPsomCandidateIds:Array.from(new Set([
+          ...arr(state.deferredLegacyPsomCandidateIds),...arr(state.pendingPlacementIds)
+        ].map(txt).filter(Boolean))).slice(-300),
+        pendingPlacementIds:[],
+        lastResult:'legacy_auto_psom_disabled_candidates_preserved_for_admin_review'
+      });
     }
     return Object.assign(state,{phase:'idle',lastResult:'unknown_phase_reset_without_deleting_data'});
   }
@@ -321,7 +330,7 @@ function makePipeline(deps) {
         // No eligible seller URL is a recoverable input gap, not a reason to
         // hammer the same empty ledger every two minutes in 90 countries.
         // A new durable supplier marker invalidates the backoff immediately.
-        if(/활성 공급업체가 없습니다|공식 판매 출처 URL이 없습니다|supplier_discovery_not_yet_durably_saved/.test(reason)){
+        if(/활성 공급업체가 없습니다|공식 판매 출처 URL이 없습니다|supplier_discovery_not_yet_durably_saved|AUTO_PRODUCT_SUPPLIER_THRESHOLD_PENDING/.test(reason)){
           update.nextRetryAt=new Date(ts(clock())+30*60*1000).toISOString();
           update.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
           update.lastErrorReason=reason;
@@ -332,7 +341,12 @@ function makePipeline(deps) {
     // Stop is never a reset, including if a selected-country pause happens
     // between two DB calls. Keep pending candidate IDs and research cursors.
     await release(scope,claimed,update);
-    return { scope:scopeKey(scope),ok:result!=='step_failed_checkpoint_preserved',phase:txt(update.phase),jobId:txt(update.jobId)||null,result,placed:Number(update.placed||0),reviewRequired:Number(update.reviewRequired||0),pendingPlacement:arr(update.pendingPlacementIds).length,sectionFill:obj(update.sectionFill),nextRefreshAt:update.nextRefreshAt||null,fillPhase:txt(update.fillPhase)||null,targetReached:update.targetReached===true,publicPublication:false };
+    return { scope:scopeKey(scope),ok:result!=='step_failed_checkpoint_preserved',phase:txt(update.phase),jobId:txt(update.jobId)||null,result,
+      placed:Number(update.placed||0),privateCandidatesStaged:Number(update.privateCandidatesStaged||0),
+      awaitingAdminSectionReview:update.awaitingAdminSectionReview===true,
+      reviewRequired:Number(update.reviewRequired||0),pendingPlacement:arr(update.pendingPlacementIds).length,
+      sectionFill:obj(update.sectionFill),nextRefreshAt:update.nextRefreshAt||null,fillPhase:txt(update.fillPhase)||null,
+      targetReached:update.targetReached===true,automaticPsomPlacement:false,publicPublication:false };
   }
   async function run() {
     const plan=await automation.autoProductScopes();
@@ -361,7 +375,7 @@ function makePipeline(deps) {
     const results=settled.map((item,index)=>item.status==='fulfilled'?item.value:{
       scope:scopeKey(choices[index]),ok:false,error:txt(item.reason&&item.reason.message||item.reason)
     });
-    return {ok:results.every(r=>r.ok!==false),version:VERSION,masterMode:plan.mode,activeScopes:plan.scopes.length,processed:results.length,results,safety:{countryIndependent:true,priorResearchAndAssignmentsPreserved:true,automaticFrontMatch:false,automaticPublication:false,administratorApprovalRequired:true}};
+    return {ok:results.every(r=>r.ok!==false),version:VERSION,masterMode:plan.mode,activeScopes:plan.scopes.length,processed:results.length,results,safety:{countryIndependent:true,priorResearchAndAssignmentsPreserved:true,automaticPrivateCandidateStaging:true,automaticPsomPlacement:false,automaticFrontMatch:false,automaticPublication:false,administratorApprovalRequired:true}};
   }
   return { run, runScope, claim, release, advance, setTakeover, sectionFill, idFor };
 }
