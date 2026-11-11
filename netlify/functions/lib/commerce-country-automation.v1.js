@@ -401,6 +401,7 @@ function rowToSetting(row) {
     // Attempt time rotates retry priority; durable time allows product research
     // on actually saved supplier rows without falsely marking a partial run complete.
     lastAttemptAt: text(rule.lastAttemptAt) || null,
+    lastAttemptSummary: plain(rule.lastAttemptSummary),
     lastDurableSupplierAt: text(rule.lastDurableSupplierAt) || null,
     updatedAt: text(row && row.updated_at) || null
   };
@@ -459,6 +460,7 @@ function effectiveSetting(state, countryCode, subdivisionCode) {
     expandSubdivisions: !!(countrySetting && countrySetting.expandSubdivisions),
     lastRunAt: (subdivision || countrySetting || {}).lastRunAt || null,
     lastAttemptAt: (subdivision || countrySetting || {}).lastAttemptAt || null,
+    lastAttemptSummary: plain((subdivision || countrySetting || {}).lastAttemptSummary),
     lastDurableSupplierAt: (subdivision || countrySetting || {}).lastDurableSupplierAt || null,
     lastRunSummary: (subdivision || countrySetting || {}).lastRunSummary || {},
     chain: chain.map((item) => ({ id: item.id, mode: item.mode }))
@@ -1538,14 +1540,39 @@ function researchScope(input) {
   if (region !== "NATIONWIDE" && !array(countryInfo.subdivisions).some((item) => item.code === region)) { const error = new Error("선택 국가의 공식 주·성·지역 범위가 아닙니다."); error.statusCode = 400; throw error; }
   return { country, region, regionGroup: countryInfo.regionGroup, countryName: countryInfo.nameKo || countryInfo.nameEn || country, scopeAuthority: lower(raw.scopeAuthority) === "administrator-selected" ? "administrator-selected" : "explicit-request", requestGeoIgnored: raw.ignoreRequestGeo === true || lower(raw.scopeAuthority) === "administrator-selected" };
 }
-function researchJobId(scope) { return RESEARCH_JOB_PREFIX + lower(scope.country) + "_" + lower(scope.region || "NATIONWIDE").replace(/[^a-z0-9_-]/g, "_"); }
-async function researchJobRule(scope) {
-  const id = researchJobId(scope); const rows = await SlotStore.select("gslot_policies", "select=id,name,scope_hub,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq." + encodeURIComponent(id) + "&limit=1");
-  const row = array(rows)[0]; return row ? Object.assign({}, plain(row.rule)) : null;
+// Human research and country scheduler must not contend for one mutable job.
+// Keep the administrator's established key unchanged; the scheduled worker
+// has an independent resumable checkpoint for the same geographical scope.
+function researchJobId(scope, actorId) {
+  const base=RESEARCH_JOB_PREFIX + lower(scope.country) + "_" + lower(scope.region || "NATIONWIDE").replace(/[^a-z0-9_-]/g, "_");
+  return text(actorId)==="scheduled-automation"?base+"_scheduled":base;
+}
+async function researchJobRule(scope, actorId) {
+  const id=researchJobId(scope,actorId);
+  const query=(value)=>"select=id,name,scope_hub,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq."+encodeURIComponent(value)+"&limit=1";
+  const rows=await SlotStore.select("gslot_policies",query(id));
+  const row=array(rows)[0];
+  if(row)return Object.assign({},plain(row.rule));
+  if(text(actorId)!=="scheduled-automation")return null;
+  // One-time, non-destructive migration: resume old scheduled work without
+  // taking ownership of an administrator job. The original row is retained.
+  const legacy=array(await SlotStore.select("gslot_policies",query(researchJobId(scope))))[0];
+  if(!legacy||text(legacy.updated_by)!=="scheduled-automation")return null;
+  const historic=plain(legacy.rule);
+  if(historic.schema!==RESEARCH_JOB_SCHEMA||!text(historic.jobId))return null;
+  const migrated=Object.assign({},historic,{migratedFromSharedCheckpointAt:iso()});
+  await saveResearchJob(migrated,"scheduled-automation");
+  return migrated;
 }
 async function saveResearchJob(job, actorId) {
   const now = iso(); job.updatedAt = now;
-  const row = { id: researchJobId(job.scope), name: "국가 책임 공급업체 단계별 리서치 작업", scope_hub: "country-supplier-research-job", scope_country: job.scope.country, scope_region: job.scope.region === "NATIONWIDE" ? null : job.scope.region, enabled: !["complete","committed","cancelled"].includes(job.status), rule: job, updated_at: now, updated_by: text(actorId) || "country-research-orchestrator" };
+  // Scheduled polling reads ONLY this bounded projection. The full checkpoint
+  // may contain thousands of search tasks and several MB of inspection data.
+  job.checkpointMeta={candidateCount:array(job.candidates).length,
+    searchCursor:Number(job.searchCursor||0),searchTotal:array(job.searchTasks).length,
+    inspectCursor:Number(job.inspectCursor||0),inspectTotal:array(job.inspectionPool).length,
+    rankCursor:Number(job.rankCursor||0),rankTotal:array(job.rankQueue).length};
+  const row = { id: researchJobId(job.scope,actorId), name: "국가 책임 공급업체 단계별 리서치 작업", scope_hub: text(actorId)==="scheduled-automation"?"country-supplier-scheduled-research-job":"country-supplier-research-job", scope_country: job.scope.country, scope_region: job.scope.region === "NATIONWIDE" ? null : job.scope.region, enabled: !["complete","committed","cancelled"].includes(job.status), rule: job, updated_at: now, updated_by: text(actorId) || "country-research-orchestrator" };
   if (!job.createdAt) { job.createdAt = now; row.created_at = now; }
   // A new deploy must never report a checkpoint as saved if the database did
   // not return the same country/job identity.  Keep the previous checkpoint
@@ -1947,7 +1974,7 @@ async function archiveSupplierResearchCycle(job, actorId) {
   }
 }
 async function beginResearchJob(actorId, input, event) {
-  const raw=plain(input),scope=researchScope(raw),state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),existing=await researchJobRule(scope),context=await researchContext(scope),researchRounds=supplierResearchRoundCount(raw),
+  const raw=plain(input),scope=researchScope(raw),state=await configState(),effective=effectiveSetting(state,scope.country,scope.region==="NATIONWIDE"?"":scope.region),existing=await researchJobRule(scope,actorId),context=await researchContext(scope),researchRounds=supplierResearchRoundCount(raw),
     researchRoundIndex=text(actorId)==="scheduled-automation"?Math.max(1,Math.min(5,Math.round(Number(raw.researchRoundIndex)||1))):1;
   // A run may resume only when the operating/policy signature is unchanged.
   // Completed runs are historical.  A new run is cumulative: previously
@@ -1997,7 +2024,7 @@ async function beginResearchJob(actorId, input, event) {
 }
 async function researchJobStatus(input) { const scope = researchScope(input); return publicResearchJob(await researchJobRule(scope)); }
 async function advanceResearchJob(actorId, input, event) {
-  const scope = researchScope(input), job = await researchJobRule(scope); if (!job || job.schema !== RESEARCH_JOB_SCHEMA) { const error = new Error("진행 중인 국가 책임 공급업체 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
+  const scope = researchScope(input), job = await researchJobRule(scope,actorId); if (!job || job.schema !== RESEARCH_JOB_SCHEMA) { const error = new Error("진행 중인 국가 책임 공급업체 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
   if (["complete","committed"].includes(job.status)) return publicResearchJob(job);
   const selectorInput = Object.assign({}, plain(job.selectorInput), { country: scope.country, region: scope.region === "NATIONWIDE" ? undefined : scope.region });
   try {
@@ -2055,7 +2082,7 @@ async function advanceResearchJob(actorId, input, event) {
   }
 }
 async function commitResearchJob(actorId, input) {
-  const scope = researchScope(input), job = await researchJobRule(scope); if (!job || !["complete","committed"].includes(job.status) || !array(job.candidates).length) { const error = new Error("실행 가능한 완료 리서치 결과가 없습니다. 단계별 검색·증빙·AI 평가를 먼저 완료하세요."); error.statusCode = 409; throw error; }
+  const scope = researchScope(input), job = await researchJobRule(scope,actorId); if (!job || !["complete","committed"].includes(job.status) || !array(job.candidates).length) { const error = new Error("실행 가능한 완료 리서치 결과가 없습니다. 단계별 검색·증빙·AI 평가를 먼저 완료하세요."); error.statusCode = 409; throw error; }
   if (job.status === "committed" && job.commit && job.commit.result) return job.commit.result;
   const newCandidates=array(job.candidates).filter((row)=>row&&row.preservedExisting!==true);
   // Scheduled five-round research can produce up to 250 new supplier entries.
@@ -2995,7 +3022,7 @@ async function beginProductResearchJob(actorId, input) {
     existing.trace=array(existing.trace).concat([{at:iso(),source:"research-start",status:"stale_staging_completed_without_queue_write",automaticPrivateQueueWrite:false}]).slice(-120);
     await saveProductJob(existing,actorId);
   }
-  const supplierJob=await researchJobRule(scope);
+  const supplierJob=await researchJobRule(scope,text(actorId)==="scheduled-country-product-ai"?"scheduled-automation":null);
   // Product research must follow the CURRENT durable supplier candidate ledger,
   // not only the snapshot captured by the last supplier-research job.  A newly
   // registered/selected supplier can therefore enter product research
@@ -4208,6 +4235,18 @@ function productCandidatePayload(actorId, scope, product, decision) {
     productSku: text(first(product&&product.productSku,product&&product.productSKU,product&&product.sku)),
     title: card.title, sourceTitle: card.sourceTitle, url: productUrlValue, externalProductUrl: productUrlValue, productUrl: productUrlValue, sourcePageUrl: safeUrl(product.sourcePageUrl) || null, verifiedDetailPageUrl: safeUrl(product.verifiedDetailPageUrl) || productUrlValue || null, image: imageUrlValue, thumb: imageUrlValue, imageUrl: imageUrlValue,
     price: text(product.price), priceCurrency: text(product.priceCurrency), availability: text(product.availability), productCard: card,
+    // The scheduled PSOM worker reads the DURABLE candidate, not the product
+    // research checkpoint.  Preserve the observed evidence verbatim instead of
+    // inferring success from a queue registration or stamping a new inspection.
+    productName: text(first(product.productName,product.title)),
+    researchStatus: text(product.researchStatus),
+    inspectionComplete: product.inspectionComplete === true,
+    productPageLive: product.productPageLive === true,
+    sameSupplierSite: product.sameSupplierSite === true,
+    inspectedAt: text(first(product.inspectedAt,product.lastVerifiedAt)) || null,
+    lastVerifiedAt: text(first(product.lastVerifiedAt,product.inspectedAt)) || null,
+    supplierEvidenceReady: product.supplierEvidenceReady === true,
+    supplierSiteUrl: text(product.supplierSiteUrl),
     page: placementRecord.page, channel: placementRecord.page, section: placementRecord.section, psom_key: placementRecord.section,
     placement: placementRecord, approvedPlacement: selected ? placementRecord : null, proposedPlacements: array(product.sectionAssignments), managementControl,
     marketKeys: [scope.country + "-" + scope.region], marketScope: { marketCountry: scope.country, marketRegion: scope.region }, internationalSafety:Object.assign({},plain(product.internationalSafety),{schema:InternationalSafety.VERSION,automaticPrivatePlacementEligible:internationalMarketReview.eligibleForAutomaticPrivatePlacement,policyBlockers:internationalMarketReview.blockers,publicPublicationApproved:false}),
@@ -5439,6 +5478,16 @@ async function productCandidatePsomPlace(actorId, input) {
       if (!product) { results.push({candidateId:id,assigned:false,error:"candidate_product_payload_missing"}); continue; }
       product.candidateId = id; product.id = id;
       const plan = candidateRuntimePlacementOptions(product, payload,scope.country);
+      // Automatic scheduled placement is narrower than a human-initiated PSOM
+      // click. Require full PRIVATE evidence and an unambiguous strict semantic
+      // section family. Never use the generic "some available section" fallback.
+      const semantic=actor==="scheduled-country-product-ai"?ProductRanking.strictPlacementSectionKeys(product):null;
+      const strictKeys=new Set(array(semantic&&semantic.keys));
+      if(actor==="scheduled-country-product-ai"&&
+        (productPrivateReviewAssessment(product,scope.country).eligible!==true||!strictKeys.size)){
+        results.push({candidateId:id,assigned:false,error:"automatic_psom_evidence_or_semantic_section_pending"});continue;
+      }
+      const placementOptions=semantic?array(plan.options).filter(option=>strictKeys.has(productPlacementKey(option))):array(plan.options);
       let picked = null;
       if (preferredSectionKey) {
         picked = array(plan.options).find((option) => productPlacementKey(option) === preferredSectionKey) || null;
@@ -5460,7 +5509,7 @@ async function productCandidatePsomPlace(actorId, input) {
           } : null;
         }
       } else {
-        picked = automaticBalancedPlacement(product, plan.options, counts);
+        picked = automaticBalancedPlacement(product, placementOptions, counts);
       }
       if (!picked) { const review=productPrivateReviewAssessment(product),semantic=ProductRanking.strictPlacementSectionKeys(product);
         results.push({candidateId:id,assigned:false,error:"no_compatible_psom_section",semanticFamily:text(semantic.family),reviewReason:text(review.reason),strictSectionCount:array(semantic.keys).length,possibleSections:array(plan.options).map(productPlacementKey)}); continue; }
@@ -7931,6 +7980,15 @@ async function dueScopes(limitInput) {
 // Scheduled PRODUCT research uses the same active country/IP whitelist as
 // supplier discovery, but is not limited to supplier discovery's 3.5-day due
 // queue.  Every active market has a separate durable research/PSOM checkpoint.
+function supplierProductScope(setting,countryCode,subdivisionCode){
+  const latest=plain(setting&&setting.lastAttemptSummary),prior=plain(setting&&setting.lastRunSummary);
+  // These are observational numbers, not eligibility overrides. Actual URLs
+  // and policy evidence are always re-read in beginProductResearchJob().
+  const supplierCount=Math.max(0,Number(first(latest.activeSupplierCount,prior.activeSupplierCount,0))||0);
+  const supplierRoundsCompleted=Math.max(0,Number(first(latest.supplierRoundsCompleted,prior.supplierRoundsCompleted,0))||0);
+  return{countryCode,subdivisionCode,supplierLastRunAt:text(setting&&setting.lastDurableSupplierAt)||null,
+    supplierCount,supplierRoundsCompleted};
+}
 async function autoProductScopes() {
   const state=await configState();
   if(!state.storageAvailable)throw Object.assign(new Error("automation_settings_unavailable"),{statusCode:503});
@@ -7946,7 +8004,7 @@ async function autoProductScopes() {
     if(manual&&manual!==country.code)continue;
     if(manual&&manualRegion!=="NATIONWIDE"){
       const setting=effectiveSetting(state,country.code,manualRegion);
-      if(setting.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:manualRegion,supplierLastRunAt:setting.lastDurableSupplierAt||null});
+      if(setting.mode==="auto")scopes.push(supplierProductScope(setting,country.code,manualRegion));
       continue;
     }
     const effective=effectiveSetting(state,country.code,"");
@@ -7954,9 +8012,9 @@ async function autoProductScopes() {
     if(country.requiresSubdivision&&effective.expandSubdivisions===true&&array(country.subdivisions).length){
       for(const region of country.subdivisions){
         const child=effectiveSetting(state,country.code,region.code);
-        if(child.mode==="auto")scopes.push({countryCode:country.code,subdivisionCode:region.code,supplierLastRunAt:child.lastDurableSupplierAt||null});
+        if(child.mode==="auto")scopes.push(supplierProductScope(child,country.code,region.code));
       }
-    }else scopes.push({countryCode:country.code,subdivisionCode:"NATIONWIDE",supplierLastRunAt:effective.lastDurableSupplierAt||null});
+    }else scopes.push(supplierProductScope(effective,country.code,"NATIONWIDE"));
   }
   return{mode:state.master.mode,scopes};
 }
@@ -8000,15 +8058,26 @@ async function autoScopeStatus(input) {
 // Small, read-only job checkpoint for scheduled supplier continuation.
 // Do not return the often multi-MB research payload to a scheduled worker.
 async function autoSupplierJobCheckpoint(input){
-  const scope=researchScope(input);
-  const rows=array(await SlotStore.select("gslot_policies", "select=id,rule,updated_by&id=eq."+encodeURIComponent(researchJobId(scope))+"&limit=1"));
-  const stored=plain(rows[0]),job=plain(stored.rule);
-  return{jobId:text(job.jobId)||null,status:text(job.status)||"not_started",updatedBy:text(stored.updated_by)||null,
-    manualOnly:job.manualOnly===true,researchRounds:Number(job.researchRounds||0),researchRoundIndex:Number(job.researchRoundIndex||1),
-    candidateCount:array(job.candidates).length,searchCursor:Number(job.searchCursor||0),
-    searchTotal:array(job.searchTasks).length,inspectCursor:Number(job.inspectCursor||0),
-    inspectTotal:array(job.inspectionPool).length,rankCursor:Number(job.rankCursor||0),rankTotal:array(job.rankQueue).length};
+  const scope=researchScope(input),id=researchJobId(scope,"scheduled-automation");
+  const query="select=id,updated_by,jobId:rule->>jobId,status:rule->>status,manualOnly:rule->>manualOnly,"+
+    "researchRounds:rule->>researchRounds,researchRoundIndex:rule->>researchRoundIndex,checkpointMeta:rule->checkpointMeta"+
+    "&id=eq."+encodeURIComponent(id)+"&limit=1";
+  let rows=array(await SlotStore.select("gslot_policies",query));
+  if(!rows.length){
+    // Only migrate a legacy record when it belongs to the scheduler; this
+    // operation does not touch an administrator's shared job checkpoint.
+    await researchJobRule(scope,"scheduled-automation");
+    rows=array(await SlotStore.select("gslot_policies",query));
+  }
+  const stored=plain(rows[0]),meta=plain(stored.checkpointMeta);
+  return{jobId:text(stored.jobId)||null,status:text(stored.status)||"not_started",updatedBy:text(stored.updated_by)||null,
+    manualOnly:stored.manualOnly===true||text(stored.manualOnly)==="true",
+    researchRounds:Number(stored.researchRounds||0),researchRoundIndex:Number(stored.researchRoundIndex||1),
+    candidateCount:Number(meta.candidateCount||0),searchCursor:Number(meta.searchCursor||0),
+    searchTotal:Number(meta.searchTotal||0),inspectCursor:Number(meta.inspectCursor||0),
+    inspectTotal:Number(meta.inspectTotal||0),rankCursor:Number(meta.rankCursor||0),rankTotal:Number(meta.rankTotal||0)};
 }
+
 // A supplier research step does not make a seller durable. Commit completion
 // alone may release product research, only after the CURRENT country-local
 // candidate ledger has been read successfully. Empty results are retried.
@@ -8047,7 +8116,8 @@ async function recordScheduledSupplierCompletion(input){
   const policy=array(await SlotStore.select('gslot_policies','select=id,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq.'+encodeURIComponent(id)+'&limit=1'))[0],oldRule=plain(policy&&policy.rule),t=iso();
   const setting=policy?Object.assign({},oldRule):sanitizeSetting({scopeType:kind,countryCode:scope.country,subdivisionCode:scope.region,mode:'inherit'});
   const rule=Object.assign({},setting,{schema:VERSION,lastAttemptAt:t,lastAttemptSummary:{source:progressive?'scheduled_progressive_private_supplier':'scheduled_staged_research',jobId:requested,activeSupplierCount:active.length,qualifiedSupplierCount:qualified.length,foreignPolicyPending,crossBorderPending,
-    safetyPolicyVersion:InternationalSafety.VERSION,created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds},updatedAt:t,updatedBy:'scheduled-automation'});
+    safetyPolicyVersion:InternationalSafety.VERSION,created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds,
+    supplierRoundsCompleted:Math.max(0,Number(first(plain(input).supplierRoundsCompleted,oldRule.lastAttemptSummary&&oldRule.lastAttemptSummary.supplierRoundsCompleted,0))||0)},updatedAt:t,updatedBy:'scheduled-automation'});
   const newlySaved=Math.max(0,Number(plain(input).recordedSuppliers||0));
   // A zero-new-supplier pass may still see a pre-existing validated portfolio:
   // permit the initial product cycle, but don't force a full product rescan
@@ -8077,7 +8147,7 @@ async function recordScheduledSupplierCompletion(input){
 // decisions are enforced again by persistCandidate, never overwritten.
 async function progressivePrivateSupplierCommit(actorId,input){
   if(text(actorId)!=="scheduled-automation")throw Object.assign(new Error("scheduler_only_progressive_supplier_commit"),{statusCode:403});
-  const scope=researchScope(input),job=await researchJobRule(scope);
+  const scope=researchScope(input),job=await researchJobRule(scope,"scheduled-automation");
   if(!job||job.schema!==RESEARCH_JOB_SCHEMA||job.status!=="searching")return{ok:true,skipped:"not_searching",inspected:0,persisted:0};
   const checkpoint=await autoSupplierJobCheckpoint(input);
   if(checkpoint.updatedBy!=="scheduled-automation"||checkpoint.jobId!==job.jobId)throw new Error("supplier_progressive_owner_mismatch");

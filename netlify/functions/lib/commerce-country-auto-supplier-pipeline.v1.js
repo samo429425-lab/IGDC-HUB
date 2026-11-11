@@ -94,9 +94,9 @@ function create(deps) {
     const state=Object.assign({phase:'idle',autoTakeover:false,operatorAutoPause:false,rounds:RESEARCH_ROUNDS},current);
     if(state.operatorAutoPause===true)return Object.assign(state,{lastResult:'administrator_automation_paused_checkpoint_preserved'});
     const job=await automation.autoSupplierJobCheckpoint(input(s));
-    // The research checkpoint is shared for a country, but protection is per
-    // manually pinned/held/blocked SUPPLIER, never per country. A manual search
-    // click alone must not remove the country from scheduled rotation.
+    // Scheduled and manual research now have separate durable job keys. A manual
+    // search click may briefly yield to the human, but cannot keep a country
+    // blocked forever. Supplier-level holds/pins still prevail downstream.
     if(job.jobId && job.updatedBy!==ACTOR){
       if(job.manualOnly===true)return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,lastResult:'explicit_manual_only_job_preserved'});
       if(await humanResearchIsActive(s))return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,lastResult:'recent_administrator_edit_yield_auto_retry'});
@@ -182,14 +182,15 @@ function create(deps) {
           protectedJobId:owned.jobId||state.jobId,
           lastResult:'supplier_checkpoint_changed_before_durable_handoff'});
       }
-      const recorded=await automation.recordScheduledSupplierCompletion(input(s,{jobId:state.jobId,recordedSuppliers:savedCount}));
+      const completedRounds=Math.min(RESEARCH_ROUNDS,Math.max(0,Number(state.roundsCompleted||0))+Math.max(1,Number(job.researchRounds||1)));
+      const recorded=await automation.recordScheduledSupplierCompletion(input(s,{
+        jobId:state.jobId,recordedSuppliers:savedCount,supplierRoundsCompleted:completedRounds}));
       const have=Number(recorded&&recorded.activeSupplierCount||0);
       const qualified=Number(recorded&&recorded.qualifiedSupplierCount||0);
       // The supplier crawl also revisits markets while their PRIVATE 20-section
       // board is under target, independent of the ordinary 84-hour refresh.
       let fill={unavailable:true};
       if(have){try{fill=await require('./commerce-country-auto-product-pipeline.v1').makePipeline().sectionFill(s);}catch(error){fill={unavailable:true,error:txt(error&&error.message||error)};}}
-      const completedRounds=Math.min(RESEARCH_ROUNDS,Math.max(0,Number(state.roundsCompleted||0))+Math.max(1,Number(job.researchRounds||1)));
       // The same completed persistent job must never count as the next search
       // round after this checkpoint moves back to idle.
       const committedJobId=txt(state.jobId);

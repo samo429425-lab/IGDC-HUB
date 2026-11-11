@@ -33,6 +33,11 @@
 [functions."commerce-country-product-ai-scheduler"]
   schedule = "*/2 * * * *"
 
+# Verified, private PSOM placement is separated from slow product discovery.
+# No automatic Front Match or public publication is performed here.
+[functions."commerce-country-private-psom-scheduler"]
+  schedule = "*/3 * * * *"
+
 # Apply only the latest administrator-stored, policy-gated media snapshot
 # release inside the Netlify build workspace before production deployment.
 [[plugins]]
