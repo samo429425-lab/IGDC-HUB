@@ -185,7 +185,11 @@ async function refundFreshCharge(access, reason) {
   const usage = access && access.creditUsage;
   if (!usage || usage.charged !== true || !usage.eventHash || !access.userId) return;
   try {
-    await refundUsageByHash(access, usage.eventHash);
+    if (access.accessClass === 'paddle_windows_paid_member') {
+      await require('./lib/maru-paddle-windows').rpc('maru_paddle_win_refund_usage', {p_user_id:access.userId,p_usage_key:usage.eventHash});
+    } else {
+      await refundUsageByHash(access, usage.eventHash);
+    }
   } catch (error) {
     console.error('[MARU:TRANSLATE_REFUND_FAILED]', error && (error.code || error.message) || error);
   }

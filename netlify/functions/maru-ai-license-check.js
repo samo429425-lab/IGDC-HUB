@@ -66,15 +66,18 @@ exports.handler = async (event) => {
       googlePlayProductId: access.googlePlayProductId || '',
       googlePlayBasePlanId: access.googlePlayBasePlanId || '',
       monthlyCreditUnits: access.monthlyCreditUnits || 0,
+      usageRemaining: access.usageRemaining ?? null,
+      expiresAt: access.paddlePeriodEnd || '',
       googlePlaySubscriptionState: access.googlePlaySubscriptionState || '',
       googlePlayExpiryTime: access.googlePlayExpiryTime || '',
       message: '',
       paymentUrl: ''
-    }, publicServiceState()));
+    }, publicServiceState(), access.accessClass === 'paddle_windows_paid_member' ? {pgReady: true, publicServiceState: 'paid_membership_required'} : {}));
   } catch (error) {
     const classified = accessErrorResponse(error);
     if (classified.code === 'ai_public_service_preparing') return json(200, preparingResponse());
     if (classified.code === 'ai_membership_required') {
+      const windowsPaddle = String(event.headers?.['x-maru-client']||event.headers?.['X-MARU-Client']||'') === 'MARU-Media-Player' && process.env.MARU_PADDLE_WINDOWS_ENABLED === '1';
       return json(200, Object.assign({
         ok: true,
         active: false,
@@ -84,10 +87,10 @@ exports.handler = async (event) => {
         plan: 'PAID_MEMBERSHIP_REQUIRED',
         role: 'member',
         roles: [],
-        message: googlePlayBillingConfigured()
+        message: windowsPaddle ? 'Windows Paddle AI 자막 생성·번역 이용권이 필요합니다.' : googlePlayBillingConfigured()
           ? 'Google Play에서 활성화된 MARU AI 월 구독이 필요합니다.'
           : 'MARU AI 월 회원권 또는 유효한 유료 이용권이 필요합니다.',
-        paymentUrl: paymentUrl()
+        paymentUrl: windowsPaddle ? '' : paymentUrl()
       }, publicServiceState()));
     }
     return json(classified.statusCode, {

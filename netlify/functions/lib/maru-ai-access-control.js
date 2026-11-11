@@ -563,6 +563,16 @@ async function authorizeAiAccess(event, options) {
     return access;
   }
 
+  // Additive Windows-only Paddle gate. Never alter Android Google Play purchase handling.
+  if (clean(getHeader(event, 'X-MARU-Client')) === 'MARU-Media-Player' &&
+      clean(getHeader(event, 'X-MARU-Client-Version')) === 'v96-site-oauth' &&
+      process.env.MARU_PADDLE_WINDOWS_ENABLED === '1') {
+    const {windowsPaidAccess} = require('./maru-paddle-windows-access');
+    const access = await windowsPaidAccess(event, member, settings.purpose || 'maru-ai');
+    enforceRateLimit(access, event, settings.purpose || 'maru-ai');
+    return access;
+  }
+
   // Preserve the existing external-PG / server-role path for web/Windows customers.
   // Android V190 must never inherit a site membership role as a Google Play entitlement:
   // it requires a verified Play purchase token whenever Play Billing is configured.

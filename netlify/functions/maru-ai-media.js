@@ -2059,7 +2059,9 @@ async function refundChargedUsage(access, id, reason) {
   // was created by this exact invocation.
   if (!usage || usage.charged !== true || !usage.eventHash) return;
   try {
-    const refunded = await refundUsageByHash(access, usage.eventHash);
+    const refunded = access.accessClass === 'paddle_windows_paid_member'
+      ? await require('./lib/maru-paddle-windows').rpc('maru_paddle_win_refund_usage', {p_user_id:access.userId,p_usage_key:usage.eventHash})
+      : await refundUsageByHash(access, usage.eventHash);
     log(id, 'credit-refund=', refunded && refunded.refunded === true, 'reason=', reason || 'request-failed');
   } catch (refundError) {
     log(id, 'credit-refund-error=', String(refundError && refundError.message || refundError));

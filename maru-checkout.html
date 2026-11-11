@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>MARU Media Player · Secure payment</title>
+<style>body{margin:0;background:#f4f7fb;color:#172b46;font:16px/1.6 system-ui,Arial,sans-serif}main{max-width:520px;margin:8vh auto;padding:28px;border-radius:14px;background:#fff;border:1px solid #dce6f2}h1{font-size:23px}p{font-size:14px}#notice{color:#526274}</style>
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+</head><body><main><h1>MARU Media Player</h1><p id="notice">Opening the secure Paddle checkout. Final prices, currency and tax are shown before payment.</p></main>
+<script>
+(async()=>{
+ const el=document.getElementById('notice');
+ const id=new URL(location.href).searchParams.get('_ptxn')||'';
+ if(!/^txn_[a-z0-9]{26}$/.test(id)){el.textContent='Invalid payment link.';return;}
+ try{
+  const r=await fetch('/.netlify/functions/maru-paddle-public-config',{credentials:'omit',cache:'no-store'});
+  const config=await r.json();
+  if(!r.ok||config.ok!==true||!new RegExp(config.environment==='sandbox'?'^test_[a-z0-9_]+$':'^live_[a-z0-9_]+$','i').test(config.token)||!window.Paddle)throw Error('Checkout not ready');
+  // The transaction and buyer binding were created server-side; do not use client-supplied price IDs.
+  if(config.environment==='sandbox')Paddle.Environment.set('sandbox');
+  Paddle.Initialize({token:config.token,eventCallback(event){
+   if(event?.name==='checkout.completed')el.textContent='Payment submitted. Return to MARU Media Player and check your credits after confirmation.';
+  }});
+  Paddle.Checkout.open({transactionId:id,settings:{displayMode:'overlay'}});
+ }catch(_){el.textContent='The payment service is not ready. Please try again later.';}
+})();
+</script></body></html>
