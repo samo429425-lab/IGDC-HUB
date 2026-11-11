@@ -1,0 +1,42 @@
+{
+  "windows": {
+    "channel": "windows-stable",
+    "latestVersion": "35.0.1",
+    "latestBuild": 350001,
+    "fileName": "maru-media-player-setup.exe",
+    "downloadPage": "https://igdcglobal.com/maru-download.html",
+    "sha256": "77fbc0b995ae4d6ae81b56f73ce44c6f404693a48c5df45fc93000816b3ac7d0",
+    "releaseNotes": {
+      "ko": "주요 개선: 12밴드 이퀄라이저·음색 프리셋·실시간 오디오 시각화 개선. AI 자막 생성·번역 유료 기능을 사용할 수 있습니다. (AI 더빙은 배포용에서 제외)",
+      "en": "What’s new: improved 12-band EQ, sound presets and real-time audio visualizer. Paid AI subtitle generation and translation are now available. (AI dubbing is not included.)",
+      "zh": "更新内容：改进12段均衡器、音效预设和实时音频可视化。现已开放付费AI字幕生成与翻译功能。（不含AI配音）",
+      "zht": "更新內容：改進12段等化器、音效預設與即時音訊視覺化。現已開放付費AI字幕產生與翻譯功能。（不含AI配音）",
+      "ja": "更新内容：12バンドEQ、音質プリセット、リアルタイム音声ビジュアライザーを改善。AI字幕生成・翻訳の有料機能を提供開始。（AI吹き替えは対象外）",
+      "es": "Novedades: mejoras en el ecualizador de 12 bandas, ajustes de sonido y visualización de audio en tiempo real. Ya están disponibles la generación y traducción de subtítulos con IA de pago. (Sin doblaje por IA.)",
+      "fr": "Nouveautés : égaliseur 12 bandes, préréglages audio et visualisation en temps réel améliorés. Génération et traduction de sous-titres IA désormais proposées en version payante. (Doublage IA exclu.)",
+      "de": "Neu: Verbesserungen am 12-Band-EQ, den Klangprofilen und der Echtzeit-Audioanzeige. Kostenpflichtige KI-Untertitelgenerierung und -übersetzung jetzt verfügbar. (Ohne KI-Synchronisation.)",
+      "ru": "Обновления: улучшены 12-полосный эквалайзер, звуковые пресеты и визуализация звука. Доступны платные функции создания и перевода субтитров ИИ. (Без ИИ-дубляжа.)",
+      "pt": "Novidades: melhorias no equalizador de 12 bandas, nas predefinições de som e na visualização de áudio em tempo real. Geração e tradução de legendas por IA disponíveis como recursos pagos. (Sem dublagem por IA.)",
+      "it": "Novità: migliorati EQ a 12 bande, preset audio e visualizzazione in tempo reale. Disponibili le funzioni a pagamento per creare e tradurre sottotitoli con IA. (Doppiaggio IA escluso.)",
+      "ar": "الجديد: تحسين معادل الصوت ذي 12 نطاقًا والإعدادات الصوتية المسبقة والتصور الصوتي المباشر. تتوفر الآن ميزتا إنشاء الترجمة النصية وترجمتها بالذكاء الاصطناعي بشكل مدفوع. (الدبلجة بالذكاء الاصطناعي غير مضمنة.)",
+      "vi": "Cập nhật: cải thiện EQ 12 băng tần, bộ cài đặt âm thanh và hiển thị phổ âm thanh trực tiếp. Đã mở tính năng trả phí tạo và dịch phụ đề bằng AI. (Không gồm lồng tiếng AI.)",
+      "th": "อัปเดต: ปรับปรุง EQ 12 แบนด์ พรีเซ็ตเสียง และภาพเสียงแบบเรียลไทม์ เปิดใช้ฟีเจอร์แบบชำระเงินสำหรับสร้างและแปลคำบรรยายด้วย AI (ไม่รวมพากย์เสียง AI)",
+      "id": "Pembaruan: EQ 12 band, preset suara, dan visualisasi audio waktu nyata ditingkatkan. Pembuatan serta penerjemahan subtitle AI kini tersedia sebagai fitur berbayar. (Tanpa sulih suara AI.)",
+      "hi": "नया: 12-बैंड EQ, साउंड प्रीसेट और रियल-टाइम ऑडियो विज़ुअलाइज़र में सुधार। AI से सबटाइटल बनाना और अनुवाद करना अब सशुल्क सुविधाएँ हैं। (AI डबिंग शामिल नहीं है।)",
+      "tr": "Yenilikler: 12 bant EQ, ses ön ayarları ve gerçek zamanlı ses görselleştirmesi iyileştirildi. Ücretli yapay zekâ altyazı oluşturma ve çeviri artık kullanılabilir. (Yapay zekâ dublajı dahil değildir.)",
+      "fa": "تازه‌ها: بهبود اکولایزر ۱۲ باند، پیش‌تنظیم‌های صدا و نمایش زندهٔ طیف صوت. ساخت و ترجمهٔ زیرنویس با هوش مصنوعی اکنون به‌صورت پولی در دسترس است. (دوبلهٔ هوش مصنوعی شامل نمی‌شود.)",
+      "bn": "নতুন: ১২-ব্যান্ড EQ, সাউন্ড প্রিসেট ও রিয়েল-টাইম অডিও ভিজ্যুয়ালাইজেশন উন্নত হয়েছে। AI দিয়ে সাবটাইটেল তৈরি ও অনুবাদের পেইড সুবিধা চালু। (AI ডাবিং অন্তর্ভুক্ত নয়।)",
+      "ur": "نئی خصوصیات: 12 بینڈ EQ، صوتی پری سیٹس اور لائیو آڈیو ویژولائزیشن میں بہتری۔ AI سے سب ٹائٹل بنانا اور ترجمہ کرنا اب معاوضے پر دستیاب ہے۔ (AI ڈبنگ شامل نہیں۔)",
+      "sw": "Mabadiliko: EQ ya bendi 12, mipangilio ya sauti na taswira ya sauti ya moja kwa moja imeboreshwa. Kutengeneza na kutafsiri manukuu kwa AI sasa ni huduma za kulipia. (Hakuna dubbing ya AI.)",
+      "ta": "புதுப்பிப்பு: 12-பேண்ட் EQ, ஒலி முன்அமைவுகள் மற்றும் நேரடி ஒலி காட்சிப்படுத்தல் மேம்படுத்தப்பட்டுள்ளன. AI வசன உருவாக்கம் மற்றும் மொழிபெயர்ப்பு கட்டண அம்சங்களாகக் கிடைக்கின்றன. (AI டப்பிங் இல்லை.)",
+      "hu": "Újdonságok: továbbfejlesztett 12 sávos EQ, hangzásprofilok és valós idejű hangvizualizáció. A mesterséges intelligenciás feliratkészítés és -fordítás most fizetős funkcióként elérhető. (AI-szinkron nélkül.)",
+      "ms": "Kemaskini: EQ 12 jalur, pratetap bunyi dan visualisasi audio masa nyata dipertingkat. Penjanaan serta terjemahan sari kata AI kini tersedia sebagai ciri berbayar. (Alih suara AI tidak disertakan.)",
+      "nl": "Nieuw: verbeterde 12-bands equalizer, geluidsprofielen en realtime audiovisualisatie. Betaalde AI-functies voor ondertitels maken en vertalen zijn nu beschikbaar. (Geen AI-nasynchronisatie.)",
+      "pl": "Nowości: ulepszony 12-pasmowy korektor, presety dźwięku i wizualizacja audio na żywo. Płatne tworzenie i tłumaczenie napisów przez AI jest już dostępne. (Bez dubbingu AI.)",
+      "sv": "Nyheter: förbättrad 12-bands-EQ, ljudförinställningar och ljudvisualisering i realtid. Betalda AI-funktioner för att skapa och översätta undertexter finns nu. (AI-dubbning ingår inte.)",
+      "tl": "Bago: pinahusay ang 12-band EQ, sound preset at real-time audio visualization. Available na ang bayad na AI subtitle generation at translation. (Hindi kasama ang AI dubbing.)",
+      "uk": "Оновлення: покращено 12-смуговий еквалайзер, звукові пресети та візуалізацію аудіо в реальному часі. Доступні платні функції створення й перекладу субтитрів ШІ. (Без ШІ-дубляжу.)",
+      "uz": "Yangiliklar: 12 diapazonli EQ, ovoz sozlamalari va real vaqt audio vizualizatsiyasi yaxshilandi. AI yordamida subtitr yaratish va tarjima qilish pullik funksiya sifatida mavjud. (AI dublyaj kiritilmagan.)"
+    }
+  }
+}
