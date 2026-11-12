@@ -294,18 +294,6 @@
     deferredBackgroundObserver.observe(el);
   }
 
-  // Snapshot selection and card order remain untouched. Only the initial
-  // high-priority IMAGE requests are limited to sections near the viewport.
-  // The existing IntersectionObserver still loads all other images on approach.
-  function firstViewportSection(box){
-    if(!box || typeof box.getBoundingClientRect!=='function') return true;
-    const anchor=box.closest('section, .brand-rail, article') || box;
-    const height=window.innerHeight || document.documentElement.clientHeight;
-    if(!height) return true;
-    const rect=anchor.getBoundingClientRect();
-    return rect.width>0 && rect.height>0 && rect.bottom>=-240 && rect.top<=height+420;
-  }
-
   function makeCard(item,track,eager){
     const root=document.createElement('div'); root.className='thumb-card';
     // This renderer already emits its own exact tracker calls. Keep the global
@@ -470,8 +458,7 @@
     if(!job||job.generation!==renderGeneration||job.offset>=job.list.length) return;
     const end=Math.min(job.offset+RENDER_BATCH,job.list.length);
     const fragment=document.createDocumentFragment();
-    const prioritizeFirstBatch=job.offset===0 && firstViewportSection(job.box);
-    for(let i=job.offset;i<end;i++) fragment.appendChild(makeCard(job.list[i],true,prioritizeFirstBatch && i<FIRST_VIEW_EAGER));
+    for(let i=job.offset;i<end;i++) fragment.appendChild(makeCard(job.list[i],true,i<FIRST_VIEW_EAGER));
     if(job.offset===0) replaceChildren(job.box,fragment);
     else job.box.appendChild(fragment);
     job.offset=end;
@@ -610,13 +597,12 @@
         const previous=job.list;
         job.list=list;
         const alreadyPainted=Math.min(job.offset,list.length,job.box.children.length);
-        const prioritizeFirstBatch=firstViewportSection(job.box);
         for(let index=0;index<alreadyPainted;index++){
           // Even a previously real card may have changed in the later, fully
           // verified snapshot (ID, URL, picture, slot or listing order).
           // Update only changed slots; retain unchanged DOM and scroll state.
           if(displayedIdentity(previous[index])!==displayedIdentity(list[index])){
-            job.box.replaceChild(makeCard(list[index],true,prioritizeFirstBatch && index<FIRST_VIEW_EAGER),job.box.children[index]);
+            job.box.replaceChild(makeCard(list[index],true,index<FIRST_VIEW_EAGER),job.box.children[index]);
           }
         }
       });

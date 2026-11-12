@@ -743,25 +743,12 @@
     return sectionMap[key] || sectionMap[alt] || sectionMap[legacyKey(key)] || [];
   }
 
-  // Only the opening viewport gets high-priority thumbnail requests.
-  // Later sections keep native lazy images and become eligible when scrolled into view.
-  function firstViewportSection(target){
-    const node=(target && (target.list || target.scroller)) || null;
-    const anchor=node && (node.closest('.shop-row-wrap, .ad-section, .shopping-section, section') || target.scroller || node);
-    if(!anchor || typeof anchor.getBoundingClientRect!=='function') return true;
-    const height=window.innerHeight || document.documentElement.clientHeight;
-    if(!height) return true;
-    const rect=anchor.getBoundingClientRect();
-    return rect.width>0 && rect.height>0 && rect.bottom>=-240 && rect.top<=height+420;
-  }
-
 function bindIncremental(target, items) {
 
   const isRight = target.isRight;
   const limit = isRight ? RIGHT_LIMIT : MAIN_LIMIT;
 
   let offset = 0;
-  const prioritizeFirstBatch = firstViewportSection(target);
 
   function renderMore() {
     const batch = isRight ? RIGHT_BATCH : MAIN_BATCH;
@@ -770,7 +757,7 @@ function bindIncremental(target, items) {
 
     for (let i = offset; i < end; i++) {
       const it = items[i];
-      const eager = prioritizeFirstBatch && i < FIRST_VIEW_EAGER;
+      const eager = i < FIRST_VIEW_EAGER;
       frag.appendChild(isRight ? buildRightCard(it, eager) : buildMainCard(it, eager));
     }
 
