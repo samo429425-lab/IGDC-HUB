@@ -2037,22 +2037,37 @@ async function advanceResearchJob(actorId, input, event) {
         const result = await RegionalSelector.searchSupplierResearchStep(event || {}, Object.assign({}, selectorInput, { task, externalFallback, limit: Number(job.effective && job.effective.maxCandidates || DEFAULT_MAX_CANDIDATES), timeoutMs: 7000 }));
         const novelItems=filterKnownSupplierItems(result.items,new Set(array(job.knownSupplierKeys)));
         job.supplierHoldingCandidates=mergeSupplierHolding(job.supplierHoldingCandidates,novelItems,job.blockedSupplierKeys,300); job.supplierBlockedCandidates=mergeSupplierBlocked(job.supplierBlockedCandidates,novelItems,job.blockedSupplierKeys,300); job.rawCandidates = mergeResearchItems(job.rawCandidates, novelItems, SUPPLIER_RAW_LIMIT, job.blockedSupplierKeys); job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0), returned:Number(array(result.items).length), novel:Number(novelItems.length), duplicateExistingSkipped:Math.max(0,array(result.items).length-novelItems.length) }, plain(result.trace))]); job.searchCursor = Number(job.searchCursor || 0) + 1;
-        // A provider-level Google Custom Search 403 is a configuration/permission
-        // denial, not a transient 429. Repeating the same blocked Google calls
-        // dozens of times delays the usable Sanmaru fallback and wastes quota.
-        // Only the autonomous job skips its *remaining* Google tasks; this
-        // never invents a supplier and a fresh research cycle retries Google.
-        if (text(actorId)==='scheduled-automation' && task.lane==='google' &&
-            lower(result.status)==='http_403' &&
-            /does not have (?:the )?access to custom search json api/i.test(text(result.detail))) {
-          const prefix=job.searchTasks.slice(0,job.searchCursor);
-          const tail=job.searchTasks.slice(job.searchCursor);
-          const retained=tail.filter(row=>plain(row).lane!=='google');
+        // An absent provider key or a confirmed Google API permission denial
+        // will fail identically for EVERY remaining query in this country.
+        // Skip only this unavailable provider lane for the CURRENT scheduled
+        // research cycle and let the independent Sanmaru tasks run sooner.
+        // Administrator research jobs and all future cycles remain unchanged.
+        const providerStatus=lower(result.status);
+        const permissionDenied=task.lane==='google' && providerStatus==='http_403' &&
+          /does not have (?:the )?access to custom search json api|custom search (?:json )?api.{0,100}(?:disabled|not (?:used|enabled)|not authorized)|api key not valid|permission.denied/i.test(text(result.detail));
+        const providerUnavailable=text(actorId)==='scheduled-automation' &&
+          ['google','naver'].includes(task.lane) &&
+          (providerStatus==='not_configured'||permissionDenied);
+        if(providerUnavailable){
+          const prefix=job.searchTasks.slice(0,job.searchCursor),tail=job.searchTasks.slice(job.searchCursor);
+          const retained=tail.filter(row=>plain(row).lane!==task.lane),skippedTasks=tail.length-retained.length;
           job.searchTasks=prefix.concat(retained);
-          job.trace=array(job.trace).concat([{at:iso(),source:'google',status:'provider_permission_denied_remaining_google_tasks_skipped',skippedTasks:tail.length-retained.length,provider:'google',fallback:'sanmaru',operatorAction:'enable_custom_search_json_api_for_google_project'}]);
-          job.providerWarnings=Object.assign({},plain(job.providerWarnings),{googleCsePermissionDenied:true});
+          job.trace=array(job.trace).concat([{at:iso(),source:'scheduled-provider-fallback',status:providerStatus==='not_configured'?'provider_not_configured':'provider_permission_denied',provider:task.lane,skippedTasks,fallback:'sanmaru',privateResearchOnly:true}]);
+          job.providerWarnings=Object.assign({},plain(job.providerWarnings),{
+            [task.lane==='google'?'googleProviderUnavailable':'naverProviderUnavailable']:true
+          });
         }
-        if (retryableResearchStatus(result.status) && Number(task.attempt || 0) < 1) job.searchTasks.push(Object.assign({}, task, { attempt: Number(task.attempt || 0) + 1, retryOf: Number(job.searchCursor || 0) - 1 }));
+        // In Node fetch() failures often arrive as TypeError("fetch failed").
+        // The provider wrapper reports that as "typeerror", not "network";
+        // without this scheduler-only guard, automatic searches consumed those
+        // tasks permanently with zero sellers. Retry later in the persisted
+        // queue (never in a request-time loop). No retry on permission denial,
+        // missing credentials, or an ordinary legitimate empty result.
+        const scheduledTransportFailure=text(actorId)==="scheduled-automation" &&
+          /^(?:typeerror|fetch_failed|fetch failed|econnreset|etimedout|eai_again|enotfound|socket(?: hang up)?|network_error)$/i.test(text(result.status));
+        const retryLimit=scheduledTransportFailure?2:1;
+        if ((retryableResearchStatus(result.status)||scheduledTransportFailure) && Number(task.attempt || 0)<retryLimit)
+          job.searchTasks.push(Object.assign({},task,{attempt:Number(task.attempt||0)+1,retryOf:Number(job.searchCursor||0)-1}));
         if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.newCandidateTarget||job.effective && job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES) * 2)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       }
     } else if (job.status === "inspecting") {

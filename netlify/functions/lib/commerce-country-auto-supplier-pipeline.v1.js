@@ -10,7 +10,7 @@ const ACTOR = 'scheduled-automation';
 const HUB = 'country-supplier-staged-auto';
 const LEASE_MS = 3 * 60 * 1000; // Worker timeouts recover without a nine-minute country stall.
 const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Brief concurrency yield, never a country-wide permanent pause.
-const MAX_SCOPES = 8; // Country-local fair rotation, bounded parallel work per minute (<= 12).
+const MAX_SCOPES = 4; // Keep concurrent country network/DB writes within one short Netlify scheduled invocation.
 const RESEARCH_ROUNDS = 5; // Country scheduled automation always completes five distinct research rounds.
 // Checkpoints run each scheduled tick while a country is being researched.
 // These gaps apply ONLY after a complete five-round search has exhausted its
@@ -27,6 +27,21 @@ function now() { return new Date().toISOString(); }
 function ts(v) { const n = Date.parse(txt(v)); return Number.isFinite(n) ? n : 0; }
 function reg(s) { return txt(s.subdivisionCode || 'NATIONWIDE').toUpperCase(); }
 function key(s) { return txt(s.countryCode).toUpperCase() + '|' + reg(s); }
+// A successful scheduler invocation is not proof that its external search
+// provider returned sellers. Store a tiny error summary in the staged control
+// record so national bottleneck JSON can distinguish "searched" from "found".
+function providerOutcome(result, previousCursor) {
+  const progress=obj(obj(result).progress);
+  const done=Number(obj(progress.search).done||0);
+  if(done<=Number(previousCursor||0))return null;
+  const trace=arr(obj(result).trace);
+  // A provider-configuration fallback record can follow the actual result.
+  // Report the underlying Google/Naver/Sanmaru status, not the guard message.
+  const last=obj(trace.slice().reverse().find(row=>['google','naver','sanmaru'].includes(txt(obj(row).source).toLowerCase())));
+  const provider=txt(last.source).toLowerCase();
+  if(!provider)return null;
+  return {provider,status:txt(last.status).toLowerCase()||'unknown',count:Math.max(0,Number(last.count||0)),searchCursor:done};
+}
 function idFor(s) { return 'igdc_supplier_staged_auto_' + txt(s.countryCode).toLowerCase() + '_' + reg(s).toLowerCase().replace(/[^a-z0-9_-]/g, '_'); }
 function input(s,extra) { return Object.assign({countryCode:s.countryCode,subdivisionCode:reg(s),scopeAuthority:'administrator-selected',ignoreRequestGeo:true},extra||{}); }
 // Existing database checkpoints may still contain a SIX-HOUR nextCycleAt
@@ -152,7 +167,26 @@ function create(deps) {
       }
       await recheck(s);
       const result=await automation.advanceResearchJob(ACTOR,input(s));
-      return Object.assign(state,{phase:['complete','committed'].includes(result.status)?'committing':'researching',lastResult:'supplier_step_'+txt(result.status)});
+      const outcome=job.status==='searching'?providerOutcome(result,job.searchCursor):null;
+      let lastResult='supplier_step_'+txt(result.status);
+      if(outcome){
+        state.lastProvider=Object.assign({at:clock()},outcome);
+        if(outcome.status==='ok'){
+          state.providerSuccesses=Number(state.providerSuccesses||0)+1;
+          lastResult=outcome.count?'supplier_provider_results_saved_in_research_checkpoint':'supplier_provider_no_usable_results';
+        }else if(outcome.status==='empty'){
+          lastResult='supplier_provider_empty_continue';
+        }else{
+          state.providerFailures=Number(state.providerFailures||0)+1;
+          state.errors=arr(state.errors).concat([{at:clock(),phase:'researching',provider:outcome.provider,error:'provider_'+outcome.status}]).slice(-24);
+          lastResult='supplier_provider_'+outcome.status+'_step_saved';
+          // A provider quota limit is not permission to launch more queries
+          // immediately. Yield this COUNTRY for 10 minutes; other countries
+          // retain their own independent rotation and progress.
+          if(outcome.status==='http_429')state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
+        }
+      }
+      return Object.assign(state,{phase:['complete','committed'].includes(result.status)?'committing':'researching',lastResult});
     }
     if(state.phase==='committing') {
       await recheck(s);
@@ -218,24 +252,28 @@ function create(deps) {
   }
   async function runScope(s) {
     const claimed=await claim(s);if(!claimed)return{scope:key(s),skipped:'already_running'};
-    let state=Object.assign({},claimed.rule),failure=null,steps=0;
+    let state=Object.assign({},claimed.rule),failure=null,stopped=false,steps=0;
     try {
-      // At most two country-local steps per minute. Do not start a second
-      // network search after a slow first one: scheduled function executions
-      // have a short hard timeout, and every step must leave a durable cursor.
-      const begin=Date.now();
+      // One expensive search/inspection/commit step per country per minute.
+      // Only a newly started, quickly saved empty->researching checkpoint may
+      // run its first search in the same invocation. Eight markets x two slow
+      // steps was liable to exceed the scheduled function time budget and lose
+      // ALL in-flight commits. Fair rotation still visits every active market.
+      const begin=Date.now(),startedIdle=state.phase==='idle';
       for(let i=0;i<2;i++){
-        if(i>0&&(Date.now()-begin>11000||['manual_preserved','cooldown'].includes(state.phase)||state.operatorAutoPause===true))break;
+        if(i>0&&(!startedIdle||Date.now()-begin>3500||state.phase!=='researching'||state.operatorAutoPause===true))break;
         await recheck(s);
         state=await advance(s,state);steps++;
-        // Successful cursor advance invalidates any prior transient failure.
-        state.nextRetryAt=null;
+        // Keep a deliberate provider backoff (e.g. HTTP 429) even when the
+        // research cursor was saved. Only clear an EXPIRED prior retry timer.
+        if(ts(state.nextRetryAt)<=ts(clock()))state.nextRetryAt=null;
         if(['manual_preserved','cooldown'].includes(state.phase)||state.operatorAutoPause===true)break;
       }
     }
     catch(e) {
       failure=txt(e&&e.message||e);
-      state.lastResult=e&&e.stopped?'country_paused_without_data_loss':'supplier_step_failed_checkpoint_preserved';
+      stopped=!!(e&&e.stopped);
+      state.lastResult=stopped?'country_paused_without_data_loss':'supplier_step_failed_checkpoint_preserved';
       if(!(e&&e.stopped)){
         // Persist the SAME job/cursor. Retry 429/403 less aggressively without
         // pausing other countries or mistaking an API outage for a full board.
@@ -243,10 +281,12 @@ function create(deps) {
           /\b403\b|permission.denied|no.access/i.test(failure)?20*60*1000:2*60*1000;
         state.nextRetryAt=new Date(ts(clock())+wait).toISOString();
       }
-      state.errors=arr(state.errors).concat([{at:clock(),phase:state.phase,error:failure}]).slice(-24);
+      if(!stopped)state.errors=arr(state.errors).concat([{at:clock(),phase:state.phase,error:failure}]).slice(-24);
     }
     const stored=await release(s,claimed,state);
-    return{scope:key(s),ok:!failure,phase:stored.phase,jobId:stored.jobId||null,rounds:stored.rounds,lastResult:stored.lastResult,stepsAdvanced:steps,error:failure,publicPublication:false};
+    // An administrator STOP during an invocation is expected cancellation,
+    // not a failed scheduled function for every other country in the batch.
+    return{scope:key(s),ok:!failure||stopped,stopped,phase:stored.phase,jobId:stored.jobId||null,rounds:stored.rounds,lastResult:stored.lastResult,stepsAdvanced:steps,error:stopped?null:failure,publicPublication:false};
   }
   async function setTakeover(actor,s,enabled) {
     if(!['string','number'].includes(typeof actor)||!txt(actor))throw new Error('administrator_required');
