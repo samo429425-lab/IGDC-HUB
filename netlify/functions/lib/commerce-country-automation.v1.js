@@ -1843,6 +1843,16 @@ function publicResearchJob(job) {
     candidates, holdingCandidates: array(job.supplierHoldingCandidates).filter(visibleSupplier), blockedCandidates: array(job.supplierBlockedCandidates).filter(visibleSupplier), blockedSupplierKeys: array(job.blockedSupplierKeys), trace: array(job.trace).slice(-120), errors: array(job.errors).slice(-30), lastError: job.lastError || null, commit: plain(job.commit)
   };
 }
+// Scheduled workers never consume administrator HTML/worklist arrays. Returning
+// the full multi-MB workspace after each 1-step continuation wastes CPU and
+// exacerbates scheduled-function timeouts. Keep the manual endpoint unchanged.
+function supplierResearchStepView(job,actorId) {
+  if(text(actorId)!=="scheduled-automation")return publicResearchJob(job);
+  if(!job)return{ok:true,status:"not_started",progress:{search:{done:0,total:0}},trace:[]};
+  return{ok:true,jobId:job.jobId,status:job.status,startedAt:job.startedAt,
+    progress:researchProgress(job),trace:array(job.trace).slice(-3),
+    candidateCount:array(job.candidates).length,noPublicPublication:true};
+}
 async function researchContext(scope) {
   let marketSignalStatus = null; try { marketSignalStatus = await MarketSignals.signalStatus(scope.regionGroup); } catch (error) { marketSignalStatus = { effective: { active: false, categoryWeights: {} }, error: text(error && error.message) }; }
   const marketSignalPlan = plain(marketSignalStatus && marketSignalStatus.effective);
@@ -1995,7 +2005,7 @@ async function beginResearchJob(actorId, input, event) {
     error.statusCode = 409; throw error;
   }
   const resumableExisting=existing&&existing.schema===RESEARCH_JOB_SCHEMA&&existing.manualOnly!==true&&!["complete","committed","cancelled","failed"].includes(existingStatus)&&text(existing.researchSignature)===researchSignature;
-  if(resumableExisting&&!forceNewRun)return publicResearchJob(existing);
+  if(resumableExisting&&!forceNewRun)return supplierResearchStepView(existing,actorId);
 
   // Failed scope reads are NOT an empty supplier portfolio.  If the database
   // is temporarily unavailable, do not start a fresh cycle over a false zero.
@@ -2020,12 +2030,12 @@ async function beginResearchJob(actorId, input, event) {
   const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchRoundIndex,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
   if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
   if (existing && text(existing.jobId) !== text(job.jobId)) await archiveSupplierResearchCycle(existing, actorId);
-  await saveResearchJob(job,actorId);return publicResearchJob(job);
+  await saveResearchJob(job,actorId);return supplierResearchStepView(job,actorId);
 }
 async function researchJobStatus(input) { const scope = researchScope(input); return publicResearchJob(await researchJobRule(scope)); }
 async function advanceResearchJob(actorId, input, event) {
   const scope = researchScope(input), job = await researchJobRule(scope,actorId); if (!job || job.schema !== RESEARCH_JOB_SCHEMA) { const error = new Error("진행 중인 국가 책임 공급업체 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
-  if (["complete","committed"].includes(job.status)) return publicResearchJob(job);
+  if (["complete","committed"].includes(job.status)) return supplierResearchStepView(job,actorId);
   const selectorInput = Object.assign({}, plain(job.selectorInput), { country: scope.country, region: scope.region === "NATIONWIDE" ? undefined : scope.region });
   try {
     if (job.status === "searching") {
@@ -2089,7 +2099,7 @@ async function advanceResearchJob(actorId, input, event) {
       }
       if(job.status==="complete"){const rankedAll=array(job.rankedEntries).sort((a,b)=>Number(b.item&&b.item.adminPinned===true)-Number(a.item&&a.item.adminPinned===true)||Number(b.assessment.approvalReady===true)-Number(a.assessment.approvalReady===true)||Number(b.assessment.hardGatePassed===true)-Number(a.assessment.hardGatePassed===true)||Number(b.assessment.trustScore||b.assessment.score||0)-Number(a.assessment.trustScore||a.assessment.score||0)||supplierPolicyAffinity(b.item,plain(job.selectorInput).policyHints)-supplierPolicyAffinity(a.item,plain(job.selectorInput).policyHints)||Number(b.assessment.commercialScore||0)-Number(a.assessment.commercialScore||0)||itemTitle(a.item).localeCompare(itemTitle(b.item))),seenRanked=new Set(),known=new Set(array(job.knownSupplierKeys)),ranked=rankedAll.filter((entry)=>{const key=supplierResearchRootKey(entry&&entry.item);if(!key||known.has(key)||seenRanked.has(key))return false;seenRanked.add(key);return true;}).slice(0,Math.max(0,Number(job.newCandidateTarget||0)));job.newCandidates=ranked.map((entry,index)=>stagedCandidateRow(entry,index+1));job.candidates=reindexCandidateRows(array(job.preservedCandidates).concat(job.newCandidates));job.finishedAt=iso();}
     }
-    job.lastError = null; await saveResearchJob(job, actorId); return publicResearchJob(job);
+    job.lastError = null; await saveResearchJob(job, actorId); return supplierResearchStepView(job,actorId);
   } catch (error) {
     job.lastError = { at: iso(), stage: job.status, message: text(error && error.message), code: text(error && error.code) || null }; job.errors = array(job.errors).concat([job.lastError]);
     try { await saveResearchJob(job, actorId); } catch (_saveError) {}
@@ -8203,13 +8213,16 @@ async function progressivePrivateSupplierCommit(actorId,input){
 
 async function autoProductJobCheckpoint(input){
   const scope=researchScope(input),stored=array(await SlotStore.select("gslot_policies",
-    "select=id,rule,updated_by&id=eq."+encodeURIComponent(productJobId(scope))+"&limit=1"))[0],
-    job=plain(stored&&stored.rule),runtime=await productRuntimeRule(scope);
-  return{jobId:text(job.jobId)||null,status:text(job.status)||"not_started",
-    resultCount:Number(job.resultCount||array(job.products).length||0),
-    updatedBy:text(stored&&stored.updated_by)||null,
-    paused:runtime.pauseRequested===true&&(!text(runtime.jobId)||text(runtime.jobId)===text(job.jobId)),
-    startedAt:text(job.startedAt)||null};
+    "select=id,updated_by,jobId:rule->>jobId,status:rule->>status,"+
+    "resultCount:rule->>resultCount,startedAt:rule->>startedAt"+
+    "&id=eq."+encodeURIComponent(productJobId(scope))+"&limit=1"))[0],
+    row=plain(stored),legacy=plain(row.rule),runtime=await productRuntimeRule(scope);
+  const jobId=text(first(row.jobId,legacy.jobId));
+  return{jobId:jobId||null,status:text(first(row.status,legacy.status))||"not_started",
+    resultCount:Math.max(0,Number(first(row.resultCount,legacy.resultCount,array(legacy.products).length,0))||0),
+    updatedBy:text(row.updated_by)||null,
+    paused:runtime.pauseRequested===true&&(!text(runtime.jobId)||text(runtime.jobId)===jobId),
+    startedAt:text(first(row.startedAt,legacy.startedAt))||null};
 }
 
 async function schedulerRun(event) {
@@ -8230,7 +8243,7 @@ async function globalControlDiagnostic() {
   // one country product job may contain thousands of inspected product objects.
   // Metadata is enough to show saved/active scopes; detailed progress is read only
   // when the administrator opens that exact country scope.
-  try { jobs = array(await SlotStore.select("gslot_policies", "select=id,scope_hub,scope_country,scope_region,enabled,updated_at,updated_by&scope_hub=in.(country-supplier-research-job,country-product-reference-research-job)&order=updated_at.desc&limit=1000")); } catch (_error) { jobs = []; }
+  try { jobs = array(await SlotStore.select("gslot_policies", "select=id,scope_hub,scope_country,scope_region,enabled,updated_at,updated_by&scope_hub=in.(country-supplier-research-job,country-supplier-scheduled-research-job,country-product-reference-research-job)&order=updated_at.desc&limit=1000")); } catch (_error) { jobs = []; }
   function summarize(prefix, kind) { return jobs.filter((row) => text(row && row.id).startsWith(prefix)).map((row) => ({ kind, jobId: text(row && row.id), country: text(row && row.scope_country), region: text(row && row.scope_region || "NATIONWIDE") || "NATIONWIDE", status: row && row.enabled === false ? "saved_inactive" : "saved_active", progress: null, startedAt: null, updatedAt: text(row && row.updated_at) || null, lastError: null, detailDeferred: true })); }
   const supplierJobs = summarize(RESEARCH_JOB_PREFIX, "supplier"), productJobs = summarize(PRODUCT_JOB_PREFIX, "product");
   let stagedRows=[],stagedReadError=null;
@@ -8238,9 +8251,17 @@ async function globalControlDiagnostic() {
   catch(e){stagedReadError=text(e&&e.message);}
   const staged=stagedRows.map(row=>{
     const rule=plain(row.rule),fill=plain(rule.sectionFill),scope=plain(rule.scope);
-    return{kind:row.scope_hub==="country-supplier-staged-auto"?"supplier":"product",country:text(row.scope_country||scope.countryCode),region:text(row.scope_region||scope.subdivisionCode||"NATIONWIDE"),phase:text(rule.phase)||"idle",jobId:text(rule.jobId)||null,rounds:Number(rule.rounds||0),autoTakeover:rule.autoTakeover===true,progressiveInspected:Number(rule.progressiveInspected||0),progressivePersisted:Number(rule.progressivePersisted||0),progressiveUsableSuppliers:Number(rule.progressiveUsableSuppliers||0),lastResult:text(rule.lastResult)||null,lastStepAt:rule.lastStepAt||null,nextCycleAt:rule.nextCycleAt||rule.nextRefreshAt||null,privateSlotsUnder20:array(fill.under20).length,privateSlotsUnder100:array(fill.under100).length,sectionFillAvailable:fill.totalSections===20,errorCount:array(rule.errors).length,updatedAt:row.updated_at||null};
+    return{kind:row.scope_hub==="country-supplier-staged-auto"?"supplier":"product",country:text(row.scope_country||scope.countryCode),region:text(row.scope_region||scope.subdivisionCode||"NATIONWIDE"),phase:text(rule.phase)||"idle",jobId:text(rule.jobId)||null,rounds:Number(rule.rounds||0),autoTakeover:rule.autoTakeover===true,progressiveInspected:Number(rule.progressiveInspected||0),progressivePersisted:Number(rule.progressivePersisted||0),progressiveUsableSuppliers:Number(rule.progressiveUsableSuppliers||0),lastResult:text(rule.lastResult)||null,lastStepAt:rule.lastStepAt||null,
+      nextCycleAt:rule.nextCycleAt||rule.nextRefreshAt||null,nextRetryAt:rule.nextRetryAt||null,
+      lastProvider:plain(rule.lastProvider),providerSuccesses:Number(rule.providerSuccesses||0),
+      providerFailures:Number(rule.providerFailures||0),activeSupplierCount:Number(rule.activeSupplierCount||0),
+      qualifiedSupplierCount:Number(rule.qualifiedSupplierCount||0),
+      lastError:text(plain(array(rule.errors).slice(-1)[0]).error||plain(array(rule.errors).slice(-1)[0]).reason).slice(0,180)||null,
+      privateSlotsUnder20:array(fill.under20).length,privateSlotsUnder100:array(fill.under100).length,sectionFillAvailable:fill.totalSections===20,errorCount:array(rule.errors).length,updatedAt:row.updated_at||null};
   });
-  return { ok: true, reportType: "igdc-global-automation-control-diagnostic", version: VERSION, generatedAt: iso(), operatingStatus: operatingStatus(state), master: state.master, savedSettings: state.settings, scheduler: { schedule: "supplier-minute-checkpoint + product-2-minute-checkpoint", dueCount: Number(dueResult.dueCount || 0), nextScopes: array(dueResult.scopes).map((row) => ({ country: row.countryCode, region: row.subdivisionCode || "NATIONWIDE", lastRunAt: row.effective && row.effective.lastRunAt || null })) }, researchJobs: { supplier: supplierJobs, product: productJobs, activeSupplier: supplierJobs.filter((row) => row.status === "saved_active").length, activeProduct: productJobs.filter((row) => row.status === "saved_active").length, detailedProgressDeferredToScope: true }, stagedAutomation:{readError:stagedReadError,total:staged.length,supplierCount:staged.filter(x=>x.kind==='supplier').length,productCount:staged.filter(x=>x.kind==='product').length,manualPreserved:staged.filter(x=>x.phase==='manual_preserved'||x.phase==='manual_job_preserved').length,errors:staged.filter(x=>x.errorCount>0).length,rows:staged}, safety: { privateResearchOnly: true, administratorApplyRequired: true, automaticProductImport: false, automaticSlotPublication: false, paymentExecution: false, excludedCountries: ["KP"], manualDecisionPrecedence: true, largeLedgerRulesExcludedFromGlobalOverview: true } };
+  return { ok: true, reportType: "igdc-global-automation-control-diagnostic", version: VERSION, generatedAt: iso(), operatingStatus: operatingStatus(state), master: state.master, savedSettings: state.settings, scheduler: { schedule: "supplier-minute-checkpoint + product-2-minute-checkpoint", dueCount: Number(dueResult.dueCount || 0), nextScopes: array(dueResult.scopes).map((row) => ({ country: row.countryCode, region: row.subdivisionCode || "NATIONWIDE", lastRunAt: row.effective && row.effective.lastRunAt || null })) }, researchJobs: { supplier: supplierJobs, product: productJobs, activeSupplier: supplierJobs.filter((row) => row.status === "saved_active").length, activeProduct: productJobs.filter((row) => row.status === "saved_active").length,
+      activeScheduledSupplier: supplierJobs.filter(row=>row.jobId.endsWith("_scheduled")&&row.status==="saved_active").length,
+      detailedProgressDeferredToScope: true }, stagedAutomation:{readError:stagedReadError,total:staged.length,supplierCount:staged.filter(x=>x.kind==='supplier').length,productCount:staged.filter(x=>x.kind==='product').length,manualPreserved:staged.filter(x=>x.phase==='manual_preserved'||x.phase==='manual_job_preserved').length,errors:staged.filter(x=>x.errorCount>0).length,rows:staged}, safety: { privateResearchOnly: true, administratorApplyRequired: true, automaticProductImport: false, automaticSlotPublication: false, paymentExecution: false, excludedCountries: ["KP"], manualDecisionPrecedence: true, largeLedgerRulesExcludedFromGlobalOverview: true } };
 }
 
 function diagnostic(state) {

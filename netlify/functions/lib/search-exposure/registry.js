@@ -335,7 +335,14 @@ function marketCommerceTargets(commerce){
   return out.sort((a,b)=>a.marketCountry.localeCompare(b.marketCountry)||compareTargets(a,b));
 }
 function hubTargets(){
-  return HUB_TARGETS.map(([id,title,route,priority])=>({kind:id.startsWith("maru-")?"software":"hub",id,title,url:abs(route),priority,commercialPriority:0,rankingScore:priority,updatedAt:"",keywords:uniq([title,"IGDC Global","IGDC Platform","MARU Platform"])}));
+  const doc=plain(readJson("netlify/functions/data/search-exposure-maru-pages.json"));
+  const changed=plain(doc.pages);
+  return HUB_TARGETS.map(([id,title,route,priority])=>{
+    const raw=id.startsWith("maru-")?text(changed[id]):"";
+    const parsed=Date.parse(raw);
+    const updatedAt=raw&&Number.isFinite(parsed)&&parsed<=Date.now()+300000?new Date(parsed).toISOString():"";
+    return {kind:id.startsWith("maru-")?"software":"hub",id,title,url:abs(route),priority,commercialPriority:0,rankingScore:priority,updatedAt,keywords:uniq([title,"IGDC Global","IGDC Platform","MARU Platform"])};
+  });
 }
 function buildRegistry(){
   const commerce=commerceTargets(), marketCommerce=marketCommerceTargets(commerce), media=mediaTargets(), hubs=hubTargets();

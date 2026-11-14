@@ -68,8 +68,20 @@ function makePipeline(deps) {
   async function rows() {
     const all=[],page=500;
     for(let offset=0;offset<10000;offset+=page){
-      const slice=arr(await store.select('gslot_policies','select=id,rule,updated_at&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
-      all.push(...slice);if(slice.length<page)return all;
+      // Product-job checkpoints can hold large private queues. Scheduler
+      // fairness only needs timing and gate flags; never hydrate all rules.
+      const fields='select=id,updated_at,phase:rule->>phase,jobId:rule->>jobId,'+
+        'lastStepAt:rule->>lastStepAt,completedAt:rule->>completedAt,'+
+        'nextRefreshAt:rule->>nextRefreshAt,lastSupplierRunAt:rule->>lastSupplierRunAt,'+
+        'sectionFill:rule->sectionFill,operatorAutoPause:rule->operatorAutoPause,'+
+        'nextRetryAt:rule->>nextRetryAt,retrySupplierAt:rule->>retrySupplierAt';
+      const slice=arr(await store.select('gslot_policies',fields+'&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
+      all.push(...slice.map(row=>({id:row.id,updated_at:row.updated_at,rule:{
+        phase:row.phase,jobId:row.jobId,lastStepAt:row.lastStepAt,completedAt:row.completedAt,
+        nextRefreshAt:row.nextRefreshAt,lastSupplierRunAt:row.lastSupplierRunAt,
+        sectionFill:obj(row.sectionFill),operatorAutoPause:row.operatorAutoPause===true,
+        nextRetryAt:row.nextRetryAt,retrySupplierAt:row.retrySupplierAt
+      }})));if(slice.length<page)return all;
     }
     throw new Error('product_auto_checkpoint_page_limit');
   }
@@ -230,17 +242,13 @@ function makePipeline(deps) {
     if (!state.jobId || state.phase === 'idle') {
       const selected = configuredScopeMap(await automation.autoProductScopes()).get(scopeKey(scope));
       if (!txt(selected && selected.supplierLastRunAt)) return Object.assign(state,{phase:'idle',lastResult:'supplier_discovery_not_yet_durably_saved'});
-      // The durable supplier marker is not a count. New product jobs wait for
-      // ten usable seller sites; current seller research continues in parallel.
-      // For legacy settings with unknown count, the server begin function
-      // checks the real country-local ledger before starting a new job.
-      const observedSuppliers=Number(selected.supplierCount||0);
-      // A small market may legitimately have fewer than ten usable suppliers.
-      // After a complete five-round survey, use its verified real sellers.
-      const surveyed=Number(selected.supplierRoundsCompleted||0)>=5;
-      if(observedSuppliers>0&&observedSuppliers<MIN_SUPPLIER_SOURCES&&!surveyed)
-        return Object.assign(state,{phase:'idle',lastResult:'waiting_for_ten_usable_suppliers',usableSuppliers:observedSuppliers});
-      const minimum=observedSuppliers>0&&surveyed?1:MIN_SUPPLIER_SOURCES;
+      // The VERIFIED durable-supplier marker is the start gate; ten is a
+      // portfolio growth target, not a mandatory quota before the FIRST real
+      // supplier can enter PRIVATE product research. The server begin function
+      // re-reads the actual country-local seller ledger, checks official URLs,
+      // operator holds and fraud flags; it never publishes to the front page.
+      const observedSuppliers=Math.max(0,Number(selected.supplierCount||0));
+      const minimum=observedSuppliers>0?1:MIN_SUPPLIER_SOURCES;
       await recheck(scope);
       const started = await automation.beginProductResearchJob(ACTOR, inputFor(scope, {compact:true,fullRescan:state.fullRescanNeeded===true,minEligibleSupplierSources:minimum}));
       if (!txt(started && started.jobId)) throw new Error('auto_product_begin_no_job_id');
@@ -317,8 +325,16 @@ function makePipeline(deps) {
     if(!claimed) return { scope:scopeKey(scope),skipped:'already_running' };
     let update = Object.assign({},claimed.rule), result='unknown';
     try {
-      await recheck(scope);
-      update = await advance(scope,update);
+      // A second country-local step is safe only when the first was cheap.
+      // A 22-second AI/source operation must never start another long request
+      // inside Netlify's 30-second scheduled-function window.
+      const started=Date.now();
+      for(let step=0;step<2;step++){
+        if(step>0&&(Date.now()-started>3500||!['researching','staging'].includes(update.phase)||
+          update.operatorAutoPause===true))break;
+        await recheck(scope);
+        update=await advance(scope,update);
+      }
       result=txt(update.lastResult);
     } catch (err) {
       if(err && err.stopped) result='paused_checkpoint_preserved';

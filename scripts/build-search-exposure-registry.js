@@ -11,6 +11,7 @@
 const fs=require("fs");
 const path=require("path");
 const crypto=require("crypto");
+const {execFileSync}=require("child_process");
 const MarketSaleScope=require("../netlify/functions/lib/market-sale-scope.v1");
 
 const root=path.resolve(__dirname,"..");
@@ -103,7 +104,26 @@ function mergeRecord(entry,card,country){
 }
 function writeOutput(doc){fs.mkdirSync(path.dirname(outputPath),{recursive:true});fs.writeFileSync(outputPath,JSON.stringify(doc));}
 
+// Record genuine source commit times, never build time, as page lastmod.
+function writeMaruPageManifest(){
+  const pages={};
+  for(const [id,filename] of [["maru-windows","maru-download.html"],["maru-android","maru-android.html"]]){
+    try{
+      const working=execFileSync("git",["hash-object","--",filename],{cwd:root,encoding:"utf8",timeout:2000,stdio:["ignore","pipe","ignore"]}).trim();
+      const committed=execFileSync("git",["rev-parse",`HEAD:${filename}`],{cwd:root,encoding:"utf8",timeout:2000,stdio:["ignore","pipe","ignore"]}).trim();
+      if(!working || working!==committed) continue;
+      const raw=execFileSync("git",["log","-1","--format=%cI","--",filename],{cwd:root,encoding:"utf8",timeout:2000,stdio:["ignore","pipe","ignore"]}).trim();
+      const stamp=Date.parse(raw);
+      if(raw&&Number.isFinite(stamp)&&stamp<=Date.now()+300000) pages[id]=new Date(stamp).toISOString();
+    }catch(_e){ /* No Git history: no invented lastmod. */ }
+  }
+  const filename=path.join(root,"netlify","functions","data","search-exposure-maru-pages.json");
+  fs.mkdirSync(path.dirname(filename),{recursive:true});
+  fs.writeFileSync(filename,JSON.stringify({schema:"igdc-maru-search-page-changes-v1",pages})+"\n");
+}
+
 function main(){
+  writeMaruPageManifest();
   const manifest=readJson(manifestPath);
   if(!manifest||manifest.schema!=="canonical-ip-slot-release-manifest-v1"||!manifest.canonicalReleaseId){
     writeOutput({schema:"igdc-search-exposure-public-v1",version:VERSION,generatedAt:new Date().toISOString(),source:"no-canonical-ip-manifest",canonicalReleaseId:null,ipSlotPolicyDigest:null,verifiedSnapshotCount:0,scannedCardCount:0,publishedCardCount:0,itemCount:0,items:[]});

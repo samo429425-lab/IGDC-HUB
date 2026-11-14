@@ -63,8 +63,20 @@ function create(deps) {
   async function rows() {
     const all=[],page=500;
     for(let offset=0;offset<10000;offset+=page){
-      const slice=arr(await store.select('gslot_policies','select=id,rule,updated_at&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
-      all.push(...slice);if(slice.length<page)return all;
+      // A global fairness check needs only compact fields. Do not transfer a
+      // growing array of supplier errors and section diagnostics for every
+      // country once per minute. The full rule is read only when a country is
+      // claimed (rowFor/claim/release retain their existing CAS contract).
+      const fields='select=id,updated_at,phase:rule->>phase,lastStepAt:rule->>lastStepAt,'+
+        'completedAt:rule->>completedAt,nextCycleAt:rule->>nextCycleAt,'+
+        'activeSupplierCount:rule->activeSupplierCount,supplierTarget:rule->supplierTarget,'+
+        'operatorAutoPause:rule->operatorAutoPause,nextRetryAt:rule->>nextRetryAt';
+      const slice=arr(await store.select('gslot_policies',fields+'&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
+      all.push(...slice.map(row=>({id:row.id,updated_at:row.updated_at,rule:{
+        phase:row.phase,lastStepAt:row.lastStepAt,completedAt:row.completedAt,nextCycleAt:row.nextCycleAt,
+        activeSupplierCount:row.activeSupplierCount,supplierTarget:row.supplierTarget,
+        operatorAutoPause:row.operatorAutoPause===true,nextRetryAt:row.nextRetryAt
+      }})));if(slice.length<page)return all;
     }
     throw new Error('supplier_auto_checkpoint_page_limit');
   }
@@ -147,7 +159,7 @@ function create(deps) {
       await recheck(s);
       const started=await automation.beginResearchJob(ACTOR,input(s,{researchRounds:RESEARCH_ROUNDS_PER_JOB,researchRoundIndex:Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1)}));
       if(!txt(started&&started.jobId))throw new Error('supplier_research_start_without_job');
-      return Object.assign(state,{jobId:started.jobId,lastProgressiveSearchCursor:0,phase:['complete','committed'].includes(started.status)?'committing':'researching',rounds:RESEARCH_ROUNDS,startedAt:started.startedAt||clock(),lastResult:'five_round_supplier_research_started_round_'+String(Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1))});
+      return Object.assign(state,{jobId:started.jobId,lastProgressiveSearchCursor:0,lastResearchStage:txt(started.status),phase:['complete','committed'].includes(started.status)?'committing':'researching',rounds:RESEARCH_ROUNDS,startedAt:started.startedAt||clock(),lastResult:'five_round_supplier_research_started_round_'+String(Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1))});
     }
     if(state.phase==='researching') {
       if(job.status==='complete'||job.status==='committed')return Object.assign(state,{phase:'committing',lastResult:'supplier_research_complete'});
@@ -186,7 +198,8 @@ function create(deps) {
           if(outcome.status==='http_429')state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
         }
       }
-      return Object.assign(state,{phase:['complete','committed'].includes(result.status)?'committing':'researching',lastResult});
+      return Object.assign(state,{phase:['complete','committed'].includes(result.status)?'committing':'researching',
+        lastResult,lastResearchStage:txt(result.status)});
     }
     if(state.phase==='committing') {
       await recheck(s);
@@ -254,14 +267,15 @@ function create(deps) {
     const claimed=await claim(s);if(!claimed)return{scope:key(s),skipped:'already_running'};
     let state=Object.assign({},claimed.rule),failure=null,stopped=false,steps=0;
     try {
-      // One expensive search/inspection/commit step per country per minute.
-      // Only a newly started, quickly saved empty->researching checkpoint may
-      // run its first search in the same invocation. Eight markets x two slow
-      // steps was liable to exceed the scheduled function time budget and lose
-      // ALL in-flight commits. Fair rotation still visits every active market.
-      const begin=Date.now(),startedIdle=state.phase==='idle';
+      // Netlify gives scheduled invocations 30 seconds. Run a second bounded
+      // search/inspection step ONLY if the first checkpoint was cheap, preserving
+      // room for the database release on the slowest country.
+      // No unbounded tight loop, and a provider 429 is never retried in-tick.
+      const begin=Date.now();
       for(let i=0;i<2;i++){
-        if(i>0&&(!startedIdle||Date.now()-begin>3500||state.phase!=='researching'||state.operatorAutoPause===true))break;
+        if(i>0&&(Date.now()-begin>9500||state.phase!=='researching'||
+          state.lastResearchStage==='ranking'||state.operatorAutoPause===true||
+          ts(state.nextRetryAt)>ts(clock())))break;
         await recheck(s);
         state=await advance(s,state);steps++;
         // Keep a deliberate provider backoff (e.g. HTTP 429) even when the
@@ -286,7 +300,12 @@ function create(deps) {
     const stored=await release(s,claimed,state);
     // An administrator STOP during an invocation is expected cancellation,
     // not a failed scheduled function for every other country in the batch.
-    return{scope:key(s),ok:!failure||stopped,stopped,phase:stored.phase,jobId:stored.jobId||null,rounds:stored.rounds,lastResult:stored.lastResult,stepsAdvanced:steps,error:stopped?null:failure,publicPublication:false};
+    return{scope:key(s),ok:!failure||stopped,stopped,phase:stored.phase,jobId:stored.jobId||null,
+      rounds:stored.rounds,lastResult:stored.lastResult,stepsAdvanced:steps,error:stopped?null:failure,
+      lastProvider:stored.lastProvider||null,providerSuccesses:Number(stored.providerSuccesses||0),
+      providerFailures:Number(stored.providerFailures||0),progressivePersisted:Number(stored.progressivePersisted||0),
+      activeSupplierCount:Number(stored.activeSupplierCount||0),qualifiedSupplierCount:Number(stored.qualifiedSupplierCount||0),
+      nextRetryAt:stored.nextRetryAt||null,publicPublication:false};
   }
   async function setTakeover(actor,s,enabled) {
     if(!['string','number'].includes(typeof actor)||!txt(actor))throw new Error('administrator_required');
