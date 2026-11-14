@@ -50,7 +50,11 @@ function input(s,extra) { return Object.assign({countryCode:s.countryCode,subdiv
 function eligibleCycleAt(state) {
   const saved=ts(obj(state).nextCycleAt),finished=ts(obj(state).completedAt)||ts(obj(state).lastStepAt);
   if(!saved||!finished)return saved;
-  const full=Number(obj(state).activeSupplierCount||0)>=Number(obj(state).supplierTarget||100);
+  // A large unverified lead pool cannot mark the country as complete.
+  // Only the policy-qualified count (or the previously confirmed full flag)
+  // permits the long maintenance interval.
+  const goal=Number(obj(state).supplierTarget||100);
+  const full=obj(state).targetReached===true || Number(obj(state).qualifiedSupplierCount||0)>=goal;
   if(full)return saved;
   const gap=Number(obj(state).activeSupplierCount||0)>0?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS;
   return Math.min(saved,finished+gap);
@@ -167,7 +171,7 @@ function create(deps) {
       // small batches instead of waiting for every query of all five rounds.
       // This never truncates searchTasks or advances the completed-round count.
       if(job.status==='searching' && job.updatedBy===ACTOR && Number(job.searchCursor||0)>0 &&
-         Number(job.searchCursor||0)>=Number(state.lastProgressiveSearchCursor||0)+3 &&
+         Number(job.searchCursor||0)>=Number(state.lastProgressiveSearchCursor||0)+2 &&
          typeof automation.progressivePrivateSupplierCommit==='function') {
         await recheck(s);
         const staged=await automation.progressivePrivateSupplierCommit(ACTOR,input(s));
@@ -195,7 +199,12 @@ function create(deps) {
           // A provider quota limit is not permission to launch more queries
           // immediately. Yield this COUNTRY for 10 minutes; other countries
           // retain their own independent rotation and progress.
-          if(outcome.status==='http_429')state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
+          if(/^(?:http_429|rate_limit|quota_exceeded)$/.test(outcome.status))
+            state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
+          else if(/^(?:http_408|http_500|http_502|http_503|http_504|timeout|typeerror|network_error|fetch_failed)$/.test(outcome.status))
+            state.nextRetryAt=new Date(ts(clock())+2*60*1000).toISOString();
+          // Missing/disabled provider credentials use an independent Sanmaru
+          // lane; do not postpone the fallback on those deterministic errors.
         }
       }
       return Object.assign(state,{phase:['complete','committed'].includes(result.status)?'committing':'researching',
@@ -271,9 +280,11 @@ function create(deps) {
       // search/inspection step ONLY if the first checkpoint was cheap, preserving
       // room for the database release on the slowest country.
       // No unbounded tight loop, and a provider 429 is never retried in-tick.
-      const begin=Date.now();
+      const begin=Date.now(),startedIdle=state.phase==='idle';
       for(let i=0;i<2;i++){
-        if(i>0&&(Date.now()-begin>9500||state.phase!=='researching'||
+        // A cheap job-init may precede one search. Never chain two provider,
+        // inspection, AI ranking or ledger writes into one 30s invocation.
+        if(i>0&&(!startedIdle||Date.now()-begin>3500||state.phase!=='researching'||
           state.lastResearchStage==='ranking'||state.operatorAutoPause===true||
           ts(state.nextRetryAt)>ts(clock())))break;
         await recheck(s);

@@ -10,7 +10,7 @@ exports.handler=async function(){
     // Only country codes and stage summaries, never seller URLs or DB secrets.
     console.info('[IGDC_SUPPLIER_AUTO]',JSON.stringify({active:result.activeScopes,processed:result.processed,
       scopes:(result.results||[]).map(row=>({scope:row.scope,ok:row.ok!==false,
-        phase:row.phase,result:row.lastResult,steps:row.stepsAdvanced,
+        phase:row.phase,result:row.lastResult,skipped:row.skipped||null,steps:row.stepsAdvanced,
         provider:row.lastProvider&&row.lastProvider.provider,providerStatus:row.lastProvider&&row.lastProvider.status,
         providerFound:row.lastProvider&&row.lastProvider.count,privateSaved:row.progressivePersisted,
         error:row.error?String(row.error).slice(0,110):null}))}));

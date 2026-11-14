@@ -211,10 +211,23 @@ function makePipeline(deps) {
     const thisJob = txt(state.jobId);
     const isOwned = thisJob && checkpoint.jobId === thisJob;
     if (checkpoint.paused && !(state.autoTakeover && ['complete','committed'].includes(checkpoint.status))) return Object.assign(state,{ lastResult:'research_manually_paused_preserved' });
-    if(checkpoint.jobId && checkpoint.updatedBy && checkpoint.updatedBy!==ACTOR){
-      if(await humanResearchIsActive(scope))return Object.assign(state,{phase:'manual_job_preserved',lastResult:'recent_administrator_edit_yield_auto_retry',protectedJobId:checkpoint.jobId});
+    // Unlike supplier research, the product working job uses one shared key
+    // for manual and scheduled runs. A scheduled worker must NEVER resume a
+    // human-owned in-progress job or stage its candidate queue. Even after the
+    // short admin-edit window, wait for the operator to complete the job.
+    // An explicit autoTakeover is honored only for a COMPLETED manual job,
+    // and starts a fresh private cycle rather than staging manual results.
+    if(checkpoint.jobId && checkpoint.updatedBy!==ACTOR){
+      const manualFinished=['complete','committed'].includes(checkpoint.status);
+      if(!manualFinished || state.autoTakeover!==true){
+        return Object.assign(state,{phase:'manual_job_preserved',
+          lastResult:manualFinished?'administrator_completed_product_job_preserved':'administrator_product_job_preserved',
+          protectedJobId:checkpoint.jobId});
+      }
+      state.jobId=null;state.phase='idle';state.lastStagedResultCount=0;
+      state.pendingPlacementIds=[];state.reconcileCursor='';
     }
-    if(checkpoint.jobId && !isOwned){
+    if(checkpoint.jobId && checkpoint.updatedBy===ACTOR && !isOwned){
       // Resume the exact existing job/cursor. A human clicking Start does not
       // disable all other research for that country; never delete that job.
       state.jobId=checkpoint.jobId;
@@ -223,8 +236,9 @@ function makePipeline(deps) {
       state.lastStagedResultCount=0;
       state.pendingPlacementIds=[];
       state.reconcileCursor='';
-    }else if(state.phase==='manual_job_preserved'){
-      // The 90-second manual edit window expired. Resume existing work.
+    }else if(state.phase==='manual_job_preserved'&&checkpoint.updatedBy===ACTOR&&checkpoint.jobId){
+      // Resume only our OWN scheduled job. An administrator checkpoint stays
+      // protected until explicit takeover after completion.
       state.phase=['complete','committed'].includes(checkpoint.status)?'staging':'researching';
     }
     if (state.phase === 'complete') {
@@ -328,9 +342,11 @@ function makePipeline(deps) {
       // A second country-local step is safe only when the first was cheap.
       // A 22-second AI/source operation must never start another long request
       // inside Netlify's 30-second scheduled-function window.
-      const started=Date.now();
+      const started=Date.now(),startedIdle=update.phase==='idle';
       for(let step=0;step<2;step++){
-        if(step>0&&(Date.now()-started>3500||!['researching','staging'].includes(update.phase)||
+        // Reserve DB release time: only a cheap idle->researching transition
+        // may be followed by one real product research/inspection step.
+        if(step>0&&(!startedIdle||Date.now()-started>3500||update.phase!=='researching'||
           update.operatorAutoPause===true))break;
         await recheck(scope);
         update=await advance(scope,update);
@@ -350,6 +366,14 @@ function makePipeline(deps) {
           update.nextRetryAt=new Date(ts(clock())+30*60*1000).toISOString();
           update.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
           update.lastErrorReason=reason;
+        } else if(/429|quota|rate.limit|too.many.requests/i.test(reason)){
+          update.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
+          update.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
+          update.lastErrorReason=reason.slice(0,180);
+        } else if(/timeout|fetch failed|econnreset|eai_again|502|503|504/i.test(reason)){
+          update.nextRetryAt=new Date(ts(clock())+2*60*1000).toISOString();
+          update.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
+          update.lastErrorReason=reason.slice(0,180);
         }
       }
       update.lastResult=result;

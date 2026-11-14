@@ -24,8 +24,8 @@ assert(frontend.includes("preserveOnFailure:true"), "pause/live latest refresh m
 assert(backend.includes('country-scoped-reserve-quality-guard') && backend.includes('async function routeBlockedLatestProducts'), "backend must preserve current latest-list routing while adding category reserve guard");
 assert(backend.includes("async function routeBlockedLatestProducts"), "blocked latest products must be routed into management state");
 assert(backend.includes('schema:"igdc-product-research-partial-private-queue.v6"'), "chunked queue result must use current routing-aware schema");
-assert(html.includes("조사 진행 중에도 현재 목록의 선택 상품 또는 현재 목록 전체를 후보 관리목록으로 즉시 이관"), "operator help must describe live latest-list transfer behavior");
-assert(html.includes("v=20261023-latest-inventory-actions-v2"), "admin JS cache-bust version must be updated");
+assert(html.includes("조사 도중 일시정지하면 그 시점까지 발견·점검되어 저장된 상품") && html.includes("선택 상품 또는 현재 목록 전체를 후보 관리목록 등록"), "operator help must describe current-list transfer while research remains in progress");
+assert(/admin-commerce-country-control\.js\?(?:v|build)=[A-Za-z0-9._-]+/.test(html), "admin JS must use a nonempty cache-busting revision");
 
 // Load the production backend in-place and export only the private classifier for
 // deterministic regression checks. No production export surface is changed.

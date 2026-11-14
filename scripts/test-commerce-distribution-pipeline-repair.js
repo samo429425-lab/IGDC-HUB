@@ -17,7 +17,7 @@ function product(id,scope,legacy){
  return {id,kind:'product',title:id,status:'approval_pending',official_url:'https://seller.example.com/products/'+id,source_ref:'country-product-ranking-review',source_payload:payload,updated_at:'2026-10-22T00:00:00Z'};
 }
 async function testScopedLedger(){
- const records=[...Array.from({length:190},(_,i)=>product('modern_'+i,'KR',false)),...Array.from({length:84},(_,i)=>product('legacy_'+i,'KR',true)),...Array.from({length:130},(_,i)=>product('other_'+i,'US',false)),...Array.from({length:3},(_,i)=>({...product('placement_'+i,'KR',false),source_payload:{primaryPlacement:{page:'distribution',section:'distribution-new',country:'KR',region:'NATIONWIDE'},slotDecision:'slot_candidate'}}))];
+ const records=[...Array.from({length:190},(_,i)=>product('modern_'+i,'KR',false)),...Array.from({length:84},(_,i)=>product('legacy_'+i,'KR',true)),...Array.from({length:130},(_,i)=>product('other_'+i,'US',false)),...Array.from({length:3},(_,i)=>({...product('placement_'+i,'KR',false),source_payload:{primaryPlacement:{page:'distribution',section:'distribution-new',country:'KR',region:'NATIONWIDE'},slotDecision:'slot_candidate'}})),{...product('review_ref_0','KR',false),source_ref:'commerce-candidate-review-api'}];
  // Mixed ordering means an old-format record must not vanish when the first
  // direct marketScope page is nonempty; raw cursors must not skip records.
  const store={
@@ -25,7 +25,7 @@ async function testScopedLedger(){
   request:async(url)=>{
    const u=new URL('https://local.invalid'+url),p=u.searchParams;
    assert.equal(u.pathname,'/rest/v1/gslot_candidates');
-   assert.equal(p.get('source_ref'),'eq.country-product-ranking-review');
+   assert.equal(p.get('source_ref'),'in.(country-product-ranking-review,commerce-candidate-review-api)');
    return records.slice(Number(p.get('offset')||0),Number(p.get('offset')||0)+Number(p.get('limit')||0));
   },select:async()=>[]
  };
@@ -43,14 +43,15 @@ async function testScopedLedger(){
   assert.ok(parsed.pagination.nextOffset>offset,'cursor strictly increases');offset=parsed.pagination.nextOffset;
   assert.ok(calls<20,'bounded completion');
  }while(true);
- assert.equal(new Set(collected).size,277,'no duplicate IDs');
- assert.equal(collected.length,277,'both schemas and no other country');
+ assert.equal(new Set(collected).size,278,'no duplicate IDs');
+ assert.equal(collected.length,278,'both schemas and both supported source refs, never another country');
+ assert.ok(collected.includes('review_ref_0'),'alternate authorized candidate source must not vanish');
  assert.equal(collected.filter(x=>x.startsWith('legacy_')).length,84,'all historical legacy IDs included');
  console.log('PASS mixed-schema candidate ledger pagination', {pages:calls,total:collected.length,sawEmptyContinuation});
 }
 async function testExclusionCleanup(){
  const row={id:'hold_candidate_1',kind:'product',source_ref:'country-product-ranking-review',status:'hold',source_payload:{slotDecision:'hold',queueControl:{action:'hold'},review:{state:'hold'},marketScope:{marketCountry:'KR',marketRegion:'NATIONWIDE'}}};
- const rows=new Map([[row.id,row]]),assignments=new Map([[row.id,[{id:'old_assignment',candidate_id:row.id,publication_status:'not_ready'}]]]);
+ const rows=new Map([[row.id,row]]),assignments=new Map([[row.id,[{id:'old_assignment',candidate_id:row.id,hub_key:'distribution',country_code:'KR',region_code:'NATIONWIDE',slot_key:'distribution-new',state:'approved',publication_status:'not_ready'}]]]);
  const store={
   select:async(table,query)=>{
    if(table==='gslot_candidates'){const id=decodeURIComponent((query.match(/id=eq\.([^&]+)/)||[])[1]||'');return rows.has(id)?[rows.get(id)]:[];}
@@ -71,9 +72,9 @@ async function testExclusionCleanup(){
  }).handler;
  const request=(id)=>({httpMethod:'POST',body:JSON.stringify({decision:'dismiss',expectedBucket:'hold',candidateIds:[id],countryCode:'KR',subdivisionCode:'NATIONWIDE'})});
  const response=await handler(request(row.id));assert.equal(response.statusCode,200,response.body);
- assert.equal(rows.get(row.id).status,'removed');assert.equal(assignments.get(row.id).length,0);
+ assert.equal(rows.get(row.id).status,'approval_pending');assert.equal(rows.get(row.id).source_payload.slotDecision,'removed');assert.equal(assignments.get(row.id).length,0);
  const active={id:'hold_candidate_2',kind:'product',source_ref:row.source_ref,status:'hold',source_payload:{slotDecision:'hold',queueControl:{action:'hold'},review:{state:'hold'},frontPublication:{status:'published'}}};
- rows.set(active.id,active);assignments.set(active.id,[{id:'live',publication_status:'publish_requested'}]);
+ rows.set(active.id,active);assignments.set(active.id,[{id:'live',candidate_id:active.id,hub_key:'distribution',country_code:'KR',region_code:'NATIONWIDE',slot_key:'distribution-new',state:'approved',publication_status:'publish_requested'}]);
  const forbidden=await handler(request(active.id));assert.equal(forbidden.statusCode,409,'live publication remains protected');
  assert.equal(active.status,'hold');assert.equal(assignments.get(active.id).length,1);
  console.log('PASS inactive assignment delete and live publication protection');

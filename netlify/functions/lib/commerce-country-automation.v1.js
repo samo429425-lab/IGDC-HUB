@@ -8247,10 +8247,19 @@ async function globalControlDiagnostic() {
   function summarize(prefix, kind) { return jobs.filter((row) => text(row && row.id).startsWith(prefix)).map((row) => ({ kind, jobId: text(row && row.id), country: text(row && row.scope_country), region: text(row && row.scope_region || "NATIONWIDE") || "NATIONWIDE", status: row && row.enabled === false ? "saved_inactive" : "saved_active", progress: null, startedAt: null, updatedAt: text(row && row.updated_at) || null, lastError: null, detailDeferred: true })); }
   const supplierJobs = summarize(RESEARCH_JOB_PREFIX, "supplier"), productJobs = summarize(PRODUCT_JOB_PREFIX, "product");
   let stagedRows=[],stagedReadError=null;
-  try{stagedRows=array(await SlotStore.select("gslot_policies","select=id,scope_hub,scope_country,scope_region,rule,updated_at&scope_hub=in.(country-supplier-staged-auto,country-product-ai-private-pipeline)&limit=1000"));}
+  try{stagedRows=array(await SlotStore.select("gslot_policies","select=id,scope_hub,scope_country,scope_region,updated_at,"+
+    "phase:rule->>phase,jobId:rule->>jobId,rounds:rule->rounds,lastResult:rule->>lastResult,"+
+    "autoTakeover:rule->autoTakeover,progressiveInspected:rule->progressiveInspected,"+
+    "progressivePersisted:rule->progressivePersisted,progressiveUsableSuppliers:rule->progressiveUsableSuppliers,"+
+    "lastStepAt:rule->>lastStepAt,nextCycleAt:rule->>nextCycleAt,nextRefreshAt:rule->>nextRefreshAt,"+
+    "nextRetryAt:rule->>nextRetryAt,sectionFill:rule->sectionFill,lastProvider:rule->lastProvider,"+
+    "providerSuccesses:rule->providerSuccesses,providerFailures:rule->providerFailures,"+
+    "activeSupplierCount:rule->activeSupplierCount,qualifiedSupplierCount:rule->qualifiedSupplierCount,"+
+    "errors:rule->errors"+
+    "&scope_hub=in.(country-supplier-staged-auto,country-product-ai-private-pipeline)&limit=1000"));}
   catch(e){stagedReadError=text(e&&e.message);}
   const staged=stagedRows.map(row=>{
-    const rule=plain(row.rule),fill=plain(rule.sectionFill),scope=plain(rule.scope);
+    const rule=plain(row.rule||row),fill=plain(rule.sectionFill),scope=plain(rule.scope);
     return{kind:row.scope_hub==="country-supplier-staged-auto"?"supplier":"product",country:text(row.scope_country||scope.countryCode),region:text(row.scope_region||scope.subdivisionCode||"NATIONWIDE"),phase:text(rule.phase)||"idle",jobId:text(rule.jobId)||null,rounds:Number(rule.rounds||0),autoTakeover:rule.autoTakeover===true,progressiveInspected:Number(rule.progressiveInspected||0),progressivePersisted:Number(rule.progressivePersisted||0),progressiveUsableSuppliers:Number(rule.progressiveUsableSuppliers||0),lastResult:text(rule.lastResult)||null,lastStepAt:rule.lastStepAt||null,
       nextCycleAt:rule.nextCycleAt||rule.nextRefreshAt||null,nextRetryAt:rule.nextRetryAt||null,
       lastProvider:plain(rule.lastProvider),providerSuccesses:Number(rule.providerSuccesses||0),

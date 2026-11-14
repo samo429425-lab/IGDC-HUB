@@ -60,7 +60,7 @@ assertCard(distribution,"distribution","distribution-new","new");
 assertCard(network,"network","network-right","network");
 
 const snapshotSource=fs.readFileSync(path.join(repo,"netlify/functions/snapshot-engine.js"),"utf8");
-if(!snapshotSource.includes("function canonicalSectionOf(item)"))throw new Error("canonicalSectionOf missing");
+if(!snapshotSource.includes("function sectionOfSnapshotItem(item, fallback)"))throw new Error("current snapshot section resolver missing");
 if(!snapshotSource.includes("item?.placement?.section"))throw new Error("placement.section route missing");
 const repairSource=fs.readFileSync(path.join(repo,"scripts/repair-frontmap-chain.js"),"utf8");
 if(!repairSource.includes('patch.label === "canonical URL aliases"'))throw new Error("repair script compatibility missing");

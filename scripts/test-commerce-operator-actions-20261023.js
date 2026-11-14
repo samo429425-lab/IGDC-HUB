@@ -20,7 +20,7 @@ async function testStalePublicationVersusDurableAssignment(){
    slotDecision:"hold",review:{state:"hold"},queueControl:{action:"hold"},
    frontPublication:{status:pub}
   }});
-  assignments.set(id,rel.map((r,i)=>({id:"assign_"+id+"_"+i,candidate_id:id,publication_status:r})));
+  assignments.set(id,rel.map((r,i)=>({id:"assign_"+id+"_"+i,candidate_id:id,hub_key:"distribution",country_code:"KR",region_code:"NATIONWIDE",slot_key:"distribution-new",state:"approved",publication_status:r})));
  }
  add("stale_publication",[ "not_ready" ],"published");
  add("really_published",["published"],"published");
@@ -50,11 +50,19 @@ async function testStalePublicationVersusDurableAssignment(){
  const request=id=>({httpMethod:"POST",body:JSON.stringify({decision:"dismiss",expectedBucket:"hold",candidateIds:[id],countryCode:"KR",subdivisionCode:"NATIONWIDE"})});
  let response=await handler(request("stale_publication"));
  assert.equal(response.statusCode,200,response.body);
- assert.equal(rows.get("stale_publication").status,"removed");
+ assert.equal(rows.get("stale_publication").status,"approval_pending","SQL status remains safe for the shared master ledger");
+ assert.equal(rows.get("stale_publication").source_payload.slotDecision,"removed","private management visibility is controlled by payload");
  assert.equal(assignments.get("stale_publication").length,0);
  response=await handler(request("really_published"));
  assert.equal(response.statusCode,409);
  assert.equal(rows.get("really_published").status,"hold");
+ // A stale unpublished relationship from another country must never be deleted as KR.
+ add("foreign_assignment",["not_ready"],"unmatched");
+ assignments.get("foreign_assignment")[0].country_code="US";
+ response=await handler(request("foreign_assignment"));
+ assert.equal(response.statusCode,409,"cross-market relation must remain protected");
+ assert.equal(assignments.get("foreign_assignment").length,1,"cross-market record must not be mutated");
+ assert.equal(rows.get("foreign_assignment").source_payload.slotDecision,"hold");
  response=await handler(request("payload_only"));
  assert.equal(response.statusCode,409,"No assignment and old publication marker must remain protected until reconciled");
  console.log("PASS historical assignment stale payload deletion, active publication protection");
@@ -94,7 +102,7 @@ function testAdminReadbackFallback(){
  assert.match(ui,/var stageRows=allMode\?latestVisibleResearchRows\(\)\.slice\(\):selectedRows\.slice\(\)/,
    "whole latest-list registration must exclude already transferred or held items");
  const html=fs.readFileSync(path.join(root,"commerce-country-control.html"),"utf8");
- assert.match(html,/admin-commerce-country-control\.js\?v=20261023-latest-inventory-actions-v2/);
+ assert.match(html,/admin-commerce-country-control\.js\?(?:v|build)=[A-Za-z0-9._-]+/,"admin JS must use a cache-busting revision");
  console.log("PASS committed management actions survive slow full-ledger reload; browser cache revision");
 }
 (async()=>{await testStalePublicationVersusDurableAssignment();await testChunkedVisibility();testAdminReadbackFallback();console.log("PASS operator actions regression suite");})().catch(error=>{console.error(error);process.exitCode=1;});
