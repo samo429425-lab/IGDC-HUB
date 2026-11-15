@@ -26,7 +26,20 @@ const key=s=>txt(s.countryCode).toUpperCase()+'|'+region(s);
 const idFor=s=>'igdc_private_psom_auto_'+txt(s.countryCode).toLowerCase()+'_'+region(s).toLowerCase().replace(/[^a-z0-9_-]/g,'_');
 const encoded=encodeURIComponent;
 const NEXT_CYCLE_MS=15*60000;
-const RECHECK_MS=24*60*60000;
+const RECHECK_MS=24*60*60000; // Fallback only; fresh private staging wakes a finished cycle immediately.
+const INCONCLUSIVE_RECHECK_MS=60*60000; // Retry a bounded verified-placement failure; keep administrator holds protected.
+const PRODUCT_STAGE_HUB='country-product-ai-private-pipeline';
+const productStageId=s=>'igdc_product_private_auto_'+txt(s.countryCode).toLowerCase()+'_'+region(s).toLowerCase().replace(/[^a-z0-9_-]/g,'_');
+// A staged count is a durable private-ledger signal, not a publication permit.
+function stageSignal(row){
+  const count=Math.max(0,Number(row&&row.privateCandidatesStaged||0));
+  const job=txt(row&&row.jobId);
+  return count>0?{count,token:job+'|'+count}:null;
+}
+function newStageAvailable(rule,signal){
+  return !!signal && signal.count>0 && txt(obj(rule).lastObservedProductStageToken)!==signal.token &&
+    !['retry','paused'].includes(txt(obj(rule).phase));
+}
 function rowEligible(row,scope){
   const p=obj(row.source_payload),market=obj(p.marketScope),supply=obj(p.countrySupply),management=obj(p.managementControl),queue=obj(p.queueControl),pipeline=obj(p.pipeline),front=obj(p.frontPublication),seller=obj(p.supplier);
   if(txt(row.source_ref)!=='country-product-ranking-review'||txt(row.created_by)!==ACTOR||txt(pipeline.promotedBy)!==ACTOR)return{ok:false,reason:'not_scheduler_owned'};
@@ -80,10 +93,11 @@ function makePipeline(deps){
       rule:{schema:VERSION,cursor:'',phase:'idle',lastStepAt:null,nextCycleAt:null,errors:[],leaseUntil:null},created_at:t,updated_at:t,updated_by:ACTOR},'resolution=ignore-duplicates,return=minimal');
     return readCheckpoint(s);
   }
-  async function claim(s){
+  async function claim(s,signal){
     const old=await ensure(s);if(!old)throw new Error('psom_checkpoint_missing');
     const t=new Date(Math.max(ts(clock()),ts(old.updated_at)+1)).toISOString(),prior=obj(old.rule);
-    if(ts(prior.leaseUntil)>ts(t)||ts(prior.nextCycleAt)>ts(t))return null;
+    if(ts(prior.leaseUntil)>ts(t)||
+      (ts(prior.nextCycleAt)>ts(t)&&!newStageAvailable(prior,signal)))return null;
     const token=crypto.randomBytes(10).toString('hex');
     const next=obj(Object.assign({},prior,{leaseToken:token,leaseUntil:new Date(ts(t)+LEASE_MS).toISOString()}));
     const written=arr(await store.update('gslot_policies','id=eq.'+encoded(idFor(s))+'&updated_at=eq.'+encoded(txt(old.updated_at)),{rule:next,updated_at:t,updated_by:ACTOR}));
@@ -112,14 +126,15 @@ function makePipeline(deps){
       '&order=id.asc&limit='+SCAN_LIMIT;
     return arr(await store.select('gslot_candidates',query));
   }
-  async function runScope(s){
-    const lock=await claim(s);
+  async function runScope(s,signal){
+    const lock=await claim(s,signal);
     if(!lock)return{scope:key(s),skipped:'lease_or_retry_interval'};
-    let state=Object.assign({cursor:'',errors:[],reviewRequired:0,placed:0,legacyReinspectionAttempts:0},lock.rule),error=null;
+    let state=Object.assign({cursor:'',errors:[],reviewRequired:0,placed:0,legacyReinspectionAttempts:0},lock.rule),error=null,stopped=false;
     try{
       if(!await active(s)){state.phase='paused';state.nextCycleAt=new Date(ts(clock())+NEXT_CYCLE_MS).toISOString();}
       else{
         const batch=await candidateBatch(s,state.cursor),eligible=[];
+        let retryablePlacementGap=false;
         for(const row of batch){
           const check=rowEligible(row,s);
           if(check.ok&&eligible.length<CANDIDATES_PER_SCOPE){
@@ -145,36 +160,75 @@ function makePipeline(deps){
           state.placed=Number(state.placed||0)+Number(result.assigned||0);
           state.reviewRequired=Number(state.reviewRequired||0)+Number(result.failed||0)+Number(result.held||0)+Number(result.inconclusive||0);
           state.lastPlacementResult=arr(result.results).map(x=>({candidateId:txt(x.candidateId),assigned:x.assigned===true,reason:txt(x.reason||x.error)})).slice(-CANDIDATES_PER_SCOPE);
+          // A vendor timeout or inconclusive canonical write is neither a
+          // successful placement nor an administrator hold. Do not abandon an
+          // otherwise eligible private candidate for the full 24h interval.
+          // A policy hold/rejection stays private and is NOT retried blindly.
+          retryablePlacementGap=Number(result.failed||0)>0||Number(result.inconclusive||0)>0;
+          state.lastPlacementAttemptAt=clock();
+          state.lastPlacementOutcome={requested:eligible.length,assigned:Number(result.assigned||0),
+            failed:Number(result.failed||0),held:Number(result.held||0),inconclusive:Number(result.inconclusive||0)};
         }
         const atEnd=batch.length<SCAN_LIMIT&&eligible.length<CANDIDATES_PER_SCOPE;
         state.cursor=atEnd?'':nextCursor;
         state.phase=atEnd?'cycle_complete':'research_candidates_scanned';
-        state.nextCycleAt=new Date(ts(clock())+(atEnd?RECHECK_MS:NEXT_CYCLE_MS)).toISOString();
-        state.lastResult=atEnd?'waiting_for_fresh_validated_products':(eligible.length?'private_psom_attempt_recorded':'private_psom_no_evidence_ready_product');
+        state.nextCycleAt=new Date(ts(clock())+(atEnd?(retryablePlacementGap?INCONCLUSIVE_RECHECK_MS:RECHECK_MS):NEXT_CYCLE_MS)).toISOString();
+        state.lastResult=atEnd?(retryablePlacementGap?'private_psom_inconclusive_retry_scheduled':'waiting_for_fresh_validated_products'):
+          (eligible.length?'private_psom_attempt_recorded':'private_psom_no_evidence_ready_product');
         state.lastScanned=Number(batch.length);
+        // A later staging write carries a different token and wakes PSOM again.
+        // Never acknowledge this token before the candidate batch was processed.
+        if(signal)state.lastObservedProductStageToken=signal.token;
       }
     }catch(e){
       error=txt(e&&e.message||e);
-      state.phase=e&&e.stopped?'paused':'retry';
+      stopped=!!(e&&e.stopped);
+      state.phase=stopped?'paused':'retry';
       state.lastResult=e&&e.stopped?'country_stopped_before_psom_write':'psom_step_failed_cursor_preserved';
       state.nextCycleAt=new Date(ts(clock())+NEXT_CYCLE_MS).toISOString();
       if(!(e&&e.stopped))state.errors=arr(state.errors).concat([{at:clock(),error}]).slice(-MAX_ERRORS);
     }
     await release(s,lock,state);
-    return{scope:key(s),ok:!error,phase:state.phase,result:state.lastResult,placed:Number(state.placed||0),reviewRequired:Number(state.reviewRequired||0),legacyReinspectionAttempts:Number(state.legacyReinspectionAttempts||0),error,publicPublication:false};
+    return{scope:key(s),ok:!error||stopped,stopped,phase:state.phase,result:state.lastResult,
+      placed:Number(state.placed||0),reviewRequired:Number(state.reviewRequired||0),
+      lastPlacementOutcome:obj(state.lastPlacementOutcome),nextCycleAt:state.nextCycleAt||null,
+      legacyReinspectionAttempts:Number(state.legacyReinspectionAttempts||0),
+      error:stopped?null:error,publicPublication:false};
   }
   async function run(){
     const plan=await automation.autoProductScopes(),scopes=arr(plan.scopes);
     if(!scopes.length)return{ok:true,version:VERSION,processed:0,results:[],automaticFrontMatch:false};
     const prior=[],page=500;
     for(let offset=0;offset<1000;offset+=page){
-      const slice=arr(await store.select('gslot_policies','select=id,rule&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
-      prior.push(...slice);if(slice.length<page)break;
+      const fields='select=id,lastStepAt:rule->>lastStepAt,nextCycleAt:rule->>nextCycleAt,'+
+        'phase:rule->>phase,lastObservedProductStageToken:rule->>lastObservedProductStageToken';
+      const slice=arr(await store.select('gslot_policies',fields+'&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
+      prior.push(...slice.map(row=>({id:row.id,rule:{lastStepAt:row.lastStepAt,nextCycleAt:row.nextCycleAt,
+        phase:row.phase,lastObservedProductStageToken:row.lastObservedProductStageToken}})));if(slice.length<page)break;
     }
     const byId=new Map(prior.map(row=>[txt(row.id),obj(row.rule)]));
-    const choices=scopes.filter(s=>ts(obj(byId.get(idFor(s))).nextCycleAt)<=ts(clock()))
-      .sort((a,b)=>ts(obj(byId.get(idFor(a))).lastStepAt)-ts(obj(byId.get(idFor(b))).lastStepAt)||key(a).localeCompare(key(b))).slice(0,MAX_SCOPES);
-    const settled=await Promise.allSettled(choices.map(runScope));
+    // Read just the durable product staging counters. No candidate payloads,
+    // URLs, large product jobs or manual records are loaded by this wake gate.
+    const stageRows=[];
+    for(let offset=0;offset<1000;offset+=page){
+      const fields='select=id,jobId:rule->>jobId,privateCandidatesStaged:rule->privateCandidatesStaged';
+      const slice=arr(await store.select('gslot_policies',fields+'&scope_hub=eq.'+PRODUCT_STAGE_HUB+'&order=id.asc&limit='+page+'&offset='+offset));
+      stageRows.push(...slice);if(slice.length<page)break;
+    }
+    const stages=new Map(stageRows.map(row=>[txt(row.id),stageSignal(row)]));
+    const choices=scopes.filter(s=>{
+      const state=byId.get(idFor(s))||{};
+      return ts(state.nextCycleAt)<=ts(clock())||newStageAvailable(state,stages.get(productStageId(s)));
+    }).sort((a,b)=>{
+      // New verified PRIVATE staging should not queue behind a long backlog
+      // of ordinary 24-hour sweeps. Each acknowledged signal is consumed once.
+      const freshA=Number(newStageAvailable(byId.get(idFor(a))||{},stages.get(productStageId(a))));
+      const freshB=Number(newStageAvailable(byId.get(idFor(b))||{},stages.get(productStageId(b))));
+      return freshB-freshA ||
+        ts(obj(byId.get(idFor(a))).lastStepAt)-ts(obj(byId.get(idFor(b))).lastStepAt)||
+        key(a).localeCompare(key(b));
+    }).slice(0,MAX_SCOPES);
+    const settled=await Promise.allSettled(choices.map(s=>runScope(s,stages.get(productStageId(s)))));
     const results=settled.map((x,i)=>x.status==='fulfilled'?x.value:{scope:key(choices[i]),ok:false,error:txt(x.reason&&x.reason.message||x.reason)});
     return{ok:results.every(x=>x.ok!==false),version:VERSION,activeScopes:scopes.length,processed:results.length,results,automaticFrontMatch:false,automaticPublication:false};
   }

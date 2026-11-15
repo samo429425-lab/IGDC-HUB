@@ -3,6 +3,7 @@
 const AdminSession = require("./lib/global-slot-console-auth");
 const Automation = require("./lib/commerce-country-automation.v1");
 const AutoBottleneck = require("./lib/commerce-automation-bottleneck-diagnostic.v1");
+const Phase15Audit = require("./lib/commerce-country-phase15-diagnostic.v1");
 const SupplierStaged = require("./lib/commerce-country-auto-supplier-pipeline.v1");
 const ProductStaged = require("./lib/commerce-country-auto-product-pipeline.v1");
 const MarketSignals = require("./lib/commerce-market-signal-intelligence.v1");
@@ -220,6 +221,8 @@ exports.handler=async function(event){
     if(action==="diagnostic")return json(200,Automation.diagnostic(await Automation.configState()));
     if(action==="global_control_diagnostic")return json(200,await Automation.globalControlDiagnostic());
     if(action==="auto_bottleneck_diagnostic")return json(200,await AutoBottleneck.run({focusCountry:query.focusCountry,focusRegion:query.focusRegion}));
+    // Read-only, administrator-authenticated phase 1–15 stage report; no writes or public listing.
+    if(action==="auto_research_15_diagnostic")return json(200,await Phase15Audit.run());
     if(action==="toggle_kr_selected_research"){
       if(method!=="POST")return json(405,{ok:false,error:"POST 관리자 작업만 허용됩니다."});
       const latest=await Automation.configState();

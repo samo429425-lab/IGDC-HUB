@@ -74,11 +74,13 @@ function create(deps) {
       const fields='select=id,updated_at,phase:rule->>phase,lastStepAt:rule->>lastStepAt,'+
         'completedAt:rule->>completedAt,nextCycleAt:rule->>nextCycleAt,'+
         'activeSupplierCount:rule->activeSupplierCount,supplierTarget:rule->supplierTarget,'+
+        'qualifiedSupplierCount:rule->qualifiedSupplierCount,targetReached:rule->targetReached,'+
         'operatorAutoPause:rule->operatorAutoPause,nextRetryAt:rule->>nextRetryAt';
       const slice=arr(await store.select('gslot_policies',fields+'&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
       all.push(...slice.map(row=>({id:row.id,updated_at:row.updated_at,rule:{
         phase:row.phase,lastStepAt:row.lastStepAt,completedAt:row.completedAt,nextCycleAt:row.nextCycleAt,
         activeSupplierCount:row.activeSupplierCount,supplierTarget:row.supplierTarget,
+        qualifiedSupplierCount:row.qualifiedSupplierCount,targetReached:row.targetReached===true,
         operatorAutoPause:row.operatorAutoPause===true,nextRetryAt:row.nextRetryAt
       }})));if(slice.length<page)return all;
     }

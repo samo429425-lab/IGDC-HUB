@@ -8268,9 +8268,32 @@ async function globalControlDiagnostic() {
       lastError:text(plain(array(rule.errors).slice(-1)[0]).error||plain(array(rule.errors).slice(-1)[0]).reason).slice(0,180)||null,
       privateSlotsUnder20:array(fill.under20).length,privateSlotsUnder100:array(fill.under100).length,sectionFillAvailable:fill.totalSections===20,errorCount:array(rule.errors).length,updatedAt:row.updated_at||null};
   });
+  // Read only bounded private PSOM state: this view must not hydrate candidate
+  // rows or alter any previous diagnostic response fields. A failed read is
+  // reported explicitly, never interpreted as an empty successful queue.
+  let privatePsomRows=[],privatePsomReadError=null;
+  try{privatePsomRows=array(await SlotStore.select("gslot_policies",
+    "select=id,scope_country,scope_region,updated_at,"+
+    "phase:rule->>phase,lastResult:rule->>lastResult,nextCycleAt:rule->>nextCycleAt,"+
+    "lastStepAt:rule->>lastStepAt,lastPlacementAttemptAt:rule->>lastPlacementAttemptAt,"+
+    "lastPlacementOutcome:rule->lastPlacementOutcome,placed:rule->placed,"+
+    "reviewRequired:rule->reviewRequired,errors:rule->errors"+
+    "&scope_hub=eq.country-private-psom-auto&order=id.asc&limit=1000"));}
+  catch(error){privatePsomReadError=text(error&&error.message||error);}
+  const privatePsomStates=privatePsomRows.map(row=>({country:text(row.scope_country),
+    region:text(row.scope_region||"NATIONWIDE"),phase:text(row.phase)||"idle",
+    lastResult:text(row.lastResult)||null,nextCycleAt:row.nextCycleAt||null,
+    lastStepAt:row.lastStepAt||null,lastPlacementAttemptAt:row.lastPlacementAttemptAt||null,
+    lastPlacementOutcome:plain(row.lastPlacementOutcome),placed:Number(row.placed||0),
+    reviewRequired:Number(row.reviewRequired||0),errorCount:array(row.errors).length,
+    updatedAt:row.updated_at||null}));
   return { ok: true, reportType: "igdc-global-automation-control-diagnostic", version: VERSION, generatedAt: iso(), operatingStatus: operatingStatus(state), master: state.master, savedSettings: state.settings, scheduler: { schedule: "supplier-minute-checkpoint + product-2-minute-checkpoint", dueCount: Number(dueResult.dueCount || 0), nextScopes: array(dueResult.scopes).map((row) => ({ country: row.countryCode, region: row.subdivisionCode || "NATIONWIDE", lastRunAt: row.effective && row.effective.lastRunAt || null })) }, researchJobs: { supplier: supplierJobs, product: productJobs, activeSupplier: supplierJobs.filter((row) => row.status === "saved_active").length, activeProduct: productJobs.filter((row) => row.status === "saved_active").length,
       activeScheduledSupplier: supplierJobs.filter(row=>row.jobId.endsWith("_scheduled")&&row.status==="saved_active").length,
-      detailedProgressDeferredToScope: true }, stagedAutomation:{readError:stagedReadError,total:staged.length,supplierCount:staged.filter(x=>x.kind==='supplier').length,productCount:staged.filter(x=>x.kind==='product').length,manualPreserved:staged.filter(x=>x.phase==='manual_preserved'||x.phase==='manual_job_preserved').length,errors:staged.filter(x=>x.errorCount>0).length,rows:staged}, safety: { privateResearchOnly: true, administratorApplyRequired: true, automaticProductImport: false, automaticSlotPublication: false, paymentExecution: false, excludedCountries: ["KP"], manualDecisionPrecedence: true, largeLedgerRulesExcludedFromGlobalOverview: true } };
+      detailedProgressDeferredToScope: true }, stagedAutomation:{readError:stagedReadError,total:staged.length,supplierCount:staged.filter(x=>x.kind==='supplier').length,productCount:staged.filter(x=>x.kind==='product').length,manualPreserved:staged.filter(x=>x.phase==='manual_preserved'||x.phase==='manual_job_preserved').length,errors:staged.filter(x=>x.errorCount>0).length,rows:staged},
+    privatePsomAutomation:{readError:privatePsomReadError,total:privatePsomStates.length,
+      inconclusive:privatePsomStates.filter(x=>x.lastResult==='private_psom_inconclusive_retry_scheduled').length,
+      delayed:privatePsomStates.filter(x=>ts(x.nextCycleAt)>Date.now()).length,
+      rows:privatePsomStates}, safety: { privateResearchOnly: true, administratorApplyRequired: true, automaticProductImport: false, automaticSlotPublication: false, paymentExecution: false, excludedCountries: ["KP"], manualDecisionPrecedence: true, largeLedgerRulesExcludedFromGlobalOverview: true } };
 }
 
 function diagnostic(state) {
