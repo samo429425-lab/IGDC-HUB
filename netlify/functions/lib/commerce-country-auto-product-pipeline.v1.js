@@ -307,16 +307,23 @@ function makePipeline(deps) {
       await recheck(scope);
       const step = await automation.stageCurrentProductResearchQueue(ACTOR,inputFor(scope,{jobId:state.jobId,source:'scheduled_auto',operation:'stage'}));
       const p=obj(step.partialQueue);
-      const previousCursor=Number(state.lastStagingScanCursor||0);
       const scanCursor=Number(p.scanCursor||0);
-      const privateWrites=Number(p.created||0)+Number(p.updated||0)+Number(p.preserved||0);
-      const stalled=p.complete!==true && scanCursor<=previousCursor && privateWrites===0;
+      const privateWrites=Number(p.created||0)+Number(p.updated||0);
+      // An already-present (preserved) row is not a NEW staging write; if the
+      // same invalid product remains pending, it must not reset the backoff.
+      // An invalid/private-review item may leave the same cursor and remaining
+      // count forever. Compare a persisted stable signature (not just a cursor
+      // which can legitimately rewind after migration) before deferring retries.
+      const stageSignature=[txt(state.jobId),scanCursor,Number(p.remaining||0),Number(p.failed||0),Number(p.blocked||0)].join('|');
+      const stalled=p.complete!==true&&Number(p.remaining||0)>0&&privateWrites===0&&
+        stageSignature===txt(state.lastStagingSignature);
       const repeated=stalled?Number(state.stagingNoProgressCount||0)+1:0;
       const next=Object.assign(state,{stagingComplete:p.complete===true,
         privateCandidatesStaged:Number(state.privateCandidatesStaged||0)+Number(p.created||0),latestStaging:p,
-        lastStagingScanCursor:scanCursor,stagingNoProgressCount:repeated,
+        lastStagingScanCursor:scanCursor,lastStagingSignature:stageSignature,stagingNoProgressCount:repeated,
         lastStagingSummary:{done:Number(p.done||0),remaining:Number(p.remaining||0),
-          failed:Number(p.failed||0),blocked:Number(p.blocked||0),scanCursor},
+          failed:Number(p.failed||0),blocked:Number(p.blocked||0),skipped:Number(p.skipped||0),
+          scanCursor,reviewRequired:Number(p.validationBlocked||0)},
         awaitingAdminSectionReview:true,lastResult:'latest_research_and_shared_candidate_ledger_updated',phase:'staging'});
       if(repeated>=3){
         // An unchanged failed staging cursor is not a reason to auto-approve

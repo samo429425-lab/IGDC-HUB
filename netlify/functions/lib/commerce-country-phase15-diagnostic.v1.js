@@ -238,12 +238,17 @@ function create(deps) {
     try{const countries=list(obj(automation.registry()).countries);registryCodes=countries.map(row=>country(row.code)).filter(Boolean);registryCount=registryCodes.length;}
     catch(e){readErrors.push({component:'country_registry',category:errorType(e&&e.message),message:safeError(e&&e.message)});}
     const hasSettings=!!state&&state.storageAvailable!==false;
+    const configuredSelected=list(obj(state&&state.master).selectedCountryCodes).map(country).filter(Boolean);
+    const scheduledCountries=new Set(expected.map(scope=>scope.split('|')[0]));
+    const selectedButNotScheduled=[...new Set(configuredSelected)].filter(code=>!scheduledCountries.has(code));
     const isComplete=complete&&jobScanComplete&&hasSettings&&readErrors.length===0;
     const report={
       ok:true,reportType:'igdc-country-automatic-research-phase01-15-diagnostic',version:VERSION,
       generatedAt:clock(),startedAt,coverage:{complete:isComplete,checkpointScanComplete:complete,researchJobScanComplete:jobScanComplete,
         registeredCountries:registryCount,registeredCountryCodes:registryCodes,
         masterMode:text(obj(state&&state.master).mode||plan.mode)||'unknown',
+        selectedCountryCount:new Set(configuredSelected).size,scheduledCountryCount:scheduledCountries.size,
+        selectedButNotScheduledCountryCodes:selectedButNotScheduled,
         expectedScheduledScopes:expected.length,observedCheckpointRows:scopeRows.length,observedResearchJobRows:jobRows.length,
         observedScopes:scopes.length,unselectedCheckpoints:scopes.filter(s=>!s.scheduled).length,
         buildCommit:text(process.env.COMMIT_REF).slice(0,40)||null},
@@ -257,6 +262,8 @@ function create(deps) {
         privateSuppliersSaved:scopes.reduce((n,s)=>n+(s.supplier?s.supplier.supplier.privateSaved:0),0),
         supplierCandidateLedgerRowsObserved:scopes.reduce((n,s)=>n+(s.supplier?s.supplier.supplier.privateLedgerGate.ledgerRows:0),0),
         supplierUsablePrivateSitesObserved:scopes.reduce((n,s)=>n+(s.supplier?s.supplier.supplier.privateLedgerGate.eligibleSellerSites:0),0),
+        supplierUsablePrivateSitesSelectedScopes:scopes.reduce((n,s)=>n+(s.scheduled&&s.supplier?s.supplier.supplier.privateLedgerGate.eligibleSellerSites:0),0),
+        supplierUsablePrivateSitesUnselectedScopes:scopes.reduce((n,s)=>n+(!s.scheduled&&s.supplier?s.supplier.supplier.privateLedgerGate.eligibleSellerSites:0),0),
         productStagingNoProgressScopes:scopes.filter(s=>s.product&&s.product.product.stagingNoProgressCount>=3).length,
         psomCandidatesNeedingReviewScopes:scopes.filter(s=>s.psom&&s.psom.psom.lastCandidateGate.blocked>0&&s.psom.psom.lastCandidateGate.eligible===0).length,
         privateProductsStaged:scopes.reduce((n,s)=>n+(s.product?s.product.product.privateStaged:0),0),

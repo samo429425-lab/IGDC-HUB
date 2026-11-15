@@ -260,6 +260,10 @@
 /vi/*                   /vi/:splat                       200
 /pl/*                   /pl/:splat                       200
 
+# IGDC/MARU owned search sitemap and IndexNow key (before generic rewrites).
+/sitemap-global.xml     /.netlify/functions/global-search-sitemap   200!
+/indexnow-key.txt       /.netlify/functions/igdc-indexnow-key        200!
+
 /admin/api/log          /.netlify/functions/admin-log    200
 
 /.netlify/functions/*   /.netlify/functions/:splat       200

@@ -2026,7 +2026,13 @@ async function beginResearchJob(actorId, input, event) {
 
   const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,scopeAuthority:"administrator-selected",ignoreRequestGeo:true,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},basePlan=augmentAdministratorPriorityResearchPlan(augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope,context.policyControl),scope,Object.assign({},context.policyControl,{researchDirective:text(effective.researchDirective)})),plan=researchRoundIndex>1?selectSingleSupplierResearchRound(expandSupplierResearchRounds(basePlan,scope,researchRoundIndex),researchRoundIndex):expandSupplierResearchRounds(basePlan,scope,researchRounds),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
   const novelSeeds=filterKnownSupplierItems(manualSeeds.concat(array(plan.seeds)),knownSupplierKeys);
-  const initialStatus=newCandidateTarget<=0?"complete":(array(plan.tasks).length?"searching":"inspecting");
+  // A scheduled provider cooldown must not suppress the independent Sanmaru
+  // source, or alter a human-initiated research plan. These values were missing
+  // in earlier deployed builds, causing ReferenceError on each NEW job.
+  const cooldowns=text(actorId)==="scheduled-automation"?plain(raw.scheduledProviderCooldowns):{};
+  const suppressedScheduledLanes=["google","naver"].filter(lane=>Date.parse(text(cooldowns[lane]))>Date.now());
+  const searchPlanTasks=array(plan.tasks).filter(task=>!suppressedScheduledLanes.includes(lower(plain(task).lane)));
+  const initialStatus=newCandidateTarget<=0?"complete":(searchPlanTasks.length?"searching":"inspecting");
   const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchRoundIndex,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds,scheduledProviderCooldowns:suppressedScheduledLanes}),searchTasks:newCandidateTarget>0?searchPlanTasks:[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?searchPlanTasks.length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
   if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
   if (existing && text(existing.jobId) !== text(job.jobId)) await archiveSupplierResearchCycle(existing, actorId);
@@ -2910,7 +2916,10 @@ function productSupplierSource(row, marketCountry) {
   // Do not impose an additional supplier-count / HTTPS-evidence / marketplace
   // gate here; the downstream public-release pipeline keeps its own trust,
   // market, safety, evidence, revenue and administrator Front Match gates.
-  const logistics=plain(first(row&&row.countryLogistics,plain(row&&row.supplier).countryLogistics,plain(row&&row.evidence).countryLogistics));
+  // first() stringifies values; an object would become "[object Object]" and
+  // erase its country/policy evidence. Retain real structured metadata only.
+  const logistics=plain(row&&row.countryLogistics&&typeof row.countryLogistics==='object'?row.countryLogistics:
+    (plain(row&&row.supplier).countryLogistics||plain(row&&row.evidence).countryLogistics));
   const privateResearchEligible=true;
   const releaseEvidenceReady=evidence.supplierReviewEligible===true||(evidence.official===true&&evidence.responsibleEntity===true&&evidence.directSales===true&&evidence.legalIdentity===true&&evidence.contactChannel===true&&evidence.marketplace!==true);
   const designated=safeUrl(first(row&&row.productPageUrl,row&&row.sourceCandidateUrl));parsed.pathname="/";parsed.search="";parsed.hash="";
@@ -8017,8 +8026,12 @@ function supplierProductScope(setting,countryCode,subdivisionCode){
   const latest=plain(setting&&setting.lastAttemptSummary),prior=plain(setting&&setting.lastRunSummary);
   // These are observational numbers, not eligibility overrides. Actual URLs
   // and policy evidence are always re-read in beginProductResearchJob().
-  const supplierCount=Math.max(0,Number(first(latest.activeSupplierCount,prior.activeSupplierCount,0))||0);
-  const supplierRoundsCompleted=Math.max(0,Number(first(latest.supplierRoundsCompleted,prior.supplierRoundsCompleted,0))||0);
+  // Unlike first() (which discards numeric zero), a freshly confirmed ZERO
+  // suppliers must not fall back to an obsolete nonzero completed-run count.
+  const newestCount=latest.activeSupplierCount!=null?latest.activeSupplierCount:prior.activeSupplierCount;
+  const newestRounds=latest.supplierRoundsCompleted!=null?latest.supplierRoundsCompleted:prior.supplierRoundsCompleted;
+  const supplierCount=Math.max(0,Number(newestCount)||0);
+  const supplierRoundsCompleted=Math.max(0,Number(newestRounds)||0);
   return{countryCode,subdivisionCode,supplierLastRunAt:text(setting&&setting.lastDurableSupplierAt)||null,
     supplierCount,supplierRoundsCompleted};
 }

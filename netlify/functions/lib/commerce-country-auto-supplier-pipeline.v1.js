@@ -12,6 +12,8 @@ const LEASE_MS = 3 * 60 * 1000; // Worker timeouts recover without a nine-minute
 const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Brief concurrency yield, never a country-wide permanent pause.
 const MAX_SCOPES = 4; // Keep concurrent country network/DB writes within one short Netlify scheduled invocation.
 const RESEARCH_ROUNDS = 5; // Country scheduled automation always completes five distinct research rounds.
+const GLOBAL_PROVIDER_GUARD_ID='igdc_supplier_provider_cooldown_global_v1';
+const GLOBAL_PROVIDER_BACKOFF_MS=2*60*60*1000; // bounded, not permanent
 // Checkpoints run each scheduled tick while a country is being researched.
 // These gaps apply ONLY after a complete five-round search has exhausted its
 // current provider/source plan without filling the PRIVATE country board.
@@ -64,6 +66,35 @@ function create(deps) {
   const store=deps&&deps.store||Store;
   const clock=deps&&deps.clock||now;
   async function rowFor(s) { return arr(await store.select('gslot_policies','select=id,rule,updated_at&id=eq.'+encodeURIComponent(idFor(s))+'&limit=1'))[0]||null; }
+  // A 429 on a shared API key is not country-specific. Keep a small durable
+  // provider-only throttle so the other 90 markets do not waste the same quota.
+  // If this optional guard is unavailable, existing country cooldowns still work.
+  async function sharedCooldowns(){
+    try{
+      const row=arr(await store.select('gslot_policies','select=rule&id=eq.'+GLOBAL_PROVIDER_GUARD_ID+'&limit=1'))[0];
+      const rule=obj(row&&row.rule),out={};
+      for(const lane of ['google','naver'])if(ts(rule[lane])>ts(clock()))out[lane]=rule[lane];
+      return out;
+    }catch(_error){return{};}
+  }
+  async function markSharedQuota(lane){
+    if(!['google','naver'].includes(lane))return;
+    try{
+      const id=GLOBAL_PROVIDER_GUARD_ID;
+      const old=arr(await store.select('gslot_policies','select=id,rule,updated_at&id=eq.'+id+'&limit=1'))[0];
+      const t=new Date(Math.max(ts(clock()),ts(old&&old.updated_at)+1)).toISOString();
+      const prior=obj(old&&old.rule),until=new Date(Math.max(ts(prior[lane]),ts(clock())+GLOBAL_PROVIDER_BACKOFF_MS)).toISOString();
+      const rule=Object.assign({},prior,{[lane]:until,updatedAt:t});
+      if(old){
+        await store.update('gslot_policies','id=eq.'+id+'&updated_at=eq.'+encodeURIComponent(txt(old.updated_at)),
+          {rule,updated_at:t,updated_by:ACTOR});
+      }else{
+        await store.insert('gslot_policies',{id,name:'공유 검색 제공업체 예약 호출량 보호',scope_hub:'country-supplier-provider-guard',
+          scope_country:null,scope_region:null,enabled:true,rule,created_at:t,updated_at:t,updated_by:ACTOR},
+          'resolution=ignore-duplicates,return=minimal');
+      }
+    }catch(_error){/* optional shared guard never blocks country work */}
+  }
   async function rows() {
     const all=[],page=500;
     for(let offset=0;offset<10000;offset+=page){
@@ -166,9 +197,14 @@ function create(deps) {
       // Provider quota is scoped to provider requests, never to Sanmaru or
       // the country itself. Carry bounded, persisted cooldowns into a NEW job;
       // manual research ignores this scheduling hint entirely.
+      const shared=await sharedCooldowns(),local=obj(state.providerCooldowns),merged={};
+      for(const lane of ['google','naver']){
+        const until=Math.max(ts(shared[lane]),ts(local[lane]));
+        if(until>ts(clock()))merged[lane]=new Date(until).toISOString();
+      }
       const started=await automation.beginResearchJob(ACTOR,input(s,{researchRounds:RESEARCH_ROUNDS_PER_JOB,
         researchRoundIndex:Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1),
-        scheduledProviderCooldowns:obj(state.providerCooldowns)}));
+        scheduledProviderCooldowns:merged}));
       if(!txt(started&&started.jobId))throw new Error('supplier_research_start_without_job');
       return Object.assign(state,{jobId:started.jobId,lastProgressiveSearchCursor:0,lastResearchStage:txt(started.status),phase:['complete','committed'].includes(started.status)?'committing':'researching',rounds:RESEARCH_ROUNDS,startedAt:started.startedAt||clock(),lastResult:'five_round_supplier_research_started_round_'+String(Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1))});
     }
@@ -211,6 +247,7 @@ function create(deps) {
             if(['google','naver'].includes(outcome.provider)){
               state.providerCooldowns=Object.assign({},obj(state.providerCooldowns),{
                 [outcome.provider]:new Date(ts(clock())+6*60*60*1000).toISOString()});
+              await markSharedQuota(outcome.provider);
               // The failed provider lane has already been cut short in the
               // saved job. Continue the independent Sanmaru lane next tick.
               state.nextRetryAt=null;

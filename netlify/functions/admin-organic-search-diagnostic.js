@@ -9,7 +9,7 @@ try{RUN_LEDGER=require("./lib/igdc-search-exposure-run-ledger");}
 catch(e){if(e&&e.code!=="MODULE_NOT_FOUND")throw e;RUN_LEDGER={readLatest:async()=>({state:"not-installed",record:null})};}
 const ORIGIN="https://igdcglobal.com";
 const PLAY="https://play.google.com/store/apps/details?id=com.maru.mediaplayer";
-const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.2.0-mobile-runledger";
+const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.3.0-routing-crosscheck";
 const CHECKS=[
  ["platform-home","IGDC Global Platform","/home.html","platform"],
  ["platform-en","IGDC Global Platform (English)","/igdc-amplify-platform-en.html","platform"],
@@ -33,7 +33,7 @@ async function probe(id,label,path,group){
  const url=urlFor(path),started=Date.now();
  try{
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),4500);
+  const timeout=setTimeout(()=>controller.abort(),7000);
   let response,body="";
   try{
    response=await fetch(url,{method:"GET",headers:{"accept":"text/html,application/xml,text/plain;q=0.8","user-agent":"IGDC-ReadOnly-Diagnostic/1.0"},redirect:"follow",signal:controller.signal,cache:"no-store"});
@@ -60,7 +60,7 @@ async function probe(id,label,path,group){
    contentType:ctype.split(";")[0],title:cleanText(title).slice(0,120)||null,canonical:canonical||null,
    hasNoindex,hasPlayLink:html?pageHasPlay:null,htmlOrSitemapRecognized:hasMarker,
    checks:{httpOk:response.ok,contentTypeOk:correctType,markerPresent:hasMarker,indexableHint:!hasNoindex},
-   note:!response.ok?"The origin returned a non-success status":!correctType||!hasMarker?"Unexpected response content":hasNoindex?"Noindex signal detected":"Reachability is not proof of search ranking"};
+   note:!response.ok?"The origin returned a non-success status":xml&&ctype.includes("html")?"Sitemap returned HTML instead of XML; inspect Netlify rewrites":!correctType||!hasMarker?"Unexpected response content":hasNoindex?"Noindex signal detected":"Reachability is not proof of search ranking"};
  }catch(e){
   return{id,label,group,url,status:"unverified",httpStatus:null,elapsedMs:Date.now()-started,error:simpleError(e),
    note:"Live probe inconclusive; hosting, network policy, or timeout may be responsible"};
@@ -71,7 +71,7 @@ async function indexNowKeyCheck(){
  if(!key)return{configured:false,verification:"not-configured",reason:"INDEXNOW_KEY is not configured"};
  if(!/^[a-zA-Z0-9-]{8,128}$/.test(key))return{configured:true,verification:"invalid-format"};
  try{
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),3500);
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
   let resp,body="";
   try{resp=await fetch(ORIGIN+"/indexnow-key.txt",{method:"GET",signal:controller.signal,cache:"no-store"});body=(await resp.text()).slice(0,300);}
   finally{clearTimeout(timer);}
@@ -108,8 +108,8 @@ async function diagnostic(){
  const pageStatus=failed.length?"needs-review":unknown.length?"incomplete":"reachable-checks-passed";
  const dynamic=probes.find(x=>x.id==="dynamic-sitemap"),direct=probes.find(x=>x.id==="direct-sitemap");
  const routingCrosscheck={publicSitemap:dynamic&&dynamic.status||"unverified",directFunction:direct&&direct.status||"unverified",
-  status:dynamic&&dynamic.status==="reachable"?"route-ok":direct&&direct.status==="reachable"?"public-rewrite-mismatch":"unverified-or-generator-error",
-  explanation:"Compare the public XML URL to its direct generator; both must return XML. No URL is submitted to a search engine."};
+  status:dynamic&&dynamic.status==="reachable"&&direct&&direct.status==="reachable"?"route-ok":dynamic&&dynamic.status==="reachable"?"public-route-ok-direct-unverified":direct&&direct.status==="reachable"?"public-rewrite-mismatch":"unverified-or-generator-error",
+  explanation:"Both public and direct sitemap endpoints should return XML; a timeout alone is inconclusive. This check never submits URLs."};
   // SQL-free download evidence: current checks are NOT a historical execution receipt.
   // A missing optional SQL table is never treated as a search-engine failure.
   const latest=ledger&&ledger.record||null;
@@ -124,6 +124,7 @@ async function diagnostic(){
    explanation:latest?"Last stored run metadata; not proof the scheduled trigger ran or any URL was indexed.":"SQL 없이 현재 상태 점검 가능. 과거 실제 실행/제출 여부는 Netlify Functions 로그에서 별도 확인해야 합니다."
   };
   const downloadAudit={
+   deploymentChecks:{expectedSitemapContentType:"application/xml",indexNowKeyEndpoint:"/indexnow-key.txt",indexNowConfigured:key.configured===true,liveSubmissionVerified:false},
    schema:"igdc-maru-search-json-audit-v1",
    createdAt:now,
    mode:"read-only-no-search-submission",
