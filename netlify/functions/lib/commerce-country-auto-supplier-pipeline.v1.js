@@ -163,7 +163,12 @@ function create(deps) {
     }
     if(state.phase==='idle') {
       await recheck(s);
-      const started=await automation.beginResearchJob(ACTOR,input(s,{researchRounds:RESEARCH_ROUNDS_PER_JOB,researchRoundIndex:Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1)}));
+      // Provider quota is scoped to provider requests, never to Sanmaru or
+      // the country itself. Carry bounded, persisted cooldowns into a NEW job;
+      // manual research ignores this scheduling hint entirely.
+      const started=await automation.beginResearchJob(ACTOR,input(s,{researchRounds:RESEARCH_ROUNDS_PER_JOB,
+        researchRoundIndex:Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1),
+        scheduledProviderCooldowns:obj(state.providerCooldowns)}));
       if(!txt(started&&started.jobId))throw new Error('supplier_research_start_without_job');
       return Object.assign(state,{jobId:started.jobId,lastProgressiveSearchCursor:0,lastResearchStage:txt(started.status),phase:['complete','committed'].includes(started.status)?'committing':'researching',rounds:RESEARCH_ROUNDS,startedAt:started.startedAt||clock(),lastResult:'five_round_supplier_research_started_round_'+String(Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1))});
     }
@@ -181,6 +186,7 @@ function create(deps) {
         state.progressiveInspected=Number(state.progressiveInspected||0)+Number(staged.inspected||0);
         state.progressivePersisted=Number(state.progressivePersisted||0)+Number(staged.persisted||0);
         state.progressiveUsableSuppliers=Number(staged.usableSuppliers||state.progressiveUsableSuppliers||0);
+        if(obj(staged.privateSupplierGate).ledgerRows!=null)state.supplierGate=obj(staged.privateSupplierGate);
         if(Number(staged.persisted||0)>0)return Object.assign(state,{lastResult:'supplier_progressive_private_leads_staged_search_continues'});
       }
       await recheck(s);
@@ -201,8 +207,16 @@ function create(deps) {
           // A provider quota limit is not permission to launch more queries
           // immediately. Yield this COUNTRY for 10 minutes; other countries
           // retain their own independent rotation and progress.
-          if(/^(?:http_429|rate_limit|quota_exceeded)$/.test(outcome.status))
-            state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
+          if(/^(?:http_429|rate_limit|quota_exceeded)$/.test(outcome.status)){
+            if(['google','naver'].includes(outcome.provider)){
+              state.providerCooldowns=Object.assign({},obj(state.providerCooldowns),{
+                [outcome.provider]:new Date(ts(clock())+6*60*60*1000).toISOString()});
+              // The failed provider lane has already been cut short in the
+              // saved job. Continue the independent Sanmaru lane next tick.
+              state.nextRetryAt=null;
+              lastResult='supplier_provider_quota_sanmaru_fallback_queued';
+            }else state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
+          }
           else if(/^(?:http_408|http_500|http_502|http_503|http_504|timeout|typeerror|network_error|fetch_failed)$/.test(outcome.status))
             state.nextRetryAt=new Date(ts(clock())+2*60*1000).toISOString();
           // Missing/disabled provider credentials use an independent Sanmaru
@@ -245,6 +259,7 @@ function create(deps) {
         jobId:state.jobId,recordedSuppliers:savedCount,supplierRoundsCompleted:completedRounds}));
       const have=Number(recorded&&recorded.activeSupplierCount||0);
       const qualified=Number(recorded&&recorded.qualifiedSupplierCount||0);
+      state.supplierGate=obj(recorded&&recorded.privateSupplierGate);
       // The supplier crawl also revisits markets while their PRIVATE 20-section
       // board is under target, independent of the ordinary 84-hour refresh.
       let fill={unavailable:true};

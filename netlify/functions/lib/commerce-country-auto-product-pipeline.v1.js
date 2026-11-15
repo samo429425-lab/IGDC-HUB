@@ -234,6 +234,7 @@ function makePipeline(deps) {
       state.autoJobStartedAt=checkpoint.startedAt||clock();
       state.phase=['complete','committed'].includes(checkpoint.status)?'staging':'researching';
       state.lastStagedResultCount=0;
+      state.lastStagingScanCursor=0;state.stagingNoProgressCount=0;
       state.pendingPlacementIds=[];
       state.reconcileCursor='';
     }else if(state.phase==='manual_job_preserved'&&checkpoint.updatedBy===ACTOR&&checkpoint.jobId){
@@ -252,6 +253,7 @@ function makePipeline(deps) {
       // are underfilled; existing manual and canonical assignments remain held.
       state.fullRescanNeeded=refreshDue;
       state.phase='idle';state.jobId=null;state.reconcileCursor='';state.pendingPlacementIds=[];
+      state.lastStagingScanCursor=0;state.stagingNoProgressCount=0;
     }
     if (!state.jobId || state.phase === 'idle') {
       const selected = configuredScopeMap(await automation.autoProductScopes()).get(scopeKey(scope));
@@ -305,10 +307,27 @@ function makePipeline(deps) {
       await recheck(scope);
       const step = await automation.stageCurrentProductResearchQueue(ACTOR,inputFor(scope,{jobId:state.jobId,source:'scheduled_auto',operation:'stage'}));
       const p=obj(step.partialQueue);
+      const previousCursor=Number(state.lastStagingScanCursor||0);
+      const scanCursor=Number(p.scanCursor||0);
+      const privateWrites=Number(p.created||0)+Number(p.updated||0)+Number(p.preserved||0);
+      const stalled=p.complete!==true && scanCursor<=previousCursor && privateWrites===0;
+      const repeated=stalled?Number(state.stagingNoProgressCount||0)+1:0;
       const next=Object.assign(state,{stagingComplete:p.complete===true,
         privateCandidatesStaged:Number(state.privateCandidatesStaged||0)+Number(p.created||0),latestStaging:p,
+        lastStagingScanCursor:scanCursor,stagingNoProgressCount:repeated,
+        lastStagingSummary:{done:Number(p.done||0),remaining:Number(p.remaining||0),
+          failed:Number(p.failed||0),blocked:Number(p.blocked||0),scanCursor},
         awaitingAdminSectionReview:true,lastResult:'latest_research_and_shared_candidate_ledger_updated',phase:'staging'});
+      if(repeated>=3){
+        // An unchanged failed staging cursor is not a reason to auto-approve
+        // products or throw away the job. Yield 15m; a fresh supplier marker
+        // still overrides this delay in the fair country scheduler.
+        next.nextRetryAt=new Date(ts(clock())+15*60*1000).toISOString();
+        next.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
+        next.lastResult='private_product_staging_no_progress_retry_deferred';
+      }
       if(p.complete===true){
+        next.stagingNoProgressCount=0;next.nextRetryAt=null;
         const fill=await sectionFill(scope);
         next.phase='complete';next.completedAt=clock();next.sectionFill=fill;
         next.fillPhase=fill.fullTargetComplete?'maintenance':'initial_fill';

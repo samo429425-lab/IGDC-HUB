@@ -134,6 +134,7 @@ function makePipeline(deps){
       if(!await active(s)){state.phase='paused';state.nextCycleAt=new Date(ts(clock())+NEXT_CYCLE_MS).toISOString();}
       else{
         const batch=await candidateBatch(s,state.cursor),eligible=[];
+        const gateReasons={};
         let retryablePlacementGap=false;
         for(const row of batch){
           const check=rowEligible(row,s);
@@ -141,7 +142,11 @@ function makePipeline(deps){
             eligible.push(txt(row.id));
             if(check.needsFreshReinspection===true)state.legacyReinspectionAttempts=Number(state.legacyReinspectionAttempts||0)+1;
           }
-          else if(!check.ok)state.reviewRequired=Number(state.reviewRequired||0)+1;
+          else if(!check.ok){
+            state.reviewRequired=Number(state.reviewRequired||0)+1;
+            const reason=txt(check.reason).slice(0,70).replace(/[^a-z0-9_-]/gi,'_')||'other';
+            gateReasons[reason]=(gateReasons[reason]||0)+1;
+          }
         }
         // Do not advance beyond an eligible item left unprocessed in the batch.
         // This ensures no qualified product is skipped on the next tick.
@@ -170,10 +175,13 @@ function makePipeline(deps){
             failed:Number(result.failed||0),held:Number(result.held||0),inconclusive:Number(result.inconclusive||0)};
         }
         const atEnd=batch.length<SCAN_LIMIT&&eligible.length<CANDIDATES_PER_SCOPE;
+        state.lastScanSummary={scanned:batch.length,eligible:eligible.length,
+          blocked:Math.max(0,batch.length-eligible.length),reasonCounts:gateReasons};
         state.cursor=atEnd?'':nextCursor;
         state.phase=atEnd?'cycle_complete':'research_candidates_scanned';
         state.nextCycleAt=new Date(ts(clock())+(atEnd?(retryablePlacementGap?INCONCLUSIVE_RECHECK_MS:RECHECK_MS):NEXT_CYCLE_MS)).toISOString();
-        state.lastResult=atEnd?(retryablePlacementGap?'private_psom_inconclusive_retry_scheduled':'waiting_for_fresh_validated_products'):
+        state.lastResult=atEnd?(retryablePlacementGap?'private_psom_inconclusive_retry_scheduled':
+          (batch.length>0&&!eligible.length?'private_psom_candidates_require_review':'waiting_for_fresh_validated_products')):
           (eligible.length?'private_psom_attempt_recorded':'private_psom_no_evidence_ready_product');
         state.lastScanned=Number(batch.length);
         // A later staging write carries a different token and wakes PSOM again.

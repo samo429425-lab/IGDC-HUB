@@ -2027,7 +2027,7 @@ async function beginResearchJob(actorId, input, event) {
   const selectorInput={country:scope.country,region:scope.region==="NATIONWIDE"?undefined:scope.region,scopeAuthority:"administrator-selected",ignoreRequestGeo:true,categoryWeights:context.effectiveCategoryWeights,policyHints:{priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)},signalPlanVersion:"persisted-staged-research"},basePlan=augmentAdministratorPriorityResearchPlan(augmentTourRightResearchPlan(RegionalSelector.createSupplierResearchPlan(selectorInput),scope,context.policyControl),scope,Object.assign({},context.policyControl,{researchDirective:text(effective.researchDirective)})),plan=researchRoundIndex>1?selectSingleSupplierResearchRound(expandSupplierResearchRounds(basePlan,scope,researchRoundIndex),researchRoundIndex):expandSupplierResearchRounds(basePlan,scope,researchRounds),now=iso(),manualRegistry=await manualSupplierRegistry(scope),manualSeeds=activeManualSupplierSeeds(manualRegistry);
   const novelSeeds=filterKnownSupplierItems(manualSeeds.concat(array(plan.seeds)),knownSupplierKeys);
   const initialStatus=newCandidateTarget<=0?"complete":(array(plan.tasks).length?"searching":"inspecting");
-  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchRoundIndex,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds}),searchTasks:newCandidateTarget>0?array(plan.tasks):[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?array(plan.tasks).length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
+  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchRoundIndex,researchSignature,selectorInput,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds,scheduledProviderCooldowns:suppressedScheduledLanes}),searchTasks:newCandidateTarget>0?searchPlanTasks:[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?searchPlanTasks.length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
   if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
   if (existing && text(existing.jobId) !== text(job.jobId)) await archiveSupplierResearchCycle(existing, actorId);
   await saveResearchJob(job,actorId);return supplierResearchStepView(job,actorId);
@@ -2055,14 +2055,22 @@ async function advanceResearchJob(actorId, input, event) {
         const providerStatus=lower(result.status);
         const permissionDenied=task.lane==='google' && providerStatus==='http_403' &&
           /does not have (?:the )?access to custom search json api|custom search (?:json )?api.{0,100}(?:disabled|not (?:used|enabled)|not authorized)|api key not valid|permission.denied/i.test(text(result.detail));
+        // Account-level quota (429) and 403 must not be retried for every
+        // remaining query in this country round. Keep Sanmaru and any other
+        // independently configured lane. A NEW cycle may probe the provider
+        // again: do not permanently disable or alter any API credentials.
+        const providerQuota=providerStatus==='http_429';
+        const providerAccessDenied=providerStatus==='http_403';
         const providerUnavailable=text(actorId)==='scheduled-automation' &&
           ['google','naver'].includes(task.lane) &&
-          (providerStatus==='not_configured'||permissionDenied);
+          (providerStatus==='not_configured'||permissionDenied||providerQuota||providerAccessDenied);
         if(providerUnavailable){
           const prefix=job.searchTasks.slice(0,job.searchCursor),tail=job.searchTasks.slice(job.searchCursor);
           const retained=tail.filter(row=>plain(row).lane!==task.lane),skippedTasks=tail.length-retained.length;
           job.searchTasks=prefix.concat(retained);
-          job.trace=array(job.trace).concat([{at:iso(),source:'scheduled-provider-fallback',status:providerStatus==='not_configured'?'provider_not_configured':'provider_permission_denied',provider:task.lane,skippedTasks,fallback:'sanmaru',privateResearchOnly:true}]);
+          job.trace=array(job.trace).concat([{at:iso(),source:'scheduled-provider-fallback',
+            status:providerQuota?'provider_quota_short_circuit':providerStatus==='not_configured'?'provider_not_configured':'provider_permission_denied',
+            provider:task.lane,skippedTasks,fallback:'sanmaru',privateResearchOnly:true}]);
           job.providerWarnings=Object.assign({},plain(job.providerWarnings),{
             [task.lane==='google'?'googleProviderUnavailable':'naverProviderUnavailable']:true
           });
@@ -2076,7 +2084,7 @@ async function advanceResearchJob(actorId, input, event) {
         const scheduledTransportFailure=text(actorId)==="scheduled-automation" &&
           /^(?:typeerror|fetch_failed|fetch failed|econnreset|etimedout|eai_again|enotfound|socket(?: hang up)?|network_error)$/i.test(text(result.status));
         const retryLimit=scheduledTransportFailure?2:1;
-        if ((retryableResearchStatus(result.status)||scheduledTransportFailure) && Number(task.attempt || 0)<retryLimit)
+        if (!providerUnavailable && (retryableResearchStatus(result.status)||scheduledTransportFailure) && Number(task.attempt || 0)<retryLimit)
           job.searchTasks.push(Object.assign({},task,{attempt:Number(task.attempt||0)+1,retryOf:Number(job.searchCursor||0)-1}));
         if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.newCandidateTarget||job.effective && job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES) * 2)) })); job.status = "inspecting"; job.inspectCursor = 0; }
       }
@@ -8121,10 +8129,18 @@ async function recordScheduledSupplierCompletion(input){
   // all new countries at zero product research despite genuine private leads.
   const inactiveStatuses=new Set(['blocked','suppressed','rejected','reject','disabled','excluded','removed','purged']);
   const inactiveDecisions=new Set(['hold','held','blocked','suppressed','rejected','reject','disabled','excluded','dismiss','remove_from_list','purge']);
-  const rows=await listAutomationCandidates(scope.country,scope.region),active=rows.filter(row=>
-    !inactiveStatuses.has(lower(row.status))&&
-    !inactiveDecisions.has(lower(first(row&&row.operatorDecision,plain(row.ai).operatorDecision,plain(row.supplier).operatorReviewState)))&&
-    !supplierExplicitDanger(row) && !!productSupplierSource(row,scope.country));
+  const rows=await listAutomationCandidates(scope.country,scope.region);
+  const privateSupplierGate={ledgerRows:rows.length,eligibleSellerSites:0,
+    excludedByStatus:0,excludedByOperator:0,excludedByRisk:0,missingUsableSellerSource:0};
+  const active=rows.filter(row=>{
+    if(inactiveStatuses.has(lower(row.status))){privateSupplierGate.excludedByStatus++;return false;}
+    if(inactiveDecisions.has(lower(first(row&&row.operatorDecision,plain(row.ai).operatorDecision,plain(row.supplier).operatorReviewState)))){
+      privateSupplierGate.excludedByOperator++;return false;
+    }
+    if(supplierExplicitDanger(row)){privateSupplierGate.excludedByRisk++;return false;}
+    if(!productSupplierSource(row,scope.country)){privateSupplierGate.missingUsableSellerSource++;return false;}
+    privateSupplierGate.eligibleSellerSites++;return true;
+  });
   // Research leads can unlock PRIVATE product discovery. Do not confuse their
   // count with sellers whose public merchant/policy evidence was inspected.
   // Both counts are exposed; only evidence-ready suppliers count to the
@@ -8141,7 +8157,8 @@ async function recordScheduledSupplierCompletion(input){
   const policy=array(await SlotStore.select('gslot_policies','select=id,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq.'+encodeURIComponent(id)+'&limit=1'))[0],oldRule=plain(policy&&policy.rule),t=iso();
   const setting=policy?Object.assign({},oldRule):sanitizeSetting({scopeType:kind,countryCode:scope.country,subdivisionCode:scope.region,mode:'inherit'});
   const rule=Object.assign({},setting,{schema:VERSION,lastAttemptAt:t,lastAttemptSummary:{source:progressive?'scheduled_progressive_private_supplier':'scheduled_staged_research',jobId:requested,activeSupplierCount:active.length,qualifiedSupplierCount:qualified.length,foreignPolicyPending,crossBorderPending,
-    safetyPolicyVersion:InternationalSafety.VERSION,created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds,
+    safetyPolicyVersion:InternationalSafety.VERSION,privateSupplierGate,
+    created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds,
     supplierRoundsCompleted:Math.max(0,Number(first(plain(input).supplierRoundsCompleted,oldRule.lastAttemptSummary&&oldRule.lastAttemptSummary.supplierRoundsCompleted,0))||0)},updatedAt:t,updatedBy:'scheduled-automation'});
   const newlySaved=Math.max(0,Number(plain(input).recordedSuppliers||0));
   // A zero-new-supplier pass may still see a pre-existing validated portfolio:
@@ -8160,7 +8177,7 @@ async function recordScheduledSupplierCompletion(input){
   const saved=array(await SlotStore.insert('gslot_policies',row,'resolution=merge-duplicates,return=representation'));
   if(!saved.length||text(saved[0].id)!==id)throw Object.assign(new Error('scheduled_supplier_setting_save_not_confirmed'),{statusCode:503});
   return{ok:true,scope:{country:scope.country,region:scope.region},activeSupplierCount:active.length,
-    qualifiedSupplierCount:qualified.length,foreignPolicyPending,crossBorderPending,
+    privateSupplierGate,qualifiedSupplierCount:qualified.length,foreignPolicyPending,crossBorderPending,
     safetyPolicyVersion:InternationalSafety.VERSION,qualification:scope.country==='KR'?"public_merchant_and_policy_evidence_not_independent_fulfillment_verification":"overseas_seller_site_policy_and_local_market_evidence_only_not_fulfillment_certification",
     lastDurableSupplierAt:active.length?t:null};
 }
@@ -8208,7 +8225,7 @@ async function progressivePrivateSupplierCommit(actorId,input){
   job.progressiveSavedSuppliers=Number(job.progressiveSavedSuppliers||0)+newlyPersisted;
   job.trace=array(job.trace).concat([{at:iso(),source:"scheduled-progressive-private-supplier",status:"inspected_candidates_saved",count:items.length,newSaved:Number(plain(saved.summary).created||0),held:Number(plain(saved.summary).held||0),searchCursor:Number(job.searchCursor||0),searchTotal:array(job.searchTasks).length}]).slice(-160);
   await saveResearchJob(job,actorId);
-  return{ok:true,inspected:items.length,persisted:Number(plain(saved.summary).created||0)+Number(plain(saved.summary).updated||0)+Number(plain(saved.summary).held||0),usableSuppliers:Number(usable.activeSupplierCount||0),searchCursor:Number(job.searchCursor||0),searchTotal:array(job.searchTasks).length,stillSearching:true,automaticPublication:false};
+  return{ok:true,inspected:items.length,persisted:Number(plain(saved.summary).created||0)+Number(plain(saved.summary).updated||0)+Number(plain(saved.summary).held||0),usableSuppliers:Number(usable.activeSupplierCount||0),privateSupplierGate:plain(usable.privateSupplierGate),searchCursor:Number(job.searchCursor||0),searchTotal:array(job.searchTasks).length,stillSearching:true,automaticPublication:false};
 }
 
 async function autoProductJobCheckpoint(input){

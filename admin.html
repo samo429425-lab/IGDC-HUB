@@ -1347,7 +1347,7 @@
 </style>
 <div class="os-head">
   <div>
-    <h2 id="igdc-organic-search-title">IGDC·MARU 글로벌 검색 증폭 엔진 점검</h2>
+    <h2 id="igdc-organic-search-title">IGDC·MARU 글로벌 검색 증폭·운영 검증</h2>
     <div class="os-muted">IGDC 플랫폼 · MARU Windows · MARU Android/Google Play | 공개 검색 경로·설정·접근성을 읽기 전용으로 확인합니다.</div>
   </div>
   <div>
@@ -1374,7 +1374,7 @@
 </div>
 </details>
 <details><summary style="cursor:pointer;font-weight:700;color:#234c76;">기술 점검 요약 JSON 보기</summary><pre id="igdc-os-preview">점검 실행 후 표시됩니다.</pre></details>
-<p class="os-muted">검색 페이지가 정상 응답하더라도 검색엔진 색인·상위권 노출·설치 증가가 증명되는 것은 아닙니다. Netlify 예약 실행 로그와 검색엔진 접수 기록도 별도 확인 대상입니다.</p>
+<p class="os-muted">점검 JSON은 SQL 없이 다운로드할 수 있습니다. 현재 페이지·사이트맵·인증 상태와 미확인 항목을 구분해 저장합니다. 과거 자동 실행·검색엔진 접수 내역은 Netlify 함수 로그로 별도 확인해야 하며, 정상 응답만으로 색인·순위·설치 증가가 증명되지는 않습니다.</p>
 </section>
 <script id="igdc-organic-search-diagnostic-script">
 (function(){
@@ -1412,9 +1412,14 @@
     display("igdc-os-engine",env.moduleLoaded?"ok":"fail",env.moduleLoaded?"엔진 로드 확인 · 실행 기록 미연결":"엔진 확인 실패");
     var play=report.googlePlay||{};
     display("igdc-os-play",play.listingLinkPresent?"ok":"unknown",play.listingLinkPresent?"Google Play 링크 확인 · 순위 자료 미연결":"스토어 링크 확인 필요");
-    var overview=report.overview||{};
-    status("점검 완료 · 접근 정상 "+(overview.reachable||0)+"건 / 검토 "+(overview.needsReview||0)+"건 / 확인 불가 "+(overview.unverified||0)+"건 · IndexNow 키 "+(key.verification||"확인 불가")+" · 실제 순위 검증 별도");
-    by("igdc-os-preview").textContent=JSON.stringify({overview:overview,engine:env,googlePlay:play,channels:report.channels},null,2);
+    var overview=report.overview||{},route=report.routingCrosscheck||{};
+    var routeText=route.status==="route-ok"?"동적 사이트맵 정상":route.status==="public-rewrite-mismatch"?"동적 사이트맵 경로 충돌":"동적 사이트맵 추가 확인";
+    var routeLevel=route.status==="route-ok"?"ok":route.status==="public-rewrite-mismatch"?"fail":"unknown";
+    status("점검 완료 · 접근 정상 "+(overview.reachable||0)+"건 / 검토 "+(overview.needsReview||0)+"건 / 확인 불가 "+(overview.unverified||0)+"건 · "+routeText+" · IndexNow 키 "+(key.verification||"확인 불가")+" · 실제 순위 검증 별도");
+    var recorded=env.lastRecordedExecution||null,runLedger=env.runLedgerState||"unavailable";
+    var historyText=recorded?"저장된 실행 메타정보 "+recorded:"과거 실행 별도 확인(Netlify 로그)";
+    display("igdc-os-engine",routeLevel,routeText+" · "+historyText);
+    by("igdc-os-preview").textContent=JSON.stringify({overview:overview,downloadAudit:report.downloadAudit||null,routingCrosscheck:route,indexNowKey:key,runLedger:report.runLedger,engine:env,googlePlay:play,channels:report.channels},null,2);
   }
   async function request(){
     var list=tokenList();if(!list.length)throw new Error("관리자 로그인 토큰을 찾지 못했습니다. 관리자 계정으로 로그인 후 다시 점검하세요.");
@@ -1449,7 +1454,12 @@
   by("igdc-os-download").addEventListener("click",function(){
     if(!lastReport)return;
     var result=JSON.parse(JSON.stringify(lastReport));
-    result.manualPerformanceInput=metrics();
+    result.manualPerformanceInput=metrics();result.playConsoleCsvAudit=window.IGDC_OS_MOBILE_AUDIT_DATA||null;
+     result.downloadedAt=new Date().toISOString();
+     result.downloadEvidence={sqlRequired:false,inspectionOnly:true,scheduledRunIndependentlyConfirmed:false,
+       playCsvSource:result.playConsoleCsvAudit?"administrator-local-csv":"not-provided",
+       manualMetricsSource:"administrator-entry-unverified",
+       note:"다운로드한 파일은 점검 당시 상태입니다. 실제 과거 예약 실행·검색엔진 접수는 Netlify 로그/외부 콘솔 증거 없이는 확인되지 않습니다."};
     var filename="IGDC_MARU_Organic_Search_Diagnostic_"+new Date().toISOString().replace(/[:.]/g,"-")+".json";
     save(filename,result);
   });
@@ -3915,5 +3925,6 @@ window.IGDC_FEATURES = window.IGDC_FEATURES || { externalHooks: true };
 })();
 </script>
 
+<script defer src="/assets/js/igdc-organic-search-mobile-audit.js"></script>
 </body>
 </html>

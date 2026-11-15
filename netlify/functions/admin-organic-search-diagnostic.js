@@ -4,9 +4,12 @@
 const AdminSession=require("./lib/global-slot-console-auth");
 const {buildRegistry}=require("./lib/search-exposure/registry");
 const ENGINE=require("./global-search-exposure-engine");
+let RUN_LEDGER;
+try{RUN_LEDGER=require("./lib/igdc-search-exposure-run-ledger");}
+catch(e){if(e&&e.code!=="MODULE_NOT_FOUND")throw e;RUN_LEDGER={readLatest:async()=>({state:"not-installed",record:null})};}
 const ORIGIN="https://igdcglobal.com";
 const PLAY="https://play.google.com/store/apps/details?id=com.maru.mediaplayer";
-const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.0.0";
+const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.2.0-mobile-runledger";
 const CHECKS=[
  ["platform-home","IGDC Global Platform","/home.html","platform"],
  ["platform-en","IGDC Global Platform (English)","/igdc-amplify-platform-en.html","platform"],
@@ -17,7 +20,8 @@ const CHECKS=[
  ["maru-ar","MARU Media Player (Arabic)","/igdc-amplify-maru-ar.html","maru"],
  ["robots","Search crawler access","/robots.txt","technical"],
  ["sitemap","Search sitemap","/sitemap.xml","technical"],
- ["dynamic-sitemap","Verified search sitemap","/sitemap-global.xml","technical"]
+ ["dynamic-sitemap","Verified search sitemap","/sitemap-global.xml","technical"],
+ ["direct-sitemap","Direct Netlify sitemap function","/.netlify/functions/global-search-sitemap","technical"]
 ];
 const json=(statusCode,body)=>({statusCode,headers:{"content-type":"application/json; charset=utf-8","cache-control":"private, no-store, max-age=0","x-content-type-options":"nosniff","x-robots-tag":"noindex, nofollow"},body:JSON.stringify(body)});
 function simpleError(e){return String(e&&e.message||e||"Unknown failure").slice(0,130);}
@@ -44,7 +48,7 @@ async function probe(id,label,path,group){
    }else body=(await response.text()).slice(0,100000);
   }finally{clearTimeout(timeout);}
   const statusCode=response.status,ctype=String(response.headers.get("content-type")||"").toLowerCase();
-  const html=/\.html$/i.test(path),xml=/\.xml$/i.test(path),robots=path==="/robots.txt";
+  const html=/\.html$/i.test(path),xml=/\.xml$/i.test(path)||path==="/.netlify/functions/global-search-sitemap",robots=path==="/robots.txt";
   const title=(body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]||"";
   const canonical=(body.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)/i)||[])[1]||"";
   const hasNoindex=html&&(/<meta[^>]+(?:name=["']robots["'][^>]+content=["'][^"']*noindex|content=["'][^"']*noindex[^"']*["'][^>]+name=["']robots)/i.test(body)||/noindex/i.test(String(response.headers.get("x-robots-tag")||"")));
@@ -69,7 +73,7 @@ async function indexNowKeyCheck(){
  try{
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),3500);
   let resp,body="";
-  try{resp=await fetch(ORIGIN+"/"+encodeURIComponent(key)+".txt",{method:"GET",signal:controller.signal,cache:"no-store"});body=(await resp.text()).slice(0,300);}
+  try{resp=await fetch(ORIGIN+"/indexnow-key.txt",{method:"GET",signal:controller.signal,cache:"no-store"});body=(await resp.text()).slice(0,300);}
   finally{clearTimeout(timer);}
   return{configured:true,verification:resp.ok&&body.trim()===key?"confirmed":"not-confirmed",httpStatus:resp.status};
  }catch(e){return{configured:true,verification:"unverified",error:simpleError(e)};}
@@ -92,7 +96,7 @@ function channels(indexnow){
 }
 async function diagnostic(){
  const now=new Date().toISOString();
- const [probes,key]=await Promise.all([Promise.all(CHECKS.map(row=>probe(...row))),indexNowKeyCheck()]);
+ const [probes,key,ledger]=await Promise.all([Promise.all(CHECKS.map(row=>probe(...row))),indexNowKeyCheck(),RUN_LEDGER.readLatest()]);
  let registry;
  try{
   const r=buildRegistry();
@@ -102,16 +106,59 @@ async function diagnostic(){
  const failed=probes.filter(x=>x.status==="needs-review");
  const unknown=probes.filter(x=>x.status==="unverified");
  const pageStatus=failed.length?"needs-review":unknown.length?"incomplete":"reachable-checks-passed";
+ const dynamic=probes.find(x=>x.id==="dynamic-sitemap"),direct=probes.find(x=>x.id==="direct-sitemap");
+ const routingCrosscheck={publicSitemap:dynamic&&dynamic.status||"unverified",directFunction:direct&&direct.status||"unverified",
+  status:dynamic&&dynamic.status==="reachable"?"route-ok":direct&&direct.status==="reachable"?"public-rewrite-mismatch":"unverified-or-generator-error",
+  explanation:"Compare the public XML URL to its direct generator; both must return XML. No URL is submitted to a search engine."};
+  // SQL-free download evidence: current checks are NOT a historical execution receipt.
+  // A missing optional SQL table is never treated as a search-engine failure.
+  const latest=ledger&&ledger.record||null;
+  const ledgerState=ledger&&ledger.state||"unavailable";
+  const submissionEvidence={
+   state:latest?"stored-run-metadata":"not-independently-verified",
+   source:latest?"optional-supabase-search-run-ledger":"none",
+   runAt:latest?latest.run_at:null,
+   historicalRunsAvailable:!!latest,
+   automaticScheduleVerified:false,
+   submissionReceiptVerified:false,
+   explanation:latest?"Last stored run metadata; not proof the scheduled trigger ran or any URL was indexed.":"SQL 없이 현재 상태 점검 가능. 과거 실제 실행/제출 여부는 Netlify Functions 로그에서 별도 확인해야 합니다."
+  };
+  const downloadAudit={
+   schema:"igdc-maru-search-json-audit-v1",
+   createdAt:now,
+   mode:"read-only-no-search-submission",
+   sqlRequired:false,
+   evidenceSources:{
+    pageAndSitemapChecks:"live-origin-http-probes-at-diagnostic-time",
+    registry:"server-generated-target-registry",
+    indexingAndRank:"not-measured",
+    scheduledExecution:latest?"optional-recorded-metadata-only":"not-verified",
+    netlifyFunctionLogs:"not-accessed",
+    playSearchPerformance:"external-play-console-csv-only"
+   },
+   execution:submissionEvidence,
+   summary:{reachable:probes.filter(x=>x.status==="reachable").length,
+    needsReview:failed.length,unverified:unknown.length,
+    routing:routingCrosscheck.status,
+    indexNowKeyVerification:key.verification||"unverified",
+    optionalHistoryStorage:ledgerState,
+    engineLoaded:typeof ENGINE.run==="function"},
+   checksNeedingAttention:probes.filter(x=>x.status!=="reachable").map(x=>({id:x.id,status:x.status,httpStatus:x.httpStatus==null?null:x.httpStatus,reason:x.note||x.error||null})),
+   followUp:"Netlify > Functions > global-search-exposure-engine > Logs에서 [IGDC_SEARCH_EXPOSURE_RUN] 실행시각·제출·대기·실패 수치를 확인하세요. Netlify 로그는 보관 기간이 제한됩니다."
+  };
  return{schema:VERSION,generatedAt:now,readOnly:true,
   purpose:"IGDC Global Platform and MARU Media Player organic search health and evidence",
   scope:["IGDC Global Platform","MARU Windows","MARU Android / Google Play"],
   overview:{status:pageStatus,probesTotal:probes.length,reachable:probes.filter(x=>x.status==="reachable").length,needsReview:failed.length,unverified:unknown.length},
-  engine:{moduleLoaded:typeof ENGINE.run==="function",configuredDailySchedule:"17 3 * * * (UTC; repository config, not live Netlify confirmation)",lastScheduledExecution:null,lastSubmissionReceipt:null,notes:"Netlify run logs or persisted receipts are not connected. This diagnostic never invokes search submission."},
-  registry,robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
+  engine:{moduleLoaded:typeof ENGINE.run==="function",configuredDailySchedule:"17 3 * * * (UTC; repository config, not live Netlify confirmation)",lastScheduledExecution:null,lastSubmissionReceipt:null,lastRecordedExecution:ledger&&ledger.record?ledger.record.run_at:null,
+   recordedSubmissionSummary:ledger&&ledger.record?{status:ledger.record.result_status,changed:ledger.record.changed_count,submitted:ledger.record.submitted_count,pending:ledger.record.pending_count,failed:ledger.record.failed_count,partial:ledger.record.partial_count,providers:ledger.record.details}:null,
+   runLedgerState:ledger&&ledger.state||"unavailable",
+   notes:"Read-only persisted run metadata are not evidence of Google indexing or store ranking. A recorded run can be scheduled or manually triggered."},
+  registry,routingCrosscheck,downloadAudit,runLedger:{state:ledgerState,latest},robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
   targets:probes.filter(x=>x.group!=="technical"),
   indexNowKey:indexnowSafe(key),
   channels:channels(key),
-  googlePlay:{packageName:"com.maru.mediaplayer",listingUrl:PLAY,listingLinkPresent:probes.some(x=>x.id==="maru-android"&&x.hasPlayLink===true),searchVisits:null,storeClicks:null,ctr:null,searchTerms:null,rank:null,source:"Play Console export required"},
+  googlePlay:{packageName:"com.maru.mediaplayer",listingUrl:PLAY,listingLinkPresent:probes.some(x=>x.id==="maru-android"&&x.hasPlayLink===true),searchVisits:null,storeClicks:null,ctr:null,searchTerms:null,rank:null,source:"Play Console CSV required; never infer rank from links or visits",csvAnalyzerAvailable:true,trackingScope:"Android MARU 1.0.208 / regional search acquisition"},
   searchPerformance:{webSearchImpressions:null,webSearchClicks:null,averagePosition:null,source:"Search Console / webmaster exports required"},
   guidance:["Confirmed crawlability is not proof of indexing or ranking","Google Play ranking cannot be inferred from website URLs","Use authorized Console CSV reports for real traffic and search-term results","No automatic clicks, fabricated searches, forced submissions or writes occur"]
  };

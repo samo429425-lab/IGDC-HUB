@@ -524,10 +524,10 @@
   </section>
 
   <section id="jsonPanel" class="panel hidden"><div class="panel-heading"><h2>점검·실행 JSON</h2><div class="actions"><button id="runCurrentDiagnosticBtn" type="button">점검 실행 JSON</button><button id="downloadCurrentJsonBtn" type="button" class="secondary" disabled>전체 JSON 다운로드</button></div></div><pre id="jsonOutput" class="json"></pre></section>
-  <section id="autoResearch15DiagnosticPanel" class="panel" aria-label="국가별 자동 리서치 1~15단계 운영 점검">
-    <h2>국가별 자동 리서치 1~15단계 · 전체 운영 점검</h2>
+  <section id="autoResearch15DiagnosticPanel" class="panel" aria-label="전체 자동화 점검">
+    <h2>전체 자동화 점검</h2>
     <p class="small">관리자 전용 읽기 점검입니다. 선택 국가·공급업체 검색·실제 비공개 저장·상품 조사·PSOM 배정·오류·다음 재시도 시간을 한 JSON으로 내려받습니다. 기존 원장·관리자 고정·프론트 공개는 변경하지 않습니다.</p>
-    <div class="actions"><button id="autoResearch15DiagnosticDownloadBtn" type="button" class="secondary">1~15단계 전체 자동화 점검 JSON 다운로드</button><span id="autoResearch15DiagnosticState" class="state" role="status" aria-live="polite">버튼을 누르면 최신 저장 진행 기록을 새로 조회합니다. 실제 예약 함수의 실행 여부는 Netlify 로그를 함께 확인해야 합니다.</span></div>
+    <div class="actions"><button id="autoResearch15DiagnosticDownloadBtn" type="button" class="secondary">전체 자동화 점검 JSON 다운로드</button><span id="autoResearch15DiagnosticState" class="state" role="status" aria-live="polite">버튼을 누르면 최신 저장 진행 기록을 새로 조회합니다. 실제 예약 함수의 실행 여부는 Netlify 로그를 함께 확인해야 합니다.</span></div>
   </section>
   <p class="foot">운영 흐름: 세계 방향 신호 → 권역 상황 신호 → 관리자 반영 품목군 가중치 → 국가·지역 책임 공급업체 발견 → 비공개 업체 후보 → 사업체와 직접 판매 책임 확인 → 결제·배송·반품·환불·고객지원 확인 → 해당 업체 상품 중 적합한 항목만 별도 선별 → Canonical·공개 게이트 순서입니다. IGDC는 판매자·결제 주체·재고 보유자·배송·반품·환불·AS 책임자가 되지 않습니다.</p>
 </main>

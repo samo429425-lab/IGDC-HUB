@@ -43,7 +43,10 @@ const FIELDS = [
   'placed:rule->placed','reviewRequired:rule->reviewRequired',
   'lastPlacementOutcome:rule->lastPlacementOutcome',
   'lastErrorReason:rule->>lastErrorReason','errors:rule->errors',
-  'sectionFill:rule->sectionFill'
+  'supplierGate:rule->supplierGate','lastStagingSummary:rule->lastStagingSummary',
+  'stagingNoProgressCount:rule->stagingNoProgressCount',
+  'lastScanSummary:rule->lastScanSummary',
+  'sectionFill:rule->sectionFill' 
 ].join(',');
 const text = v => String(v == null ? '' : v).trim();
 const list = v => Array.isArray(v) ? v : [];
@@ -92,11 +95,29 @@ function compact(row) {
       failures:num(row.providerFailures),successes:num(row.providerSuccesses)},
     supplier:{privateSaved:num(row.progressivePersisted),active:num(row.activeSupplierCount),
       policyQualified:num(row.qualifiedSupplierCount),target:num(row.supplierTarget),
-      targetReached:row.targetReached===true},
-    product:{privateStaged:num(row.privateCandidatesStaged),supplierMarkerPresent:!!text(row.lastSupplierRunAt)},
+      targetReached:row.targetReached===true,
+      // This is a disposition of current durable ledger rows, not a count of
+      // unique verified businesses or publicly approved merchants.
+      privateLedgerGate:{ledgerRows:num(obj(row.supplierGate).ledgerRows),
+        eligibleSellerSites:num(obj(row.supplierGate).eligibleSellerSites),
+        excludedByStatus:num(obj(row.supplierGate).excludedByStatus),
+        excludedByOperator:num(obj(row.supplierGate).excludedByOperator),
+        excludedByRisk:num(obj(row.supplierGate).excludedByRisk),
+        missingUsableSellerSource:num(obj(row.supplierGate).missingUsableSellerSource)}},
+    product:{privateStaged:num(row.privateCandidatesStaged),supplierMarkerPresent:!!text(row.lastSupplierRunAt),
+      stagingNoProgressCount:num(row.stagingNoProgressCount),
+      lastStaging:{done:num(obj(row.lastStagingSummary).done),
+        remaining:num(obj(row.lastStagingSummary).remaining),failed:num(obj(row.lastStagingSummary).failed),
+        blocked:num(obj(row.lastStagingSummary).blocked),scanCursor:num(obj(row.lastStagingSummary).scanCursor)}},
     psom:{placed:num(row.placed),reviewRequired:num(row.reviewRequired),
       lastOutcome:{requested:num(placement.requested),assigned:num(placement.assigned),
         failed:num(placement.failed),held:num(placement.held),inconclusive:num(placement.inconclusive)},
+      lastCandidateGate:{scanned:num(obj(row.lastScanSummary).scanned),
+        eligible:num(obj(row.lastScanSummary).eligible),
+        blocked:num(obj(row.lastScanSummary).blocked),
+        reasonCounts:Object.fromEntries(Object.entries(obj(obj(row.lastScanSummary).reasonCounts))
+          .filter(([reason])=>/^[a-z0-9_-]{1,70}$/i.test(reason)).slice(0,20)
+          .map(([reason,count])=>[reason,num(count)]))},
       observedStageTokenPresent:!!text(row.lastObservedProductStageToken),
       // Only a count comparison; never export durable candidate IDs.
       observedStageToken:text(row.lastObservedProductStageToken).split('|').slice(-1)[0]||null},
@@ -179,6 +200,8 @@ function create(deps) {
         if(!supplier)issue(scope,'supplier','supplier_checkpoint_missing','warning','예약 공급업체 조사 진행 기록이 없습니다.');
         if(supplier&&supplier.operatorPaused)issue(scope,'supplier','supplier_operator_paused','info','관리자 중지 상태입니다.');
         if(supplier&&supplier.error.count>0)issue(scope,'supplier','supplier_errors','warning',supplier.error.lastCategory);
+        if(supplier&&supplier.supplier.privateLedgerGate.ledgerRows>0&&supplier.supplier.privateLedgerGate.eligibleSellerSites===0)
+          issue(scope,'supplier','private_supplier_ledger_has_no_usable_site','warning','저장된 업체 후보가 있지만 비공개 상품 조사에 사용할 공식 판매처는 없습니다. 원장 분류를 확인하세요.');
         if(supplier&&supplier.phase==='researching'&&!jobs.supplier)
           issue(scope,'supplier','supplier_search_checkpoint_missing','warning','진행 중인 공급업체 조사 커서를 찾지 못했습니다.');
         if(jobs.supplier&&jobs.supplier.lastError)
@@ -190,6 +213,8 @@ function create(deps) {
         else{
           if(product.operatorPaused)issue(scope,'product','product_operator_paused','info','관리자 중지 상태입니다.');
           if(product.error.count>0)issue(scope,'product','product_errors','warning',product.error.lastCategory);
+          if(product.product.stagingNoProgressCount>=3)
+            issue(scope,'product','staging_without_progress','warning','검증된 상품 대기열 저장이 같은 진행 위치에서 반복 실패하고 있습니다.');
           if(jobs.product&&jobs.product.lastError)
             issue(scope,'product','product_search_job_error','warning',jobs.product.lastError.category);
           if(product.phase==='manual_job_preserved')issue(scope,'product','manual_product_job_protected','info','관리자 수동 상품 조사 기록이 보호되어 자동 진행이 대기 중입니다.');
@@ -200,6 +225,8 @@ function create(deps) {
         if(productSaved>0&&!psom)issue(scope,'psom','psom_checkpoint_missing','warning','비공개 상품은 저장됐으나 PSOM 진행 기록이 없습니다.');
         if(psom){
           if(psom.error.count>0)issue(scope,'psom','psom_errors','warning',psom.error.lastCategory);
+          if(psom.psom.lastCandidateGate.blocked>0&&psom.psom.lastCandidateGate.eligible===0)
+            issue(scope,'psom','private_psom_candidates_require_review','info','상품 후보가 있지만 검증·판매국가·섹션 근거를 충족하지 못했습니다.');
           if(productSaved>0&&psom.psom.placed===0&&time(psom.nextCycleAt)>current)
             issue(scope,'psom','psom_waiting_with_products','info','비공개 후보가 있으나 PSOM 진행 대기 중입니다. 검증 보류일 수도 있습니다.');
         }
@@ -228,6 +255,10 @@ function create(deps) {
         productRowsWithErrors:scopes.filter(s=>s.product&&s.product.error.count).length,
         psomRowsWithErrors:scopes.filter(s=>s.psom&&s.psom.error.count).length,
         privateSuppliersSaved:scopes.reduce((n,s)=>n+(s.supplier?s.supplier.supplier.privateSaved:0),0),
+        supplierCandidateLedgerRowsObserved:scopes.reduce((n,s)=>n+(s.supplier?s.supplier.supplier.privateLedgerGate.ledgerRows:0),0),
+        supplierUsablePrivateSitesObserved:scopes.reduce((n,s)=>n+(s.supplier?s.supplier.supplier.privateLedgerGate.eligibleSellerSites:0),0),
+        productStagingNoProgressScopes:scopes.filter(s=>s.product&&s.product.product.stagingNoProgressCount>=3).length,
+        psomCandidatesNeedingReviewScopes:scopes.filter(s=>s.psom&&s.psom.psom.lastCandidateGate.blocked>0&&s.psom.psom.lastCandidateGate.eligible===0).length,
         privateProductsStaged:scopes.reduce((n,s)=>n+(s.product?s.product.product.privateStaged:0),0),
         privatePsomPlaced:scopes.reduce((n,s)=>n+(s.psom?s.psom.psom.placed:0),0),
         issueCount:issues.length,
@@ -235,6 +266,7 @@ function create(deps) {
       issues,readErrors,scopes,
       interpretation:{
         providerSuccessDoesNotEqualSavedSuppliers:true,privateStagingDoesNotEqualPublishedProduct:true,checkpointCountersAreNotUniqueLedgerTotals:true,
+        supplierGateCountsAreLastObservedPerCountryNotUniqueLifetimeTotals:true,
         noScheduledLogsInDatabase:true,
         productionFunctionLogsRequiredForInvocationAndTimeoutConfirmation:true,
         noUnselectedCountryActivation:true,
