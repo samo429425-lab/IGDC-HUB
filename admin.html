@@ -143,6 +143,8 @@
     }
     .sidebar {
       width: 210px;
+      min-width: 210px;
+      flex: 0 0 210px;
       background-color: #e0e0e0;
       display: flex;
       flex-direction: column;
@@ -2042,7 +2044,7 @@ setTimeout(async function(){
   if(!sidebar || !main) return;
 
   const baseSidebar = 210;
-  const minSidebar  = 50; // 최저 50px
+  const minSidebar  = 210; // 왼쪽 메뉴 폭 고정 (50px 축소 방지)
   let last = -1;
 
   // 고정 한 번만 설정: 매 리사이즈마다 min/max를 재설정하지 않음(레이아웃 튐 방지)
