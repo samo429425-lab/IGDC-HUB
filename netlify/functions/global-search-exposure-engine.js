@@ -5,6 +5,7 @@ const {buildRegistry,selectChangedUrls}=require("./lib/search-exposure/registry"
 const indexnow=require("./search-adapters/indexnow");
 const configurable=require("./search-adapters/configurable-submit");
 const baidu=require("./search-adapters/baidu");
+const ledger=require("./lib/igdc-search-exposure-run-ledger");
 const SITE="https://igdcglobal.com",SITEMAP=SITE+"/sitemap-global.xml";
 function bodyOf(event){try{const x=JSON.parse(event&&event.body||"{}");return x&&typeof x==="object"&&!Array.isArray(x)?x:{};}catch(_e){return {};}}
 function ownedUrl(value){
@@ -79,6 +80,15 @@ exports.handler=async event=>{
   const force=forceRequested&&String(process.env.SEARCH_EXPOSURE_ALLOW_FORCE||"").toLowerCase()==="true";
   if(forceRequested&&!force)return{statusCode:403,headers,body:JSON.stringify({ok:false,error:"Force submission is not enabled"})};
   const report=await run({force,hours:isAuthorized?Number(q.hours||b.hours||96):96,deletedUrls:deletions&&isAuthorized?b.deletedUrls:[]});
+  // Persist sanitized execution evidence, never blocking a search submission.
+  const recorded=await ledger.store(report);
+  report.executionAudit={storage:recorded.state,stored:recorded.state==="stored"};
+  try{console.info("[IGDC_SEARCH_EXPOSURE_RUN]",JSON.stringify({
+   generatedAt:report.generatedAt,status:report.status,changedUrls:report.changedUrls,
+   submitted:report.submissionSummary.submitted,partial:report.submissionSummary.partial,
+   failed:report.submissionSummary.failed,skipped:report.submissionSummary.skipped,
+   registryHash:report.registry.hash,auditStorage:recorded.state
+  }));}catch(_e){}
   return{statusCode:report.ok?200:502,headers,body:JSON.stringify(report)};
  }catch(e){return{statusCode:500,headers,body:JSON.stringify({ok:false,error:safeError(e)})};}
 };

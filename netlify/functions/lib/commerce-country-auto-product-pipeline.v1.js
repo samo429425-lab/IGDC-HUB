@@ -210,7 +210,7 @@ function makePipeline(deps) {
     const checkpoint = await automation.autoProductJobCheckpoint(inputFor(scope));
     const thisJob = txt(state.jobId);
     const isOwned = thisJob && checkpoint.jobId === thisJob;
-    if (checkpoint.paused && !(state.autoTakeover && ['complete','committed'].includes(checkpoint.status))) return Object.assign(state,{ lastResult:'research_manually_paused_preserved' });
+    if (checkpoint.paused && !['complete','committed'].includes(checkpoint.status)) return Object.assign(state,{ lastResult:'research_manually_paused_preserved' });
     // Unlike supplier research, the product working job uses one shared key
     // for manual and scheduled runs. A scheduled worker must NEVER resume a
     // human-owned in-progress job or stage its candidate queue. Even after the
@@ -219,7 +219,10 @@ function makePipeline(deps) {
     // and starts a fresh private cycle rather than staging manual results.
     if(checkpoint.jobId && checkpoint.updatedBy!==ACTOR){
       const manualFinished=['complete','committed'].includes(checkpoint.status);
-      if(!manualFinished || state.autoTakeover!==true){
+      // A completed manual cycle is archival, not an indefinite blocker to
+      // an explicitly enabled country automation. Active manual work remains
+      // protected; the new scheduled cycle cannot stage the old manual job.
+      if(!manualFinished){
         return Object.assign(state,{phase:'manual_job_preserved',
           lastResult:manualFinished?'administrator_completed_product_job_preserved':'administrator_product_job_preserved',
           protectedJobId:checkpoint.jobId});
@@ -258,13 +261,14 @@ function makePipeline(deps) {
     if (!state.jobId || state.phase === 'idle') {
       const selected = configuredScopeMap(await automation.autoProductScopes()).get(scopeKey(scope));
       if (!txt(selected && selected.supplierLastRunAt)) return Object.assign(state,{phase:'idle',lastResult:'supplier_discovery_not_yet_durably_saved'});
-      // The VERIFIED durable-supplier marker is the start gate; ten is a
-      // portfolio growth target, not a mandatory quota before the FIRST real
-      // supplier can enter PRIVATE product research. The server begin function
-      // re-reads the actual country-local seller ledger, checks official URLs,
-      // operator holds and fraud flags; it never publishes to the front page.
+      // Ten usable supplier sites are required by the operator before
+      // automatic product research; the server independently verifies the
+      // DISTINCT seller URLs before opening a new private research cycle.
       const observedSuppliers=Math.max(0,Number(selected.supplierCount||0));
-      const minimum=observedSuppliers>0?1:MIN_SUPPLIER_SOURCES;
+      const minimum=MIN_SUPPLIER_SOURCES;
+      if(observedSuppliers<minimum)return Object.assign(state,{phase:'idle',
+        lastResult:'supplier_portfolio_below_product_research_threshold',
+        usableSupplierCount:observedSuppliers,requiredSupplierCount:minimum});
       await recheck(scope);
       const started = await automation.beginProductResearchJob(ACTOR, inputFor(scope, {compact:true,fullRescan:state.fullRescanNeeded===true,minEligibleSupplierSources:minimum}));
       if (!txt(started && started.jobId)) throw new Error('auto_product_begin_no_job_id');

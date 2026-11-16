@@ -3112,6 +3112,16 @@ async function beginProductResearchJob(actorId, input) {
   }
   const allSupplierSources=ProductReserve.interleaveSuppliers(sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||focusedProductResearchPriority(b)-focusedProductResearchPriority(a)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))));
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
+  // Autonomous product research begins only after ten DISTINCT, verified,
+  // operator-unblocked seller sites.  This is a research trigger, NOT a
+  // public merchant approval and never authorizes a section placement.
+  if(text(actorId)==="scheduled-country-product-ai") {
+    const required=Math.max(10,Math.min(200,Math.floor(Number(raw.minEligibleSupplierSources)||10)));
+    if(allSupplierSources.length<required){
+      const error=new Error("AUTO_PRODUCT_SUPPLIER_THRESHOLD_PENDING: "+allSupplierSources.length+"/"+required+" official seller sites");
+      error.code="AUTO_PRODUCT_SUPPLIER_THRESHOLD_PENDING";error.statusCode=409;throw error;
+    }
+  }
 
   const supplierLedgerSourceId=text(supplierJob&&supplierJob.jobId)||"durable_supplier_candidate_ledger";
   const priorResearchedKeys=researchedProductSupplierKeys(existing),priorGapKeys=productGapSupplierKeys(existing),supplierSourceFingerprint=productSupplierSourceFingerprint(allSupplierSources);
@@ -3560,6 +3570,9 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   // The chunked staging path is called directly before the outer staging
   // function's local pause flag exists. Resolve it from this job's checkpoint.
   const durablePaused=runtime.pauseRequested===true&&(!text(runtime.jobId)||text(runtime.jobId)===text(job.jobId));
+  // Only the trusted scheduler actor can bypass a section-level candidate
+  // reserve. Administrator-supplied request.source alone is not authority.
+  const automaticInbox=lower(input&&input.source)==="scheduled_auto"&&text(actorId)==="scheduled-country-product-ai";
   const requestedIds=new Set(array(input&&input.productIds).map(text).filter(Boolean).slice(0,100)),hasSelection=requestedIds.size>0||array(input&&input.productRefs).length>0,handled=new Set(array(runtime.partialQueueStagedIdentities).map(text).filter(Boolean)),explicitlyUnstaged=new Set(array(runtime.partialQueueUnstagedIdentities).map(text).filter(Boolean));
   if(operation==="purge"){
     if(!hasSelection){const error=new Error("영구 제외할 최신 상품을 선택하세요.");error.statusCode=400;throw error;}
@@ -3597,7 +3610,9 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   const durableLedgerCheckpointFresh=text(runtime.partialQueueLedgerVerifiedVersion)===VERSION;
   if(!hasSelection&&!durableLedgerCheckpointFresh){scanCursor=0;handled.clear();}
   const researchSuppressed=new Set(array(runtime.permanentExcludedIdentities).map(text).filter(Boolean).concat(array(runtime.researchExcludedIdentities).map(text).filter(Boolean)));
-  const previouslyReserveDeferred=new Set(array(runtime.partialQueueReserveDeferredIdentities).map(text).filter(Boolean));
+  // Previous section-reserve deferrals must not suppress verified products
+  // when the scheduler now writes to the separate, unassigned research inbox.
+  const previouslyReserveDeferred=new Set(automaticInbox?[]:array(runtime.partialQueueReserveDeferredIdentities).map(text).filter(Boolean));
   const queueAccepts=(row)=>{const identity=productQueueIdentity(row);return row&&(!identity||!previouslyReserveDeferred.has(identity))&&(!identity||!researchSuppressed.has(identity))&&productResearchStagingQualityReady(row)&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));};
   // An explicit latest-list registration/AI request is an administrator command to
   // re-check the selected product pages now. Product discovery may have produced a
@@ -3644,14 +3659,17 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
     }
   }
 
-  // The administrator's explicit selection is an override.  Automatic and
-  // unselected bulk staging must observe the country/category reserve budget.
-  const reserveManaged=!hasSelection;
+  // The 20-section reserve policy applies ONLY to administrator-managed
+  // section candidates, never to the upstream unassigned research inbox.
+  // Scheduled research must register independently verified products to the
+  // country-scoped private candidate ledger even when every section is full.
+  // No automatic front assignment is performed by this staging operation.
+  const reserveManaged=!hasSelection&&!automaticInbox;
   const reserveRows=reserveManaged&&batch.length?await readResearchReserveRows(scope):null;
-  const reserveDeferred=new Set(array(runtime.partialQueueReserveDeferredIdentities).map(text).filter(Boolean));
+  const reserveDeferred=new Set(automaticInbox?[]:array(runtime.partialQueueReserveDeferredIdentities).map(text).filter(Boolean));
   const summary={created:0,updated:0,preserved:0,skipped:0,failed:0,reserveDeferred:0,reserveReplaced:0},stagedCandidateIds=new Set();let firstFailed=null;
   for(let offset=0;offset<batch.length;offset+=(reserveManaged?1:PRODUCT_PARTIAL_STAGE_CONCURRENCY)){
-    const group=batch.slice(offset,offset+(reserveManaged?1:PRODUCT_PARTIAL_STAGE_CONCURRENCY)),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product,{allowAdministratorReviewQueue:manualReviewQueue,restoreReviewableExisting:explicitManualQueue,reserveRows,privateAutomaticNewOnly:lower(input&&input.source)==='scheduled_auto'})));
+    const group=batch.slice(offset,offset+(reserveManaged?1:PRODUCT_PARTIAL_STAGE_CONCURRENCY)),settled=await Promise.allSettled(group.map((entry)=>syncProductResearchPreview(actorId,scope,entry.product,{allowAdministratorReviewQueue:manualReviewQueue,restoreReviewableExisting:explicitManualQueue,reserveRows,privateAutomaticNewOnly:automaticInbox})));
     for(let i=0;i<settled.length;i++){const result=settled[i],entry=group[i];if(result.status!=="fulfilled"){summary.failed+=1;if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}const state=text(result.value&&result.value.status),candidateId=text(result.value&&result.value.candidateId),registered=result.value&&result.value.registered===true;if(!registered){summary.skipped+=1;
         if(state==='research_reserve_deferred'){reserveDeferred.add(entry.identity);summary.reserveDeferred+=1;continue;}
         if(!hasSelection&&Number.isFinite(entry.absoluteIndex)&&(firstFailed==null||entry.absoluteIndex<firstFailed))firstFailed=entry.absoluteIndex;continue;}if(/created/.test(state))summary.created+=1;else if(/updated/.test(state))summary.updated+=1;else summary.preserved+=1;
@@ -3667,7 +3685,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   const validationConsumedIdentities=new Set(array(validationRoute.consumedIdentities).map(text).filter(Boolean)),transferredIdentities=new Set([...candidateTransferredIdentities,...validationConsumedIdentities]);
   const holdTransferredKeys=Array.from(new Set(array(validationRoute.candidateHoldKeys).map(text).filter(Boolean))),rejectTransferredKeys=Array.from(new Set(array(validationRoute.candidateRejectKeys).map(text).filter(Boolean))),protectedTransferredKeys=Array.from(new Set(array(validationRoute.protectedKeys).map(text).filter(Boolean))),allTransferredKeys=Array.from(new Set([...candidateTransferredKeys,...holdTransferredKeys,...rejectTransferredKeys,...protectedTransferredKeys]));
   const movedToCandidate=candidateTransferredIdentities.size,transferred=movedToCandidate+Number(validationRoute.routedHold||0)+Number(validationRoute.routedReject||0)+Number(validationRoute.protectedPreserved||0);
-  const partialQueue={schema:"igdc-product-research-partial-private-queue.v6",operation:"stage",source:lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual"),eligible:eligibleTotal,done,remaining,attempted:batch.length+Number(validationRoute.attempted||0),handled:summary.created+summary.updated+summary.preserved,movedToCandidate,transferred,transferredKeys:allTransferredKeys,candidateTransferredKeys:Array.from(candidateTransferredKeys),holdTransferredKeys,rejectTransferredKeys,protectedTransferredKeys,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,reserveDeferred:summary.reserveDeferred,reserveReplaced:summary.reserveReplaced,validationBlocked:selectedValidationBlockedRows.length,routedHold:Number(validationRoute.routedHold||0),routedReject:Number(validationRoute.routedReject||0),protectedPreserved:Number(validationRoute.protectedPreserved||0),blocked:selectedBlocked,blockedReasons,failed:totalFailed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),reactivationPending:Number(selectionReconcile.reactivationPending||0),complete,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsTransferred:hasSelection&&manualReviewQueue?transferred:0,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
+  const partialQueue={schema:"igdc-product-research-partial-private-queue.v6",operation:"stage",source:automaticInbox?"scheduled_auto":(lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual")),eligible:eligibleTotal,done,remaining,attempted:batch.length+Number(validationRoute.attempted||0),handled:summary.created+summary.updated+summary.preserved,movedToCandidate,transferred,transferredKeys:allTransferredKeys,candidateTransferredKeys:Array.from(candidateTransferredKeys),holdTransferredKeys,rejectTransferredKeys,protectedTransferredKeys,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,reserveDeferred:summary.reserveDeferred,reserveReplaced:summary.reserveReplaced,validationBlocked:selectedValidationBlockedRows.length,routedHold:Number(validationRoute.routedHold||0),routedReject:Number(validationRoute.routedReject||0),protectedPreserved:Number(validationRoute.protectedPreserved||0),blocked:selectedBlocked,blockedReasons,failed:totalFailed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),reactivationPending:Number(selectionReconcile.reactivationPending||0),complete,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsTransferred:hasSelection&&manualReviewQueue?transferred:0,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
   const consumedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));if(hasSelection&&manualReviewQueue)transferredIdentities.forEach((identity)=>consumedLatest.add(identity));
   runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueScanCursor:hasSelection?Number(runtime.partialQueueScanCursor||0):((job.status!=="complete"&&!durablePaused&&lower(input&&input.source)==="administrator_manual")?0:scanCursor),partialQueueLedgerVerifiedVersion:hasSelection?text(runtime.partialQueueLedgerVerifiedVersion):VERSION,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueReserveDeferredIdentities:Array.from(reserveDeferred).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(consumedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
   return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,onlyValidatedProductsEnterActiveCandidateQueue:true,invalidLatestRowsClassifiedToHoldOrReject:hasSelection&&manualReviewQueue,latestListActsAsTransferInbox:hasSelection&&manualReviewQueue,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
@@ -8322,7 +8340,7 @@ async function globalControlDiagnostic() {
       detailedProgressDeferredToScope: true }, stagedAutomation:{readError:stagedReadError,total:staged.length,supplierCount:staged.filter(x=>x.kind==='supplier').length,productCount:staged.filter(x=>x.kind==='product').length,manualPreserved:staged.filter(x=>x.phase==='manual_preserved'||x.phase==='manual_job_preserved').length,errors:staged.filter(x=>x.errorCount>0).length,rows:staged},
     privatePsomAutomation:{readError:privatePsomReadError,total:privatePsomStates.length,
       inconclusive:privatePsomStates.filter(x=>x.lastResult==='private_psom_inconclusive_retry_scheduled').length,
-      delayed:privatePsomStates.filter(x=>ts(x.nextCycleAt)>Date.now()).length,
+      delayed:privatePsomStates.filter(x=>{const when=Date.parse(text(x.nextCycleAt));return Number.isFinite(when)&&when>Date.now();}).length,
       rows:privatePsomStates}, safety: { privateResearchOnly: true, administratorApplyRequired: true, automaticProductImport: false, automaticSlotPublication: false, paymentExecution: false, excludedCountries: ["KP"], manualDecisionPrecedence: true, largeLedgerRulesExcludedFromGlobalOverview: true } };
 }
 

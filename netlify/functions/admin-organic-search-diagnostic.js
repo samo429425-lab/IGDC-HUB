@@ -116,12 +116,12 @@ async function diagnostic(){
   const ledgerState=ledger&&ledger.state||"unavailable";
   const submissionEvidence={
    state:latest?"stored-run-metadata":"not-independently-verified",
-   source:latest?"optional-supabase-search-run-ledger":"none",
+   source:latest?"netlify-search-run-receipt":"none",
    runAt:latest?latest.run_at:null,
    historicalRunsAvailable:!!latest,
    automaticScheduleVerified:false,
    submissionReceiptVerified:false,
-   explanation:latest?"Last stored run metadata; not proof the scheduled trigger ran or any URL was indexed.":"SQL 없이 현재 상태 점검 가능. 과거 실제 실행/제출 여부는 Netlify Functions 로그에서 별도 확인해야 합니다."
+   explanation:latest?"Last recorded function execution; scheduled trigger and search indexing still require independent evidence.":"SQL 없이 현재 상태 점검 가능. 과거 실제 실행/제출 여부는 Netlify Functions 로그에서 별도 확인해야 합니다."
   };
   const downloadAudit={
    deploymentChecks:{expectedSitemapContentType:"application/xml",indexNowKeyEndpoint:"/indexnow-key.txt",indexNowConfigured:key.configured===true,liveSubmissionVerified:false},
@@ -133,7 +133,7 @@ async function diagnostic(){
     pageAndSitemapChecks:"live-origin-http-probes-at-diagnostic-time",
     registry:"server-generated-target-registry",
     indexingAndRank:"not-measured",
-    scheduledExecution:latest?"optional-recorded-metadata-only":"not-verified",
+    scheduledExecution:latest?"latest-recorded-execution":"not-verified",
     netlifyFunctionLogs:"not-accessed",
     playSearchPerformance:"external-play-console-csv-only"
    },
