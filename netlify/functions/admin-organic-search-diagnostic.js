@@ -145,6 +145,15 @@ async function diagnostic(){
   const latest=ledger&&ledger.record||null;
   const ledgerState=ledger&&ledger.state||"unavailable";
   const ledgerReason=ledger&&ledger.reason||null;
+  const ledgerRecommendation=ledgerState==="storage-unavailable"
+   ? (ledgerReason==="sdk-unavailable"?"Check Netlify Blobs package installation":
+      ledgerReason==="runtime-context-missing"?"Check Netlify Blobs runtime environment":
+      ledgerReason==="storage-timeout"?"Storage request timed out; retry or inspect Netlify function logs":
+      ledgerReason==="storage-access-denied"?"Check Netlify Blobs runtime permissions":
+      ledgerReason==="storage-network-error"?"Check temporary Netlify Blobs network errors":
+      "Inspect Netlify function logs for storage error category")
+   : ledgerState==="empty"?"Storage reachable; no search execution receipt saved yet":
+     ledgerState==="available"?"Latest search execution receipt found":"Receipt not verified";
   const submissionEvidence={
    state:latest?"stored-run-metadata":"not-independently-verified",
    source:latest?"netlify-search-run-receipt":"none",
@@ -176,6 +185,7 @@ async function diagnostic(){
     indexNowKeyVerification:key.verification||"unverified",
     optionalHistoryStorage:ledgerState,
     optionalHistoryStorageReason:ledgerReason,
+    optionalHistoryStorageRecommendation:ledgerRecommendation,
     engineLoaded:typeof ENGINE.run==="function"},
    checksNeedingAttention:probes.filter(x=>x.status!=="reachable").map(x=>({id:x.id,status:x.status,httpStatus:x.httpStatus==null?null:x.httpStatus,reason:x.note||x.error||null})),
    followUp:"Netlify > Functions > global-search-exposure-engine > Logs에서 [IGDC_SEARCH_EXPOSURE_RUN] 실행시각·제출·대기·실패 수치를 확인하세요. Netlify 로그는 보관 기간이 제한됩니다."
@@ -188,7 +198,7 @@ async function diagnostic(){
    recordedSubmissionSummary:ledger&&ledger.record?{status:ledger.record.result_status,changed:ledger.record.changed_count,submitted:ledger.record.submitted_count,pending:ledger.record.pending_count,failed:ledger.record.failed_count,partial:ledger.record.partial_count,providers:ledger.record.details}:null,
    runLedgerState:ledgerState,runLedgerReason:ledgerReason,
    notes:"Read-only persisted run metadata are not evidence of Google indexing or store ranking. A recorded run can be scheduled or manually triggered."},
-  registry,multilingualSearch,routingCrosscheck,downloadAudit,runLedger:{state:ledgerState,reason:ledgerReason,latest},robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
+  registry,multilingualSearch,routingCrosscheck,downloadAudit,runLedger:{state:ledgerState,reason:ledgerReason,recommendation:ledgerRecommendation,latest},robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
   targets:probes.filter(x=>x.group!=="technical"),
   indexNowKey:indexnowSafe(key),
   channels:channels(key),
