@@ -30,15 +30,28 @@ function summary(report){
   };
 }
 function openStore(){
-  const {getStore}=require("@netlify/blobs");
-  return getStore({name:location(),consistency:"strong"});
+  const blobs=require("@netlify/blobs");
+  if(!blobs || typeof blobs.getStore!=="function"){
+    const e=new Error("Blobs SDK unavailable"); e.code="BLOBS_SDK_UNAVAILABLE"; throw e;
+  }
+  return blobs.getStore({name:location(),consistency:"strong"});
+}
+function reasonOf(e){
+  const code=String(e&&e.code||"").toUpperCase();
+  const message=String(e&&e.message||"").toLowerCase();
+  if(["MODULE_NOT_FOUND","ERR_MODULE_NOT_FOUND","BLOBS_SDK_UNAVAILABLE"].includes(code))return "sdk-not-installed";
+  if(code==="AUDIT_TIMEOUT" || /timed out|timeout|abort/.test(message))return "storage-timeout";
+  if(/missing.*(site.?id|token|blobs.?context|metadata)|site.?id.*(missing|undefined)|not configured|credentials/.test(message))return "runtime-context-missing";
+  if(/401|403|unauthori[sz]ed|forbidden|permission/.test(message))return "storage-access-denied";
+  if(["ECONNRESET","ENOTFOUND","ETIMEDOUT"].includes(code)||/fetch failed|econnreset|enotfound|network|dns/.test(message))return "storage-network-error";
+  return "storage-error-other";
 }
 async function bounded(operation){
   let timer;
   try{
     return await Promise.race([
       Promise.resolve().then(operation),
-      new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error("audit-timeout")),3000);})
+      new Promise((_,reject)=>{timer=setTimeout(()=>{const e=new Error("audit-timeout");e.code="AUDIT_TIMEOUT";reject(e);},5000);})
     ]);
   }finally{clearTimeout(timer);}
 }
@@ -47,13 +60,13 @@ async function store(report){
     const record=summary(report);
     await bounded(()=>openStore().setJSON(KEY,record));
     return{state:"stored"};
-  }catch(_e){return{state:"storage-unavailable"};}
+  }catch(e){const reason=reasonOf(e);console.warn("[IGDC_SEARCH_RECEIPT_WRITE]",reason);return{state:"storage-unavailable",reason};}
 }
 async function readLatest(){
   try{
     const data=await bounded(()=>openStore().get(KEY,{type:"json"}));
     if(!data||typeof data!=="object"||!data.run_at)return{state:"empty",record:null};
     return{state:"available",record:data};
-  }catch(_e){return{state:"storage-unavailable",record:null};}
+  }catch(e){const reason=reasonOf(e);console.warn("[IGDC_SEARCH_RECEIPT_READ]",reason);return{state:"storage-unavailable",reason,record:null};}
 }
-module.exports={store,readLatest,_test:{location,summary,safeNum}};
+module.exports={store,readLatest,_test:{location,summary,safeNum,reasonOf}};
