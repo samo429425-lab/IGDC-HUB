@@ -34,14 +34,24 @@ function openStore(event){
   if(!blobs||typeof blobs.getStore!=="function"){
     const err=new Error("Blobs SDK export unavailable");err.code="BLOBS_SDK_UNAVAILABLE";throw err;
   }
-  // Netlify v1 Lambda handler: bind runtime credentials from the function event.
-  // The event/headers must never be persisted or logged.
-  if(event&&typeof blobs.connectLambda==="function")blobs.connectLambda(event);
+  // A legacy Lambda event may carry a Netlify Blobs envelope. Some scheduled
+  // invocations and runtimes omit it and use the SDK's injected environment.
+  // connectLambda() decodes event.blobs unconditionally, so never call it when
+  // that field is absent. Do not read, persist, or log envelope contents.
+  const headers=event&&event.headers;
+  const hasEnvelope=typeof(event&&event.blobs)==="string"&&event.blobs.length>0;
+  const hasSiteHeader=!!(headers&&typeof headers["x-nf-site-id"]==="string"&&headers["x-nf-site-id"]);
+  if(hasEnvelope&&hasSiteHeader&&typeof blobs.connectLambda==="function"){
+    blobs.connectLambda(event);
+  }
   return blobs.getStore({name:location(),consistency:"strong"});
 }
 function reasonOf(e){
   const code=String(e&&e.code||"").toUpperCase();
   const message=String(e&&e.message||"").toLowerCase();
+  const name=String(e&&e.name||"").toLowerCase();
+  if(name==="missingblobsenvironmenterror")return "runtime-context-missing";
+  if(name==="invalidblobstorenameerror"||name==="invalidblobsregionerror")return "storage-configuration-invalid";
   if(["MODULE_NOT_FOUND","ERR_MODULE_NOT_FOUND","BLOBS_SDK_UNAVAILABLE","ERR_REQUIRE_ESM"].includes(code))return "sdk-unavailable";
   if(/missingblobsenvironmenterror|environment has not been configured to use netlify blobs/.test(message))return "runtime-context-missing";
   if(code==="AUDIT_TIMEOUT"||/timed out|timeout|abort/.test(message))return "storage-timeout";
