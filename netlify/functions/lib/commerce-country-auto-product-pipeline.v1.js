@@ -260,15 +260,26 @@ function makePipeline(deps) {
     }
     if (!state.jobId || state.phase === 'idle') {
       const selected = configuredScopeMap(await automation.autoProductScopes()).get(scopeKey(scope));
-      if (!txt(selected && selected.supplierLastRunAt)) return Object.assign(state,{phase:'idle',lastResult:'supplier_discovery_not_yet_durably_saved'});
-      // Ten usable supplier sites are required by the operator before
-      // automatic product research; the server independently verifies the
-      // DISTINCT seller URLs before opening a new private research cycle.
-      const observedSuppliers=Math.max(0,Number(selected.supplierCount||0));
+      // Older supplier jobs often stored real private sellers but lost the
+      // country completion marker, leaving product research forever idle.
+      // Re-read the ACTUAL country supplier ledger for a missing/stale marker;
+      // never synthesize counts, timestamps or administrator approvals.
       const minimum=MIN_SUPPLIER_SOURCES;
-      if(observedSuppliers<minimum)return Object.assign(state,{phase:'idle',
-        lastResult:'supplier_portfolio_below_product_research_threshold',
-        usableSupplierCount:observedSuppliers,requiredSupplierCount:minimum});
+      let supplierMarker=txt(selected&&selected.supplierLastRunAt);
+      let observedSuppliers=Math.max(0,Number(selected&&selected.supplierCount||0));
+      // Even a saved nonzero supplier count can represent ten URLs from one
+      // merchant. Always validate the current distinct ledger at job-start.
+      const ledgerRecheck=await automation.autoSupplierPortfolioGate(inputFor(scope));
+      observedSuppliers=Math.max(0,Number(ledgerRecheck.usableSellerSites||0));
+      if(observedSuppliers>=minimum)supplierMarker=supplierMarker||txt(ledgerRecheck.latestEligibleSupplierAt);
+      if(!supplierMarker||observedSuppliers<minimum){
+        return Object.assign(state,{phase:'idle',usableSupplierCount:observedSuppliers,requiredSupplierCount:minimum,
+          supplierLedgerRecheck:ledgerRecheck&&{ledgerRows:ledgerRecheck.ledgerRows,excluded:ledgerRecheck.excluded,noSource:ledgerRecheck.noSource,duplicateSellerSites:ledgerRecheck.duplicateSellerSites},
+          nextRetryAt:new Date(ts(clock())+15*60*1000).toISOString(),
+          retrySupplierAt:txt(selected&&selected.supplierLastRunAt)||null,
+          lastResult:!supplierMarker?'durable_supplier_marker_missing_ledger_checked':'supplier_portfolio_below_product_research_threshold'});
+      }
+      state.nextRetryAt=null;state.retrySupplierAt=null;
       await recheck(scope);
       const started = await automation.beginProductResearchJob(ACTOR, inputFor(scope, {compact:true,fullRescan:state.fullRescanNeeded===true,minEligibleSupplierSources:minimum}));
       if (!txt(started && started.jobId)) throw new Error('auto_product_begin_no_job_id');
@@ -284,7 +295,7 @@ function makePipeline(deps) {
           fillPhase:full?'maintenance':'initial_fill',targetReached:full,
           lastResult:full?'private_board_full_weekly_twice_maintenance':'no_new_product_sources_initial_fill_retry_scheduled'});
       }
-      return Object.assign(state, { phase:txt(started.status)==='complete'?'staging':'researching', jobId:started.jobId,autoJobStartedAt:started.startedAt||clock(),lastSupplierRunAt:selected.supplierLastRunAt,fullRescanNeeded:false,reconcileCursor:'',pendingPlacementIds:[],stagingComplete:false,lastStagedResultCount:0,nextPhaseAfterPlacement:null,lastResult:'product_research_started' });
+      return Object.assign(state, { phase:txt(started.status)==='complete'?'staging':'researching', jobId:started.jobId,autoJobStartedAt:started.startedAt||clock(),lastSupplierRunAt:supplierMarker,fullRescanNeeded:false,reconcileCursor:'',pendingPlacementIds:[],stagingComplete:false,lastStagedResultCount:0,nextPhaseAfterPlacement:null,lastResult:'product_research_started' });
     }
     if (state.phase === 'researching') {
       if (checkpoint.status === 'complete') return Object.assign(state, {phase:'staging',lastResult:'research_complete_pending_private_staging'});
@@ -429,7 +440,8 @@ function makePipeline(deps) {
       const st=previous.get(idFor(s))||{};
       // An existing manually-started product job may continue its private
       // research even when a supplier completion timestamp is not yet present.
-      if (!txt(s.supplierLastRunAt) && !txt(st.jobId)) return false;
+      // Missing legacy supplier markers are probed through the live private
+      // supplier ledger in advance(); never hide these scopes forever here.
       if(st.operatorAutoPause===true)return false;
       if(ts(st.nextRetryAt)>ts(clock())&&
          ts(s.supplierLastRunAt)<=ts(st.retrySupplierAt))return false;

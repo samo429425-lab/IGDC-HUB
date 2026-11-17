@@ -9,7 +9,7 @@ try{RUN_LEDGER=require("./lib/igdc-search-exposure-run-ledger");}
 catch(e){if(e&&e.code!=="MODULE_NOT_FOUND")throw e;RUN_LEDGER={readLatest:async()=>({state:"not-installed",record:null})};}
 const ORIGIN="https://igdcglobal.com";
 const PLAY="https://play.google.com/store/apps/details?id=com.maru.mediaplayer";
-const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.3.0-routing-crosscheck";
+const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.4.0-multilingual-coverage";
 const CHECKS=[
  ["platform-home","IGDC Global Platform","/home.html","platform"],
  ["platform-en","IGDC Global Platform (English)","/igdc-amplify-platform-en.html","platform"],
@@ -94,8 +94,38 @@ function channels(indexnow){
   {name:"Bilibili",method:"content platform, not generic web engine",configured:null,submissionVerified:null,rankObserved:false,note:"Platform search requires an authorized published content presence"}
  ];
 }
+/* Read-only 30-locale coverage audit. This does not add keywords to public pages,
+   submit URLs, or assert indexation. Use only the existing organic-search config. */
+function multilingualDiscoveryAudit(configOverride){
+ try{
+  const config=configOverride||require("./data/igdc-maru-organic-search.config.json");
+  const locales=config&&config.locales||{},terms=config&&config.localizedTerms||{},routes=config&&config.routes||{};
+  const keys=Object.keys(locales);
+  const safeTerms=x=>Array.isArray(x)?x.filter(t=>typeof t==="string"&&t.trim()).map(t=>t.trim()):[];
+  const languages=keys.map(code=>{
+   const words=safeTerms(terms[code]),unique=[...new Set(words.map(t=>t.normalize("NFKC").toLocaleLowerCase()))];
+   const spec=locales[code]||{},dir=String(spec.dir||"").replace(/[^a-z]/gi,""),suffix=String(spec.suffix||"").replace(/[^a-z_]/gi,"");
+   const route=routes.distributionhub&&routes.distributionhub.file;
+   const relativePath=route?(code==="ko"?"/"+route:"/"+dir+"/"+route.replace(/\.html$/i,"")+suffix+".html"):null;
+   return{language:code,termCount:words.length,uniqueTermCount:unique.length,
+    mediaTermSeeds:words.slice(0,3).length,distributionAndPlatformTermSeeds:words.slice(3).length,
+    exampleDistributionPage:relativePath,
+    status:words.length>=6&&unique.length===words.length&&relativePath?"configured":"needs-review"};
+  });
+  const missingLanguageTerms=keys.filter(k=>!safeTerms(terms[k]).length);
+  const statuses=languages.filter(x=>x.status!=="configured").map(x=>x.language);
+  return{status:!keys.length?"not-configured":(keys.length!==30||statuses.length)?"needs-review":"configured",
+   configuredLanguageCount:keys.length,expectedLanguageCount:30,
+   totalLocalizedTermSeeds:languages.reduce((n,x)=>n+x.termCount,0),
+   missingLanguageTerms,needsReviewLanguages:statuses,languages,
+   scope:"local-config-only",searchRankingVerified:false,pageExistenceVerified:false,
+   note:"30-language keyword configuration is not proof of translated page content, crawler accessibility, indexing, Google Play store localization, or search ranking."};
+ }catch(e){return{status:"unavailable",reason:"localized-config-unavailable",configuredLanguageCount:null,
+   searchRankingVerified:false,pageExistenceVerified:false};}
+}
 async function diagnostic(){
  const now=new Date().toISOString();
+ const multilingualSearch=multilingualDiscoveryAudit();
  const [probes,key,ledger]=await Promise.all([Promise.all(CHECKS.map(row=>probe(...row))),indexNowKeyCheck(),RUN_LEDGER.readLatest()]);
  let registry;
  try{
@@ -114,6 +144,7 @@ async function diagnostic(){
   // A missing optional SQL table is never treated as a search-engine failure.
   const latest=ledger&&ledger.record||null;
   const ledgerState=ledger&&ledger.state||"unavailable";
+  const ledgerReason=ledger&&ledger.reason||null;
   const submissionEvidence={
    state:latest?"stored-run-metadata":"not-independently-verified",
    source:latest?"netlify-search-run-receipt":"none",
@@ -129,6 +160,7 @@ async function diagnostic(){
    createdAt:now,
    mode:"read-only-no-search-submission",
    sqlRequired:false,
+   multilingualSearch:{status:multilingualSearch.status,configuredLanguageCount:multilingualSearch.configuredLanguageCount,needsReviewLanguages:multilingualSearch.needsReviewLanguages||[]},
    evidenceSources:{
     pageAndSitemapChecks:"live-origin-http-probes-at-diagnostic-time",
     registry:"server-generated-target-registry",
@@ -143,6 +175,7 @@ async function diagnostic(){
     routing:routingCrosscheck.status,
     indexNowKeyVerification:key.verification||"unverified",
     optionalHistoryStorage:ledgerState,
+    optionalHistoryStorageReason:ledgerReason,
     engineLoaded:typeof ENGINE.run==="function"},
    checksNeedingAttention:probes.filter(x=>x.status!=="reachable").map(x=>({id:x.id,status:x.status,httpStatus:x.httpStatus==null?null:x.httpStatus,reason:x.note||x.error||null})),
    followUp:"Netlify > Functions > global-search-exposure-engine > Logs에서 [IGDC_SEARCH_EXPOSURE_RUN] 실행시각·제출·대기·실패 수치를 확인하세요. Netlify 로그는 보관 기간이 제한됩니다."
@@ -153,9 +186,9 @@ async function diagnostic(){
   overview:{status:pageStatus,probesTotal:probes.length,reachable:probes.filter(x=>x.status==="reachable").length,needsReview:failed.length,unverified:unknown.length},
   engine:{moduleLoaded:typeof ENGINE.run==="function",configuredDailySchedule:"17 3 * * * (UTC; repository config, not live Netlify confirmation)",lastScheduledExecution:null,lastSubmissionReceipt:null,lastRecordedExecution:ledger&&ledger.record?ledger.record.run_at:null,
    recordedSubmissionSummary:ledger&&ledger.record?{status:ledger.record.result_status,changed:ledger.record.changed_count,submitted:ledger.record.submitted_count,pending:ledger.record.pending_count,failed:ledger.record.failed_count,partial:ledger.record.partial_count,providers:ledger.record.details}:null,
-   runLedgerState:ledger&&ledger.state||"unavailable",
+   runLedgerState:ledgerState,runLedgerReason:ledgerReason,
    notes:"Read-only persisted run metadata are not evidence of Google indexing or store ranking. A recorded run can be scheduled or manually triggered."},
-  registry,routingCrosscheck,downloadAudit,runLedger:{state:ledgerState,latest},robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
+  registry,multilingualSearch,routingCrosscheck,downloadAudit,runLedger:{state:ledgerState,reason:ledgerReason,latest},robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
   targets:probes.filter(x=>x.group!=="technical"),
   indexNowKey:indexnowSafe(key),
   channels:channels(key),
@@ -173,4 +206,4 @@ exports.handler=async(event)=>{
   return json(200,{ok:true,report:await diagnostic()});
  }catch(e){const status=[401,403,503].includes(Number(e&&e.statusCode))?e.statusCode:500;return json(status,{ok:false,error:status===500?"Diagnostic unavailable":simpleError(e),code:e&&e.code||null});}
 };
-exports._test={diagnostic,probe,indexNowKeyCheck,channels};
+exports._test={diagnostic,probe,indexNowKeyCheck,channels,multilingualDiscoveryAudit};

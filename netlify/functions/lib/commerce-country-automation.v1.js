@@ -29,6 +29,7 @@ const AdminPlacementGuard = require("./commerce-admin-placement-guard.v1");
 const OriginalProductEvidence = require("./igdc-original-product-url-evidence-20261013-all-safe.json");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 const SupplierSourceGuard = require("./commerce-supplier-source-guard.v1");
+const ProductSellerOriginGuard = require("./commerce-product-seller-origin-guard.v1");
 const CountryLogistics = require("./commerce-country-logistics-evidence.v1");
 const InternationalSafety = require("./commerce-international-distribution-safety.v1");
 
@@ -2209,10 +2210,13 @@ function productResearchStagingQualityReady(row){
     !ProductRanking.isGenericProductName(first(row.productName,row.title)));
 }
 function summarizeProductResultRows(rowsInput){
-  const stats={inspected:0,withImage:0,withVideo:0,readyForAdminReview:0,queueEligible:0,slotCandidates:0,held:0,rejected:0,permanentExcluded:0};
-  for(const row of array(rowsInput)){if(row&&row.inspectionComplete===true)stats.inspected+=1;if(productImageUrl(row))stats.withImage+=1;if(productVideoUrl(row))stats.withVideo+=1;if(row&&row.researchStatus==="ready_for_admin_review")stats.readyForAdminReview+=1;if(productResearchStagingQualityReady(row)&&ProductPipeline.researchReadiness(row).queueEligible===true)stats.queueEligible+=1;const d=lower(row&&row.slotDecision||"undecided");if(d==="slot_candidate")stats.slotCandidates+=1;else if(d==="hold")stats.held+=1;else if(d==="reject")stats.rejected+=1;else if(d==="purge")stats.permanentExcluded+=1;}return stats;
+  const stats={inspected:0,withImage:0,withVideo:0,readyForAdminReview:0,queueEligible:0,originRejected:0,slotCandidates:0,held:0,rejected:0,permanentExcluded:0};
+  for(const row of array(rowsInput)){if(row&&row.inspectionComplete===true)stats.inspected+=1;if(productImageUrl(row))stats.withImage+=1;if(productVideoUrl(row))stats.withVideo+=1;if(row&&row.researchStatus==="ready_for_admin_review")stats.readyForAdminReview+=1;if(productResearchStagingQualityReady(row)&&ProductPipeline.researchReadiness(row).queueEligible===true){
+      if(!ProductSellerOriginGuard.reason({supplierSiteUrl:row&&row.supplierSiteUrl},row))stats.queueEligible+=1;
+      else stats.originRejected+=1;
+    }const d=lower(row&&row.slotDecision||"undecided");if(d==="slot_candidate")stats.slotCandidates+=1;else if(d==="hold")stats.held+=1;else if(d==="reject")stats.rejected+=1;else if(d==="purge")stats.permanentExcluded+=1;}return stats;
 }
-function mergeProductResultStats(baseInput,deltaInput){const base=Object.assign({inspected:0,withImage:0,withVideo:0,readyForAdminReview:0,queueEligible:0,slotCandidates:0,held:0,rejected:0,permanentExcluded:0},plain(baseInput)),delta=plain(deltaInput);for(const key of Object.keys(base))base[key]=Math.max(0,Number(base[key]||0)+Number(delta[key]||0));return base;}
+function mergeProductResultStats(baseInput,deltaInput){const base=Object.assign({inspected:0,withImage:0,withVideo:0,readyForAdminReview:0,queueEligible:0,originRejected:0,slotCandidates:0,held:0,rejected:0,permanentExcluded:0},plain(baseInput)),delta=plain(deltaInput);for(const key of Object.keys(base))base[key]=Math.max(0,Number(base[key]||0)+Number(delta[key]||0));return base;}
 async function appendInspectedProductResults(job,rowsInput,actorId){
   const raw=array(rowsInput);if(!raw.length)return[];const evaluated=ProductRanking.buildPortfolio(raw,plain(job.rankingContext)).products,evaluatedMap=new Map(array(evaluated).map((row)=>[ProductRanking.productIdentity(row)||text(row&&row.id),row])),ordered=raw.map((row)=>evaluatedMap.get(ProductRanking.productIdentity(row)||text(row&&row.id))||row);
   const before=Math.max(0,Number(job.resultCount||0)),result=await appendProductChunkRows(job,"result",ordered,actorId);job.resultStorage="chunked_v1";
@@ -2938,16 +2942,16 @@ function productSupplierSource(row, marketCountry) {
 }
 function productSupplierSourceKey(source) {
   const raw=safeUrl(first(source&&source.supplierSiteUrl,source&&source.url,source&&source.sourceCandidateUrl));
-  if(!raw)return "";
-  try{const u=new URL(raw);u.hash="";u.search="";u.pathname=(u.pathname||"/").replace(/\/{2,}/g,"/").replace(/\/$/,"")||"/";return lower(u.protocol+"//"+u.hostname+(u.port?":"+u.port:"")+u.pathname);}
-  catch(_error){return lower(raw).replace(/\/$/,"");}
+  // Seller identity, never a product-page path. Twenty URLs on one retailer
+  // are one supplier; each Naver merchant storefront has its own identity.
+  return raw?SupplierSourceGuard.identityKey(raw):"";
 }
 function productSupplierSourceFingerprint(sources) {
   return sha256(array(sources).map(productSupplierSourceKey).filter(Boolean).sort());
 }
 function researchedProductSupplierKeys(existing) {
   if(!existing||existing.schema!==PRODUCT_JOB_SCHEMA)return new Set();
-  const keys=new Set(array(existing.researchedSupplierKeys).map(text).filter(Boolean));
+  const keys=new Set(array(existing.researchedSupplierKeys).map((value)=>productSupplierSourceKey({supplierSiteUrl:value})||text(value)).filter(Boolean));
   const addSource=function(value){
     const key=productSupplierSourceKey({supplierSiteUrl:first(value&&value.supplierSiteUrl,value&&value.supplierUrl,value&&value.sourcePageUrl)});
     if(key)keys.add(key);
@@ -2965,11 +2969,10 @@ function researchedProductSupplierKeys(existing) {
 function productGapSupplierKeys(existing){
   const keys=new Set();
   if(!existing||existing.schema!==PRODUCT_JOB_SCHEMA)return keys;
-  array(existing.temporarilyDeferredSupplierKeys).map(text).filter(Boolean).forEach((key)=>keys.add(key));
-  array(existing.supplierRetryQueue).map(text).filter(Boolean).forEach((key)=>keys.add(key));
-  array(existing.zeroProductSupplierKeys).map(text).filter(Boolean).forEach((key)=>keys.add(key));
+  array(existing.temporarilyDeferredSupplierKeys).concat(array(existing.supplierRetryQueue),array(existing.zeroProductSupplierKeys))
+    .map((value)=>productSupplierSourceKey({supplierSiteUrl:value})||text(value)).filter(Boolean).forEach((key)=>keys.add(key));
   for(const row of array(existing.trace)){
-    const supplierKey=text(row&&row.supplierKey);if(!supplierKey||text(row&&row.source)!=="supplier-product-discovery")continue;
+    const supplierKey=productSupplierSourceKey({supplierSiteUrl:row&&row.supplierKey})||text(row&&row.supplierKey);if(!supplierKey||text(row&&row.source)!=="supplier-product-discovery")continue;
     const count=Number(row&&row.count||row&&row.returned||row&&row.fallbackCount||0),status=lower(row&&row.status);
     if(status==="ok"&&count>0)keys.delete(supplierKey);
     else if((status==="ok"||status==="supplier_url_missing"||row&&row.retryable===true)&&count<=0)keys.add(supplierKey);
@@ -3325,7 +3328,7 @@ async function advanceProductResearchJob(actorId, input) {
         let result;
         try{result=await RegionalSelector.discoverSupplierProductsStep(source,{country:scope.country,region:scope.region,limit:100,timeoutMs:7000});}
         catch(discoveryError){result={ok:true,items:[],retryable:true,trace:{source:"supplier-product-discovery",status:"step_exception",detail:text(discoveryError&&discoveryError.message),code:text(discoveryError&&discoveryError.code)||null,retryable:true}};job.errors=array(job.errors).concat([{at:iso(),stage:"discovering",supplierKey:productSupplierSourceKey(source),message:text(discoveryError&&discoveryError.message)||"supplier_product_discovery_failed",recoverable:true}]).slice(-60);}
-        if(!array(result.items).length){
+        if(!array(result.items).some(item=>!ProductSellerOriginGuard.reason(source,item))){
           try{
             const fallback=await fallbackDiscoverSupplierProducts(source,scope);
             if(array(fallback.items).length){result=Object.assign({},result,{items:fallback.items,retryable:false,trace:Object.assign({},plain(result.trace),{fallbackDiscovery:true,fallbackCount:array(fallback.items).length,fallbackStatus:plain(fallback.trace).status})});}
@@ -3333,14 +3336,19 @@ async function advanceProductResearchJob(actorId, input) {
           }catch(fallbackError){result=Object.assign({},result,{trace:Object.assign({},plain(result.trace),{fallbackDiscovery:true,fallbackCount:0,fallbackStatus:'error',fallbackDetail:text(fallbackError&&fallbackError.message)})});}
         }
         const sourceSettlement=normalizeAffiliateSettlement(source.affiliateSettlement,{existing:source.affiliateSettlement});
-        const discoveredItems=orderProductDiscoveryByPolicy(array(result.items).map((row)=>compactProductWorkingRow(Object.assign({},row,{affiliateSettlement:sourceSettlement,affiliateStage:sourceSettlement.stage,supplierAdminPinned:source.adminPinned===true,supplierManualRegistered:source.manualRegistered===true,manualSupplierId:text(source.manualSupplierId),supplierAffiliatePriority:sourceSettlement.stageRank,countryLogistics:plain(source.countryLogistics),
+        // A search engine may return Google product/service pages for an
+        // unrelated country's merchant. Only seller-origin-matching product
+        // references enter the automatic inspection/registration pipeline.
+        const discoveredRaw=array(result.items),matchedRows=discoveredRaw.filter(row=>!ProductSellerOriginGuard.reason(source,row));
+        const supplierOriginRejected=discoveredRaw.length-matchedRows.length;
+        const discoveredItems=orderProductDiscoveryByPolicy(matchedRows.map((row)=>compactProductWorkingRow(Object.assign({},row,{affiliateSettlement:sourceSettlement,affiliateStage:sourceSettlement.stage,supplierAdminPinned:source.adminPinned===true,supplierManualRegistered:source.manualRegistered===true,manualSupplierId:text(source.manualSupplierId),supplierAffiliatePriority:sourceSettlement.stageRank,countryLogistics:plain(source.countryLogistics),
           supplierPolicyChecks:plain(source.supplierPolicyChecks),supplierOriginCountryClaim:text(source.sellerAddressCountryClaim),
           internationalSafety:plain(source.internationalSafety)}))),job.rankingContext);
         if(job.discoveryStorage==="chunked_v1"){
           await appendProductChunkRows(job,"discovery",discoveredItems,actorId);
           job.rawProductCount=Math.max(Number(job.rawProductCount||0),Number(job.discoveryResultCount||0));
         }else job.rawProducts=mergeProductRows(job.rawProducts,discoveredItems,PRODUCT_PORTFOLIO_LIMIT);
-        const researchedKey=productSupplierSourceKey(source),trace=plain(result.trace),retryable=result.retryable===true||trace.retryable===true,retryCounts=plain(job.supplierDiscoveryRetryCounts);job.supplierDiscoveryRetryCounts=retryCounts;
+        const researchedKey=productSupplierSourceKey(source),trace=Object.assign({},plain(result.trace),{supplierOriginRejected,sourceItemsReturned:discoveredRaw.length,verifiedSourceItems:discoveredItems.length}),retryable=result.retryable===true||trace.retryable===true,retryCounts=plain(job.supplierDiscoveryRetryCounts);job.supplierDiscoveryRetryCounts=retryCounts;
         if(retryable&&!discoveredItems.length&&researchedKey){const attempt=Number(retryCounts[researchedKey]||0)+1;retryCounts[researchedKey]=attempt;if(attempt<3){const queue=array(job.supplierRetryQueue);if(!queue.includes(researchedKey))queue.push(researchedKey);job.supplierRetryQueue=queue;}else{const deferred=array(job.temporarilyDeferredSupplierKeys);if(!deferred.includes(researchedKey))deferred.push(researchedKey);job.temporarilyDeferredSupplierKeys=deferred;}if(!array(job.zeroProductSupplierKeys).includes(researchedKey))job.zeroProductSupplierKeys=array(job.zeroProductSupplierKeys).concat([researchedKey]);}
         else if(researchedKey){if(!array(job.researchedSupplierKeys).includes(researchedKey))job.researchedSupplierKeys=array(job.researchedSupplierKeys).concat([researchedKey]);job.temporarilyDeferredSupplierKeys=array(job.temporarilyDeferredSupplierKeys).filter((key)=>key!==researchedKey);if(discoveredItems.length){job.zeroProductSupplierKeys=array(job.zeroProductSupplierKeys).filter((key)=>key!==researchedKey);}else if(!array(job.zeroProductSupplierKeys).includes(researchedKey)){job.zeroProductSupplierKeys=array(job.zeroProductSupplierKeys).concat([researchedKey]);}}
         if(!retryMode)job.discoveryCursor=cursor+1;
@@ -3613,7 +3621,15 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   // Previous section-reserve deferrals must not suppress verified products
   // when the scheduler now writes to the separate, unassigned research inbox.
   const previouslyReserveDeferred=new Set(automaticInbox?[]:array(runtime.partialQueueReserveDeferredIdentities).map(text).filter(Boolean));
-  const queueAccepts=(row)=>{const identity=productQueueIdentity(row);return row&&(!identity||!previouslyReserveDeferred.has(identity))&&(!identity||!researchSuppressed.has(identity))&&productResearchStagingQualityReady(row)&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));};
+  let sourceValidationRejectedInScan=0;
+  const queueAccepts=(row)=>{
+    const identity=productQueueIdentity(row);
+    if(!row||identity&&previouslyReserveDeferred.has(identity)||identity&&researchSuppressed.has(identity))return false;
+    if(automaticInbox&&ProductSellerOriginGuard.reason({supplierSiteUrl:row.supplierSiteUrl},row)){
+      sourceValidationRejectedInScan++;return false;
+    }
+    return productResearchStagingQualityReady(row)&&(ProductPipeline.researchReadiness(row).queueEligible===true||(manualReviewQueue&&administratorReviewQueueEligible(row)));
+  };
   // An explicit latest-list registration/AI request is an administrator command to
   // re-check the selected product pages now. Product discovery may have produced a
   // provisional row (for example a catalog anchor with an image) before the normal
@@ -3685,7 +3701,7 @@ async function stageCurrentProductResearchQueueChunked(actorId,input,job,runtime
   const validationConsumedIdentities=new Set(array(validationRoute.consumedIdentities).map(text).filter(Boolean)),transferredIdentities=new Set([...candidateTransferredIdentities,...validationConsumedIdentities]);
   const holdTransferredKeys=Array.from(new Set(array(validationRoute.candidateHoldKeys).map(text).filter(Boolean))),rejectTransferredKeys=Array.from(new Set(array(validationRoute.candidateRejectKeys).map(text).filter(Boolean))),protectedTransferredKeys=Array.from(new Set(array(validationRoute.protectedKeys).map(text).filter(Boolean))),allTransferredKeys=Array.from(new Set([...candidateTransferredKeys,...holdTransferredKeys,...rejectTransferredKeys,...protectedTransferredKeys]));
   const movedToCandidate=candidateTransferredIdentities.size,transferred=movedToCandidate+Number(validationRoute.routedHold||0)+Number(validationRoute.routedReject||0)+Number(validationRoute.protectedPreserved||0);
-  const partialQueue={schema:"igdc-product-research-partial-private-queue.v6",operation:"stage",source:automaticInbox?"scheduled_auto":(lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual")),eligible:eligibleTotal,done,remaining,attempted:batch.length+Number(validationRoute.attempted||0),handled:summary.created+summary.updated+summary.preserved,movedToCandidate,transferred,transferredKeys:allTransferredKeys,candidateTransferredKeys:Array.from(candidateTransferredKeys),holdTransferredKeys,rejectTransferredKeys,protectedTransferredKeys,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,reserveDeferred:summary.reserveDeferred,reserveReplaced:summary.reserveReplaced,validationBlocked:selectedValidationBlockedRows.length,routedHold:Number(validationRoute.routedHold||0),routedReject:Number(validationRoute.routedReject||0),protectedPreserved:Number(validationRoute.protectedPreserved||0),blocked:selectedBlocked,blockedReasons,failed:totalFailed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),reactivationPending:Number(selectionReconcile.reactivationPending||0),complete,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsTransferred:hasSelection&&manualReviewQueue?transferred:0,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
+  const partialQueue={schema:"igdc-product-research-partial-private-queue.v6",operation:"stage",source:automaticInbox?"scheduled_auto":(lower(input&&input.source)==="pause_auto"?"pause_auto":(lower(input&&input.source)==="latest_list_manual"?"latest_list_manual":"administrator_manual")),eligible:eligibleTotal,done,remaining,attempted:batch.length+Number(validationRoute.attempted||0),handled:summary.created+summary.updated+summary.preserved,movedToCandidate,transferred,transferredKeys:allTransferredKeys,candidateTransferredKeys:Array.from(candidateTransferredKeys),holdTransferredKeys,rejectTransferredKeys,protectedTransferredKeys,created:summary.created,updated:summary.updated,preserved:summary.preserved,skipped:summary.skipped,sourceValidationRejectedInScan,reserveDeferred:summary.reserveDeferred,reserveReplaced:summary.reserveReplaced,validationBlocked:selectedValidationBlockedRows.length,routedHold:Number(validationRoute.routedHold||0),routedReject:Number(validationRoute.routedReject||0),protectedPreserved:Number(validationRoute.protectedPreserved||0),blocked:selectedBlocked,blockedReasons,failed:totalFailed,candidateIds:verifiedCandidateIds,staleHandledRepaired:Number(selectionReconcile.staleHandledRepaired||0),verifiedExisting:Number(selectionReconcile.actualCandidateIds.length||0),reactivationPending:Number(selectionReconcile.reactivationPending||0),complete,researchStatus:job.status,researchCursorPreserved:true,latestResearchRowsTransferred:hasSelection&&manualReviewQueue?transferred:0,automaticFullCompletionStaging:false,scanCursor,totalResults:total,stagedAt:iso(),stagedBy:text(actorId)||"administrator"};
   const consumedLatest=new Set(array(runtime.latestResearchDeletedIdentities).map(text).filter(Boolean));if(hasSelection&&manualReviewQueue)transferredIdentities.forEach((identity)=>consumedLatest.add(identity));
   runtime=await saveProductRuntime(scope,actorId,{jobId:job.jobId,partialQueueScanCursor:hasSelection?Number(runtime.partialQueueScanCursor||0):((job.status!=="complete"&&!durablePaused&&lower(input&&input.source)==="administrator_manual")?0:scanCursor),partialQueueLedgerVerifiedVersion:hasSelection?text(runtime.partialQueueLedgerVerifiedVersion):VERSION,partialQueueStagedIdentities:Array.from(handled).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueUnstagedIdentities:Array.from(explicitlyUnstaged).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueReserveDeferredIdentities:Array.from(reserveDeferred).slice(0,PRODUCT_PORTFOLIO_LIMIT),latestResearchDeletedIdentities:Array.from(consumedLatest).slice(0,PRODUCT_PORTFOLIO_LIMIT),partialQueueLast:partialQueue});
   return{ok:true,reportType:"igdc-country-product-reference-partial-queue-stage",version:VERSION,jobId:job.jobId,status:job.status,scope:job.scope,partialQueue,pause:publicProductRuntime(runtime,job.jobId),safety:{researchCursorPreserved:true,onlyValidatedProductsEnterActiveCandidateQueue:true,invalidLatestRowsClassifiedToHoldOrReject:hasSelection&&manualReviewQueue,latestListActsAsTransferInbox:hasSelection&&manualReviewQueue,automaticPublicPublication:false,automaticSlotPlacement:false,checkout:false,payment:false}};
@@ -4381,6 +4397,10 @@ async function archiveReplacedPrivateResearchCandidate(actorId,olderId,scope){
 }
 async function syncProductResearchPreview(actorId, scope, productInput, optionsInput) {
   const options=plain(optionsInput),readiness = ProductPipeline.researchReadiness(productInput),manualReviewQueue=options.allowAdministratorReviewQueue===true;
+  if(options.privateAutomaticNewOnly===true){
+    const originProblem=ProductSellerOriginGuard.reason({supplierSiteUrl:productInput&&productInput.supplierSiteUrl},productInput);
+    if(originProblem)return{status:"automatic_product_origin_rejected",reason:originProblem,candidateId:null,registered:false};
+  }
   // A bare sitemap/catalog URL or a text-only discovery is RESEARCH evidence,
   // not a ready product card. Keep it in the research result until inspection
   // recovers an authentic image. Never fabricate a misleading seller thumbnail.
@@ -8172,12 +8192,19 @@ async function recordScheduledSupplierCompletion(input){
     if(!productSupplierSource(row,scope.country)){privateSupplierGate.missingUsableSellerSource++;return false;}
     privateSupplierGate.eligibleSellerSites++;return true;
   });
-  // Research leads can unlock PRIVATE product discovery. Do not confuse their
-  // count with sellers whose public merchant/policy evidence was inspected.
-  // Both counts are exposed; only evidence-ready suppliers count to the
-  // 100/200 research target. Public trust remains separately gated.
-  const safetyAssessed=active.map(row=>InternationalSafety.supplier(row,scope.country));
-  const qualified=active.filter((row,index)=>scope.country==='KR'
+  // Many search-result URLs on one vendor are NOT distinct responsible
+  // suppliers. Base both the private product trigger and goal on verified
+  // site identities, not raw row counts or repeated product landing pages.
+  const seenSellerSites=new Set(),distinctActive=active.filter(row=>{
+    const source=productSupplierSource(row,scope.country),key=source&&productSupplierSourceKey(source);
+    if(!key||seenSellerSites.has(key))return false;
+    seenSellerSites.add(key);return true;
+  });
+  privateSupplierGate.duplicateSellerSites=Math.max(0,active.length-distinctActive.length);
+  privateSupplierGate.eligibleSellerSites=distinctActive.length;
+  // Strong public merchant evidence is still a separate release decision.
+  const safetyAssessed=distinctActive.map(row=>InternationalSafety.supplier(row,scope.country));
+  const qualified=distinctActive.filter((row,index)=>scope.country==='KR'
     ? plain(row.evidence).supplierReviewEligible===true&&Number(plain(row.evidence).policyPagesInspected||0)>0&&
       plain(row.evidence).responsibleEntity===true&&plain(row.evidence).directSales===true
     : safetyAssessed[index].overseasPolicyQualified===true);
@@ -8187,7 +8214,7 @@ async function recordScheduledSupplierCompletion(input){
   const id=settingId(kind,{countryCode:scope.country,subdivisionCode:scope.region});
   const policy=array(await SlotStore.select('gslot_policies','select=id,scope_country,scope_region,enabled,rule,updated_at,updated_by&id=eq.'+encodeURIComponent(id)+'&limit=1'))[0],oldRule=plain(policy&&policy.rule),t=iso();
   const setting=policy?Object.assign({},oldRule):sanitizeSetting({scopeType:kind,countryCode:scope.country,subdivisionCode:scope.region,mode:'inherit'});
-  const rule=Object.assign({},setting,{schema:VERSION,lastAttemptAt:t,lastAttemptSummary:{source:progressive?'scheduled_progressive_private_supplier':'scheduled_staged_research',jobId:requested,activeSupplierCount:active.length,qualifiedSupplierCount:qualified.length,foreignPolicyPending,crossBorderPending,
+  const rule=Object.assign({},setting,{schema:VERSION,lastAttemptAt:t,lastAttemptSummary:{source:progressive?'scheduled_progressive_private_supplier':'scheduled_staged_research',jobId:requested,activeSupplierCount:distinctActive.length,qualifiedSupplierCount:qualified.length,foreignPolicyPending,crossBorderPending,
     safetyPolicyVersion:InternationalSafety.VERSION,privateSupplierGate,
     created:Number(plain(input).recordedSuppliers||0),researchRounds:checkpoint.researchRounds,
     supplierRoundsCompleted:Math.max(0,Number(first(plain(input).supplierRoundsCompleted,oldRule.lastAttemptSummary&&oldRule.lastAttemptSummary.supplierRoundsCompleted,0))||0)},updatedAt:t,updatedBy:'scheduled-automation'});
@@ -8195,22 +8222,46 @@ async function recordScheduledSupplierCompletion(input){
   // A zero-new-supplier pass may still see a pre-existing validated portfolio:
   // permit the initial product cycle, but don't force a full product rescan
   // after every subsequent empty/repeated research round.
-  if(active.length){
+  if(distinctActive.length){
     if(newlySaved>0||!text(oldRule.lastDurableSupplierAt))rule.lastDurableSupplierAt=t;
     if(!progressive){rule.lastRunAt=t;rule.lastRunSummary=Object.assign({},rule.lastAttemptSummary,{completed:true});}
   }
   // Keep durable seller records unchanged, but do not unlock product research
   // based on a stale timestamp when no supplier still passes the safety gate.
-  if (!active.length) rule.lastDurableSupplierAt=null;
+  if (!distinctActive.length) rule.lastDurableSupplierAt=null;
   // Preserve the last completed *attempt* for diagnostics; do not grant private product research without a current usable supplier.
   const row={id,name:'국가 책임 공급업체 발굴 자동화',scope_hub:'country-commerce-control',scope_country:scope.country,scope_region:kind==='subdivision'?scope.region:null,enabled:true,rule,updated_at:t,updated_by:'scheduled-automation'};
   if(!policy)row.created_at=t;
   const saved=array(await SlotStore.insert('gslot_policies',row,'resolution=merge-duplicates,return=representation'));
   if(!saved.length||text(saved[0].id)!==id)throw Object.assign(new Error('scheduled_supplier_setting_save_not_confirmed'),{statusCode:503});
-  return{ok:true,scope:{country:scope.country,region:scope.region},activeSupplierCount:active.length,
+  return{ok:true,scope:{country:scope.country,region:scope.region},activeSupplierCount:distinctActive.length,
     privateSupplierGate,qualifiedSupplierCount:qualified.length,foreignPolicyPending,crossBorderPending,
     safetyPolicyVersion:InternationalSafety.VERSION,qualification:scope.country==='KR'?"public_merchant_and_policy_evidence_not_independent_fulfillment_verification":"overseas_seller_site_policy_and_local_market_evidence_only_not_fulfillment_certification",
-    lastDurableSupplierAt:active.length?t:null};
+    lastDurableSupplierAt:distinctActive.length?text(rule.lastDurableSupplierAt):null};
+}
+
+// Read-only recovery for country schedulers whose historical supplier
+// completion marker was never stored. Do not backfill fake counts or modify
+// admin policy. The actual product-start function independently rechecks this
+// same ledger and the explicit 10 distinct seller threshold.
+async function autoSupplierPortfolioGate(input){
+  const scope=researchScope(input),rows=await listAutomationCandidates(scope.country,scope.region);
+  const inactiveStatuses=new Set(['blocked','suppressed','rejected','reject','disabled','excluded','removed','purged']);
+  const inactiveDecisions=new Set(['hold','held','blocked','suppressed','rejected','reject','disabled','excluded','dismiss','remove_from_list','purge']);
+  const unique=new Map();let noSource=0,excluded=0,duplicates=0;
+  for(const row of rows){
+    if(inactiveStatuses.has(lower(row.status))||inactiveDecisions.has(lower(first(row.operatorDecision,plain(row.ai).operatorDecision,plain(row.supplier).operatorReviewState)))||supplierExplicitDanger(row)){
+      excluded++;continue;
+    }
+    const source=productSupplierSource(row,scope.country),key=source&&productSupplierSourceKey(source);
+    if(!key){noSource++;continue;}
+    if(unique.has(key)){duplicates++;continue;}
+    unique.set(key,row);
+  }
+  const dates=Array.from(unique.values()).map(row=>Date.parse(text(first(row.updatedAt,row.createdAt)))).filter(Number.isFinite);
+  const latestEligibleSupplierAt=dates.length?new Date(Math.max(...dates)).toISOString():null;
+  return{ok:true,country:scope.country,region:scope.region,ledgerRows:rows.length,usableSellerSites:unique.size,excluded,noSource,duplicateSellerSites:duplicates,
+    latestEligibleSupplierAt,meetsAutomaticStartThreshold:unique.size>=10,publicApprovalNotImplied:true};
 }
 
 // Save a small batch of *inspected* private supplier leads before the full
@@ -8361,5 +8412,5 @@ function diagnostic(state) {
 
 module.exports = {
   VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
-  saveSetting, operatingStatus, applyOperatingPreset, autoProductScopes, autoScopeStatus, autoSupplierJobCheckpoint, recordScheduledSupplierCompletion, progressivePrivateSupplierCommit, autoProductJobCheckpoint, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, runScopedMaintenanceRepair, globalControlDiagnostic, diagnostic
+  saveSetting, operatingStatus, applyOperatingPreset, autoProductScopes, autoScopeStatus, autoSupplierJobCheckpoint, recordScheduledSupplierCompletion, autoSupplierPortfolioGate, progressivePrivateSupplierCommit, autoProductJobCheckpoint, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, runScopedMaintenanceRepair, globalControlDiagnostic, diagnostic
 };

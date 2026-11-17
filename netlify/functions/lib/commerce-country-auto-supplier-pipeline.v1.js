@@ -42,7 +42,7 @@ function providerOutcome(result, previousCursor) {
   const last=obj(trace.slice().reverse().find(row=>['google','naver','sanmaru'].includes(txt(obj(row).source).toLowerCase())));
   const provider=txt(last.source).toLowerCase();
   if(!provider)return null;
-  return {provider,status:txt(last.status).toLowerCase()||'unknown',count:Math.max(0,Number(last.count||0)),searchCursor:done};
+  return {provider,status:txt(last.status).toLowerCase().replace(/^provider_/, '')||'unknown',count:Math.max(0,Number(last.count||0)),searchCursor:done};
 }
 function idFor(s) { return 'igdc_supplier_staged_auto_' + txt(s.countryCode).toLowerCase() + '_' + reg(s).toLowerCase().replace(/[^a-z0-9_-]/g, '_'); }
 function input(s,extra) { return Object.assign({countryCode:s.countryCode,subdivisionCode:reg(s),scopeAuthority:'administrator-selected',ignoreRequestGeo:true},extra||{}); }
@@ -254,10 +254,22 @@ function create(deps) {
               lastResult='supplier_provider_quota_sanmaru_fallback_queued';
             }else state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
           }
+          else if(/^(?:http_403|permission_denied|forbidden|not_configured|invalid_api_key)$/.test(outcome.status)){
+            // Account-level access errors are NOT country-specific failures.
+            // Skip repeated credential-denied queries while allowing a separately
+            // configured Sanmaru lane to continue the next scheduled tick.
+            if(['google','naver'].includes(outcome.provider)){
+              state.providerCooldowns=Object.assign({},obj(state.providerCooldowns),{
+                [outcome.provider]:new Date(ts(clock())+6*60*60*1000).toISOString()});
+              await markSharedQuota(outcome.provider);
+              state.nextRetryAt=null;
+              lastResult='supplier_provider_permission_sanmaru_fallback_queued';
+            }else state.nextRetryAt=new Date(ts(clock())+20*60*1000).toISOString();
+          }
           else if(/^(?:http_408|http_500|http_502|http_503|http_504|timeout|typeerror|network_error|fetch_failed)$/.test(outcome.status))
             state.nextRetryAt=new Date(ts(clock())+2*60*1000).toISOString();
-          // Missing/disabled provider credentials use an independent Sanmaru
-          // lane; do not postpone the fallback on those deterministic errors.
+          // A provider that has no credentials cannot be repaired through
+          // infinite national retries; the other search lanes remain active.
         }
       }
       return Object.assign(state,{phase:['complete','committed'].includes(result.status)?'committing':'researching',

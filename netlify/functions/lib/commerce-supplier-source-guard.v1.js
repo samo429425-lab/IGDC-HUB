@@ -22,6 +22,16 @@ function reason(value){
  // Distinguish a genuine merchant-owned storefront from its parent search/
  // software service. The store subdomains/paths still require product checks.
  if(host==="store.google.com" || host==="store.microsoft.com" || (host==="microsoft.com"&&/^\/(?:[a-z]{2}-[a-z]{2}\/)?store(?:\/|$)/i.test(u.pathname)))return "";
+ // These Naver hosts contain individual merchant-owned storefront paths.
+ // Accept only a concrete shop ID, never the parent portal, search, or
+ // category root. Product pages still require merchant-path matching.
+ if(["smartstore.naver.com","brand.naver.com","storefarm.naver.com"].includes(host)){
+   let shop="";try{shop=decodeURIComponent(u.pathname.split("/").filter(Boolean)[0]||"");}
+   catch(_){return "naver_storefront_identity_missing";}
+   if(/^[a-z0-9_-]{2,80}$/i.test(shop)&&
+      !/^(?:products?|goods|search|category|categories|login|cart|mypage|home|main|about|help|support)$/i.test(shop))return "";
+   return "naver_storefront_identity_missing";
+ }
  if(host==="localhost"||host.endsWith(".localhost")||host.endsWith(".local")||host.endsWith(".test")||host.endsWith(".example")||/^\d+\.\d+\.\d+\.\d+$/.test(host))return "non_public_supplier_host";
  if(PORTAL_DOMAINS.some(d=>onDomain(host,d)))return "discovery_or_social_platform_not_supplier";
  if(DOCUMENT_SUITES.some(d=>onDomain(host,d)))return "documentation_or_service_platform_not_supplier";
@@ -29,4 +39,14 @@ function reason(value){
  if(BAD_PATH.test(u.pathname)&&!/(?:\/products?\/|\/store\/|\/shop\/)/i.test(u.pathname))return "informational_page_not_supplier";
  return "";
 }
-module.exports={VERSION,reason,isUsableSupplierUrl:(u)=>!reason(u)};
+// Distinct merchant identity, not URL path.  Different product pages at one
+// ordinary retailer must NOT count as different suppliers; separate Naver
+// merchant storefront paths must remain distinct. Use only valid supplier URLs.
+function identityKey(value){
+ if(reason(value))return "";
+ const u=asUrl(value),host=u.hostname.toLowerCase().replace(/^www\./,"");
+ const naver=["smartstore.naver.com","brand.naver.com","storefarm.naver.com"].includes(host);
+ if(naver){const shop=u.pathname.split("/").filter(Boolean)[0]||"";return host+"/"+shop.toLowerCase();}
+ return host;
+}
+module.exports={VERSION,reason,identityKey,isUsableSupplierUrl:(u)=>!reason(u)};
