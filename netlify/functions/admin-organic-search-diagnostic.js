@@ -123,7 +123,7 @@ function multilingualDiscoveryAudit(configOverride){
  }catch(e){return{status:"unavailable",reason:"localized-config-unavailable",configuredLanguageCount:null,
    searchRankingVerified:false,pageExistenceVerified:false};}
 }
-async function diagnostic(){
+async function diagnostic(event){
  const now=new Date().toISOString();
  const multilingualSearch=multilingualDiscoveryAudit();
  const [probes,key,ledger]=await Promise.all([Promise.all(CHECKS.map(row=>probe(...row))),indexNowKeyCheck(),RUN_LEDGER.readLatest(event)]);
@@ -213,7 +213,7 @@ exports.handler=async(event)=>{
  try{
   const actor=await AdminSession.resolveUser(event),cap=AdminSession.capability(actor);
   if(!(cap&& (cap.read||cap.mediaRead||cap.owner)))return json(403,{ok:false,error:"Administrator read capability required"});
-  return json(200,{ok:true,report:await diagnostic()});
+  return json(200,{ok:true,report:await diagnostic(event)});
  }catch(e){const status=[401,403,503].includes(Number(e&&e.statusCode))?e.statusCode:500;return json(status,{ok:false,error:status===500?"Diagnostic unavailable":simpleError(e),code:e&&e.code||null});}
 };
 exports._test={diagnostic,probe,indexNowKeyCheck,channels,multilingualDiscoveryAudit};
