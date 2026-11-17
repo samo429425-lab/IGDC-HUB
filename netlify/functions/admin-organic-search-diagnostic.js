@@ -126,7 +126,7 @@ function multilingualDiscoveryAudit(configOverride){
 async function diagnostic(){
  const now=new Date().toISOString();
  const multilingualSearch=multilingualDiscoveryAudit();
- const [probes,key,ledger]=await Promise.all([Promise.all(CHECKS.map(row=>probe(...row))),indexNowKeyCheck(),RUN_LEDGER.readLatest()]);
+ const [probes,key,ledger]=await Promise.all([Promise.all(CHECKS.map(row=>probe(...row))),indexNowKeyCheck(),RUN_LEDGER.readLatest(event)]);
  let registry;
  try{
   const r=buildRegistry();

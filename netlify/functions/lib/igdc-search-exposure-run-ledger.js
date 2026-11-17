@@ -29,17 +29,21 @@ function summary(report){
     }))
   };
 }
-function openStore(){
+function openStore(event){
   const blobs=require("@netlify/blobs");
   if(!blobs||typeof blobs.getStore!=="function"){
     const err=new Error("Blobs SDK export unavailable");err.code="BLOBS_SDK_UNAVAILABLE";throw err;
   }
+  // Netlify v1 Lambda handler: bind runtime credentials from the function event.
+  // The event/headers must never be persisted or logged.
+  if(event&&typeof blobs.connectLambda==="function")blobs.connectLambda(event);
   return blobs.getStore({name:location(),consistency:"strong"});
 }
 function reasonOf(e){
   const code=String(e&&e.code||"").toUpperCase();
   const message=String(e&&e.message||"").toLowerCase();
   if(["MODULE_NOT_FOUND","ERR_MODULE_NOT_FOUND","BLOBS_SDK_UNAVAILABLE","ERR_REQUIRE_ESM"].includes(code))return "sdk-unavailable";
+  if(/missingblobsenvironmenterror|environment has not been configured to use netlify blobs/.test(message))return "runtime-context-missing";
   if(code==="AUDIT_TIMEOUT"||/timed out|timeout|abort/.test(message))return "storage-timeout";
   if(/(site.?id|token|credentials|blobs.?context).*(missing|undefined|not configured)|missing.*(site.?id|token|credentials)/.test(message))return "runtime-context-missing";
   if(/401|403|unauthori[sz]ed|forbidden|permission/.test(message))return "storage-access-denied";
@@ -55,16 +59,16 @@ async function bounded(operation){
     ]);
   }finally{clearTimeout(timer);}
 }
-async function store(report){
+async function store(report,event){
   try{
     const record=summary(report);
-    await bounded(()=>openStore().setJSON(KEY,record));
+    await bounded(()=>openStore(event).setJSON(KEY,record));
     return{state:"stored"};
   }catch(e){const reason=reasonOf(e);console.warn("[IGDC_SEARCH_RECEIPT_WRITE]",reason);return{state:"storage-unavailable",reason};}
 }
-async function readLatest(){
+async function readLatest(event){
   try{
-    const data=await bounded(()=>openStore().get(KEY,{type:"json"}));
+    const data=await bounded(()=>openStore(event).get(KEY,{type:"json"}));
     if(!data||typeof data!=="object"||!data.run_at)return{state:"empty",record:null};
     return{state:"available",record:data};
   }catch(e){const reason=reasonOf(e);console.warn("[IGDC_SEARCH_RECEIPT_READ]",reason);return{state:"storage-unavailable",reason,record:null};}

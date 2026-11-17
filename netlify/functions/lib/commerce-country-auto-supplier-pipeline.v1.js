@@ -39,7 +39,7 @@ function providerOutcome(result, previousCursor) {
   const trace=arr(obj(result).trace);
   // A provider-configuration fallback record can follow the actual result.
   // Report the underlying Google/Naver/Sanmaru status, not the guard message.
-  const last=obj(trace.slice().reverse().find(row=>['google','naver','sanmaru'].includes(txt(obj(row).source).toLowerCase())));
+  const last=obj(trace.slice().reverse().find(row=>['google','naver','sanmaru','brave'].includes(txt(obj(row).source).toLowerCase())));
   const provider=txt(last.source).toLowerCase();
   if(!provider)return null;
   return {provider,status:txt(last.status).toLowerCase().replace(/^provider_/, '')||'unknown',count:Math.max(0,Number(last.count||0)),searchCursor:done};
@@ -73,12 +73,12 @@ function create(deps) {
     try{
       const row=arr(await store.select('gslot_policies','select=rule&id=eq.'+GLOBAL_PROVIDER_GUARD_ID+'&limit=1'))[0];
       const rule=obj(row&&row.rule),out={};
-      for(const lane of ['google','naver'])if(ts(rule[lane])>ts(clock()))out[lane]=rule[lane];
+      for(const lane of ['google','naver','brave'])if(ts(rule[lane])>ts(clock()))out[lane]=rule[lane];
       return out;
     }catch(_error){return{};}
   }
   async function markSharedQuota(lane){
-    if(!['google','naver'].includes(lane))return;
+    if(!['google','naver','brave'].includes(lane))return;
     try{
       const id=GLOBAL_PROVIDER_GUARD_ID;
       const old=arr(await store.select('gslot_policies','select=id,rule,updated_at&id=eq.'+id+'&limit=1'))[0];
@@ -198,7 +198,7 @@ function create(deps) {
       // the country itself. Carry bounded, persisted cooldowns into a NEW job;
       // manual research ignores this scheduling hint entirely.
       const shared=await sharedCooldowns(),local=obj(state.providerCooldowns),merged={};
-      for(const lane of ['google','naver']){
+      for(const lane of ['google','naver','brave']){
         const until=Math.max(ts(shared[lane]),ts(local[lane]));
         if(until>ts(clock()))merged[lane]=new Date(until).toISOString();
       }
@@ -244,26 +244,26 @@ function create(deps) {
           // immediately. Yield this COUNTRY for 10 minutes; other countries
           // retain their own independent rotation and progress.
           if(/^(?:http_429|rate_limit|quota_exceeded)$/.test(outcome.status)){
-            if(['google','naver'].includes(outcome.provider)){
+            if(['google','naver','brave'].includes(outcome.provider)){
               state.providerCooldowns=Object.assign({},obj(state.providerCooldowns),{
                 [outcome.provider]:new Date(ts(clock())+6*60*60*1000).toISOString()});
               await markSharedQuota(outcome.provider);
               // The failed provider lane has already been cut short in the
               // saved job. Continue the independent Sanmaru lane next tick.
               state.nextRetryAt=null;
-              lastResult='supplier_provider_quota_sanmaru_fallback_queued';
+              lastResult=outcome.provider==='brave'?'brave_quota_country_shared_cooldown':'supplier_provider_quota_sanmaru_fallback_queued';
             }else state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
           }
           else if(/^(?:http_403|permission_denied|forbidden|not_configured|invalid_api_key)$/.test(outcome.status)){
             // Account-level access errors are NOT country-specific failures.
             // Skip repeated credential-denied queries while allowing a separately
             // configured Sanmaru lane to continue the next scheduled tick.
-            if(['google','naver'].includes(outcome.provider)){
+            if(['google','naver','brave'].includes(outcome.provider)){
               state.providerCooldowns=Object.assign({},obj(state.providerCooldowns),{
                 [outcome.provider]:new Date(ts(clock())+6*60*60*1000).toISOString()});
               await markSharedQuota(outcome.provider);
               state.nextRetryAt=null;
-              lastResult='supplier_provider_permission_sanmaru_fallback_queued';
+              lastResult=outcome.provider==='brave'?'brave_permission_country_shared_cooldown':'supplier_provider_permission_sanmaru_fallback_queued';
             }else state.nextRetryAt=new Date(ts(clock())+20*60*1000).toISOString();
           }
           else if(/^(?:http_408|http_500|http_502|http_503|http_504|timeout|typeerror|network_error|fetch_failed)$/.test(outcome.status))

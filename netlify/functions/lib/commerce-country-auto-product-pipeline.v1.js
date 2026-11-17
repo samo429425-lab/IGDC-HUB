@@ -311,7 +311,9 @@ function makePipeline(deps) {
         return Object.assign(state, {lastStagedResultCount:Number(checkpoint.resultCount||0),
           privateCandidatesStaged:Number(state.privateCandidatesStaged||0)+Number(part.created||0),latestStaging:part,
           awaitingAdminSectionReview:true,phase:'researching',
-          lastResult:'latest_research_private_candidates_staged_supplier_crawl_continues'});
+          lastResult:Number(part.created||0)>0?'new_private_product_candidates_saved':
+            Number(part.updated||0)>0?'existing_private_product_candidates_updated':
+            'latest_research_checked_no_new_candidate_saved'});
       }
       await recheck(scope);
       const step = await automation.advanceProductResearchJob(ACTOR, inputFor(scope,{jobId:state.jobId,compact:true}));
@@ -339,7 +341,12 @@ function makePipeline(deps) {
         lastStagingSummary:{done:Number(p.done||0),remaining:Number(p.remaining||0),
           failed:Number(p.failed||0),blocked:Number(p.blocked||0),skipped:Number(p.skipped||0),
           scanCursor,reviewRequired:Number(p.validationBlocked||0)},
-        awaitingAdminSectionReview:true,lastResult:'latest_research_and_shared_candidate_ledger_updated',phase:'staging'});
+        awaitingAdminSectionReview:true,
+        lastResult:Number(p.created||0)>0?'new_private_product_candidates_saved':
+          Number(p.updated||0)>0?'existing_private_product_candidates_updated':
+          Number(p.verifiedExisting||0)>0?'existing_product_candidates_verified_no_new_save':
+          Number(p.sourceValidationRejectedInScan||0)>0?'product_origin_validation_rejected_no_new_save':
+          'private_candidate_queue_scanned_no_new_save',phase:'staging'});
       if(repeated>=3){
         // An unchanged failed staging cursor is not a reason to auto-approve
         // products or throw away the job. Yield 15m; a fresh supplier marker

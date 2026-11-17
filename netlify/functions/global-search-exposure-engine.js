@@ -81,7 +81,7 @@ exports.handler=async event=>{
   if(forceRequested&&!force)return{statusCode:403,headers,body:JSON.stringify({ok:false,error:"Force submission is not enabled"})};
   const report=await run({force,hours:isAuthorized?Number(q.hours||b.hours||96):96,deletedUrls:deletions&&isAuthorized?b.deletedUrls:[]});
   // Persist sanitized execution evidence, never blocking a search submission.
-  const recorded=await ledger.store(report);
+  const recorded=await ledger.store(report,event);
   report.executionAudit={storage:recorded.state,stored:recorded.state==="stored"};
   try{console.info("[IGDC_SEARCH_EXPOSURE_RUN]",JSON.stringify({
    generatedAt:report.generatedAt,status:report.status,changedUrls:report.changedUrls,
