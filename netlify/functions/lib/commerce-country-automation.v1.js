@@ -2071,7 +2071,7 @@ async function advanceResearchJob(actorId, input, event) {
           searchItems=array(alternative.items);
           liveTrace={at:iso(),source:'brave',status:text(alternative.status),count:searchItems.length,
             query:text(task.query).slice(0,300),fallbackFor:'sanmaru',realHttpSearch:true};
-          if(['http_401','http_403','http_429','not_configured'].includes(lower(alternative.status)))
+          if(['http_401','http_403','http_422','http_429','not_configured'].includes(lower(alternative.status)))
             job.liveFallbackDisabled=true;
         }
         const novelItems=filterKnownSupplierItems(searchItems,new Set(array(job.knownSupplierKeys)));
@@ -3071,6 +3071,30 @@ async function archiveProductResearchCycle(job, actorId){
 }
 async function beginProductResearchJob(actorId, input) {
   const raw=plain(input),scope=researchScope(raw),existing=await loadProductResearchJob(scope);
+  // Explicit saved auto-takeover consent is checked by the scheduled worker.
+  // At the data boundary independently verify the actor, an ACTUALLY paused
+  // manual runtime, and the same job ID before allowing archival.  This must
+  // not be settable by an ordinary/manual product research request.
+  let archivePausedManual=false;
+  if(text(actorId)==='scheduled-country-product-ai' && raw.archivePausedManual===true && existing &&
+      !['complete','committed','cancelled'].includes(existing.status)){
+    // A string actor is insufficient authority to archive an unfinished human
+    // research job. Require the persisted, operator-controlled per-country
+    // auto-takeover decision as well as the same paused runtime checkpoint.
+    const takeoverId='igdc_product_private_auto_'+lower(scope.country)+'_'+
+      lower(scope.region||'NATIONWIDE').replace(/[^a-z0-9_-]/g,'_');
+    const takeoverRows=await SlotStore.select('gslot_policies',
+      'select=rule&id=eq.'+encodeURIComponent(takeoverId)+'&limit=1');
+    const takeover=plain(plain(array(takeoverRows)[0]).rule);
+    const runtime=await productRuntimeRule(scope);
+    archivePausedManual=takeover.autoTakeover===true && takeover.operatorAutoPause!==true &&
+      runtime.pauseRequested===true && lower(runtime.pauseMode)==='manual' &&
+      text(runtime.jobId)===text(existing.jobId);
+    if(!archivePausedManual){
+      const error=new Error('PAUSED_MANUAL_RESEARCH_REQUIRES_SAVED_TAKEOVER_AND_SAME_RUNTIME_JOB');
+      error.code='PAUSED_MANUAL_TAKEOVER_NOT_AUTHORIZED';error.statusCode=409;throw error;
+    }
+  }
   if (existing && existing.schema !== PRODUCT_JOB_SCHEMA) {
     const error = new Error("PRODUCT_RESEARCH_EXISTING_SCHEMA_REVIEW_REQUIRED");
     error.statusCode = 409; throw error;
@@ -3165,7 +3189,7 @@ async function beginProductResearchJob(actorId, input) {
   // searched. A diagnostic full rescan is available only with fullRescan=true.
   const forceSourceRefresh=raw.fullRescan===true||raw.forceFullRescan===true;
 
-  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!['complete','cancelled','failed'].includes(existing.status)){
+  if(existing&&existing.schema===PRODUCT_JOB_SCHEMA&&!archivePausedManual&&!['complete','cancelled','failed'].includes(existing.status)){
     // Never replace an unfinished product job: its discovery/result chunks and
     // administrator queue checkpoints must survive a supplier-ledger update.
     // While still discovering, append only NEW supplier roots to the same job.
@@ -3225,7 +3249,8 @@ async function beginProductResearchJob(actorId, input) {
   // new products are appended.
   const previousCycleProductCount=existing&&existing.schema===PRODUCT_JOB_SCHEMA?(existing.resultStorage==="chunked_v1"?Number(existing.resultCount||0):array(existing.products).length):0;
   const cycleResearchedKeys=forceSourceRefresh?[]:Array.from(priorResearchedKeys);
-  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,rankingVersion:ProductRanking.VERSION,supplierResearchFocusPolicyVersion:focusPolicyVersion,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,supplierRefreshCursor:nextSupplierRefreshCursor,refreshedSupplierSourceCount:refreshing.length,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,gapSupplierSourceCount,skippedKnownSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,zeroProductSupplierKeys:Array.from(priorGapKeys),supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,discoveryStorage:"chunked_v1",discoveryResultCount:0,discoveryChunkCount:0,discoveryIdentities:[],rawProducts:[],rawProductCount:0,inspectionStorage:"discovery_chunks_v1",inspectionPool:[],inspectionProcessedBase:0,inspectionTotalCount:0,inspectCursor:0,productInspectionRetryRefs:[],productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],resultStorage:"chunked_v1",resultCount:0,resultChunkCount:0,resultIdentities:[],resultStats:summarizeProductResultRows([]),products:[],preservedProductIdentities:[],currentCycleTouchedIdentities:[],stagePool:[],stagePoolFormat:"result_cursor_v1",stageTotalCount:0,stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},partialQueueStagedIdentities:[],partialQueueLast:null,trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,gapSupplierSources:gapSupplierSourceCount,skippedKnownSupplierSources:skippedKnownSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,storage:"country_region_chunked_v1",chunkSize:PRODUCT_CHUNK_SIZE,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; explicit_full_rescan; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; skip_successfully_researched_suppliers; research_new_and_gap_suppliers_only; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
+  const now=iso(),job={schema:PRODUCT_JOB_SCHEMA,version:VERSION,
+    archivedPausedManualJobId:archivePausedManual?text(existing&&existing.jobId):null,rankingVersion:ProductRanking.VERSION,supplierResearchFocusPolicyVersion:focusPolicyVersion,jobId:"country_product_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:existing&&existing.jobId||null,preservedFromPreviousCycle:0,preservedRawCount:0,candidateLedgerBaseline:true,status:"discovering",scope,startedAt:now,finishedAt:null,supplierResearchJobId:supplierLedgerSourceId,supplierSources,supplierRefreshCursor:nextSupplierRefreshCursor,refreshedSupplierSourceCount:refreshing.length,currentSupplierSourceCount:allSupplierSources.length,existingSupplierSourceCount,gapSupplierSourceCount,skippedKnownSupplierSourceCount,newSupplierSourceCount,priorResearchedSupplierCount:existingSupplierSourceCount,supplierSourceFingerprint,researchedSupplierKeys:cycleResearchedKeys,zeroProductSupplierKeys:Array.from(priorGapKeys),supplierRetryQueue:[],supplierDiscoveryRetryCounts:{},temporarilyDeferredSupplierKeys:[],rankingContext,discoveryCursor:0,discoveryStorage:"chunked_v1",discoveryResultCount:0,discoveryChunkCount:0,discoveryIdentities:[],rawProducts:[],rawProductCount:0,inspectionStorage:"discovery_chunks_v1",inspectionPool:[],inspectionProcessedBase:0,inspectionTotalCount:0,inspectCursor:0,productInspectionRetryRefs:[],productInspectionRetryCounts:{},productInspectionRetryPending:0,temporarilyDeferredProductKeys:[],resultStorage:"chunked_v1",resultCount:0,resultChunkCount:0,resultIdentities:[],resultStats:summarizeProductResultRows([]),products:[],preservedProductIdentities:[],currentCycleTouchedIdentities:[],stagePool:[],stagePoolFormat:"result_cursor_v1",stageTotalCount:0,stageCursor:0,stageSummary:{eligible:0,created:0,updated:0,preserved:0,skipped:0,failed:0},partialQueueStagedIdentities:[],partialQueueLast:null,trace:[{at:now,source:"product-research-job",status:forceSourceRefresh?"candidate_ledger_preserved_supplier_rescan_started":"candidate_ledger_preserved_supplier_delta_started",suppliers:supplierSources.length,currentSupplierSources:allSupplierSources.length,previousCycleResearchedSuppliers:existingSupplierSourceCount,gapSupplierSources:gapSupplierSourceCount,skippedKnownSupplierSources:skippedKnownSupplierSourceCount,newSupplierSources:newSupplierSourceCount,previousResearchPayloadProducts:previousCycleProductCount,storage:"country_region_chunked_v1",chunkSize:PRODUCT_CHUNK_SIZE,canonicalBaseline:"gslot_candidates_private_product_ledger",sourcePolicy:forceSourceRefresh?"preserve_candidate_ledger; explicit_full_rescan; upsert_changed_products_in_place; append_only_truly_new_products; no_publication":"preserve_candidate_ledger; skip_successfully_researched_suppliers; research_new_and_gap_suppliers_only; upsert_changed_products_in_place; append_only_truly_new_products; no_publication"}],errors:[],lastError:null};
   if(existing&&existing.schema===PRODUCT_JOB_SCHEMA)await archiveProductResearchCycle(existing,actorId);
   await saveProductJob(job,actorId);
   // The job row is the only resumable head for this country.  Confirm the new
@@ -8378,6 +8403,7 @@ async function globalControlDiagnostic() {
     "providerSuccesses:rule->providerSuccesses,providerFailures:rule->providerFailures,"+
     "privateCandidatesStaged:rule->privateCandidatesStaged,"+
     "stagedNewLastBatch:rule->latestStaging->>created,stagedUpdatedLastBatch:rule->latestStaging->>updated,"+
+    "latestStagedAt:rule->latestStaging->>stagedAt,"+
     "activeSupplierCount:rule->activeSupplierCount,qualifiedSupplierCount:rule->qualifiedSupplierCount,"+
     "errors:rule->errors"+
     "&scope_hub=in.(country-supplier-staged-auto,country-product-ai-private-pipeline)&limit=1000"));}
@@ -8389,6 +8415,7 @@ async function globalControlDiagnostic() {
       lastProvider:plain(rule.lastProvider),providerSuccesses:Number(rule.providerSuccesses||0),
       providerFailures:Number(rule.providerFailures||0),privateCandidatesCreatedTotal:Number(rule.privateCandidatesStaged||0),
       newProductsSavedLastBatch:Number(rule.stagedNewLastBatch||0),productsUpdatedLastBatch:Number(rule.stagedUpdatedLastBatch||0),
+      latestStagedAt:rule.latestStagedAt||null,
       activeSupplierCount:Number(rule.activeSupplierCount||0),
       qualifiedSupplierCount:Number(rule.qualifiedSupplierCount||0),
       lastError:text(plain(array(rule.errors).slice(-1)[0]).error||plain(array(rule.errors).slice(-1)[0]).reason).slice(0,180)||null,
@@ -8413,6 +8440,31 @@ async function globalControlDiagnostic() {
     lastPlacementOutcome:plain(row.lastPlacementOutcome),placed:Number(row.placed||0),
     reviewRequired:Number(row.reviewRequired||0),errorCount:array(row.errors).length,
     updatedAt:row.updated_at||null}));
+  // Operational proof is deliberately separate from enabled buttons, stored
+  // jobs and historic candidate totals.  A recorded provider response of
+  // HTTP 403/429 or "empty" is never counted as an actual new seller/product.
+  const supplierStages=staged.filter(row=>row.kind==='supplier');
+  const productStages=staged.filter(row=>row.kind==='product');
+  const providerStatuses={};
+  for(const row of supplierStages){
+    const outcome=plain(row.lastProvider),source=text(outcome.provider)||'unknown',status=text(outcome.status)||'no_report';
+    const label=source+':'+status;providerStatuses[label]=Number(providerStatuses[label]||0)+1;
+  }
+  const durableWriteEvidence={
+    interpretation:'checkpoint-counters-not-independent-live-database-proof',
+    supplierCheckpoints:supplierStages.length,productCheckpoints:productStages.length,
+    lastObservedProviderStatusByCountry:providerStatuses,
+    supplierScopesReportingPersistedLeads:supplierStages.filter(row=>row.progressivePersisted>0).length,
+    productScopesReportingPrivateCandidateWrites:productStages.filter(row=>row.privateCandidatesCreatedTotal>0).length,
+    lastBatchCreatedProducts:productStages.reduce((n,row)=>n+Math.max(0,row.newProductsSavedLastBatch),0),
+    lastBatchUpdatedProducts:productStages.reduce((n,row)=>n+Math.max(0,row.productsUpdatedLastBatch),0),
+    last24HoursCheckpointCreated:productStages.filter(row=>Date.now()-Date.parse(text(row.latestStagedAt))<=86400000 &&
+      Date.parse(text(row.latestStagedAt))<=Date.now()).reduce((n,row)=>n+Math.max(0,row.newProductsSavedLastBatch),0),
+    last24HoursCheckpointWriteScopes:productStages.filter(row=>Date.now()-Date.parse(text(row.latestStagedAt))<=86400000 &&
+      Date.parse(text(row.latestStagedAt))<=Date.now() && row.newProductsSavedLastBatch>0).length,
+    productScopesWithLastBatchNewProduct:productStages.filter(row=>row.newProductsSavedLastBatch>0).length,
+    notes:'Do not infer fresh products from a historical eight-product checkpoint; verify gslot_candidates.created_at for this country and run.'
+  };
   return { ok: true, reportType: "igdc-global-automation-control-diagnostic", version: VERSION, generatedAt: iso(), operatingStatus: operatingStatus(state), master: state.master, savedSettings: state.settings, scheduler: { schedule: "supplier-minute-checkpoint + product-2-minute-checkpoint", dueCount: Number(dueResult.dueCount || 0), nextScopes: array(dueResult.scopes).map((row) => ({ country: row.countryCode, region: row.subdivisionCode || "NATIONWIDE", lastRunAt: row.effective && row.effective.lastRunAt || null })) }, searchProviderReadiness:{
       googleCredentialsPresent:!!text(process.env.GOOGLE_CUSTOM_SEARCH_API_KEY||process.env.GOOGLE_SEARCH_API_KEY||process.env.GOOGLE_API_KEY||process.env.GOOGLE_CLOUD_API_KEY)&&
         !!text(process.env.GOOGLE_CSE_ID||process.env.GOOGLE_CX||process.env.GOOGLE_SEARCH_ENGINE_ID||process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID),
@@ -8421,7 +8473,7 @@ async function globalControlDiagnostic() {
       braveCredentialsPresent:LiveSupplierSearch.configured(),
       credentialPresenceDoesNotGuaranteeProviderAccess:true,
       verifiedLiveSearchRequiresSuccessfulExternalHttpResponse:true
-    }, researchJobs: { supplier: supplierJobs, product: productJobs, activeSupplier: supplierJobs.filter((row) => row.status === "saved_active").length, activeProduct: productJobs.filter((row) => row.status === "saved_active").length,
+    }, durableWriteEvidence, researchJobs: { supplier: supplierJobs, product: productJobs, activeSupplier: supplierJobs.filter((row) => row.status === "saved_active").length, activeProduct: productJobs.filter((row) => row.status === "saved_active").length,
       activeScheduledSupplier: supplierJobs.filter(row=>row.jobId.endsWith("_scheduled")&&row.status==="saved_active").length,
       detailedProgressDeferredToScope: true }, stagedAutomation:{readError:stagedReadError,total:staged.length,supplierCount:staged.filter(x=>x.kind==='supplier').length,productCount:staged.filter(x=>x.kind==='product').length,manualPreserved:staged.filter(x=>x.phase==='manual_preserved'||x.phase==='manual_job_preserved').length,errors:staged.filter(x=>x.errorCount>0).length,rows:staged},
     privatePsomAutomation:{readError:privatePsomReadError,total:privatePsomStates.length,

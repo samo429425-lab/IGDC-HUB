@@ -11,6 +11,11 @@
  */
 const Guard = require('./commerce-supplier-source-guard.v1');
 const VERSION = 'igdc-commerce-live-supplier-search.v1';
+// Brave's web-search country filter accepts a limited enum, not all ISO
+// countries. A blind country=EG (or 50+ other countries) returns HTTP 422.
+// Use global search for unsupported markets; seller identity and marketplace
+// eligibility are still checked by the existing country supplier pipeline.
+const SEARCH_COUNTRIES=new Set('AR AU AT BE BR CA CL DK FI FR DE GR HK IN ID IT JP KR MY MX NL NZ NO CN PL PT PH RU SA ZA ES SE CH TW TR GB US'.split(' '));
 function text(v){return v == null ? '' : String(v).trim();}
 function code(error){
   const m = text(error && (error.code || error.message || error)).match(/(?:http[_ ]?)(\d{3})/i);
@@ -39,9 +44,12 @@ async function search(task, scope, options){
   const endpoint=new URL('https://api.search.brave.com/res/v1/web/search');
   endpoint.searchParams.set('q',query);
   endpoint.searchParams.set('count','20');
-  if(/^[A-Z]{2}$/.test(country))endpoint.searchParams.set('country',country.toLowerCase());
+  endpoint.searchParams.set('country',SEARCH_COUNTRIES.has(country)?country.toLowerCase():'all');
+  // Brave uses 'jp' for Japanese and 'zh-hans'/'zh-hant' for Chinese;
+  // unsupported search_lang values can cause a rejected request (422).
   const lang=text(task && task.locale).split('-')[0].toLowerCase();
-  if(/^(?:en|ko|ja|zh|de|fr|es|pt|it|nl|pl|ru|ar|hi|th|vi|tr|id)$/.test(lang))endpoint.searchParams.set('search_lang',lang);
+  const braveLang=lang==='ja'?'jp':lang==='zh'?'zh-hans':lang;
+  if(/^(?:en|ko|jp|zh-hans|de|fr|es|pt|it|nl|pl|ru|ar|hi|th|vi|tr|id)$/.test(braveLang))endpoint.searchParams.set('search_lang',braveLang);
   const timeout=Math.max(2000,Math.min(6500,Number(options && options.timeoutMs)||5500));
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),timeout);

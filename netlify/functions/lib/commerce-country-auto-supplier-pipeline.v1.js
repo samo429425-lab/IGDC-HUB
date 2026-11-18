@@ -254,7 +254,7 @@ function create(deps) {
               lastResult=outcome.provider==='brave'?'brave_quota_country_shared_cooldown':'supplier_provider_quota_sanmaru_fallback_queued';
             }else state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
           }
-          else if(/^(?:http_403|permission_denied|forbidden|not_configured|invalid_api_key)$/.test(outcome.status)){
+          else if(/^(?:http_401|http_403|permission_denied|forbidden|not_configured|invalid_api_key)$/.test(outcome.status)){
             // Account-level access errors are NOT country-specific failures.
             // Skip repeated credential-denied queries while allowing a separately
             // configured Sanmaru lane to continue the next scheduled tick.
@@ -266,7 +266,7 @@ function create(deps) {
               lastResult=outcome.provider==='brave'?'brave_permission_country_shared_cooldown':'supplier_provider_permission_sanmaru_fallback_queued';
             }else state.nextRetryAt=new Date(ts(clock())+20*60*1000).toISOString();
           }
-          else if(/^(?:http_408|http_500|http_502|http_503|http_504|timeout|typeerror|network_error|fetch_failed)$/.test(outcome.status))
+          else if(/^(?:http_408|http_422|http_500|http_502|http_503|http_504|timeout|typeerror|network_error|fetch_failed)$/.test(outcome.status))
             state.nextRetryAt=new Date(ts(clock())+2*60*1000).toISOString();
           // A provider that has no credentials cannot be repaired through
           // infinite national retries; the other search lanes remain active.
