@@ -36,6 +36,37 @@ function summary(jobs){
  const skipped=jobs.filter(x=>SKIP.has(x.status)).length;
  return{submitted,partial,failed,skipped,submissionAdapters:jobs.length};
 }
+
+const SUBMISSION_ADAPTERS=["indexnow","china-search","regional-search","baidu"];
+const sha=s=>crypto.createHash("sha256").update(s).digest("hex");
+function revision(url,item,isDeleted){
+ return sha(JSON.stringify(isDeleted?[url,"deleted"]:[
+ url,item&&item.updatedAt||"",item&&item.marketVerifiedAt||"",
+ item&&item.fingerprint||"",item&&item.marketEvidenceDigest||"",
+ item&&item.title||"",item&&item.keywords||[]]));
+}
+function makePlan(reg,urls,deleted,checkpoint,force){
+ const targets=new Map((reg.targets||[]).map(item=>[ownedUrl(item.url),item]));
+ const deletedSet=new Set(deleted);
+ const revisions=new Map(urls.map(url=>[url,revision(url,targets.get(url),deletedSet.has(url))]));
+ const reliable=checkpoint.state==="empty"||checkpoint.state==="available";
+ const entries=checkpoint.entries||{};
+ const selected=SUBMISSION_ADAPTERS.map(name=>urls.filter(url=>
+  force||!reliable||deletedSet.has(url)||!(entries[name]&&entries[name][sha(url)]&&entries[name][sha(url)].revision===revisions.get(url))));
+ return{reliable,selected,revisions};
+}
+function acknowledged(checkpoint,plan,jobs){
+ if(!plan.reliable)return null;
+ const entries=checkpoint.entries||{};
+ let updated=false,count=0;
+ SUBMISSION_ADAPTERS.forEach((name,i)=>{
+  if(!jobs[i]||jobs[i].status!=="submitted"||!plan.selected[i].length)return;
+  const previous=entries[name]||{},block={...previous};
+  for(const url of plan.selected[i]){block[sha(url)]={revision:plan.revisions.get(url),at:Date.now()};count++;}
+  entries[name]=block;updated=true;
+ });
+ return updated?{entries,count}:null;
+}
 async function run(options={}){
  const reg=buildRegistry();
  const force=options.force===true;
@@ -44,13 +75,17 @@ async function run(options={}){
  const changed=force?reg.targets.map(x=>ownedUrl(x.url)).filter(Boolean):selectChangedUrls(reg,{hours}).map(ownedUrl).filter(Boolean);
  const deleted=(Array.isArray(options.deletedUrls)?options.deletedUrls:[]).map(ownedUrl).filter(Boolean).slice(0,200);
  const urls=[...new Set([...changed,...deleted])];
- // Run concurrently to fit Netlify scheduled-function timeout; each has its own bounded transport.
+ const checkpoint=force?{state:"force",entries:{}}:await ledger.readCheckpoints(options.event);
+ const plan=makePlan(reg,urls,deleted,checkpoint,force);
  const jobs=await Promise.all([
-  guard("indexnow",()=>indexnow.submit(urls)),
-  guard("china-search",()=>configurable.submit("china-search","CHINA_SEARCH",urls)),
-  guard("regional-search",()=>configurable.submit("regional-search","REGIONAL_SEARCH",urls)),
-  guard("baidu",()=>baidu.submit(urls))
+  guard("indexnow",()=>indexnow.submit(plan.selected[0])),
+  guard("china-search",()=>configurable.submit("china-search","CHINA_SEARCH",plan.selected[1])),
+  guard("regional-search",()=>configurable.submit("regional-search","REGIONAL_SEARCH",plan.selected[2])),
+  guard("baidu",()=>baidu.submit(plan.selected[3]))
  ]);
+ const accepted=acknowledged(checkpoint,plan,jobs);
+ const checkpointSaved=accepted?await ledger.storeCheckpoints(accepted.entries,options.event):null;
+ const duplicatesSkipped=plan.selected.reduce((total,v)=>total+urls.length-v.length,0);
  const audit=summary(jobs);
  const errors=audit.failed+audit.partial;
  const status=errors?(audit.submitted||audit.partial?"partial-failure":"submission-failed"):
@@ -67,7 +102,10 @@ async function run(options={}){
  return{ok:errors===0,status,version:"igdc-global-search-exposure-v4.0.0-marusearch",
   generatedAt:new Date().toISOString(),
   registry:{version:reg.version,hash:reg.hash,counts:reg.counts,total:reg.targets.length,commerce:reg.commerceCount,countryMarketPages:reg.marketCommerceCount,media:reg.mediaCount,countries:Object.keys(reg.countryCounts||{}).length,countryCounts:reg.countryCounts},
-  changeWindowHours:force?null:hours,changedUrls:urls.length,submissionSummary:audit,sitemap:SITEMAP,results};
+  changeWindowHours:force?null:hours,changedUrls:urls.length,submissionSummary:audit,
+  deduplication:{checkpointState:checkpoint.state,duplicatesSkipped,acknowledgedRevisions:accepted?accepted.count:0,
+    checkpointWrite:checkpointSaved?checkpointSaved.state:"no-write",storesUrls:false},
+  sitemap:SITEMAP,results};
 }
 exports.handler=async event=>{
  const headers={"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-robots-tag":"noindex, nofollow"};
@@ -79,7 +117,7 @@ exports.handler=async event=>{
   if((forceRequested||deletions||hoursRequested)&&!isAuthorized)return{statusCode:403,headers,body:JSON.stringify({ok:false,error:"Administrator authorization required"})};
   const force=forceRequested&&String(process.env.SEARCH_EXPOSURE_ALLOW_FORCE||"").toLowerCase()==="true";
   if(forceRequested&&!force)return{statusCode:403,headers,body:JSON.stringify({ok:false,error:"Force submission is not enabled"})};
-  const report=await run({force,hours:isAuthorized?Number(q.hours||b.hours||96):96,deletedUrls:deletions&&isAuthorized?b.deletedUrls:[]});
+  const report=await run({force,hours:isAuthorized?Number(q.hours||b.hours||96):96,deletedUrls:deletions&&isAuthorized?b.deletedUrls:[],event});
   // Persist sanitized execution evidence, never blocking a search submission.
   const recorded=await ledger.store(report,event);
   report.executionAudit={storage:recorded.state,stored:recorded.state==="stored"};

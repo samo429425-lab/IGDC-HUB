@@ -142,4 +142,29 @@ async function readLatest(event){
     return{state:"available",record:data};
    }catch(e){const reason=reasonOf(e);const diagnostic=errorDetails(e,event,"read");console.warn("[IGDC_SEARCH_RECEIPT_READ]",reason,diagnostic.name,diagnostic.code,diagnostic.status);return{state:"storage-unavailable",reason,record:null,diagnostic};}
 }
-module.exports={store,readLatest,_test:{location,summary,safeNum,reasonOf,errorDetails,runtimeFlags,messagePattern}};
+
+const CHECKPOINT_KEY="submitted-checkpoints-v1";
+const ADAPTERS=["indexnow","china-search","regional-search","baidu"];
+async function readCheckpoints(event){
+ try{
+  const doc=await bounded(()=>openStore(event).get(CHECKPOINT_KEY,{type:"json"}));
+  if(!doc)return{state:"empty",entries:{}};
+  if(doc.version!==1||!doc.entries||typeof doc.entries!=="object"||Array.isArray(doc.entries))return{state:"invalid",entries:{}};
+  const entries={};
+  for(const name of ADAPTERS){const obj=doc.entries[name];entries[name]=obj&&typeof obj==="object"&&!Array.isArray(obj)?obj:{};}
+  return{state:"available",entries};
+ }catch(err){const reason=reasonOf(err);console.warn("[IGDC_SEARCH_CHECKPOINT_READ]",reason);return{state:"storage-unavailable",reason,entries:{}};}
+}
+async function storeCheckpoints(entries,event){
+ try{
+  const sanitized={};
+  for(const name of ADAPTERS){
+   const rows=Object.entries(entries&&entries[name]||{}).filter(([key,v])=>/^[a-f0-9]{64}$/.test(key)&&v&&/^[a-f0-9]{64}$/.test(String(v.revision||""))&&Number.isFinite(Number(v.at)));
+   rows.sort((a,b)=>Number(b[1].at)-Number(a[1].at));
+   sanitized[name]=Object.fromEntries(rows.slice(0,2500));
+  }
+  await bounded(()=>openStore(event).setJSON(CHECKPOINT_KEY,{version:1,entries:sanitized}));
+  return{state:"stored"};
+ }catch(err){const reason=reasonOf(err);console.warn("[IGDC_SEARCH_CHECKPOINT_WRITE]",reason);return{state:"storage-unavailable",reason};}
+}
+module.exports={store,readLatest,readCheckpoints,storeCheckpoints,_test:{location,summary,safeNum,reasonOf,errorDetails,runtimeFlags,messagePattern}};

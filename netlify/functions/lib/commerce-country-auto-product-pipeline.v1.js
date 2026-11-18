@@ -210,7 +210,17 @@ function makePipeline(deps) {
     const checkpoint = await automation.autoProductJobCheckpoint(inputFor(scope));
     const thisJob = txt(state.jobId);
     const isOwned = thisJob && checkpoint.jobId === thisJob;
-    if (checkpoint.paused && !['complete','committed'].includes(checkpoint.status)) return Object.assign(state,{ lastResult:'research_manually_paused_preserved' });
+    // A paused human job is NEVER discarded.  Only the operator's previously
+    // saved auto-takeover consent permits moving its complete working record to
+    // a verified archive before starting a NEW, private scheduled research job.
+    // Give a recently editing human the existing concurrency grace period.
+    const pausedHumanJob=!!checkpoint.jobId && checkpoint.updatedBy!==ACTOR &&
+      checkpoint.paused===true && !['complete','committed'].includes(checkpoint.status);
+    const archivePausedManual=pausedHumanJob && state.autoTakeover===true &&
+      !(await humanResearchIsActive(scope));
+    if(pausedHumanJob && !archivePausedManual)
+      return Object.assign(state,{phase:'manual_job_preserved',
+        lastResult:'research_manually_paused_preserved',protectedJobId:checkpoint.jobId});
     // Unlike supplier research, the product working job uses one shared key
     // for manual and scheduled runs. A scheduled worker must NEVER resume a
     // human-owned in-progress job or stage its candidate queue. Even after the
@@ -222,7 +232,7 @@ function makePipeline(deps) {
       // A completed manual cycle is archival, not an indefinite blocker to
       // an explicitly enabled country automation. Active manual work remains
       // protected; the new scheduled cycle cannot stage the old manual job.
-      if(!manualFinished){
+      if(!manualFinished&&!archivePausedManual){
         return Object.assign(state,{phase:'manual_job_preserved',
           lastResult:manualFinished?'administrator_completed_product_job_preserved':'administrator_product_job_preserved',
           protectedJobId:checkpoint.jobId});
@@ -281,8 +291,19 @@ function makePipeline(deps) {
       }
       state.nextRetryAt=null;state.retrySupplierAt=null;
       await recheck(scope);
-      const started = await automation.beginProductResearchJob(ACTOR, inputFor(scope, {compact:true,fullRescan:state.fullRescanNeeded===true,minEligibleSupplierSources:minimum}));
+      const started = await automation.beginProductResearchJob(ACTOR, inputFor(scope, {
+        compact:true,fullRescan:state.fullRescanNeeded===true||archivePausedManual,
+        archivePausedManual:archivePausedManual===true,
+        minEligibleSupplierSources:minimum
+      }));
       if (!txt(started && started.jobId)) throw new Error('auto_product_begin_no_job_id');
+      // The core must create a DIFFERENT, archived research cycle before the
+      // scheduler may own a formerly paused manual job. If it returns the same
+      // job ID for any reason, keep the old manual data untouched.
+      if(archivePausedManual && txt(started.jobId)===txt(checkpoint.jobId)){
+        const error=new Error('AUTO_TAKEOVER_OLD_MANUAL_JOB_STILL_ACTIVE');
+        error.code='AUTO_TAKEOVER_ARCHIVAL_NOT_CONFIRMED';error.statusCode=409;throw error;
+      }
       // A same-ID completion with zero fresh sources must not restage older
       // products, nor reset the management ledger.
       if(started.jobId===checkpoint.jobId&&started.status==='complete'){

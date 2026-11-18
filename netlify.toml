@@ -53,7 +53,7 @@
   path = "/*"
 
 [functions."global-search-exposure-engine"]
-  schedule = "17 3 * * *"
+  schedule = "17 3,11,21 * * *"
 
 [[redirects]]
   from = "/sitemap-global.xml"

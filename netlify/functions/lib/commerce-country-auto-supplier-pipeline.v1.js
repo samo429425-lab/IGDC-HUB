@@ -39,7 +39,7 @@ function providerOutcome(result, previousCursor) {
   const trace=arr(obj(result).trace);
   // A provider-configuration fallback record can follow the actual result.
   // Report the underlying Google/Naver/Sanmaru status, not the guard message.
-  const last=obj(trace.slice().reverse().find(row=>['google','naver','sanmaru','brave'].includes(txt(obj(row).source).toLowerCase())));
+  const last=obj(trace.slice().reverse().find(row=>['google','naver','sanmaru','wikidata'].includes(txt(obj(row).source).toLowerCase())));
   const provider=txt(last.source).toLowerCase();
   if(!provider)return null;
   return {provider,status:txt(last.status).toLowerCase().replace(/^provider_/, '')||'unknown',count:Math.max(0,Number(last.count||0)),searchCursor:done};
@@ -73,17 +73,17 @@ function create(deps) {
     try{
       const row=arr(await store.select('gslot_policies','select=rule&id=eq.'+GLOBAL_PROVIDER_GUARD_ID+'&limit=1'))[0];
       const rule=obj(row&&row.rule),out={};
-      for(const lane of ['google','naver','brave'])if(ts(rule[lane])>ts(clock()))out[lane]=rule[lane];
+      for(const lane of ['google','naver','wikidata'])if(ts(rule[lane])>ts(clock()))out[lane]=rule[lane];
       return out;
     }catch(_error){return{};}
   }
-  async function markSharedQuota(lane){
-    if(!['google','naver','brave'].includes(lane))return;
+  async function markSharedQuota(lane,overrideMs){
+    if(!['google','naver','wikidata'].includes(lane))return;
     try{
       const id=GLOBAL_PROVIDER_GUARD_ID;
       const old=arr(await store.select('gslot_policies','select=id,rule,updated_at&id=eq.'+id+'&limit=1'))[0];
       const t=new Date(Math.max(ts(clock()),ts(old&&old.updated_at)+1)).toISOString();
-      const prior=obj(old&&old.rule),until=new Date(Math.max(ts(prior[lane]),ts(clock())+GLOBAL_PROVIDER_BACKOFF_MS)).toISOString();
+      const prior=obj(old&&old.rule),until=new Date(Math.max(ts(prior[lane]),ts(clock())+(Number(overrideMs)||GLOBAL_PROVIDER_BACKOFF_MS))).toISOString();
       const rule=Object.assign({},prior,{[lane]:until,updatedAt:t});
       if(old){
         await store.update('gslot_policies','id=eq.'+id+'&updated_at=eq.'+encodeURIComponent(txt(old.updated_at)),
@@ -198,7 +198,7 @@ function create(deps) {
       // the country itself. Carry bounded, persisted cooldowns into a NEW job;
       // manual research ignores this scheduling hint entirely.
       const shared=await sharedCooldowns(),local=obj(state.providerCooldowns),merged={};
-      for(const lane of ['google','naver','brave']){
+      for(const lane of ['google','naver','wikidata']){
         const until=Math.max(ts(shared[lane]),ts(local[lane]));
         if(until>ts(clock()))merged[lane]=new Date(until).toISOString();
       }
@@ -231,6 +231,13 @@ function create(deps) {
       let lastResult='supplier_step_'+txt(result.status);
       if(outcome){
         state.lastProvider=Object.assign({at:clock()},outcome);
+        if(outcome.provider==='wikidata'){
+          // Public WDQS is a community service, not a replacement for a
+          // commercial high-volume API. Persist a global minimum spacing for
+          // every attempted query (including empty and successful responses).
+          await markSharedQuota('wikidata',/^(?:http_429|http_403|http_503|timeout)$/.test(outcome.status)
+            ? 2*60*60*1000 : 10*60*1000);
+        }
         if(outcome.status==='ok'){
           state.providerSuccesses=Number(state.providerSuccesses||0)+1;
           lastResult=outcome.count?'supplier_provider_results_saved_in_research_checkpoint':'supplier_provider_no_usable_results';
@@ -244,29 +251,29 @@ function create(deps) {
           // immediately. Yield this COUNTRY for 10 minutes; other countries
           // retain their own independent rotation and progress.
           if(/^(?:http_429|rate_limit|quota_exceeded)$/.test(outcome.status)){
-            if(['google','naver','brave'].includes(outcome.provider)){
+            if(['google','naver','wikidata'].includes(outcome.provider)){
               state.providerCooldowns=Object.assign({},obj(state.providerCooldowns),{
-                [outcome.provider]:new Date(ts(clock())+6*60*60*1000).toISOString()});
-              await markSharedQuota(outcome.provider);
+                [outcome.provider]:new Date(ts(clock())+(outcome.provider==='wikidata'?60*60*1000:6*60*60*1000)).toISOString()});
+              if(outcome.provider!=='wikidata')await markSharedQuota(outcome.provider);
               // The failed provider lane has already been cut short in the
               // saved job. Continue the independent Sanmaru lane next tick.
               state.nextRetryAt=null;
-              lastResult=outcome.provider==='brave'?'brave_quota_country_shared_cooldown':'supplier_provider_quota_sanmaru_fallback_queued';
+              lastResult=outcome.provider==='wikidata'?'wikidata_quota_global_cooldown':'supplier_provider_quota_sanmaru_fallback_queued';
             }else state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
           }
-          else if(/^(?:http_403|permission_denied|forbidden|not_configured|invalid_api_key)$/.test(outcome.status)){
+          else if(/^(?:http_401|http_403|permission_denied|forbidden|not_configured|invalid_api_key)$/.test(outcome.status)){
             // Account-level access errors are NOT country-specific failures.
             // Skip repeated credential-denied queries while allowing a separately
             // configured Sanmaru lane to continue the next scheduled tick.
-            if(['google','naver','brave'].includes(outcome.provider)){
+            if(['google','naver','wikidata'].includes(outcome.provider)){
               state.providerCooldowns=Object.assign({},obj(state.providerCooldowns),{
-                [outcome.provider]:new Date(ts(clock())+6*60*60*1000).toISOString()});
-              await markSharedQuota(outcome.provider);
+                [outcome.provider]:new Date(ts(clock())+(outcome.provider==='wikidata'?60*60*1000:6*60*60*1000)).toISOString()});
+              if(outcome.provider!=='wikidata')await markSharedQuota(outcome.provider);
               state.nextRetryAt=null;
-              lastResult=outcome.provider==='brave'?'brave_permission_country_shared_cooldown':'supplier_provider_permission_sanmaru_fallback_queued';
+              lastResult=outcome.provider==='wikidata'?'wikidata_permission_global_cooldown':'supplier_provider_permission_sanmaru_fallback_queued';
             }else state.nextRetryAt=new Date(ts(clock())+20*60*1000).toISOString();
           }
-          else if(/^(?:http_408|http_500|http_502|http_503|http_504|timeout|typeerror|network_error|fetch_failed)$/.test(outcome.status))
+          else if(/^(?:http_408|http_422|http_500|http_502|http_503|http_504|timeout|typeerror|network_error|fetch_failed)$/.test(outcome.status))
             state.nextRetryAt=new Date(ts(clock())+2*60*1000).toISOString();
           // A provider that has no credentials cannot be repaired through
           // infinite national retries; the other search lanes remain active.

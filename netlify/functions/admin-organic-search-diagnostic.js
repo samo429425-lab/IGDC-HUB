@@ -196,7 +196,7 @@ async function diagnostic(event){
   purpose:"IGDC Global Platform and MARU Media Player organic search health and evidence",
   scope:["IGDC Global Platform","MARU Windows","MARU Android / Google Play"],
   overview:{status:pageStatus,probesTotal:probes.length,reachable:probes.filter(x=>x.status==="reachable").length,needsReview:failed.length,unverified:unknown.length},
-  engine:{moduleLoaded:typeof ENGINE.run==="function",configuredDailySchedule:"17 3 * * * (UTC; repository config, not live Netlify confirmation)",lastScheduledExecution:null,lastSubmissionReceipt:null,lastRecordedExecution:ledger&&ledger.record?ledger.record.run_at:null,
+  engine:{moduleLoaded:typeof ENGINE.run==="function",configuredDailySchedule:"17 3,11,21 * * * (UTC; repository config, not live Netlify confirmation)",lastScheduledExecution:null,lastSubmissionReceipt:null,lastRecordedExecution:ledger&&ledger.record?ledger.record.run_at:null,
    recordedSubmissionSummary:ledger&&ledger.record?{status:ledger.record.result_status,changed:ledger.record.changed_count,submitted:ledger.record.submitted_count,pending:ledger.record.pending_count,failed:ledger.record.failed_count,partial:ledger.record.partial_count,providers:ledger.record.details}:null,
    runLedgerState:ledgerState,runLedgerReason:ledgerReason,
    notes:"Read-only persisted run metadata are not evidence of Google indexing or store ranking. A recorded run can be scheduled or manually triggered."},
