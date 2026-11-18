@@ -145,6 +145,7 @@ async function diagnostic(event){
   const latest=ledger&&ledger.record||null;
   const ledgerState=ledger&&ledger.state||"unavailable";
   const ledgerReason=ledger&&ledger.reason||null;
+  const ledgerDiagnostic=ledger&&ledger.diagnostic||null;
   const ledgerRecommendation=ledgerState==="storage-unavailable"
    ? (ledgerReason==="sdk-unavailable"?"Check Netlify Blobs package installation":
       ledgerReason==="runtime-context-missing"?"Check Netlify Blobs runtime environment":
@@ -185,6 +186,7 @@ async function diagnostic(event){
     indexNowKeyVerification:key.verification||"unverified",
     optionalHistoryStorage:ledgerState,
     optionalHistoryStorageReason:ledgerReason,
+    optionalHistoryStorageDiagnostic:ledgerDiagnostic,
     optionalHistoryStorageRecommendation:ledgerRecommendation,
     engineLoaded:typeof ENGINE.run==="function"},
    checksNeedingAttention:probes.filter(x=>x.status!=="reachable").map(x=>({id:x.id,status:x.status,httpStatus:x.httpStatus==null?null:x.httpStatus,reason:x.note||x.error||null})),
@@ -198,7 +200,7 @@ async function diagnostic(event){
    recordedSubmissionSummary:ledger&&ledger.record?{status:ledger.record.result_status,changed:ledger.record.changed_count,submitted:ledger.record.submitted_count,pending:ledger.record.pending_count,failed:ledger.record.failed_count,partial:ledger.record.partial_count,providers:ledger.record.details}:null,
    runLedgerState:ledgerState,runLedgerReason:ledgerReason,
    notes:"Read-only persisted run metadata are not evidence of Google indexing or store ranking. A recorded run can be scheduled or manually triggered."},
-  registry,multilingualSearch,routingCrosscheck,downloadAudit,runLedger:{state:ledgerState,reason:ledgerReason,recommendation:ledgerRecommendation,latest},robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
+  registry,multilingualSearch,routingCrosscheck,downloadAudit,runLedger:{state:ledgerState,reason:ledgerReason,recommendation:ledgerRecommendation,diagnostic:ledgerDiagnostic,latest},robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
   targets:probes.filter(x=>x.group!=="technical"),
   indexNowKey:indexnowSafe(key),
   channels:channels(key),
