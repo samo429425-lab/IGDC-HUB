@@ -44,12 +44,15 @@ function openStore(event){
   if(hasEnvelope&&hasSiteHeader&&typeof blobs.connectLambda==="function"){
     blobs.connectLambda(event);
   }
-  return blobs.getStore({name:location(),consistency:"strong"});
+  // A single latest-run receipt does not require strong reads. The Lambda
+  // envelope lacks uncachedEdgeURL, so use Netlify Blobs default eventual reads.
+  return blobs.getStore({name:location()});
 }
 function reasonOf(e){
   const code=String(e&&e.code||"").toUpperCase();
   const message=String(e&&e.message||"").toLowerCase();
   const name=String(e&&e.name||"").toLowerCase();
+  if(name==="blobsconsistencyerror")return "storage-consistency-unsupported";
   if(name==="missingblobsenvironmenterror")return "runtime-context-missing";
   if(name==="invalidblobstorenameerror"||name==="invalidblobsregionerror")return "storage-configuration-invalid";
   if(["MODULE_NOT_FOUND","ERR_MODULE_NOT_FOUND","BLOBS_SDK_UNAVAILABLE","ERR_REQUIRE_ESM"].includes(code))return "sdk-unavailable";
@@ -87,6 +90,7 @@ function statusOf(e){
 }
 function messagePattern(e){
   const m=String(e&&e.message||"").toLowerCase();
+  if(/uncachededgeurl|strong consistency/.test(m))return "strong-consistency-unavailable";
   if(/environment has not been configured|missingblobsenvironmenterror|supply the following properties/.test(m))return "blobs-context-required";
   if(/invalid.+(store name|region)|invalidblobs/.test(m))return "invalid-store-configuration";
   if(/cannot read properties of undefined|cannot read property/.test(m))return "undefined-access";
