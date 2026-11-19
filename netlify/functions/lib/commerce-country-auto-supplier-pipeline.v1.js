@@ -30,26 +30,40 @@ function now() { return new Date().toISOString(); }
 function ts(v) { const n = Date.parse(txt(v)); return Number.isFinite(n) ? n : 0; }
 function reg(s) { return txt(s.subdivisionCode || 'NATIONWIDE').toUpperCase(); }
 function key(s) { return txt(s.countryCode).toUpperCase() + '|' + reg(s); }
+function safeProviderStatus(v){ const s=txt(v).toLowerCase();return /^(?:ok|empty|timeout|unavailable|not_configured|network_error|fetch_failed|typeerror|rate_limit|quota_exceeded|blocked|http_[1-5][0-9]{2}|invalid_country|global_cooldown|concurrent_claim|guard_unavailable)$/.test(s)?s:'unknown'; }
+function safeProviderDetail(v){return txt(v).replace(/https?:\/\/\S+/gi,'[URL]').replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi,'[EMAIL]').replace(/(?:sk|eyJ)[a-z0-9_.-]{24,}/gi,'[TOKEN]').slice(0,130);}
 // A successful scheduler invocation is not proof that its external search
 // provider returned sellers. Store a tiny error summary in the staged control
 // record so national bottleneck JSON can distinguish "searched" from "found".
-function providerOutcome(result, previousCursor) {
-  const progress=obj(obj(result).progress);
-  const done=Number(obj(progress.search).done||0);
+function providerOutcomes(result, previousCursor) {
+  const progress=obj(obj(result).progress), done=Number(obj(progress.search).done||0);
   const trace=arr(obj(result).trace);
-  const recovered=trace.some(row=>obj(row).source==='wikidata'&&obj(row).deferredRecovered===true);
-  if(done<=Number(previousCursor||0)&&!recovered)return null;
-  // A provider-configuration fallback record can follow the actual result.
-  // Report the underlying Google/Naver/Sanmaru status, not the guard message.
-  const last=obj(trace.slice().reverse().find(row=>['google','naver','sanmaru','wikidata'].includes(txt(obj(row).source).toLowerCase())));
-  const provider=txt(last.source).toLowerCase();
-  if(!provider)return null;
-  return {provider,status:txt(last.status).toLowerCase().replace(/^provider_/, '')||'unknown',
-    count:Math.max(0,Number(last.count||0)),rawReturned:Math.max(0,Number(last.returned||last.count||0)),
-    rejectedNonSeller:Math.max(0,Number(last.rejectedNonSeller||0)),novel:Math.max(0,Number(last.novel||0)),
-    duplicateExistingSkipped:Math.max(0,Number(last.duplicateExistingSkipped||0)),searchCursor:done,
-    elapsedMs:Math.max(0,Number(last.elapsedMs||0)),rawBindings:Math.max(0,Number(last.rawBindings||0)),
-    rejected:obj(last.rejected)};
+  // A deferred public-source search may finish without advancing the normal
+  // search cursor. Treat only the new deferred result as fresh in that case.
+  const deferred=trace.filter(row=>obj(row).source==='wikidata'&&obj(row).deferredRecovered===true);
+  if(done<=Number(previousCursor||0)&&!deferred.length)return [];
+  const primary=['google','naver','sanmaru'];
+  let recent;
+  if(done>Number(previousCursor||0)){
+    let index=-1;
+    for(let i=trace.length-1;i>=0;i--)if(primary.includes(txt(obj(trace[i]).source).toLowerCase())){index=i;break;}
+    // The step can have a main source and a second public fallback. Preserve
+    // BOTH real attempts rather than attributing the fallback to the main lane.
+    recent=index>=0?trace.slice(index):trace.slice(-1);
+  }else recent=deferred.slice(-1);
+  return recent.filter(row=>['google','naver','sanmaru','wikidata'].includes(txt(obj(row).source).toLowerCase()))
+    .slice(-3).map(row=>{
+      const last=obj(row),provider=txt(last.source).toLowerCase();
+      return {provider,status:safeProviderStatus(txt(last.status).toLowerCase().replace(/^provider_/,'')),
+        httpStatus:Number(last.httpStatus)||Number((txt(last.status).match(/http_(\d{3})/)||[])[1])||null,
+        detail:safeProviderDetail(last.detail),targetCountry:txt(last.targetCountry).toUpperCase()||null,
+        countryBound:last.selectedCountryBoundToSearch===true?true:last.selectedCountryBoundToSearch===false?false:null,
+        count:Math.max(0,Number(last.count||0)),rawReturned:Math.max(0,Number(last.returned||last.count||0)),
+        rejectedNonSeller:Math.max(0,Number(last.rejectedNonSeller||0)),novel:Math.max(0,Number(last.novel||0)),
+        duplicateExistingSkipped:Math.max(0,Number(last.duplicateExistingSkipped||0)),searchCursor:done,
+        elapsedMs:Math.max(0,Number(last.elapsedMs||0)),rawBindings:Math.max(0,Number(last.rawBindings||0)),
+        rejected:obj(last.rejected)};
+    });
 }
 function idFor(s) { return 'igdc_supplier_staged_auto_' + txt(s.countryCode).toLowerCase() + '_' + reg(s).toLowerCase().replace(/[^a-z0-9_-]/g, '_'); }
 function input(s,extra) { return Object.assign({countryCode:s.countryCode,subdivisionCode:reg(s),scopeAuthority:'administrator-selected',ignoreRequestGeo:true},extra||{}); }
@@ -234,14 +248,27 @@ function create(deps) {
       }
       await recheck(s);
       const result=await automation.advanceResearchJob(ACTOR,input(s));
-      const outcome=job.status==='searching'?providerOutcome(result,job.searchCursor):null;
+      const outcomes=job.status==='searching'?providerOutcomes(result,job.searchCursor):[];
       let lastResult='supplier_step_'+txt(result.status);
       if(result.freeFallbackWaitingForSlot===true&&result.freeFallbackRetryAt){
         state.nextRetryAt=result.freeFallbackRetryAt;
         lastResult='supplier_free_search_queued_for_global_slot';
       }
-      if(outcome){
+      for(const outcome of outcomes){
         state.lastProvider=Object.assign({at:clock()},outcome);
+        const providerEvent={at:clock(),provider:outcome.provider,status:outcome.status,
+          httpStatus:outcome.httpStatus||null,detail:outcome.detail||null,
+          found:outcome.count,novel:outcome.novel,rejectedNonSeller:outcome.rejectedNonSeller,
+          cursor:outcome.searchCursor,elapsedMs:outcome.elapsedMs,targetCountry:outcome.targetCountry,
+          countryBound:outcome.countryBound};
+        state.providerHistory=arr(state.providerHistory).concat([providerEvent]).slice(-16);
+        const totals=obj(state.providerTotals),current=obj(totals[outcome.provider]);
+        state.providerTotals=Object.assign({},totals,{[outcome.provider]:{
+          calls:Number(current.calls||0)+1,found:Number(current.found||0)+outcome.count,
+          novel:Number(current.novel||0)+outcome.novel,
+          empty:Number(current.empty||0)+(outcome.status==='empty'?1:0),
+          failed:Number(current.failed||0)+(!['ok','empty'].includes(outcome.status)?1:0),
+          lastStatus:outcome.status,lastAt:clock()}});
         if(outcome.provider==='wikidata'){
           // Public WDQS is a community service, not a replacement for a
           // commercial high-volume API. Persist a global minimum spacing for
@@ -416,16 +443,18 @@ function create(deps) {
     const plan=await automation.autoProductScopes();const active=arr(plan.scopes);
     if(!active.length)return{ok:true,version:VERSION,activeScopes:0,processed:0,results:[]};
     const previous=new Map((await rows()).map(x=>[txt(x.id),obj(x.rule)]));
-    const choices=active.filter(s=>{const state=previous.get(idFor(s))||{};
+    const eligible=active.filter(s=>{const state=previous.get(idFor(s))||{};
       return state.operatorAutoPause!==true &&
         !(state.phase==='cooldown'&&eligibleCycleAt(state)>ts(clock())) &&
-        !(ts(state.nextRetryAt)>ts(clock()));})
-      .sort((a,b)=>ts((previous.get(idFor(a))||{}).lastStepAt)-ts((previous.get(idFor(b))||{}).lastStepAt)||key(a).localeCompare(key(b))).slice(0,MAX_SCOPES);
+        !(ts(state.nextRetryAt)>ts(clock()));});
+    const choices=eligible.sort((a,b)=>ts((previous.get(idFor(a))||{}).lastStepAt)-ts((previous.get(idFor(b))||{}).lastStepAt)||key(a).localeCompare(key(b))).slice(0,MAX_SCOPES);
     // Independent leases allow concurrent country steps, without overwriting
     // another country's research or an administrator selection.
     const settled=await Promise.allSettled(choices.map(runScope));
     const results=settled.map((r,i)=>r.status==='fulfilled'?r.value:{scope:key(choices[i]),ok:false,error:txt(r.reason&&r.reason.message||r.reason)});
-    return{ok:results.every(r=>r.ok!==false),version:VERSION,activeScopes:active.length,processed:results.length,results,safety:{humanJobProtected:true,countryIndependent:true,researchRounds:RESEARCH_ROUNDS,noPublicFrontMatch:true}};
+    return{ok:results.every(r=>r.ok!==false),version:VERSION,activeScopes:active.length,
+      eligibleScopes:eligible.length,deferredScopes:Math.max(0,eligible.length-choices.length),
+      batchLimit:MAX_SCOPES,processed:results.length,results,safety:{humanJobProtected:true,countryIndependent:true,researchRounds:RESEARCH_ROUNDS,noPublicFrontMatch:true}};
   }
   return{run,runScope,setTakeover,idFor,advance,claim,release};
 }

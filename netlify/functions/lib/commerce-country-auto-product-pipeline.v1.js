@@ -221,7 +221,9 @@ function makePipeline(deps) {
       !(await humanResearchIsActive(scope));
     if(pausedHumanJob && !archivePausedManual)
       return Object.assign(state,{phase:'manual_job_preserved',
-        lastResult:'research_manually_paused_preserved',protectedJobId:checkpoint.jobId});
+        lastResult:state.autoTakeover===true?'manual_runtime_checkpoint_mismatch_no_auto_archival':'research_manually_paused_preserved',
+        protectedJobId:checkpoint.jobId,manualBlock:{jobOwner:checkpoint.updatedBy||null,
+          jobStatus:checkpoint.status||null,paused:true,requiresSavedMatchingRuntime:true}});
     // Unlike supplier research, the product working job uses one shared key
     // for manual and scheduled runs. A scheduled worker must NEVER resume a
     // human-owned in-progress job or stage its candidate queue. Even after the
@@ -235,8 +237,9 @@ function makePipeline(deps) {
       // protected; the new scheduled cycle cannot stage the old manual job.
       if(!manualFinished&&!archivePausedManual){
         return Object.assign(state,{phase:'manual_job_preserved',
-          lastResult:manualFinished?'administrator_completed_product_job_preserved':'administrator_product_job_preserved',
-          protectedJobId:checkpoint.jobId});
+          lastResult:'administrator_product_job_preserved',protectedJobId:checkpoint.jobId,
+          manualBlock:{jobOwner:checkpoint.updatedBy||null,jobStatus:checkpoint.status||null,
+            paused:checkpoint.paused===true,requiresOperatorCompletion:true}});
       }
       state.jobId=null;state.phase='idle';state.lastStagedResultCount=0;
       state.pendingPlacementIds=[];state.reconcileCursor='';
@@ -283,13 +286,17 @@ function makePipeline(deps) {
       const ledgerRecheck=await automation.autoSupplierPortfolioGate(inputFor(scope));
       observedSuppliers=Math.max(0,Number(ledgerRecheck.usableSellerSites||0));
       if(observedSuppliers>=minimum)supplierMarker=supplierMarker||txt(ledgerRecheck.latestEligibleSupplierAt);
-      if(!supplierMarker||observedSuppliers<minimum){
+      // A fresh read of >=minimum distinct, usable supplier sites IS the
+      // input proof. Historical last-run timestamps are diagnostics only;
+      // their absence must not block a verified existing country portfolio.
+      if(observedSuppliers<minimum){
         return Object.assign(state,{phase:'idle',usableSupplierCount:observedSuppliers,requiredSupplierCount:minimum,
           supplierLedgerRecheck:ledgerRecheck&&{ledgerRows:ledgerRecheck.ledgerRows,excluded:ledgerRecheck.excluded,noSource:ledgerRecheck.noSource,duplicateSellerSites:ledgerRecheck.duplicateSellerSites},
           nextRetryAt:new Date(ts(clock())+15*60*1000).toISOString(),
           retrySupplierAt:txt(selected&&selected.supplierLastRunAt)||null,
-          lastResult:!supplierMarker?'durable_supplier_marker_missing_ledger_checked':'supplier_portfolio_below_product_research_threshold',
-        supplierStartGate:{required:minimum,observed:observedSuppliers,verifiedBy:'durable_country_ledger'}});
+          lastResult:'supplier_portfolio_below_product_research_threshold',
+        supplierStartGate:{required:minimum,observed:observedSuppliers,verifiedBy:'fresh_durable_country_ledger',
+          markerPresent:!!supplierMarker}});
       }
       state.nextRetryAt=null;state.retrySupplierAt=null;
       await recheck(scope);
@@ -318,7 +325,7 @@ function makePipeline(deps) {
           fillPhase:full?'maintenance':'initial_fill',targetReached:full,
           lastResult:full?'private_board_full_weekly_twice_maintenance':'no_new_product_sources_initial_fill_retry_scheduled'});
       }
-      return Object.assign(state, { phase:txt(started.status)==='complete'?'staging':'researching', jobId:started.jobId,autoJobStartedAt:started.startedAt||clock(),lastSupplierRunAt:supplierMarker,fullRescanNeeded:false,reconcileCursor:'',pendingPlacementIds:[],stagingComplete:false,lastStagedResultCount:0,nextPhaseAfterPlacement:null,lastResult:'product_research_started' });
+      return Object.assign(state, { phase:txt(started.status)==='complete'?'staging':'researching', jobId:started.jobId,autoJobStartedAt:started.startedAt||clock(),lastSupplierRunAt:supplierMarker||null,supplierStartGate:{required:minimum,observed:observedSuppliers,verifiedBy:'fresh_durable_country_ledger',markerPresent:!!supplierMarker},fullRescanNeeded:false,reconcileCursor:'',pendingPlacementIds:[],stagingComplete:false,lastStagedResultCount:0,nextPhaseAfterPlacement:null,lastResult:'product_research_started' });
     }
     if (state.phase === 'researching') {
       if (checkpoint.status === 'complete') return Object.assign(state, {phase:'staging',lastResult:'research_complete_pending_private_staging'});
@@ -463,7 +470,7 @@ function makePipeline(deps) {
     const plan=await automation.autoProductScopes();
     if(!arr(plan.scopes).length)return {ok:true,version:VERSION,masterMode:plan.mode,activeScopes:0,processed:0,results:[],safety:{stoppedDoesNotDelete:true,publicPublication:false}};
     const previous=new Map((await rows()).map(row=>[txt(row.id),obj(row.rule)]));
-    const choices=arr(plan.scopes).filter(s=>{
+    const eligible=arr(plan.scopes).filter(s=>{
       // Legacy hourly lastRunAt is not proof of inspected, durable suppliers.
       // Wait for supplier worker's verified country-local completion marker
       // before creating any NEW product checkpoint or starting product search.
@@ -476,10 +483,10 @@ function makePipeline(deps) {
       if(ts(st.nextRetryAt)>ts(clock())&&
          ts(s.supplierLastRunAt)<=ts(st.retrySupplierAt))return false;
       // Do not repeatedly poll a completed market while nothing changed.
-      const supplier=arr(plan.scopes).find(p=>scopeKey(p)===scopeKey(s));
-      if(st.phase==='complete'&&eligibleRefreshAt(st)>ts(clock())&&ts(supplier&&supplier.supplierLastRunAt)<=ts(st.lastSupplierRunAt))return false;
+      if(st.phase==='complete'&&eligibleRefreshAt(st)>ts(clock())&&ts(s.supplierLastRunAt)<=ts(st.lastSupplierRunAt))return false;
       return true;
-    }).sort((a,b)=>ts(previous.get(idFor(a))&&previous.get(idFor(a)).lastStepAt)-ts(previous.get(idFor(b))&&previous.get(idFor(b)).lastStepAt)||scopeKey(a).localeCompare(scopeKey(b))).slice(0,MAX_SCOPES);
+    });
+    const choices=eligible.sort((a,b)=>ts(previous.get(idFor(a))&&previous.get(idFor(a)).lastStepAt)-ts(previous.get(idFor(b))&&previous.get(idFor(b)).lastStepAt)||scopeKey(a).localeCompare(scopeKey(b))).slice(0,MAX_SCOPES);
     // Independent country leases permit bounded parallel research without
     // waiting for the previous country to complete a slow product inspection.
     // This does not change the scheduled function's 30-second limit.
@@ -487,7 +494,9 @@ function makePipeline(deps) {
     const results=settled.map((item,index)=>item.status==='fulfilled'?item.value:{
       scope:scopeKey(choices[index]),ok:false,error:txt(item.reason&&item.reason.message||item.reason)
     });
-    return {ok:results.every(r=>r.ok!==false),version:VERSION,masterMode:plan.mode,activeScopes:plan.scopes.length,processed:results.length,results,safety:{countryIndependent:true,priorResearchAndAssignmentsPreserved:true,automaticPrivateCandidateStaging:true,automaticPsomPlacement:false,automaticFrontMatch:false,automaticPublication:false,administratorApprovalRequired:true}};
+    return {ok:results.every(r=>r.ok!==false),version:VERSION,masterMode:plan.mode,activeScopes:plan.scopes.length,
+      eligibleScopes:eligible.length,deferredScopes:Math.max(0,eligible.length-choices.length),
+      batchLimit:MAX_SCOPES,processed:results.length,results,safety:{countryIndependent:true,priorResearchAndAssignmentsPreserved:true,automaticPrivateCandidateStaging:true,automaticPsomPlacement:false,automaticFrontMatch:false,automaticPublication:false,administratorApprovalRequired:true}};
   }
   return { run, runScope, claim, release, advance, setTakeover, sectionFill, idFor };
 }

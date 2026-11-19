@@ -37,7 +37,7 @@ const InternationalSafety = require("./commerce-international-distribution-safet
 
 const VERSION = "commerce-country-automation-v3.40.0-country-scoped-reserve-quality-guard";
 // Deployment verification marker only. Do not change persisted job schema VERSION.
-const PATCH_REVISION = "igdc-auto-20261119-15stage-free-search-20-first-v1";
+const PATCH_REVISION = "igdc-auto-20261119-country-supplier-product-10step-v2";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -8415,7 +8415,8 @@ async function autoSupplierPortfolioGate(input){
   const dates=Array.from(unique.values()).map(row=>Date.parse(text(first(row.updatedAt,row.createdAt)))).filter(Number.isFinite);
   const latestEligibleSupplierAt=dates.length?new Date(Math.max(...dates)).toISOString():null;
   return{ok:true,country:scope.country,region:scope.region,ledgerRows:rows.length,usableSellerSites:unique.size,excluded,noSource,duplicateSellerSites:duplicates,
-    latestEligibleSupplierAt,meetsAutomaticStartThreshold:unique.size>=10,publicApprovalNotImplied:true};
+    latestEligibleSupplierAt,meetsAutomaticStartThreshold:unique.size>=AutoResearchPolicy.INITIAL_SUPPLIER_SITES,
+    requiredDistinctSellerSites:AutoResearchPolicy.INITIAL_SUPPLIER_SITES,publicApprovalNotImplied:true};
 }
 
 // Save a small batch of *inspected* private supplier leads before the full

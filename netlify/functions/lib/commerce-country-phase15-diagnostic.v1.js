@@ -6,7 +6,7 @@ const Automation = require('./commerce-country-automation.v1');
 const Store = require('./global-slot-console-supabase');
 const Evidence = require('./commerce-country-automation-evidence.v1');
 const AutoPolicy = require('./commerce-country-auto-research-policy.v1');
-const VERSION = 'igdc-country-automation-phase01-15-diagnostic.v1.3-15stage-runtime';
+const VERSION = 'igdc-country-automation-phase01-15-diagnostic.v1.5-249-provider-coverage';
 const HUBS = Object.freeze({
   'country-supplier-staged-auto': 'supplier',
   'country-product-ai-private-pipeline': 'product',
@@ -41,7 +41,9 @@ const FIELDS = [
   'operatorAutoPause:rule->operatorAutoPause','roundsCompleted:rule->roundsCompleted',
   'providerSuccesses:rule->providerSuccesses','providerFailures:rule->providerFailures',
   'freeFallbackRetryAt:rule->>freeFallbackRetryAt',
-  'lastProvider:rule->lastProvider','progressivePersisted:rule->progressivePersisted',
+  'lastProvider:rule->lastProvider','providerHistory:rule->providerHistory','providerTotals:rule->providerTotals',
+  'manualBlock:rule->manualBlock','supplierStartGate:rule->supplierStartGate',
+  'progressivePersisted:rule->progressivePersisted',
   'activeSupplierCount:rule->activeSupplierCount','qualifiedSupplierCount:rule->qualifiedSupplierCount',
   'supplierTarget:rule->supplierTarget','targetReached:rule->targetReached',
   'privateCandidatesStaged:rule->privateCandidatesStaged',
@@ -103,7 +105,21 @@ function compact(row) {
       rawReturned:num(provider.rawReturned),rejectedNonSeller:num(provider.rejectedNonSeller),
       novelCandidates:num(provider.novel),duplicatesSkipped:num(provider.duplicateExistingSkipped),
       rawPublicBindings:num(provider.rawBindings),elapsedMs:num(provider.elapsedMs),
-      publicRejectionCounts:obj(provider.rejected),publicFallbackRetryAt:row.freeFallbackRetryAt||null},
+      publicRejectionCounts:obj(provider.rejected),publicFallbackRetryAt:row.freeFallbackRetryAt||null,
+      latestCountry:country(provider.targetCountry)||null,
+      latestCountryBound:typeof provider.countryBound==='boolean'?provider.countryBound:null,
+      httpStatus:num(provider.httpStatus)||null,
+      latestDetail:safeError(provider.detail)||null,
+      // Bounded per-provider counters and recent attempts. No merchant URLs, queries or tokens.
+      totals:Object.fromEntries(Object.entries(obj(row.providerTotals)).filter(([name])=>/^[a-z0-9_-]{1,28}$/i.test(name)).slice(0,9)
+        .map(([name,values])=>[name,{calls:num(obj(values).calls),found:num(obj(values).found),novel:num(obj(values).novel),
+          empty:num(obj(values).empty),failed:num(obj(values).failed),lastStatus:text(obj(values).lastStatus).slice(0,45)||null,lastAt:obj(values).lastAt||null}])),
+      history:list(row.providerHistory).slice(-16).map(ev=>({at:obj(ev).at||null,
+        name:text(obj(ev).provider).slice(0,28)||null,status:text(obj(ev).status).slice(0,55)||null,
+        httpStatus:num(obj(ev).httpStatus)||null,country:country(obj(ev).targetCountry)||null,
+        countryBound:typeof obj(ev).countryBound==='boolean'?obj(ev).countryBound:null,
+        found:num(obj(ev).found),novel:num(obj(ev).novel),rejectedNonSeller:num(obj(ev).rejectedNonSeller),
+        elapsedMs:num(obj(ev).elapsedMs),detail:safeError(obj(ev).detail)||null}))},
     supplier:{privateSaved:num(row.progressivePersisted),active:num(row.activeSupplierCount),
       policyQualified:num(row.qualifiedSupplierCount),target:num(row.supplierTarget),
       targetReached:row.targetReached===true,
@@ -116,6 +132,17 @@ function compact(row) {
         excludedByRisk:num(obj(row.supplierGate).excludedByRisk),
         missingUsableSellerSource:num(obj(row.supplierGate).missingUsableSellerSource)}},
     product:{privateStaged:num(row.privateCandidatesStaged),supplierMarkerPresent:!!text(row.lastSupplierRunAt),
+      // A genuine fresh supplier-ledger count is stronger evidence than a historical timestamp.
+      startGate:{required:num(obj(row.supplierStartGate).required)||null,
+        observed:num(obj(row.supplierStartGate).observed),
+        verification:text(obj(row.supplierStartGate).verifiedBy).slice(0,60)||null,
+        markerPresent:obj(row.supplierStartGate).markerPresent===true},
+      manualBlock:{ownerClass:text(obj(row.manualBlock).jobOwner).startsWith('scheduled-')?'scheduled':
+          obj(row.manualBlock).jobOwner?'manual_or_other':null,
+        status:text(obj(row.manualBlock).jobStatus).slice(0,60)||null,
+        paused:obj(row.manualBlock).paused===true,
+        requiresMatchingRuntime:obj(row.manualBlock).requiresSavedMatchingRuntime===true,
+        requiresOperatorCompletion:obj(row.manualBlock).requiresOperatorCompletion===true},
       stagingNoProgressCount:num(row.stagingNoProgressCount),
       lastStaging:{done:num(obj(row.lastStagingSummary).done),
         remaining:num(obj(row.lastStagingSummary).remaining),failed:num(obj(row.lastStagingSummary).failed),
@@ -300,7 +327,7 @@ function create(deps) {
         issueCategories:issues.reduce((m,row)=>(m[row.code]=(m[row.code]||0)+1,m),{})},
       issues,readErrors,scopes,
       deploy,
-      evidenceReport:{schema:Evidence.VERSION,stageCount:7,source:'persisted_country_checkpoints_and_job_summaries',
+      evidenceReport:{schema:Evidence.VERSION,stageCount:10,source:'persisted_country_checkpoints_and_job_summaries',
         patchRevision:Automation.PATCH_REVISION,requestedSupplierFirstStage:AutoPolicy.INITIAL_SUPPLIER_SITES,
         liveProviderCallsVerified:false,newProductInsertVerified:false,
         explanation:'오류명만이 아니라 어떤 저장 기록과 숫자가 병목 판정의 근거인지 국가별 scopes[].evidence에 수록합니다. 확인되지 않은 값은 null 또는 미확인으로 처리합니다.',

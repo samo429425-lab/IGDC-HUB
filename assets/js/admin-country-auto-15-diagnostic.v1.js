@@ -8,7 +8,7 @@
   var status=document.getElementById('autoResearch15DiagnosticState');
   if(!button||!status)return;
   var endpoint='/.netlify/functions/commerce-country-control';
-  var VERSION='igdc-selected-country-automation-evidence.v1.0';
+  var VERSION='igdc-selected-country-automation-evidence.v1.2-249-scope-coverage';
   function say(value){status.textContent=value;}
   function txt(v){return String(v==null?'':v).trim();}
   function obj(v){return v&&typeof v==='object'&&!Array.isArray(v)?v:{};}
@@ -51,7 +51,10 @@
     .replace(/(?:sk|eyJ)[A-Za-z0-9_.-]{24,}/g,'[TOKEN]');}
   function filename(){return 'IGDC_DISTRIBUTION_SELECTED_COUNTRIES_ALL_AUTOMATION_'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';}
   function download(data){
-    var blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json;charset=utf-8'});
+    // Large all-country exports stay readable JSON but avoid whitespace
+    // inflation when hundreds of markets and subdivisions are selected.
+    var compact=number(obj(data.selection).selectedCountryCount)>100;
+    var blob=new Blob([JSON.stringify(data,null,compact?0:2)+'\n'],{type:'application/json;charset=utf-8'});
     var url=URL.createObjectURL(blob),a=document.createElement('a');
     a.href=url;a.download=filename();a.style.display='none';document.body.appendChild(a);a.click();
     setTimeout(function(){a.remove();URL.revokeObjectURL(url);},1200);
@@ -122,6 +125,12 @@
         durableSupplierMarkerAt:state.durableSupplierMarkerAt||null,
         lastSupplierAttemptAt:state.lastSupplierAttemptAt||null,
         countryReadStatus:state.readStatus||'not_reported',
+        // Compact index only. Full evidence is already present in scopeDiagnostics;
+        // do not double payload size across 93 or 249 selected markets.
+        tenStageTrace:s.map(function(x){return {scope:x.scope,firstBlocker:obj(x.evidence).firstActionableBlocker||null,
+          stages:arr(obj(x.evidence).stages).map(function(stage){return {name:stage.name,state:stage.state};}),
+          providerCalls:Object.keys(obj(obj(obj(x.supplier).provider).totals)).length,
+          providerAttemptsRecorded:arr(obj(obj(x.supplier).provider).history).length};}),
         scopeDiagnostics:s, supplierAutomation:filterList(stagedBy[c],function(x){return x.kind==='supplier';}),
         productAutomation:filterList(stagedBy[c],function(x){return x.kind==='product';}),
         psomAutomation:psomBy[c]||[],bottleneck:{supplier:state.supplier||null,product:state.product||null,
@@ -136,18 +145,29 @@
     if(obj(global.privatePsomAutomation).readError)errors.push({source:'globalControl',component:'privatePsomAutomation',message:safeMessage(global.privatePsomAutomation.readError)});
     if(!selected.length)errors.push({component:'selectedCountries',message:'자동화 대상 국가를 증명할 설정 자료가 없습니다. 전체 국가가 정상이라고 판단할 수 없습니다.'});
     var missing=countries.filter(function(c){return !c.completeness.phase15||!c.completeness.bottleneckCountry;}).map(function(c){return c.country;});
+    var unscheduled=distinct(arr(coverage.selectedButNotScheduledCountryCodes).map(code).filter(function(x){return selectedSet.has(x);}));
+    // A selected market can legitimately be disabled by policy or have an
+    // ineffective country override. Report that exception; never label 249
+    // selected settings as 249 running workers without matching evidence.
+    var unscheduledObserved=selected.filter(function(c){return !scheduled.includes(c);});
+    unscheduled=distinct(unscheduled.concat(unscheduledObserved));
+    if(unscheduled.length)errors.push({component:'selected_not_scheduled',count:unscheduled.length,
+      message:'선택된 국가 중 예약 실행 대상이 아닌 국가가 있습니다. 비활성 국가·설정·정책을 점검하세요.'});
     var complete=!!phase.reportType&&!!global.reportType&&!!bottleneck.reportType&&coverage.complete===true&&errors.length===0&&missing.length===0;
     return {ok:complete,partial:!complete,reportType:'igdc-distribution-selected-country-all-automation-evidence',version:VERSION,
       generatedAt:new Date().toISOString(),selection:{mode,selectedCountryCodes:selected,
         selectedCountryCount:selected.length,observedScheduledCountries:scheduled.length,
-        selectedButNotScheduled:arr(coverage.selectedButNotScheduledCountryCodes).filter(function(x){return selectedSet.has(code(x));}),
+        selectedButNotScheduled:unscheduled,
         adminResearchIndependentOfVisitorIp:operating.administratorResearchIgnoresVisitorIp===true,
         note:'IP는 방문자 개인 주소가 아니라 국가별 자동화 대상/지역 판정 메타데이터입니다. 실제 방문자 IP는 수집하지 않습니다.'},
       coverage:{complete,partial:!complete,countriesWithPhase15: countries.filter(function(c){return c.completeness.phase15;}).length,
         countriesWithStagedCheckpoints:countries.filter(function(c){return c.completeness.globalStaged;}).length,
         countriesWithBottleneck:countries.filter(function(c){return c.completeness.bottleneckCountry;}).length,
-        missingCountryEvidence:missing,phase15:phase.coverage||null,readErrors:errors},
-      summary:{selectedCountryCount:selected.length,selectedScopeCount:selectedScopeRows.length,
+        missingCountryEvidence:missing,selectedNotScheduled:unscheduled,phase15:phase.coverage||null,readErrors:errors},
+      summary:{diagnosticStages:10,
+        firstBlockers:selectedScopeRows.reduce(function(acc,x){var blocker=obj(x.evidence).firstActionableBlocker;
+          if(blocker)acc[blocker]=(acc[blocker]||0)+1;return acc;},{}),
+        selectedCountryCount:selected.length,selectedScopeCount:selectedScopeRows.length,
         selectedSupplierCheckpoints:selectedScopeRows.filter(function(x){return !!x.supplier;}).length,
         selectedProductCheckpoints:selectedScopeRows.filter(function(x){return !!x.product;}).length,
         selectedPsomCheckpoints:selectedScopeRows.filter(function(x){return !!x.psom;}).length,
