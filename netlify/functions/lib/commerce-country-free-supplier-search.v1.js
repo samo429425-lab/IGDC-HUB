@@ -32,8 +32,9 @@ function safeSupplierUrl(raw){
     u.hash='';return u.toString();
   }catch(_e){return '';}
 }
-function queryForCountry(country){
+function queryForCountry(country, offsetInput){
   const code=txt(country).toUpperCase();
+  const offset=Math.min(96,Math.max(0,Math.floor(Number(offsetInput)||0)));
   if(!/^[A-Z]{2}$/.test(code))return '';
   // ISO 3166 country codes are literal values in P297. Only declared
   // official website (P856) results of organizations with corporate classes
@@ -43,7 +44,7 @@ function queryForCountry(country){
     `  ?company wdt:P17 ?country ; wdt:P31 ?class ; wdt:P856 ?website .\n`+
     `  VALUES ?class { wd:Q4830453 wd:Q783794 wd:Q6881511 }\n`+
     `  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }\n`+
-    `} LIMIT 24`;
+    `} ORDER BY ?company LIMIT 24 OFFSET ${offset}`;
 }
 function errorCode(error){
   const e=txt(error&&error.message||error);
@@ -51,7 +52,7 @@ function errorCode(error){
   return 'network_error';
 }
 async function search(task,scope,opts){
-  const country=txt(scope&&scope.country).toUpperCase(),query=queryForCountry(country);
+  const country=txt(scope&&scope.country).toUpperCase(),query=queryForCountry(country,opts&&opts.offset);
   if(!query)return {provider:'wikidata',status:'invalid_country',count:0,items:[]};
   const timeoutMs=Math.max(1500,Math.min(5500,Number(opts&&opts.timeoutMs)||4500));
   const url=new URL(ENDPOINT);
@@ -74,7 +75,7 @@ async function search(task,scope,opts){
       const source=txt(row&&row.company&&row.company.value);
       // The origin remains attached to a discovered candidate. This is not
       // a verified seller; full official-store validation happens downstream.
-      if(!/^https:\/\/www\.wikidata\.org\/entity\/Q\d+$/.test(source))continue;
+      if(!/^https?:\/\/www\.wikidata\.org\/entity\/Q\d+$/.test(source))continue;
       seen.add(official);
       found.push({title:name,name,url:official,link:official,
         summary:'Official website URL listed in Wikidata; selling activity not independently verified',

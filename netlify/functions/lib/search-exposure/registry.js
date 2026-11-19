@@ -46,7 +46,9 @@ const HUB_TARGETS = Object.freeze([
   ["donation", "IGDC Global Donation", "/donation", 75],
   ["maru-windows", "MARU Media Player for Windows", "/maru-download.html", 96],
   ["support", "IGDC Help & Download Center", "/support.html", 70],
-  ["maru-android", "MARU Media Player for Android", "/maru-android.html", 96]
+  ["maru-android", "MARU Media Player for Android", "/maru-android.html", 96],
+  ["maru-capture", "MARU Capture Windows Screen Capture", "/maru-download.html#captureDownload", 95],
+  ["verified-market-directory", "IGDC Global Verified Country Product Directory", "/.netlify/functions/public-commerce-search-index", 91]
 ]);
 
 function text(v){ return v == null ? "" : String(v).trim(); }

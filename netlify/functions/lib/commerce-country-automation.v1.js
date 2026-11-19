@@ -29,12 +29,14 @@ const AdminPlacementGuard = require("./commerce-admin-placement-guard.v1");
 const OriginalProductEvidence = require("./igdc-original-product-url-evidence-20261013-all-safe.json");
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 const SupplierSourceGuard = require("./commerce-supplier-source-guard.v1");
-const LiveSupplierSearch = require("./commerce-country-live-supplier-search.v1");
+const FreeSupplierSearch = require("./commerce-country-free-supplier-search.v1");
 const ProductSellerOriginGuard = require("./commerce-product-seller-origin-guard.v1");
 const CountryLogistics = require("./commerce-country-logistics-evidence.v1");
 const InternationalSafety = require("./commerce-international-distribution-safety.v1");
 
 const VERSION = "commerce-country-automation-v3.40.0-country-scoped-reserve-quality-guard";
+// Deployment verification marker only. Do not change persisted job schema VERSION.
+const PATCH_REVISION = "igdc-auto-20261119-free-supplier-evidence-v1";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -2033,14 +2035,51 @@ async function beginResearchJob(actorId, input, event) {
   // in earlier deployed builds, causing ReferenceError on each NEW job.
   const cooldowns=text(actorId)==="scheduled-automation"?plain(raw.scheduledProviderCooldowns):{};
   const suppressedScheduledLanes=["google","naver"].filter(lane=>Date.parse(text(cooldowns[lane]))>Date.now());
-  const searchPlanTasks=array(plan.tasks).filter(task=>!suppressedScheduledLanes.includes(lower(plain(task).lane)));
+  // Zero-new-spend policy: scheduled supplier research must not consume a
+  // potentially billable Google Custom Search API. Google charges for usage
+  // beyond its free quota and is being retired. Re-enable only by explicit
+  // server-side operator choice; manual search workflows stay unchanged.
+  const noBillableSearch=text(actorId)==="scheduled-automation" &&
+    text(process.env.IGDC_ALLOW_BILLABLE_SEARCH).toLowerCase()!=="true";
+  const searchPlanTasks=array(plan.tasks).filter(task=>
+    !suppressedScheduledLanes.includes(lower(plain(task).lane)) &&
+    !(noBillableSearch && lower(plain(task).lane)==="google"));
   const initialStatus=newCandidateTarget<=0?"complete":(searchPlanTasks.length?"searching":"inspecting");
-  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchRoundIndex,researchSignature,selectorInput,scheduledFallbackCooldowns:cooldowns,liveFallbackCallCount:0,liveFallbackDisabled:false,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds,scheduledProviderCooldowns:suppressedScheduledLanes}),searchTasks:newCandidateTarget>0?searchPlanTasks:[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?searchPlanTasks.length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
+  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchRoundIndex,researchSignature,selectorInput,scheduledFallbackCooldowns:cooldowns,liveFallbackCallCount:0,liveFallbackDisabled:false,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds,scheduledProviderCooldowns:suppressedScheduledLanes,noBillableSearch,googleAutoDisabledForCost:noBillableSearch}),searchTasks:newCandidateTarget>0?searchPlanTasks:[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?searchPlanTasks.length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
   if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
   if (existing && text(existing.jobId) !== text(job.jobId)) await archiveSupplierResearchCycle(existing, actorId);
   await saveResearchJob(job,actorId);return supplierResearchStepView(job,actorId);
 }
 async function researchJobStatus(input) { const scope = researchScope(input); return publicResearchJob(await researchJobRule(scope)); }
+// Shared, durable provider-only lease. It is not a country-wide pause and it
+// never turns a free directory hit into a trusted seller. CAS ensures parallel
+// scheduled country functions cannot all hit the same public WDQS endpoint.
+async function claimPublicSupplierQuerySlot() {
+  const id='igdc_supplier_provider_cooldown_global_v1', now=Date.now();
+  try {
+    const rows=array(await SlotStore.select('gslot_policies',
+      'select=id,rule,updated_at&id=eq.'+encodeURIComponent(id)+'&limit=1'));
+    const prior=rows[0]||null, rule=plain(prior&&prior.rule);
+    const until=Date.parse(text(rule.wikidata))||0;
+    if(until>now)return {allowed:false,reason:'global_cooldown',retryAt:rule.wikidata};
+    const revision=new Date(Math.max(now,(Date.parse(text(prior&&prior.updated_at))||0)+1)).toISOString();
+    const next=Object.assign({},rule,{wikidata:new Date(now+2*60*1000).toISOString(),updatedAt:revision});
+    let written;
+    if(prior){
+      written=await SlotStore.update('gslot_policies',
+        'id=eq.'+encodeURIComponent(id)+'&updated_at=eq.'+encodeURIComponent(text(prior.updated_at)),
+        {rule:next,updated_at:revision,updated_by:'scheduled-automation'});
+    }else{
+      written=await SlotStore.insert('gslot_policies',{
+        id,name:'공유 검색 제공업체 예약 호출량 보호',scope_hub:'country-supplier-provider-guard',
+        scope_country:null,scope_region:null,enabled:true,rule:next,
+        created_at:revision,updated_at:revision,updated_by:'scheduled-automation'
+      },'resolution=ignore-duplicates,return=representation');
+    }
+    return array(written).length===1 ? {allowed:true,reason:'claimed',retryAt:next.wikidata} :
+      {allowed:false,reason:'concurrent_claim'};
+  }catch(_error){return {allowed:false,reason:'guard_unavailable'};}
+}
 async function advanceResearchJob(actorId, input, event) {
   const scope = researchScope(input), job = await researchJobRule(scope,actorId); if (!job || job.schema !== RESEARCH_JOB_SCHEMA) { const error = new Error("진행 중인 국가 책임 공급업체 리서치 작업이 없습니다."); error.statusCode = 404; throw error; }
   if (["complete","committed"].includes(job.status)) return supplierResearchStepView(job,actorId);
@@ -2060,21 +2099,31 @@ async function advanceResearchJob(actorId, input, event) {
         let searchItems=primaryItems,liveTrace=null;
         const liveAllowed=text(actorId)==='scheduled-automation' && task.lane==='sanmaru' &&
           primaryItems.length===0 && !job.liveFallbackDisabled &&
-          Number(job.liveFallbackCallCount||0)<6 &&
-          !(Date.parse(text(plain(job.scheduledFallbackCooldowns).brave))>Date.now()) &&
-          LiveSupplierSearch.configured();
-        // A missing Brave credential is never represented as a successful
-        // search. It also does not cause an outbound request or fake results.
+          Number(job.liveFallbackCallCount||0)<1 &&
+          !(Date.parse(text(plain(job.scheduledFallbackCooldowns).wikidata))>Date.now()) &&
+          FreeSupplierSearch.configured();
+        // A public Wikidata query is bounded to one call per country cycle.
+        // Results are leads only; no substitute for official-store checks.
         if(liveAllowed){
-          const alternative=await LiveSupplierSearch.search(task,scope,{timeoutMs:5500});
-          job.liveFallbackCallCount=Number(job.liveFallbackCallCount||0)+1;
-          searchItems=array(alternative.items);
-          liveTrace={at:iso(),source:'brave',status:text(alternative.status),count:searchItems.length,
-            query:text(task.query).slice(0,300),fallbackFor:'sanmaru',realHttpSearch:true};
-          if(['http_401','http_403','http_422','http_429','not_configured'].includes(lower(alternative.status)))
-            job.liveFallbackDisabled=true;
+          const slot=await claimPublicSupplierQuerySlot();
+          if(slot.allowed){
+            const offset=(Math.max(1,Math.min(5,Number(job.researchRoundIndex)||1))-1)*24;
+            const alternative=await FreeSupplierSearch.search(task,scope,{timeoutMs:4500,offset});
+            job.liveFallbackCallCount=Number(job.liveFallbackCallCount||0)+1;
+            searchItems=array(alternative.items).filter(item=>!SupplierSourceGuard.reason(researchCandidateUrl(item)));
+            liveTrace={at:iso(),source:'wikidata',status:text(alternative.status),count:searchItems.length,
+              query:text(task.query).slice(0,300),fallbackFor:'sanmaru',publicDirectoryOnly:true,
+              offset,realHttpSearch:true};
+            if(['http_401','http_403','http_422','http_429','not_configured'].includes(lower(alternative.status)))
+              job.liveFallbackDisabled=true;
+          }else{
+            liveTrace={at:iso(),source:'free-search-gate',status:slot.reason,count:0,
+              retryAt:slot.retryAt||null,freeSearchSkipped:true,realHttpSearch:false};
+          }
         }
         const novelItems=filterKnownSupplierItems(searchItems,new Set(array(job.knownSupplierKeys)));
+        if(liveTrace&&liveTrace.source==='wikidata')Object.assign(liveTrace,{
+          returned:searchItems.length,novel:novelItems.length,duplicateExistingSkipped:Math.max(0,searchItems.length-novelItems.length)});
         job.supplierHoldingCandidates=mergeSupplierHolding(job.supplierHoldingCandidates,novelItems,job.blockedSupplierKeys,300); job.supplierBlockedCandidates=mergeSupplierBlocked(job.supplierBlockedCandidates,novelItems,job.blockedSupplierKeys,300); job.rawCandidates = mergeResearchItems(job.rawCandidates, novelItems, SUPPLIER_RAW_LIMIT, job.blockedSupplierKeys);
         job.trace = array(job.trace).concat([Object.assign({ at: iso(), attempt: Number(task.attempt || 0), returned:Number(array(result.items).length), rejectedNonSeller:Number(array(result.items).length-primaryItems.length), novel:Number(novelItems.length), duplicateExistingSkipped:Math.max(0,searchItems.length-novelItems.length) }, plain(result.trace))].concat(liveTrace?[liveTrace]:[])); job.searchCursor = Number(job.searchCursor || 0) + 1;
         // An absent provider key or a confirmed Google API permission denial
@@ -3088,7 +3137,7 @@ async function beginProductResearchJob(actorId, input) {
     const takeover=plain(plain(array(takeoverRows)[0]).rule);
     const runtime=await productRuntimeRule(scope);
     archivePausedManual=takeover.autoTakeover===true && takeover.operatorAutoPause!==true &&
-      runtime.pauseRequested===true && lower(runtime.pauseMode)==='manual' &&
+      runtime.pauseRequested===true && ['manual','auto'].includes(lower(runtime.pauseMode)) &&
       text(runtime.jobId)===text(existing.jobId);
     if(!archivePausedManual){
       const error=new Error('PAUSED_MANUAL_RESEARCH_REQUIRES_SAVED_TAKEOVER_AND_SAME_RUNTIME_JOB');
@@ -8465,12 +8514,12 @@ async function globalControlDiagnostic() {
     productScopesWithLastBatchNewProduct:productStages.filter(row=>row.newProductsSavedLastBatch>0).length,
     notes:'Do not infer fresh products from a historical eight-product checkpoint; verify gslot_candidates.created_at for this country and run.'
   };
-  return { ok: true, reportType: "igdc-global-automation-control-diagnostic", version: VERSION, generatedAt: iso(), operatingStatus: operatingStatus(state), master: state.master, savedSettings: state.settings, scheduler: { schedule: "supplier-minute-checkpoint + product-2-minute-checkpoint", dueCount: Number(dueResult.dueCount || 0), nextScopes: array(dueResult.scopes).map((row) => ({ country: row.countryCode, region: row.subdivisionCode || "NATIONWIDE", lastRunAt: row.effective && row.effective.lastRunAt || null })) }, searchProviderReadiness:{
+  return { ok: true, reportType: "igdc-global-automation-control-diagnostic", version: VERSION, patchRevision: PATCH_REVISION, generatedAt: iso(), operatingStatus: operatingStatus(state), master: state.master, savedSettings: state.settings, scheduler: { schedule: "supplier-minute-checkpoint + product-2-minute-checkpoint", dueCount: Number(dueResult.dueCount || 0), nextScopes: array(dueResult.scopes).map((row) => ({ country: row.countryCode, region: row.subdivisionCode || "NATIONWIDE", lastRunAt: row.effective && row.effective.lastRunAt || null })) }, searchProviderReadiness:{
       googleCredentialsPresent:!!text(process.env.GOOGLE_CUSTOM_SEARCH_API_KEY||process.env.GOOGLE_SEARCH_API_KEY||process.env.GOOGLE_API_KEY||process.env.GOOGLE_CLOUD_API_KEY)&&
         !!text(process.env.GOOGLE_CSE_ID||process.env.GOOGLE_CX||process.env.GOOGLE_SEARCH_ENGINE_ID||process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID),
       naverCredentialsPresent:!!text(process.env.NAVER_API_KEY||process.env.NAVER_CLIENT_ID||process.env.NAVER_SEARCH_CLIENT_ID||process.env.NAVER_OPENAPI_CLIENT_ID)&&
         !!text(process.env.NAVER_CLIENT_SECRET||process.env.NAVER_API_SECRET||process.env.NAVER_SEARCH_CLIENT_SECRET),
-      braveCredentialsPresent:LiveSupplierSearch.configured(),
+      paidFallbackEnabled:false,googleAutomaticPaidQueriesAllowed:text(process.env.IGDC_ALLOW_BILLABLE_SEARCH).toLowerCase()==="true",freeCandidateDirectoryAvailable:FreeSupplierSearch.configured(),
       credentialPresenceDoesNotGuaranteeProviderAccess:true,
       verifiedLiveSearchRequiresSuccessfulExternalHttpResponse:true
     }, durableWriteEvidence, researchJobs: { supplier: supplierJobs, product: productJobs, activeSupplier: supplierJobs.filter((row) => row.status === "saved_active").length, activeProduct: productJobs.filter((row) => row.status === "saved_active").length,
@@ -8498,6 +8547,6 @@ function diagnostic(state) {
 }
 
 module.exports = {
-  VERSION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
+  VERSION, PATCH_REVISION, SOURCE_REF, TRUST_POLICY, AI_TRUST_SCALE, registry, countryRow, regionRow, settingId, configState, effectiveSetting,
   saveSetting, operatingStatus, applyOperatingPreset, autoProductScopes, autoScopeStatus, autoSupplierJobCheckpoint, recordScheduledSupplierCompletion, autoSupplierPortfolioGate, progressivePrivateSupplierCommit, autoProductJobCheckpoint, runScope, beginResearchJob, advanceResearchJob, researchJobStatus, manualSupplierRegister, researchCandidateAction, commitResearchJob, beginProductResearchJob, advanceProductResearchJob, productResearchPauseControl, stageCurrentProductResearchQueue, productResearchJobStatus, loadProductResearchJob, productCandidateAction, productCandidateLedgerAction, productCandidateLedgerBulkAction, syncCandidateManagementResearchVisibilityByInput, productCandidatePsomPlace, productCandidateVerifiedPsomPlace, productCandidatePsomRankedReplace, productCandidateAiRecover, productCandidateHoldVerify, productVerifiedReviewAction, revalidateProductFrontTargets, productAiAutomation, prepareProductFrontTargets, productFrontReplacementPlan, productFrontSyncTargets, recordProductFrontSync, commitPreviewCandidates, listAutomationCandidates, candidateAction, dueScopes, schedulerRun, runMaintenanceLivenessPass, runDailyMaintenancePublish, runScopedMaintenanceRepair, globalControlDiagnostic, diagnostic
 };

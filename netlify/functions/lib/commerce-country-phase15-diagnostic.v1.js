@@ -4,7 +4,8 @@
 // Access is restricted by the existing commerce-country-control session/role gate.
 const Automation = require('./commerce-country-automation.v1');
 const Store = require('./global-slot-console-supabase');
-const VERSION = 'igdc-country-automation-phase01-15-diagnostic.v1';
+const Evidence = require('./commerce-country-automation-evidence.v1');
+const VERSION = 'igdc-country-automation-phase01-15-diagnostic.v1.2-evidence-runtime';
 const HUBS = Object.freeze({
   'country-supplier-staged-auto': 'supplier',
   'country-product-ai-private-pipeline': 'product',
@@ -12,7 +13,8 @@ const HUBS = Object.freeze({
 });
 const JOB_HUBS = Object.freeze({
   'country-supplier-scheduled-research-job':'supplier',
-  'country-product-reference-research-job':'product'
+  'country-product-reference-research-job':'product',
+  'country-product-reference-research-runtime':'runtime'
 });
 const JOB_FIELDS = [
   'id','scope_hub','scope_country','scope_region','updated_at','updated_by',
@@ -22,7 +24,10 @@ const JOB_FIELDS = [
   'rankCursor:rule->>rankCursor','rankTotal:rule->checkpointMeta->rankTotal',
   'candidateCount:rule->checkpointMeta->candidateCount',
   'resultCount:rule->resultCount','discoveryResultCount:rule->discoveryResultCount',
-  'lastError:rule->lastError'
+  'lastError:rule->lastError',
+  'stageSummary:rule->stageSummary',
+  'pauseRequested:rule->pauseRequested','pauseMode:rule->>pauseMode',
+  'operatorAutoPause:rule->operatorAutoPause','autoTakeover:rule->autoTakeover'
 ].join(',');
 const LIMIT = 200;
 const MAX_PAGES = 12;
@@ -91,8 +96,10 @@ function compact(row) {
     nextRefreshAt:row.nextRefreshAt||null,nextRetryAt:row.nextRetryAt||null,
     leaseUntil:row.leaseUntil||null,operatorPaused:row.operatorAutoPause===true,
     roundsCompleted:num(row.roundsCompleted),provider:{name:text(provider.provider).slice(0,28)||null,
-      status:text(provider.status).slice(0,70)||null,found:num(provider.count),
-      failures:num(row.providerFailures),successes:num(row.providerSuccesses)},
+      status:text(provider.status).slice(0,70)||null,found:num(provider.count),at:provider.at||null,
+      failures:num(row.providerFailures),successes:num(row.providerSuccesses),
+      rawReturned:num(provider.rawReturned),rejectedNonSeller:num(provider.rejectedNonSeller),
+      novelCandidates:num(provider.novel),duplicatesSkipped:num(provider.duplicateExistingSkipped)},
     supplier:{privateSaved:num(row.progressivePersisted),active:num(row.activeSupplierCount),
       policyQualified:num(row.qualifiedSupplierCount),target:num(row.supplierTarget),
       targetReached:row.targetReached===true,
@@ -108,7 +115,8 @@ function compact(row) {
       stagingNoProgressCount:num(row.stagingNoProgressCount),
       lastStaging:{done:num(obj(row.lastStagingSummary).done),
         remaining:num(obj(row.lastStagingSummary).remaining),failed:num(obj(row.lastStagingSummary).failed),
-        blocked:num(obj(row.lastStagingSummary).blocked),scanCursor:num(obj(row.lastStagingSummary).scanCursor)}},
+        blocked:num(obj(row.lastStagingSummary).blocked),skipped:num(obj(row.lastStagingSummary).skipped),
+        reviewRequired:num(obj(row.lastStagingSummary).reviewRequired),scanCursor:num(obj(row.lastStagingSummary).scanCursor)}},
     psom:{placed:num(row.placed),reviewRequired:num(row.reviewRequired),
       lastOutcome:{requested:num(placement.requested),assigned:num(placement.assigned),
         failed:num(placement.failed),held:num(placement.held),inconclusive:num(placement.inconclusive)},
@@ -123,7 +131,10 @@ function compact(row) {
       observedStageToken:text(row.lastObservedProductStageToken).split('|').slice(-1)[0]||null},
     sectionFill:{totalSections:num(fill.totalSections),belowPrivate20:list(fill.under20).length,
       belowPrivate100:list(fill.under100).length,fullTargetComplete:fill.fullTargetComplete===true},
-    error:{count:errors.length,lastCategory:errorType(lastError),lastMessage:lastError||null}
+    error:{count:errors.length,lastCategory:errorType(lastError),lastMessage:lastError||null,
+      recent:errors.slice(-3).map(e=>({at:obj(e).at||null,stage:text(obj(e).phase||obj(e).stage).slice(0,50)||null,
+        category:errorType(obj(e).error||obj(e).reason||obj(e).message),
+        message:safeError(obj(e).error||obj(e).reason||obj(e).message)}))}
   };
 }
 function compactJob(row) {
@@ -137,6 +148,11 @@ function compactJob(row) {
     ranking:{done:num(row.rankCursor),total:num(row.rankTotal)},
     candidates:num(row.candidateCount),productResults:num(row.resultCount),
     productDiscovery:num(row.discoveryResultCount),
+    runtime:{paused:row.pauseRequested===true,pauseMode:text(row.pauseMode)||null,jobId:text(row.jobId)||null},
+    storage:{attempted:obj(row.stageSummary).attempted==null?null:num(obj(row.stageSummary).attempted),
+      created:obj(row.stageSummary).created==null?null:num(obj(row.stageSummary).created),
+      updated:obj(row.stageSummary).updated==null?null:num(obj(row.stageSummary).updated),
+      failed:obj(row.stageSummary).failed==null?null:num(obj(row.stageSummary).failed)},
     lastError:reason?{category:errorType(reason),message:reason}:null};
 }
 function create(deps) {
@@ -144,6 +160,7 @@ function create(deps) {
   const clock=deps&&deps.clock||(()=>new Date().toISOString());
   async function run() {
     const startedAt=clock(),readErrors=[],scopeRows=[];
+    const deploy={commitRef:text(process.env.COMMIT_REF)||null,deployId:text(process.env.DEPLOY_ID)||null,context:text(process.env.CONTEXT)||null,automationPatchRevision:text(automation.PATCH_REVISION)||null};
     let plan={mode:'unavailable',scopes:[]},state=null;
     try{plan=await automation.autoProductScopes();}catch(e){readErrors.push({component:'selected_scopes',category:errorType(e&&e.message),message:safeError(e&&e.message)});}
     try{state=await automation.configState();if(state.storageAvailable===false)readErrors.push({component:'control_settings',category:'db_unavailable',message:safeError(state.storageError)});}
@@ -231,7 +248,8 @@ function create(deps) {
             issue(scope,'psom','psom_waiting_with_products','info','비공개 후보가 있으나 PSOM 진행 대기 중입니다. 검증 보류일 수도 있습니다.');
         }
       }
-      scopes.push({scope,scheduled,researchJobs:{supplier:jobs.supplier||null,product:jobs.product||null},phases:{supplier:supplier&&supplier.phase||'not_started',
+      const evidence=Evidence.analyze(scope,scheduled,stage,jobs,clock());
+      scopes.push({scope,scheduled,evidence,researchJobs:{supplier:jobs.supplier||null,product:jobs.product||null},phases:{supplier:supplier&&supplier.phase||'not_started',
         product:product&&product.phase||'not_started',psom:psom&&psom.phase||'not_started'},supplier,product,psom});
     }
     let registryCount=null,registryCodes=[];
@@ -268,9 +286,16 @@ function create(deps) {
         psomCandidatesNeedingReviewScopes:scopes.filter(s=>s.psom&&s.psom.psom.lastCandidateGate.blocked>0&&s.psom.psom.lastCandidateGate.eligible===0).length,
         privateProductsStaged:scopes.reduce((n,s)=>n+(s.product?s.product.product.privateStaged:0),0),
         privatePsomPlaced:scopes.reduce((n,s)=>n+(s.psom?s.psom.psom.placed:0),0),
+        evidenceFirstBlockers:scopes.reduce((m,s)=>(s.evidence&&s.evidence.firstActionableBlocker&&(m[s.evidence.firstActionableBlocker]=(m[s.evidence.firstActionableBlocker]||0)+1),m),{}),
+        evidenceUnresolvedScopes:scopes.filter(s=>s.scheduled&&s.evidence&&s.evidence.findings.some(f=>f.level==='blocking'||f.level==='error')).length,
         issueCount:issues.length,
         issueCategories:issues.reduce((m,row)=>(m[row.code]=(m[row.code]||0)+1,m),{})},
       issues,readErrors,scopes,
+      deploy,
+      evidenceReport:{schema:Evidence.VERSION,stageCount:7,source:'persisted_country_checkpoints_and_job_summaries',
+        liveProviderCallsVerified:false,newProductInsertVerified:false,
+        explanation:'오류명만이 아니라 어떤 저장 기록과 숫자가 병목 판정의 근거인지 국가별 scopes[].evidence에 수록합니다. 확인되지 않은 값은 null 또는 미확인으로 처리합니다.',
+        primaryBlockerCounts:scopes.reduce((m,s)=>(s.scheduled&&s.evidence&&s.evidence.firstActionableBlocker&&(m[s.evidence.firstActionableBlocker]=(m[s.evidence.firstActionableBlocker]||0)+1),m),{})},
       interpretation:{
         providerSuccessDoesNotEqualSavedSuppliers:true,privateStagingDoesNotEqualPublishedProduct:true,checkpointCountersAreNotUniqueLedgerTotals:true,
         supplierGateCountsAreLastObservedPerCountryNotUniqueLifetimeTotals:true,
