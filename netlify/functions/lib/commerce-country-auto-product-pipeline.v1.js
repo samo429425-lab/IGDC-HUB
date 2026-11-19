@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const Automation = require('./commerce-country-automation.v1');
 const Store = require('./global-slot-console-supabase');
 const MarketSaleScope = require('./market-sale-scope.v1');
+const AutoPolicy = require('./commerce-country-auto-research-policy.v1');
 
 const VERSION = 'igdc-country-product-ai-private-pipeline.v1';
 const HUB = 'country-product-ai-private-pipeline';
@@ -17,7 +18,7 @@ const MAX_SCOPES = 3; // Fair rotation across active markets; bounded by each co
 // Stage 1 is research -> latest research / private shared candidate ledger.
 // PSOM section placement is deliberately reserved for the administrator's
 // separate approval/section workflow; NEVER run it in this scheduled worker.
-const MIN_SUPPLIER_SOURCES = 10;
+const MIN_SUPPLIER_SOURCES = AutoPolicy.INITIAL_SUPPLIER_SITES;
 const CANDIDATE_SCAN = 24;
 // Private country board targets: first 20 verified candidates per section,
 // then build to 100. Never create fake candidates to meet those targets.
@@ -277,7 +278,7 @@ function makePipeline(deps) {
       const minimum=MIN_SUPPLIER_SOURCES;
       let supplierMarker=txt(selected&&selected.supplierLastRunAt);
       let observedSuppliers=Math.max(0,Number(selected&&selected.supplierCount||0));
-      // Even a saved nonzero supplier count can represent ten URLs from one
+      // Even a saved nonzero supplier count can represent many URLs from one
       // merchant. Always validate the current distinct ledger at job-start.
       const ledgerRecheck=await automation.autoSupplierPortfolioGate(inputFor(scope));
       observedSuppliers=Math.max(0,Number(ledgerRecheck.usableSellerSites||0));
@@ -287,7 +288,8 @@ function makePipeline(deps) {
           supplierLedgerRecheck:ledgerRecheck&&{ledgerRows:ledgerRecheck.ledgerRows,excluded:ledgerRecheck.excluded,noSource:ledgerRecheck.noSource,duplicateSellerSites:ledgerRecheck.duplicateSellerSites},
           nextRetryAt:new Date(ts(clock())+15*60*1000).toISOString(),
           retrySupplierAt:txt(selected&&selected.supplierLastRunAt)||null,
-          lastResult:!supplierMarker?'durable_supplier_marker_missing_ledger_checked':'supplier_portfolio_below_product_research_threshold'});
+          lastResult:!supplierMarker?'durable_supplier_marker_missing_ledger_checked':'supplier_portfolio_below_product_research_threshold',
+        supplierStartGate:{required:minimum,observed:observedSuppliers,verifiedBy:'durable_country_ledger'}});
       }
       state.nextRetryAt=null;state.retrySupplierAt=null;
       await recheck(scope);

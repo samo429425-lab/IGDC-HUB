@@ -12,6 +12,7 @@
  * is never converted into a successful supplier discovery.
  */
 const Guard = require('./commerce-supplier-source-guard.v1');
+const AutoPolicy = require('./commerce-country-auto-research-policy.v1');
 const VERSION = 'igdc-country-free-supplier-search.v1';
 const ENDPOINT = 'https://query.wikidata.org/sparql';
 function txt(v){return v == null ? '' : String(v).trim();}
@@ -39,12 +40,17 @@ function queryForCountry(country, offsetInput){
   // ISO 3166 country codes are literal values in P297. Only declared
   // official website (P856) results of organizations with corporate classes
   // are candidates; not Google search pages or generated seller sites.
-  return `SELECT DISTINCT ?company ?companyLabel ?website WHERE {\n`+
-    `  ?country wdt:P297 "${code}" .\n`+
-    `  ?company wdt:P17 ?country ; wdt:P31 ?class ; wdt:P856 ?website .\n`+
-    `  VALUES ?class { wd:Q4830453 wd:Q783794 wd:Q6881511 }\n`+
+  // Page the corporate website rows BEFORE requesting labels. The old
+  // outer ORDER BY joined labels for the entire country's corporate index,
+  // easily exceeding the former 4.5s budget. A stable page order is retained.
+  return `SELECT ?company ?companyLabel ?website WHERE {\n`+
+    `  { SELECT DISTINCT ?company ?website WHERE {\n`+
+    `      ?country wdt:P297 "${code}" .\n`+
+    `      ?company wdt:P17 ?country ; wdt:P31 ?class ; wdt:P856 ?website .\n`+
+    `      VALUES ?class { wd:Q4830453 wd:Q783794 wd:Q6881511 }\n`+
+    `    } ORDER BY ?company LIMIT 24 OFFSET ${offset} }\n`+
     `  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }\n`+
-    `} ORDER BY ?company LIMIT 24 OFFSET ${offset}`;
+    `}`;
 }
 function errorCode(error){
   const e=txt(error&&error.message||error);
@@ -54,7 +60,9 @@ function errorCode(error){
 async function search(task,scope,opts){
   const country=txt(scope&&scope.country).toUpperCase(),query=queryForCountry(country,opts&&opts.offset);
   if(!query)return {provider:'wikidata',status:'invalid_country',count:0,items:[]};
-  const timeoutMs=Math.max(1500,Math.min(5500,Number(opts&&opts.timeoutMs)||4500));
+  // Bounded within Netlify's 30s scheduled invocation; no extra paid API.
+  const timeoutMs=Math.max(2500,Math.min(AutoPolicy.FREE_DIRECTORY_MAX_TIMEOUT_MS,Number(opts&&opts.timeoutMs)||AutoPolicy.FREE_DIRECTORY_TIMEOUT_MS));
+  const started=Date.now();
   const url=new URL(ENDPOINT);
   url.searchParams.set('query',query);
   url.searchParams.set('format','json');
@@ -64,18 +72,20 @@ async function search(task,scope,opts){
       'Accept':'application/sparql-results+json',
       'User-Agent':'IGDC-CountrySupplierResearch/1.0 (https://igdcglobal.com; rate-limited, no-paid-search)'
     }});
-    if(!response.ok)return {provider:'wikidata',status:'http_'+response.status,count:0,items:[]};
+    if(!response.ok)return {provider:'wikidata',status:'http_'+response.status,count:0,items:[],elapsedMs:Date.now()-started,httpStatus:response.status};
     const payload=await response.json();
     const rows=Array.isArray(payload&&payload.results&&payload.results.bindings)?payload.results.bindings:[];
-    const found=[],seen=new Set();
+    const found=[],seen=new Set(),rejects={invalidUrl:0,missingName:0,invalidEntity:0,duplicateUrl:0};
     for(const row of rows){
       const official=safeSupplierUrl(row&&row.website&&row.website.value);
       const name=txt(row&&row.companyLabel&&row.companyLabel.value).replace(/<[^>]*>/g,' ').slice(0,180);
-      if(!official||!name||seen.has(official))continue;
+      if(!official){rejects.invalidUrl++;continue;}
+      if(!name){rejects.missingName++;continue;}
+      if(seen.has(official)){rejects.duplicateUrl++;continue;}
       const source=txt(row&&row.company&&row.company.value);
       // The origin remains attached to a discovered candidate. This is not
       // a verified seller; full official-store validation happens downstream.
-      if(!/^https?:\/\/www\.wikidata\.org\/entity\/Q\d+$/.test(source))continue;
+      if(!/^https?:\/\/www\.wikidata\.org\/entity\/Q\d+$/.test(source)){rejects.invalidEntity++;continue;}
       seen.add(official);
       found.push({title:name,name,url:official,link:official,
         summary:'Official website URL listed in Wikidata; selling activity not independently verified',
@@ -83,8 +93,9 @@ async function search(task,scope,opts){
         payload:{source:'wikidata',country,entity:source,queryOrigin:'public-company-official-site',supplyLane:txt(task&&task.supplyLane)}});
       if(found.length>=16)break;
     }
-    return {provider:'wikidata',status:found.length?'ok':'empty',count:found.length,items:found};
-  }catch(e){return {provider:'wikidata',status:errorCode(e),count:0,items:[]};}
+    return {provider:'wikidata',status:found.length?'ok':'empty',count:found.length,items:found,
+      rawBindings:rows.length,rejected:rejects,elapsedMs:Date.now()-started,httpStatus:200};
+  }catch(e){return {provider:'wikidata',status:errorCode(e),count:0,items:[],elapsedMs:Date.now()-started};}
   finally{clearTimeout(timer);}
 }
 module.exports={VERSION,configured,safeSupplierUrl,queryForCountry,search};

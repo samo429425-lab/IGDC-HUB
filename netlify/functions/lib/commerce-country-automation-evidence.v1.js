@@ -6,7 +6,7 @@
  * Numbers are OBSERVATIONS, not evidence of successful live web access.
  */
 const VERSION='igdc-auto-stage-evidence.v1.2';
-const MIN_SUPPLIERS=10;
+const MIN_SUPPLIERS=require('./commerce-country-auto-research-policy.v1').INITIAL_SUPPLIER_SITES;
 function o(v){return v&&typeof v==='object'&&!Array.isArray(v)?v:{};}
 function n(v){return Number.isFinite(Number(v))?Math.max(0,Number(v)):0;}
 function t(v){return v==null?'':String(v).trim();}
@@ -62,7 +62,7 @@ function analyze(scope,scheduled,checkpoints,jobs,clock){
     ['supplierCheckpoint.supplierGate'],'업체 URL·공식 판매처 여부·검증 제외 사유별 건수를 대조');
   }
   if(n(gate.eligibleSellerSites)<MIN_SUPPLIERS){
-   add('product_start_supplier_threshold','blocking','handoff','상품 자동 조사 시작에 필요한 서로 다른 공식 판매처 10개 미달',
+   add('product_start_supplier_threshold','blocking','handoff','상품 자동 조사 시작에 필요한 서로 다른 공식 판매처 '+MIN_SUPPLIERS+'개 미달',
     {qualified:n(gate.eligibleSellerSites),required:MIN_SUPPLIERS},['supplierCheckpoint.supplierGate.eligibleSellerSites'],'실제 공식 공급업체 확보 단계 복구. 가짜 후보나 수동 조사 건수를 자동 성과로 계산하지 말 것');
   }
   if(t(product.lastResult)==='research_manually_paused_preserved'){

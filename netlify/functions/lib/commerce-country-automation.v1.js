@@ -30,13 +30,14 @@ const OriginalProductEvidence = require("./igdc-original-product-url-evidence-20
 const ReleaseDispatch = require("./commerce-release-dispatch.v1");
 const SupplierSourceGuard = require("./commerce-supplier-source-guard.v1");
 const FreeSupplierSearch = require("./commerce-country-free-supplier-search.v1");
+const AutoResearchPolicy = require("./commerce-country-auto-research-policy.v1");
 const ProductSellerOriginGuard = require("./commerce-product-seller-origin-guard.v1");
 const CountryLogistics = require("./commerce-country-logistics-evidence.v1");
 const InternationalSafety = require("./commerce-international-distribution-safety.v1");
 
 const VERSION = "commerce-country-automation-v3.40.0-country-scoped-reserve-quality-guard";
 // Deployment verification marker only. Do not change persisted job schema VERSION.
-const PATCH_REVISION = "igdc-auto-20261119-free-supplier-evidence-v1";
+const PATCH_REVISION = "igdc-auto-20261119-15stage-free-search-20-first-v1";
 const POLICY_PREFIX = "igdc_country_automation_";
 const RESEARCH_JOB_PREFIX = "igdc_supplier_research_job_";
 const RESEARCH_JOB_SCHEMA = "igdc-country-supplier-research-job.v1";
@@ -1855,7 +1856,11 @@ function supplierResearchStepView(job,actorId) {
   if(!job)return{ok:true,status:"not_started",progress:{search:{done:0,total:0}},trace:[]};
   return{ok:true,jobId:job.jobId,status:job.status,startedAt:job.startedAt,
     progress:researchProgress(job),trace:array(job.trace).slice(-3),
-    candidateCount:array(job.candidates).length,noPublicPublication:true};
+    candidateCount:array(job.candidates).length,noPublicPublication:true,
+    freeFallbackPending:job.deferredFreeFallback===true,
+    freeFallbackWaitingForSlot:job.deferredFreeFallback===true&&
+      Number(job.searchCursor||0)>=array(job.searchTasks).length,
+    freeFallbackRetryAt:job.freeFallbackRetryAt||null};
 }
 async function researchContext(scope) {
   let marketSignalStatus = null; try { marketSignalStatus = await MarketSignals.signalStatus(scope.regionGroup); } catch (error) { marketSignalStatus = { effective: { active: false, categoryWeights: {} }, error: text(error && error.message) }; }
@@ -2036,11 +2041,12 @@ async function beginResearchJob(actorId, input, event) {
   const cooldowns=text(actorId)==="scheduled-automation"?plain(raw.scheduledProviderCooldowns):{};
   const suppressedScheduledLanes=["google","naver"].filter(lane=>Date.parse(text(cooldowns[lane]))>Date.now());
   // Zero-new-spend policy: scheduled supplier research must not consume a
-  // potentially billable Google Custom Search API. Google charges for usage
-  // beyond its free quota and is being retired. Re-enable only by explicit
-  // server-side operator choice; manual search workflows stay unchanged.
-  const noBillableSearch=text(actorId)==="scheduled-automation" &&
-    text(process.env.IGDC_ALLOW_BILLABLE_SEARCH).toLowerCase()!=="true";
+  // potentially billable Google Custom Search API. No environment override
+  // can re-enable a billable SCHEDULED search; manual search is unchanged.
+  // Explicit zero-new-spend rule for scheduled countries: the prior
+  // environment override could unexpectedly activate billable Google calls.
+  // It remains available to the existing human/manual workflow only.
+  const noBillableSearch=text(actorId)==="scheduled-automation";
   const searchPlanTasks=array(plan.tasks).filter(task=>
     !suppressedScheduledLanes.includes(lower(plain(task).lane)) &&
     !(noBillableSearch && lower(plain(task).lane)==="google"));
@@ -2087,7 +2093,44 @@ async function advanceResearchJob(actorId, input, event) {
   try {
     if (job.status === "searching") {
       const task = array(job.searchTasks)[Number(job.searchCursor || 0)];
-      if (!task) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.newCandidateTarget||job.effective && job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES) * 2)) })); job.status = "inspecting"; job.inspectCursor = 0; }
+      if (!task) {
+        // When all real search lanes were empty and a shared public-query
+        // lease was busy, do NOT lose this country's only free search chance.
+        // Retry this final, read-only lookup in a later scheduled tick;
+        // preserve the current job and every completed search cursor.
+        if(text(actorId)==='scheduled-automation' && job.deferredFreeFallback===true &&
+            Number(job.liveFallbackCallCount||0)<1 && job.liveFallbackDisabled!==true &&
+            FreeSupplierSearch.configured()){
+          const slot=await claimPublicSupplierQuerySlot();
+          if(!slot.allowed){
+            job.freeFallbackRetryAt=slot.retryAt||new Date(Date.now()+2*60*1000).toISOString();
+            job.trace=array(job.trace).concat([{at:iso(),source:'free-search-gate',
+              status:slot.reason,count:0,retryAt:job.freeFallbackRetryAt,
+              postponedNotDiscarded:true}]).slice(-240);
+            await saveResearchJob(job,actorId);
+            return supplierResearchStepView(job,actorId);
+          }
+          const offset=(Math.max(1,Math.min(5,Number(job.researchRoundIndex)||1))-1)*24;
+          const alternative=await FreeSupplierSearch.search({supplyLane:'deferred-official-web'},scope,
+            {timeoutMs:AutoResearchPolicy.FREE_DIRECTORY_TIMEOUT_MS,offset});
+          job.liveFallbackCallCount=Number(job.liveFallbackCallCount||0)+1;
+          job.deferredFreeFallback=false;job.freeFallbackRetryAt=null;
+          const safeItems=array(alternative.items).filter(item=>!SupplierSourceGuard.reason(researchCandidateUrl(item)));
+          const novelItems=filterKnownSupplierItems(safeItems,new Set(array(job.knownSupplierKeys)));
+          job.supplierHoldingCandidates=mergeSupplierHolding(job.supplierHoldingCandidates,novelItems,job.blockedSupplierKeys,300);
+          job.supplierBlockedCandidates=mergeSupplierBlocked(job.supplierBlockedCandidates,novelItems,job.blockedSupplierKeys,300);
+          job.rawCandidates=mergeResearchItems(job.rawCandidates,novelItems,SUPPLIER_RAW_LIMIT,job.blockedSupplierKeys);
+          job.trace=array(job.trace).concat([{at:iso(),source:'wikidata',status:text(alternative.status),
+            count:safeItems.length,returned:safeItems.length,novel:novelItems.length,
+            rawBindings:Number(alternative.rawBindings||0),rejected:plain(alternative.rejected),
+            elapsedMs:Number(alternative.elapsedMs||0),offset,deferredRecovered:true,
+            duplicateExistingSkipped:Math.max(0,safeItems.length-novelItems.length)}]).slice(-240);
+        }
+        job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,
+          Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,
+          Math.max(80,Number(job.newCandidateTarget||job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*2))}));
+        job.status='inspecting';job.inspectCursor=0;
+      }
       else {
         const matchingGoogleTrace = task.lane === "sanmaru" ? array(job.trace).slice().reverse().find((row) => row && row.source === "google" && text(row.query) === text(task.query)) : null;
         const externalFallback = scope.country !== "KR" && task.lane === "sanmaru" && (!matchingGoogleTrace || matchingGoogleTrace.status !== "ok" || Number(matchingGoogleTrace.count || matchingGoogleTrace.returned || 0) <= 0);
@@ -2108,17 +2151,21 @@ async function advanceResearchJob(actorId, input, event) {
           const slot=await claimPublicSupplierQuerySlot();
           if(slot.allowed){
             const offset=(Math.max(1,Math.min(5,Number(job.researchRoundIndex)||1))-1)*24;
-            const alternative=await FreeSupplierSearch.search(task,scope,{timeoutMs:4500,offset});
+            const alternative=await FreeSupplierSearch.search(task,scope,{timeoutMs:AutoResearchPolicy.FREE_DIRECTORY_TIMEOUT_MS,offset});
             job.liveFallbackCallCount=Number(job.liveFallbackCallCount||0)+1;
             searchItems=array(alternative.items).filter(item=>!SupplierSourceGuard.reason(researchCandidateUrl(item)));
+            job.deferredFreeFallback=false;job.freeFallbackRetryAt=null;
             liveTrace={at:iso(),source:'wikidata',status:text(alternative.status),count:searchItems.length,
               query:text(task.query).slice(0,300),fallbackFor:'sanmaru',publicDirectoryOnly:true,
-              offset,realHttpSearch:true};
+              offset,realHttpSearch:true,rawBindings:Number(alternative.rawBindings||0),
+              rejected:plain(alternative.rejected),elapsedMs:Number(alternative.elapsedMs||0)};
             if(['http_401','http_403','http_422','http_429','not_configured'].includes(lower(alternative.status)))
               job.liveFallbackDisabled=true;
           }else{
+            job.deferredFreeFallback=true;
+            job.freeFallbackRetryAt=slot.retryAt||new Date(Date.now()+2*60*1000).toISOString();
             liveTrace={at:iso(),source:'free-search-gate',status:slot.reason,count:0,
-              retryAt:slot.retryAt||null,freeSearchSkipped:true,realHttpSearch:false};
+              retryAt:job.freeFallbackRetryAt,freeSearchSkipped:true,postponedNotDiscarded:true,realHttpSearch:false};
           }
         }
         const novelItems=filterKnownSupplierItems(searchItems,new Set(array(job.knownSupplierKeys)));
@@ -2165,7 +2212,17 @@ async function advanceResearchJob(actorId, input, event) {
         const retryLimit=scheduledTransportFailure?2:1;
         if (!providerUnavailable && (retryableResearchStatus(result.status)||scheduledTransportFailure) && Number(task.attempt || 0)<retryLimit)
           job.searchTasks.push(Object.assign({},task,{attempt:Number(task.attempt||0)+1,retryOf:Number(job.searchCursor||0)-1}));
-        if (job.searchCursor >= array(job.searchTasks).length) { job.inspectionPool = RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates, Object.assign({}, selectorInput, { limit: Math.min(SUPPLIER_INSPECTION_LIMIT, Math.max(80, Number(job.newCandidateTarget||job.effective && job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES) * 2)) })); job.status = "inspecting"; job.inspectCursor = 0; }
+        if (job.searchCursor >= array(job.searchTasks).length &&
+            !(text(actorId)==='scheduled-automation' && job.deferredFreeFallback===true &&
+              Number(job.liveFallbackCallCount||0)<1 && job.liveFallbackDisabled!==true)) {
+          job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,
+            Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,
+            Math.max(80,Number(job.newCandidateTarget||job.effective&&job.effective.maxCandidates||DEFAULT_MAX_CANDIDATES)*2))}));
+          job.status='inspecting';job.inspectCursor=0;
+        }
+        // Otherwise keep SEARCHING with searchCursor at the end, so the
+        // deferred free-source branch runs on the NEXT scheduled tick.
+
       }
     } else if (job.status === "inspecting") {
       const batch = array(job.inspectionPool).slice(Number(job.inspectCursor || 0), Number(job.inspectCursor || 0) + 3);
@@ -3211,11 +3268,11 @@ async function beginProductResearchJob(actorId, input) {
   }
   const allSupplierSources=ProductReserve.interleaveSuppliers(sourcePool.sort((a,b)=>Number(b.adminPinned===true)-Number(a.adminPinned===true)||Number(b.affiliatePriority||0)-Number(a.affiliatePriority||0)||focusedProductResearchPriority(b)-focusedProductResearchPriority(a)||Number(b.priorityScore||0)-Number(a.priorityScore||0)||Number(b.trustScore||0)-Number(a.trustScore||0)||text(a.supplierName).localeCompare(text(b.supplierName))));
   if(!allSupplierSources.length){const error=new Error("완료된 공급업체 후보 중 비공개 상품 조사에 사용할 수 있는 공식 판매 출처 URL이 없습니다. 공급업체 후보의 공식 URL을 확인하세요.");error.statusCode=409;throw error;}
-  // Autonomous product research begins only after ten DISTINCT, verified,
+  // Autonomous product research begins only after the initial DISTINCT, verified,
   // operator-unblocked seller sites.  This is a research trigger, NOT a
   // public merchant approval and never authorizes a section placement.
   if(text(actorId)==="scheduled-country-product-ai") {
-    const required=Math.max(10,Math.min(200,Math.floor(Number(raw.minEligibleSupplierSources)||10)));
+    const required=Math.max(AutoResearchPolicy.INITIAL_SUPPLIER_SITES,Math.min(200,Math.floor(Number(raw.minEligibleSupplierSources)||AutoResearchPolicy.INITIAL_SUPPLIER_SITES)));
     if(allSupplierSources.length<required){
       const error=new Error("AUTO_PRODUCT_SUPPLIER_THRESHOLD_PENDING: "+allSupplierSources.length+"/"+required+" official seller sites");
       error.code="AUTO_PRODUCT_SUPPLIER_THRESHOLD_PENDING";error.statusCode=409;throw error;
@@ -8519,7 +8576,7 @@ async function globalControlDiagnostic() {
         !!text(process.env.GOOGLE_CSE_ID||process.env.GOOGLE_CX||process.env.GOOGLE_SEARCH_ENGINE_ID||process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID),
       naverCredentialsPresent:!!text(process.env.NAVER_API_KEY||process.env.NAVER_CLIENT_ID||process.env.NAVER_SEARCH_CLIENT_ID||process.env.NAVER_OPENAPI_CLIENT_ID)&&
         !!text(process.env.NAVER_CLIENT_SECRET||process.env.NAVER_API_SECRET||process.env.NAVER_SEARCH_CLIENT_SECRET),
-      paidFallbackEnabled:false,googleAutomaticPaidQueriesAllowed:text(process.env.IGDC_ALLOW_BILLABLE_SEARCH).toLowerCase()==="true",freeCandidateDirectoryAvailable:FreeSupplierSearch.configured(),
+      paidFallbackEnabled:false,googleAutomaticPaidQueriesAllowed:false,freeCandidateDirectoryAvailable:FreeSupplierSearch.configured(),
       credentialPresenceDoesNotGuaranteeProviderAccess:true,
       verifiedLiveSearchRequiresSuccessfulExternalHttpResponse:true
     }, durableWriteEvidence, researchJobs: { supplier: supplierJobs, product: productJobs, activeSupplier: supplierJobs.filter((row) => row.status === "saved_active").length, activeProduct: productJobs.filter((row) => row.status === "saved_active").length,

@@ -4,6 +4,7 @@
 // human research job without an explicit takeover for that geographic scope.
 const crypto = require('crypto');
 const Automation = require('./commerce-country-automation.v1');
+const AutoPolicy = require('./commerce-country-auto-research-policy.v1');
 const Store = require('./global-slot-console-supabase');
 const VERSION = 'igdc-country-supplier-staged-auto.v1';
 const ACTOR = 'scheduled-automation';
@@ -35,8 +36,9 @@ function key(s) { return txt(s.countryCode).toUpperCase() + '|' + reg(s); }
 function providerOutcome(result, previousCursor) {
   const progress=obj(obj(result).progress);
   const done=Number(obj(progress.search).done||0);
-  if(done<=Number(previousCursor||0))return null;
   const trace=arr(obj(result).trace);
+  const recovered=trace.some(row=>obj(row).source==='wikidata'&&obj(row).deferredRecovered===true);
+  if(done<=Number(previousCursor||0)&&!recovered)return null;
   // A provider-configuration fallback record can follow the actual result.
   // Report the underlying Google/Naver/Sanmaru status, not the guard message.
   const last=obj(trace.slice().reverse().find(row=>['google','naver','sanmaru','wikidata'].includes(txt(obj(row).source).toLowerCase())));
@@ -45,7 +47,9 @@ function providerOutcome(result, previousCursor) {
   return {provider,status:txt(last.status).toLowerCase().replace(/^provider_/, '')||'unknown',
     count:Math.max(0,Number(last.count||0)),rawReturned:Math.max(0,Number(last.returned||last.count||0)),
     rejectedNonSeller:Math.max(0,Number(last.rejectedNonSeller||0)),novel:Math.max(0,Number(last.novel||0)),
-    duplicateExistingSkipped:Math.max(0,Number(last.duplicateExistingSkipped||0)),searchCursor:done};
+    duplicateExistingSkipped:Math.max(0,Number(last.duplicateExistingSkipped||0)),searchCursor:done,
+    elapsedMs:Math.max(0,Number(last.elapsedMs||0)),rawBindings:Math.max(0,Number(last.rawBindings||0)),
+    rejected:obj(last.rejected)};
 }
 function idFor(s) { return 'igdc_supplier_staged_auto_' + txt(s.countryCode).toLowerCase() + '_' + reg(s).toLowerCase().replace(/[^a-z0-9_-]/g, '_'); }
 function input(s,extra) { return Object.assign({countryCode:s.countryCode,subdivisionCode:reg(s),scopeAuthority:'administrator-selected',ignoreRequestGeo:true},extra||{}); }
@@ -232,6 +236,10 @@ function create(deps) {
       const result=await automation.advanceResearchJob(ACTOR,input(s));
       const outcome=job.status==='searching'?providerOutcome(result,job.searchCursor):null;
       let lastResult='supplier_step_'+txt(result.status);
+      if(result.freeFallbackWaitingForSlot===true&&result.freeFallbackRetryAt){
+        state.nextRetryAt=result.freeFallbackRetryAt;
+        lastResult='supplier_free_search_queued_for_global_slot';
+      }
       if(outcome){
         state.lastProvider=Object.assign({at:clock()},outcome);
         if(outcome.provider==='wikidata'){
@@ -332,7 +340,7 @@ function create(deps) {
       if(completedRounds<RESEARCH_ROUNDS) return Object.assign(state,{
         phase:'idle',jobId:null,lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,completedAt:clock(),
         sectionFill:fill,committedSuppliers:savedCount,activeSupplierCount:have,
-        lastResult:have?'supplier_round_saved_product_research_unlocked':'supplier_round_complete_retry_next_round'
+        lastResult:have>=AutoPolicy.INITIAL_SUPPLIER_SITES?'supplier_round_saved_product_research_unlocked':'supplier_round_saved_supplier_first_stage_continues'
       });
       // Weekly twice is MAINTENANCE only after ALL real 20-section private
       // placements are at target. Underfilled markets automatically begin
