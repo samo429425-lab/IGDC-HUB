@@ -220,8 +220,14 @@ function makePipeline(deps) {
     // Give a recently editing human the existing concurrency grace period.
     const pausedHumanJob=!!checkpoint.jobId && checkpoint.updatedBy!==ACTOR &&
       checkpoint.paused===true && !['complete','committed'].includes(checkpoint.status);
-    const archivePausedManual=pausedHumanJob && state.autoTakeover===true &&
-      !(await humanResearchIsActive(scope));
+    // The core checks this exact triple again before archival.  Check it here
+    // too so stale KR manual runtime checkpoints are preserved without a 409
+    // and without suppressing other country supplier/product workers.
+    const runtimeMatchesManual=checkpoint.pauseRequested===true && checkpoint.paused===true &&
+      txt(checkpoint.runtimeJobId)===txt(checkpoint.jobId) &&
+      ['manual','auto'].includes(txt(checkpoint.pauseMode).toLowerCase());
+    const archivePausedManual=pausedHumanJob && runtimeMatchesManual &&
+      state.autoTakeover===true && !(await humanResearchIsActive(scope));
     if(pausedHumanJob && !archivePausedManual)
       return Object.assign(state,{phase:'manual_job_preserved',
         lastResult:state.autoTakeover===true?'manual_runtime_checkpoint_mismatch_no_auto_archival':'research_manually_paused_preserved',

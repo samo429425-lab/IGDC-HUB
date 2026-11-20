@@ -2,6 +2,8 @@
 
 const AdminSession = require("./lib/global-slot-console-auth");
 const Automation = require("./lib/commerce-country-automation.v1");
+const PaidSupplierBudget = require("./lib/commerce-country-paid-search-budget.v1");
+const SupplierAiAssist = require("./lib/commerce-country-ai-supplier-assist.v1");
 const AutoBottleneck = require("./lib/commerce-automation-bottleneck-diagnostic.v1");
 const Phase15Audit = require("./lib/commerce-country-phase15-diagnostic.v1");
 const SupplierStaged = require("./lib/commerce-country-auto-supplier-pipeline.v1");
@@ -223,6 +225,21 @@ exports.handler=async function(event){
     if(action==="auto_bottleneck_diagnostic")return json(200,await AutoBottleneck.run({focusCountry:query.focusCountry,focusRegion:query.focusRegion}));
     // Read-only, administrator-authenticated phase 1–15 stage report; no writes or public listing.
     if(action==="auto_research_15_diagnostic")return json(200,await Phase15Audit.run());
+    // Private usage ledger. No frontend/public API exposes this data.
+    if(action==="paid_supplier_budget_status"){
+      const country=text(query.countryCode||query.country||"").toUpperCase();
+      const current=await Automation.configState(),master=plain(current.master),mode=text(master.mode).toLowerCase();
+      const selected=mode==='selected'?array(master.selectedCountryCodes).map(code=>text(code).toUpperCase()).filter(code=>/^[A-Z]{2}$/.test(code)&&code!=='KP'):
+        mode==='auto'?Automation.registry().countries.filter(c=>c&&c.code!=='KP'&&Automation.effectiveSetting(current,c.code,'').mode==='auto').map(c=>c.code):
+        mode==='manual'&&master.selectedCountryCode?[text(master.selectedCountryCode).toUpperCase()]:[];
+      return json(200,{ok:true,country:country?await PaidSupplierBudget.status(country):null,
+        aggregate:await PaidSupplierBudget.aggregate(undefined,Array.from(new Set(selected))),
+        openAiAssistConfigured:SupplierAiAssist.configured()});
+    }
+    if(action==="paid_supplier_ai_assist_once"){
+      if(method!=="POST")throw Object.assign(new Error("POST 요청만 허용합니다."),{statusCode:405});
+      return json(200,await SupplierAiAssist.run(body.countryCode||body.country,body.explicitApproval===true));
+    }
     if(action==="toggle_kr_selected_research"){
       if(method!=="POST")return json(405,{ok:false,error:"POST 관리자 작업만 허용됩니다."});
       const latest=await Automation.configState();

@@ -134,6 +134,14 @@
 @media(max-width:900px){.latest-overview-rows{grid-template-columns:repeat(2,minmax(0,1fr))}.latest-overview-thumb{height:190px}}
 @media(max-width:520px){.latest-overview-rows{grid-template-columns:minmax(0,1fr)}.latest-overview-thumb{height:215px}.latest-overview-controls label{flex:1}}
 </style>
+<style>
+  .paid-supplier-budget{margin-top:16px}.paid-budget-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:9px;margin:10px 0}
+  .paid-budget-cards>div{background:#091525;border:1px solid #29425f;border-radius:9px;padding:11px}
+  .paid-budget-cards span{display:block;font-size:12px;color:#adbed2;line-height:1.45}.paid-budget-cards strong{display:block;margin-top:5px;font-size:20px;color:#e7f2ff}
+  .paid-budget-country{border-top:1px solid #355677;padding-top:10px;margin-top:13px}.paid-budget-extra{margin-top:13px;border-top:1px solid #355677;padding-top:11px}
+  .paid-budget-extra summary{font-weight:700;cursor:pointer}.paid-budget-approval{display:flex;gap:10px;align-items:center;font-size:13px;margin:10px 0}
+  .paid-budget-extra .actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.paid-budget-extra a{color:#b7dfff;text-decoration:underline;font-size:12px}
+</style>
 </head>
 <body>
 <main>
@@ -529,6 +537,37 @@
     <p class="small">관리자 전용 읽기 점검입니다. 버튼 한 번으로 선택된 모든 국가의 1~15단계 실행 증거, 국가/IP·권역 설정, 공급업체·상품 원장 진행, 비공개 배치와 오류·재시도 현황을 기존 전체 관제·병목 점검과 합쳐 JSON 하나로 내려받습니다. 조회 실패·누락도 JSON에 기록되며 기존 원장과 프론트 공개는 변경하지 않습니다.</p>
     <div class="actions"><button id="autoResearch15DiagnosticDownloadBtn" type="button" class="secondary">선택 국가 전체 자동화 통합 JSON 다운로드</button><span id="autoResearch15DiagnosticState" class="state" role="status" aria-live="polite">버튼을 누르면 최신 저장 진행 기록을 새로 조회합니다. 실제 예약 함수의 실행 여부는 Netlify 로그를 함께 확인해야 합니다.</span></div>
   </section>
+  <section id="paidSupplierBudgetPanel" class="panel paid-supplier-budget" aria-label="책임공급업체 검색 비용 및 크레딧 점검">
+    <div class="panel-heading"><h2>책임공급업체 유료 검색 사용량 · 관리자 전용</h2>
+      <div class="actions"><button id="paidSupplierBudgetRefresh" type="button" class="secondary">최신 사용량 조회</button></div></div>
+    <p class="small">무료 공급업체 조사를 먼저 진행하며, 부족할 때만 Google 검색을 사용합니다. 국가별 자동 최대 10회·관리자 수동 최대 5회. 상품 조사와 프론트 매칭은 이 Google 검색 한도를 사용하지 않습니다.</p>
+    <div class="paid-budget-cards" aria-live="polite">
+      <div><span>가동 선택 국가</span><strong id="paidBudgetSelectedCountries">—</strong></div>
+      <div><span>전체 검색 사용 / 기본 허용</span><strong id="paidBudgetTotalUsed">—</strong></div>
+      <div><span>남은 기본 검색 가능 횟수</span><strong id="paidBudgetTotalRemaining">—</strong></div>
+      <div><span>예상 소진액 (USD)</span><strong id="paidBudgetSpent">—</strong></div>
+    </div>
+    <div class="paid-budget-country" aria-live="polite">
+      <strong id="paidBudgetCountryTitle">선택 국가</strong>
+      <div class="paid-budget-cards">
+        <div><span>자동 Google 검색</span><strong id="paidBudgetAuto">— / 10회</strong></div>
+        <div><span>수동 추가 검색</span><strong id="paidBudgetManual">— / 5회</strong></div>
+        <div><span>국가별 남은 검색</span><strong id="paidBudgetCountryRemaining">—</strong></div>
+        <div><span>국가별 예상 소진액</span><strong id="paidBudgetCountrySpent">—</strong></div>
+      </div>
+    </div>
+    <p id="paidBudgetStatus" class="small" role="status">관리자 세션 확인 후 조회할 수 있습니다.</p>
+    <p class="small">표시 금액은 기존 검색 API 요금(회당 $0.005)을 적용한 <b>예상 사용액</b>입니다. 실제 Google Cloud 충전 잔액·청구액과 OpenAI 잔액은 별도 계정 확인이 필요합니다. 승인되지 않은 추가 과금은 차단합니다.</p>
+    <details class="paid-budget-extra"><summary>OpenAI 검색어 보강 · 국가별 추가 1회 선택</summary>
+      <p class="small">이 기능은 Google 유료 검색이나 충전 결제가 아닙니다. 관리자가 승인하면 OpenAI API로 검색어 제안을 1회 요청하며, 응답 토큰에 따른 별도 비용이 발생할 수 있습니다. 자동 실행되지 않습니다.</p>
+      <label class="paid-budget-approval"><input id="paidBudgetAiApproval" type="checkbox"> 이번 국가의 OpenAI 1회 추가 요청을 승인합니다.</label>
+      <div class="actions"><button id="paidBudgetAiOnce" type="button" class="secondary" disabled>OpenAI 검색어 1회 보강</button>
+        <a href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noopener noreferrer">OpenAI API 결제·잔액 확인</a>
+        <a href="https://console.cloud.google.com/billing" target="_blank" rel="noopener noreferrer">Google Cloud 결제 확인</a>
+      </div>
+      <pre id="paidBudgetAiResult" class="json" style="max-height:160px;white-space:pre-wrap;overflow:auto"></pre>
+    </details>
+  </section>
   <p class="foot">운영 흐름: 세계 방향 신호 → 권역 상황 신호 → 관리자 반영 품목군 가중치 → 국가·지역 책임 공급업체 발견 → 비공개 업체 후보 → 사업체와 직접 판매 책임 확인 → 결제·배송·반품·환불·고객지원 확인 → 해당 업체 상품 중 적합한 항목만 별도 선별 → Canonical·공개 게이트 순서입니다. IGDC는 판매자·결제 주체·재고 보유자·배송·반품·환불·AS 책임자가 되지 않습니다.</p>
 </main>
 
@@ -670,7 +709,8 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=igdc-selected-auto-resume-20261107"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=igdc-paid-country-budget-20261121"></script>
+<script src="/assets/js/admin-commerce-paid-supplier-budget.v1.js?v=20261121"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20261025-paged-exclusion-v1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
 <script src="/assets/js/admin-commerce-policy-voice.js?v=20260823-2"></script>

@@ -2648,10 +2648,13 @@ async function naverImage(ctx){
 }
 
 async function googleWeb(ctx){
-  const key = process.env.GOOGLE_API_KEY;
-  const cx = process.env.GOOGLE_CSE_ID;
+  const key = sanmaruEnvFirst('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY','GOOGLE_CUSTOM_SEARCH_API_KEY');
+  const cx = sanmaruEnvFirst('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID');
   if(!key || !cx) return null;
-  const url = "https://www.googleapis.com/customsearch/v1?key=" + encodeURIComponent(key) + "&cx=" + encodeURIComponent(cx) + "&q=" + encodeURIComponent(ctx.q) + "&num=" + Math.min(ctx.deep ? 10 : 6, 10) + "&start=1&gl=us";
+  // Honor the explicit country. Never force US scope for other markets.
+  const country = String(ctx && (ctx.country || ctx.effectiveCountry || ctx.region) || '').toLowerCase();
+  const gl = /^[a-z]{2}$/.test(country) ? country : 'us';
+  const url = "https://www.googleapis.com/customsearch/v1?key=" + encodeURIComponent(key) + "&cx=" + encodeURIComponent(cx) + "&q=" + encodeURIComponent(ctx.q) + "&num=" + Math.min(ctx.deep ? 10 : 6, 10) + "&start=1&gl="+gl;
   const data = await fetchJsonAllowlisted(url, null, 3200);
   return (Array.isArray(data.items) ? data.items : []).map(it => {
     const pagemap = it.pagemap || {};
@@ -2663,8 +2666,8 @@ async function googleWeb(ctx){
 }
 
 async function googleImage(ctx){
-  const key = process.env.GOOGLE_API_KEY;
-  const cx = process.env.GOOGLE_CSE_ID;
+  const key = sanmaruEnvFirst('GOOGLE_API_KEY','GOOGLE_SEARCH_API_KEY','GOOGLE_CUSTOM_SEARCH_API_KEY');
+  const cx = sanmaruEnvFirst('GOOGLE_CSE_ID','GOOGLE_CX','GOOGLE_SEARCH_ENGINE_ID');
   if(!key || !cx) return null;
   const url = "https://www.googleapis.com/customsearch/v1?key=" + encodeURIComponent(key) + "&cx=" + encodeURIComponent(cx) + "&q=" + encodeURIComponent(ctx.q) + "&searchType=image&num=" + Math.min(ctx.deep ? 10 : 6, 10) + "&start=1";
   const data = await fetchJsonAllowlisted(url, null, 3200);
@@ -2675,7 +2678,7 @@ async function googleImage(ctx){
 }
 
 async function bingWeb(ctx){
-  const key = process.env.BING_API_KEY;
+  const key = sanmaruEnvFirst('BING_API_KEY','BING_SEARCH_API_KEY','AZURE_BING_SEARCH_API_KEY');
   if(!key) return null;
   const url = "https://api.bing.microsoft.com/v7.0/search?q=" + encodeURIComponent(ctx.q) + "&count=" + Math.min(ctx.deep ? 40 : 20, 50) + "&offset=0";
   const data = await fetchJsonAllowlisted(url, { headers: { "Ocp-Apim-Subscription-Key": key } }, 3200);

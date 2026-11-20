@@ -451,12 +451,14 @@ async function runDirectProviderDiscovery(geo,targetLimit,queryPlan){
     const bridgeRows=rows.filter(row=>baseLocale(row&&row.locale)!=="ko");
     const naverRows=(koreanRows.length?koreanRows:rows).slice(0,Math.min(4,MAX_PROVIDER_CALLS));
     for(const row of naverRows)add(naverCountrySearch(row,geo,Math.min(20,Math.max(limit,20))));
-    const googleRows=(koreanRows.slice(0,1).concat(bridgeRows.slice(0,1))).filter(Boolean);
-    for(const row of googleRows)add(googleCountrySearch(row,geo,Math.min(10,limit)));
+    // Direct/legacy preview must not bypass country paid-search reservations.
+    // Use explicit staged research for Google after the free search rounds.
+    void bridgeRows;
   }else{
-    for(let index=0;index<rows.length&&tasks.length<MAX_PROVIDER_CALLS;index+=1)add(googleCountrySearch(rows[index],geo,Math.min(10,limit)));
+    // Offshore direct previews use Sanmaru free sources and existing snapshots;
+    // Google is only allowed via searchSupplierResearchStep with budget guard.
   }
-  if(!tasks.length)return{items:[],trace:[{source:"country-provider",status:"not_configured",count:0,timeoutMs:PROVIDER_FETCH_TIMEOUT,locales:queryPlan&&queryPlan.locales||[]}]} ;
+  if(!tasks.length)return{items:[],trace:[{source:"country-provider",status:"paid_google_deferred_to_budgeted_research",count:0,timeoutMs:PROVIDER_FETCH_TIMEOUT,locales:queryPlan&&queryPlan.locales||[]}]} ;
   const settled=await Promise.all(tasks);
   return{items:researchFirst(settled.flatMap(row=>row.items||[])),trace:settled.map(row=>({source:row.provider,query:row.query,queryLocale:row.locale,queryOrigin:rows.find(plan=>plan.query===row.query&&plan.locale===row.locale)&&rows.find(plan=>plan.query===row.query&&plan.locale===row.locale).origin||"unknown",status:row.status,detail:row.detail||null,count:(row.items||[]).length,timeoutMs:PROVIDER_FETCH_TIMEOUT}))};
 }
@@ -884,7 +886,10 @@ async function stagedGoogle(row,geo,limit,timeoutMs,pageInput){
 }
 async function stagedSanmaru(event,row,geo,limit,timeoutMs,externalFallback){
   let Sanmaru=null;try{Sanmaru=require("./sanmaru_engine_v2");}catch(_e){}if(!Sanmaru||typeof Sanmaru.runEngine!=="function")return{provider:"sanmaru",status:"unavailable",detail:null,items:[]};
-  const allowExternal=externalFallback===true;
+  // Supplier automation owns its paid search budget.  External Sanmaru
+  // fallback could secretly invoke Google/Bing outside that budget, even
+  // when scheduled search tasks explicitly exclude Google. Fail closed.
+  const allowExternal=false;
   // The engine resolves its working country from event.queryStringParameters,
   // rather than params.country. A scheduled country must NEVER inherit the
   // server/visitor IP or an English locale (which otherwise defaults to US).
@@ -933,12 +938,34 @@ async function bridgeOfficialDirectory(item,geo,row,max){
 async function searchSupplierResearchStep(event,params){
   const geo=stagedGeo(params),task=plain(params&&params.task),row={query:text(task.query),locale:text(task.locale)||"en",origin:text(task.origin)||"searchbank-psom-policy-plan",supplyLane:text(task.supplyLane)||"general"};
   const providerTimeoutMs=boundedResearchTimeout(params&&params.timeoutMs,7500,5000,10000);
-  const searchPage=Math.max(1,Number(task.searchPage||task.researchRound)||1);let result;if(task.lane==="naver")result=await stagedNaver(row,geo,Math.max(20,Number(params&&params.limit)||20),providerTimeoutMs,searchPage);else if(task.lane==="google")result=await stagedGoogle(row,geo,Math.min(10,Number(params&&params.limit)||10),providerTimeoutMs,searchPage);else result=await stagedSanmaru(event,row,geo,Math.max(18,Number(params&&params.limit)||18),providerTimeoutMs,params&&params.externalFallback===true);
+  const searchPage=Math.max(1,Number(task.searchPage||task.researchRound)||1);
+  let result;
+  if(task.lane==="naver")result=await stagedNaver(row,geo,Math.max(20,Number(params&&params.limit)||20),providerTimeoutMs,searchPage);
+  else if(task.lane==="google"){
+    // One atomic budget across all manual clicks, scheduled rounds and deploys.
+    // Google is never called before this server-side country reservation.
+    const PaidBudget=require('./lib/commerce-country-paid-search-budget.v1');
+    const billKind=plain(params).billingActor==='auto'?'auto':'manual';
+    const keys=googleKeys();
+    if(!keys.key||!keys.cx)result={provider:'google',status:'not_configured',detail:'GOOGLE_API_KEY_or_GOOGLE_CSE_ID_missing',items:[]};
+    else{
+      const reserve=await PaidBudget.reserve(geo.country,billKind);
+      if(!reserve.allowed)result={provider:'google',status:reserve.reason,detail:'유료 검색 한도 또는 API 권한으로 호출하지 않음',items:[]};
+      else{
+        try{
+          result=await stagedGoogle(row,geo,Math.min(10,Number(params&&params.limit)||10),providerTimeoutMs,searchPage);
+        }catch(error){result={provider:'google',status:'request_unknown',detail:'요청 완료 여부 불명확',items:[]};}
+        // Failure to record settlement must remain visible and must not enable
+        // a second paid request. The pending reservation remains safely held.
+        await PaidBudget.settle(geo.country,reserve.token,result.status);
+      }
+    }
+  }else result=await stagedSanmaru(event,row,geo,Math.max(18,Number(params&&params.limit)||18),providerTimeoutMs,params&&params.externalFallback===true);
   let items=researchFirst(result.items||[]).filter(item=>!blockedByAdministratorPolicy(item,geo)).map((item)=>{const compact=compactResearchItem(item);if(compact){compact.payload=Object.assign({},plain(compact.payload),{supplyLane:row.supplyLane});}return compact;}).filter(Boolean);
   let bridged=[];
   if(row.supplyLane==="public_directory_bridge"&&items.length){bridged=await bridgeOfficialDirectory(items[0],geo,row,12);items=items.concat(bridged);}
   return{ok:true,version:VERSION,task:Object.assign({},task),status:result.status,detail:result.detail||null,items,trace:{source:result.provider,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane,status:result.status,detail:result.detail||null,count:items.length,rawReturned:Number(result.rawReturned||0),rejectedBySearchFilter:Number(result.filterRejected||0),
-    directoryBridgeCount:bridged.length,externalFallback:params&&params.externalFallback===true,scopeAuthority:geo.scopeAuthority||"explicit-request",targetCountry:geo.country,selectedCountryBoundToSearch:geo.ignoreRequestGeo===true,timeoutMs:providerTimeoutMs,searchPage}};
+    directoryBridgeCount:bridged.length,externalFallback:false,externalPaidProvidersBlocked:true,scopeAuthority:geo.scopeAuthority||"explicit-request",targetCountry:geo.country,selectedCountryBoundToSearch:geo.ignoreRequestGeo===true,timeoutMs:providerTimeoutMs,searchPage}};
 }
 function prepareSupplierInspectionPool(rawItems,params){
   const geo=stagedGeo(params),limit=Math.max(10,Math.min(100,Number(params&&params.limit)||60)),out=[],seen=new Set(),hostCounts=new Map();

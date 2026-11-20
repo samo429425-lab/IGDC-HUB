@@ -240,6 +240,19 @@
     catch(e){if(Number(e.status)===401){acceptedToken='';acceptedSession=null;await ensureSession(true);return pipelineTracedRequest(endpoint,action,method||'GET',scopedParams,scopedBody||null,acceptedToken,timeoutMs);}throw e;}
   }
 
+  // Read-only bridge for the isolated Distribution budget panel. Reuse
+  // the *existing* administrator token/session; never expose it globally.
+  window.IGDCCountryBudgetBridge={
+    request:function(action,method,params,body){return api(CONTROL,action,method||'GET',params||{},body||null,25000);},
+    scope:function(){return {country:selectedCountry,region:selectedSubdivision||'NATIONWIDE'};},
+    selectedCountries:function(){
+      var master=catalog&&catalog.master||{},active=Array.isArray(master.selectedCountryCodes)?master.selectedCountryCodes:[];
+      if(master.mode==='selected')return active.filter(function(code){return code&&code!=='KP';}).length;
+      if(master.mode==='auto')return countries.filter(function(c){return c&&c.enabled!==false&&c.code!=='KP';}).length;
+      return master.mode==='manual'&&master.selectedCountryCode?1:0;
+    }
+  };
+
   async function geoData(){
     try{var res=await fetch(GEO,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}}),data=await res.json();if(res.ok&&data&&data.ok===true)return data;}catch(_e){}
     try{return await api(CONTROL,'geo','GET',{});}catch(_e){return{ok:true,resolved:false,country:null,region:null,worldRegion:null,source:'unresolved'};}

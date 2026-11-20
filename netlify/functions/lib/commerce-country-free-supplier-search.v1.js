@@ -35,7 +35,10 @@ function safeSupplierUrl(raw){
 }
 function queryForCountry(country, offsetInput){
   const code=txt(country).toUpperCase();
-  const offset=Math.min(96,Math.max(0,Math.floor(Number(offsetInput)||0)));
+  // Each subsequent free-only five-round cycle must inspect fresh pages,
+  // not repeat the same first 120 listed businesses forever. Keep bounded
+  // offsets to protect Wikidata Query Service on large countries.
+  const offset=Math.min(336,Math.max(0,Math.floor(Number(offsetInput)||0)));
   if(!/^[A-Z]{2}$/.test(code))return '';
   // ISO 3166 country codes are literal values in P297. Only declared
   // official website (P856) results of organizations with corporate classes

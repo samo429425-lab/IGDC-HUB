@@ -229,12 +229,17 @@ function create(deps) {
         const until=Math.max(ts(shared[lane]),ts(local[lane]));
         if(until>ts(clock()))merged[lane]=new Date(until).toISOString();
       }
+      // After five persisted free-only rounds, the country MAY use a bounded
+      // Google recovery job if the supplier target remains unfilled and the
+      // server-side auto allowance is still available.
+      const paidRecovery=state.paidRecoveryPending===true;
       const started=await automation.beginResearchJob(ACTOR,input(s,{researchRounds:RESEARCH_ROUNDS_PER_JOB,
-        researchRoundIndex:Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1),
+        researchRoundIndex:paidRecovery?1:Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1),
+        scheduledPaidRecovery:paidRecovery,
         scheduledQueryCycleIndex:Math.max(0,Number(state.researchQueryCycle||0)),
         scheduledProviderCooldowns:merged}));
       if(!txt(started&&started.jobId))throw new Error('supplier_research_start_without_job');
-      return Object.assign(state,{jobId:started.jobId,lastProgressiveSearchCursor:0,lastResearchStage:txt(started.status),phase:['complete','committed'].includes(started.status)?'committing':'researching',rounds:RESEARCH_ROUNDS,startedAt:started.startedAt||clock(),lastResult:'five_round_supplier_research_started_round_'+String(Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1))});
+      return Object.assign(state,{jobId:started.jobId,paidRecoveryPending:false,paidRecoveryRunning:paidRecovery,lastProgressiveSearchCursor:0,lastResearchStage:txt(started.status),phase:['complete','committed'].includes(started.status)?'committing':'researching',rounds:RESEARCH_ROUNDS,startedAt:started.startedAt||clock(),lastResult:paidRecovery?'paid_supplier_fallback_after_five_free_rounds':'five_round_supplier_research_started_round_'+String(Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1))});
     }
     if(state.phase==='researching') {
       if(job.status==='complete'||job.status==='committed')return Object.assign(state,{phase:'committing',lastResult:'supplier_research_complete'});
@@ -383,8 +388,20 @@ function create(deps) {
       // modest quota-safe retry gap; no browser session is needed.
       const supplierTarget=s.countryCode==='US'?200:100;
       const full=qualified>=supplierTarget;
+      if(!full && state.paidRecoveryRunning!==true){
+        const budget=await require('./commerce-country-paid-search-budget.v1').status(s.countryCode);
+        const blockedUntil=Date.parse(txt(budget.googleAccessBlockedUntil))||0;
+        if(budget.auto.remaining>0 && blockedUntil<=ts(clock())){
+          // Every paid attempt is server-reserved separately: 10 lifetime auto
+          // requests maximum per selected country, no automatic reset.
+          return Object.assign(state,{phase:'idle',jobId:null,lastCommittedJobId:committedJobId,
+            roundsCompleted:RESEARCH_ROUNDS,paidRecoveryPending:true,
+            paidRecoveryRunning:false,completedAt:clock(),qualifiedSupplierCount:qualified,
+            lastResult:'free_research_completed_paid_fallback_available'});
+        }
+      }
       const gap=full?SUPPLIER_REFRESH_MS:(have?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS);
-      return Object.assign(state,{phase:'cooldown',lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,
+      return Object.assign(state,{phase:'cooldown',paidRecoveryPending:false,paidRecoveryRunning:false,lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,
         researchQueryCycle:Math.max(0,Number(state.researchQueryCycle||0))+1,completedAt:clock(),sectionFill:fill,
         fillPhase:full?'maintenance':'initial_fill',targetReached:full,supplierTarget,qualifiedSupplierCount:qualified,
         nextCycleAt:new Date(ts(clock())+gap).toISOString(),
