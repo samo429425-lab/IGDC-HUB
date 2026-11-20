@@ -11,7 +11,7 @@ const ACTOR = 'scheduled-automation';
 const HUB = 'country-supplier-staged-auto';
 const LEASE_MS = 3 * 60 * 1000; // Worker timeouts recover without a nine-minute country stall.
 const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Brief concurrency yield, never a country-wide permanent pause.
-const MAX_SCOPES = 4; // Keep concurrent country network/DB writes within one short Netlify scheduled invocation.
+const MAX_SCOPES = AutoPolicy.SCHEDULED_SUPPLIER_SCOPE_BATCH; // Bounded country/DB concurrency within Netlify's 30s deadline.
 const RESEARCH_ROUNDS = 5; // Country scheduled automation always completes five distinct research rounds.
 const GLOBAL_PROVIDER_GUARD_ID='igdc_supplier_provider_cooldown_global_v1';
 const GLOBAL_PROVIDER_BACKOFF_MS=2*60*60*1000; // bounded, not permanent
@@ -61,7 +61,7 @@ function providerOutcomes(result, previousCursor) {
         count:Math.max(0,Number(last.count||0)),rawReturned:Math.max(0,Number(last.returned||last.count||0)),
         rejectedNonSeller:Math.max(0,Number(last.rejectedNonSeller||0)),novel:Math.max(0,Number(last.novel||0)),
         duplicateExistingSkipped:Math.max(0,Number(last.duplicateExistingSkipped||0)),searchCursor:done,
-        elapsedMs:Math.max(0,Number(last.elapsedMs||0)),rawBindings:Math.max(0,Number(last.rawBindings||0)),
+        elapsedMs:Math.max(0,Number(last.elapsedMs||0)),retryAfterMs:Math.max(0,Number(last.retryAfterMs||0)),rawBindings:Math.max(0,Number(last.rawBindings||0)),
         rejected:obj(last.rejected)};
     });
 }
@@ -76,8 +76,10 @@ function eligibleCycleAt(state) {
   // A large unverified lead pool cannot mark the country as complete.
   // Only the policy-qualified count (or the previously confirmed full flag)
   // permits the long maintenance interval.
-  const goal=Number(obj(state).supplierTarget||100);
-  const full=obj(state).targetReached===true || Number(obj(state).qualifiedSupplierCount||0)>=goal;
+  // The US remains a 200-supplier market even when a checkpoint from an
+  // older release incorrectly persisted supplierTarget=100.
+  const goal=txt(obj(obj(state).scope).countryCode).toUpperCase()==='US'?200:100;
+  const full=Number(obj(state).qualifiedSupplierCount||0)>=goal;
   if(full)return saved;
   const gap=Number(obj(state).activeSupplierCount||0)>0?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS;
   return Math.min(saved,finished+gap);
@@ -225,6 +227,7 @@ function create(deps) {
       }
       const started=await automation.beginResearchJob(ACTOR,input(s,{researchRounds:RESEARCH_ROUNDS_PER_JOB,
         researchRoundIndex:Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1),
+        scheduledQueryCycleIndex:Math.max(0,Number(state.researchQueryCycle||0)),
         scheduledProviderCooldowns:merged}));
       if(!txt(started&&started.jobId))throw new Error('supplier_research_start_without_job');
       return Object.assign(state,{jobId:started.jobId,lastProgressiveSearchCursor:0,lastResearchStage:txt(started.status),phase:['complete','committed'].includes(started.status)?'committing':'researching',rounds:RESEARCH_ROUNDS,startedAt:started.startedAt||clock(),lastResult:'five_round_supplier_research_started_round_'+String(Math.min(RESEARCH_ROUNDS,Number(state.roundsCompleted||0)+1))});
@@ -259,7 +262,7 @@ function create(deps) {
         const providerEvent={at:clock(),provider:outcome.provider,status:outcome.status,
           httpStatus:outcome.httpStatus||null,detail:outcome.detail||null,
           found:outcome.count,novel:outcome.novel,rejectedNonSeller:outcome.rejectedNonSeller,
-          cursor:outcome.searchCursor,elapsedMs:outcome.elapsedMs,targetCountry:outcome.targetCountry,
+          cursor:outcome.searchCursor,elapsedMs:outcome.elapsedMs,retryAfterMs:outcome.retryAfterMs,targetCountry:outcome.targetCountry,
           countryBound:outcome.countryBound};
         state.providerHistory=arr(state.providerHistory).concat([providerEvent]).slice(-16);
         const totals=obj(state.providerTotals),current=obj(totals[outcome.provider]);
@@ -274,7 +277,7 @@ function create(deps) {
           // commercial high-volume API. Persist a global minimum spacing for
           // every attempted query (including empty and successful responses).
           await markSharedQuota('wikidata',/^(?:http_429|http_403|http_503|timeout)$/.test(outcome.status)
-            ? 2*60*60*1000 : 2*60*1000);
+            ? Math.max(2*60*1000,Math.min(6*60*60*1000,outcome.retryAfterMs||2*60*60*1000)) : 2*60*1000);
         }
         if(outcome.status==='ok'){
           state.providerSuccesses=Number(state.providerSuccesses||0)+1;
@@ -376,7 +379,8 @@ function create(deps) {
       const supplierTarget=s.countryCode==='US'?200:100;
       const full=qualified>=supplierTarget;
       const gap=full?SUPPLIER_REFRESH_MS:(have?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS);
-      return Object.assign(state,{phase:'cooldown',lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,completedAt:clock(),sectionFill:fill,
+      return Object.assign(state,{phase:'cooldown',lastCommittedJobId:committedJobId,roundsCompleted:completedRounds,
+        researchQueryCycle:Math.max(0,Number(state.researchQueryCycle||0))+1,completedAt:clock(),sectionFill:fill,
         fillPhase:full?'maintenance':'initial_fill',targetReached:full,supplierTarget,qualifiedSupplierCount:qualified,
         nextCycleAt:new Date(ts(clock())+gap).toISOString(),
         lastResult:full?'private_board_full_weekly_twice_maintenance':have?'private_board_underfilled_continue_after_source_retry':'no_verified_supplier_continue_after_provider_retry',committedSuppliers:savedCount,activeSupplierCount:have});

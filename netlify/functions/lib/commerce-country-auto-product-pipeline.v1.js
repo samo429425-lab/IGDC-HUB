@@ -14,7 +14,7 @@ const HUB = 'country-product-ai-private-pipeline';
 const ACTOR = 'scheduled-country-product-ai';
 const LEASE_MS = 3 * 60 * 1000; // Country checkpoint resumes after a killed invocation.
 const RECENT_ADMIN_EDIT_MS = 90 * 1000; // Only a short concurrency yield for administrator edits.
-const MAX_SCOPES = 3; // Fair rotation across active markets; bounded by each country lease.
+const MAX_SCOPES = AutoPolicy.SCHEDULED_PRODUCT_SCOPE_BATCH; // Fair country rotation with bounded DB work.
 // Stage 1 is research -> latest research / private shared candidate ledger.
 // PSOM section placement is deliberately reserved for the administrator's
 // separate approval/section workflow; NEVER run it in this scheduled worker.

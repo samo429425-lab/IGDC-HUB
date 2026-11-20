@@ -1956,6 +1956,28 @@ function expandSupplierResearchRounds(planInput,scopeInput,roundsInput){
   return plan;
 }
 
+// Scheduled research rotates distinct, COUNTRY-LOCAL queries instead of spending
+// several days on repetitive zero-yield Sanmaru tasks. The entire configured
+// base plan is still revisited across the five independent persistent rounds.
+// Administrator/manual plans are unchanged. No paid Google lane is activated.
+function scheduledSupplierSearchTasks(tasksInput,roundIndex,budgetInput){
+  const tasks=array(tasksInput).map(x=>Object.assign({},plain(x))),
+    budget=Math.max(1,Math.min(12,Math.floor(Number(budgetInput)||8))),
+    round=Math.max(1,Math.floor(Number(roundIndex)||1));
+  if(tasks.length<=budget)return tasks;
+  // Reserve up to two seats for explicit operator-priority research; these are
+  // already in the operator's private search plan, never generated URLs.
+  const priority=tasks.filter(t=>/administrator-policy-priority/.test(text(t.origin))).slice(0,2);
+  const others=tasks.filter(t=>!priority.includes(t));
+  if(!others.length)return priority.slice(0,budget);
+  const remaining=budget-priority.length;
+  // Rotating rather than always picking the first N ensures that country and
+  // category variations eventually have a chance even in empty-result markets.
+  const start=((round-1)*remaining)%others.length,selected=[];
+  for(let i=0;i<Math.min(remaining,others.length);i++)selected.push(others[(start+i)%others.length]);
+  return priority.concat(selected);
+}
+
 // Allow the autonomous scheduler to persist each of the five distinct search
 // rounds separately. Administrator runs retain the existing 1–5 round plan.
 function selectSingleSupplierResearchRound(planInput,roundInput){
@@ -2038,6 +2060,10 @@ async function beginResearchJob(actorId, input, event) {
   // A scheduled provider cooldown must not suppress the independent Sanmaru
   // source, or alter a human-initiated research plan. These values were missing
   // in earlier deployed builds, causing ReferenceError on each NEW job.
+  // Persisted across successive five-round cycles: no supplier category in
+  // a large country plan is permanently starved by always selecting query 1.
+  const scheduledQueryCycleIndex=text(actorId)==='scheduled-automation'
+    ? Math.max(0,Math.floor(Number(raw.scheduledQueryCycleIndex)||0)):0;
   const cooldowns=text(actorId)==="scheduled-automation"?plain(raw.scheduledProviderCooldowns):{};
   const suppressedScheduledLanes=["google","naver"].filter(lane=>Date.parse(text(cooldowns[lane]))>Date.now());
   // Zero-new-spend policy: scheduled supplier research must not consume a
@@ -2047,11 +2073,14 @@ async function beginResearchJob(actorId, input, event) {
   // environment override could unexpectedly activate billable Google calls.
   // It remains available to the existing human/manual workflow only.
   const noBillableSearch=text(actorId)==="scheduled-automation";
-  const searchPlanTasks=array(plan.tasks).filter(task=>
+  const enabledTasks=array(plan.tasks).filter(task=>
     !suppressedScheduledLanes.includes(lower(plain(task).lane)) &&
     !(noBillableSearch && lower(plain(task).lane)==="google"));
+  const searchPlanTasks=noBillableSearch?
+    scheduledSupplierSearchTasks(enabledTasks,researchRoundIndex+5*scheduledQueryCycleIndex,
+      AutoResearchPolicy.SCHEDULED_SUPPLIER_QUERIES_PER_ROUND):enabledTasks;
   const initialStatus=newCandidateTarget<=0?"complete":(searchPlanTasks.length?"searching":"inspecting");
-  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchRoundIndex,researchSignature,selectorInput,scheduledFallbackCooldowns:cooldowns,liveFallbackCallCount:0,liveFallbackDisabled:false,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds,scheduledProviderCooldowns:suppressedScheduledLanes,noBillableSearch,googleAutoDisabledForCost:noBillableSearch}),searchTasks:newCandidateTarget>0?searchPlanTasks:[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?searchPlanTasks.length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
+  const job={schema:RESEARCH_JOB_SCHEMA,version:VERSION,jobId:"country_research_"+sha256(now+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20),previousJobId:text(existing&&existing.jobId)||null,newRunToken:text(raw.newRunToken)||null,status:initialStatus,startedAt:now,createdAt:now,finishedAt:newCandidateTarget<=0?now:null,scope,effective:Object.assign({},effective,{researchRounds}),researchRounds,researchRoundIndex,researchSignature,selectorInput,scheduledFallbackCooldowns:cooldowns,scheduledQueryCycleIndex,liveFallbackCallCount:0,liveFallbackDisabled:false,researchPlanVersion:plan.researchPlanVersion||plan.version||null,planRows:array(plan.rows),planDiagnostics:Object.assign({},plain(plan.diagnostics),{manualPinnedSuppliers:manualSeeds.length,cumulativeResearch:true,preserveExistingSuppliers:true,preserveExistingHoldingSuppliers:true,preserveExistingBlockedSuppliers:true,skipDuplicateSupplierResearch:true,preservedExistingSupplierCount:preservedCandidates.length,preservedHoldingSupplierCount:preservedHolding.length,preservedBlockedSupplierCount:preservedBlocked.length,targetTotalCandidates:targetTotal,perRunCandidateLimit,newCandidateTarget,researchRounds,scheduledProviderCooldowns:suppressedScheduledLanes,noBillableSearch,googleAutoDisabledForCost:noBillableSearch,scheduledSearchTaskBudget:noBillableSearch?AutoResearchPolicy.SCHEDULED_SUPPLIER_QUERIES_PER_ROUND:null,scheduledQueryCycleIndex,selectedSearchTasks:searchPlanTasks.length,totalSearchPlanTasks:enabledTasks.length}),searchTasks:newCandidateTarget>0?searchPlanTasks:[],searchCursor:0,blockedSupplierKeys,knownSupplierKeys:Array.from(knownSupplierKeys),manualSupplierCount:manualSeeds.length,manualOnly:false,preservedCandidates,newCandidateTarget,perRunCandidateLimit,targetTotalCandidates:targetTotal,rawCandidates:mergeResearchItems([],novelSeeds,SUPPLIER_RAW_LIMIT,blockedSupplierKeys),supplierHoldingCandidates:mergeSupplierHolding(preservedHolding,novelSeeds,blockedSupplierKeys,300),supplierBlockedCandidates:mergeSupplierBlocked(preservedBlocked,novelSeeds,blockedSupplierKeys,300),inspectionPool:[],inspectCursor:0,inspectedCandidates:[],reviewPool:[],rankQueue:[],rankCursor:0,rankAttempt:0,rankedEntries:[],newCandidates:[],candidates:preservedCandidates,trace:[{source:"research-job",status:newCandidateTarget<=0?"target_already_filled":"cumulative_started",at:now,queries:array(plan.rows).length,tasks:newCandidateTarget>0?searchPlanTasks.length:0,snapshotSeeds:array(plan.seeds).length,manualPinnedSeeds:manualSeeds.length,preservedExistingSuppliers:preservedCandidates.length,preservedHoldingSuppliers:preservedHolding.length,preservedBlockedSuppliers:preservedBlocked.length,newCandidateTarget,researchRounds,targetTotalCandidates:targetTotal,duplicateResearchSkipped:true}],errors:[],lastError:null,marketSignals:{active:context.marketSignalPlan.active===true,categoryWeights:plain(context.marketSignalPlan.categoryWeights)},policyControl:{active:context.policyControl&&context.policyControl.active===true,categoryWeights:plain(context.policyControl&&context.policyControl.categoryWeights),priorityDirections:array(context.policyControl&&context.policyControl.priorityDirections),avoidDirections:array(context.policyControl&&context.policyControl.avoidDirections),manualPriorityTargets:array(context.policyControl&&context.policyControl.manualPriorityTargets),manualBlockedTargets:array(context.policyControl&&context.policyControl.manualBlockedTargets),finalDecision:text(context.policyControl&&context.policyControl.finalDecision)}};
   if(newCandidateTarget>0&&!job.searchTasks.length){job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,Object.assign({},selectorInput,{limit:Math.min(SUPPLIER_INSPECTION_LIMIT,Math.max(80,newCandidateTarget*4))}));job.status="inspecting";}
   if (existing && text(existing.jobId) !== text(job.jobId)) await archiveSupplierResearchCycle(existing, actorId);
   await saveResearchJob(job,actorId);return supplierResearchStepView(job,actorId);
@@ -2092,6 +2121,24 @@ async function advanceResearchJob(actorId, input, event) {
   const selectorInput = Object.assign({}, plain(job.selectorInput), { country: scope.country, region: scope.region === "NATIONWIDE" ? undefined : scope.region });
   try {
     if (job.status === "searching") {
+      // Older deployed jobs may contain dozens of outstanding searches from
+      // the pre-budget plan. Keep the exact completed prefix/cursor and all
+      // already found candidates, but narrow only the UNEXECUTED tail once.
+      // This makes the new bounded research policy effective on deployment
+      // without deleting research jobs or resetting manual work.
+      if(text(actorId)==='scheduled-automation' &&
+         plain(job.planDiagnostics).scheduledPendingRebudgetApplied!==true){
+        const cursor=Math.max(0,Math.min(array(job.searchTasks).length,Number(job.searchCursor||0)));
+        const prefix=array(job.searchTasks).slice(0,cursor),pending=array(job.searchTasks).slice(cursor),
+          selected=scheduledSupplierSearchTasks(pending,Number(job.researchRoundIndex||1)+5*Number(job.scheduledQueryCycleIndex||0),
+            AutoResearchPolicy.SCHEDULED_SUPPLIER_QUERIES_PER_ROUND);
+        if(selected.length<pending.length)job.searchTasks=prefix.concat(selected);
+        job.planDiagnostics=Object.assign({},plain(job.planDiagnostics),{
+          scheduledPendingRebudgetApplied:true,
+          scheduledPendingTasksBefore:pending.length,
+          scheduledPendingTasksAfter:selected.length,
+          preservedSearchCursor:cursor});
+      }
       const task = array(job.searchTasks)[Number(job.searchCursor || 0)];
       if (!task) {
         // When all real search lanes were empty and a shared public-query
@@ -2123,7 +2170,7 @@ async function advanceResearchJob(actorId, input, event) {
           job.trace=array(job.trace).concat([{at:iso(),source:'wikidata',status:text(alternative.status),
             count:safeItems.length,returned:safeItems.length,novel:novelItems.length,
             rawBindings:Number(alternative.rawBindings||0),rejected:plain(alternative.rejected),
-            elapsedMs:Number(alternative.elapsedMs||0),offset,deferredRecovered:true,
+            elapsedMs:Number(alternative.elapsedMs||0),offset,deferredRecovered:true,retryAfterMs:Number(alternative.retryAfterMs||0),httpStatus:Number(alternative.httpStatus||0),
             duplicateExistingSkipped:Math.max(0,safeItems.length-novelItems.length)}]).slice(-240);
         }
         job.inspectionPool=RegionalSelector.prepareSupplierInspectionPool(job.rawCandidates,
@@ -2157,7 +2204,7 @@ async function advanceResearchJob(actorId, input, event) {
             job.deferredFreeFallback=false;job.freeFallbackRetryAt=null;
             liveTrace={at:iso(),source:'wikidata',status:text(alternative.status),count:searchItems.length,
               query:text(task.query).slice(0,300),fallbackFor:'sanmaru',publicDirectoryOnly:true,
-              offset,realHttpSearch:true,rawBindings:Number(alternative.rawBindings||0),
+              offset,realHttpSearch:true,retryAfterMs:Number(alternative.retryAfterMs||0),httpStatus:Number(alternative.httpStatus||0),rawBindings:Number(alternative.rawBindings||0),
               rejected:plain(alternative.rejected),elapsedMs:Number(alternative.elapsedMs||0)};
             if(['http_401','http_403','http_422','http_429','not_configured'].includes(lower(alternative.status)))
               job.liveFallbackDisabled=true;

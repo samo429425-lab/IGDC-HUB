@@ -47,7 +47,7 @@ function queryForCountry(country, offsetInput){
     `  { SELECT DISTINCT ?company ?website WHERE {\n`+
     `      ?country wdt:P297 "${code}" .\n`+
     `      ?company wdt:P17 ?country ; wdt:P31 ?class ; wdt:P856 ?website .\n`+
-    `      VALUES ?class { wd:Q4830453 wd:Q783794 wd:Q6881511 }\n`+
+    `      VALUES ?class { wd:Q4830453 wd:Q783794 wd:Q6881511 wd:Q2865305 wd:Q567521 wd:Q4539 wd:Q99536263 wd:Q507619 wd:Q4382945 wd:Q1252971 }\n`+
     `    } ORDER BY ?company LIMIT 24 OFFSET ${offset} }\n`+
     `  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }\n`+
     `}`;
@@ -72,7 +72,14 @@ async function search(task,scope,opts){
       'Accept':'application/sparql-results+json',
       'User-Agent':'IGDC-CountrySupplierResearch/1.0 (https://igdcglobal.com; rate-limited, no-paid-search)'
     }});
-    if(!response.ok)return {provider:'wikidata',status:'http_'+response.status,count:0,items:[],elapsedMs:Date.now()-started,httpStatus:response.status};
+    if(!response.ok){
+      const header=txt(response.headers&&response.headers.get&&response.headers.get('retry-after'));
+      let retryAfterMs=0;
+      if(/^\d{1,8}$/.test(header))retryAfterMs=Number(header)*1000;
+      else if(header){const at=Date.parse(header);if(Number.isFinite(at))retryAfterMs=at-Date.now();}
+      return {provider:'wikidata',status:'http_'+response.status,count:0,items:[],elapsedMs:Date.now()-started,
+        httpStatus:response.status,retryAfterMs:Math.max(0,Math.min(6*60*60*1000,retryAfterMs))};
+    }
     const payload=await response.json();
     const rows=Array.isArray(payload&&payload.results&&payload.results.bindings)?payload.results.bindings:[];
     const found=[],seen=new Set(),rejects={invalidUrl:0,missingName:0,invalidEntity:0,duplicateUrl:0};
