@@ -200,7 +200,10 @@ function makePipeline(deps) {
     if(!prior)throw new Error('product_auto_takeover_checkpoint_unavailable');
     if(ts(obj(prior.rule).leaseUntil)>ts(clock()))throw Object.assign(new Error('상품 자동 조사 진행 중입니다. 단계 종료 후 다시 선택해 주세요.'),{statusCode:409});
     const t=new Date(Math.max(ts(clock()),ts(prior.updated_at)+1)).toISOString();
-    const next=Object.assign({},obj(prior.rule),{autoTakeover:enabled===true,operatorAutoPause:enabled!==true,phase:enabled===true&&obj(prior.rule).phase==='manual_job_preserved'?'idle':obj(prior.rule).phase,changedAt:t,changedBy:txt(actor)});
+    const next=Object.assign({},obj(prior.rule),{autoTakeover:enabled===true,operatorAutoPause:enabled!==true,phase:enabled===true&&obj(prior.rule).phase==='manual_job_preserved'?'idle':obj(prior.rule).phase,
+      // An operator's explicit new consent immediately rechecks the EXACT
+      // paused runtime and saved job id; it never silently grants archival.
+      nextRetryAt:null,retrySupplierAt:null,changedAt:t,changedBy:txt(actor)});
     const rows=arr(await store.update('gslot_policies','id=eq.'+encodeURIComponent(idFor(scope))+'&updated_at=eq.'+encodeURIComponent(txt(prior.updated_at)),{rule:next,updated_at:t,updated_by:txt(actor)}));
     if(rows.length!==1)throw Object.assign(new Error('상품 자동화 전환 설정 저장 충돌'),{statusCode:409});
     return{ok:true,scope:scopeKey(scope),autoTakeover:next.autoTakeover,manualProductsPreserved:true,automaticFrontMatch:false};
@@ -223,7 +226,12 @@ function makePipeline(deps) {
       return Object.assign(state,{phase:'manual_job_preserved',
         lastResult:state.autoTakeover===true?'manual_runtime_checkpoint_mismatch_no_auto_archival':'research_manually_paused_preserved',
         protectedJobId:checkpoint.jobId,manualBlock:{jobOwner:checkpoint.updatedBy||null,
-          jobStatus:checkpoint.status||null,paused:true,requiresSavedMatchingRuntime:true}});
+          jobStatus:checkpoint.status||null,paused:true,requiresSavedMatchingRuntime:true,
+          takeoverSaved:state.autoTakeover===true,notArchived:true},
+        // A manual checkpoint is not a provider outage. Recheck periodically,
+        // but do not consume a 249-market scheduler slot every two minutes.
+        nextRetryAt:new Date(ts(clock())+15*60*1000).toISOString(),
+        retrySupplierAt:txt(scope.supplierLastRunAt)||null});
     // Unlike supplier research, the product working job uses one shared key
     // for manual and scheduled runs. A scheduled worker must NEVER resume a
     // human-owned in-progress job or stage its candidate queue. Even after the
@@ -239,7 +247,9 @@ function makePipeline(deps) {
         return Object.assign(state,{phase:'manual_job_preserved',
           lastResult:'administrator_product_job_preserved',protectedJobId:checkpoint.jobId,
           manualBlock:{jobOwner:checkpoint.updatedBy||null,jobStatus:checkpoint.status||null,
-            paused:checkpoint.paused===true,requiresOperatorCompletion:true}});
+            paused:checkpoint.paused===true,requiresOperatorCompletion:true,notArchived:true},
+          nextRetryAt:new Date(ts(clock())+15*60*1000).toISOString(),
+          retrySupplierAt:txt(scope.supplierLastRunAt)||null});
       }
       state.jobId=null;state.phase='idle';state.lastStagedResultCount=0;
       state.pendingPlacementIds=[];state.reconcileCursor='';
@@ -448,6 +458,17 @@ function makePipeline(deps) {
           update.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
           update.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
           update.lastErrorReason=reason.slice(0,180);
+        } else if(/PAUSED_MANUAL_RESEARCH_REQUIRES_SAVED_TAKEOVER_AND_SAME_RUNTIME_JOB|AUTO_TAKEOVER_OLD_MANUAL_JOB_STILL_ACTIVE/.test(reason)){
+          // Fail closed. Never overwrite the saved manual job; require the
+          // current persisted operator consent AND matching paused runtime.
+          update.phase='manual_job_preserved';
+          update.lastResult='manual_runtime_checkpoint_mismatch_no_auto_archival';
+          update.nextRetryAt=new Date(ts(clock())+15*60*1000).toISOString();
+          update.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
+          update.manualBlock=Object.assign({},obj(update.manualBlock),{notArchived:true,
+            required:'saved_auto_takeover_and_exact_paused_runtime_job'});
+          update.lastErrorReason=reason.slice(0,180);
+          result=update.lastResult;
         } else if(/timeout|fetch failed|econnreset|eai_again|502|503|504/i.test(reason)){
           update.nextRetryAt=new Date(ts(clock())+2*60*1000).toISOString();
           update.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
@@ -459,7 +480,8 @@ function makePipeline(deps) {
     // Stop is never a reset, including if a selected-country pause happens
     // between two DB calls. Keep pending candidate IDs and research cursors.
     await release(scope,claimed,update);
-    return { scope:scopeKey(scope),ok:result!=='step_failed_checkpoint_preserved',phase:txt(update.phase),jobId:txt(update.jobId)||null,result,
+    return { scope:scopeKey(scope),ok:result!=='step_failed_checkpoint_preserved'&&result!=='manual_runtime_checkpoint_mismatch_no_auto_archival',
+      phase:txt(update.phase),jobId:txt(update.jobId)||null,result,
       placed:Number(update.placed||0),privateCandidatesStaged:Number(update.privateCandidatesStaged||0),
       awaitingAdminSectionReview:update.awaitingAdminSectionReview===true,
       reviewRequired:Number(update.reviewRequired||0),pendingPlacement:arr(update.pendingPlacementIds).length,
@@ -467,6 +489,7 @@ function makePipeline(deps) {
       targetReached:update.targetReached===true,automaticPsomPlacement:false,publicPublication:false };
   }
   async function run() {
+    const runStarted=Date.now();
     const plan=await automation.autoProductScopes();
     if(!arr(plan.scopes).length)return {ok:true,version:VERSION,masterMode:plan.mode,activeScopes:0,processed:0,results:[],safety:{stoppedDoesNotDelete:true,publicPublication:false}};
     const previous=new Map((await rows()).map(row=>[txt(row.id),obj(row.rule)]));
@@ -494,7 +517,8 @@ function makePipeline(deps) {
     const results=settled.map((item,index)=>item.status==='fulfilled'?item.value:{
       scope:scopeKey(choices[index]),ok:false,error:txt(item.reason&&item.reason.message||item.reason)
     });
-    return {ok:results.every(r=>r.ok!==false),version:VERSION,masterMode:plan.mode,activeScopes:plan.scopes.length,
+    return {ok:results.every(r=>r.ok!==false),version:VERSION,elapsedMs:Date.now()-runStarted,
+      masterMode:plan.mode,activeScopes:plan.scopes.length,
       eligibleScopes:eligible.length,deferredScopes:Math.max(0,eligible.length-choices.length),
       batchLimit:MAX_SCOPES,processed:results.length,results,safety:{countryIndependent:true,priorResearchAndAssignmentsPreserved:true,automaticPrivateCandidateStaging:true,automaticPsomPlacement:false,automaticFrontMatch:false,automaticPublication:false,administratorApprovalRequired:true}};
   }

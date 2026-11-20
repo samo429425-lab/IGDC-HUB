@@ -7,7 +7,7 @@ exports.config = { schedule:'*/2 * * * *' };
 exports.handler = async function () {
   try {
     const result=await Pipeline.run();
-    console.info('[IGDC_PRODUCT_AUTO]',JSON.stringify({active:result.activeScopes,processed:result.processed,
+    console.info('[IGDC_PRODUCT_AUTO]',JSON.stringify({active:result.activeScopes,elapsedMs:result.elapsedMs,eligible:result.eligibleScopes,deferred:result.deferredScopes,processed:result.processed,
       scopes:(result.results||[]).map(row=>({scope:row.scope,ok:row.ok!==false,phase:row.phase,
         result:row.result,skipped:row.skipped||null,privateSaved:row.privateCandidatesStaged,review:row.awaitingAdminSectionReview}))}));
     return json(result.ok===false?500:200,result);

@@ -59,7 +59,8 @@ function providerOutcomes(result, previousCursor) {
         detail:safeProviderDetail(last.detail),targetCountry:txt(last.targetCountry).toUpperCase()||null,
         countryBound:last.selectedCountryBoundToSearch===true?true:last.selectedCountryBoundToSearch===false?false:null,
         count:Math.max(0,Number(last.count||0)),rawReturned:Math.max(0,Number(last.returned||last.count||0)),
-        rejectedNonSeller:Math.max(0,Number(last.rejectedNonSeller||0)),novel:Math.max(0,Number(last.novel||0)),
+        rejectedNonSeller:Math.max(0,Number(last.rejectedNonSeller||0)),
+        rejectedBySearchFilter:Math.max(0,Number(last.rejectedBySearchFilter||0)),novel:Math.max(0,Number(last.novel||0)),
         duplicateExistingSkipped:Math.max(0,Number(last.duplicateExistingSkipped||0)),searchCursor:done,
         elapsedMs:Math.max(0,Number(last.elapsedMs||0)),retryAfterMs:Math.max(0,Number(last.retryAfterMs||0)),rawBindings:Math.max(0,Number(last.rawBindings||0)),
         rejected:obj(last.rejected)};
@@ -185,8 +186,10 @@ function create(deps) {
     // search click may briefly yield to the human, but cannot keep a country
     // blocked forever. Supplier-level holds/pins still prevail downstream.
     if(job.jobId && job.updatedBy!==ACTOR){
-      if(job.manualOnly===true)return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,lastResult:'explicit_manual_only_job_preserved'});
-      if(await humanResearchIsActive(s))return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,lastResult:'recent_administrator_edit_yield_auto_retry'});
+      if(job.manualOnly===true)return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,
+        nextRetryAt:new Date(ts(clock())+15*60*1000).toISOString(),lastResult:'explicit_manual_only_job_preserved'});
+      if(await humanResearchIsActive(s))return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,
+        nextRetryAt:new Date(ts(clock())+2*60*1000).toISOString(),lastResult:'recent_administrator_edit_yield_auto_retry'});
       if(job.status==='committed'){
         // The administrator already completed this historical job. Its saved
         // candidates and decisions remain in the ledger; start a fresh round.
@@ -195,7 +198,8 @@ function create(deps) {
         // Never silently take over an unfinished administrator checkpoint.
         // An explicit takeover flag allows continuation only after the
         // administrator has authorized it; otherwise the same job is retained.
-        if(state.autoTakeover!==true)return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,lastResult:'administrator_research_checkpoint_protected'});
+        if(state.autoTakeover!==true)return Object.assign(state,{phase:'manual_preserved',protectedJobId:job.jobId,
+          nextRetryAt:new Date(ts(clock())+15*60*1000).toISOString(),lastResult:'administrator_research_checkpoint_protected'});
         state.jobId=job.jobId;
         state.phase=job.status==='complete'?'committing':'researching';
         state.lastProgressiveSearchCursor=0;
@@ -262,6 +266,7 @@ function create(deps) {
         const providerEvent={at:clock(),provider:outcome.provider,status:outcome.status,
           httpStatus:outcome.httpStatus||null,detail:outcome.detail||null,
           found:outcome.count,novel:outcome.novel,rejectedNonSeller:outcome.rejectedNonSeller,
+          rejectedBySearchFilter:outcome.rejectedBySearchFilter,
           cursor:outcome.searchCursor,elapsedMs:outcome.elapsedMs,retryAfterMs:outcome.retryAfterMs,targetCountry:outcome.targetCountry,
           countryBound:outcome.countryBound};
         state.providerHistory=arr(state.providerHistory).concat([providerEvent]).slice(-16);
@@ -438,12 +443,14 @@ function create(deps) {
     const prior=await rowFor(s)||await ensure(s);if(!prior)throw new Error('supplier_auto_takeover_checkpoint_unavailable');
     if(ts(obj(prior.rule).leaseUntil)>ts(clock()))throw Object.assign(new Error('해당 국가 자동화 작업이 진행 중입니다. 단계 종료 후 다시 선택해 주세요.'),{statusCode:409});
     const t=new Date(Math.max(ts(clock()),ts(prior.updated_at)+1)).toISOString();
-    const next=Object.assign({},obj(prior.rule),{autoTakeover:enabled===true,operatorAutoPause:enabled!==true,phase:enabled===true&&obj(prior.rule).phase==='manual_preserved'?'idle':obj(prior.rule).phase,changedBy:txt(actor),changedAt:t});
+    const next=Object.assign({},obj(prior.rule),{autoTakeover:enabled===true,operatorAutoPause:enabled!==true,phase:enabled===true&&obj(prior.rule).phase==='manual_preserved'?'idle':obj(prior.rule).phase,
+      nextRetryAt:null,changedBy:txt(actor),changedAt:t});
     const saved=arr(await store.update('gslot_policies','id=eq.'+encodeURIComponent(idFor(s))+'&updated_at=eq.'+encodeURIComponent(txt(prior.updated_at)),{rule:next,updated_at:t,updated_by:txt(actor)}));
     if(saved.length!==1)throw Object.assign(new Error('자동화 전환 상태 저장 충돌'),{statusCode:409});
     return{ok:true,scope:key(s),autoTakeover:next.autoTakeover,manualDataPreserved:true,automaticFrontMatch:false};
   }
   async function run() {
+    const runStarted=Date.now();
     const plan=await automation.autoProductScopes();const active=arr(plan.scopes);
     if(!active.length)return{ok:true,version:VERSION,activeScopes:0,processed:0,results:[]};
     const previous=new Map((await rows()).map(x=>[txt(x.id),obj(x.rule)]));
@@ -456,7 +463,7 @@ function create(deps) {
     // another country's research or an administrator selection.
     const settled=await Promise.allSettled(choices.map(runScope));
     const results=settled.map((r,i)=>r.status==='fulfilled'?r.value:{scope:key(choices[i]),ok:false,error:txt(r.reason&&r.reason.message||r.reason)});
-    return{ok:results.every(r=>r.ok!==false),version:VERSION,activeScopes:active.length,
+    return{ok:results.every(r=>r.ok!==false),version:VERSION,elapsedMs:Date.now()-runStarted,activeScopes:active.length,
       eligibleScopes:eligible.length,deferredScopes:Math.max(0,eligible.length-choices.length),
       batchLimit:MAX_SCOPES,processed:results.length,results,safety:{humanJobProtected:true,countryIndependent:true,researchRounds:RESEARCH_ROUNDS,noPublicFrontMatch:true}};
   }

@@ -894,11 +894,12 @@ async function stagedSanmaru(event,row,geo,limit,timeoutMs,externalFallback){
   try{
     const wait=boundedResearchTimeout(timeoutMs,7500,5000,10000);
     const result=await withTimeout(Sanmaru.runEngine(scopedEvent,{q:row.query,query:row.query,country:geo.country,targetCountry:geo.country,queryCountry:geo.country,region:geo.region||undefined,limit:Math.min(20,limit||18),candidatePool:allowExternal?72:48,language:row.locale,locale:row.locale,type:"site",channel:"commerce",entity:"supplier",external:allowExternal?"force":"off",directExternal:allowExternal?"1":"0",noExternal:allowExternal?"0":"1",noMedia:"1",deep:allowExternal?"1":"0",timeoutMs:wait,from:"regional-brokerage-autoselector-staged",source:"regional-brokerage-autoselector-staged",regionalBrokerageSupply:"1",scopeAuthority:geo.scopeAuthority||"explicit-request",ignoreRequestGeo:geo.ignoreRequestGeo===true,noAnalytics:"1",noRevenue:"1",readOnly:"1",noWrite:"1",noSync:"1",writeMode:"readonly"}),wait+800);
-    const items=researchFirst(extractItems(result));
+    const rawItems=extractItems(result),items=researchFirst(rawItems);
     const blocked=String(result&&result.status||'').toLowerCase()==='blocked';
     const reason=String(result&&result.meta&&result.meta.reason||'').slice(0,100);
     return {provider:'sanmaru',status:blocked?(reason==='rate_limit'?'rate_limit':'blocked'):items.length?'ok':'empty',
-      detail:blocked?reason:allowExternal?'external_fallback_enabled':null,items};
+      detail:blocked?reason:allowExternal?'external_fallback_enabled':null,items,
+      rawReturned:rawItems.length,filterRejected:Math.max(0,rawItems.length-items.length)};
   }catch(error){return{provider:'sanmaru',status:providerErrorCode(error),detail:providerErrorDetail(error),items:[]};}
 }
 function directoryBridgeCandidate(label,url,sourceUrl,geo,row){
@@ -936,7 +937,8 @@ async function searchSupplierResearchStep(event,params){
   let items=researchFirst(result.items||[]).filter(item=>!blockedByAdministratorPolicy(item,geo)).map((item)=>{const compact=compactResearchItem(item);if(compact){compact.payload=Object.assign({},plain(compact.payload),{supplyLane:row.supplyLane});}return compact;}).filter(Boolean);
   let bridged=[];
   if(row.supplyLane==="public_directory_bridge"&&items.length){bridged=await bridgeOfficialDirectory(items[0],geo,row,12);items=items.concat(bridged);}
-  return{ok:true,version:VERSION,task:Object.assign({},task),status:result.status,detail:result.detail||null,items,trace:{source:result.provider,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane,status:result.status,detail:result.detail||null,count:items.length,directoryBridgeCount:bridged.length,externalFallback:params&&params.externalFallback===true,scopeAuthority:geo.scopeAuthority||"explicit-request",targetCountry:geo.country,selectedCountryBoundToSearch:geo.ignoreRequestGeo===true,timeoutMs:providerTimeoutMs,searchPage}};
+  return{ok:true,version:VERSION,task:Object.assign({},task),status:result.status,detail:result.detail||null,items,trace:{source:result.provider,query:row.query,queryLocale:row.locale,queryOrigin:row.origin,supplyLane:row.supplyLane,status:result.status,detail:result.detail||null,count:items.length,rawReturned:Number(result.rawReturned||0),rejectedBySearchFilter:Number(result.filterRejected||0),
+    directoryBridgeCount:bridged.length,externalFallback:params&&params.externalFallback===true,scopeAuthority:geo.scopeAuthority||"explicit-request",targetCountry:geo.country,selectedCountryBoundToSearch:geo.ignoreRequestGeo===true,timeoutMs:providerTimeoutMs,searchPage}};
 }
 function prepareSupplierInspectionPool(rawItems,params){
   const geo=stagedGeo(params),limit=Math.max(10,Math.min(100,Number(params&&params.limit)||60)),out=[],seen=new Set(),hostCounts=new Map();

@@ -47,7 +47,7 @@ function queryForCountry(country, offsetInput){
     `  { SELECT DISTINCT ?company ?website WHERE {\n`+
     `      ?country wdt:P297 "${code}" .\n`+
     `      ?company wdt:P17 ?country ; wdt:P31 ?class ; wdt:P856 ?website .\n`+
-    `      VALUES ?class { wd:Q4830453 wd:Q783794 wd:Q6881511 wd:Q2865305 wd:Q567521 wd:Q4539 wd:Q99536263 wd:Q507619 wd:Q4382945 wd:Q1252971 }\n`+
+    `      VALUES ?class { wd:Q4830453 wd:Q783794 wd:Q6881511 wd:Q2865305 wd:Q567521 wd:Q4539 wd:Q99536263 wd:Q507619 wd:Q4382945 wd:Q1252971 wd:Q43229 }\n`+
     `    } ORDER BY ?company LIMIT 24 OFFSET ${offset} }\n`+
     `  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . }\n`+
     `}`;
@@ -87,7 +87,7 @@ async function search(task,scope,opts){
       const official=safeSupplierUrl(row&&row.website&&row.website.value);
       const name=txt(row&&row.companyLabel&&row.companyLabel.value).replace(/<[^>]*>/g,' ').slice(0,180);
       if(!official){rejects.invalidUrl++;continue;}
-      if(!name){rejects.missingName++;continue;}
+      if(!name||/^Q\d+$/.test(name)){rejects.missingName++;continue;}
       if(seen.has(official)){rejects.duplicateUrl++;continue;}
       const source=txt(row&&row.company&&row.company.value);
       // The origin remains attached to a discovered candidate. This is not
