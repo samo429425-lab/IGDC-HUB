@@ -47,6 +47,7 @@ const HUB_TARGETS = Object.freeze([
   ["maru-windows", "MARU Media Player for Windows", "/maru-download.html", 96],
   ["support", "IGDC Help & Download Center", "/support.html", 70],
   ["maru-android", "MARU Media Player for Android", "/maru-android.html", 96],
+  ["player-selection-guide", "MARU Media Player Windows and Android Selection Guide", "/igdc-amplify-maru.html", 94],
   ["maru-capture", "MARU Capture Windows Screen Capture", "/maru-download.html#captureDownload", 95],
   ["verified-market-directory", "IGDC Global Verified Country Product Directory", "/.netlify/functions/public-commerce-search-index", 91]
 ]);
@@ -339,8 +340,9 @@ function marketCommerceTargets(commerce){
 function hubTargets(){
   const doc=plain(readJson("netlify/functions/data/search-exposure-maru-pages.json"));
   const changed=plain(doc.pages);
+  const configured=plain(plain(readJson("netlify/functions/data/igdc-maru-organic-search.config.json")).seoPageUpdatedAt);
   return HUB_TARGETS.map(([id,title,route,priority])=>{
-    const raw=id.startsWith("maru-")?text(changed[id]):"";
+    const raw=id.startsWith("maru-")?text(changed[id]||configured[id]):"";
     const parsed=Date.parse(raw);
     const updatedAt=raw&&Number.isFinite(parsed)&&parsed<=Date.now()+300000?new Date(parsed).toISOString():"";
     return {kind:id.startsWith("maru-")?"software":"hub",id,title,url:abs(route),priority,commercialPriority:0,rankingScore:priority,updatedAt,keywords:uniq([title,"IGDC Global","IGDC Platform","MARU Platform"])};

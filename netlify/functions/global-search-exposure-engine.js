@@ -32,9 +32,10 @@ const SKIP=new Set(["disabled","noop","sitemap-managed","crawl-managed"]);
 function summary(jobs){
  const submitted=jobs.filter(x=>x.status==="submitted").length;
  const partial=jobs.filter(x=>x.status==="partial-failure").length;
- const failed=jobs.filter(x=>x.status==="failed").length;
+  const pending=jobs.filter(x=>x.status==="pending-verification").length;
+  const failed=jobs.filter(x=>x.status==="failed").length;
  const skipped=jobs.filter(x=>SKIP.has(x.status)).length;
- return{submitted,partial,failed,skipped,submissionAdapters:jobs.length};
+  return{submitted,pending,partial,failed,skipped,submissionAdapters:jobs.length};
 }
 
 const SUBMISSION_ADAPTERS=["indexnow","china-search","regional-search","baidu"];
@@ -60,7 +61,9 @@ function acknowledged(checkpoint,plan,jobs){
  const entries=checkpoint.entries||{};
  let updated=false,count=0;
  SUBMISSION_ADAPTERS.forEach((name,i)=>{
-  if(!jobs[i]||jobs[i].status!=="submitted"||!plan.selected[i].length)return;
+  // HTTP 202 means a search engine accepted a key-verification request;
+  // it is a receipt, NOT evidence of actual indexing or rank.
+  if(!jobs[i]||!["submitted","pending-verification"].includes(jobs[i].status)||!plan.selected[i].length)return;
   const previous=entries[name]||{},block={...previous};
   for(const url of plan.selected[i]){block[sha(url)]={revision:plan.revisions.get(url),at:Date.now()};count++;}
   entries[name]=block;updated=true;
@@ -72,10 +75,26 @@ async function run(options={}){
  const force=options.force===true;
  const n=Number(options.hours);
  const hours=Number.isFinite(n)?Math.max(1,Math.min(720,n)):96;
+ const checkpoint=force?{state:"force",entries:{}}:await ledger.readCheckpoints(options.event);
  const changed=force?reg.targets.map(x=>ownedUrl(x.url)).filter(Boolean):selectChangedUrls(reg,{hours}).map(ownedUrl).filter(Boolean);
  const deleted=(Array.isArray(options.deletedUrls)?options.deletedUrls:[]).map(ownedUrl).filter(Boolean).slice(0,200);
- const urls=[...new Set([...changed,...deleted])];
- const checkpoint=force?{state:"force",entries:{}}:await ledger.readCheckpoints(options.event);
+ // New or altered approved public URLs must not be lost when their published/updated
+ // timestamp was not refreshed. Use durable per-URL revision receipts, never crawl private candidates.
+ // This is deliberately a bounded scheduled backlog, not synthetic search traffic.
+ const canCheck=checkpoint.state==="available"||checkpoint.state==="empty";
+ const hasIndexNow=Boolean(String(process.env.INDEXNOW_KEY||"").trim());
+ const ack=checkpoint.entries&&checkpoint.entries.indexnow||{};
+ const freshCandidates=(!force&&canCheck&&hasIndexNow)?(reg.targets||[])
+  .map(t=>({t,url:ownedUrl(t.url)})).filter(x=>x.url)
+  .filter(x=>!(ack[sha(x.url)]&&ack[sha(x.url)].revision===revision(x.url,x.t,false)))
+  .sort((a,b)=>{
+   const pa=a.t.kind==="software"?0:a.t.kind==="hub"?1:a.t.kind==="commerce"?2:a.t.kind==="commerce-market"?3:4;
+   const pb=b.t.kind==="software"?0:b.t.kind==="hub"?1:b.t.kind==="commerce"?2:b.t.kind==="commerce-market"?3:4;
+   return pa-pb||a.url.localeCompare(b.url);
+  }).map(x=>x.url):[];
+ const batchLimit=force?10000:300;
+ // Prioritize not-yet-acknowledged URLs so large backlogs progress across daily runs.
+ const urls=[...new Set([...deleted,...freshCandidates,...changed])].slice(0,batchLimit);
  const plan=makePlan(reg,urls,deleted,checkpoint,force);
  const jobs=await Promise.all([
   guard("indexnow",()=>indexnow.submit(plan.selected[0])),
@@ -89,7 +108,7 @@ async function run(options={}){
  const audit=summary(jobs);
  const errors=audit.failed+audit.partial;
  const status=errors?(audit.submitted||audit.partial?"partial-failure":"submission-failed"):
-             audit.submitted?"submitted":urls.length?"sitemap-only":"no-changes";
+             audit.submitted?"submitted":audit.pending?"pending-verification":urls.length?"sitemap-only":"no-changes";
  const results=[
   jobs[0],
   {adapter:"google",status:"sitemap-managed",sitemap:SITEMAP,note:"Crawl discovery only; Google generic Indexing API is not used"},
@@ -103,6 +122,7 @@ async function run(options={}){
   generatedAt:new Date().toISOString(),
   registry:{version:reg.version,hash:reg.hash,counts:reg.counts,total:reg.targets.length,commerce:reg.commerceCount,countryMarketPages:reg.marketCommerceCount,media:reg.mediaCount,countries:Object.keys(reg.countryCounts||{}).length,countryCounts:reg.countryCounts},
   changeWindowHours:force?null:hours,changedUrls:urls.length,submissionSummary:audit,
+  discovery:{unacknowledgedCandidates:freshCandidates.length,batchLimit,usedUnacknowledged:Math.min(freshCandidates.length,urls.length),note:"Submission receipt is not search indexing or search rank"},
   deduplication:{checkpointState:checkpoint.state,duplicatesSkipped,acknowledgedRevisions:accepted?accepted.count:0,
     checkpointWrite:checkpointSaved?checkpointSaved.state:"no-write",storesUrls:false},
   sitemap:SITEMAP,results};

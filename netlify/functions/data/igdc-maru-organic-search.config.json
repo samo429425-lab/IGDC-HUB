@@ -12,6 +12,7 @@
     "searchBankCoreMutation": false,
     "readOnlySanmaruAdapter": true
   },
+  "seoPageUpdatedAt": {"maru-windows": "2026-11-21T18:00:00.000Z", "maru-android": "2026-11-21T18:00:00.000Z", "maru-capture": "2026-11-21T18:00:00.000Z"},
   "brands": [
     {
       "id": "maru-media-player-android",
