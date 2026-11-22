@@ -44,7 +44,16 @@ exports.handler=async(event)=>{
   const canonical=market?marketUrl(t.id,market):t.url;
   const marketLabel=market?marketName(market,lang(event)==="ko"?"ko":"en"):"";
   const title=market?`${t.title} | ${marketLabel} | IGDC Global Distribution`:`${t.title} | IGDC Global Distribution`;
-  const baseDesc=t.description||[t.brand,t.model,t.category,t.seller].filter(Boolean).join(" · ")||`${t.title} — IGDC Global 공개 유통 정보`;
+  // Preserve meaningful publisher descriptions. For genuinely short or absent source
+  // descriptions, use only verified, already-public product fields to form a
+  // useful page-specific summary; never invent ratings, stock or prices.
+  const sourceDesc=String(t.description||"").trim();
+  const descriptionFacts=[sourceDesc,t.title,
+    t.brand&&`브랜드: ${t.brand}`,t.model&&`모델: ${t.model}`,
+    t.category&&`분류: ${t.category}`,t.seller&&`판매처: ${t.seller}`];
+  const baseDesc=sourceDesc.length>=40?sourceDesc:
+    [...new Set(descriptionFacts.map(v=>String(v||"").trim()).filter(Boolean)),
+      "IGDC Global에서 상품 정보와 판매처 연결을 확인하세요. 최종 가격·재고·배송 조건은 연결된 판매처에서 확인해야 합니다."].join(" · ");
   const desc=market?`${baseDesc} · IGDC verified market availability: ${marketLabel} (${market}).`:baseDesc;
   const graph=[
     {"@type":"WebPage","@id":canonical,"url":canonical,"name":title,"description":desc,"isPartOf":{"@id":`${ORIGIN}/#website`},"mainEntity":{"@id":`${canonical}#product`}},
