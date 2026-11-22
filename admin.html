@@ -1364,6 +1364,8 @@
 <tr><td><strong>IGDC Global Platform</strong></td><td id="igdc-os-platform">점검 전</td><td id="igdc-os-engine">점검 전</td><td>Search Console 자료 필요</td></tr>
 <tr><td><strong>MARU Windows</strong></td><td id="igdc-os-windows">점검 전</td><td>검색엔진의 색인 여부는 별도 확인</td><td>Search Console 자료 필요</td></tr>
 <tr><td><strong>MARU Android</strong></td><td id="igdc-os-android">점검 전</td><td id="igdc-os-play">Google Play 연결 점검 전</td><td>Play Console 자료 필요</td></tr>
+<tr><td><strong>검증 상품·국가별 목록</strong></td><td id="igdc-os-commerce">점검 전</td><td id="igdc-os-queue">전송 대기열 점검 전</td><td>검색엔진 실제 색인 확인 필요</td></tr>
+<tr><td><strong>SEO 페이지 품질</strong></td><td id="igdc-os-seo">점검 전</td><td id="igdc-os-checkpoint">중복 전송 방지 기록 점검 전</td><td>검색 실적 자료 필요</td></tr>
 </tbody></table></div>
 <details>
 <summary style="cursor:pointer;font-weight:700;color:#234c76;">실제 검색 성과 수치(선택 입력 · 콘솔 확인값만)</summary>
@@ -1374,6 +1376,9 @@
 <label>평균 검색 순위 <input type="number" id="igdc-os-position" min="0" step="0.1" placeholder="확인값만"></label>
 <label>Play 검색 방문 수 <input type="number" id="igdc-os-play-visits" min="0" step="1" placeholder="확인값만"></label>
 </div>
+<p class="os-muted">선택: Google Search Console에서 내보낸 CSV(검색어 또는 페이지·노출수·클릭수·순위)를 불러오면 브라우저 안에서 집계한 수치를 진단 JSON에 추가합니다. 원문 검색어와 CSV 파일은 서버로 전송하지 않습니다.</p>
+<label>Search Console CSV <input type="file" id="igdc-os-gsc-csv" accept=".csv,text/csv" style="width:auto"></label>
+<span class="os-muted" id="igdc-os-gsc-status">CSV 미선택 · 실제 검색 노출/순위 자료 없음</span>
 </details>
 <details><summary style="cursor:pointer;font-weight:700;color:#234c76;">기술 점검 요약 JSON 보기</summary><pre id="igdc-os-preview">점검 실행 후 표시됩니다.</pre></details>
 <p class="os-muted">점검 JSON은 SQL 없이 다운로드할 수 있습니다. 현재 페이지·사이트맵·인증 상태와 미확인 항목을 구분해 저장합니다. 과거 자동 실행·검색엔진 접수 내역은 Netlify 함수 로그로 별도 확인해야 하며, 정상 응답만으로 색인·순위·설치 증가가 증명되지는 않습니다.</p>
@@ -1384,7 +1389,48 @@
   if(window.__IGDC_ORGANIC_SEARCH_DIAGNOSTIC_READY__)return;
   window.__IGDC_ORGANIC_SEARCH_DIAGNOSTIC_READY__=true;
   var root=document.getElementById("igdc-organic-search-diagnostic");if(!root)return;
-  var checking=false,lastReport=null;
+  var checking=false,lastReport=null,localGscCsv=null;
+  // CSV import runs locally in the administrator browser; never POST files or raw queries.
+  function csvRows(source,maxRows){
+    var rows=[],row=[],field="",quoted=false,text=String(source||"").replace(/^\uFEFF/,"");
+    for(var i=0;i<text.length&&rows.length<maxRows;i++){
+      var c=text[i];
+      if(quoted){if(c==='"'&&text[i+1]==='"'){field+='"';i++;}else if(c==='"')quoted=false;else field+=c;}
+      else if(c==='"')quoted=true;
+      else if(c===','){row.push(field);field="";}
+      else if(c==='\n'){row.push(field.replace(/\r$/, ""));rows.push(row);row=[];field="";}
+      else field+=c;
+    }
+    if(field||row.length){row.push(field.replace(/\r$/, ""));rows.push(row);}
+    return rows;
+  }
+  function parseSearchConsoleCsv(text){
+    var rows=csvRows(text,50001);if(rows.length<2)throw new Error("헤더 또는 데이터 행을 찾지 못했습니다.");
+    var cols=rows[0].map(function(s){return String(s).toLowerCase().replace(/\s/g,"");});
+    function find(parts){for(var i=0;i<cols.length;i++){if(parts.some(function(x){return cols[i]===x||cols[i].indexOf(x)>=0;}))return i;}return -1;}
+    var clicks=find(["clicks","클릭수","클릭"]),impressions=find(["impressions","노출수","노출"]),position=find(["position","게재순위","평균순위","순위"]);
+    var query=find(["topqueries","query","검색어","검색키워드"]),page=find(["toppages","page","페이지"]);
+    if(clicks<0||impressions<0||position<0||(query<0&&page<0))throw new Error("Search Console 검색어/페이지·클릭·노출·순위 CSV가 아닙니다.");
+    function num(v){var n=Number(String(v||"").replace(/[, %]/g,""));return Number.isFinite(n)?n:0;}
+    function bucket(){return{rows:0,clicks:0,impressions:0,weightedPosition:null};}
+    var total=bucket(),groups={maruBrand:bucket(),igdcBrand:bucket(),genericPlayer:bucket(),distribution:bucket(),other:bucket()};
+    var weighted={total:0,maruBrand:0,igdcBrand:0,genericPlayer:0,distribution:0,other:0};
+    rows.slice(1).forEach(function(row){
+      if(row.length<=Math.max(clicks,impressions,position))return;
+      var label=String(row[query>=0?query:page]||"").toLowerCase().slice(0,400);
+      var c=Math.max(0,num(row[clicks])),n=Math.max(0,num(row[impressions])),p=Math.max(0,num(row[position]));
+      var group=/(maru|마루)/i.test(label)?"maruBrand":/(igdc|국제종합|국제종합상사)/i.test(label)?"igdcBrand":
+        /(media.?player|video.?player|audio.?player|subtitle|미디어.?플레이어|비디오.?플레이어|동영상.?플레이어|자막.?플레이어)/i.test(label)?"genericPlayer":
+        /(distribution|wholesale|supplier|marketplace|유통|도매|공급업체)/i.test(label)?"distribution":"other";
+      total.rows++;total.clicks+=c;total.impressions+=n;weighted.total+=p*n;
+      var dest=groups[group];dest.rows++;dest.clicks+=c;dest.impressions+=n;weighted[group]+=p*n;
+    });
+    ["total",...Object.keys(groups)].forEach(function(k){var obj=k==="total"?total:groups[k];obj.weightedPosition=obj.impressions?Math.round(weighted[k]/obj.impressions*100)/100:null;});
+    return {source:"administrator-local-Search-Console-CSV; not independently verified",importedAt:new Date().toISOString(),
+      format:query>=0?"query":"page",rowsRead:total.rows,truncated:rows.length>=50001,
+      total:total,groups:groups,containsRawQueries:false,sitePropertyVerified:false,reportDateRange:null,
+      note:"Only grouped totals saved. Specify the Search Console property and date range separately when interpreting trends."};
+  }
   function by(id){return document.getElementById(id);}
   function status(message){by("igdc-os-status").textContent=message;}
   function readNumber(id){var input=by(id),v=String(input&&input.value||"").trim();if(!v)return null;var n=Number(v);return Number.isFinite(n)&&n>=0?n:null;}
@@ -1410,6 +1456,15 @@
     var platform=find("platform-home"),windows=find("maru-windows"),android=find("maru-android");
     function showItem(el,item){if(!item)return display(el,"unknown","자료 없음");display(el,item.status==="reachable"?"ok":item.status==="needs-review"?"fail":"unknown",item.status==="reachable"?"정상 응답":item.status==="needs-review"?"검토 필요":"확인 불가");}
     showItem("igdc-os-platform",platform);showItem("igdc-os-windows",windows);showItem("igdc-os-android",android);
+    showItem("igdc-os-commerce",find("market-directory"));
+    var seo=report.liveSeoInspection||{},trans=report.transmissionEvidence||{},ck=trans.checkpoint||{};
+    var findings=Array.isArray(seo.findings)?seo.findings:[];
+    display("igdc-os-seo",findings.length?"fail":"ok",findings.length?("점검 필요 "+findings.length+"항목"):("페이지 구조 확인 "+(seo.inspectedPages||0)+"개"));
+    var lastQueue=report.runLedger&&report.runLedger.latest&&report.runLedger.latest.discovery||{};
+    display("igdc-os-queue","unknown","최근 대기 "+(lastQueue.unacknowledged_count==null?"미기록":lastQueue.unacknowledged_count+"건")+" · 실제 색인 별도");
+    var idx=ck.adapters&&ck.adapters.indexnow||{};
+    display("igdc-os-checkpoint",ck.state==="available"?"ok":"unknown",
+      "기록 상태 "+(ck.state||"미확인")+" · 접수 기록 "+(idx.acknowledgedUrlCount==null?"미확인":idx.acknowledgedUrlCount+"개"));
     var env=report.engine||{},key=report.indexNowKey||{};
     display("igdc-os-engine",env.moduleLoaded?"ok":"fail",env.moduleLoaded?"엔진 로드 확인 · 실행 기록 미연결":"엔진 확인 실패");
     var play=report.googlePlay||{};
@@ -1421,14 +1476,16 @@
     var recorded=env.lastRecordedExecution||null,runLedger=env.runLedgerState||"unavailable";
     var historyText=recorded?"저장된 실행 메타정보 "+recorded:"과거 실행 별도 확인(Netlify 로그)";
     display("igdc-os-engine",routeLevel,routeText+" · "+historyText);
-    by("igdc-os-preview").textContent=JSON.stringify({overview:overview,downloadAudit:report.downloadAudit||null,routingCrosscheck:route,indexNowKey:key,runLedger:report.runLedger,engine:env,googlePlay:play,channels:report.channels},null,2);
+    by("igdc-os-preview").textContent=JSON.stringify({overview:overview,seo:seo,transmissionEvidence:trans,
+      downloadAudit:report.downloadAudit||null,routingCrosscheck:route,indexNowKey:key,
+      runLedger:report.runLedger,engine:env,googlePlay:play,channels:report.channels},null,2);
   }
   async function request(){
     var list=tokenList();if(!list.length)throw new Error("관리자 로그인 토큰을 찾지 못했습니다. 관리자 계정으로 로그인 후 다시 점검하세요.");
     var last="인증 실패";
     for(var i=0;i<list.length;i++){
       var controller=typeof AbortController!=="undefined"?new AbortController():null;
-      var timer=controller?setTimeout(function(){controller.abort();},22000):null;
+      var timer=controller?setTimeout(function(){controller.abort();},35000):null;
       try{
         var res=await fetch("/.netlify/functions/admin-organic-search-diagnostic",{method:"GET",headers:{Accept:"application/json",Authorization:"Bearer "+list[i]},credentials:"same-origin",cache:"no-store",signal:controller?controller.signal:undefined});
         var doc=await res.json().catch(function(){return null;});
@@ -1446,9 +1503,16 @@
     link.href=url;link.download=filename;link.style.display="none";document.body.appendChild(link);link.click();link.remove();
     setTimeout(function(){URL.revokeObjectURL(url);},250);
   }
+  by("igdc-os-gsc-csv").addEventListener("change",async function(){
+    localGscCsv=null;var file=this.files&&this.files[0],info=by("igdc-os-gsc-status");
+    if(!file){info.textContent="CSV 미선택";return;}
+    if(file.size>5*1024*1024){info.textContent="CSV가 5MB를 초과합니다.";return;}
+    try{localGscCsv=parseSearchConsoleCsv(await file.text());info.textContent="로컬 CSV "+localGscCsv.rowsRead+"행 분석 완료 · 원본은 전송하지 않음";}
+    catch(e){info.textContent="CSV 분석 실패: "+String(e.message||e).slice(0,100);}
+  });
   by("igdc-os-check").addEventListener("click",async function(){
     if(checking)return;checking=true;by("igdc-os-check").disabled=true;by("igdc-os-download").disabled=true;
-    status("검색 페이지·사이트맵·인증 설정을 점검 중입니다. 실제 검색 제출은 하지 않습니다.");
+    status("공개 상품·국가·MARU·검색 수집·IndexNow 접수 기록을 점검 중입니다. 검색 제출이나 인위적 방문은 하지 않습니다.");
     try{lastReport=await request();view(lastReport);by("igdc-os-download").disabled=false;}
     catch(e){lastReport={schema:"igdc-maru-organic-search-diagnostic-error-v1",generatedAt:new Date().toISOString(),ok:false,error:String(e&&e.message||e).slice(0,180),readOnly:true};status("점검 미완료 · "+lastReport.error+" · 오류 JSON 다운로드 가능");by("igdc-os-preview").textContent=JSON.stringify(lastReport,null,2);by("igdc-os-download").disabled=false;}
     finally{checking=false;by("igdc-os-check").disabled=false;}
@@ -1457,9 +1521,11 @@
     if(!lastReport)return;
     var result=JSON.parse(JSON.stringify(lastReport));
     result.manualPerformanceInput=metrics();result.playConsoleCsvAudit=window.IGDC_OS_MOBILE_AUDIT_DATA||null;
+    result.searchConsoleCsvAudit=localGscCsv||null;
      result.downloadedAt=new Date().toISOString();
      result.downloadEvidence={sqlRequired:false,inspectionOnly:true,scheduledRunIndependentlyConfirmed:false,
        playCsvSource:result.playConsoleCsvAudit?"administrator-local-csv":"not-provided",
+       searchConsoleCsvSource:result.searchConsoleCsvAudit?"administrator-local-csv":"not-provided",
        manualMetricsSource:"administrator-entry-unverified",
        note:"다운로드한 파일은 점검 당시 상태입니다. 실제 과거 예약 실행·검색엔진 접수는 Netlify 로그/외부 콘솔 증거 없이는 확인되지 않습니다."};
     var filename="IGDC_MARU_Organic_Search_Diagnostic_"+new Date().toISOString().replace(/[:.]/g,"-")+".json";

@@ -1,5 +1,5 @@
 "use strict";
-const {buildRegistry}=require("./lib/search-exposure/registry");
+const {buildRegistry,marketName}=require("./lib/search-exposure/registry");
 const ROOT="https://igdcglobal.com/.netlify/functions/public-commerce-search-index",BATCH=80;
 const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 function html(title,description,url,body,robots){
@@ -11,7 +11,7 @@ exports.handler=async event=>{
   const reg=buildRegistry(),q=event&&event.queryStringParameters||{},country=String(q.country||"").toUpperCase();
   const markets=Object.entries(reg.countryCounts||{}).filter(([cc,count])=>/^[A-Z]{2}$/.test(cc)&&Number(count)>0).sort((a,b)=>a[0].localeCompare(b[0]));
   if(!country){
-   const rows=markets.map(([cc,count])=>'<li><a href="'+ROOT+'?country='+cc+'">'+cc+'</a> — '+Number(count)+' verified product market pages</li>').join("");
+   const rows=markets.map(([cc,count])=>'<li><a href="'+ROOT+'?country='+cc+'">'+esc(marketName(cc,"en"))+' ('+cc+')</a> — '+Number(count)+' verified product market pages</li>').join("");
    const body='<h1>IGDC verified country product directory</h1><p>국가별로 공개 승인된 상품만 안내합니다. Visitors and search crawlers can reach each verified country listing without IP-based redirection.</p><section><ul>'+rows+'</ul></section>';
    return send(200,html("IGDC Global — verified country product markets","Approved IGDC Distribution product listings for verified country markets.",ROOT,body));
   }
@@ -23,7 +23,7 @@ exports.handler=async event=>{
   const list=items.slice((page-1)*BATCH,page*BATCH).map(t=>'<li><a href="'+esc(t.url)+'">'+esc(t.title||t.id)+'</a>'+(t.category?' — '+esc(t.category):'')+'</li>').join("");
   const prev=page>1?'<a href="'+base+(page>2?'&page='+(page-1):'')+'">Previous page</a>':"";
   const next=page<pages?'<a href="'+base+'&page='+(page+1)+'">Next page</a>':"";
-  const body='<h1>IGDC verified products — '+country+'</h1><p class="info">'+items.length+' public approved market listings · page '+page+' / '+pages+'</p><p>Only currently published and verified market entries appear here. Prices and availability are confirmed at the seller.</p><section><ul>'+list+'</ul></section><nav aria-label="Pages">'+prev+' '+next+'</nav><p><a href="'+ROOT+'">All verified markets</a></p>';
+  const body='<h1>IGDC verified products — '+esc(marketName(country,"en"))+' ('+country+')</h1><p class="info">'+items.length+' public approved market listings · page '+page+' / '+pages+'</p><p>Only currently published and verified market entries appear here. Prices and availability are confirmed at the seller.</p><section><ul>'+list+'</ul></section><nav aria-label="Pages">'+prev+' '+next+'</nav><p><a href="'+ROOT+'">All verified markets</a></p>';
   return send(200,html("IGDC verified products — "+country+" — page "+page,"IGDC Distribution verified product market listings for "+country,canonical,body));
  }catch(_e){return send(503,html("Directory temporarily unavailable","Temporary failure",ROOT,"<h1>Temporarily unavailable</h1>","noindex,follow"));}
 };

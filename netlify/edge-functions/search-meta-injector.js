@@ -71,10 +71,14 @@ function cleanHead(html) {
     .replace(/<meta\s+[^>]*name=["']twitter:(?:card|title|description)["'][^>]*>/ig, "")
     .replace(/<script\s+[^>]*id=["']igdc-search-schema["'][^>]*>[\s\S]*?<\/script>/ig, "");
 }
-function metadataBlock(url, page, lang) {
+function metadataBlock(url, page, lang, originalTitle, originalDescription) {
   const label = PAGE_LABELS[page];
-  const title = page === "home" ? `${label} | MARU Platform` : `${label} | IGDC Global Platform | MARU Platform`;
-  const description = PAGE_DESCRIPTIONS[page] || PAGE_DESCRIPTIONS.home;
+  // Preserve meaningful translated HTML titles/descriptions for search crawlers.
+  // Do not replace localized content with English-only boilerplate metadata.
+  const defaultTitle = page === "home" ? `${label} | MARU Platform` : `${label} | IGDC Global Platform | MARU Platform`;
+  const title = lang!=="ko" && originalTitle && originalTitle.length>8 ? originalTitle.slice(0,145) : defaultTitle;
+  const description = lang!=="ko" && originalDescription && originalDescription.length>35
+    ? originalDescription.slice(0,220) : (PAGE_DESCRIPTIONS[page] || PAGE_DESCRIPTIONS.home);
   const canonical = ORIGIN + localizedRoute(page, lang);
   const alternates = LANGS.map(code => `<link rel="alternate" hreflang="${esc(code)}" href="${esc(ORIGIN + localizedRoute(page, code))}">`).join("\n");
   const schema = {
@@ -149,7 +153,10 @@ export default async function handler(request, context) {
   if (!/<head[\s>]/i.test(html)) return new Response(html, response);
 
   const lang = languageFromPath(url.pathname, url.searchParams);
-  const injected = cleanHead(html).replace(/<head([^>]*)>/i, `<head$1>\n${metadataBlock(url, page, lang)}\n`);
+  const originalTitle=(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]||"";
+  const originalDescription=(html.match(/<meta\b(?=[^>]*name=["']description["'])[^>]*content=["']([^"']*)/i)||[])[1]||"";
+  const injected = cleanHead(html).replace(/<head([^>]*)>/i,
+    `<head$1>\n${metadataBlock(url, page, lang, originalTitle.replace(/<[^>]*>/g," ").trim(), originalDescription.trim())}\n`);
   const headers = new Headers(response.headers);
   headers.delete("content-length");
   headers.set("x-igdc-search-meta", `central-v1:${page}:${lang}`);

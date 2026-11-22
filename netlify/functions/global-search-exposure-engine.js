@@ -122,7 +122,10 @@ async function run(options={}){
   generatedAt:new Date().toISOString(),
   registry:{version:reg.version,hash:reg.hash,counts:reg.counts,total:reg.targets.length,commerce:reg.commerceCount,countryMarketPages:reg.marketCommerceCount,media:reg.mediaCount,countries:Object.keys(reg.countryCounts||{}).length,countryCounts:reg.countryCounts},
   changeWindowHours:force?null:hours,changedUrls:urls.length,submissionSummary:audit,
-  discovery:{unacknowledgedCandidates:freshCandidates.length,batchLimit,usedUnacknowledged:Math.min(freshCandidates.length,urls.length),note:"Submission receipt is not search indexing or search rank"},
+  discovery:{unacknowledgedCandidates:freshCandidates.length,batchLimit,
+   usedUnacknowledged:freshCandidates.filter(u=>urls.includes(u)).length,
+   remainingAfterBatch:Math.max(0,freshCandidates.filter(u=>!urls.includes(u)).length),
+   note:"This is a real changed-URL notification queue. It does not conduct user searches or determine ranking."},
   deduplication:{checkpointState:checkpoint.state,duplicatesSkipped,acknowledgedRevisions:accepted?accepted.count:0,
     checkpointWrite:checkpointSaved?checkpointSaved.state:"no-write",storesUrls:false},
   sitemap:SITEMAP,results};

@@ -22,6 +22,22 @@ function summary(report){
     partial_count:safeNum(a.partial),
     // A handler invocation can be scheduled or manually triggered. Neither is assumed.
     trigger:"not-independently-verified",
+    indexnow_providers:(report&&report.results||[]).filter(x=>x&&x.adapter==="indexnow")
+     .flatMap(x=>Array.isArray(x.providers)?x.providers:[]).slice(0,3).map(x=>({
+      engine:String(x.engine||"").slice(0,40),status:String(x.status||"").slice(0,40),
+      http_status:Number.isInteger(Number(x.http&&x.http.statusCode))?Number(x.http.statusCode):null
+     })),
+    discovery:{
+     unacknowledged_count:safeNum(report&&report.discovery&&report.discovery.unacknowledgedCandidates),
+     batch_limit:safeNum(report&&report.discovery&&report.discovery.batchLimit),
+     used_unacknowledged:safeNum(report&&report.discovery&&report.discovery.usedUnacknowledged)
+    },
+    checkpoint:{
+     state:String(report&&report.deduplication&&report.deduplication.checkpointState||"unknown").slice(0,36),
+     write:String(report&&report.deduplication&&report.deduplication.checkpointWrite||"unknown").slice(0,36),
+     acknowledged_revisions:safeNum(report&&report.deduplication&&report.deduplication.acknowledgedRevisions),
+     duplicates_skipped:safeNum(report&&report.deduplication&&report.deduplication.duplicatesSkipped)
+    },
     details:(report&&report.results||[]).filter(x=>x&&x.adapter).slice(0,16).map(x=>({
       engine:String(x.adapter).slice(0,40),
       state:String(x.status||"unknown").slice(0,48),
@@ -155,6 +171,18 @@ async function readCheckpoints(event){
   return{state:"available",entries};
  }catch(err){const reason=reasonOf(err);console.warn("[IGDC_SEARCH_CHECKPOINT_READ]",reason);return{state:"storage-unavailable",reason,entries:{}};}
 }
+// Read-only aggregate health for administrator diagnostic JSON. Never expose URL hashes or revisions.
+async function checkpointHealth(event){
+ const doc=await readCheckpoints(event);
+ const adapters={};
+ for(const name of ADAPTERS){
+  const records=Object.values(doc.entries&&doc.entries[name]||{});
+  const timestamps=records.map(r=>Number(r&&r.at)).filter(Number.isFinite);
+  const max=timestamps.length?Math.max(...timestamps):0;
+  adapters[name]={acknowledgedUrlCount:records.length,lastAcknowledgementAt:max?new Date(max).toISOString():null};
+ }
+ return {state:doc.state,reason:doc.reason||null,adapters,containsNoUrls:true};
+}
 async function storeCheckpoints(entries,event){
  try{
   const sanitized={};
@@ -167,4 +195,4 @@ async function storeCheckpoints(entries,event){
   return{state:"stored"};
  }catch(err){const reason=reasonOf(err);console.warn("[IGDC_SEARCH_CHECKPOINT_WRITE]",reason);return{state:"storage-unavailable",reason};}
 }
-module.exports={store,readLatest,readCheckpoints,storeCheckpoints,_test:{location,summary,safeNum,reasonOf,errorDetails,runtimeFlags,messagePattern}};
+module.exports={store,readLatest,readCheckpoints,checkpointHealth,storeCheckpoints,_test:{location,summary,safeNum,reasonOf,errorDetails,runtimeFlags,messagePattern}};

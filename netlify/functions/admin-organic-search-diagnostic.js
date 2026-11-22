@@ -9,7 +9,7 @@ try{RUN_LEDGER=require("./lib/igdc-search-exposure-run-ledger");}
 catch(e){if(e&&e.code!=="MODULE_NOT_FOUND")throw e;RUN_LEDGER={readLatest:async()=>({state:"not-installed",record:null})};}
 const ORIGIN="https://igdcglobal.com";
 const PLAY="https://play.google.com/store/apps/details?id=com.maru.mediaplayer";
-const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.4.0-multilingual-coverage";
+const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.5.0-15stage-evidence";
 const CHECKS=[
  ["platform-home","IGDC Global Platform","/home.html","platform"],
  ["platform-en","IGDC Global Platform (English)","/igdc-amplify-platform-en.html","platform"],
@@ -18,6 +18,10 @@ const CHECKS=[
  ["maru-android","MARU Media Player Android","/maru-android.html","maru"],
  ["maru-en","MARU Media Player (English)","/igdc-amplify-maru-en.html","maru"],
  ["maru-ar","MARU Media Player (Arabic)","/igdc-amplify-maru-ar.html","maru"],
+ ["maru-guide","Windows Android selection guidance","/igdc-amplify-maru.html","maru"],
+ ["distribution","IGDC Distribution hub","/distributionhub.html","commerce"],
+ ["network","IGDC Network hub","/networkhub.html","platform"],
+ ["market-directory","Verified country directory","/.netlify/functions/public-commerce-search-index","commerce"],
  ["robots","Search crawler access","/robots.txt","technical"],
  ["sitemap","Search sitemap","/sitemap.xml","technical"],
  ["dynamic-sitemap","Verified search sitemap","/sitemap-global.xml","technical"],
@@ -28,6 +32,26 @@ function simpleError(e){return String(e&&e.message||e||"Unknown failure").slice(
 function urlFor(path){return ORIGIN+path;}
 function cleanText(html){
  return String(html||"").replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();
+}
+// Audit the returned first HTML bytes, not just HTTP 200. No synthetic traffic or rank tests.
+function contentSignals(html,canonical,robotsHeader){
+ const head=String(html||"").split(/<\/head\s*>/i)[0];
+ const match=(rx)=>((head.match(rx)||[])[1]||"").trim();
+ const description=match(/<meta\b(?=[^>]*name=["']description["'])[^>]*content=["']([^"']*)/i)
+   ||match(/<meta\b(?=[^>]*content=["'][^"']*["'])(?=[^>]*name=["']description["'])[^>]*content=["']([^"']*)/i);
+ const h1=(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)||[])[1]||"";
+ const blocks=[...head.matchAll(/<script\b(?=[^>]*type=["']application\/ld\+json["'])[^>]*>([\s\S]*?)<\/script>/gi)];
+ let jsonLdValid=0,jsonLdInvalid=0;
+ for(const block of blocks){try{JSON.parse(block[1]);jsonLdValid++;}catch(_e){jsonLdInvalid++;}}
+ const indexable=!/noindex/i.test(robotsHeader||"")&&!/<meta\b[^>]*name=["']robots["'][^>]*content=["'][^"']*noindex/i.test(head);
+ let canonicalOwned=false;
+ try{const u=new URL(canonical);canonicalOwned=u.protocol==="https:"&&u.hostname==="igdcglobal.com"&&!u.hash;}catch(_e){}
+ return {titlePresent:/<title\b/i.test(head),descriptionPresent:description.length>20,
+  headingPresent:cleanText(h1).length>3,canonicalOwned,robotsAllowsIndex:indexable,
+  structuredDataValid:jsonLdValid,structuredDataInvalid:jsonLdInvalid,
+  contentTextCharacters:Math.min(100000,cleanText(html).length),
+  downloadUrlPresent:/releases\/(?:download|latest\/download)\//.test(html),
+  googlePlayLinkPresent:html.includes("play.google.com/store/apps/details?id=com.maru.mediaplayer")};
 }
 async function probe(id,label,path,group){
  const url=urlFor(path),started=Date.now();
@@ -48,7 +72,8 @@ async function probe(id,label,path,group){
    }else body=(await response.text()).slice(0,100000);
   }finally{clearTimeout(timeout);}
   const statusCode=response.status,ctype=String(response.headers.get("content-type")||"").toLowerCase();
-  const html=/\.html$/i.test(path),xml=/\.xml$/i.test(path)||path==="/.netlify/functions/global-search-sitemap",robots=path==="/robots.txt";
+  const xml=/\.xml$/i.test(path)||path==="/.netlify/functions/global-search-sitemap",robots=path==="/robots.txt";
+  const html=!xml&&!robots;
   const title=(body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]||"";
   const canonical=(body.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)/i)||[])[1]||"";
   const hasNoindex=html&&(/<meta[^>]+(?:name=["']robots["'][^>]+content=["'][^"']*noindex|content=["'][^"']*noindex[^"']*["'][^>]+name=["']robots)/i.test(body)||/noindex/i.test(String(response.headers.get("x-robots-tag")||"")));
@@ -56,8 +81,10 @@ async function probe(id,label,path,group){
   const hasMarker=html?/<html\b/i.test(body):(xml?/<(?:urlset|sitemapindex)\b/i.test(body):(robots?/user-agent:/i.test(body):true));
   const pageHasPlay=body.includes("play.google.com/store/apps/details?id=com.maru.mediaplayer");
   const status=response.ok&&correctType&&hasMarker&&!hasNoindex?"reachable":"needs-review";
+  const signals=html?contentSignals(body,canonical,String(response.headers.get("x-robots-tag")||"")):null;
   return{id,label,group,url,status,httpStatus:statusCode,elapsedMs:Date.now()-started,
    contentType:ctype.split(";")[0],title:cleanText(title).slice(0,120)||null,canonical:canonical||null,
+   seoSignals:signals,
    hasNoindex,hasPlayLink:html?pageHasPlay:null,htmlOrSitemapRecognized:hasMarker,
    checks:{httpOk:response.ok,contentTypeOk:correctType,markerPresent:hasMarker,indexableHint:!hasNoindex},
    note:!response.ok?"The origin returned a non-success status":xml&&ctype.includes("html")?"Sitemap returned HTML instead of XML; inspect Netlify rewrites":!correctType||!hasMarker?"Unexpected response content":hasNoindex?"Noindex signal detected":"Reachability is not proof of search ranking"};
@@ -123,18 +150,46 @@ function multilingualDiscoveryAudit(configOverride){
  }catch(e){return{status:"unavailable",reason:"localized-config-unavailable",configuredLanguageCount:null,
    searchRankingVerified:false,pageExistenceVerified:false};}
 }
+function createSeoFindings(probes){
+ const findings=[];
+ for(const p of probes){
+  if(!p.seoSignals||p.status!=="reachable")continue;
+  const x=p.seoSignals;
+  for(const [ok,code] of [[x.titlePresent,"missing-title"],[x.descriptionPresent,"missing-description"],
+    [x.headingPresent,"missing-h1"],[x.canonicalOwned,"invalid-canonical"],
+    [x.robotsAllowsIndex,"noindex"],[x.structuredDataInvalid===0,"invalid-json-ld"]]){
+   if(!ok)findings.push({id:p.id,code,severity:code==="noindex"?"critical":"review"});
+  }
+ }
+ return findings;
+}
 async function diagnostic(event){
  const now=new Date().toISOString();
  const multilingualSearch=multilingualDiscoveryAudit();
- const [probes,key,ledger]=await Promise.all([Promise.all(CHECKS.map(row=>probe(...row))),indexNowKeyCheck(),RUN_LEDGER.readLatest(event)]);
- let registry;
+ const [probes,key,ledger,checkpoint]=await Promise.all([
+  Promise.all(CHECKS.map(row=>probe(...row))),indexNowKeyCheck(),RUN_LEDGER.readLatest(event),
+  typeof RUN_LEDGER.checkpointHealth==="function"?RUN_LEDGER.checkpointHealth(event):Promise.resolve({state:"not-installed"})
+ ]);
+ let registry,productSample=null,countrySample=null;
  try{
   const r=buildRegistry();
   const selected=(r.targets||[]).filter(x=>["maru-android","maru-windows","home"].includes(x.id)).map(x=>({id:x.id,url:x.url,updatedAt:x.updatedAt||null}));
-  registry={available:true,version:r.version,hash:r.hash,counts:r.counts||{},total:r.targets.length,selected};
+  const products=(r.targets||[]).filter(x=>x.kind==="commerce"&&typeof x.url==="string");
+  const markets=(r.targets||[]).filter(x=>x.kind==="commerce-market"&&typeof x.url==="string");
+  // Two bounded approved-only live examples; no private candidates or newly disclosed data.
+  const [sampleProduct,sampleCountry]=await Promise.all([
+   products.length?probe("sample-approved-product","Approved product detail sample",new URL(products[0].url).pathname,"commerce"):Promise.resolve(null),
+   markets.length?probe("sample-country-product","Verified country product sample",new URL(markets[0].url).pathname,"commerce"):Promise.resolve(null)
+  ]);
+  productSample=sampleProduct;countrySample=sampleCountry;
+  registry={available:true,version:r.version,hash:r.hash,counts:r.counts||{},total:r.targets.length,selected,
+   countsByCountry:r.countryCounts||{},sampledPublishedProducts:products.length?1:0,
+   sampleNote:"Approved-only read-only samples; not an exhaustive crawl or indexation guarantee"};
  }catch(e){registry={available:false,error:simpleError(e)};}
- const failed=probes.filter(x=>x.status==="needs-review");
- const unknown=probes.filter(x=>x.status==="unverified");
+ const allProbes=[...probes,...[productSample,countrySample].filter(Boolean)];
+ const seoFindings=createSeoFindings(allProbes);
+ const failed=allProbes.filter(x=>x.status==="needs-review");
+ const unknown=allProbes.filter(x=>x.status==="unverified");
  const pageStatus=failed.length?"needs-review":unknown.length?"incomplete":"reachable-checks-passed";
  const dynamic=probes.find(x=>x.id==="dynamic-sitemap"),direct=probes.find(x=>x.id==="direct-sitemap");
  const routingCrosscheck={publicSitemap:dynamic&&dynamic.status||"unverified",directFunction:direct&&direct.status||"unverified",
@@ -180,7 +235,7 @@ async function diagnostic(event){
     playSearchPerformance:"external-play-console-csv-only"
    },
    execution:submissionEvidence,
-   summary:{reachable:probes.filter(x=>x.status==="reachable").length,
+   summary:{reachable:allProbes.filter(x=>x.status==="reachable").length,
     needsReview:failed.length,unverified:unknown.length,
     routing:routingCrosscheck.status,
     indexNowKeyVerification:key.verification||"unverified",
@@ -188,24 +243,35 @@ async function diagnostic(event){
     optionalHistoryStorageReason:ledgerReason,
     optionalHistoryStorageDiagnostic:ledgerDiagnostic,
     optionalHistoryStorageRecommendation:ledgerRecommendation,
-    engineLoaded:typeof ENGINE.run==="function"},
-   checksNeedingAttention:probes.filter(x=>x.status!=="reachable").map(x=>({id:x.id,status:x.status,httpStatus:x.httpStatus==null?null:x.httpStatus,reason:x.note||x.error||null})),
+    engineLoaded:typeof ENGINE.run==="function",seoFindings:seoFindings.length,
+    checkpointState:checkpoint.state||"unverified"},
+   checksNeedingAttention:[...allProbes.filter(x=>x.status!=="reachable").map(x=>({id:x.id,status:x.status,httpStatus:x.httpStatus==null?null:x.httpStatus,reason:x.note||x.error||null})),...seoFindings],
    followUp:"Netlify > Functions > global-search-exposure-engine > Logs에서 [IGDC_SEARCH_EXPOSURE_RUN] 실행시각·제출·대기·실패 수치를 확인하세요. Netlify 로그는 보관 기간이 제한됩니다."
   };
  return{schema:VERSION,generatedAt:now,readOnly:true,
   purpose:"IGDC Global Platform and MARU Media Player organic search health and evidence",
   scope:["IGDC Global Platform","MARU Windows","MARU Android / Google Play"],
-  overview:{status:pageStatus,probesTotal:probes.length,reachable:probes.filter(x=>x.status==="reachable").length,needsReview:failed.length,unverified:unknown.length},
+  overview:{status:pageStatus,probesTotal:allProbes.length,reachable:allProbes.filter(x=>x.status==="reachable").length,needsReview:failed.length,unverified:unknown.length},
   engine:{moduleLoaded:typeof ENGINE.run==="function",configuredDailySchedule:"17 3,11,21 * * * (UTC; repository config, not live Netlify confirmation)",lastScheduledExecution:null,lastSubmissionReceipt:null,lastRecordedExecution:ledger&&ledger.record?ledger.record.run_at:null,
    recordedSubmissionSummary:ledger&&ledger.record?{status:ledger.record.result_status,changed:ledger.record.changed_count,submitted:ledger.record.submitted_count,pending:ledger.record.pending_count,failed:ledger.record.failed_count,partial:ledger.record.partial_count,providers:ledger.record.details}:null,
    runLedgerState:ledgerState,runLedgerReason:ledgerReason,
    notes:"Read-only persisted run metadata are not evidence of Google indexing or store ranking. A recorded run can be scheduled or manually triggered."},
-  registry,multilingualSearch,routingCrosscheck,downloadAudit,runLedger:{state:ledgerState,reason:ledgerReason,recommendation:ledgerRecommendation,diagnostic:ledgerDiagnostic,latest},robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
-  targets:probes.filter(x=>x.group!=="technical"),
+  registry,multilingualSearch,routingCrosscheck,downloadAudit,
+  liveSeoInspection:{status:unknown.length?"incomplete":failed.length||seoFindings.length?"needs-review":"observed",
+   findings:seoFindings,inspectedPages:allProbes.filter(x=>x.seoSignals).length,
+   note:"Only selected URLs were inspected. Search ranking and indexed status require external search console evidence."},
+  transmissionEvidence:{latestReceipt:latest?"recorded":"missing",checkpoint,
+   currentIndexNowKeyVerified:key.verification==="confirmed",
+   scheduledTriggerVerified:false,searchEngineIndexedVerified:false,
+   note:"Checkpoint counts are receipt evidence, never indexing or ranking guarantees."},
+  runLedger:{state:ledgerState,reason:ledgerReason,recommendation:ledgerRecommendation,diagnostic:ledgerDiagnostic,latest},robotsAndSitemaps:probes.filter(x=>x.group==="technical"),
+  targets:allProbes.filter(x=>x.group!=="technical"),
   indexNowKey:indexnowSafe(key),
   channels:channels(key),
   googlePlay:{packageName:"com.maru.mediaplayer",listingUrl:PLAY,listingLinkPresent:probes.some(x=>x.id==="maru-android"&&x.hasPlayLink===true),searchVisits:null,storeClicks:null,ctr:null,searchTerms:null,rank:null,source:"Play Console CSV required; never infer rank from links or visits",csvAnalyzerAvailable:true,trackingScope:"Android MARU 1.0.208 / regional search acquisition"},
-  searchPerformance:{webSearchImpressions:null,webSearchClicks:null,averagePosition:null,source:"Search Console / webmaster exports required"},
+  searchPerformance:{webSearchImpressions:null,webSearchClicks:null,averagePosition:null,
+   actualRankingMeasured:false,actualDownloadsMeasured:false,
+   source:"Search Console, Bing Webmaster, Naver Search Advisor, Google Play Console and download stats are separate authorized sources; none were accessed by this read-only endpoint"},
   guidance:["Confirmed crawlability is not proof of indexing or ranking","Google Play ranking cannot be inferred from website URLs","Use authorized Console CSV reports for real traffic and search-term results","No automatic clicks, fabricated searches, forced submissions or writes occur"]
  };
 }
@@ -218,4 +284,4 @@ exports.handler=async(event)=>{
   return json(200,{ok:true,report:await diagnostic(event)});
  }catch(e){const status=[401,403,503].includes(Number(e&&e.statusCode))?e.statusCode:500;return json(status,{ok:false,error:status===500?"Diagnostic unavailable":simpleError(e),code:e&&e.code||null});}
 };
-exports._test={diagnostic,probe,indexNowKeyCheck,channels,multilingualDiscoveryAudit};
+exports._test={diagnostic,probe,indexNowKeyCheck,channels,multilingualDiscoveryAudit,contentSignals,createSeoFindings};
