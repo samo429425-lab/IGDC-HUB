@@ -30,17 +30,18 @@ function now() { return new Date().toISOString(); }
 function ts(v) { const n = Date.parse(txt(v)); return Number.isFinite(n) ? n : 0; }
 function reg(s) { return txt(s.subdivisionCode || 'NATIONWIDE').toUpperCase(); }
 function key(s) { return txt(s.countryCode).toUpperCase() + '|' + reg(s); }
-function safeProviderStatus(v){ const s=txt(v).toLowerCase();return /^(?:ok|empty|timeout|unavailable|not_configured|network_error|fetch_failed|typeerror|rate_limit|quota_exceeded|blocked|http_[1-5][0-9]{2}|invalid_country|global_cooldown|concurrent_claim|guard_unavailable)$/.test(s)?s:'unknown'; }
+function safeProviderStatus(v){ const s=txt(v).toLowerCase();return /^(?:ok|empty|timeout|unavailable|not_configured|network_error|fetch_failed|typeerror|rate_limit|quota_exceeded|blocked|http_[1-5][0-9]{2}|invalid_country|google_permission_cooldown|country_paid_supplier_limit_reached|global_cooldown|concurrent_claim|guard_unavailable)$/.test(s)?s:'unknown'; }
 function safeProviderDetail(v){return txt(v).replace(/https?:\/\/\S+/gi,'[URL]').replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi,'[EMAIL]').replace(/(?:sk|eyJ)[a-z0-9_.-]{24,}/gi,'[TOKEN]').slice(0,130);}
 // A successful scheduler invocation is not proof that its external search
 // provider returned sellers. Store a tiny error summary in the staged control
 // record so national bottleneck JSON can distinguish "searched" from "found".
-function providerOutcomes(result, previousCursor) {
+function providerOutcomes(result, previousCursor, lastDeferredAt) {
   const progress=obj(obj(result).progress), done=Number(obj(progress.search).done||0);
   const trace=arr(obj(result).trace);
   // A deferred public-source search may finish without advancing the normal
   // search cursor. Treat only the new deferred result as fresh in that case.
-  const deferred=trace.filter(row=>obj(row).source==='wikidata'&&obj(row).deferredRecovered===true);
+  const deferred=trace.filter(row=>['wikidata','osm'].includes(obj(row).source)&&obj(row).deferredRecovered===true&&
+    (!ts(lastDeferredAt)||ts(obj(row).at)>ts(lastDeferredAt)));
   if(done<=Number(previousCursor||0)&&!deferred.length)return [];
   const primary=['google','naver','sanmaru'];
   let recent;
@@ -51,7 +52,7 @@ function providerOutcomes(result, previousCursor) {
     // BOTH real attempts rather than attributing the fallback to the main lane.
     recent=index>=0?trace.slice(index):trace.slice(-1);
   }else recent=deferred.slice(-1);
-  return recent.filter(row=>['google','naver','sanmaru','wikidata'].includes(txt(obj(row).source).toLowerCase()))
+  return recent.filter(row=>['google','naver','sanmaru','wikidata','osm'].includes(txt(obj(row).source).toLowerCase()))
     .slice(-3).map(row=>{
       const last=obj(row),provider=txt(last.source).toLowerCase();
       return {provider,status:safeProviderStatus(txt(last.status).toLowerCase().replace(/^provider_/,'')),
@@ -63,7 +64,7 @@ function providerOutcomes(result, previousCursor) {
         rejectedBySearchFilter:Math.max(0,Number(last.rejectedBySearchFilter||0)),novel:Math.max(0,Number(last.novel||0)),
         duplicateExistingSkipped:Math.max(0,Number(last.duplicateExistingSkipped||0)),searchCursor:done,
         elapsedMs:Math.max(0,Number(last.elapsedMs||0)),retryAfterMs:Math.max(0,Number(last.retryAfterMs||0)),rawBindings:Math.max(0,Number(last.rawBindings||0)),
-        rejected:obj(last.rejected)};
+        rejected:obj(last.rejected),deferredRecovered:last.deferredRecovered===true,sourceAttemptAt:txt(last.at)};
     });
 }
 function idFor(s) { return 'igdc_supplier_staged_auto_' + txt(s.countryCode).toLowerCase() + '_' + reg(s).toLowerCase().replace(/[^a-z0-9_-]/g, '_'); }
@@ -97,12 +98,12 @@ function create(deps) {
     try{
       const row=arr(await store.select('gslot_policies','select=rule&id=eq.'+GLOBAL_PROVIDER_GUARD_ID+'&limit=1'))[0];
       const rule=obj(row&&row.rule),out={};
-      for(const lane of ['google','naver','wikidata'])if(ts(rule[lane])>ts(clock()))out[lane]=rule[lane];
+      for(const lane of ['google','naver','wikidata','osm'])if(ts(rule[lane])>ts(clock()))out[lane]=rule[lane];
       return out;
     }catch(_error){return{};}
   }
   async function markSharedQuota(lane,overrideMs){
-    if(!['google','naver','wikidata'].includes(lane))return;
+    if(!['google','naver','wikidata','osm'].includes(lane))return;
     try{
       const id=GLOBAL_PROVIDER_GUARD_ID;
       const old=arr(await store.select('gslot_policies','select=id,rule,updated_at&id=eq.'+id+'&limit=1'))[0];
@@ -225,7 +226,7 @@ function create(deps) {
       // the country itself. Carry bounded, persisted cooldowns into a NEW job;
       // manual research ignores this scheduling hint entirely.
       const shared=await sharedCooldowns(),local=obj(state.providerCooldowns),merged={};
-      for(const lane of ['google','naver','wikidata']){
+      for(const lane of ['google','naver','wikidata','osm']){
         const until=Math.max(ts(shared[lane]),ts(local[lane]));
         if(until>ts(clock()))merged[lane]=new Date(until).toISOString();
       }
@@ -260,13 +261,14 @@ function create(deps) {
       }
       await recheck(s);
       const result=await automation.advanceResearchJob(ACTOR,input(s));
-      const outcomes=job.status==='searching'?providerOutcomes(result,job.searchCursor):[];
+      const outcomes=job.status==='searching'?providerOutcomes(result,job.searchCursor,state.lastFreeRecoveryAt):[];
       let lastResult='supplier_step_'+txt(result.status);
       if(result.freeFallbackWaitingForSlot===true&&result.freeFallbackRetryAt){
         state.nextRetryAt=result.freeFallbackRetryAt;
         lastResult='supplier_free_search_queued_for_global_slot';
       }
       for(const outcome of outcomes){
+        if(outcome.deferredRecovered&&outcome.sourceAttemptAt)state.lastFreeRecoveryAt=outcome.sourceAttemptAt;
         state.lastProvider=Object.assign({at:clock()},outcome);
         const providerEvent={at:clock(),provider:outcome.provider,status:outcome.status,
           httpStatus:outcome.httpStatus||null,detail:outcome.detail||null,
@@ -282,12 +284,12 @@ function create(deps) {
           empty:Number(current.empty||0)+(outcome.status==='empty'?1:0),
           failed:Number(current.failed||0)+(!['ok','empty'].includes(outcome.status)?1:0),
           lastStatus:outcome.status,lastAt:clock()}});
-        if(outcome.provider==='wikidata'){
+        if(['wikidata','osm'].includes(outcome.provider)){
           // Public WDQS is a community service, not a replacement for a
           // commercial high-volume API. Persist a global minimum spacing for
           // every attempted query (including empty and successful responses).
-          await markSharedQuota('wikidata',/^(?:http_429|http_403|http_503|timeout)$/.test(outcome.status)
-            ? Math.max(2*60*1000,Math.min(6*60*60*1000,outcome.retryAfterMs||2*60*60*1000)) : 2*60*1000);
+          await markSharedQuota(outcome.provider,/^(?:http_429|http_403|http_503|timeout)$/.test(outcome.status)
+            ? Math.max(2*60*1000,Math.min(6*60*60*1000,outcome.retryAfterMs||2*60*60*1000)) : 30*1000);
         }
         if(outcome.status==='ok'){
           state.providerSuccesses=Number(state.providerSuccesses||0)+1;
@@ -302,26 +304,26 @@ function create(deps) {
           // immediately. Yield this COUNTRY for 10 minutes; other countries
           // retain their own independent rotation and progress.
           if(/^(?:http_429|rate_limit|quota_exceeded)$/.test(outcome.status)){
-            if(['google','naver','wikidata'].includes(outcome.provider)){
+            if(['google','naver','wikidata','osm'].includes(outcome.provider)){
               state.providerCooldowns=Object.assign({},obj(state.providerCooldowns),{
-                [outcome.provider]:new Date(ts(clock())+(outcome.provider==='wikidata'?60*60*1000:6*60*60*1000)).toISOString()});
-              if(outcome.provider!=='wikidata')await markSharedQuota(outcome.provider);
+                [outcome.provider]:new Date(ts(clock())+(['wikidata','osm'].includes(outcome.provider)?60*60*1000:6*60*60*1000)).toISOString()});
+              if(!['wikidata','osm'].includes(outcome.provider))await markSharedQuota(outcome.provider);
               // The failed provider lane has already been cut short in the
               // saved job. Continue the independent Sanmaru lane next tick.
               state.nextRetryAt=null;
-              lastResult=outcome.provider==='wikidata'?'wikidata_quota_global_cooldown':'supplier_provider_quota_sanmaru_fallback_queued';
+              lastResult=['wikidata','osm'].includes(outcome.provider)?'free_provider_quota_global_cooldown':'supplier_provider_quota_sanmaru_fallback_queued';
             }else state.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
           }
           else if(/^(?:http_401|http_403|permission_denied|forbidden|not_configured|invalid_api_key)$/.test(outcome.status)){
             // Account-level access errors are NOT country-specific failures.
             // Skip repeated credential-denied queries while allowing a separately
             // configured Sanmaru lane to continue the next scheduled tick.
-            if(['google','naver','wikidata'].includes(outcome.provider)){
+            if(['google','naver','wikidata','osm'].includes(outcome.provider)){
               state.providerCooldowns=Object.assign({},obj(state.providerCooldowns),{
-                [outcome.provider]:new Date(ts(clock())+(outcome.provider==='wikidata'?60*60*1000:6*60*60*1000)).toISOString()});
-              if(outcome.provider!=='wikidata')await markSharedQuota(outcome.provider);
+                [outcome.provider]:new Date(ts(clock())+(['wikidata','osm'].includes(outcome.provider)?60*60*1000:6*60*60*1000)).toISOString()});
+              if(!['wikidata','osm'].includes(outcome.provider))await markSharedQuota(outcome.provider);
               state.nextRetryAt=null;
-              lastResult=outcome.provider==='wikidata'?'wikidata_permission_global_cooldown':'supplier_provider_permission_sanmaru_fallback_queued';
+              lastResult=['wikidata','osm'].includes(outcome.provider)?'free_provider_permission_global_cooldown':'supplier_provider_permission_sanmaru_fallback_queued';
             }else state.nextRetryAt=new Date(ts(clock())+20*60*1000).toISOString();
           }
           else if(/^(?:http_408|http_422|http_500|http_502|http_503|http_504|timeout|typeerror|network_error|fetch_failed)$/.test(outcome.status))
@@ -388,7 +390,22 @@ function create(deps) {
       // modest quota-safe retry gap; no browser session is needed.
       const supplierTarget=s.countryCode==='US'?200:100;
       const full=qualified>=supplierTarget;
-      if(!full && state.paidRecoveryRunning!==true){
+      // Paid supplier discovery is not a compulsory quota. When 10 usable
+      // sellers already exist, allow the independent product worker to TRY
+      // them before paying for more seller searches. Only a completed,
+      // same-country scheduled product search with zero results permits a
+      // further automatic paid-recovery decision. Never use a protected
+      // human/manual product job as proof of automated failure.
+      let paidEvidenceNeeded=qualified<AutoPolicy.INITIAL_SUPPLIER_SITES;
+      if(!paidEvidenceNeeded&&!full){
+        try{
+          const checkpoint=await automation.autoProductJobCheckpoint(input(s));
+          paidEvidenceNeeded=checkpoint.updatedBy==='scheduled-country-product-ai' &&
+            ['complete','committed'].includes(txt(checkpoint.status).toLowerCase()) &&
+            Number(checkpoint.resultCount||0)===0;
+        }catch(_e){paidEvidenceNeeded=false;}
+      }
+      if(!full && paidEvidenceNeeded && state.paidRecoveryRunning!==true){
         const budget=await require('./commerce-country-paid-search-budget.v1').status(s.countryCode);
         const blockedUntil=Date.parse(txt(budget.googleAccessBlockedUntil))||0;
         if(budget.auto.remaining>0 && blockedUntil<=ts(clock())){
@@ -397,7 +414,7 @@ function create(deps) {
           return Object.assign(state,{phase:'idle',jobId:null,lastCommittedJobId:committedJobId,
             roundsCompleted:RESEARCH_ROUNDS,paidRecoveryPending:true,
             paidRecoveryRunning:false,completedAt:clock(),qualifiedSupplierCount:qualified,
-            lastResult:'free_research_completed_paid_fallback_available'});
+            lastResult:'free_research_insufficient_actual_sellers_or_products_paid_fallback_available'});
         }
       }
       const gap=full?SUPPLIER_REFRESH_MS:(have?UNDERFILLED_RETRY_MS:NO_RESULT_RETRY_MS);

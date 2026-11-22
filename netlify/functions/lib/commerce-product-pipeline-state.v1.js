@@ -9,8 +9,9 @@
  */
 
 const ProductRanking = require("./commerce-product-ranking.v1");
+const CommercialLanding = require("./commerce-commercial-landing-guard.v1");
 
-const VERSION = "commerce-product-pipeline-state-v1.6.3-travel-inventory-detail-evidence";
+const VERSION = "commerce-product-pipeline-state-v1.6.4-compare-site-evidence";
 const SOURCE_REF = "country-product-ranking-review";
 const STAGES = Object.freeze([
   "research_discovered",
@@ -200,6 +201,10 @@ function researchReadiness(productInput){
   if(!card.price) warnings.push("price_to_be_confirmed_at_seller");
   if(!card.availability) warnings.push("availability_to_be_confirmed_at_seller");
   if(!(product.offerPresent === true)) warnings.push("structured_offer_not_confirmed");
+  // Keep comparison-site discoveries visible for administrator reinspection,
+  // but never promote them on the basis of a hotel profile and thumbnail.
+  const comparison=CommercialLanding.evaluate(product);
+  if(!comparison.accepted)reviewGaps.push(...comparison.issues);
 
   const queueEligible=hardBlockers.length === 0;
   const promotionEligible=queueEligible && reviewGaps.length === 0;

@@ -13,6 +13,7 @@
  */
 const Guard = require('./commerce-supplier-source-guard.v1');
 const AutoPolicy = require('./commerce-country-auto-research-policy.v1');
+const OsmSearch = require('./commerce-country-osm-supplier-search.v1');
 const VERSION = 'igdc-country-free-supplier-search.v1';
 const ENDPOINT = 'https://query.wikidata.org/sparql';
 function txt(v){return v == null ? '' : String(v).trim();}
@@ -108,4 +109,15 @@ async function search(task,scope,opts){
   }catch(e){return {provider:'wikidata',status:errorCode(e),count:0,items:[],elapsedMs:Date.now()-started};}
   finally{clearTimeout(timer);}
 }
-module.exports={VERSION,configured,safeSupplierUrl,queryForCountry,search};
+// Route a bounded part of the five free research rounds to a second genuine,
+// no-key official-website directory. Never fabricate a lead or mark it verified.
+async function searchCountry(task,scope,options){
+  // Missing/uncertain coordinates must never consume a free-query lease on
+  // an empty OSM task; use the independent public company directory instead.
+  const country=txt(scope&&(scope.country||scope.countryCode)).toUpperCase();
+  const region=txt(scope&&(scope.region||scope.subdivisionCode)||'NATIONWIDE');
+  if(options&&options.preferOsm===true&&OsmSearch.queryForCountry(country,options.offset,region))
+    return OsmSearch.search(task,scope,options);
+  return search(task,scope,options);
+}
+module.exports={VERSION,configured,safeSupplierUrl,queryForCountry,search:searchCountry,searchWikidata:search};

@@ -13,10 +13,11 @@
 const Core=require("./lib/regional-brokerage-autoselection.core.v1");
 const ProductRanking=require("./lib/commerce-product-ranking.v1");
 const SupplierSourceGuard=require("./lib/commerce-supplier-source-guard.v1");
+const CommercialLanding=require("./lib/commerce-commercial-landing-guard.v1");
 const CountryLogistics=require("./lib/commerce-country-logistics-evidence.v1");
 let SupplierResearchPlan=null;
 try{SupplierResearchPlan=require("./lib/commerce-supplier-research-plan.v1");}catch(_e){SupplierResearchPlan=null;}
-const VERSION="regional-brokerage-autoselector-v2.10.2-product-media-evidence-guard";
+const VERSION="regional-brokerage-autoselector-v2.10.3-comparison-supplier-guard";
 const CACHE_TTL=5*60*1000;
 function envInt(name,fallback,min,max){
   const value=Number(process.env[name]);
@@ -78,7 +79,6 @@ const LOCAL_QUERY_PACKS=Object.freeze({
 });
 
 
-const QUERY_LOCALIZATION_CACHE=globalThis.__IGDC_COUNTRY_QUERY_LOCALIZATION_CACHE__||(globalThis.__IGDC_COUNTRY_QUERY_LOCALIZATION_CACHE__=new Map());
 const GOOGLE_LOCALE_ALIASES=Object.freeze({"zh-Hans":"zh-CN","zh-Hant":"zh-TW",nb:"no",fil:"tl"});
 const COMMERCE_TEXT_RX=/(shop|store|product|buy|price|cart|catalog|mall|shopping|official store|online store|쇼핑|상품|구매|가격|스토어|온라인몰|ショップ|商品|購入|通販|商店|商品|購買|網上商店|网上商城|tienda|producto|comprar|loja|produto|comprar|boutique|produit|acheter|onlineshop|produkt|kaufen|negozio|prodotto|acquistare|webshop|producten|kopen|магазин|товар|купить|інтернет-магазин|товари|متجر|منتج|شراء|ऑनलाइन स्टोर|उत्पाद|खरीद|অনলাইন স্টোর|পণ্য|কিনুন|آن لائن اسٹور|مصنوعات|خریدیں|toko|produk|beli|kedai|cửa hàng|sản phẩm|mua|ร้านค้า|สินค้า|ซื้อ|duka|bidhaa|nunua)/i;
 const NON_COMMERCE_TEXT_RX=/(\.pdf\b|\bpdf\b|report|research|study|journal|paper|proceedings|conference|symposium|whitepaper|statistics|policy brief|trade agreement|free trade agreement|trade barriers|news article|press release|working paper|annual report|보고서|연구|논문|학술|통계|협정|기사|보도자료|報告書|研究|論文|統計|協定|ニュース|报告|研究|论文|统计|协定|新闻|rapport|recherche|étude|journal|conférence|informe|investigación|estudio|revista|conferencia|relatório|pesquisa|estudo|conferência|bericht|forschung|studie|konferenz|отчет|исследование|доклад|конференция|تقرير|بحث|دراسة|مؤتمر)/i;
@@ -237,47 +237,6 @@ function queryCategories(geo){
   while(chosen.length<5&&chosen.length<size){const index=(offset+chosen.length)%size;if(!chosen.includes(index))chosen.push(index);else break;}
   return chosen;
 }
-function parseOpenAiJson(raw){
-  const value=text(raw);if(!value)return null;
-  try{return JSON.parse(value);}catch(_e){}
-  const start=value.indexOf("{");const end=value.lastIndexOf("}");
-  if(start>=0&&end>start){try{return JSON.parse(value.slice(start,end+1));}catch(_e){}}
-  return null;
-}
-function validLocalizedQuery(value){
-  const q=text(value).replace(/\s+/g," ").slice(0,320);
-  if(!q||/^https?:\/\//i.test(q)||/\bhttps?:\/\//i.test(q))return "";
-  return q;
-}
-async function openAiLocalizedQueries(geo,locale,indices,localName){
-  const key=envFirst("OPENAI_API_KEY","OPENAI_KEY");
-  if(!key)return{queries:[],origin:"english-fallback",error:"OPENAI_API_KEY_missing"};
-  const cacheKey=[geo.country,geo.region||"NATIONWIDE",locale,indices.join("-")].join("|");
-  const cached=QUERY_LOCALIZATION_CACHE.get(cacheKey);
-  if(cached&&Date.now()-cached.at<24*60*60*1000)return cached.value;
-  const model=envFirst("IGDC_COUNTRY_QUERY_MODEL","IGDC_COUNTRY_AUTOMATION_MODEL","OPENAI_MODEL")||"gpt-4o-mini";
-  const categories=indices.map(index=>LOCAL_QUERY_PACKS.en.categories[index]);
-  const controller=typeof AbortController!=="undefined"?new AbortController():null;
-  const timer=controller?setTimeout(()=>controller.abort(),Math.min(24000,PROVIDER_FETCH_TIMEOUT)):null;
-  try{
-    const response=await fetch((envFirst("OPENAI_BASE_URL")||"https://api.openai.com/v1").replace(/\/+$/,"")+"/chat/completions",{
-      method:"POST",signal:controller?controller.signal:undefined,
-      headers:{"Content-Type":"application/json",Authorization:"Bearer "+key},
-      body:JSON.stringify({model,temperature:0.05,response_format:{type:"json_object"},messages:[
-        {role:"system",content:"Create exactly three concise supplier-discovery search queries in the requested locale. Each query must seek real manufacturers, producers, cooperatives, responsible sellers, small or regional distributors, and official stores that conduct their own sales and clearly handle payment, delivery, returns, refunds, and customer support. Search for the responsible business, not individual product listings. Exclude reports, PDFs, news, research, wikis, major marketplaces, classifieds, and unrelated documents. Do not include or invent URLs. Return JSON only: {\"queries\":[\"...\",\"...\",\"...\"]}."},
-        {role:"user",content:JSON.stringify({countryCode:geo.country,countryName:localName,region:geo.region||"NATIONWIDE",locale,categories})}
-      ]})
-    });
-    const body=await response.json().catch(()=>({}));
-    if(!response.ok)throw Object.assign(new Error(text(body&&body.error&&body.error.message)||"OpenAI HTTP "+response.status),{code:"HTTP_"+response.status});
-    const parsed=parseOpenAiJson(body&&body.choices&&body.choices[0]&&body.choices[0].message&&body.choices[0].message.content);
-    const queries=(Array.isArray(parsed&&parsed.queries)?parsed.queries:[]).map(validLocalizedQuery).filter(Boolean).slice(0,3);
-    if(queries.length<3)throw new Error("localized_query_count_invalid");
-    const value={queries,origin:"openai-localized",error:null};QUERY_LOCALIZATION_CACHE.set(cacheKey,{at:Date.now(),value});
-    return value;
-  }catch(error){return{queries:[],origin:"english-fallback",error:providerErrorCode(error)};}
-  finally{if(timer)clearTimeout(timer);}
-}
 async function queriesForLocale(geo,locale,indices){
   const fallbackName=geo.countryName||geo.country;const localName=localCountryName(geo.country,locale,fallbackName);
   const locality=[geo.region&&geo.region!=="NATIONWIDE"?geo.region:"",localName].filter(Boolean).join(" ");
@@ -285,8 +244,11 @@ async function queriesForLocale(geo,locale,indices){
   if(pack){
     return{locale,localName,origin:"static-local-pack",error:null,queries:indices.map(index=>`${locality} ${pack.categories[index%pack.categories.length]} ${supplierRoleTerms(locale)} ${pack.commerce}`.replace(/\s+/g," ").trim())};
   }
-  const ai=await openAiLocalizedQueries(geo,locale,indices,localName);
-  if(ai.queries.length)return{locale,localName,origin:ai.origin,error:null,queries:ai.queries.map(q=>`${locality} ${q}`.replace(/\s+/g," ").trim())};
+  // Distribution supplier research never spends OpenAI credits implicitly.
+  // Existing static local-language packs are preferred above; for unsupported
+  // locales use the predefined English bridge instead. Administrator-approved
+  // one-time assistance has its own guarded API and is not called here.
+  const ai={queries:[],origin:"english-language-fallback",error:"automatic_ai_query_disabled_by_policy"};
   const english=LOCAL_QUERY_PACKS.en;const englishName=localCountryName(geo.country,"en",fallbackName);
   const englishLocality=[geo.region&&geo.region!=="NATIONWIDE"?geo.region:"",englishName].filter(Boolean).join(" ");
   return{locale:"en",localName:englishName,origin:"english-language-fallback",error:ai.error,queries:indices.map(index=>`${englishLocality} ${english.categories[index]} ${supplierRoleTerms("en")} ${english.commerce}`.replace(/\s+/g," ").trim())};
@@ -378,6 +340,7 @@ function obviousNonCommerceReason(item){
   if(supplierSourceProblem)return supplierSourceProblem;
   if(BLOCKED_DOCUMENT_EXT_RX.test(u.pathname+u.search))return "document_file";
   if(BLOCKED_REFERENCE_HOST_RX.test(u.hostname))return "reference_or_research_host";
+  if(CommercialLanding.isComparisonHost(u.toString()))return "price_comparison_service_not_responsible_seller";
   if(Core.isMarketplace(item,u.toString()))return "major_marketplace_or_aggregator";
   const hay=resultText(item);
   if(/\/(?:attachment|tag|author|category|archives?)\//i.test(u.pathname)||/wp-auto-importer|featured-image|첨부파일|꿈\s*해몽|fortune|horoscope/i.test(hay))return "blog_attachment_or_generated_page";
@@ -400,7 +363,10 @@ function commerceHeuristicScore(item){
 function commerceFirst(items){return (items||[]).filter(item=>!obviousNonCommerceReason(item)).sort((a,b)=>commerceHeuristicScore(b)-commerceHeuristicScore(a));}
 function guidedResearchResult(item){
   const payload=plain(item&&item.payload),origin=lower([payload.queryOrigin,payload.source,item&&item.source,item&&item.provider,item&&item.generatedBy].filter(Boolean).join(" "));
-  return /searchbank-psom-policy-plan|country_discovery|searchbank_snapshot|administrator-policy|sanmaru/.test(origin);
+  // Wikidata and OSM are genuine no-key PUBLIC DIRECTORY sources. Keep their
+  // unverified official-site leads available for private evidence inspection
+  // after search, never silently promote them to approved responsible sellers.
+  return /searchbank-psom-policy-plan|country_discovery|searchbank_snapshot|administrator-policy|sanmaru|wikidata_official_website|osm_mapped_business_official_website|public-business-website-lead|public-company-official-site/.test(origin);
 }
 function researchFirst(items){
   return (items||[]).filter(item=>{
@@ -695,6 +661,8 @@ function researchCandidateShell(item,geo,status,error){
 async function inspectCandidate(item,geo,params){
   const discoveredUrl=Core.externalUrl(item);if(!discoveredUrl)return item;
   const u=safeHttpUrl(discoveredUrl);if(!u)return item;
+  const blockedSource=SupplierSourceGuard.reason(u.toString());
+  if(blockedSource)return researchCandidateShell(item,geo,"supplier_source_blocked",blockedSource);
   let timer=null;
   try{
     const timeoutMs=boundedResearchTimeout(params&&params.timeoutMs,PAGE_CHECK_TIMEOUT,3500,9000),controller=new AbortController();timer=setTimeout(()=>controller.abort(),timeoutMs);
@@ -730,6 +698,15 @@ async function inspectCandidate(item,geo,params){
       (words.service?8:0)+(words.contactChannel?5:0)+(words.legalIdentity||ld.org?7:0)+(words.termsPrivacy?4:0)+(words.warranty?3:0)+
       (detectedCountry&&detectedCountry===geo.country?3:0)-(marketplace?100:0)
     )));
+    const provenance=plain(item.payload);
+    const publicDirectorySource=
+      ((lower(item.provider)==='wikidata'||lower(provenance.source)==='wikidata') &&
+        /^https:\/\/www\.wikidata\.org\/entity\/Q\d+$/.test(text(provenance.entity))) ||
+      ((lower(item.provider)==='osm'||lower(provenance.source)==='osm') &&
+        /^(?:node|way|relation)\/\d+$/.test(text(provenance.osmId)));
+    // A linked public directory is corroboration of a WEBSITE LISTING only,
+    // NOT legal ownership, inventory, country eligibility or operator approval.
+    const corroboratedSource=publicDirectorySource && sameSite(discoveredUrl,officialUrl);
     const evidence=Object.assign({},item.brokerageVerification||{}, {
       automated:true,inspectedAt:now,discoveredFromUrl:discoveredUrl,inspectedUrl:finalUrl.toString(),supplierOfficialUrl:officialUrl,
       official:words.official||ld.org,responsibleEntity,directSales,payment:words.payment,secureTransport,securePaymentSignal:words.securePayment,
@@ -739,7 +716,9 @@ async function inspectCandidate(item,geo,params){
       publicPolicyChecks:policyCheck,countryLogistics:logisticsEvidence,
       sellerMarketEvidence:{schema:"igdc-seller-market-claim.v1",targetCountry:geo.country,
         sellerAddressCountryClaim:ld.country||null,verifiedLegalAddress:false,
-        crossBorderDeliveryIndependentlyVerified:false,ipBasedMarketAssumption:false},publicDirectoryCorroborated:!!policyCheck.externalDirectoryLink,publicCountryScopeCorroborated:ld.matchCountry===true,
+        crossBorderDeliveryIndependentlyVerified:false,ipBasedMarketAssumption:false},publicDirectoryCorroborated:!!policyCheck.externalDirectoryLink||corroboratedSource,
+      publicDirectoryEvidenceType:corroboratedSource?'self_editable_public_website_listing_unverified':(policyCheck.externalDirectoryLink?'linked_directory_unverified':null),
+      publicCountryScopeCorroborated:ld.matchCountry===true,
       publicShippingPolicyVerified:!!policyCheck.shippingPolicyUrl,publicReturnRefundPolicyVerified:!!(policyCheck.returnsPolicyUrl&&policyCheck.refundPolicyUrl),
       publicCustomerSupportVerified:!!policyCheck.supportPolicyUrl,
       marketplace,majorPlatform:marketplace,jsonLdOrganization:ld.org,jsonLdProduct:ld.product,jsonLdOffer:ld.offer,supplierType:typeCode,

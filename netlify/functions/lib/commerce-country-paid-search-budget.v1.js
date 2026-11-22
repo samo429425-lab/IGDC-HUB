@@ -68,11 +68,11 @@ async function settle(country,token,status,store=Store){
     const i=state.pending.findIndex(p=>p&&p.id===token);
     if(i<0)return{noWrite:true,response:{settled:false,reason:'reservation_missing'}};
     const item=state.pending.splice(i,1)[0];
-    const nonBillable=['not_configured','http_403','invalid_query','google_permission_cooldown'].includes(statusText);
-    if(nonBillable){state.denied=Math.max(0,Number(state.denied)||0)+1;if(statusText==='http_403')state.googleAccessBlockedUntil=new Date(Date.now()+60*60*1000).toISOString();}
+    const nonBillable=['not_configured','http_401','http_403','http_429','invalid_query','google_permission_cooldown','country_paid_supplier_limit_reached'].includes(statusText);
+    if(nonBillable){state.denied=Math.max(0,Number(state.denied)||0)+1;if(statusText==='http_403'||statusText==='http_401'||statusText==='http_429')state.googleAccessBlockedUntil=new Date(Date.now()+(statusText==='http_429'?6:3)*60*60*1000).toISOString();}
     else state.used[item.kind]=Math.max(0,Number(state.used[item.kind])||0)+1;
     state.lastProviderStatus=statusText;
-    state.history.push({at:new Date().toISOString(),kind:item.kind,event:nonBillable?'not_billed_access_denied':'potentially_billable_search',status:statusText});
+    state.history.push({at:new Date().toISOString(),kind:item.kind,event:nonBillable?'rejected_or_quota_denied_not_estimated_billed':'potentially_billable_search',status:statusText});
     return{response:{settled:true,billableCounted:!nonBillable,kind:item.kind,totals:totals(state)}};
   },store);
 }
