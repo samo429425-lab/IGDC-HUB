@@ -287,4 +287,7 @@
 
 
 
+# Public approved product detail pages: must precede the catch-all shell rewrite.
+/product/*              /.netlify/functions/product-search-detail  200!
+
 /*                      /index.html                      200

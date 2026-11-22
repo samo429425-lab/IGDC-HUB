@@ -11,15 +11,32 @@ function geoCountry(event){
   const c=nf&&nf.country; return normalizeCountry((c&&typeof c==="object"?(c.code||c.alpha2):c)||h["cf-ipcountry"]||h["x-country"]||h["x-nf-country"]||h["x-vercel-ip-country"]||"");
 }
 function parsePath(event){
-  const parts=String(event&&event.path||"").split("/").filter(Boolean);
-  const productAt=parts.lastIndexOf("product");
-  const tail=productAt>=0?parts.slice(productAt+1):parts.slice(-2);
-  const maybeCountry=normalizeCountry(tail.length>1?tail[tail.length-1]:"");
-  const idPart=maybeCountry?tail[tail.length-2]:tail[tail.length-1];
-  return {id:decodeURIComponent(idPart||""),market:maybeCountry};
+  const q=event&&event.queryStringParameters||{};
+  let suffix="";
+  // Netlify may expose either the original public path or the rewritten function path.
+  // A dedicated _redirects rule supplies product_path, preserving IDs and optional country.
+  for(const candidate of [event&&event.rawUrl,event&&event.path]){
+    if(!candidate)continue;
+    try{
+      const pathname=new URL(String(candidate),ORIGIN).pathname;
+      const match=pathname.match(/^\/product\/(.+?)\/?$/i);
+      if(match){suffix=match[1];break;}
+    }catch(_e){}
+  }
+  if(!suffix && typeof q.product_path==="string")suffix=q.product_path.replace(/^\/+|\/+$/g,"");
+  try{
+    const parts=suffix.split("/").filter(Boolean).map(decodeURIComponent);
+    if(parts.length!==1&&parts.length!==2)return{id:"",market:""};
+    const id=parts[0],market=parts.length===2?normalizeCountry(parts[1]):"";
+    if(!/^[\p{L}\p{N}_.:@-]{1,220}$/u.test(id)||parts.length===2&&(!market||parts[1]!==market))return{id:"",market:""};
+    return{id,market};
+  }catch(_e){return{id:"",market:""};}
 }
+
 exports.handler=async(event)=>{
-  const parsed=parsePath(event), registry=buildRegistry();
+  const parsed=parsePath(event);
+   if(!parsed.id)return response(404,"<!doctype html><meta name=robots content='noindex'><p>Product not found.</p>",{"cache-control":"public,max-age=60"});
+   const registry=buildRegistry();
   const t=registry.targets.find(x=>x.kind==="commerce"&&x.id===parsed.id);
   if(!t)return response(404,"<!doctype html><meta name=robots content='noindex'><p>Product not found.</p>",{"cache-control":"public,max-age=60"});
   if(parsed.market&&!hasMarket(t,parsed.market)) return response(404,"<!doctype html><meta name=robots content='noindex'><p>Product is not verified for this market.</p>",{"cache-control":"public,max-age=60"});

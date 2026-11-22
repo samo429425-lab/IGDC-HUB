@@ -30,7 +30,8 @@ function summary(report){
     discovery:{
      unacknowledged_count:safeNum(report&&report.discovery&&report.discovery.unacknowledgedCandidates),
      batch_limit:safeNum(report&&report.discovery&&report.discovery.batchLimit),
-     used_unacknowledged:safeNum(report&&report.discovery&&report.discovery.usedUnacknowledged)
+     used_unacknowledged:safeNum(report&&report.discovery&&report.discovery.usedUnacknowledged),
+     remaining_after_checkpoint:report?.discovery?.remainingAfterCheckpoint==null?null:safeNum(report.discovery.remainingAfterCheckpoint)
     },
     checkpoint:{
      state:String(report&&report.deduplication&&report.deduplication.checkpointState||"unknown").slice(0,36),

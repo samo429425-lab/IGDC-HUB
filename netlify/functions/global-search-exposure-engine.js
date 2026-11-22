@@ -106,6 +106,9 @@ async function run(options={}){
  const checkpointSaved=accepted?await ledger.storeCheckpoints(accepted.entries,options.event):null;
  const duplicatesSkipped=plan.selected.reduce((total,v)=>total+urls.length-v.length,0);
  const audit=summary(jobs);
+ const acknowledgedIndexNow=accepted&&checkpointSaved&&checkpointSaved.state==="stored"&&["submitted","pending-verification"].includes(jobs[0].status);
+ const acknowledgedFresh=acknowledgedIndexNow?freshCandidates.filter(url=>plan.selected[0].includes(url)).length:0;
+ const remainingAfterCheckpoint=acknowledgedIndexNow?Math.max(0,freshCandidates.length-acknowledgedFresh):null;
  const errors=audit.failed+audit.partial;
  const status=errors?(audit.submitted||audit.partial?"partial-failure":"submission-failed"):
              audit.submitted?"submitted":audit.pending?"pending-verification":urls.length?"sitemap-only":"no-changes";
@@ -124,7 +127,7 @@ async function run(options={}){
   changeWindowHours:force?null:hours,changedUrls:urls.length,submissionSummary:audit,
   discovery:{unacknowledgedCandidates:freshCandidates.length,batchLimit,
    usedUnacknowledged:freshCandidates.filter(u=>urls.includes(u)).length,
-   remainingAfterBatch:Math.max(0,freshCandidates.filter(u=>!urls.includes(u)).length),
+   remainingAfterBatch:Math.max(0,freshCandidates.filter(u=>!urls.includes(u)).length),remainingAfterCheckpoint,
    note:"This is a real changed-URL notification queue. It does not conduct user searches or determine ranking."},
   deduplication:{checkpointState:checkpoint.state,duplicatesSkipped,acknowledgedRevisions:accepted?accepted.count:0,
     checkpointWrite:checkpointSaved?checkpointSaved.state:"no-write",storesUrls:false},

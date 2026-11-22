@@ -1,7 +1,8 @@
 "use strict";
 // Read-only search sitemap. Do not advertise private or unverified records.
 const {buildRegistry}=require("./lib/search-exposure/registry");
-const ORIGIN="https://igdcglobal.com",MAX_URLS=45000;
+const crypto=require("crypto");
+const ORIGIN="https://igdcglobal.com",MAX_URLS=45000,DIRECTORY_PAGE_SIZE=80;
 // Bounded warm-instance cache avoids rebuilding large approved snapshots for every crawler.
 // A fresh Netlify instance always recomputes. This does not cache or publish private candidates.
 const CACHE_MS=90*1000;
@@ -15,8 +16,12 @@ function publicSitemapTargets(){
  // Expose only country directories backed by existing approved, verified market entries.
  const directory=ORIGIN+"/.netlify/functions/public-commerce-search-index";
  for(const code of Object.keys(reg.countryCounts||{}).sort()){
-  if(/^[A-Z]{2}$/.test(code)&&reg.countryCounts[code]>0)
-   push({url:directory+"?country="+code,kind:"market-directory"});
+   if(/^[A-Z]{2}$/.test(code)&&reg.countryCounts[code]>0){
+    const pages=Math.ceil(reg.countryCounts[code]/DIRECTORY_PAGE_SIZE);
+    for(let page=1;page<=pages;page++){
+     push({url:directory+"?country="+code+(page>1?"&page="+page:""),kind:"market-directory"});
+    }
+   }
  }
  const value={reg,targets};cached={value,expires:now+CACHE_MS};return value;
 }
@@ -53,6 +58,9 @@ exports.handler=async event=>{
   if(raw!==undefined&&(!/^[1-9]\d{0,5}$/.test(String(raw))||Number(raw)>parts))return{statusCode:404,headers:{"content-type":"text/plain; charset=utf-8","cache-control":"no-store"},body:"Sitemap part not found"};
   const part=raw===undefined?0:Number(raw);
   const body=parts>1&&!part?indexXml(parts):urlset(targets.slice(((part||1)-1)*MAX_URLS,(part||1)*MAX_URLS));
-  return{statusCode:200,headers:{"content-type":"application/xml; charset=utf-8","cache-control":"public,max-age=90,s-maxage=180","x-content-type-options":"nosniff","x-igdc-search-registry":reg.hash,"x-igdc-sitemap-parts":String(parts),"x-igdc-country-market-pages":String(reg.marketCommerceCount||0),"x-igdc-sitemap-directory-count":String(Object.keys(reg.countryCounts||{}).filter(k=>reg.countryCounts[k]>0).length)},body};
+   const etag='"'+crypto.createHash("sha256").update(body).digest("hex")+'"';
+   const headers={"content-type":"application/xml; charset=utf-8","cache-control":"public,max-age=90,s-maxage=180","x-content-type-options":"nosniff","etag":etag,"x-igdc-search-registry":reg.hash,"x-igdc-sitemap-parts":String(parts),"x-igdc-country-market-pages":String(reg.marketCommerceCount||0),"x-igdc-sitemap-directory-count":String(Object.keys(reg.countryCounts||{}).filter(k=>reg.countryCounts[k]>0).length)};
+   if(String(event&&event.headers&&(event.headers["if-none-match"]||event.headers["If-None-Match"])||"").split(",").map(s=>s.trim()).includes(etag))return{statusCode:304,headers,body:""};
+   return{statusCode:200,headers,body};
  }catch(e){return{statusCode:503,headers:{"content-type":"text/plain; charset=utf-8","cache-control":"no-store"},body:"Search sitemap unavailable"};}
 };

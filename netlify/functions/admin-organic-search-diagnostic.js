@@ -9,7 +9,7 @@ try{RUN_LEDGER=require("./lib/igdc-search-exposure-run-ledger");}
 catch(e){if(e&&e.code!=="MODULE_NOT_FOUND")throw e;RUN_LEDGER={readLatest:async()=>({state:"not-installed",record:null})};}
 const ORIGIN="https://igdcglobal.com";
 const PLAY="https://play.google.com/store/apps/details?id=com.maru.mediaplayer";
-const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.5.0-15stage-evidence";
+const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.6.0-25stage-verification";
 const CHECKS=[
  ["platform-home","IGDC Global Platform","/home.html","platform"],
  ["platform-en","IGDC Global Platform (English)","/igdc-amplify-platform-en.html","platform"],
@@ -34,20 +34,27 @@ function cleanText(html){
  return String(html||"").replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();
 }
 // Audit the returned first HTML bytes, not just HTTP 200. No synthetic traffic or rank tests.
-function contentSignals(html,canonical,robotsHeader){
+function contentSignals(html,canonical,robotsHeader,requestedUrl){
  const head=String(html||"").split(/<\/head\s*>/i)[0];
  const match=(rx)=>((head.match(rx)||[])[1]||"").trim();
  const description=match(/<meta\b(?=[^>]*name=["']description["'])[^>]*content=["']([^"']*)/i)
    ||match(/<meta\b(?=[^>]*content=["'][^"']*["'])(?=[^>]*name=["']description["'])[^>]*content=["']([^"']*)/i);
  const h1=(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)||[])[1]||"";
  const blocks=[...head.matchAll(/<script\b(?=[^>]*type=["']application\/ld\+json["'])[^>]*>([\s\S]*?)<\/script>/gi)];
- let jsonLdValid=0,jsonLdInvalid=0;
- for(const block of blocks){try{JSON.parse(block[1]);jsonLdValid++;}catch(_e){jsonLdInvalid++;}}
+ let jsonLdValid=0,jsonLdInvalid=0,productStructuredDataPresent=false;
+ for(const block of blocks){try{
+   const data=JSON.parse(block[1]);jsonLdValid++;
+   const entries=Array.isArray(data)?data:[data];
+   const flat=entries.flatMap(e=>e&&Array.isArray(e["@graph"])?e["@graph"]:[e]);
+   productStructuredDataPresent=productStructuredDataPresent||flat.some(e=>e&&([].concat(e["@type"]||[])).includes("Product"));
+  }catch(_e){jsonLdInvalid++;}}
  const indexable=!/noindex/i.test(robotsHeader||"")&&!/<meta\b[^>]*name=["']robots["'][^>]*content=["'][^"']*noindex/i.test(head);
  let canonicalOwned=false;
  try{const u=new URL(canonical);canonicalOwned=u.protocol==="https:"&&u.hostname==="igdcglobal.com"&&!u.hash;}catch(_e){}
+ let canonicalMatchesRequest=false;
+ try{const a=new URL(canonical),b=new URL(requestedUrl);canonicalMatchesRequest=a.origin===b.origin&&a.pathname===b.pathname&&a.search===b.search;}catch(_e){}
  return {titlePresent:/<title\b/i.test(head),descriptionPresent:description.length>20,
-  headingPresent:cleanText(h1).length>3,canonicalOwned,robotsAllowsIndex:indexable,
+  headingPresent:cleanText(h1).length>3,canonicalOwned,canonicalMatchesRequest,productStructuredDataPresent,robotsAllowsIndex:indexable,
   structuredDataValid:jsonLdValid,structuredDataInvalid:jsonLdInvalid,
   contentTextCharacters:Math.min(100000,cleanText(html).length),
   downloadUrlPresent:/releases\/(?:download|latest\/download)\//.test(html),
@@ -57,19 +64,20 @@ async function probe(id,label,path,group){
  const url=urlFor(path),started=Date.now();
  try{
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),7000);
-  let response,body="";
+  const timeout=setTimeout(()=>controller.abort(),8000);
+  let response,body="",truncated=false;
+  const byteLimit=/(?:^|\/)home(?:_[a-z]+)?\.html$/i.test(path)?660000:160000;
   try{
    response=await fetch(url,{method:"GET",headers:{"accept":"text/html,application/xml,text/plain;q=0.8","user-agent":"IGDC-ReadOnly-Diagnostic/1.0"},redirect:"follow",signal:controller.signal,cache:"no-store"});
    if(response.body&&typeof response.body.getReader==="function"){
     const reader=response.body.getReader();let chunks=0;
-    while(chunks<100000){
+    while(chunks<byteLimit){
      const part=await reader.read();if(part.done)break;
      body+=new TextDecoder().decode(part.value,{stream:true});
      chunks+=part.value.length;
     }
-    if(chunks>=100000)await reader.cancel().catch(()=>{});
-   }else body=(await response.text()).slice(0,100000);
+    if(chunks>=byteLimit){truncated=true;await reader.cancel().catch(()=>{});}
+   }else{const raw=await response.text();truncated=raw.length>byteLimit;body=raw.slice(0,byteLimit);}
   }finally{clearTimeout(timeout);}
   const statusCode=response.status,ctype=String(response.headers.get("content-type")||"").toLowerCase();
   const xml=/\.xml$/i.test(path)||path==="/.netlify/functions/global-search-sitemap",robots=path==="/robots.txt";
@@ -80,14 +88,16 @@ async function probe(id,label,path,group){
   const correctType=html?ctype.includes("html"):(xml?ctype.includes("xml"):(robots?ctype.includes("text"):true));
   const hasMarker=html?/<html\b/i.test(body):(xml?/<(?:urlset|sitemapindex)\b/i.test(body):(robots?/user-agent:/i.test(body):true));
   const pageHasPlay=body.includes("play.google.com/store/apps/details?id=com.maru.mediaplayer");
-  const status=response.ok&&correctType&&hasMarker&&!hasNoindex?"reachable":"needs-review";
-  const signals=html?contentSignals(body,canonical,String(response.headers.get("x-robots-tag")||"")):null;
+  const signals=html?contentSignals(body,canonical,String(response.headers.get("x-robots-tag")||""),url):null;
+  const isProduct=id==="sample-approved-product"||id==="sample-country-product";
+  const productValid=!isProduct||!!(signals&&signals.canonicalMatchesRequest&&signals.productStructuredDataPresent&&!/^(IGDC Global Hub|IGDC Global Platform)$/i.test(cleanText(title)));
+  const status=response.ok&&correctType&&hasMarker&&!hasNoindex&&productValid?"reachable":"needs-review";
   return{id,label,group,url,status,httpStatus:statusCode,elapsedMs:Date.now()-started,
-   contentType:ctype.split(";")[0],title:cleanText(title).slice(0,120)||null,canonical:canonical||null,
+   contentType:ctype.split(";")[0],title:cleanText(title).slice(0,120)||null,canonical:canonical||null,htmlTruncated:truncated,
    seoSignals:signals,
    hasNoindex,hasPlayLink:html?pageHasPlay:null,htmlOrSitemapRecognized:hasMarker,
    checks:{httpOk:response.ok,contentTypeOk:correctType,markerPresent:hasMarker,indexableHint:!hasNoindex},
-   note:!response.ok?"The origin returned a non-success status":xml&&ctype.includes("html")?"Sitemap returned HTML instead of XML; inspect Netlify rewrites":!correctType||!hasMarker?"Unexpected response content":hasNoindex?"Noindex signal detected":"Reachability is not proof of search ranking"};
+   note:!response.ok?"The origin returned a non-success status":xml&&ctype.includes("html")?"Sitemap returned HTML instead of XML; inspect Netlify rewrites":!correctType||!hasMarker?"Unexpected response content":hasNoindex?"Noindex signal detected":!productValid?"Product route returned an unrelated shell or missing canonical/product schema":"Reachability is not proof of search ranking"};
  }catch(e){
   return{id,label,group,url,status:"unverified",httpStatus:null,elapsedMs:Date.now()-started,error:simpleError(e),
    note:"Live probe inconclusive; hosting, network policy, or timeout may be responsible"};
@@ -153,10 +163,13 @@ function multilingualDiscoveryAudit(configOverride){
 function createSeoFindings(probes){
  const findings=[];
  for(const p of probes){
-  if(!p.seoSignals||p.status!=="reachable")continue;
+  if(!p.seoSignals)continue;
+  if((p.id==="sample-approved-product"||p.id==="sample-country-product")&&!p.seoSignals.productStructuredDataPresent)
+    findings.push({id:p.id,code:"missing-product-schema",severity:"critical"});
   const x=p.seoSignals;
   for(const [ok,code] of [[x.titlePresent,"missing-title"],[x.descriptionPresent,"missing-description"],
-    [x.headingPresent,"missing-h1"],[x.canonicalOwned,"invalid-canonical"],
+    [x.headingPresent||p.htmlTruncated,"missing-h1"],[x.canonicalOwned,"invalid-canonical"],
+    [x.canonicalMatchesRequest,"canonical-mismatch"],
     [x.robotsAllowsIndex,"noindex"],[x.structuredDataInvalid===0,"invalid-json-ld"]]){
    if(!ok)findings.push({id:p.id,code,severity:code==="noindex"?"critical":"review"});
   }
@@ -190,7 +203,7 @@ async function diagnostic(event){
  const seoFindings=createSeoFindings(allProbes);
  const failed=allProbes.filter(x=>x.status==="needs-review");
  const unknown=allProbes.filter(x=>x.status==="unverified");
- const pageStatus=failed.length?"needs-review":unknown.length?"incomplete":"reachable-checks-passed";
+ const pageStatus=failed.length||seoFindings.length?"needs-review":unknown.length?"incomplete":"reachable-checks-passed";
  const dynamic=probes.find(x=>x.id==="dynamic-sitemap"),direct=probes.find(x=>x.id==="direct-sitemap");
  const routingCrosscheck={publicSitemap:dynamic&&dynamic.status||"unverified",directFunction:direct&&direct.status||"unverified",
   status:dynamic&&dynamic.status==="reachable"&&direct&&direct.status==="reachable"?"route-ok":dynamic&&dynamic.status==="reachable"?"public-route-ok-direct-unverified":direct&&direct.status==="reachable"?"public-rewrite-mismatch":"unverified-or-generator-error",
@@ -198,6 +211,7 @@ async function diagnostic(event){
   // SQL-free download evidence: current checks are NOT a historical execution receipt.
   // A missing optional SQL table is never treated as a search-engine failure.
   const latest=ledger&&ledger.record||null;
+  const lastRunAgeMinutes=latest&&Number.isFinite(Date.parse(latest.run_at))?Math.max(0,Math.round((Date.now()-Date.parse(latest.run_at))/60000)):null;
   const ledgerState=ledger&&ledger.state||"unavailable";
   const ledgerReason=ledger&&ledger.reason||null;
   const ledgerDiagnostic=ledger&&ledger.diagnostic||null;
@@ -244,7 +258,7 @@ async function diagnostic(event){
     optionalHistoryStorageDiagnostic:ledgerDiagnostic,
     optionalHistoryStorageRecommendation:ledgerRecommendation,
     engineLoaded:typeof ENGINE.run==="function",seoFindings:seoFindings.length,
-    checkpointState:checkpoint.state||"unverified"},
+    checkpointState:checkpoint.state||"unverified",latestBacklog:latest&&latest.discovery||null},
    checksNeedingAttention:[...allProbes.filter(x=>x.status!=="reachable").map(x=>({id:x.id,status:x.status,httpStatus:x.httpStatus==null?null:x.httpStatus,reason:x.note||x.error||null})),...seoFindings],
    followUp:"Netlify > Functions > global-search-exposure-engine > Logs에서 [IGDC_SEARCH_EXPOSURE_RUN] 실행시각·제출·대기·실패 수치를 확인하세요. Netlify 로그는 보관 기간이 제한됩니다."
   };
@@ -252,7 +266,7 @@ async function diagnostic(event){
   purpose:"IGDC Global Platform and MARU Media Player organic search health and evidence",
   scope:["IGDC Global Platform","MARU Windows","MARU Android / Google Play"],
   overview:{status:pageStatus,probesTotal:allProbes.length,reachable:allProbes.filter(x=>x.status==="reachable").length,needsReview:failed.length,unverified:unknown.length},
-  engine:{moduleLoaded:typeof ENGINE.run==="function",configuredDailySchedule:"17 3,11,21 * * * (UTC; repository config, not live Netlify confirmation)",lastScheduledExecution:null,lastSubmissionReceipt:null,lastRecordedExecution:ledger&&ledger.record?ledger.record.run_at:null,
+  engine:{moduleLoaded:typeof ENGINE.run==="function",configuredDailySchedule:"17 3,11,21 * * * (UTC; repository config, not live Netlify confirmation)",lastScheduledExecution:null,lastSubmissionReceipt:null,lastRecordedExecution:ledger&&ledger.record?ledger.record.run_at:null,lastRunAgeMinutes,runWithin24Hours:lastRunAgeMinutes===null?null:lastRunAgeMinutes<=1440,
    recordedSubmissionSummary:ledger&&ledger.record?{status:ledger.record.result_status,changed:ledger.record.changed_count,submitted:ledger.record.submitted_count,pending:ledger.record.pending_count,failed:ledger.record.failed_count,partial:ledger.record.partial_count,providers:ledger.record.details}:null,
    runLedgerState:ledgerState,runLedgerReason:ledgerReason,
    notes:"Read-only persisted run metadata are not evidence of Google indexing or store ranking. A recorded run can be scheduled or manually triggered."},
@@ -260,7 +274,7 @@ async function diagnostic(event){
   liveSeoInspection:{status:unknown.length?"incomplete":failed.length||seoFindings.length?"needs-review":"observed",
    findings:seoFindings,inspectedPages:allProbes.filter(x=>x.seoSignals).length,
    note:"Only selected URLs were inspected. Search ranking and indexed status require external search console evidence."},
-  transmissionEvidence:{latestReceipt:latest?"recorded":"missing",checkpoint,
+  transmissionEvidence:{latestReceipt:latest?"recorded":"missing",checkpoint,lastRecordedBacklog:latest&&latest.discovery||null,
    currentIndexNowKeyVerified:key.verification==="confirmed",
    scheduledTriggerVerified:false,searchEngineIndexedVerified:false,
    note:"Checkpoint counts are receipt evidence, never indexing or ranking guarantees."},

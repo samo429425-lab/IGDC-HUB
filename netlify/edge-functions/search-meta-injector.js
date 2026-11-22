@@ -79,8 +79,9 @@ function metadataBlock(url, page, lang, originalTitle, originalDescription) {
   const title = lang!=="ko" && originalTitle && originalTitle.length>8 ? originalTitle.slice(0,145) : defaultTitle;
   const description = lang!=="ko" && originalDescription && originalDescription.length>35
     ? originalDescription.slice(0,220) : (PAGE_DESCRIPTIONS[page] || PAGE_DESCRIPTIONS.home);
-  const canonical = ORIGIN + localizedRoute(page, lang);
-  const alternates = LANGS.map(code => `<link rel="alternate" hreflang="${esc(code)}" href="${esc(ORIGIN + localizedRoute(page, code))}">`).join("\n");
+  const canonical = ORIGIN + localizedRoute(page, lang) + ".html";
+  const hreflang = code => code === "ko" ? "ko-KR" : code === "zh" ? "zh-CN" : code === "zht" ? "zh-TW" : code;
+  const alternates = LANGS.map(code => `<link rel="alternate" hreflang="${esc(hreflang(code))}" href="${esc(ORIGIN + localizedRoute(page, code) + ".html")}">`).join("\n");
   const schema = {
     "@context": "https://schema.org",
     "@type": page === "home" ? "WebSite" : "WebPage",
@@ -88,14 +89,14 @@ function metadataBlock(url, page, lang, originalTitle, originalDescription) {
     alternateName: BRAND_ALIASES,
     url: canonical,
     inLanguage: lang,
-    isPartOf: { "@type": "WebSite", name: "IGDC Global Platform", alternateName: BRAND_ALIASES, url: ORIGIN + "/home" }
+    isPartOf: { "@type": "WebSite", name: "IGDC Global Platform", alternateName: BRAND_ALIASES, url: ORIGIN + "/home.html" }
   };
   return [
     `<title>${esc(title)}</title>`,
     `<meta name="description" content="${esc(description)}">`,
     `<link rel="canonical" href="${esc(canonical)}">`,
     alternates,
-    `<link rel="alternate" hreflang="x-default" href="${esc(ORIGIN + localizedRoute(page, "en"))}">`,
+    `<link rel="alternate" hreflang="x-default" href="${esc(ORIGIN + localizedRoute(page, "en") + ".html")}">`,
     `<meta property="og:type" content="website">`,
     `<meta property="og:title" content="${esc(title)}">`,
     `<meta property="og:description" content="${esc(description)}">`,
