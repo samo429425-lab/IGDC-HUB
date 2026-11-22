@@ -34,7 +34,7 @@ const SECTION_ALIASES = Object.freeze({
   variety:"media-variety", entertainment:"media-variety", show:"media-variety", "classic-tv":"media-variety", "media-variety":"media-variety",
   documentary:"media-documentary", docs:"media-documentary", publicrecord:"media-documentary", publicrecords:"media-documentary", "media-documentary":"media-documentary",
   animation:"media-animation", anime:"media-animation", cartoon:"media-animation", "media-animation":"media-animation",
-  music:"media-music", concert:"media-music", performance:"media-music", "media-music":"media-music",
+  music:"media-music", musicvideo:"media-music", "music-video":"media-music", concert:"media-music", performance:"media-music", "media-music":"media-music",
   shorts:"media-shorts", short:"media-shorts", shortfilm:"media-shorts", "media-shorts":"media-shorts"
 });
 const READ_ROLES = new Set(["owner","admin","site_manager","site_manager_director","director","media_manager","commerce_manager"]);
