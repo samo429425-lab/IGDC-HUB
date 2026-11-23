@@ -30,6 +30,7 @@ function safeSupplierUrl(raw){
       return '';
     }
     if(Guard.reason(u.toString()))return '';
+    if(/(?:^|\/)(?:login|log-in|signin|sign-in|signup|sign-up|register|registration|auth|oauth|account|accounts|cart|checkout|basket|search|results)(?:\/|$)/i.test(u.pathname))return '';
     if(u.searchParams.has('q')&&/(?:^|\/)(?:search|results)(?:\/|$)/i.test(u.pathname))return '';
     u.hash='';return u.toString();
   }catch(_e){return '';}

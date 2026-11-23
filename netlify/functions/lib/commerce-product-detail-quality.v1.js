@@ -12,6 +12,18 @@ function evaluate(row){
   const x=row&&typeof row==='object'?row:{},url=text(x.verifiedDetailPageUrl||x.productUrl||x.url),title=text(x.productName||x.title);
   const reasons=[];
   if(!Ranking.isSpecificProductUrl(url)||Ranking.isTemplateOrPlaceholderUrl(url))reasons.push('individual_product_url_not_verified');
+  // A product-looking route can redirect to sign-in/checkout or contain an
+  // authentication action as its terminal item. This guards ONLY new private
+  // automatic product staging; manual and already-published rows are untouched.
+  try {
+    const u=new URL(url);
+    const segments=u.pathname.split('/').filter(Boolean).map(s=>decodeURIComponent(s).toLowerCase());
+    const denied=new Set(['login','log-in','signin','sign-in','signup','sign-up','register','registration','auth','oauth','account','accounts','cart','basket','checkout','search','results','password','forgot-password','reset-password','session']);
+    if(segments.some(segment=>denied.has(segment)) ||
+       ['redirect','redirect_uri','return','returnurl','next','continue','destination'].some(key=>
+         u.searchParams.has(key)&&/(?:login|signin|signup|register|checkout|cart|account)/i.test(u.searchParams.get(key)||'')))
+      reasons.push('authentication_or_navigation_page_not_product');
+  } catch (_error) { /* invalid links are rejected by the existing URL gate */ }
   if(x.productPageLive===false&&!x.inspectionDeferred)reasons.push('product_page_unavailable');
   if(x.inspectionComplete!==true)reasons.push('product_inspection_not_complete');
   if(!text(x.imageUrl||x.imageOriginalUrl||x.image))reasons.push('authentic_product_image_missing');
