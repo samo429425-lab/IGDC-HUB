@@ -11,7 +11,7 @@ const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 const CommerceAutomation = require("./lib/commerce-country-automation.v1");
 const crypto = require("node:crypto");
 
-const VERSION = "commerce-candidate-queue-control-v1.13.0-verified-canonical-unpublication-delete";
+const VERSION = "commerce-candidate-queue-control-v1.13.1-hold-deletion-compatibility";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore","hard_delete"]);
 const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce-candidate-review-api"]);
@@ -175,7 +175,7 @@ function requireNoForeignCandidateAssignments(assignments,body){
 
 async function applyAction(actorId,row,action){
   const id=text(row&&row.id),payload=Object.assign({},plain(row&&row.source_payload)),now=new Date().toISOString();
-  const oldAssignments=await readAssignments(id),priorFront=previousFrontPlacement(payload,oldAssignments);
+  const oldAssignments=await readAssignments(id);let priorFront=previousFrontPlacement(payload,oldAssignments);
   // Excluded-queue deletion is never a back door for removing assigned or
   // already-public items. Those require the ordinary section/front workflow.
   // Historical inactive slot rows can remain after a HOLD/REJECT decision.
@@ -190,7 +190,29 @@ async function applyAction(actorId,row,action){
   // permitted: a PSOM placement is not a front publication. The relation is
   // removed and read back before the archived candidate state is committed.
   if(livePublication){
-    const error=new Error("assigned_or_published_candidate_protected:"+id);error.statusCode=409;throw error;
+    // HOLD/REJECT tombstones from older releases can retain a pending-unpublish
+    // marker after the canonical public snapshot has demonstrably withdrawn
+    // them. Only release-proof (never a missing assignment alone) can clear it.
+    const front=plain(payload.frontPublication),frontStatus=lower(front.status||front.publicationStatus);
+    const actualActive=oldAssignments.some((entry)=>frontStateActive(entry&&entry.publication_status));
+    const explicitlyNeverPublished=frontStatus==="unpublish_requested"&&oldAssignments.length===0
+      &&front.queued===false&&front.pendingBuild===false&&front.publicSnapshotConfirmed===false
+      &&front.buildVerificationRequired!==true&&payload.publicPublication===false
+      &&plain(payload.publication).public!==true;
+    let releaseProof=explicitlyNeverPublished?{ok:true,releaseId:null,verifiedAt:now}:null;
+    if(!releaseProof&&!actualActive&&["unpublish_requested","unpublish_failed","unmatch_requested","unmatch_pending","deferred_section_release"].includes(frontStatus)){
+      releaseProof=await verifiedFrontWithdrawal(row,oldAssignments);
+    }
+    if(actualActive||!releaseProof||releaseProof.ok!==true){
+      const error=new Error("assigned_or_published_candidate_protected:"+id+(releaseProof?":canonical_recheck="+text(releaseProof.reason||"not_verified"):""));
+      error.statusCode=409;throw error;
+    }
+    // stageFrontWithdrawal below must not recreate an unpublish request for
+    // a card that the verified current canonical release no longer contains.
+    payload.frontPublication=Object.assign({},front,{status:"unmatched",queued:false,pendingBuild:false,
+      publicSnapshotConfirmed:false,buildVerificationRequired:false,deferredBuild:false,
+      canonicalWithdrawalVerifiedAt:releaseProof.verifiedAt,canonicalWithdrawalReleaseId:releaseProof.releaseId});
+    priorFront=previousFrontPlacement(payload,oldAssignments);
   }
   if(action==="restore"){
     if(candidateAlreadyRestored(row))return{id,action,status:text(row&&row.status)||"approval_pending",restoredToCandidate:true,idempotent:true,assignmentCleanup:{ok:true,count:0}};
@@ -410,11 +432,22 @@ async function hardDeleteCandidate(actorId,row,body,expectedBucket,knownAssignme
   // Preflight FK relations, failing closed before any destructive call.
   // Independent SELECT-only preflights can run concurrently. Destructive
   // writes below are still sequential and every table is read back.
-  const before=await Promise.all(RELATED_CANDIDATE_TABLES.map(async(table)=>{
-    const rows=await SlotStore.select(table,"select=candidate_id&candidate_id=eq."+encodeURIComponent(id)+"&limit=1001");
+  const OPTIONAL_RELATIONS=new Set(["gslot_candidate_availability","gslot_candidate_revenue","gslot_candidate_evidence"]);
+  function missingOptionalRelation(error){
+    const msg=text(error&&error.message).toLowerCase();
+    return /(?:could not find the table|relation [^ ]+ does not exist|42p01|pgrst205)/.test(msg);
+  }
+  const preflight=await Promise.all(RELATED_CANDIDATE_TABLES.map(async(table)=>{
+    let rows;
+    try{rows=await SlotStore.select(table,"select=candidate_id&candidate_id=eq."+encodeURIComponent(id)+"&limit=1001");}
+    catch(error){
+      if(OPTIONAL_RELATIONS.has(table)&&missingOptionalRelation(error))return {table,absent:true,count:0};
+      throw error;
+    }
     if(!Array.isArray(rows)||rows.length>1000)throw new Error("hard_delete_relation_preflight_failed:"+table);
-    return {table,count:rows.length};
+    return {table,count:rows.length,absent:false};
   }));
+  const before=preflight.filter(item=>!item.absent);
   const fresh=await readCandidate(id);
   if(!fresh||text(fresh.updated_at)!==text(row.updated_at)){
     const e=new Error("hard_delete_candidate_changed_since_preflight:"+id);e.statusCode=409;throw e;
@@ -445,6 +478,7 @@ async function hardDeleteCandidate(actorId,row,body,expectedBucket,knownAssignme
   }));
   return{id,action:"hard_delete",deleted:true,masterLedgerDeleted:true,ledgerVerified:true,relationCleanup:cleanup,
     canonicalUnpublicationVerification:releaseEvidence&&releaseEvidence.ok?{releaseId:releaseEvidence.releaseId,verifiedAt:releaseEvidence.verifiedAt}:null,
+    unavailableOptionalRelations:preflight.filter(item=>item.absent).map(item=>item.table),
     // Independent runtime research identity/suppression is reconciled separately.
     researchPolicy:"existing_research_runtime_policy_not_automatically_reset",actor:!!actorId};
 }
