@@ -2982,6 +2982,10 @@
       if(failures.length)notice+=' · '+failures.slice(0,2).map(function(f){return '['+text(f&&f.id).slice(0,42)+'] '+text(f&&f.error||'처리 실패');}).join(' / ');
       show(notice,failures.length||refreshError?'warn':'ok');
       excludedOperationStatus(notice,!!(failures.length||refreshError));
+      if(failures.length){
+        var holdFeedback=$(kind==='hold'?'productHoldSelectedCount':'productRejectSelectedCount');
+        if(holdFeedback)holdFeedback.textContent='실패 '+failures.length+'건 · '+failures.slice(0,2).map(function(f){return text(f&&f.error||f&&f.code||'처리 거부');}).join(' / ').slice(0,220);
+      }
       if(!refreshError){
         // Discard selections that have left this actionable bucket; never retain ghost checks.
         var activeIds=new Set(selectedProductExclusionIds(kind));
@@ -2990,7 +2994,14 @@
         var confirmedIds=new Set((bulkResult&&bulkResult.processedIds||[]).map(text));
         ids.forEach(function(id){if(confirmedIds.has(id)&&decision!=='reject')delete productExclusionSelections[kind][id];});
       }
-    }catch(error){var message='상품 관리 작업 미완료: '+(text(error&&error.message)||'선택 상품 일괄 처리 실패');excludedOperationStatus(message,true);show(message,'fail');}
+    }catch(error){
+      var serverFailures=error&&error.payload&&error.payload.failures||error&&error.exclusionFailures||[],details=serverFailures.slice(0,3).map(function(f){return text(f&&f.error||f&&f.code);}).filter(Boolean);
+      var message='상품 관리 작업 미완료: '+(details.length?details.join(' / '):(text(error&&error.message)||'선택 상품 일괄 처리 실패'));
+      excludedOperationStatus(message,true);
+      var inlineCount=$(kind==='hold'?'productHoldSelectedCount':'productRejectSelectedCount');
+      if(inlineCount)inlineCount.textContent='선택 '+ids.length+'건 · 처리 실패 · '+message.slice(0,240);
+      show(message,'fail');
+    }
     finally{productExclusionActionActive=false;renderExcludedLedger();syncProductExclusionSelection('hold');syncProductExclusionSelection('reject');}
   }
   function sectionCleanupPlan(keys){var topRows=[],reserveRows=[],warnings=[],sectionSummary=[];(keys||[]).forEach(function(key){if(!PRODUCT_SECTION_MAP[key])return;var rows=rankedSectionRows(key),locked=rows.filter(productManagementLocked),limit=frontSlotCapacity(key),top=rows.slice(0,limit),reserve=rows.slice(limit);topRows=topRows.concat(top);reserveRows=reserveRows.concat(reserve);sectionSummary.push({key:key,total:rows.length,front:top.length,reserve:reserve.length,locked:locked.length,capacity:limit});if(locked.length>limit)warnings.push(sectionLabel(key)+' 관리자 수동 고정 '+locked.length+'건 · 프론트 한도 '+limit+'건');});return{topRows:topRows,reserveRows:reserveRows,warnings:warnings,sectionSummary:sectionSummary};}

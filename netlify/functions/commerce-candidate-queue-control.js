@@ -118,32 +118,49 @@ function requireExpectedBucket(row,expectedBucket,action){
   if(expected==="reject" && !["restore","hold","dismiss","remove_from_list","purge","hard_delete"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
   return actual;
 }
+function candidateWriteScopes(payload){
+  // Match the administrator's indexed management reader. Old candidate rows
+  // may record their jurisdiction in marketKeys/targetCountry/placement only.
+  // Never infer a write scope from a thumbnail, browser IP, or user-supplied ID.
+  const p=plain(payload),found=new Map();
+  function add(country,region){
+    country=text(country).toUpperCase();region=text(region||"NATIONWIDE").toUpperCase();
+    if(!/^[A-Z]{2}$/.test(country)||!region)return;
+    found.set(country+"|"+region,{country,region});
+  }
+  for(const raw of array(p.marketKeys)){
+    const match=text(raw).toUpperCase().match(/^([A-Z]{2})-(.+)$/);
+    if(match)add(match[1],match[2]);
+  }
+  const market=plain(p.marketScope),supply=plain(p.countrySupply);
+  add(market.marketCountry||market.country,market.marketRegion||market.region);
+  add(supply.country||supply.countryCode||supply.targetMarket,supply.region||supply.regionCode||supply.targetRegion);
+  for(const key of ["approvedPlacement","selectedPlacement","primaryPlacement","placement"]){
+    const placement=plain(p[key]);
+    add(placement.country||placement.countryCode,placement.region||placement.regionCode);
+  }
+  add(p.targetCountry||p.countryCode,p.targetRegion||p.regionCode);
+  return Array.from(found.values());
+}
 function requireMatchingMarketScope(row,body){
-  // Administrative mutations, including physical deletion, are restricted to
-  // the EXPLICITLY resolved country/subdivision. Never infer a target from the
-  // candidate or IP during the write; IP may only initialize UI selection.
+  // Mutating/deleting a candidate impacts its entire master record. Only a
+  // single explicit national/region scope may be edited in this queue. A
+  // multi-market record must be separated through the regular management flow.
   const wanted=text(body&&(body.countryCode||body.country)).toUpperCase(),
     wantedRegion=text(body&&(body.subdivisionCode||body.regionCode||body.region)).toUpperCase();
   if(!/^[A-Z]{2}$/.test(wanted)||!wantedRegion){
     const error=new Error('explicit_country_and_region_required');error.statusCode=400;throw error;
   }
-  const p=plain(row&&row.source_payload),m=plain(p.marketScope),c=plain(p.countrySupply),
-    approved=plain(p.approvedPlacement),main=plain(p.primaryPlacement);
-  const countries=[m.marketCountry,c.country,c.countryCode,approved.country,main.country,p.countryCode]
-    .map(v=>text(v).toUpperCase()).filter(Boolean);
-  const regions=[m.marketRegion,c.region,c.regionCode,approved.region,main.region,p.regionCode]
-    .map(v=>text(v).toUpperCase()).filter(Boolean);
-  if(!countries.length||countries.some(v=>v!==wanted)||regions.some(v=>v!==wantedRegion)){
-    const error=new Error('candidate_market_scope_mismatch: requested '+wanted+'/'+wantedRegion+', stored '+
-      (countries.join(',')||'unknown')+'/'+(regions.join(',')||'NATIONWIDE'));
+  const scopes=candidateWriteScopes(row&&row.source_payload);
+  if(!scopes.length){
+    const error=new Error('candidate_market_scope_unverified');error.statusCode=409;error.code='candidate_market_scope_unverified';throw error;
+  }
+  if(scopes.some(s=>s.country!==wanted||s.region!==wantedRegion)){
+    const error=new Error('candidate_market_scope_mismatch: requested '+wanted+'/'+wantedRegion+', stored '+scopes.map(s=>s.country+'/'+s.region).join(','));
     error.statusCode=409;error.code='candidate_market_scope_mismatch';throw error;
   }
-  // Missing explicit candidate region is compatible only with an explicitly
-  // selected nationwide scope. Never silently equate a subdivision to nationwide.
-  if(!regions.length&&wantedRegion!=='NATIONWIDE'){
-    const error=new Error('candidate_subdivision_scope_unverified');error.statusCode=409;throw error;
-  }
 }
+
 function requireNoForeignCandidateAssignments(assignments,body){
   const wanted=text(body&&(body.countryCode||body.country)).toUpperCase(),
     region=text(body&&(body.subdivisionCode||body.regionCode||body.region)).toUpperCase();
