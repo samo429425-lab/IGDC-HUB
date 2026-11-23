@@ -505,19 +505,20 @@
           </div>
         </details>
         <details id="productRejectQueue" class="supplier-control-queue">
-          <summary><span id="productRejectToggleLabel">연구 제외·영구 제외 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
+          <summary><span id="productRejectToggleLabel">영구 제외 처리 대기 상품 목록 · 0건</span><span class="pill info" data-detail-toggle-label>목록 펼치기</span></summary>
           <div class="supplier-control-content">
             <div class="supplier-queue-toolbar">
               <label class="supplier-select-label"><input id="productRejectSelectAll" type="checkbox" data-product-exclusion-select-all="reject"> 현재 페이지 전체 선택(최대 100건)</label>
               <span id="productRejectSelectedCount" class="supplier-selection-count">선택 0건</span>
-              <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="reject" disabled>선택 후보 목록으로 복원</button>
+              <button type="button" data-product-exclusion-bulk="undecided" data-product-exclusion-scope="reject" disabled>선택 미배치 후보 목록으로 복원</button>
+              <button type="button" class="secondary" data-product-exclusion-bulk="hold" data-product-exclusion-scope="reject" disabled>선택 보류 상품 목록으로 이동</button>
               <button type="button" class="danger" data-product-exclusion-bulk="purge" data-product-exclusion-scope="reject" disabled>선택 영구 제외</button>
               <button type="button" class="danger" data-product-exclusion-bulk="dismiss" data-product-exclusion-scope="reject" disabled>선택 삭제·재수집 허용</button>
               <button type="button" class="ghost" data-product-exclusion-bulk="remove_from_list" data-product-exclusion-scope="reject" disabled>선택 목록에서만 제거</button>
               <button type="button" class="danger" data-product-exclusion-bulk="hard_delete" data-product-exclusion-scope="reject" disabled>선택 상품 원장 완전 삭제(확인 후 즉시 실행)</button>
-              <span class="small">일반 제외·영구 제외 항목을 후보 ID로 구분합니다. 원장 완전 삭제 시 연결된 관리 관계도 삭제하며, 기존 연구 차단 정책은 별도로 남을 수 있습니다.</span>
+              <span class="small">영구 제외 처리 시 이 작업 목록에서 즉시 내려가며 재수집 차단 원장 기록은 보존됩니다. 원장 완전 삭제는 실제 후보 및 관계 삭제를 시도하며, 공개·승인·배치 보호 조건에 걸리면 거부됩니다.</span>
             </div>
-            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>썸네일·상품·원본 확인</th><th>업체</th><th>연구 제외 상태</th></tr></thead><tbody id="productRejectRows"></tbody></table></div>
+            <div class="tablewrap"><table><thead><tr><th>순번</th><th>선택</th><th>썸네일·상품·원본 확인</th><th>업체</th><th>처리 상태</th></tr></thead><tbody id="productRejectRows"></tbody></table></div>
           </div>
         </details>
       </div>
@@ -709,7 +710,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=igdc-paid-country-budget-20261121"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=igdc-exclusion-workflow-20261124"></script>
 <script src="/assets/js/admin-commerce-paid-supplier-budget.v1.js?v=20261121"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20261025-paged-exclusion-v1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>

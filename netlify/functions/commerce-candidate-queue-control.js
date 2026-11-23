@@ -115,7 +115,7 @@ function requireExpectedBucket(row,expectedBucket,action){
     const error=new Error("candidate_state_mismatch: expected "+expected+", actual "+actual);error.code="candidate_state_mismatch";throw error;
   }
   if(expected==="hold" && !["restore","dismiss","remove_from_list","reject","purge","hard_delete"].includes(action)){const error=new Error("action_not_allowed_for_hold");error.code="action_not_allowed_for_hold";throw error;}
-  if(expected==="reject" && !["restore","dismiss","remove_from_list","purge","hard_delete"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
+  if(expected==="reject" && !["restore","hold","dismiss","remove_from_list","purge","hard_delete"].includes(action)){const error=new Error("action_not_allowed_for_reject");error.code="action_not_allowed_for_reject";throw error;}
   return actual;
 }
 function requireMatchingMarketScope(row,body){
