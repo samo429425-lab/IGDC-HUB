@@ -9,7 +9,7 @@ try{RUN_LEDGER=require("./lib/igdc-search-exposure-run-ledger");}
 catch(e){if(e&&e.code!=="MODULE_NOT_FOUND")throw e;RUN_LEDGER={readLatest:async()=>({state:"not-installed",record:null})};}
 const ORIGIN="https://igdcglobal.com";
 const PLAY="https://play.google.com/store/apps/details?id=com.maru.mediaplayer";
-const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.6.0-25stage-verification";
+const VERSION="igdc-maru-organic-search-admin-diagnostic-v1.7.0-30stage-evidence-verification";
 const CHECKS=[
  ["platform-home","IGDC Global Platform","/home.html","platform"],
  ["platform-en","IGDC Global Platform (English)","/igdc-amplify-platform-en.html","platform"],
@@ -176,6 +176,55 @@ function createSeoFindings(probes){
  }
  return findings;
 }
+// Five-stage, evidence-tiered diagnostics. These checks do not call external
+// performance accounts, enqueue URLs, or inspect private candidate records.
+function assessSearchOperations({probes,registry,latest,checkpoint,seoFindings,now}){
+ const asTime=value=>{const n=Date.parse(String(value||""));return Number.isFinite(n)?n:null;};
+ const at=asTime(now),runAt=asTime(latest&&latest.run_at);
+ const runAgeMinutes=at!==null&&runAt!==null?Math.max(0,Math.floor((at-runAt)/60000)):null;
+ const runDate=runAt===null?null:new Date(runAt);
+ const scheduleTimeAligned=runDate!==null&&[3,11,21].includes(runDate.getUTCHours())&&Math.abs(runDate.getUTCMinutes()-17)<=3;
+ const latencySamples=(probes||[]).filter(p=>p&&p.status==="reachable"&&Number.isFinite(p.elapsedMs));
+ const slow=latencySamples.filter(p=>p.elapsedMs>=4000).map(p=>({id:p.id,elapsedMs:p.elapsedMs,httpStatus:p.httpStatus}));
+ const delays=latencySamples.map(p=>p.elapsedMs).sort((a,b)=>a-b);
+ const countries=registry&&registry.countsByCountry||{};
+ const countryCount=Object.keys(countries).length;
+ const receipts=checkpoint&&checkpoint.adapters||{};
+ const indexReceipt=receipts.indexnow||{};
+ const registryTotal=Number.isFinite(registry&&registry.total)?registry.total:null;
+ const admitted=Number.isFinite(indexReceipt.acknowledgedUrlCount)?indexReceipt.acknowledgedUrlCount:null;
+ const issueList=[];
+ if((seoFindings||[]).length)issueList.push({priority:"critical",code:"seo-page-findings",evidence:"liveSeoInspection.findings",count:seoFindings.length,action:"Review each affected page and its canonical, description, and structured data"});
+ if(runAgeMinutes===null)issueList.push({priority:"review",code:"run-receipt-unavailable",evidence:"runLedger.latest",action:"Verify the Netlify function execution log"});
+ else if(runAgeMinutes>1440)issueList.push({priority:"review",code:"run-receipt-older-than-24h",evidence:"runLedger.latest.run_at",minutes:runAgeMinutes,action:"Verify Netlify scheduled function deployment and logs"});
+ if(slow.length)issueList.push({priority:"advisory",code:"slow-search-endpoints",evidence:"robotsAndSitemaps/targets.elapsedMs",count:slow.length,action:"Measure dynamic sitemap and product endpoint latency over multiple runs; review caching and data fetches"});
+ if(registry&&registry.available&&countryCount<2)issueList.push({priority:"advisory",code:"single-country-public-registry",evidence:"registry.countsByCountry",count:countryCount,action:"Check the separate country research/publishing pipeline; do not infer absent private inventory"});
+ issueList.push({priority:"measurement",code:"web-rank-and-clicks-not-connected",evidence:"searchPerformance",action:"Import Google Search Console and optionally Bing or Naver organic-search reports with matching date ranges"});
+ issueList.push({priority:"measurement",code:"play-store-performance-not-connected",evidence:"googlePlay",action:"Import an authorized Play Console store performance report; compare search visits, clicks, and acquisitions separately"});
+ return{
+  schema:"igdc-search-operational-evidence-v1",inspectionAt:now,readOnly:true,
+  execution:{lastRecordedAt:latest&&latest.run_at||null,ageMinutes:runAgeMinutes,within24Hours:runAgeMinutes===null?null:runAgeMinutes<=1440,
+   scheduleTimeAligned:scheduleTimeAligned===true,scheduleTimeAlignmentMeaning:"Time matches configured UTC cron, not proof that Netlify triggered it",
+   triggerIndependentlyVerified:false,failedAdaptersLastRun:latest&&Number.isFinite(latest.failed_count)?latest.failed_count:null,
+   checkpointWriteLastRun:latest&&latest.checkpoint&&latest.checkpoint.write||null,
+   duplicateUrlsSkippedLastRun:latest&&latest.checkpoint&&Number.isFinite(latest.checkpoint.duplicates_skipped)?latest.checkpoint.duplicates_skipped:null,
+   pendingLastRun:latest&&Number.isFinite(latest.pending_count)?latest.pending_count:null,
+   unacknowledgedLastRun:latest&&latest.discovery&&Number.isFinite(latest.discovery.unacknowledged_count)?latest.discovery.unacknowledged_count:null},
+  indexNow:{receiptState:checkpoint&&checkpoint.state||"unverified",acknowledgedUrlCount:admitted,
+   lastAcknowledgementAt:indexReceipt.lastAcknowledgementAt||null,registryTargetCount:registryTotal,
+   matchInterpretation:"Counts are not directly comparable across filtered URL classes or revisions; acknowledgement is not indexing"},
+  countryMarket:{publicRegistryCountries:countryCount,countsByCountry:countries,
+   globalAvailabilityVerified:false,note:"Only approved public search targets; private country research and market eligibility are outside this audit"},
+  responseSpeed:{sampledCount:delays.length,medianMs:delays.length?delays[Math.floor(delays.length/2)]:null,
+   slowThresholdMs:4000,slowPages:slow,oneRunOnly:true,note:"Advisory latency samples are not Core Web Vitals or search rankings"},
+  externalEvidence:{googleSearchConsole:"not-connected-to-this-endpoint",bingWebmaster:"not-connected-to-this-endpoint",
+   naverSearchAdvisor:"not-connected-to-this-endpoint",googlePlayConsole:"not-connected-to-this-endpoint",
+   actualWebSearchRankingMeasured:false,actualPlaySearchRankingMeasured:false,actualInstallsMeasured:false,
+   csvImportInAdministratorBrowser:"optional-local-file; report only, not a server integration"},
+  investigations:issueList,
+  nextCheck:"Compare two different timestamps of diagnostic JSON and use matching authorized console exports; never interpret URL submissions as traffic"
+ };
+}
 async function diagnostic(event){
  const now=new Date().toISOString();
  const multilingualSearch=multilingualDiscoveryAudit();
@@ -201,6 +250,7 @@ async function diagnostic(event){
  }catch(e){registry={available:false,error:simpleError(e)};}
  const allProbes=[...probes,...[productSample,countrySample].filter(Boolean)];
  const seoFindings=createSeoFindings(allProbes);
+ const operations=assessSearchOperations({probes:allProbes,registry,latest:ledger&&ledger.record||null,checkpoint,seoFindings,now});
  const failed=allProbes.filter(x=>x.status==="needs-review");
  const unknown=allProbes.filter(x=>x.status==="unverified");
  const pageStatus=failed.length||seoFindings.length?"needs-review":unknown.length?"incomplete":"reachable-checks-passed";
@@ -270,7 +320,7 @@ async function diagnostic(event){
    recordedSubmissionSummary:ledger&&ledger.record?{status:ledger.record.result_status,changed:ledger.record.changed_count,submitted:ledger.record.submitted_count,pending:ledger.record.pending_count,failed:ledger.record.failed_count,partial:ledger.record.partial_count,providers:ledger.record.details}:null,
    runLedgerState:ledgerState,runLedgerReason:ledgerReason,
    notes:"Read-only persisted run metadata are not evidence of Google indexing or store ranking. A recorded run can be scheduled or manually triggered."},
-  registry,multilingualSearch,routingCrosscheck,downloadAudit,
+  registry,multilingualSearch,routingCrosscheck,downloadAudit,operationalEvidence:operations,
   liveSeoInspection:{status:unknown.length?"incomplete":failed.length||seoFindings.length?"needs-review":"observed",
    findings:seoFindings,inspectedPages:allProbes.filter(x=>x.seoSignals).length,
    note:"Only selected URLs were inspected. Search ranking and indexed status require external search console evidence."},
@@ -298,4 +348,4 @@ exports.handler=async(event)=>{
   return json(200,{ok:true,report:await diagnostic(event)});
  }catch(e){const status=[401,403,503].includes(Number(e&&e.statusCode))?e.statusCode:500;return json(status,{ok:false,error:status===500?"Diagnostic unavailable":simpleError(e),code:e&&e.code||null});}
 };
-exports._test={diagnostic,probe,indexNowKeyCheck,channels,multilingualDiscoveryAudit,contentSignals,createSeoFindings};
+exports._test={diagnostic,probe,indexNowKeyCheck,channels,multilingualDiscoveryAudit,contentSignals,createSeoFindings,assessSearchOperations};
