@@ -42,8 +42,8 @@ function releaseArmed(input) {
   // cannot arm the build merely by setting the generic scheduled flag.
   const scheduledMaintenanceAuthorization = !!(input && input.scheduledMaintenanceAuthorization === true && input.maintenanceBatch === true && text(input.operation) === "publish");
   return {
-    armed: environmentArmed || explicitAdminAuthorization || scheduledMaintenanceAuthorization,
-    mode: explicitAdminAuthorization ? "explicit_admin_confirmation" : (scheduledMaintenanceAuthorization ? "scheduled_maintenance_authorization" : mode),
+    armed: explicitAdminAuthorization,
+    mode: explicitAdminAuthorization ? "explicit_admin_confirmation" : "administrator_front_match_required",
     keyPresent: key.length >= 32,
     environmentArmed,
     explicitAdminAuthorization,

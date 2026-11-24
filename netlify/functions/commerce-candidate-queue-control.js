@@ -11,9 +11,9 @@ const ProductPipeline = require("./lib/commerce-product-pipeline-state.v1");
 const CommerceAutomation = require("./lib/commerce-country-automation.v1");
 const crypto = require("node:crypto");
 
-const VERSION = "commerce-candidate-queue-control-v1.13.1-hold-deletion-compatibility";
+const VERSION = "commerce-candidate-queue-control-v1.14.0-safe-hold-delete-preflight";
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
-const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore","hard_delete"]);
+const ACTIONS = new Set(["dismiss","purge","remove_from_list","hold","reject","restore","hard_delete","inspect"]);
 const MANAGEABLE_PRODUCT_SOURCES = new Set([ProductPipeline.SOURCE_REF,"commerce-candidate-review-api"]);
 
 
@@ -356,8 +356,12 @@ async function verifiedFrontWithdrawal(row,assignments){
   const payload=plain(row&&row.source_payload),front=plain(payload.frontPublication);
   const status=lower(front.status||front.publicationStatus),id=text(row&&row.id);
   if(!["unpublish_requested","unpublish_failed","unmatch_requested","unmatch_pending","deferred_section_release"].includes(status))return {ok:false,reason:"candidate_not_in_unpublication_state"};
-  if(array(assignments).length||payload.publicPublication!==false||plain(payload.publication).public===true||
-      front.queued===true||plain(payload.approvedPlacement).sectionKey||plain(payload.approvedPlacement).section||
+  // Legacy HOLD rows often have no explicit publicPublication=false field and
+  // a stale queued flag. Those are NOT permission to delete: only a later,
+  // hash-verified canonical release proving the candidate absent may clear it.
+  // Explicit true flags, live relations and approved placements always block.
+  if(array(assignments).length||payload.publicPublication===true||plain(payload.publication).public===true||
+      plain(payload.approvedPlacement).sectionKey||plain(payload.approvedPlacement).section||
       plain(payload.selectedPlacement).sectionKey||plain(payload.selectedPlacement).section)return {ok:false,reason:"candidate_has_live_or_unverified_placement"};
   const changedAt=Date.parse(text(row&&row.updated_at));
   const requestedAt=front.requestedAt?Date.parse(text(front.requestedAt)):changedAt;
@@ -483,6 +487,63 @@ async function hardDeleteCandidate(actorId,row,body,expectedBucket,knownAssignme
     researchPolicy:"existing_research_runtime_policy_not_automatically_reset",actor:!!actorId};
 }
 
+// Read-only preflight runs exactly the same scope, bucket and publication gates
+// before a destructive button is enabled. It never writes to Supabase or
+// invokes the Netlify release dispatcher. A result is an eligibility estimate;
+// the real write always rechecks every condition against fresh rows.
+async function inspectPrivateCleanup(row,body,expectedBucket,decision){
+  const id=text(row&&row.id);
+  if(!row)throw Object.assign(new Error("candidate_not_found"),{statusCode:404});
+  if(lower(row.kind)!=="product"||!MANAGEABLE_PRODUCT_SOURCES.has(text(row.source_ref))){
+    throw Object.assign(new Error("unsupported_candidate_source"),{statusCode:409});
+  }
+  requireMatchingMarketScope(row,body);
+  const assignments=await readAssignments(id);
+  if(assignments.length>=100)throw Object.assign(new Error("candidate_assignment_scan_limit"),{statusCode:409});
+  requireNoForeignCandidateAssignments(assignments,body);
+  requireExpectedBucket(row,expectedBucket,decision);
+  let releaseEvidence=null;
+  if(decision==="hard_delete"){
+    const confirmedBody=Object.assign({},body,{hardDeleteConfirmed:true,confirmation:"PERMANENT_DELETE_EXCLUDED_CANDIDATES"});
+    try{hardDeleteGuard(row,assignments,expectedBucket,confirmedBody);}
+    catch(error){
+      if(!text(error.message).includes(":front_unpublish_not_verified:"))throw error;
+      releaseEvidence=await verifiedFrontWithdrawal(row,assignments);
+      if(!releaseEvidence.ok)throw Object.assign(new Error("front_unpublish_not_verified:"+text(releaseEvidence.reason)),{statusCode:409});
+      hardDeleteGuard(row,assignments,expectedBucket,confirmedBody,releaseEvidence);
+    }
+  }else if(decision==="purge"){
+    const payload=plain(row.source_payload),front=plain(payload.frontPublication),prior=previousFrontPlacement(payload,assignments);
+    const status=lower(front.status||front.publicationStatus);
+    const live=assignments.length>0
+      ?assignments.some(entry=>frontStateActive(entry&&entry.publication_status))
+      :(frontStateActive(status)||!!(prior&&prior.frontActive));
+    if(live||["unpublish_requested","unpublish_failed"].includes(status)){
+      const activeAssignment=assignments.some(entry=>frontStateActive(entry&&entry.publication_status));
+      const neverQueued=status==="unpublish_requested"&&assignments.length===0&&front.queued===false
+        &&front.pendingBuild===false&&front.publicSnapshotConfirmed===false
+        &&front.buildVerificationRequired!==true&&payload.publicPublication===false
+        &&plain(payload.publication).public!==true;
+      if(!activeAssignment&&!neverQueued)releaseEvidence=await verifiedFrontWithdrawal(row,assignments);
+      if(activeAssignment||(!neverQueued&&!(releaseEvidence&&releaseEvidence.ok))){
+        throw Object.assign(new Error("assigned_or_published_candidate_protected:"+id+
+          (releaseEvidence?":canonical_recheck="+text(releaseEvidence.reason):"")),{statusCode:409});
+      }
+    }
+  }
+  return {id,allowed:true,decision,privateCandidate:true,assignmentCount:assignments.length,
+    canonicalWithdrawalVerified:!!(releaseEvidence&&releaseEvidence.ok),
+    note:"실제 삭제 시 공개 상태와 원장을 다시 검증합니다."};
+}
+function cleanupFailureCategory(error){
+  const message=text(error&&error.message);
+  if(/(?:front_|published|approved_placement|active_assignment|assigned_or_)/i.test(message))return "front_publication_protected";
+  if(/(?:scope|market|subdivision|other_market)/i.test(message))return "market_scope_mismatch";
+  if(/(?:relation|foreign key|23503|PGRST|42P01)/i.test(message))return "ledger_dependency";
+  if(/(?:changed_since|changed_after|concurrency)/i.test(message))return "candidate_changed_retry";
+  if(/(?:state_mismatch|requires_confirmed)/i.test(message))return "candidate_state_mismatch";
+  return "other_error";
+}
 exports.handler=async function(event){
   try{
     const method=String(event&&event.httpMethod||"GET").toUpperCase();
@@ -490,9 +551,24 @@ exports.handler=async function(event){
     if(method!=="POST")return json(405,{ok:false,error:"method_not_allowed"});
     const body=parse(event),action=lower(body.decision||body.action),ids=candidateIds(body.candidateIds||body.candidateId),expectedBucket=lower(body.expectedBucket);
     if(!ACTIONS.has(action)){const error=new Error("지원하지 않는 상품 후보 대기열 작업입니다.");error.statusCode=400;throw error;}
+    if(action==="inspect"&&!(["purge","hard_delete"].includes(lower(body.inspectDecision)))){
+      const error=new Error("inspect_requires_purge_or_hard_delete");error.statusCode=400;throw error;
+    }
     if(!ids.length){const error=new Error("처리할 상품 후보를 선택해 주세요.");error.statusCode=400;throw error;}
     const actor=await AdminSession.resolveUser(event);requireWriteRole(actor);const actorId=text(actor&&actor.sub);
     if(action==="hard_delete"&&ids.length>100){const e=new Error("hard_delete_batch_limit_100");e.statusCode=400;throw e;}
+    if(action==="inspect"){
+      if(ids.length>30)return json(400,{ok:false,error:"inspect_batch_limit_30"});
+      const decision=lower(body.inspectDecision),results=[];
+      for(const id of ids){
+        try{results.push(await inspectPrivateCleanup(await readCandidate(id),body,expectedBucket,decision));}
+        catch(error){results.push({id,allowed:false,decision,reason:text(error.message),category:cleanupFailureCategory(error),
+          requiresManualFrontMatch:cleanupFailureCategory(error)==="front_publication_protected"});}
+      }
+      return json(200,{ok:true,inspectionOnly:true,version:VERSION,requested:ids.length,results,
+        allowed:results.filter(x=>x.allowed).length,blocked:results.filter(x=>!x.allowed).length,
+        publicPublication:false,netlifyBuildQueued:false});
+    }
     const processed=[],failures=[];
     for(let offset=0;offset<ids.length;offset+=(action==="hard_delete"?1:8)){
       const chunk=ids.slice(offset,offset+(action==="hard_delete"?1:8));

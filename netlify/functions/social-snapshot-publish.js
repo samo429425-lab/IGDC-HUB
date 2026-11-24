@@ -810,6 +810,13 @@ exports.handler = async function (event) {
       event.queryStringParameters || {},
       event.httpMethod === "POST" ? SocialStore.parseBody(event) : {},
     );
+    // A scheduler/internal worker cannot publish even if it calls this API.
+    // Its research and curated candidate rows are preserved separately.
+    if (params.scheduledRotation === true || params.scheduledRotation === "true") {
+      return SocialStore.response(200, {ok:true,version:VERSION,skipped:true,
+        reason:"administrator_front_publish_required",releaseStored:false,buildQueued:false,
+        automaticPublication:false,automaticDeployment:false});
+    }
     const operation = text(params.operation || params.action)
       .toLowerCase()
       .replace(/[\s-]+/g, "_");
@@ -1137,7 +1144,7 @@ exports.handler = async function (event) {
     if (verifiedPreviousStored) {
       const previousStored = verifiedPreviousStored;
       const staticRequested = params.forceBuild === true || params.forceBuild === "true" || params.forceBuild === "1" ||
-        process.env.SOCIAL_FORCE_STATIC_BUILD === "1" || !!buildHookSetting().value;
+        false; // The presence of any shared Build Hook is NOT authorization.
       // Same stored release is not proof that the SearchBank handoff and static
       // snapshot exist. One full build is necessary when these are missing.
       let pipelineState = null;
@@ -1291,7 +1298,7 @@ exports.handler = async function (event) {
     // Apply means Release + canonical static SearchBank/Snapshot, not only
     // Supabase persistence. Trigger only when a server-side hook is configured.
     const forceStaticBuild = params.forceBuild === true || params.forceBuild === "true" || params.forceBuild === "1" ||
-      process.env.SOCIAL_FORCE_STATIC_BUILD === "1" || !!buildHookSetting().value;
+      false; // The presence of any shared Build Hook is NOT authorization.
     if (storeRelease && storedVerified) {
       if (forceStaticBuild) {
         buildTrigger = await triggerCanonicalBuild(

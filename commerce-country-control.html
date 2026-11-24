@@ -570,6 +570,12 @@
     </details>
   </section>
   <p class="foot">운영 흐름: 세계 방향 신호 → 권역 상황 신호 → 관리자 반영 품목군 가중치 → 국가·지역 책임 공급업체 발견 → 비공개 업체 후보 → 사업체와 직접 판매 책임 확인 → 결제·배송·반품·환불·고객지원 확인 → 해당 업체 상품 중 적합한 항목만 별도 선별 → Canonical·공개 게이트 순서입니다. IGDC는 판매자·결제 주체·재고 보유자·배송·반품·환불·AS 책임자가 되지 않습니다.</p>
+  <section id="distributionMaintenanceIssues" class="panel" aria-label="유통 공개 상품 이상 점검" style="margin-top:20px">
+  <h2>Distribution · 20개 섹션 공개 상품 이상·교체 대기 점검</h2>
+  <p class="small">읽기 전용입니다. 공개 상품 상태를 조사한 결과 중 확인된 문제·대체 후보·일시적 조회 불가를 섹션/국가별로 표시합니다. 자동 배포·원장 삭제는 실행하지 않습니다.</p>
+  <div class="actions"><button type="button" id="distributionIssueRefresh" class="secondary">최근 문제 목록 조회</button><button type="button" id="distributionIssueDownload" class="ghost" disabled>문제 상품 JSON 다운로드</button><span id="distributionIssueStatus" class="state" role="status" aria-live="polite">최근 자동 점검 기록을 조회할 수 있습니다.</span></div>
+  <div id="distributionIssueRows" class="small" style="max-height:350px;overflow:auto"></div>
+</section>
 </main>
 
 <div id="affiliateSettlementModal" class="affiliate-modal hidden" role="dialog" aria-modal="true" aria-labelledby="affiliateSettlementTitle">
@@ -710,7 +716,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=igdc-exclusion-workflow-20261124"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=igdc-hold-delete-preflight-20261124"></script>
 <script src="/assets/js/admin-commerce-paid-supplier-budget.v1.js?v=20261121"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20261025-paged-exclusion-v1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>
@@ -761,6 +767,8 @@
   });
 })();
 </script>
+
+<script src="/assets/js/admin-publication-issues.v1.js?v=20261124-maintenance-report"></script>
 <script src="/assets/js/admin-country-auto-15-diagnostic.v1.js?v=20261119-selected-report-v1"></script>
 </body>
 </html>

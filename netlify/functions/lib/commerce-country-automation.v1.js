@@ -8013,7 +8013,7 @@ async function removeMaintenanceQueueRecord(entryInput){
 function maintenanceScopeFromAssignment(rowInput){const row=plain(rowInput),country=normalizeCountry(row.country_code),region=normalizeRegion(row.region_code||"NATIONWIDE",country)||"NATIONWIDE";return country&&country!=="GLOBAL"?{country,region}:null;}
 function maintenanceReplacementRecord(candidateId,assignment,scope,currentProduct,recovery,existingInput){
   const product=plain(recovery&&recovery.product),url=productUrl(product),image=productImageUrl(product),title=first(product.productName,product.title),identity=ProductRanking.productIdentity(product),existing=plain(existingInput);
-  return{candidateId,assignmentId:text(assignment&&assignment.id)||null,page:text(assignment&&assignment.hub_key)||null,sectionKey:text(assignment&&assignment.slot_key)||null,country:scope.country,region:scope.region,previousProductUrl:ProductRanking.canonicalProductUrl(productUrl(currentProduct))||productUrl(currentProduct)||null,replacementProductUrl:url,replacementCanonicalUrl:ProductRanking.canonicalProductUrl(url)||null,replacementProductIdentity:identity||null,title,image,price:first(product.price,currentProduct&&currentProduct.price),priceCurrency:first(product.priceCurrency,currentProduct&&currentProduct.priceCurrency),availability:first(product.availability,currentProduct&&currentProduct.availability),supplierSiteUrl:first(product.supplierSiteUrl,currentProduct&&currentProduct.supplierSiteUrl),queuedAt:first(existing.queuedAt,iso()),validatedAt:iso(),state:"maintenance_replacement_queue",publicPublication:false};
+  return{candidateId,assignmentId:text(assignment&&assignment.id)||null,page:text(assignment&&assignment.hub_key)||null,sectionKey:text(assignment&&assignment.slot_key)||null,country:scope.country,region:scope.region,originalTitle:first(currentProduct&&currentProduct.productName,currentProduct&&currentProduct.title),previousProductUrl:ProductRanking.canonicalProductUrl(productUrl(currentProduct))||productUrl(currentProduct)||null,replacementProductUrl:url,replacementCanonicalUrl:ProductRanking.canonicalProductUrl(url)||null,replacementProductIdentity:identity||null,title,image,price:first(product.price,currentProduct&&currentProduct.price),priceCurrency:first(product.priceCurrency,currentProduct&&currentProduct.priceCurrency),availability:first(product.availability,currentProduct&&currentProduct.availability),supplierSiteUrl:first(product.supplierSiteUrl,currentProduct&&currentProduct.supplierSiteUrl),queuedAt:first(existing.queuedAt,iso()),validatedAt:iso(),state:"maintenance_replacement_queue",publicPublication:false};
 }
 async function maintenancePublishedAssignments(cursorInput,limitInput,scopeInput){
   const cursor=text(cursorInput),limit=Math.max(1,Math.min(48,Number(limitInput)||MAINTENANCE_CHECK_BATCH));
@@ -8045,16 +8045,16 @@ async function runMaintenanceLivenessPass(actorId){
   const ids=Array.from(new Set(assignments.map(row=>text(row&&row.candidate_id)).filter(Boolean))),rows=await frontSyncSelectCandidates(ids),rowById=new Map(array(rows).map(row=>[text(row&&row.id),row])),scopeById=new Map(),productInputs=[];
   for(const assignment of assignments){const candidateId=text(assignment&&assignment.candidate_id),scope=maintenanceScopeFromAssignment(assignment),row=plain(rowById.get(candidateId));if(!candidateId||!scope||!Object.keys(row).length)continue;const product=candidateRuntimeProduct(row,scope);if(!product)continue;product.candidateId=candidateId;product.id=candidateId;scopeById.set(candidateId,scope);productInputs.push(product);}
   const inspectedById=await inspectMaintenanceProducts(productInputs,scopeById),queueRows=await maintenanceQueueRecords(),queueByCandidate=new Map(queueRows.map(row=>[text(row.candidateId),row])),queuedUrls=new Set(queueRows.map(row=>ProductRanking.canonicalProductUrl(row&&row.replacementCanonicalUrl||row&&row.replacementProductUrl)).filter(Boolean)),queuedIdentities=new Set(queueRows.map(row=>text(row&&row.replacementProductIdentity)).filter(Boolean));
-  let checked=0,dead=0,inconclusive=0,queued=0;const unresolved=[];
+  let checked=0,dead=0,inconclusive=0,queued=0;const unresolved=[],inconclusiveSamples=[];
   for(const assignment of assignments){
     const candidateId=text(assignment&&assignment.candidate_id),scope=scopeById.get(candidateId),row=plain(rowById.get(candidateId)),merged=plain(inspectedById.get(candidateId));if(!candidateId||!scope||!Object.keys(row).length||!Object.keys(merged).length)continue;
-    checked+=1;const health=candidateRuntimeHealth(merged);if(health.inconclusive){inconclusive+=1;continue;}if(!health.dead)continue;dead+=1;
+    checked+=1;const health=candidateRuntimeHealth(merged);if(health.inconclusive){inconclusive+=1;inconclusiveSamples.push({candidateId,assignmentId:text(assignment&&assignment.id)||null,country:scope.country,region:scope.region,page:text(assignment&&assignment.hub_key)||null,sectionKey:text(assignment&&assignment.slot_key)||null,title:first(merged.productName,merged.title,row.title),productUrl:productUrl(merged)||null,reasons:health.reasons,checkedAt:iso(),assessment:"inconclusive_not_confirmed_failure"});continue;}if(!health.dead)continue;dead+=1;
     let recovery=null;try{recovery=await recoverHeldCandidateProduct(row,scope,{excludedCanonicalUrls:Array.from(queuedUrls),excludedProductIdentities:Array.from(queuedIdentities)});}catch(_e){recovery=null;}
     if(recovery&&recovery.ok===true){
       const existing=plain(queueByCandidate.get(candidateId)),rec=maintenanceReplacementRecord(candidateId,assignment,scope,merged,recovery,existing);if(rec.replacementCanonicalUrl){const saved=await saveMaintenanceQueueRecord(rec,actor,existing);queueByCandidate.set(candidateId,saved||rec);queuedUrls.add(rec.replacementCanonicalUrl);if(rec.replacementProductIdentity)queuedIdentities.add(rec.replacementProductIdentity);queued+=1;}
-    }else unresolved.push({candidateId,assignmentId:text(assignment&&assignment.id)||null,country:scope.country,region:scope.region,sectionKey:text(assignment&&assignment.slot_key)||null,productUrl:productUrl(merged)||null,reasons:health.reasons,recoveryReason:text(recovery&&recovery.reason)||"replacement_not_found",checkedAt:iso()});
+    }else unresolved.push({candidateId,assignmentId:text(assignment&&assignment.id)||null,country:scope.country,region:scope.region,page:text(assignment&&assignment.hub_key)||null,sectionKey:text(assignment&&assignment.slot_key)||null,title:first(merged.productName,merged.title,row.title),productUrl:productUrl(merged)||null,reasons:health.reasons,recoveryReason:text(recovery&&recovery.reason)||"replacement_not_found",checkedAt:iso()});
   }
-  const lastAssignment=assignments[assignments.length-1];state.scanCursor=assignments.length<MAINTENANCE_CHECK_BATCH?"":text(lastAssignment&&lastAssignment.id);if(assignments.length<MAINTENANCE_CHECK_BATCH)state.lastScanCompletedAt=iso();state.lastLivenessPassAt=iso();state.lastLivenessPass={checked,dead,inconclusive,queued};state.lastUnresolvedSample=unresolved.slice(-100);await saveMaintenanceState(state,actor);
+  const lastAssignment=assignments[assignments.length-1];state.scanCursor=assignments.length<MAINTENANCE_CHECK_BATCH?"":text(lastAssignment&&lastAssignment.id);if(assignments.length<MAINTENANCE_CHECK_BATCH)state.lastScanCompletedAt=iso();state.lastLivenessPassAt=iso();state.lastLivenessPass={checked,dead,inconclusive,queued};state.lastUnresolvedSample=unresolved.slice(-100);state.lastInconclusiveSample=inconclusiveSamples.slice(-100);await saveMaintenanceState(state,actor);
   return{ok:true,checked,dead,inconclusive,queued,scanCursor:state.scanCursor,cycleComplete:assignments.length<MAINTENANCE_CHECK_BATCH,privateQueue:true};
 }
 // A bounded, country-only administrator repair pass. A user click scans the
@@ -8066,31 +8066,7 @@ async function runScopedMaintenanceRepair(actorId,input){
   const actor=text(actorId)||"administrator",scope=researchScope(input),mode=lower(input&&input.mode)||"scan",cursor=text(input&&input.cursor);
   if(!["scan","apply"].includes(mode))throw Object.assign(new Error("지원하지 않는 유지보수 단계"),{statusCode:400});
   if(mode==="apply"){
-    const all=(await maintenanceQueueRecords()).filter(row=>normalizeCountry(row.country)===scope.country&&
-      PRODUCT_SECTION_KEYS.includes(text(row.page)+"|"+text(row.sectionKey))&&
-      (normalizeRegion(row.region||"NATIONWIDE",scope.country)||"NATIONWIDE")===scope.region)
-      .sort((a,b)=>text(a.policyId).localeCompare(text(b.policyId)));
-    const eligible=all.filter(row=>text(row.policyId)>cursor),batch=eligible.slice(0,3),applied=[],failed=[];
-    for(const entry of batch){
-      let result;try{result=await applyMaintenanceReplacement(actor,entry);}catch(error){result={ok:false,reason:text(error&&error.message||error)||"maintenance_apply_failed",keepQueue:true};}
-      if(result.ok===true){applied.push(result);await removeMaintenanceQueueRecord(entry);}
-      else{failed.push({candidateId:text(entry.candidateId),reason:text(result.reason)||"requires_review"});
-        if(result.dropQueue===true)await removeMaintenanceQueueRecord(entry);}
-    }
-    let dispatch=null;
-    if(applied.length){
-      const ids=applied.map(row=>text(row.candidateId)).filter(Boolean),state=await maintenanceStateRule();
-      // Keep the retry record BEFORE dispatch. A failed build request does not
-      // silently drop the already-validated database change.
-      state.pendingBuildCandidateIds=Array.from(new Set(array(state.pendingBuildCandidateIds).concat(ids)));
-      await saveMaintenanceState(state,actor);
-      try{dispatch=await ReleaseDispatch.dispatch({candidateId:ids[0],candidateIds:ids,assignmentId:null,actorId:actor,operation:"publish",candidateCount:ids.length,explicitAdminAuthorization:false,scheduledMaintenanceAuthorization:true,maintenanceBatch:true});}
-      catch(error){dispatch={queued:false,reason:text(error&&error.message||error)||"release_dispatch_failed"};}
-      if(dispatch&&dispatch.queued===true){const latest=await maintenanceStateRule();latest.pendingBuildCandidateIds=array(latest.pendingBuildCandidateIds).filter(id=>!ids.includes(id));latest.lastMaintenanceBuildDispatchAt=iso();latest.lastMaintenanceBuildDispatch=dispatch;await saveMaintenanceState(latest,actor);}
-    }
-    return{ok:true,reportType:"igdc-country-maintenance-apply",scope,mode,attempted:batch.length,applied:applied.length,failed,dispatch,buildPending:!!applied.length&&!(dispatch&&dispatch.queued===true),
-      nextCursor:batch.length?text(batch[batch.length-1].policyId):cursor,done:eligible.length<=batch.length,
-      otherCountriesTouched:false,administratorPinnedPreserved:true};
+    return {ok:true,reportType:"igdc-country-maintenance-review-only",scope,mode,attempted:0,applied:0,failed:[],dispatch:null,buildPending:false,done:true,nextCursor:"",administratorFrontMatchRequired:true,reason:"review_and_front_match_required"};
   }
   const raw=await maintenancePublishedAssignments(cursor,8,scope),nextCursor=raw.length?text(raw[raw.length-1].id):cursor;
   const assignments=raw.filter(row=>{
@@ -8561,7 +8537,8 @@ async function schedulerRun(event) {
   const settled = [];
   let maintenanceLiveness={ok:false,error:"not_run"},maintenanceDaily={ok:false,error:"not_run"};
   try{maintenanceLiveness=await runMaintenanceLivenessPass("scheduled-product-maintenance");}catch(error){maintenanceLiveness={ok:false,error:text(error&&error.message||error)||"maintenance_liveness_failed"};}
-  try{maintenanceDaily=await runDailyMaintenancePublish("scheduled-product-maintenance");}catch(error){maintenanceDaily={ok:false,error:text(error&&error.message||error)||"maintenance_daily_failed"};}
+  // Research/health checks remain scheduled. Publish/replacement is administrator front-match only.
+  maintenanceDaily={ok:true,due:false,automaticApply:false,automaticDeploy:false,reason:"administrator_front_match_required"};
   return { ok: true, version: VERSION, startedAt, finishedAt: iso(), masterMode: dueResult.state.master.mode, dueCount: dueResult.dueCount || 0, processed: settled.length, results: settled.map((result, index) => result.status === "fulfilled" ? { scope: dueResult.scopes[index], ok: result.value.ok, runId: result.value.runId, summary: result.value.summary, error: result.value.error || null } : { scope: dueResult.scopes[index], ok: false, error: text(result.reason && result.reason.message || result.reason) }), maintenance:{liveness:maintenanceLiveness,daily:maintenanceDaily,privateQueue:true,singleGlobalBuildDispatch:true} };
 }
 

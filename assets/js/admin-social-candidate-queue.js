@@ -3974,6 +3974,7 @@
 
       var body = {
         operation: "actual_front_apply",
+        forceBuild: true, // explicitly clicked administrator front publication
         storeRelease: true,
         confirmPublish: true,
         includeSnapshot: 0,
@@ -4176,6 +4177,7 @@
     try {
       var d = await post(PUBLISH, {
         operation: "unpublish_selected",
+        forceBuild: true, // explicit administrator unpublish
         candidateIds: ids,
         storeRelease: true,
         confirmUnpublish: true,

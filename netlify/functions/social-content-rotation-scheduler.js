@@ -9,7 +9,6 @@
  * - Publishes fresh GLOBAL and KR runtime releases without a Netlify rebuild.
  */
 const Collector = require("./sanmaru-social-live-collector");
-const Publisher = require("./social-snapshot-publish");
 const Curator = require("./social-candidate-auto-curator");
 const Actions = require("./social-candidate-action");
 const Store = require("./lib/social-candidate-store.v1");
@@ -97,30 +96,10 @@ exports.handler = async function() {
     curation = { ok: false, error: String(error && error.message || error) };
   }
 
-  const publishes = [];
-  for (const scope of [
-    { scopeMode: "global", countryCode: "" },
-    { scopeMode: "country", countryCode: "KR" }
-  ]) {
-    const response = await Publisher.publishInternal({
-      operation: "actual_front_apply",
-      confirmPublish: true,
-      storeRelease: true,
-      scopeMode: scope.scopeMode,
-      countryCode: scope.countryCode,
-      scheduledRotation: true,
-      forceBuild: false
-    });
-    const data = bodyOf(response);
-    publishes.push({
-      scope: scope.countryCode || "GLOBAL",
-      ok: !!data.ok,
-      noChange: !!data.noChange,
-      releaseId: data.releaseId || null,
-      publicationPlanCount: Number(data.publicationPlanCount || 0),
-      error: data.error || null
-    });
-  }
+  // Social remains private: scheduled research/curation never publishes a release
+  // and never invokes a Netlify Build Hook. Only an administrator can publish.
+  const publishes = [{ scope: "GLOBAL", ok: true, skipped: true, reason: "administrator_front_publish_required" },
+                     { scope: "KR", ok: true, skipped: true, reason: "administrator_front_publish_required" }];
 
   return {
     statusCode: 200,
