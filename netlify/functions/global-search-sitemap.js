@@ -6,7 +6,8 @@ const ORIGIN="https://igdcglobal.com",MAX_URLS=45000,DIRECTORY_PAGE_SIZE=80;
 // Bounded warm-instance cache avoids rebuilding large approved snapshots for every crawler.
 // A fresh Netlify instance always recomputes. This does not cache or publish private candidates.
 const CACHE_MS=90*1000;
-let cached=null;
+// Rendered XML is immutable within the same 90-second verified registry snapshot.
+let cached=null,rendered=new Map();
 function publicSitemapTargets(){
  const now=Date.now();
  if(cached&&cached.expires>now)return cached.value;
@@ -23,7 +24,9 @@ function publicSitemapTargets(){
     }
    }
  }
- const value={reg,targets};cached={value,expires:now+CACHE_MS};return value;
+ const value={reg,targets};
+ // Do not reuse an XML/ETag pair after the approved target snapshot expires.
+ rendered.clear();cached={value,expires:now+CACHE_MS};return value;
 }
 function esc(v){return String(v||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function owned(v){
@@ -57,8 +60,14 @@ exports.handler=async event=>{
   const raw=event&&event.queryStringParameters&&event.queryStringParameters.part;
   if(raw!==undefined&&(!/^[1-9]\d{0,5}$/.test(String(raw))||Number(raw)>parts))return{statusCode:404,headers:{"content-type":"text/plain; charset=utf-8","cache-control":"no-store"},body:"Sitemap part not found"};
   const part=raw===undefined?0:Number(raw);
-  const body=parts>1&&!part?indexXml(parts):urlset(targets.slice(((part||1)-1)*MAX_URLS,(part||1)*MAX_URLS));
+  const renderKey=parts>1&&!part?"index":String(part||1);
+  let entry=rendered.get(renderKey);
+  if(!entry){
+   const body=parts>1&&!part?indexXml(parts):urlset(targets.slice(((part||1)-1)*MAX_URLS,(part||1)*MAX_URLS));
    const etag='"'+crypto.createHash("sha256").update(body).digest("hex")+'"';
+   entry={body,etag};rendered.set(renderKey,entry);
+  }
+  const {body,etag}=entry;
    const headers={"content-type":"application/xml; charset=utf-8","cache-control":"public,max-age=90,s-maxage=180","x-content-type-options":"nosniff","etag":etag,"x-igdc-search-registry":reg.hash,"x-igdc-sitemap-parts":String(parts),"x-igdc-country-market-pages":String(reg.marketCommerceCount||0),"x-igdc-sitemap-directory-count":String(Object.keys(reg.countryCounts||{}).filter(k=>reg.countryCounts[k]>0).length)};
    if(String(event&&event.headers&&(event.headers["if-none-match"]||event.headers["If-None-Match"])||"").split(",").map(s=>s.trim()).includes(etag))return{statusCode:304,headers,body:""};
    return{statusCode:200,headers,body};

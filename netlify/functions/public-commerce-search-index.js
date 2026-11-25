@@ -1,6 +1,17 @@
 "use strict";
 const {buildRegistry,marketName}=require("./lib/search-exposure/registry");
 const ROOT="https://igdcglobal.com/.netlify/functions/public-commerce-search-index",BATCH=80;
+// Keep public read-only registry decisions consistent for one warm instance.
+// Recompute after 90 seconds; never cache a failed build or private candidates.
+const CACHE_MS=90*1000;
+let cached=null;
+function publicRegistry(){
+ const now=Date.now();
+ if(cached&&cached.expires>now)return cached.reg;
+ const reg=buildRegistry();
+ cached={reg,expires:now+CACHE_MS};
+ return reg;
+}
 const esc=s=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 function html(title,description,url,body,robots){
  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+'</title><meta name="description" content="'+esc(description)+'"><meta name="robots" content="'+(robots||"index,follow")+'"><link rel="canonical" href="'+esc(url)+'"><style>body{font:16px/1.7 system-ui,Arial,sans-serif;background:#f5f8fc;color:#17324d;margin:0}main{max-width:1020px;margin:auto;padding:28px 18px 72px}a{color:#0753a0}section{background:white;border:1px solid #dce5ed;border-radius:12px;padding:20px}li{margin:6px 0}.info{color:#5c6d7a}</style></head><body><main><nav><a href="/home">IGDC Global Platform</a> / <a href="/distributionhub">Distribution Hub</a></nav>'+body+'</main></body></html>';
@@ -8,7 +19,7 @@ function html(title,description,url,body,robots){
 function send(statusCode,body){return{statusCode,headers:{"content-type":"text/html; charset=utf-8","cache-control":statusCode===200?"public,max-age=180,s-maxage=600":"no-store","x-content-type-options":"nosniff"},body};}
 exports.handler=async event=>{
  try{
-  const reg=buildRegistry(),q=event&&event.queryStringParameters||{},country=String(q.country||"").toUpperCase();
+  const reg=publicRegistry(),q=event&&event.queryStringParameters||{},country=String(q.country||"").toUpperCase();
   const markets=Object.entries(reg.countryCounts||{}).filter(([cc,count])=>/^[A-Z]{2}$/.test(cc)&&Number(count)>0).sort((a,b)=>a[0].localeCompare(b[0]));
   if(!country){
    const rows=markets.map(([cc,count])=>'<li><a href="'+ROOT+'?country='+cc+'">'+esc(marketName(cc,"en"))+' ('+cc+')</a> — '+Number(count)+' verified product market pages</li>').join("");
