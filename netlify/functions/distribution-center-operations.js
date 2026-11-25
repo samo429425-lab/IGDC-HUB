@@ -1,11 +1,12 @@
 'use strict';
+const CenterDB=require('./lib/distribution-center-db-config');
 const access=require('./lib/distribution-center-access');
 const {authenticateMember}=require('./lib/distribution-center-auth');
 const c=require('./lib/distribution-center-core');
 const crypto=require('crypto');
 const response=(statusCode,data)=>({statusCode,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'},body:JSON.stringify(data)});
-function config(){const url=process.env.DCENTER_SUPABASE_URL,key=process.env.DCENTER_SUPABASE_SERVICE_KEY;if(!url||!key)throw c.error(503,'유통센터 DB 미설정');return {url:url.replace(/\/$/,''),key};}
-async function request(path,method='GET',body,extra={}){const {url,key}=config();const r=await fetch(url+path,{method,headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'return=representation',...extra},body:body===undefined?undefined:Buffer.isBuffer(body)?body:JSON.stringify(body),signal:AbortSignal.timeout(10000)});if(!r.ok)throw c.error(r.status===409?409: r.status===400?400:503,'저장 요청 실패');return r.json();}
+function config(){const {url,key}=CenterDB.resolve();return {url:url.replace(/\/$/,''),key};}
+async function request(path,method='GET',body,extra={}){const {url,key}=config();const r=await fetch(url+path,{method,headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'return=representation',...extra},body:body===undefined?undefined:Buffer.isBuffer(body)?body:JSON.stringify(body),signal:AbortSignal.timeout(10000),redirect:'error'});if(!r.ok)throw c.error(r.status===409?409: r.status===400?400:503,'저장 요청 실패');return r.json();}
 const db=(table,q={},method='GET',body)=>request('/rest/v1/'+table+'?'+new URLSearchParams(q),method,body);
 const eq=x=>'eq.'+x;
 function id(x){if(typeof x!=='string'||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x)))throw c.error(400,'ID 오류');return x;}

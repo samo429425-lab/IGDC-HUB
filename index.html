@@ -365,6 +365,7 @@ const titleText = {
 function detectPublicRoute() {
   try {
     const pathname = (location.pathname || '/').replace(/\/$/, '') || '/';
+    if (pathname === '/distribution-center-console') return {lang:null,index:-2};
     if (pathname === '/admin') return { lang: null, index: 7 };
     if (pathname === '/help') return { lang: null, index: 8 };
     const languages = Object.keys(pageMap || {});
@@ -484,9 +485,34 @@ function renderIndexLanguage(lang) {
   return currentLang;
 }
 
+function dcenterFrameTarget(href, lang) {
+  var source=new URL(href,location.origin);
+  var country=source.searchParams.get('manage_country');
+  var frame=new URL('/distribution-center/index.html',location.origin);
+  if (/^[A-Z]{2}$/.test(country||'')) frame.searchParams.set('manage_country',country);
+  frame.searchParams.set('lang',lang||currentLang||'ko');
+  return frame.pathname+frame.search;
+}
+function dcenterShellTarget(href, lang) {
+  var frame=new URL(dcenterFrameTarget(href,lang),location.origin);
+  return '/distribution-center-console'+frame.search;
+}
+function navigateDCenter(href, replace) {
+  var target=dcenterShellTarget(href,currentLang);
+  var src=dcenterFrameTarget(target,currentLang);
+  currentPageIndex=-2;
+  if (target!==location.pathname+location.search) history[replace?'replaceState':'pushState']({igdcPage:-2,lang:currentLang,frameSrc:src},'',target);
+  else if (!history.state || history.state.frameSrc!==src) history.replaceState({igdcPage:-2,lang:currentLang,frameSrc:src},'',target);
+  restoreFrameWithoutHistory(src);
+  return false;
+}
 function changeLanguage(lang) {
   renderIndexLanguage(lang);
 
+  if ((location.pathname||'').replace(/\/$/,'')==='/distribution-center-console') {
+    navigateDCenter(location.href,true);
+    return;
+  }
   // 3) Keep current page index, map to page, set iframe
   try{
     var pageList =
@@ -656,13 +682,14 @@ window.addEventListener('popstate', function(ev){
     renderIndexLanguage(restoredLang);
 
     if (ev.state && ev.state.frameSrc) {
-      if (Number.isInteger(ev.state.igdcPage) && ev.state.igdcPage >= 0) currentPageIndex = ev.state.igdcPage;
+      if (Number.isInteger(ev.state.igdcPage) && (ev.state.igdcPage >= 0 || ev.state.igdcPage===-2)) currentPageIndex = ev.state.igdcPage;
       restoreFrameWithoutHistory(ev.state.frameSrc);
       return;
     }
     var idx = ev.state && Number.isInteger(ev.state.igdcPage)
       ? ev.state.igdcPage
       : (route && Number.isInteger(route.index) ? route.index : 0);
+    if (idx===-2) {navigateDCenter(location.href,true);return;}
     loadPage(idx, null, {skipHistory:true});
   }catch(e){}
 });
@@ -1174,7 +1201,7 @@ html:not([data-igdc-donation-ready="1"]) nav [data-igdc-donation-nav="1"] { disp
 <a href="/admin.html" data-page-index="7" data-role="admin" onclick="return loadPage(7,event)">🛠 Admin</a>
 <a href="/help" data-page-index="8" onclick="return loadPage(8,event)">❓ 도움말</a>
 <a href="/maru-download" data-page-index="9" onclick="return loadPage(9,event)">💾 프로그램 다운로드</a>
-<a id="igdc-dcenter-entry-v24" href="/distribution-center/index.html" hidden style="display:none" rel="nofollow">Distribution Center</a>
+<a id="igdc-dcenter-entry-v24" href="/distribution-center-console" hidden style="display:none" rel="nofollow">Distribution Center</a>
 </nav>
 <iframe id="mainFrame" name="mainFrame"></iframe>
 <!-- 🧠 자동 API 연동 및 도네이션 수익 로직 삽입 -->
@@ -3727,6 +3754,23 @@ function normLang(l){
   }
   function syncActive(){
     var href = resolveFromIframe();
+    try {
+      var pendingFrame=document.getElementById('mainFrame');
+      if(pendingFrame?.__igdcPendingSrc && Date.now()-(pendingFrame.__igdcPendingAt||0)<8000) {
+        var liveFrame=new URL(href,location.origin);
+        if(liveFrame.pathname+liveFrame.search+liveFrame.hash!==pendingFrame.__igdcPendingSrc && (location.pathname==='/distribution-center-console' || liveFrame.pathname==='/distribution-center/index.html'))return;
+      }
+      var dcUrl=new URL(href,location.origin);
+      if(dcUrl.origin===location.origin && dcUrl.pathname==='/distribution-center/index.html') {
+        currentPageIndex=-2;
+        setActiveIndex(-1);
+        var dcLink=document.getElementById('igdc-dcenter-entry-v24');
+        if(dcLink&&!dcLink.hidden)dcLink.classList.add('active');
+        var dcTarget=dcenterShellTarget(dcUrl.href,getLang());
+        if(dcTarget!==location.pathname+location.search)history.replaceState({igdcPage:-2,lang:getLang(),frameSrc:dcenterFrameTarget(dcUrl.href,getLang())},'',dcTarget);
+        return;
+      }
+    }catch(e){}
     var root = toRootName(href);
     var idx  = findIndexByRoot(root);
     if (idx >= 0) currentPageIndex = idx;
@@ -5134,7 +5178,7 @@ function normLang(l){
 })();
 </script>
 <!-- /IGDC donation navigation auth/country gate v1 -->
-<script src="/assets/js/dcenter-entry.v24.js?v=27" defer></script>
+<script src="/assets/js/dcenter-entry.v24.js?v=28" defer></script>
 </body>
 
 
