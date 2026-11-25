@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const SchedulerGuard=require('./commerce-scheduler-db-guard.v1');
 
 const PUBLICATION_STATUS_COMPAT_VERSION = 'gslot-publication-status-compat-v1.0.0';
 
@@ -80,13 +81,18 @@ async function request(path, init) {
   let options = Object.assign({}, init || {});
   options = normalizeAssignmentWriteBody(path, options);
   options.headers = Object.assign({}, (options && options.headers) || {}, baseHeaders);
-  const response = await fetch(cfg.url + path, options);
-  const raw = await response.text();
+  const guardSignal=SchedulerGuard.requestSignal(options.method);
+  if(guardSignal&&!options.signal)options.signal=guardSignal;
+  let response,raw;
+  try{response=await fetch(cfg.url + path, options);raw=await response.text();}
+  catch(error){SchedulerGuard.noteDbError(error);throw error;}
   let body = null;
   try { body = raw ? JSON.parse(raw) : null; } catch (_) { body = raw; }
   if (!response.ok) {
     const error = new Error((body && body.message) || (body && body.error_description) || (body && body.error) || raw || ('Supabase HTTP ' + response.status));
     error.statusCode = response.status >= 400 && response.status < 600 ? response.status : 502;
+    error.dbCode=body&&typeof body==='object'?body.code:null;
+    SchedulerGuard.noteDbError(error);
     throw error;
   }
   return normalizeAssignmentReadBody(path, body);
@@ -97,7 +103,8 @@ function rest(table, query) {
 }
 
 async function select(table, query) {
-  return request(rest(table, query), { method: 'GET', headers: { Prefer: 'count=exact' } });
+  // This API returns rows only; Content-Range totals were never consumed.
+  return request(rest(table, query), { method: 'GET' });
 }
 
 async function insert(table, rows, prefer) {

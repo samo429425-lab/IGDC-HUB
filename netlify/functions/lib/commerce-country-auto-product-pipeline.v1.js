@@ -6,6 +6,8 @@
 const crypto = require('crypto');
 const Automation = require('./commerce-country-automation.v1');
 const Store = require('./global-slot-console-supabase');
+const {readActiveCheckpoints}=require('./commerce-scheduler-checkpoints.v1');
+const {scopeBatchLimit}=require('./commerce-scheduler-db-guard.v1');
 const MarketSaleScope = require('./market-sale-scope.v1');
 const AutoPolicy = require('./commerce-country-auto-research-policy.v1');
 
@@ -66,25 +68,19 @@ function makePipeline(deps) {
   const store = (deps && deps.store) || Store;
   const clock = (deps && deps.clock) || stamp;
 
-  async function rows() {
-    const all=[],page=500;
-    for(let offset=0;offset<10000;offset+=page){
-      // Product-job checkpoints can hold large private queues. Scheduler
-      // fairness only needs timing and gate flags; never hydrate all rules.
-      const fields='select=id,updated_at,phase:rule->>phase,jobId:rule->>jobId,'+
+  async function rows(scopes) {
+    const fields='select=id,updated_at,phase:rule->>phase,jobId:rule->>jobId,'+
         'lastStepAt:rule->>lastStepAt,completedAt:rule->>completedAt,'+
         'nextRefreshAt:rule->>nextRefreshAt,lastSupplierRunAt:rule->>lastSupplierRunAt,'+
         'sectionFill:rule->sectionFill,operatorAutoPause:rule->operatorAutoPause,'+
         'nextRetryAt:rule->>nextRetryAt,retrySupplierAt:rule->>retrySupplierAt';
-      const slice=arr(await store.select('gslot_policies',fields+'&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
-      all.push(...slice.map(row=>({id:row.id,updated_at:row.updated_at,rule:{
+    const slice=await readActiveCheckpoints(store,HUB,fields,scopes.map(idFor));
+    return slice.map(row=>({id:row.id,updated_at:row.updated_at,rule:{
         phase:row.phase,jobId:row.jobId,lastStepAt:row.lastStepAt,completedAt:row.completedAt,
         nextRefreshAt:row.nextRefreshAt,lastSupplierRunAt:row.lastSupplierRunAt,
         sectionFill:obj(row.sectionFill),operatorAutoPause:row.operatorAutoPause===true,
         nextRetryAt:row.nextRetryAt,retrySupplierAt:row.retrySupplierAt
-      }})));if(slice.length<page)return all;
-    }
-    throw new Error('product_auto_checkpoint_page_limit');
+      }}));
   }
   async function rowFor(id) {
     return arr(await store.select('gslot_policies', 'select=id,rule,updated_at&id=eq.' + encodeURIComponent(id) + '&limit=1'))[0] || null;
@@ -475,8 +471,8 @@ function makePipeline(deps) {
             required:'saved_auto_takeover_and_exact_paused_runtime_job'});
           update.lastErrorReason=reason.slice(0,180);
           result=update.lastResult;
-        } else if(/timeout|fetch failed|econnreset|eai_again|502|503|504/i.test(reason)){
-          update.nextRetryAt=new Date(ts(clock())+2*60*1000).toISOString();
+        } else if(/timeout|57014|broken pipe|connection reset|fetch failed|econnreset|eai_again|502|503|504/i.test(reason)){
+          update.nextRetryAt=new Date(ts(clock())+10*60*1000).toISOString();
           update.retrySupplierAt=txt(scope.supplierLastRunAt)||null;
           update.lastErrorReason=reason.slice(0,180);
         }
@@ -498,7 +494,7 @@ function makePipeline(deps) {
     const runStarted=Date.now();
     const plan=await automation.autoProductScopes();
     if(!arr(plan.scopes).length)return {ok:true,version:VERSION,masterMode:plan.mode,activeScopes:0,processed:0,results:[],safety:{stoppedDoesNotDelete:true,publicPublication:false}};
-    const previous=new Map((await rows()).map(row=>[txt(row.id),obj(row.rule)]));
+    const previous=new Map((await rows(arr(plan.scopes))).map(row=>[txt(row.id),obj(row.rule)]));
     const eligible=arr(plan.scopes).filter(s=>{
       // Legacy hourly lastRunAt is not proof of inspected, durable suppliers.
       // Wait for supplier worker's verified country-local completion marker
@@ -515,7 +511,7 @@ function makePipeline(deps) {
       if(st.phase==='complete'&&eligibleRefreshAt(st)>ts(clock())&&ts(s.supplierLastRunAt)<=ts(st.lastSupplierRunAt))return false;
       return true;
     });
-    const choices=eligible.sort((a,b)=>ts(previous.get(idFor(a))&&previous.get(idFor(a)).lastStepAt)-ts(previous.get(idFor(b))&&previous.get(idFor(b)).lastStepAt)||scopeKey(a).localeCompare(scopeKey(b))).slice(0,MAX_SCOPES);
+    const choices=eligible.sort((a,b)=>ts(previous.get(idFor(a))&&previous.get(idFor(a)).lastStepAt)-ts(previous.get(idFor(b))&&previous.get(idFor(b)).lastStepAt)||scopeKey(a).localeCompare(scopeKey(b))).slice(0,scopeBatchLimit(MAX_SCOPES));
     // Independent country leases permit bounded parallel research without
     // waiting for the previous country to complete a slow product inspection.
     // This does not change the scheduled function's 30-second limit.
@@ -526,7 +522,7 @@ function makePipeline(deps) {
     return {ok:results.every(r=>r.ok!==false),version:VERSION,elapsedMs:Date.now()-runStarted,
       masterMode:plan.mode,activeScopes:plan.scopes.length,
       eligibleScopes:eligible.length,deferredScopes:Math.max(0,eligible.length-choices.length),
-      batchLimit:MAX_SCOPES,processed:results.length,results,safety:{countryIndependent:true,priorResearchAndAssignmentsPreserved:true,automaticPrivateCandidateStaging:true,automaticPsomPlacement:false,automaticFrontMatch:false,automaticPublication:false,administratorApprovalRequired:true}};
+      batchLimit:scopeBatchLimit(MAX_SCOPES),processed:results.length,results,safety:{countryIndependent:true,priorResearchAndAssignmentsPreserved:true,automaticPrivateCandidateStaging:true,automaticPsomPlacement:false,automaticFrontMatch:false,automaticPublication:false,administratorApprovalRequired:true}};
   }
   return { run, runScope, claim, release, advance, setTakeover, sectionFill, idFor };
 }

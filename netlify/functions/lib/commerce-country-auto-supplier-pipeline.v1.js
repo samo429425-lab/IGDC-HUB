@@ -6,6 +6,8 @@ const crypto = require('crypto');
 const Automation = require('./commerce-country-automation.v1');
 const AutoPolicy = require('./commerce-country-auto-research-policy.v1');
 const Store = require('./global-slot-console-supabase');
+const {readActiveCheckpoints}=require('./commerce-scheduler-checkpoints.v1');
+const {scopeBatchLimit}=require('./commerce-scheduler-db-guard.v1');
 const VERSION = 'igdc-country-supplier-staged-auto.v1';
 const ACTOR = 'scheduled-automation';
 const HUB = 'country-supplier-staged-auto';
@@ -120,27 +122,19 @@ function create(deps) {
       }
     }catch(_error){/* optional shared guard never blocks country work */}
   }
-  async function rows() {
-    const all=[],page=500;
-    for(let offset=0;offset<10000;offset+=page){
-      // A global fairness check needs only compact fields. Do not transfer a
-      // growing array of supplier errors and section diagnostics for every
-      // country once per minute. The full rule is read only when a country is
-      // claimed (rowFor/claim/release retain their existing CAS contract).
-      const fields='select=id,updated_at,phase:rule->>phase,lastStepAt:rule->>lastStepAt,'+
+  async function rows(scopes) {
+    const fields='select=id,scope_country,updated_at,phase:rule->>phase,lastStepAt:rule->>lastStepAt,'+
         'completedAt:rule->>completedAt,nextCycleAt:rule->>nextCycleAt,'+
         'activeSupplierCount:rule->activeSupplierCount,supplierTarget:rule->supplierTarget,'+
         'qualifiedSupplierCount:rule->qualifiedSupplierCount,targetReached:rule->targetReached,'+
         'operatorAutoPause:rule->operatorAutoPause,nextRetryAt:rule->>nextRetryAt';
-      const slice=arr(await store.select('gslot_policies',fields+'&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
-      all.push(...slice.map(row=>({id:row.id,updated_at:row.updated_at,rule:{
-        phase:row.phase,lastStepAt:row.lastStepAt,completedAt:row.completedAt,nextCycleAt:row.nextCycleAt,
+    const slice=await readActiveCheckpoints(store,HUB,fields,scopes.map(idFor));
+    return slice.map(row=>({id:row.id,updated_at:row.updated_at,rule:{
+        scope:{countryCode:row.scope_country},phase:row.phase,lastStepAt:row.lastStepAt,completedAt:row.completedAt,nextCycleAt:row.nextCycleAt,
         activeSupplierCount:row.activeSupplierCount,supplierTarget:row.supplierTarget,
         qualifiedSupplierCount:row.qualifiedSupplierCount,targetReached:row.targetReached===true,
         operatorAutoPause:row.operatorAutoPause===true,nextRetryAt:row.nextRetryAt
-      }})));if(slice.length<page)return all;
-    }
-    throw new Error('supplier_auto_checkpoint_page_limit');
+      }}));
   }
   async function ensure(s) {
     const found=await rowFor(s);if(found)return found;
@@ -457,7 +451,8 @@ function create(deps) {
         // Persist the SAME job/cursor. Retry 429/403 less aggressively without
         // pausing other countries or mistaking an API outage for a full board.
         const wait=/\b429\b|rate.limit|quota/i.test(failure)?10*60*1000:
-          /\b403\b|permission.denied|no.access/i.test(failure)?20*60*1000:2*60*1000;
+          /\b403\b|permission.denied|no.access/i.test(failure)?20*60*1000:
+          /statement timeout|57014|broken pipe|connection reset|fetch failed|econnreset|\b50[234]\b/i.test(failure)?10*60*1000:2*60*1000;
         state.nextRetryAt=new Date(ts(clock())+wait).toISOString();
       }
       if(!stopped)state.errors=arr(state.errors).concat([{at:clock(),phase:state.phase,error:failure}]).slice(-24);
@@ -487,19 +482,19 @@ function create(deps) {
     const runStarted=Date.now();
     const plan=await automation.autoProductScopes();const active=arr(plan.scopes);
     if(!active.length)return{ok:true,version:VERSION,activeScopes:0,processed:0,results:[]};
-    const previous=new Map((await rows()).map(x=>[txt(x.id),obj(x.rule)]));
+    const previous=new Map((await rows(active)).map(x=>[txt(x.id),obj(x.rule)]));
     const eligible=active.filter(s=>{const state=previous.get(idFor(s))||{};
       return state.operatorAutoPause!==true &&
         !(state.phase==='cooldown'&&eligibleCycleAt(state)>ts(clock())) &&
         !(ts(state.nextRetryAt)>ts(clock()));});
-    const choices=eligible.sort((a,b)=>ts((previous.get(idFor(a))||{}).lastStepAt)-ts((previous.get(idFor(b))||{}).lastStepAt)||key(a).localeCompare(key(b))).slice(0,MAX_SCOPES);
+    const choices=eligible.sort((a,b)=>ts((previous.get(idFor(a))||{}).lastStepAt)-ts((previous.get(idFor(b))||{}).lastStepAt)||key(a).localeCompare(key(b))).slice(0,scopeBatchLimit(MAX_SCOPES));
     // Independent leases allow concurrent country steps, without overwriting
     // another country's research or an administrator selection.
     const settled=await Promise.allSettled(choices.map(runScope));
     const results=settled.map((r,i)=>r.status==='fulfilled'?r.value:{scope:key(choices[i]),ok:false,error:txt(r.reason&&r.reason.message||r.reason)});
     return{ok:results.every(r=>r.ok!==false),version:VERSION,elapsedMs:Date.now()-runStarted,activeScopes:active.length,
       eligibleScopes:eligible.length,deferredScopes:Math.max(0,eligible.length-choices.length),
-      batchLimit:MAX_SCOPES,processed:results.length,results,safety:{humanJobProtected:true,countryIndependent:true,researchRounds:RESEARCH_ROUNDS,noPublicFrontMatch:true}};
+      batchLimit:scopeBatchLimit(MAX_SCOPES),processed:results.length,results,safety:{humanJobProtected:true,countryIndependent:true,researchRounds:RESEARCH_ROUNDS,noPublicFrontMatch:true}};
   }
   return{run,runScope,setTakeover,idFor,advance,claim,release};
 }

@@ -1,0 +1,82 @@
+[
+  {
+    "id": "home|home_1",
+    "label": "화장품 / 뷰티 / 스킨케어"
+  },
+  {
+    "id": "home|home_2",
+    "label": "의류 / 트렌디 의류 / 브랜드 패션"
+  },
+  {
+    "id": "home|home_3",
+    "label": "소형가전 / 블루투스 이어폰 / 스피커"
+  },
+  {
+    "id": "home|home_4",
+    "label": "한우 세트 / 홍삼 / 김치"
+  },
+  {
+    "id": "home|home_5",
+    "label": "청소 도구 / 분무기 / 수건"
+  },
+  {
+    "id": "home|home_6",
+    "label": "잡화 / 생활잡화 / 생필품"
+  },
+  {
+    "id": "home|home_right_top",
+    "label": "건강 식재료 / 헬스 / 헬스케어"
+  },
+  {
+    "id": "home|home_right_middle",
+    "label": "자동차 / 자동차용품 / 아웃도어"
+  },
+  {
+    "id": "home|home_right_bottom",
+    "label": "가구 / 식탁 / 주방"
+  },
+  {
+    "id": "distribution|distribution-recommend",
+    "label": "관리자 추천 / AI 추천 / 핫한 의류"
+  },
+  {
+    "id": "distribution|distribution-trending",
+    "label": "검증된 인기 / 명품 의류 / 뷰티 화장품"
+  },
+  {
+    "id": "distribution|distribution-sponsor",
+    "label": "스킨케어 / 화장품 / 바디케어"
+  },
+  {
+    "id": "distribution|distribution-new",
+    "label": "소형 가전 / 전자제품 / 컴퓨터"
+  },
+  {
+    "id": "distribution|distribution-special",
+    "label": "일반 의류 / 란제리 / 아웃도어 의류"
+  },
+  {
+    "id": "distribution|distribution-others",
+    "label": "화장지 / 키친타월 / 청소"
+  },
+  {
+    "id": "distribution|distribution-extra",
+    "label": "정원 / 아웃도어 / 신발"
+  },
+  {
+    "id": "distribution|distribution-right",
+    "label": "브랜드 가구 / 브랜드 의류 / 프리미엄 브랜드"
+  },
+  {
+    "id": "network|network-right",
+    "label": "한우 세트 / 지역 특산품 / 세탁 세제"
+  },
+  {
+    "id": "social|rightPanel",
+    "label": "유튜버 장비 / 방송 장비 / 카페"
+  },
+  {
+    "id": "tour|tour",
+    "label": "관광상품 / 호텔 / 숙박권"
+  }
+]

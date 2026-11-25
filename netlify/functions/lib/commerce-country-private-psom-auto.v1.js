@@ -8,6 +8,8 @@
 const crypto=require('crypto');
 const Automation=require('./commerce-country-automation.v1');
 const Store=require('./global-slot-console-supabase');
+const {readActiveCheckpoints}=require('./commerce-scheduler-checkpoints.v1');
+const {scopeBatchLimit}=require('./commerce-scheduler-db-guard.v1');
 const Safety=require('./commerce-international-distribution-safety.v1');
 const SourceGuard=require('./commerce-supplier-source-guard.v1');
 const ProductWorker=require('./commerce-country-auto-product-pipeline.v1');
@@ -206,23 +208,13 @@ function makePipeline(deps){
   async function run(){
     const plan=await automation.autoProductScopes(),scopes=arr(plan.scopes);
     if(!scopes.length)return{ok:true,version:VERSION,processed:0,results:[],automaticFrontMatch:false};
-    const prior=[],page=500;
-    for(let offset=0;offset<1000;offset+=page){
-      const fields='select=id,lastStepAt:rule->>lastStepAt,nextCycleAt:rule->>nextCycleAt,'+
-        'phase:rule->>phase,lastObservedProductStageToken:rule->>lastObservedProductStageToken';
-      const slice=arr(await store.select('gslot_policies',fields+'&scope_hub=eq.'+HUB+'&order=id.asc&limit='+page+'&offset='+offset));
-      prior.push(...slice.map(row=>({id:row.id,rule:{lastStepAt:row.lastStepAt,nextCycleAt:row.nextCycleAt,
-        phase:row.phase,lastObservedProductStageToken:row.lastObservedProductStageToken}})));if(slice.length<page)break;
-    }
-    const byId=new Map(prior.map(row=>[txt(row.id),obj(row.rule)]));
-    // Read just the durable product staging counters. No candidate payloads,
-    // URLs, large product jobs or manual records are loaded by this wake gate.
-    const stageRows=[];
-    for(let offset=0;offset<1000;offset+=page){
-      const fields='select=id,jobId:rule->>jobId,privateCandidatesStaged:rule->privateCandidatesStaged';
-      const slice=arr(await store.select('gslot_policies',fields+'&scope_hub=eq.'+PRODUCT_STAGE_HUB+'&order=id.asc&limit='+page+'&offset='+offset));
-      stageRows.push(...slice);if(slice.length<page)break;
-    }
+    const fields='select=id,lastStepAt:rule->>lastStepAt,nextCycleAt:rule->>nextCycleAt,'+
+      'phase:rule->>phase,lastObservedProductStageToken:rule->>lastObservedProductStageToken';
+    const prior=await readActiveCheckpoints(store,HUB,fields,scopes.map(idFor));
+    const byId=new Map(prior.map(row=>[txt(row.id),{lastStepAt:row.lastStepAt,nextCycleAt:row.nextCycleAt,
+      phase:row.phase,lastObservedProductStageToken:row.lastObservedProductStageToken}]));
+    const stageRows=await readActiveCheckpoints(store,PRODUCT_STAGE_HUB,
+      'select=id,jobId:rule->>jobId,privateCandidatesStaged:rule->privateCandidatesStaged',scopes.map(productStageId));
     const stages=new Map(stageRows.map(row=>[txt(row.id),stageSignal(row)]));
     const choices=scopes.filter(s=>{
       const state=byId.get(idFor(s))||{};
@@ -235,7 +227,7 @@ function makePipeline(deps){
       return freshB-freshA ||
         ts(obj(byId.get(idFor(a))).lastStepAt)-ts(obj(byId.get(idFor(b))).lastStepAt)||
         key(a).localeCompare(key(b));
-    }).slice(0,MAX_SCOPES);
+    }).slice(0,scopeBatchLimit(MAX_SCOPES));
     const settled=await Promise.allSettled(choices.map(s=>runScope(s,stages.get(productStageId(s)))));
     const results=settled.map((x,i)=>x.status==='fulfilled'?x.value:{scope:key(choices[i]),ok:false,error:txt(x.reason&&x.reason.message||x.reason)});
     return{ok:results.every(x=>x.ok!==false),version:VERSION,activeScopes:scopes.length,processed:results.length,results,automaticFrontMatch:false,automaticPublication:false};

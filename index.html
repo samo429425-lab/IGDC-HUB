@@ -462,7 +462,7 @@ function renderIndexLanguage(lang) {
 
   // 2) Nav labels
   try{
-    var navLinks = document.querySelectorAll('nav a');
+    var navLinks = document.querySelectorAll('nav a[data-page-index]');
     var src =
       (menuText && menuText[currentLang]) ||
       (menuText && menuText[detectPreferredLang()]) ||
@@ -1174,6 +1174,7 @@ html:not([data-igdc-donation-ready="1"]) nav [data-igdc-donation-nav="1"] { disp
 <a href="/admin.html" data-page-index="7" data-role="admin" onclick="return loadPage(7,event)">🛠 Admin</a>
 <a href="/help" data-page-index="8" onclick="return loadPage(8,event)">❓ 도움말</a>
 <a href="/maru-download" data-page-index="9" onclick="return loadPage(9,event)">💾 프로그램 다운로드</a>
+<a id="igdc-dcenter-entry-v24" href="/distribution-center/index.html" hidden style="display:none" rel="nofollow">Distribution Center</a>
 </nav>
 <iframe id="mainFrame" name="mainFrame"></iframe>
 <!-- 🧠 자동 API 연동 및 도네이션 수익 로직 삽입 -->
@@ -5133,6 +5134,7 @@ function normLang(l){
 })();
 </script>
 <!-- /IGDC donation navigation auth/country gate v1 -->
+<script src="/assets/js/dcenter-entry.v24.js?v=26" defer></script>
 </body>
 
 

@@ -1,6 +1,7 @@
 "use strict";
 
 const AdminSession = require("./lib/global-slot-console-auth");
+const SchedulerGuard = require("./lib/commerce-scheduler-db-guard.v1");
 const Automation = require("./lib/commerce-country-automation.v1");
 const PaidSupplierBudget = require("./lib/commerce-country-paid-search-budget.v1");
 const SupplierAiAssist = require("./lib/commerce-country-ai-supplier-assist.v1");
@@ -219,6 +220,7 @@ exports.handler=async function(event){
     if(action==="trust_policy")return json(200,{ok:true,version:Automation.VERSION,trustPolicy:Automation.TRUST_POLICY,marketSignalPolicy:MarketSignals.POLICY});
     // Research steps already read their own saved country scope. Avoid an
     // unrelated country-wide settings query on each checkpoint request.
+    if(action==="scheduler_pressure_status"&&method==="GET")return json(200,{ok:true,schema:"igdc-commerce-scheduler-protection.v1",observedAt:new Date().toISOString(),protection:await SchedulerGuard.status()});
     if(action==="catalog")return json(200,catalog(await Automation.configState()));
     if(action==="diagnostic")return json(200,Automation.diagnostic(await Automation.configState()));
     if(action==="global_control_diagnostic")return json(200,await Automation.globalControlDiagnostic());

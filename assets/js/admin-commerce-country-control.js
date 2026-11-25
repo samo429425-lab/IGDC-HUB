@@ -728,12 +728,12 @@
         try{
           var adaptiveSize=attempt===0?pageSize:(attempt===1?Math.max(35,Math.floor(pageSize*0.65)):25);
           page=await api(MANAGEMENT_LEDGER,'list','GET',{country:requested.country,region:requested.region,offset:offset,limit:adaptiveSize,mode:indexedRead?'scoped_indexed_v1':'legacy_global_scan',phase:indexedRead?phase:null},null,22000);
-        }catch(error){lastError=error;if(!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
+        }catch(error){lastError=error;if(databasePressure(error)||!transientResearchRequestError(error)||attempt>=2)break;await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
       }
       if(!page){
         // Old deployments can lack the indexed endpoint. Fall back to the
         // existing complete scan ONLY before accepting any new cursor.
-        if(indexedRead&&pages===0){indexedRead=false;source='direct_management_ledger_legacy';offset=0;phase='payload';continue;}
+        if(indexedRead&&pages===0&&legacyLedgerUnsupported(lastError)){indexedRead=false;source='direct_management_ledger_legacy';offset=0;phase='payload';continue;}
         partialError=lastError||new Error('상품 관리 원장 전용 조회가 중단되었습니다.');break;
       }
       if(indexedRead&&text(page.pagination&&page.pagination.mode)!=='scoped_market_and_assignment_v1'){
@@ -758,7 +758,7 @@
     if(pages>=250&&hasMore&&!partialError)partialError=new Error('상품 후보 원장 페이지 제한에 도달해 전체 목록이 아직 완성되지 않았습니다.');
     /* Compatibility fallback only. The ordinary screen no longer depends on the
        large commerce-candidate-review staging/diagnostic path. */
-    if(partialError||!all.length){
+    if(partialError&&legacyLedgerUnsupported(partialError)){
       try{
         // Legacy fallback is diagnostic only; never use it for publication,
         // deletion readback or to overwrite an already loaded full board.
@@ -1019,10 +1019,11 @@
   async function loadProductResearchPaged(country,region,options){
     options=options||{};var pageSize=Math.max(50,Math.min(200,Number(options.pageSize||200))),offset=0,pages=0,merged=null,rows=[],latest=[],seen={},latestSeen={},state=options.state||null,maxPages=Math.max(1,Math.min(250,Number(options.maxPages||250))),partialError=null;
     while(pages<maxPages){
+      if(options.keepPreviousOnPartial===true&&scopeKey()!==scopeKey({country:country,region:region||'NATIONWIDE'})){partialError=new Error('선택 범위 변경');break;}
       var page=null,pageError=null;
       for(var attempt=0;attempt<3&&!page;attempt++){
         try{page=await api(CONTROL,'product_research_status','GET',{country:country,region:region||'NATIONWIDE',fast:'page:'+offset+':'+pageSize});}
-        catch(loadError){pageError=loadError;if(attempt<2)await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
+        catch(loadError){pageError=loadError;if(databasePressure(loadError)||!transientResearchRequestError(loadError))break;if(attempt<2)await new Promise(function(resolve){setTimeout(resolve,500*(attempt+1));});}
       }
       if(!page){partialError=pageError;if(!merged)throw pageError||new Error('상품 관리 목록을 분할 로딩하지 못했습니다.');if(state)state.textContent=(options.label||'상품 관리 목록')+' '+rows.length+'건까지 안전 로딩 · 다음 묶음은 일시 중단됐습니다.';break;}
       if(!merged)merged=page;pages+=1;
@@ -1039,10 +1040,11 @@
   async function loadLatestResearchPaged(country,region,options){
     options=options||{};var pageSize=Math.max(50,Math.min(200,Number(options.pageSize||200))),offset=0,pages=0,rows=[],seen={},state=options.state||null,maxPages=Math.max(1,Math.min(250,Number(options.maxPages||250))),partialError=null,lastPage=null,reachedEnd=false;
     while(pages<maxPages){
+      if(options.keepPreviousOnPartial===true&&scopeKey()!==scopeKey({country:country,region:region||'NATIONWIDE'})){partialError=new Error('선택 범위 변경');break;}
       var page=null,pageError=null;
       for(var attempt=0;attempt<3&&!page;attempt++){
         try{page=await api(CONTROL,'product_research_status','GET',{country:country,region:region||'NATIONWIDE',fast:'latest:'+offset+':'+pageSize});}
-        catch(loadError){pageError=loadError;if(attempt<2)await new Promise(function(resolve){setTimeout(resolve,450*(attempt+1));});}
+        catch(loadError){pageError=loadError;if(databasePressure(loadError)||!transientResearchRequestError(loadError))break;if(attempt<2)await new Promise(function(resolve){setTimeout(resolve,450*(attempt+1));});}
       }
       if(!page){partialError=pageError;if(!rows.length&&options.preserveOnFailure!==true)throw pageError||new Error('최신 상품 리서치 목록을 분할 로딩하지 못했습니다.');if(state)state.textContent=(options.label||'최신 상품 리서치 목록')+' '+rows.length+'건까지 안전 로딩 · 다음 묶음 응답은 보류했습니다.';break;}
       lastPage=page;pages+=1;
@@ -1061,7 +1063,7 @@
     catch(error){if(options.throwOnFailure===true)throw error;return{rows:previous,partial:true,error:text(error&&error.message),complete:false};}
     if(scopeKey()!==scopeKey({country:country,region:region||'NATIONWIDE'}))return{rows:previous,partial:true,error:'scope_changed',complete:false};
     if(loaded)latestProductRowsComplete=loaded.complete===true;
-    if(loaded&&Array.isArray(loaded.rows)&&(loaded.rows.length||loaded.complete===true||!previous.length))latestProductRows=loaded.rows;
+    if(loaded&&Array.isArray(loaded.rows)&&(!(options.keepPreviousOnPartial===true&&loaded.complete!==true&&previous.length))&&(loaded.rows.length||loaded.complete===true||!previous.length))latestProductRows=loaded.rows;
     var status=loaded&&loaded.status||{};lastProductJson=Object.assign({},lastProductJson||{},status,{products:productRows,latestProducts:latestProductRows});
     renderProductProgress(lastProductJson);rememberReport('product',lastProductJson);saveReviewSnapshot();if($('productCandidatePanel')&&$('productCandidatePanel').open)renderLatestResearchCandidateGroup();return Object.assign({},loaded,{rows:latestProductRows});
   }
@@ -4819,15 +4821,29 @@
     var complete=status==='complete'||status==='committed';setButtonEnabled('runNowBtn',complete&&Array.isArray(data.candidates)&&data.candidates.length>0);if($('previewRunBtn'))$('previewRunBtn').textContent=researchLoopActive?('정상 진행 중 · '+(labels[status]||status)):complete?'새 책임 공급업체 검색':(p.resumable?'책임 공급업체 검색 계속':'책임 공급업체 단계별 검색');
   }
   function isGatewayDelay(error){var status=Number(error&&error.status)||0;return status===502||status===503||status===504;}
+  function databasePressure(error){var status=Number(error&&error.status)||0;return status===429||status>=500||/57014|statement timeout|lock timeout|broken pipe|connection reset|fetch failed|network|timeout|시간.*초과/i.test(text(error&&error.message));}
+  function legacyLedgerUnsupported(error){return !!error&&!databasePressure(error)&&(Number(error.status)===404||/unsupported.*(?:mode|indexed)|unknown.*(?:mode|indexed)|지원하지 않는.*조회/i.test(text(error.message)));}
   async function readScopePart(label,endpoint,action,params,fallback){
     var lastError=null;
     for(var attempt=0;attempt<2;attempt++){
       try{return{ok:true,label:label,data:await api(endpoint,action,'GET',params||{})};}
-      catch(error){lastError=error;if(!isGatewayDelay(error)||attempt>0)break;await new Promise(function(resolve){setTimeout(resolve,900);});}
+      catch(error){lastError=error;if(databasePressure(error)||attempt>0||!transientResearchRequestError(error))break;await new Promise(function(resolve){setTimeout(resolve,900);});}
     }
     return{ok:false,label:label,data:fallback,error:lastError};
   }
-  async function loadScope(reason){
+  var scopeReadInFlight=null,scopeReadKey='',scopeReadQueued=null;
+  function loadScope(reason){
+    var key=scopeKey();
+    if(scopeReadInFlight){if(key!==scopeReadKey||scopeReadQueued||reason==='commit-refresh')scopeReadQueued={key:key,reason:reason};return scopeReadInFlight;}
+    scopeReadKey=key;
+    scopeReadInFlight=(async function(){
+      try{await loadScopeOnce(reason);}finally{
+        scopeReadInFlight=null;scopeReadKey='';var queued=scopeReadQueued;scopeReadQueued=null;
+        if(queued&&scopeKey()===queued.key)await loadScope(queued.reason);
+      }
+    })();return scopeReadInFlight;
+  }
+  async function loadScopeOnce(reason){
     if(!selectedCountry)return;var passive=reason==='restore-passive';if(!passive)hide();$('refreshScopeBtn').disabled=true;
     var requested=scopeParams(),requestedKey=scopeKey(requested),failures=[];
     var cachedScope=lastScopeCache&&lastScopeCache.scope||{},sameCachedScope=lastScopeCache&&scopeKey(cachedScope)===requestedKey;
@@ -4840,7 +4856,7 @@
     var productFallback=preservedProductData||{ok:true,status:'not_started',products:[],summary:{},progress:{}};
     try{
       var scopePart=await readScopePart('국가 책임 공급업체 원장',CONTROL,'scope',requested,scopeFallback);if(scopeKey()!==requestedKey)return;
-      var scopeData=scopePart.data||scopeFallback;if(!scopePart.ok)failures.push(scopePart);
+      var scopeData=scopePart.data||scopeFallback;if(!scopePart.ok)failures.push(scopePart);if(!scopePart.ok&&databasePressure(scopePart.error))throw scopePart.error;
       renderAi(scopeData.candidates||[]);renderActiveSignals(scopeData.marketSignals||{});
 
       /* Large product candidate ledgers are loaded in small resilient pages below.
@@ -4849,7 +4865,7 @@
       renderSummary(queueData&&queueData.summary||{},scopeData,'저장 원장 기준');if(queueData&&Array.isArray(queueData.candidates)&&queueData.candidates.length)renderQueue(queueData.candidates);
 
       var researchPart=await readScopePart('책임 공급업체 리서치',CONTROL,'research_status',requested,researchFallback);if(scopeKey()!==requestedKey)return;
-      if(!researchPart.ok)failures.push(researchPart);var researchData=researchPart.data||researchFallback;renderResearchProgress(researchData);
+      if(!researchPart.ok)failures.push(researchPart);var researchData=researchPart.data||researchFallback;renderResearchProgress(researchData);if(!researchPart.ok&&databasePressure(researchPart.error))throw researchPart.error;
       if((researchData.status==='complete'||researchData.status==='committed')&&((Array.isArray(researchData.candidates)&&researchData.candidates.length)||(Array.isArray(researchData.holdingCandidates)&&researchData.holdingCandidates.length)||(Array.isArray(researchData.blockedCandidates)&&researchData.blockedCandidates.length))){lastCountryPreview=researchData;lastCountryJson=researchData;setButtonEnabled('countryRunDownloadBtn',true);renderSummary(researchData,{candidates:researchData.candidates||[]},'완료된 단계별 검색 결과');}
       renderAi(researchData.candidates||[],researchData.holdingCandidates||[],researchData.blockedCandidates||[]);
 
@@ -4857,10 +4873,10 @@
          state comes from the separate compact product job. Load the ledger in
          bounded pages so latency is independent of country size and link speed. */
       var productData=candidateLedgerProductData(queueData||{candidates:[]});
-      try{productData=await refreshCandidateLedgerProducts({preserveResearchReport:true,pageSize:100});queueData={ok:true,candidates:Array.isArray(productData&&productData.candidateRows)?productData.candidateRows:[]};refreshHoldReviewInventory().catch(function(){});}
-      catch(ledgerError){failures.push({ok:false,label:'상품 후보 원장',data:queueFallback,error:ledgerError});if(cachedQueueData&&Array.isArray(cachedQueueData.candidates))renderQueue(cachedQueueData.candidates);}
+      try{productData=await refreshCandidateLedgerProducts({preserveResearchReport:true,pageSize:100});if(scopeKey()!==requestedKey)return;queueData={ok:true,candidates:Array.isArray(productData&&productData.candidateRows)?productData.candidateRows:[]};}
+      catch(ledgerError){if(scopeKey()!==requestedKey)return;failures.push({ok:false,label:'상품 후보 원장',data:queueFallback,error:ledgerError});if(databasePressure(ledgerError))throw ledgerError;if(cachedQueueData&&Array.isArray(cachedQueueData.candidates))renderQueue(cachedQueueData.candidates);}
       var productStatusFallback=preservedProductData&&text(preservedProductData.status)!=='candidate_ledger'?preservedProductData:{ok:true,status:'not_started',scope:{country:requested.country,region:requested.region},summary:{},progress:{}};
-      var productStatusPart=await readScopePart('상품 리서치 실행 상태',CONTROL,'product_research_status',{country:requested.country,region:requested.region,compact:'1'},productStatusFallback);if(scopeKey()!==requestedKey)return;if(!productStatusPart.ok)failures.push(productStatusPart);var productStatus=productStatusPart.data||productStatusFallback;
+      var productStatusPart=await readScopePart('상품 리서치 실행 상태',CONTROL,'product_research_status',{country:requested.country,region:requested.region,compact:'1'},productStatusFallback);if(scopeKey()!==requestedKey)return;if(!productStatusPart.ok)failures.push(productStatusPart);if(!productStatusPart.ok&&databasePressure(productStatusPart.error))throw productStatusPart.error;var productStatus=productStatusPart.data||productStatusFallback;
       if(productStatus&&productStatus.status&&productStatus.status!=='not_started')lastProductJson=Object.assign({},productStatus,{products:productRows,latestProducts:latestProductRows});else lastProductJson=productData;renderProductProgress(lastProductJson);setButtonEnabled('productResearchBtn',researchData.status==='complete'||researchData.status==='committed'||productData.products.length>0||text(lastProductJson.status)!=='not_started');if(productData.products.length||text(lastProductJson.status)!=='not_started')setButtonEnabled('productResearchDownloadBtn',true);
       lastScopeCache={scope:requested,scopeData:scopeData,summaryData:queueData&&queueData.summary||sameCachedScope&&lastScopeCache.summaryData||{},queueData:queueData||queueFallback,researchData:researchData,productData:lastProductJson};
       saveReviewSnapshot();
@@ -4868,8 +4884,8 @@
       // registration/AI click. Durable registered rows are already visible
       // from the scoped candidate ledger, even when this read is delayed.
       latestProductRowsComplete=false;
-      refreshLatestResearchRows(requested.country,requested.region,{label:'자동 최신 리서치 원본 조회',preserveOnFailure:true})
-        .then(function(){if(scopeKey()===requestedKey)renderLatestResearchCandidateGroup();})
+      await refreshLatestResearchRows(requested.country,requested.region,{label:'자동 최신 리서치 원본 조회',preserveOnFailure:true,keepPreviousOnPartial:true})
+        .then(async function(result){if(scopeKey()===requestedKey){renderLatestResearchCandidateGroup();if(result&&result.complete===true)await refreshHoldReviewInventory();}})
         .catch(function(error){if(scopeKey()===requestedKey){latestInCandidateMessage='저장된 후보 원장은 유지 · 최신 리서치 원본 조회 지연: '+conciseRequestError(error&&error.message,error&&error.status);renderLatestResearchCandidateGroup();}});
 
 

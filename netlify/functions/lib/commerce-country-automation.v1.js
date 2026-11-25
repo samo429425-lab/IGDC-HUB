@@ -8532,7 +8532,7 @@ async function autoProductJobCheckpoint(input){
 
 async function schedulerRun(event) {
   const dueResult = await dueScopes(); const startedAt = iso();
-  // Supplier research is continued exclusively by the per-minute staged worker.
+  // Supplier research is continued exclusively by the staggered staged worker.
   // The legacy single-request path silently bypassed the 1–5 research rounds.
   const settled = [];
   let maintenanceLiveness={ok:false,error:"not_run"},maintenanceDaily={ok:false,error:"not_run"};
@@ -8624,7 +8624,8 @@ async function globalControlDiagnostic() {
     productScopesWithLastBatchNewProduct:productStages.filter(row=>row.newProductsSavedLastBatch>0).length,
     notes:'Do not infer fresh products from a historical eight-product checkpoint; verify gslot_candidates.created_at for this country and run.'
   };
-  return { ok: true, reportType: "igdc-global-automation-control-diagnostic", version: VERSION, patchRevision: PATCH_REVISION, generatedAt: iso(), operatingStatus: operatingStatus(state), master: state.master, savedSettings: state.settings, scheduler: { schedule: "supplier-minute-checkpoint + product-2-minute-checkpoint", dueCount: Number(dueResult.dueCount || 0), nextScopes: array(dueResult.scopes).map((row) => ({ country: row.countryCode, region: row.subdivisionCode || "NATIONWIDE", lastRunAt: row.effective && row.effective.lastRunAt || null })) }, searchProviderReadiness:{
+  const schedulerProtection=await require("./commerce-scheduler-db-guard.v1").status();
+  return { schedulerProtection, ok: true, reportType: "igdc-global-automation-control-diagnostic", version: VERSION, patchRevision: PATCH_REVISION, generatedAt: iso(), operatingStatus: operatingStatus(state), master: state.master, savedSettings: state.settings, scheduler: { schedule: "supplier-staggered-2-per-5min + product-5min + private-PSOM-5min", dueCount: Number(dueResult.dueCount || 0), nextScopes: array(dueResult.scopes).map((row) => ({ country: row.countryCode, region: row.subdivisionCode || "NATIONWIDE", lastRunAt: row.effective && row.effective.lastRunAt || null })) }, searchProviderReadiness:{
       googleCredentialsPresent:!!text(process.env.GOOGLE_CUSTOM_SEARCH_API_KEY||process.env.GOOGLE_SEARCH_API_KEY||process.env.GOOGLE_API_KEY||process.env.GOOGLE_CLOUD_API_KEY)&&
         !!text(process.env.GOOGLE_CSE_ID||process.env.GOOGLE_CX||process.env.GOOGLE_SEARCH_ENGINE_ID||process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID),
       naverCredentialsPresent:!!text(process.env.NAVER_API_KEY||process.env.NAVER_CLIENT_ID||process.env.NAVER_SEARCH_CLIENT_ID||process.env.NAVER_OPENAPI_CLIENT_ID)&&

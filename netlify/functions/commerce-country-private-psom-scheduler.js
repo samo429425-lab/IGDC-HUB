@@ -1,10 +1,11 @@
 'use strict';
 // Private verified candidate-to-PSOM worker; never triggers Front Match.
 const Pipeline=require('./lib/commerce-country-private-psom-auto.v1');
-exports.config={schedule:'*/3 * * * *'};
+const Guard=require('./lib/commerce-scheduler-db-guard.v1');
+exports.config={schedule:'2-59/5 * * * *'};
 exports.handler=async function(){
   try{
-    const result=await Pipeline.run();
+    const result=await Guard.run('private-psom',()=>Pipeline.run());
     // Emit only country codes and private-queue progress. Never log seller
     // URLs, personally identifying visitor IPs, candidate payloads or secrets.
     console.info('[IGDC_PRIVATE_PSOM_AUTO]',JSON.stringify({active:result.activeScopes,processed:result.processed,
