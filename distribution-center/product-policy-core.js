@@ -18,7 +18,7 @@
  if(x.variants!==undefined&&!Array.isArray(x.variants))fail();if((x.variants||[]).length>30)fail();const seen=new Set();for(const v of x.variants||[]){obj(v);const sku=text(v.sku,80),name=text(v.name,100);if(!sku||!name||seen.has(sku.toLowerCase())||typeof v.enabled!=='boolean')fail();seen.add(sku.toLowerCase());o.variants.push({sku,name,base:integer(v.base,1e9),stock:integer(v.stock,1e6),enabled:v.enabled});}
  const locks=obj(x.locks??{});for(const k of keys){if(locks[k]!==undefined&&typeof locks[k]!=='boolean')fail();o.locks[k]=locks[k]??false;}
  const policies=obj(x.channels??{});for(const [k,p] of Object.entries(policies)){if(!channels.includes(k)||k==='IGDC')fail();obj(p);const fee=Number(p.fee);if(typeof p.fee!=='number'||!Number.isFinite(fee)||fee<0||fee>100||Math.abs(fee*100-Math.round(fee*100))>1e-7)fail();o.channels[k]={base:integer(p.base,1e9),fee,title:text(p.title??'',150),description:text(p.description??'',2000)};}const src=sourcing(x.sourcing??{});if(src)o.sourcing=src;return o;}
- function quote(p,channel){const m=normalize(p.details??{},true),policy=m.channels[channel],base=policy?.base??p.base,tax=p.tax==='standard'?Math.round(base/10):0,price=base+tax,fee=policy?Math.round(price*policy.fee/100):null;const costKnown=Number.isSafeInteger(p.cost)&&(p.cost>0||p.cost===0&&m.zero_cost_evidence.length>=10),partial=fee===null||!costKnown?null:base-p.cost-fee;const profit=partial===null||m.fulfillment_cost===null||m.other_sale_cost===null?null:partial-m.fulfillment_cost-m.other_sale_cost;return {base,tax,price,fee,profit,partial_profit:partial,fulfillment_cost:m.fulfillment_cost,other_sale_cost:m.other_sale_cost,cost_known:costKnown,title:policy?.title||p.title,description:policy?.description||p.description};}
+ function quote(p,channel){const m=normalize(p.details??{},true),policy=m.channels[channel],base=policy?.base??p.base,tax=p.tax==='standard'?Math.round(base/10):0,price=base+tax,fee=policy&&Number.isSafeInteger(p.shipping)&&p.shipping>=0?Math.ceil((price+p.shipping)*policy.fee/100):null;const costKnown=Number.isSafeInteger(p.cost)&&(p.cost>0||p.cost===0&&m.zero_cost_evidence.length>=10),partial=fee===null||!costKnown?null:base-p.cost-fee;const profit=partial===null||m.fulfillment_cost===null||m.other_sale_cost===null?null:partial-m.fulfillment_cost-m.other_sale_cost;return {base,tax,price,fee,profit,partial_profit:partial,fulfillment_cost:m.fulfillment_cost,other_sale_cost:m.other_sale_cost,cost_known:costKnown,title:policy?.title||p.title,description:policy?.description||p.description};}
  // Conservative estimate: shipping income excluded, fee calculated on total charged incl. shipping.
  function businessQuote(p,channel='IGDC',now=new Date()){
   const m=normalize(p.details??{},true),s=m.sourcing;if(!s)return null;const q=quote(p,channel),why=[];
@@ -34,5 +34,17 @@
   if(profit!==null&&profit<=0)why.push('예상 이익 0 이하');
   return {mode:s.mode,fee,profit,margin:profit!==null&&q.base>0?profit/q.base*100:null,ready:!why.length,reasons:why,estimate_only:true};
  }
- const api={normalize,quote,channels,keys,sourcing,businessQuote};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.DCenterProductPolicy=api;
+ // Target net margin on tax-exclusive selling price; shipping receipts excluded.
+ function targetPrice({cost,fulfillment,other,shipping,fee,margin,tax}){
+  if(![cost,fulfillment,other,shipping].every(n=>Number.isSafeInteger(n)&&n>=0&&n<=1e9)||!Number.isFinite(fee)||fee<0||fee>100||!Number.isFinite(margin)||margin<0||margin>=100||!['standard','exempt','zero'].includes(tax))throw Error('원가·비용·수수료·목표 순마진 확인 필요');
+  const rate=fee/100,taxRate=tax==='standard'?.1:0,denom=1-rate*(1+taxRate)-margin/100;
+  if(denom<=0)throw Error('목표 순마진을 달성할 수 없는 수수료 조건');
+  let base=Math.max(1,Math.ceil((cost+fulfillment+other+shipping*rate+1)/denom));
+  if(!Number.isSafeInteger(base)||base>1e9)throw Error('판매가격 범위 초과');
+  const quote=base=>{const taxAmount=tax==='standard'?Math.round(base/10):0,charge=Math.ceil((base+taxAmount+shipping)*rate),profit=base-cost-fulfillment-other-charge;return {base,tax:taxAmount,price:base+taxAmount,fee:charge,profit,margin:profit/base*100};};
+  // Conservative rounding, then verify exact fee and margin before returning.
+  for(let i=0;i<100&&base<=1e9;i++,base++){const q=quote(base);if(q.profit>0&&q.margin+1e-9>=margin)return q;}
+  throw Error('목표 순마진 달성 가격 확인 필요');
+ }
+ const api={normalize,quote,channels,keys,sourcing,businessQuote,targetPrice};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.DCenterProductPolicy=api;
 })(typeof window==='undefined'?globalThis:window);
