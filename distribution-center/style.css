@@ -26,3 +26,6 @@
 
 /* Phase 31: management identity inside the native country selector. */
 .dc30-scope:has(#scope-controls:not([hidden])) #identity{position:absolute;width:1px;height:1px;padding:0;margin:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap;border:0}.dc30-scope #scope-controls{flex:1 1 100%}.dc31-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.dc31-tools input[type=checkbox]{width:auto}.dc31-tools label{display:flex;align-items:center;gap:6px}.dc31-tools a{overflow-wrap:anywhere}.dc31-reference{font-size:.9em;color:#46586b}
+
+/* Phase 33: one shared country/role field, native country selection retained. */
+.dc33-country-field{display:flex;align-items:center;min-width:0;gap:8px;background:#fff;border:1px solid #aabac9;border-radius:6px;margin:0 0 8px;padding-inline-end:12px}.dc30-scope .dc33-country-field #scope-country{flex:1 1 0;min-width:0;width:0;margin:0;border:0;background:transparent;padding:11px;box-shadow:none}.dc33-country-field:focus-within{outline:2px solid #265781;outline-offset:1px}.dc33-country-field #dc33-role{flex:0 1 auto;max-width:52%;text-align:end;font-size:14px;font-weight:600;overflow-wrap:anywhere;color:#163451}.dc33-country-field #dc33-role:empty{display:none}@media(max-width:480px){.dc33-country-field{gap:4px;padding-inline-end:7px}.dc33-country-field #dc33-role{font-size:12px;max-width:48%}}
