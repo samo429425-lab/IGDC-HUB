@@ -1,0 +1,8 @@
+'use strict';
+const d=require('./lib/distribution-center-discovery');
+const c=require('./lib/distribution-center-core');
+const auth=require('./lib/distribution-center-auth');
+const access=require('./lib/distribution-center-access');
+const db=require('./lib/distribution-center-db-config');
+const reply=(statusCode,data)=>({statusCode,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'},body:JSON.stringify(data)});
+exports.handler=async e=>{try{if(e.httpMethod!=='POST')throw c.error(405,'POST 요청 필요');if(typeof e.body!=='string'||e.body.length>5000)throw c.error(400,'수집 요청 크기 오류');let q;try{q=d.validate(JSON.parse(e.body));}catch(err){throw c.error(400,err.statusCode?err.message:'수집 요청 형식 오류');}const m=await auth.authenticateMember(e);let grant=null;if(!m.roles.includes('owner')){const {url,key}=db.resolve();const r=await fetch(url+'/rest/v1/dcenter_grants?'+new URLSearchParams({member_id:'eq.'+m.memberId,limit:'1'}),{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(5000),redirect:'error'});if(!r.ok)throw c.error(503,'권한 조회 실패');const rows=await r.json();grant=rows[0]||null;}const g=await access.scope(e,m,grant,e.headers?.['x-dcenter-country']||e.headers?.['X-DCenter-Country']);d.throttle(m.memberId);let result;if(q.action==='base')result=await d.base(q,g.country);else{const cred=d.credentials();result=await d.cached('web|'+JSON.stringify([cred?.provider,q.country,q.url,q.type,q.name,q.term,q.page]),120000,()=>d.search(q,cred));}return reply(200,{...result,country:q.country,management_country:g.country,read_only:true});}catch(err){return reply(err.statusCode||503,{error:err.statusCode?err.message:'상품 수집 연결 또는 설정 오류'});}};

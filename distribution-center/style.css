@@ -16,3 +16,8 @@
 
 /* Phase 21: independent finance workspace */
 .market-table{min-width:1330px}.market-table th,.market-table td{white-space:nowrap}.market-table td:nth-child(1),.market-table td:nth-last-child(-n+2){white-space:normal;min-width:100px}.finance-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,185px),1fr));gap:10px;margin:14px 0}.finance-kpi{padding:13px;background:#f4f7fa;border:1px solid #dce4eb;border-radius:8px;min-width:0}.finance-kpi small{display:block;color:#52677a}.finance-kpi strong{display:block;font-size:20px;overflow-wrap:anywhere}.finance-table{min-width:1250px}.finance-table td{white-space:nowrap}.finance-tools label{min-width:125px}.finance-tools button{margin:4px 0}#finance-panel details{margin:15px 0}#finance-panel summary{cursor:pointer;font-weight:600}#finance-panel{scroll-margin-top:20px}#finance-panel h3{font-size:16px}#finance-jump{margin-inline-start:auto}
+
+/* Phase 29: independent discovery list, responsive and RTL-safe. */
+.dc29-discovery{margin:12px 0;padding:12px;border:1px solid #d7e0e9;border-radius:8px;background:#f7f9fc;min-width:0}.dc29-discovery .toolbar{flex-wrap:wrap;align-items:end;gap:8px}.dc29-discovery .toolbar label{min-width:140px;flex:1 1 180px}.dc29-discovery .feed-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr))}.dc29-discovery .feed-card a{overflow-wrap:anywhere}.dc29-discovery .feed-card small{color:#46586b}.dc29-discovery #dc29-status{overflow-wrap:anywhere}.dc29-discovery .feed-grid>p{grid-column:1/-1}.dc29-discovery button:disabled{cursor:not-allowed}
+
+.dc29-discovery label.dc29-auto{display:flex;align-items:center;gap:6px}.dc29-discovery .dc29-auto input{width:auto;flex:none}
