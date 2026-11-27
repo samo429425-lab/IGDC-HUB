@@ -18,7 +18,7 @@
   // Do not try a legacy root fallback because that would bypass the IP gate.
   const SNAPSHOT_CANDIDATES = [ '/data/front.snapshot.json?view=front' ];
 
-  const KEYS_MAIN = ['home_1', 'home_2', 'home_3', 'home_4', 'home_5', 'home_6'];
+  const KEYS_MAIN = ['home_1', 'home_2', 'home_7', 'home_3', 'home_4', 'home_5', 'home_6'];
   window.__HOME_PRODUCTS_AUTOMAP_V2_HOME6__ = true;
   const KEYS_RIGHT = ['home_right_top', 'home_right_middle', 'home_right_bottom'];
   const ALL_KEYS = KEYS_MAIN.concat(KEYS_RIGHT);

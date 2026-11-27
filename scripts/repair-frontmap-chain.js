@@ -173,6 +173,7 @@ function patchSnapshotEngine() {
       )) {
       continue;
     }
+    if (patch.label.startsWith("distribution-extra") && source.includes('"distribution-extra": "distribution-extra"') && source.includes('"distribution-footwear": "distribution-footwear"')) continue;
     const result = patch.mode === "all"
       ? replaceAllOrAlready(source, patch.before, patch.after, patch.label)
       : replaceOnceOrAlready(source, patch.before, patch.after, patch.label);
@@ -202,8 +203,8 @@ function patchReviewApi() {
 
   let result = replaceOnceOrAlready(
     source,
-    `home:new Set(["home_1","home_2","home_3","home_4","home_5","home_right_top","home_right_middle","home_right_bottom"])`,
-    `home:new Set(["home_1","home_2","home_3","home_4","home_5","home_6","home_right_top","home_right_middle","home_right_bottom"])`,
+    `home:new Set(["home_1","home_2","home_7","home_3","home_4","home_5","home_right_top","home_right_middle","home_right_bottom"])`,
+    `home:new Set(["home_1","home_2","home_7","home_3","home_4","home_5","home_6","home_right_top","home_right_middle","home_right_bottom"])`,
     "admin review HOME6 whitelist"
   );
   source = result.source;
@@ -211,8 +212,8 @@ function patchReviewApi() {
 
   result = replaceOnceOrAlready(
     source,
-    `distribution:new Set(["distribution-recommend","distribution-sponsor","distribution-trending","distribution-new","distribution-special","distribution-others","distribution-right"])`,
-    `distribution:new Set(["distribution-recommend","distribution-sponsor","distribution-trending","distribution-new","distribution-special","distribution-others","distribution-extra","distribution-right"])`,
+    `distribution:new Set(["distribution-recommend","distribution-sponsor","distribution-trending","distribution-special","distribution-footwear","distribution-new","distribution-others","distribution-right"])`,
+    `distribution:new Set(["distribution-recommend","distribution-sponsor","distribution-trending","distribution-special","distribution-footwear","distribution-new","distribution-others","distribution-extra","distribution-right"])`,
     "admin review distribution-extra whitelist"
   );
   source = result.source;
@@ -357,7 +358,7 @@ function patchFrontMatchAssetFingerprint(){
 
 function validateExistingChain() {
   const home = read(HOME_AUTOMAP);
-  mustContain(home, `const KEYS_MAIN = ['home_1', 'home_2', 'home_3', 'home_4', 'home_5', 'home_6'];`, "Home AutoMap main keys");
+  mustContain(home, `const KEYS_MAIN = ['home_1', 'home_2', 'home_7', 'home_3', 'home_4', 'home_5', 'home_6'];`, "Home AutoMap main keys");
   mustContain(home, `const KEYS_RIGHT = ['home_right_top', 'home_right_middle', 'home_right_bottom'];`, "Home AutoMap right keys");
 
   const dist = read(DIST_AUTOMAP);

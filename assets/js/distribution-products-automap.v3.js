@@ -39,12 +39,13 @@
 
   const SECTION_MAP=[
     {key:'distribution-recommend',selector:'[data-psom-key="distribution-recommend"]',limit:LIMIT_MAIN,label:'Recommend Item'},
-    {key:'distribution-new',selector:'[data-psom-key="distribution-new"]',limit:LIMIT_MAIN,label:'New Item'},
     {key:'distribution-trending',selector:'[data-psom-key="distribution-trending"]',limit:LIMIT_MAIN,label:'Trending Item'},
-    {key:'distribution-special',selector:'[data-psom-key="distribution-special"]',limit:LIMIT_MAIN,label:'Special Item'},
     {key:'distribution-sponsor',selector:'[data-psom-key="distribution-sponsor"]',limit:LIMIT_MAIN,label:'Sponsor Item'},
+    {key:'distribution-special',selector:'[data-psom-key="distribution-special"]',limit:LIMIT_MAIN,label:'Special Item'},
+    {key:'distribution-footwear',selector:'[data-psom-key="distribution-footwear"]',limit:LIMIT_MAIN,label:'Footwear Outdoor Item'},
+    {key:'distribution-new',selector:'[data-psom-key="distribution-new"]',limit:LIMIT_MAIN,label:'New Item'},
     {key:'distribution-others',selector:'[data-psom-key="distribution-others"]',limit:LIMIT_MAIN,label:'Product Item'},
-    {key:'distribution-extra',selector:'[data-psom-key="distribution-extra"]',limit:LIMIT_MAIN,label:'Other Outdoor Food Item'},
+    {key:'distribution-extra',selector:'[data-psom-key="distribution-extra"]',limit:LIMIT_MAIN,label:'Other Food Item'},
     {key:'distribution-right',selector:'[data-psom-key="distribution-right"]',limit:LIMIT_RIGHT,label:'Recommended Brand'}
   ];
   const ALIAS={

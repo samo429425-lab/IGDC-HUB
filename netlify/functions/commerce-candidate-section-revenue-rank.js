@@ -7,8 +7,8 @@ const crypto=require('crypto');
 const VERSION='igdc-section-revenue-order-v1.3.0-visible-three-step-preview';
 const ROLE=new Set(['owner','admin','super_admin','site_manager','site_manager_director','director']);
 const KEYS=new Set([
-'home|home_1','home|home_2','home|home_3','home|home_4','home|home_5','home|home_6','home|home_right_top','home|home_right_middle','home|home_right_bottom',
-'distribution|distribution-recommend','distribution|distribution-trending','distribution|distribution-sponsor','distribution|distribution-new','distribution|distribution-special','distribution|distribution-others','distribution|distribution-extra','distribution|distribution-right','network|network-right','social|rightPanel','tour|tour'
+'home|home_1','home|home_2','home|home_7','home|home_3','home|home_4','home|home_5','home|home_6','home|home_right_top','home|home_right_middle','home|home_right_bottom',
+'distribution|distribution-recommend','distribution|distribution-trending','distribution|distribution-sponsor','distribution|distribution-special','distribution|distribution-footwear','distribution|distribution-new','distribution|distribution-others','distribution|distribution-extra','distribution|distribution-right','network|network-right','social|rightPanel','tour|tour'
 ]);
 function str(x){return x==null?'':String(x).trim();}
 function obj(x){return x&&!Array.isArray(x)&&typeof x==='object'?x:{};}

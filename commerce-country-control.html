@@ -159,7 +159,7 @@
 
   <section class="panel">
     <h2>전 세계 예약 자동화</h2>
-    <div class="small">현재 접속 IP 또는 관리자 선택 국가의 수동 점검과 개별 설정은 아래 국가·지역 점검에서 그대로 수행합니다. 상단에서 전 세계 전체 또는 별도 선택창에서 체크한 국가만 공급업체 조사 → 상품 리서치·검증 → AI/PSOM 20개 섹션 비공개 1차 배치까지 예약 자동화할 수 있습니다. 아래 국가·지역 관리 목록의 선택값은 예약 자동화 대상에 영향을 주지 않습니다. 자동화의 1차 PSOM 배치는 관리자 최종 확정이나 프론트 공개가 아닙니다. Front Match·SearchBank·Snapshot 공개 및 최종 검증은 관리자가 별도로 진행합니다. 선택 국가 자동 중지는 예약만 중단하며 이미 수집·배치된 결과를 삭제하거나 초기화하지 않습니다. 전 세계 자동 시작은 기존 권역·국가·지역 예외를 상속 상태로 정리한 뒤 지원국 전체를 순환 예약하며 북한(KP)은 제외합니다.</div>
+    <div class="small">현재 접속 IP 또는 관리자 선택 국가의 수동 점검과 개별 설정은 아래 국가·지역 점검에서 그대로 수행합니다. 상단에서 전 세계 전체 또는 별도 선택창에서 체크한 국가만 공급업체 조사 → 상품 리서치·검증 → AI/PSOM 22개 섹션 비공개 1차 배치까지 예약 자동화할 수 있습니다. 아래 국가·지역 관리 목록의 선택값은 예약 자동화 대상에 영향을 주지 않습니다. 자동화의 1차 PSOM 배치는 관리자 최종 확정이나 프론트 공개가 아닙니다. Front Match·SearchBank·Snapshot 공개 및 최종 검증은 관리자가 별도로 진행합니다. 선택 국가 자동 중지는 예약만 중단하며 이미 수집·배치된 결과를 삭제하거나 초기화하지 않습니다. 전 세계 자동 시작은 기존 권역·국가·지역 예외를 상속 상태로 정리한 뒤 지원국 전체를 순환 예약하며 북한(KP)은 제외합니다.</div>
     <div class="operation-actions">
       <button id="globalAutoModeBtn" type="button">전 세계 자동 시작</button>
       <button id="autoCountryPickerOpenBtn" type="button" class="ghost" aria-haspopup="dialog" aria-controls="autoCountryPicker">자동화 대상 국가 선택</button>
@@ -290,9 +290,9 @@
     <div class="commerce-flow">
       <div class="flow-step"><strong>1</strong><span>책임 공급업체 리서치</span><small>AI 정책 반영 · 업체 발견·검증·후보 원장</small></div>
       <div class="flow-step"><strong>2</strong><span>공식 상품 리서치</span><small>활성 공급업체에서 실상품 발견·검증 · 전체 상품 후보 관리목록 등록</small></div>
-      <div class="flow-step publish"><strong>3</strong><span>상품 관리·20개 섹션·프론트 매칭</span><small>미배치·배치·보류·제외·영구 제외 후 관리자 프론트 매칭</small></div>
+      <div class="flow-step publish"><strong>3</strong><span>상품 관리·22개 섹션·프론트 매칭</span><small>미배치·배치·보류·제외·영구 제외 후 관리자 프론트 매칭</small></div>
     </div>
-    <div class="small" style="margin-top:10px">중간 후보 저장·수익 판정은 내부 자동 처리합니다. 운영자는 업체 → 상품 → 20개 섹션/프론트의 3단계만 관리합니다.</div>
+    <div class="small" style="margin-top:10px">중간 후보 저장·수익 판정은 내부 자동 처리합니다. 운영자는 업체 → 상품 → 22개 섹션/프론트의 3단계만 관리합니다.</div>
   </section>
 
   <section class="panel">
@@ -350,7 +350,7 @@
         <label class="supplier-select-label"><input id="queueSelectAll" type="checkbox" data-queue-select-all> 전체 선택</label>
         <span id="queueSelectedCount" class="supplier-selection-count">선택 0건</span>
         <button id="queueOpenInProductManagerBtn" type="button" disabled>선택 상품 관리목록에서 보기</button>
-        <button id="queueSelectedAiPlaceBtn" type="button" disabled>선택 상품 AI로 20개 섹션 자동배치</button>
+        <button id="queueSelectedAiPlaceBtn" type="button" disabled>선택 상품 AI로 22개 섹션 자동배치</button>
         <select id="queueSelectedManualSection" class="product-management-select">
           <option value="">수동 배치 섹션 선택</option>
           <option value="home|home_1">홈 · home_1</option>
@@ -382,7 +382,7 @@
   </details>
 
   <section id="productResearchPanel" class="panel">
-    <div class="panel-heading"><h2>공식 상품 리서치·후보 심사·20개 섹션 배치 관리</h2><div class="actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="policy" data-policy-workspace-label="상품 리서치 적용 정책" data-policy-scope="country">AI 운영·정책 대화</button></div></div>
+    <div class="panel-heading"><h2>공식 상품 리서치·후보 심사·22개 섹션 배치 관리</h2><div class="actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="policy" data-policy-workspace-label="상품 리서치 적용 정책" data-policy-scope="country">AI 운영·정책 대화</button></div></div>
     <div class="small">현재 책임 공급업체 비공개 후보 목록의 활성 업체를 모두 조사합니다. 새로 등록된 업체도 다음 실행부터 자동 포함됩니다. 조사 도중 일시정지하면 그 시점까지 발견·점검되어 저장된 상품을 아래 전체 상품 후보·배치 관리 목록의 최신 리서치 공동 관리에서 즉시 다시 확인할 수 있으므로 전체 업체 조사가 끝날 때까지 기다릴 필요가 없습니다. 해당 공동 관리에서 선택 상품 또는 현재 목록 전체를 후보 관리목록 등록·AI 검증 자동 배치할 수 있으며, 검증 실패 상품은 보류·제외 목록으로 분류됩니다.</div>
     <div class="review-return-note">상품·업체 링크는 현재 탭에서 열립니다. 뒤로가기를 누르면 이 관리 화면의 기존 국가·목록 위치로 돌아옵니다.</div>
     <div class="operation-actions">
@@ -400,17 +400,17 @@
     <div id="productFrontSyncState" class="front-sync-state">프론트 실상품 매칭: 대기</div>
 
     <details id="productCandidatePanel" class="product-management-details heavy-data-panel" data-heavy-panel="product-candidates">
-      <summary class="heavy-panel-summary"><span><strong>전체 상품 후보·배치 관리 목록</strong> <span id="productCandidateSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="product_candidate_management" data-policy-workspace-label="전체 상품 후보·배치 관리" data-policy-scope="country">AI 운영·정책 대화</button><button id="productCandidateSmartAutoPlaceBtn" type="button" class="product-section-ai-button">전체 후보 AI 카테고리 자동 배치</button><button type="button" class="product-section-ai-button" data-section-ai-auto="__all__">미배정·빈 배정정보 AI 자동 복구</button><label class="section-select-label"><input id="allSectionsSelect" type="checkbox"> 20개 전체 선택</label><span id="selectedSectionCount" class="pill info">선택 섹션 0개</span><button id="selectedSectionsMatchBtn" type="button" class="product-section-front-button" disabled>선택 섹션 프론트 매칭</button><button id="allSectionsMatchBtn" type="button" class="product-section-front-button" disabled>전체 섹션 프론트 매칭</button><span id="productCandidateToggleLabel" class="pill info">목록 펼치기</span></span></summary>
+      <summary class="heavy-panel-summary"><span><strong>전체 상품 후보·배치 관리 목록</strong> <span id="productCandidateSummary" class="small">0건</span></span><span class="product-group-summary-actions"><button type="button" class="ghost policy-workspace-button" data-policy-workspace="product_candidate_management" data-policy-workspace-label="전체 상품 후보·배치 관리" data-policy-scope="country">AI 운영·정책 대화</button><button id="productCandidateSmartAutoPlaceBtn" type="button" class="product-section-ai-button">전체 후보 AI 카테고리 자동 배치</button><button type="button" class="product-section-ai-button" data-section-ai-auto="__all__">미배정·빈 배정정보 AI 자동 복구</button><label class="section-select-label"><input id="allSectionsSelect" type="checkbox"> 22개 전체 선택</label><span id="selectedSectionCount" class="pill info">선택 섹션 0개</span><button id="selectedSectionsMatchBtn" type="button" class="product-section-front-button" disabled>선택 섹션 프론트 매칭</button><button id="allSectionsMatchBtn" type="button" class="product-section-front-button" disabled>전체 섹션 프론트 매칭</button><span id="productCandidateToggleLabel" class="pill info">목록 펼치기</span></span></summary>
       <div class="heavy-panel-content">
         <div class="section-product-toolbar" id="sectionRevenueRankingTools" style="margin:10px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
           <button type="button" class="secondary" data-section-revenue-action="preview">선택 섹션 수익 우선 순위 미리보기</button>
           <button type="button" class="product-section-ai-button" data-section-revenue-action="apply">선택 섹션 수익 우선 순위 적용</button>
-          <button type="button" class="secondary" data-section-revenue-action="manage-pins">20개 섹션 관리자 지정 상품 고정</button>
+          <button type="button" class="secondary" data-section-revenue-action="manage-pins">22개 섹션 관리자 지정 상품 고정</button>
           <span class="small">① 미리보기: 아래 섹션 상품 카드를 임시 순서로 재정렬(미저장) → ② 적용: 그 순서를 관리자 원장에 저장 → ③ 선택 섹션 프론트 매칭: 실제 프론트 반영. 관리자 최상단 고정 상품은 보호합니다.</span>
           <div id="sectionRevenueRankingState" class="small" aria-live="polite" style="width:100%">섹션을 선택한 뒤 미리보기를 실행하세요. 상품 카드가 해당 섹션에서 즉시 순위대로 정렬됩니다. 적용 전까지 저장하지 않습니다.</div>
         </div>
         <details id="sectionLedgerAuditPanel" style="margin:10px 0;padding:10px;border:1px solid #637b91;border-radius:7px">
-          <summary><strong>20개 섹션 · 관리자 원장 ↔ 실제 배치 관계 정합성 점검·복구</strong></summary>
+          <summary><strong>22개 섹션 · 관리자 원장 ↔ 실제 배치 관계 정합성 점검·복구</strong></summary>
           <div class="small" style="margin:8px 0">전체 점검 또는 체크한 섹션만 점검할 수 있습니다. 점검은 읽기 전용입니다. 오류가 분명하고 관리자 확정 배치가 확인된 상품만 별도 승인 후 복구합니다. 프론트 공개는 Front Match에서 별도로 반영됩니다.</div>
           <div class="section-product-toolbar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
             <button id="sectionLedgerAuditSelected" type="button" class="secondary">선택 섹션 배치 정합성 점검</button>
@@ -420,8 +420,8 @@
           <div id="sectionLedgerAuditState" class="small" aria-live="polite" style="margin:8px 0">점검 전 · 관리자 확정 배치와 실제 배치 관계를 비교합니다.</div>
           <div id="sectionLedgerAuditResults" class="small" style="max-height:320px;overflow:auto;overflow-wrap:anywhere"></div>
         </details>
-        <details id="sectionRevenuePinPanel" style="margin:8px 0;padding:8px;border:1px solid #637b91;border-radius:7px"><summary><strong>20개 섹션 · 관리자 지정 최상단 고정 상품 관리</strong></summary><div class="small">섹션별로 조회합니다. 관리자 고정은 별도 지정한 상품에만 적용되며 고정 해제 시 자동 랭킹으로 복귀합니다.</div><label for="sectionRevenuePinSection">고정 상품 조회 섹션</label> <select id="sectionRevenuePinSection" aria-label="고정 상품 관리 섹션"></select> <button type="button" class="secondary" data-section-revenue-action="list-pins">고정 상품 조회</button><div id="sectionRevenuePinList" aria-live="polite" class="small">조회할 섹션을 선택하십시오.</div></details>
-        <div class="small">이 목록이 상품 배치의 유일한 관리자 기준입니다. 미배정·복구 필요·20개 섹션 배치 상품을 여기서만 수정합니다. 개별/선택/전체 프론트 매칭을 실행하면 현재 이 목록을 기준으로 Supabase 공개 배정 원장을 동기화하고 Netlify Snapshot 빌드를 요청합니다. 프론트·과거 Snapshot 상태가 이 관리자 목록을 역으로 변경하는 것은 금지됩니다.</div>
+        <details id="sectionRevenuePinPanel" style="margin:8px 0;padding:8px;border:1px solid #637b91;border-radius:7px"><summary><strong>22개 섹션 · 관리자 지정 최상단 고정 상품 관리</strong></summary><div class="small">섹션별로 조회합니다. 관리자 고정은 별도 지정한 상품에만 적용되며 고정 해제 시 자동 랭킹으로 복귀합니다.</div><label for="sectionRevenuePinSection">고정 상품 조회 섹션</label> <select id="sectionRevenuePinSection" aria-label="고정 상품 관리 섹션"></select> <button type="button" class="secondary" data-section-revenue-action="list-pins">고정 상품 조회</button><div id="sectionRevenuePinList" aria-live="polite" class="small">조회할 섹션을 선택하십시오.</div></details>
+        <div class="small">이 목록이 상품 배치의 유일한 관리자 기준입니다. 미배정·복구 필요·22개 섹션 배치 상품을 여기서만 수정합니다. 개별/선택/전체 프론트 매칭을 실행하면 현재 이 목록을 기준으로 Supabase 공개 배정 원장을 동기화하고 Netlify Snapshot 빌드를 요청합니다. 프론트·과거 Snapshot 상태가 이 관리자 목록을 역으로 변경하는 것은 금지됩니다.</div>
         <div id="productGrid" class="product-candidate-groups"><div class="small">아직 리서치된 상품 후보가 없습니다.</div></div><div id="latestCandidateResearchMount" class="product-candidate-groups" aria-label="최신 상품 리서치 전용 후보 관리 섹션"></div>
       </div>
     </details>
@@ -526,7 +526,7 @@
     </details>
 
     <section id="productTransitionAuditPanel" class="product-transition-audit" aria-label="대기열·배치 전환 검증">
-      <div class="product-transition-audit-head"><div><h3>대기열·배치 전환 검증</h3><div class="small">최신 리서치 → 비공개 상품 대기열 → 후보 관리 → 20개 섹션 배치 사이의 수량과 연결 상태를 읽기 전용으로 교차 점검합니다. 이 검증은 프론트 공개·상품 수입·결제를 실행하지 않습니다.</div></div><div class="actions"><button id="productTransitionAuditBtn" type="button" class="secondary">대기열·배치 전환 검증</button><button id="productTransitionAuditDownloadBtn" type="button" class="ghost" disabled>검증 JSON 다운로드</button></div></div>
+      <div class="product-transition-audit-head"><div><h3>대기열·배치 전환 검증</h3><div class="small">최신 리서치 → 비공개 상품 대기열 → 후보 관리 → 22개 섹션 배치 사이의 수량과 연결 상태를 읽기 전용으로 교차 점검합니다. 이 검증은 프론트 공개·상품 수입·결제를 실행하지 않습니다.</div></div><div class="actions"><button id="productTransitionAuditBtn" type="button" class="secondary">대기열·배치 전환 검증</button><button id="productTransitionAuditDownloadBtn" type="button" class="ghost" disabled>검증 JSON 다운로드</button></div></div>
       <div id="productTransitionAuditGrid" class="product-transition-audit-grid"><div class="product-transition-audit-item"><span class="small">검증 상태</span><strong>대기</strong></div></div>
       <div id="productTransitionAuditState" class="product-transition-audit-state">대기열 등록 또는 후보 정리 후 검증 버튼을 누르면 현재 국가·지역의 리서치 상태와 상품 후보 원장을 다시 읽어 연결 수량을 확인합니다.</div>
     </section>
@@ -572,7 +572,7 @@
   </section>
   <p class="foot">운영 흐름: 세계 방향 신호 → 권역 상황 신호 → 관리자 반영 품목군 가중치 → 국가·지역 책임 공급업체 발견 → 비공개 업체 후보 → 사업체와 직접 판매 책임 확인 → 결제·배송·반품·환불·고객지원 확인 → 해당 업체 상품 중 적합한 항목만 별도 선별 → Canonical·공개 게이트 순서입니다. IGDC는 판매자·결제 주체·재고 보유자·배송·반품·환불·AS 책임자가 되지 않습니다.</p>
   <section id="distributionMaintenanceIssues" class="panel" aria-label="유통 공개 상품 이상 점검" style="margin-top:20px">
-  <h2>Distribution · 20개 섹션 공개 상품 이상·교체 대기 점검</h2>
+  <h2>Distribution · 22개 섹션 공개 상품 이상·교체 대기 점검</h2>
   <p class="small">읽기 전용입니다. 공개 상품 상태를 조사한 결과 중 확인된 문제·대체 후보·일시적 조회 불가를 섹션/국가별로 표시합니다. 자동 배포·원장 삭제는 실행하지 않습니다.</p>
   <div class="actions"><button type="button" id="distributionIssueRefresh" class="secondary">최근 문제 목록 조회</button><button type="button" id="distributionIssueDownload" class="ghost" disabled>문제 상품 JSON 다운로드</button><span id="distributionIssueStatus" class="state" role="status" aria-live="polite">최근 자동 점검 기록을 조회할 수 있습니다.</span></div>
   <div id="distributionIssueRows" class="small" style="max-height:350px;overflow:auto"></div>
@@ -718,7 +718,7 @@
     var el=document.getElementById("supplierResearchRounds");
     if(el){try{var saved=Number(localStorage.getItem("igdc_supplier_research_rounds")||1);if(saved>=1&&saved<=5)el.value=String(saved);}catch(_e){}el.addEventListener("change",function(){try{localStorage.setItem("igdc_supplier_research_rounds",String(rounds()));}catch(_e){}});}
     var state=document.getElementById("productResearchState");
-    if(state&&window.MutationObserver)new MutationObserver(function(){var t=String(state.textContent||"");if(/대기열 등록 버튼|비공개 후보·중개수익 대기열/.test(t))state.textContent="상품 검증 결과를 전체 상품 후보·배치 관리 목록으로 자동 반영 중입니다. 완료 후 해당 목록에서 20개 섹션 배치·보류·제외·삭제를 결정하세요.";}).observe(state,{childList:true,subtree:true,characterData:true});
+    if(state&&window.MutationObserver)new MutationObserver(function(){var t=String(state.textContent||"");if(/대기열 등록 버튼|비공개 후보·중개수익 대기열/.test(t))state.textContent="상품 검증 결과를 전체 상품 후보·배치 관리 목록으로 자동 반영 중입니다. 완료 후 해당 목록에서 22개 섹션 배치·보류·제외·삭제를 결정하세요.";}).observe(state,{childList:true,subtree:true,characterData:true});
   });
 })();
 </script>
@@ -728,7 +728,7 @@
   // full supplier sweep to finish before the research completed so far is usable.
   try { localStorage.setItem('igdc_product_pause_auto_queue_v1', '1'); } catch (_e) {}
 </script>
-<script src="/assets/js/admin-commerce-country-control.js?build=igdc-db-protection-20261126"></script>
+<script src="/assets/js/admin-commerce-country-control.js?build=igdc-58c230065a9c"></script>
 <script src="/assets/js/admin-commerce-paid-supplier-budget.v1.js?v=20261121"></script>
 <script src="/assets/js/admin-commerce-exclusion-hotfix.v11.js?v=20261025-paged-exclusion-v1"></script>
 <script src="/assets/js/admin-commerce-policy-discussion.js?v=20260825-1"></script>

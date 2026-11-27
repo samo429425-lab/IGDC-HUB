@@ -5,8 +5,8 @@ const VERSION="commerce-candidate-registry-sync-v1.20.2-photo-integrity";
 const ProductImage=require("./commerce-product-image-integrity.v1");
 function t(v){return v==null?"":String(v).trim()}function l(v){return t(v).toLowerCase()}function o(v){return v&&typeof v==="object"&&!Array.isArray(v)?v:{}}function a(v){return Array.isArray(v)?v:[]}function f(){for(const v of arguments){const x=t(v);if(x)return x}return""}function https(v){try{const u=new URL(t(v));return u.protocol==="https:"?u.toString():""}catch(_e){return""}}function now(){return new Date().toISOString()}function sha(v){return crypto.createHash("sha256").update(v).digest("hex")}
 const FRONT_SECTIONS=new Set([
-"home|home_1","home|home_2","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",
-"distribution|distribution-recommend","distribution|distribution-sponsor","distribution|distribution-trending","distribution|distribution-new","distribution|distribution-special","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
+"home|home_1","home|home_2","home|home_7","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",
+"distribution|distribution-recommend","distribution|distribution-sponsor","distribution|distribution-trending","distribution|distribution-special","distribution|distribution-footwear","distribution|distribution-new","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
 "network|network-right","social|rightPanel","tour|tour"
 ]);
 function requested(row){const r=o(row&&row.publicationRequest),s=l(o(row&&row.assignment).publicationStatus);return r.requested===true||l(r.status)==="publish_requested"||["publish_requested","matched","published"].includes(s)}

@@ -26,6 +26,7 @@ const CANONICAL_DISTRIBUTION_SECTIONS = Object.freeze([
   "distribution-sponsor",
   "distribution-new",
   "distribution-special",
+  "distribution-footwear",
   "distribution-others",
   "distribution-extra",
   "distribution-right"
@@ -285,7 +286,7 @@ function sectionFor(item, sections) {
     "dist_4": "distribution-new", "distribution_4": "distribution-new",
     "dist_5": "distribution-special", "distribution_5": "distribution-special",
     "dist_6": "distribution-others", "distribution_6": "distribution-others",
-    "dist_8": "distribution-extra", "distribution_8": "distribution-extra", "distribution-extra": "distribution-extra",
+    "dist_8": "distribution-extra", "distribution_8": "distribution-extra", "distribution-extra": "distribution-extra", "distribution-footwear": "distribution-footwear",
     "dist_right": "distribution-right", "distribution_7": "distribution-right", "distribution-right": "distribution-right"
   };
   return map[raw] || map[aliases[raw]] || map[DEFAULT_SECTION] || Object.keys(sections || {})[0] || DEFAULT_SECTION;

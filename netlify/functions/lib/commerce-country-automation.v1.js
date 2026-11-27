@@ -1,4 +1,5 @@
 "use strict";
+const {isFootwearOutdoor} = require("./commerce-footwear-category.v1");
 
 /*
  * IGDC country/region responsible-supplier discovery control.
@@ -90,20 +91,18 @@ const MAINTENANCE_CHECK_BATCH = 24;
 const MAINTENANCE_QUEUE_READ_LIMIT = 1000;
 const MAINTENANCE_PUBLISH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const PRODUCT_SECTION_KEYS = Object.freeze([
-  "home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5", "home|home_6",
+  "home|home_1", "home|home_2", "home|home_7", "home|home_3", "home|home_4", "home|home_5", "home|home_6",
   "home|home_right_top", "home|home_right_middle", "home|home_right_bottom",
   "distribution|distribution-recommend", "distribution|distribution-trending",
-  "distribution|distribution-sponsor", "distribution|distribution-new",
-  "distribution|distribution-special", "distribution|distribution-others", "distribution|distribution-extra",
+  "distribution|distribution-sponsor", "distribution|distribution-special", "distribution|distribution-footwear", "distribution|distribution-new", "distribution|distribution-others", "distribution|distribution-extra",
   "distribution|distribution-right", "network|network-right", "social|rightPanel", "tour|tour"
 ]);
 const AI_AUTO_BALANCE_GROUPS = ProductRanking.AI_AUTO_BALANCE_GROUPS || Object.freeze({
-  homeMain: Object.freeze(["home|home_1", "home|home_2", "home|home_3", "home|home_4", "home|home_5"]),
+  homeMain: Object.freeze(["home|home_1", "home|home_2", "home|home_7", "home|home_3", "home|home_4", "home|home_5"]),
   homeRight: Object.freeze(["home|home_right_top", "home|home_right_middle", "home|home_right_bottom"]),
   distributionMain: Object.freeze([
     "distribution|distribution-recommend", "distribution|distribution-sponsor",
-    "distribution|distribution-trending", "distribution|distribution-new",
-    "distribution|distribution-special", "distribution|distribution-others"
+    "distribution|distribution-trending", "distribution|distribution-special", "distribution|distribution-footwear", "distribution|distribution-new", "distribution|distribution-others"
   ])
 });
 const AFFILIATE_SETTLEMENT_STAGES = Object.freeze(["connection_required", "referral_verified", "online_affiliate_active", "formal_partner"]);
@@ -4241,11 +4240,11 @@ function privateReviewFallbackAssignments(rowInput) {
   if (!strict || !array(strict.keys).length || text(strict.family) === "unknown") return [];
   const scoreByKey = {
     "tour|tour":130,
-    "home|home_1":126, "home|home_2":126, "home|home_3":124, "home|home_4":124, "home|home_5":116, "home|home_6":126,
+    "home|home_7":130, "home|home_1":126, "home|home_2":126, "home|home_3":124, "home|home_4":124, "home|home_5":116, "home|home_6":126,
     "home|home_right_top":122, "home|home_right_middle":126, "home|home_right_bottom":124,
     "distribution|distribution-recommend":112, "distribution|distribution-trending":114,
     "distribution|distribution-sponsor":126, "distribution|distribution-new":126, "distribution|distribution-special":126,
-    "distribution|distribution-others":124, "distribution|distribution-extra":124, "distribution|distribution-right":128,
+    "distribution|distribution-footwear":130, "distribution|distribution-others":124, "distribution|distribution-extra":124, "distribution|distribution-right":128,
     "network|network-right":116, "social|rightPanel":108
   };
   return array(strict.keys).filter(validProductSectionKey).map((key) => {
@@ -4874,7 +4873,7 @@ async function productCandidateAction(actorId, input) {
     const eligibleAssignments = array(evaluated.sectionAssignments).concat(privateReviewFallbackAssignments(evaluated)).filter((row) => row && (row.approvalEligible === true || row.reviewEligible === true));
     const fallbackKey = productPlacementKey(evaluated.approvedPlacement || evaluated.primaryPlacement || eligibleAssignments[0]);
     const selectedKey = requestedKey || fallbackKey;
-    if (!selectedKey) { const error = new Error("선택 가능한 배치 섹션이 없습니다. 20개 섹션 드롭다운에서 대상을 지정해 주세요."); error.statusCode = 409; throw error; }
+    if (!selectedKey) { const error = new Error("선택 가능한 배치 섹션이 없습니다. 22개 섹션 드롭다운에서 대상을 지정해 주세요."); error.statusCode = 409; throw error; }
     const split = splitProductSectionKey(selectedKey), selectedAssignment = eligibleAssignments.find((row) => productPlacementKey(row) === selectedKey);
     const placementWarnings = Array.from(new Set(array(privateReview.warnings).concat(array(manualReview.warnings)).concat(privateReview.eligible ? [] : [privateReview.reason]).filter(Boolean)));
     approvedPlacement = Object.assign({}, selectedAssignment || {
@@ -5018,7 +5017,7 @@ async function productCandidateLedgerAction(actorId, input) {
   if (decision === "slot_candidate") {
     const key = text(input && input.placementKey), sourcePlacement = array(payload.proposedPlacements).find((item) => productPlacementKey(item) === key) || { key };
     placement = candidateLedgerPlacementRecord(scope, sourcePlacement, actor, "administrator");
-    if (!placement) { const error = new Error("지정할 20개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+    if (!placement) { const error = new Error("지정할 22개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
     payload.slotDecision = "slot_candidate"; payload.approvedPlacement = placement; payload.placement = placement; payload.page = placement.page; payload.channel = placement.page; payload.section = placement.sectionKey; payload.psom_key = placement.sectionKey; status = checkedCandidateStatus(row);
     payload.queueControl = Object.assign({}, plain(payload.queueControl), { hiddenFromCountryQueue:false, permanentExcluded:false, action:"section_selected", restoredAt:now, restoredBy:actor });
     payload.managementControl = Object.assign({}, plain(payload.managementControl), { schema: "igdc-product-management-control.v1", source: "administrator", administratorLocked: true, aiReclassificationAllowed: false, decidedAt: now, decidedBy: actor });
@@ -5206,6 +5205,7 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
 
   const hay = lower([product.productName,product.title,product.sourceTitle,product.description,product.summary,product.supplierName,product.supplierType,product.productUrl].map(text).join(" "));
   const automotiveFit=/(자동차|차량|자동차용품|차량용품|타이어|휠|블랙박스|대시캠|카케어|세차기|카샴푸|차량청소|car\b|vehicle|automotive|tire|wheel|dashcam|car care|car wash)/i.test(hay);
+  const footwearOutdoorFit=isFootwearOutdoor(product);
   const outdoorFit=tourProfile.recreationProduct===true||/(아웃도어|등산|트레킹|캠핑|골프|스포츠용품|텐트|침낭|등산화|등산스틱|outdoor|hiking|trekking|camping|golf|sports gear|tent|sleeping bag)/i.test(hay);
   const furnitureFit=/(가구|소파|의자|테이블|책상|수납장|침대|매트리스|침구|조명|인테리어|리빙|furniture|sofa|chair|table|desk|cabinet|bed|mattress|bedding|lighting|interior|living)/i.test(hay);
   const explicitFoodFit=/(식품|식료품|식재료|농산물|수산물|축산물|건강식품|가공식품|즉석식품|간편식|음료|과자|커피|차\b|김치|장류|고추장|된장|간장|젓갈|양념|소스|쌀|잡곡|과일|채소|food|grocery|ingredient|produce|seafood|beverage|snack|coffee|tea\b)/i.test(hay)||primary==="agriculture_fishery_forestry";
@@ -5226,12 +5226,15 @@ function candidateRuntimeDraftPolicyOptions(productInput, categoryInput, tourPro
 
   // Physical outdoor/sports goods are retail products. Only travel/booking services are Tour-exclusive.
   if (automotiveFit || outdoorFit) add("home|home_right_middle", 124, automotiveFit?"자동차 용품 홈 우측 중단":"아웃도어 홈 우측 중단", "psom_home_right_automotive_outdoor");
-  if (outdoorFit) add("distribution|distribution-extra", 112, "유통 아웃도어 전용", "psom_distribution_outdoor");
+  if (outdoorFit && !footwearOutdoorFit) add("distribution|distribution-extra", 112, "유통 기타 상품", "psom_distribution_outdoor");
   if (furnitureFit) { add("home|home_5",116,"홈 5 소형 리빙·가구","psom_home5_living"); add("home|home_right_bottom", 122, "가구·리빙 홈 우측 하단", "psom_home_right_living"); }
   if (bookFit) { add("home|home_right_bottom", 108, "책방·리빙 우측 하단", "psom_home_right_books"); }
   if (healthKnowledgeFit || /(헬스케어|건강식품|영양제|보충제|wellness|healthcare|supplement)/i.test(hay)) add("home|home_right_top", 118, "지식·건강·생활 우측 상단", "psom_home_right_health_knowledge");
 
-  if (beautyFit) {
+  if (footwearOutdoorFit) {
+    add("home|home_7",130,"홈 신발·아웃도어","psom_home_footwear");
+    add("distribution|distribution-footwear",130,"유통 신발·아웃도어","psom_distribution_footwear");
+  } else if (beautyFit) {
     add("home|home_1",124,"홈 1 뷰티 중심","psom_home1_beauty");
     add("distribution|distribution-sponsor",122,"유통 뷰티 전용","psom_distribution_beauty");
     add("distribution|distribution-recommend",108,"뷰티 오늘의 추천","psom_distribution_recommend_beauty");
@@ -5608,7 +5611,7 @@ async function productCandidatePsomRankedReplace(actorId,input){
   const preferred=validProductSectionKey(input&&input.preferredSectionKey)?text(input.preferredSectionKey):'';
   const ids=Array.from(new Set(array(input&&input.candidateIds).map(text).filter(Boolean))).slice(0,8);
   if(!ids.length){const e=new Error('AI 랭킹 비교할 미배치 상품을 선택하세요.');e.statusCode=400;throw e;}
-  if(input&&input.preferredSectionKey&&!preferred){const e=new Error('20개 섹션 중 올바른 섹션을 선택하세요.');e.statusCode=400;throw e;}
+  if(input&&input.preferredSectionKey&&!preferred){const e=new Error('22개 섹션 중 올바른 섹션을 선택하세요.');e.statusCode=400;throw e;}
   const selected=await frontSyncSelectCandidates(ids),byId=new Map(selected.map(row=>[text(row.id),row]));
   // Scope-local across 249 country ledgers. Never use browser-provided counts.
   const scopedRows=await readResearchReserveRows(scope),bySection=new Map();
@@ -6735,7 +6738,7 @@ async function productAiAutomation(actorId, input) {
   });
   const placementOnly = requestedMode === "placement", placementBatch = requestedMode === "placement_batch", selectedProductIds = new Set(array(input && input.productIds).map((id) => text(id)).filter(Boolean)), selectionOnly = requestedMode === "products" || placementBatch, repairOnly = requestedMode === "repair", mode = requestedMode === "section" ? "section" : (repairOnly ? "repair" : (requestedMode === "products" ? "products" : "all")), sectionKey = text(input && input.sectionKey);
   const deferQueueSync=placementBatch&&input&&input.deferQueueSync===true,aiRunToken=placementBatch?text(input&&input.aiRunToken)||("ai_draft_"+sha256(iso()+"|"+scope.country+"|"+scope.region+"|"+Math.random()).slice(0,20)):"";
-  if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 20개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+  if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("AI 자동 관리할 22개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   if (selectionOnly && !selectedProductIds.size) { const error = new Error("AI 자동 배치할 선택 후보를 확인하세요."); error.statusCode = 400; throw error; }
   const unassignedPlacementOnly = placementOnly || placementBatch || (mode === "all" && array(job.products).some((row) =>
     lower(row && row.slotDecision || "undecided") === "undecided" && !productAdministratorLocked(row)
@@ -7482,7 +7485,7 @@ async function productFrontSyncTargets(input, jobInput) {
   const requestedSectionKeys = Array.from(new Set(array(input && input.sectionKeys).map(text).filter(validProductSectionKey))).slice(0, PRODUCT_SECTION_KEYS.length);
   const requestedProductIds = Array.from(new Set(array(input && input.productIds).map(text).filter(Boolean))).slice(0, 500);
   const requestedCandidateIds = Array.from(new Set(array(input && input.candidateIds).map(text).filter(Boolean))).slice(0, 500);
-  if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("프론트에 매칭할 20개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
+  if (mode === "section" && !validProductSectionKey(sectionKey)) { const error = new Error("프론트에 매칭할 22개 섹션을 확인하세요."); error.statusCode = 400; throw error; }
   if (mode === "sections" && !requestedSectionKeys.length) { const error = new Error("프론트에 매칭할 섹션을 하나 이상 선택하세요."); error.statusCode = 400; throw error; }
   if (mode === "candidate" && !requestedProductId && !requestedCandidateId) { const error = new Error("프론트에 매칭할 상품 한 건을 선택하세요."); error.statusCode = 400; throw error; }
   if (mode === "candidates" && !requestedProductIds.length && !requestedCandidateIds.length) { const error = new Error("프론트에 매칭할 상품을 하나 이상 선택하세요."); error.statusCode = 400; throw error; }
@@ -8578,7 +8581,7 @@ async function globalControlDiagnostic() {
       activeSupplierCount:Number(rule.activeSupplierCount||0),
       qualifiedSupplierCount:Number(rule.qualifiedSupplierCount||0),
       lastError:text(plain(array(rule.errors).slice(-1)[0]).error||plain(array(rule.errors).slice(-1)[0]).reason).slice(0,180)||null,
-      privateSlotsUnder20:array(fill.under20).length,privateSlotsUnder100:array(fill.under100).length,sectionFillAvailable:fill.totalSections===20,errorCount:array(rule.errors).length,updatedAt:row.updated_at||null};
+      privateSlotsUnder20:array(fill.under20).length,privateSlotsUnder100:array(fill.under100).length,sectionFillAvailable:fill.totalSections===PRODUCT_SECTION_KEYS.length,errorCount:array(rule.errors).length,updatedAt:row.updated_at||null};
   });
   // Read only bounded private PSOM state: this view must not hydrate candidate
   // rows or alter any previous diagnostic response fields. A failed read is

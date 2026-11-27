@@ -6,11 +6,10 @@ const VERSION = "commerce-publication-issues-report-v1.0.0";
 const STATE_ID = "igdc_global_product_maintenance_state_v2";
 const QUEUE_HUB = "global-product-maintenance-replacement";
 const SECTION_KEYS = [
- "home|home_1","home|home_2","home|home_3","home|home_4","home|home_5","home|home_6",
+ "home|home_1","home|home_2","home|home_7","home|home_3","home|home_4","home|home_5","home|home_6",
  "home|home_right_top","home|home_right_middle","home|home_right_bottom",
  "distribution|distribution-recommend","distribution|distribution-trending",
- "distribution|distribution-sponsor","distribution|distribution-new","distribution|distribution-special",
- "distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
+ "distribution|distribution-sponsor","distribution|distribution-special","distribution|distribution-footwear","distribution|distribution-new", "distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
  "network|network-right","social|rightPanel","tour|tour"
 ];
 const SECTION_NAMES = ["홈 1","홈 2","홈 3","홈 4","홈 5","홈 6","홈 우측 상단","홈 우측 중단","홈 우측 하단",

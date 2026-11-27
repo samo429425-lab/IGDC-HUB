@@ -581,6 +581,7 @@ function resolveLimitSectionKey(pageName, raw, sections) {
       "main5": "home_5",
       "main6": "home_6",
       "home_6": "home_6",
+      "home_7": "home_7",
       "right_top": "home_right_top",
       "right_mid": "home_right_middle",
       "right_bottom": "home_right_bottom",
@@ -632,6 +633,7 @@ function resolveLimitSectionKey(pageName, raw, sections) {
       "distribution6": "distribution-others",
       "distribution-others": "distribution-others",
       "distribution-extra": "distribution-extra",
+      "distribution-footwear": "distribution-footwear",
       "dist_8": "distribution-extra",
       "dist8": "distribution-extra",
       "distribution_8": "distribution-extra",
@@ -1101,6 +1103,7 @@ const HOME_SECTION_ALIAS = {
   "main5": "home_5",
   "main6": "home_6",
   "home_6": "home_6",
+      "home_7": "home_7",
 
   "right_top": "home_right_top",
   "right_mid": "home_right_middle",
@@ -1264,6 +1267,7 @@ const REQUIRED_SECTION_KEYS = [
   "distribution-trending",
   "distribution-new",
   "distribution-special",
+  "distribution-footwear",
   "distribution-others",
   "distribution-extra",
   "distribution-right"
@@ -1351,6 +1355,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
       "dist_5": "distribution-special", "dist5": "distribution-special", "distribution_5": "distribution-special", "distribution5": "distribution-special", "distribution-sponsor": "distribution-sponsor",
       "dist_6": "distribution-others", "dist6": "distribution-others", "distribution_6": "distribution-others", "distribution6": "distribution-others", "distribution-others": "distribution-others",
       "distribution-extra": "distribution-extra",
+      "distribution-footwear": "distribution-footwear",
       "dist_8": "distribution-extra",
       "dist8": "distribution-extra",
       "distribution_8": "distribution-extra",
@@ -1424,6 +1429,7 @@ REQUIRED_SECTION_KEYS.forEach(key => {
 
   // ===== extra / outdoor / food =====
   "distribution-extra": "distribution-extra",
+      "distribution-footwear": "distribution-footwear",
   "dist_8": "distribution-extra",
   "dist8": "distribution-extra",
   "distribution_8": "distribution-extra",

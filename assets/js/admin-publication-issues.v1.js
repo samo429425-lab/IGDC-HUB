@@ -34,7 +34,7 @@
  function render(doc){
   list.textContent="";
   var info=document.createElement("p");info.style.margin="8px 0";
-  info.textContent="조회 항목 "+(doc.issues||[]).length+"건 · "+(dist?"20개 섹션 · 최근 확인된 이상/교체 대기":"3개 SNS · 저장된 근거 기준")+(doc.summary&&doc.summary.partial?" · 조회 일부 미완료":"");list.appendChild(info);
+  info.textContent="조회 항목 "+(doc.issues||[]).length+"건 · "+(dist?"22개 섹션 · 최근 확인된 이상/교체 대기":"3개 SNS · 저장된 근거 기준")+(doc.summary&&doc.summary.partial?" · 조회 일부 미완료":"");list.appendChild(info);
   if(!(doc.issues||[]).length){var p=document.createElement("p");p.textContent="현재 저장된 점검 기록에 표시할 문제가 없습니다. 최근 조회 범위가 전체 실시간 정상 판정을 의미하지는 않습니다.";list.appendChild(p);return;}
   var outer=document.createElement("div");outer.style.overflowX="auto";var table=document.createElement("table");table.style.cssText="width:100%;border-collapse:collapse;font-size:12px;min-width:650px";
   var head=document.createElement("tr");["섹션","국가·지역","상품/콘텐츠","문제 또는 대체 상태","원본 확인"].forEach(function(t){var th=document.createElement("th");th.textContent=t;th.style.cssText="text-align:left;padding:7px;border-bottom:1px solid #67809d";head.appendChild(th);});table.appendChild(head);

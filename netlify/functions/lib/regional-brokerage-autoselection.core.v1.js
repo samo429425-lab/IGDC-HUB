@@ -15,6 +15,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const MarketSaleScope = require("./market-sale-scope.v1");
+const {isFootwearOutdoor} = require("./commerce-footwear-category.v1");
 
 const VERSION = "regional-brokerage-autoselection-core-v1.2.0-market-evidence-integrity";
 const MAX_CANDIDATES = 240;
@@ -296,6 +297,7 @@ function sectionKeys(template){
 }
 function sectionFor(entry,keys,index){
   const item=entry.item||{}; const textValue=lower([item.category,item.section,item.psom_key,item.title,item.summary,Array.isArray(item.tags)?item.tags.join(" "):""].join(" "));
+  if(isFootwearOutdoor(item) && keys.includes("distribution-footwear")) return "distribution-footwear";
   if(entry.managedPriority && keys.includes("distribution-sponsor")) return "distribution-sponsor";
   if(/new|latest|recent|신규|새로운/.test(textValue)&&keys.includes("distribution-new")) return "distribution-new";
   if(/trend|popular|best|인기|추천/.test(textValue)&&keys.includes("distribution-trending")) return "distribution-trending";
@@ -337,6 +339,7 @@ function buildSnapshot(template,selected,target,meta){
   const doc=safeJsonClone(template);
   const sections=doc&&doc.pages&&doc.pages.distribution&&doc.pages.distribution.sections;
   if(!sections || typeof sections!=="object") return null;
+  if (!Array.isArray(sections["distribution-footwear"])) sections["distribution-footwear"]=[];
   const keys=sectionKeys(doc);
   for(const key of keys){ const value=sections[key]; if(Array.isArray(value)) sections[key]=[]; else if(value&&Array.isArray(value.slots)) value.slots=[]; }
   let count=0; const seen=new Set();

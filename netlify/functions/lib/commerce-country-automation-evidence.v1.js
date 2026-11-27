@@ -79,7 +79,7 @@ function analyze(scope,scheduled,checkpoints,jobs,clock){
       storageNewlyCreated:latestStage.created??null,storageUpdated:latestStage.updated??null,
       storageFailed:latestStage.failed??null},
     source:'product checkpoint lastStaging + private product job stageSummary'},
-  10:{name:'관리자 검토·20개 섹션·프론트 매핑',state:'operator_review_required',
+  10:{name:'관리자 검토·22개 섹션·프론트 매핑',state:'operator_review_required',
     observed:{privatePsomPlaced:n(psomState.placed),psomBlocked:n(o(psomState.lastCandidateGate).blocked),
       sections:20,automaticFrontPublication:false,operatorApprovalRequired:true},
     source:'psom checkpoint; Front Match remains administrator-controlled'}

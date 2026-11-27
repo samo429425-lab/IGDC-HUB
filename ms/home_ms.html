@@ -2065,6 +2065,7 @@ a[id*="qna"]{
 .thumb-grid[data-psom-key="home_1"] > *,
 .thumb-grid[data-psom-key="home_2"] > *,
 .thumb-grid[data-psom-key="home_3"] > *,
+.thumb-grid[data-psom-key="home_7"] > *,
 .thumb-grid[data-psom-key="home_4"] > *,
 .thumb-grid[data-psom-key="home_5"] > *,
 .thumb-grid[data-psom-key="home_6"] > *{
@@ -2083,6 +2084,7 @@ a[id*="qna"]{
 .thumb-grid[data-psom-key="home_1"] > *,
 .thumb-grid[data-psom-key="home_2"] > *,
 .thumb-grid[data-psom-key="home_3"] > *,
+.thumb-grid[data-psom-key="home_7"] > *,
 .thumb-grid[data-psom-key="home_4"] > *,
 .thumb-grid[data-psom-key="home_5"] > *,
 .thumb-grid[data-psom-key="home_6"] > *{
@@ -2231,6 +2233,7 @@ a[id*="qna"]{
   section.shopping-section .thumb-grid[data-psom-key="home_1"],
   section.shopping-section .thumb-grid[data-psom-key="home_2"],
   section.shopping-section .thumb-grid[data-psom-key="home_3"],
+  section.shopping-section .thumb-grid[data-psom-key="home_7"],
   section.shopping-section .thumb-grid[data-psom-key="home_4"],
   section.shopping-section .thumb-grid[data-psom-key="home_5"],
   section.shopping-section .thumb-grid[data-psom-key="home_6"]{
@@ -2250,6 +2253,7 @@ a[id*="qna"]{
   section.shopping-section .thumb-grid[data-psom-key="home_1"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_2"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_3"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_7"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_4"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_5"] > *,
 .thumb-grid[data-psom-key="home_6"] > *{
@@ -2311,6 +2315,7 @@ a[id*="qna"]{
   section.shopping-section .thumb-grid[data-psom-key="home_1"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_2"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_3"] > *,
+  section.shopping-section .thumb-grid[data-psom-key="home_7"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_4"] > *,
   section.shopping-section .thumb-grid[data-psom-key="home_5"] > *,
 .thumb-grid[data-psom-key="home_6"] > *{
@@ -2618,6 +2623,13 @@ document.addEventListener('DOMContentLoaded', () => {
 <button aria-label="tatal ke kiri" class="srow-arrow left" id="srowLeft2">‹</button>
 <button aria-label="tatal ke kanan" class="srow-arrow right" id="srowRight2">›</button>
 </div>
+<div class="shop-row-wrap" data-srow="7">
+<div class="shop-scroller" id="shopScroller7">
+<div class="shop-row" id="shopRow7"></div>
+<div class="thumb-grid thumb-scroller" data-psom-key="home_7"></div></div>
+<button aria-label="tatal ke kiri" class="srow-arrow left" id="srowLeft7">‹</button>
+<button aria-label="tatal ke kanan" class="srow-arrow right" id="srowRight7">›</button>
+</div>
 <div class="shop-row-wrap" data-srow="3">
 <div class="shop-scroller" id="shopScroller3">
 <div class="shop-row" id="shopRow3"></div>
@@ -2838,7 +2850,7 @@ function reorderRow(rowId){
 
 
   function fillRows(){
-    for(let r=1;r<=ROWS;r++){
+    for(const r of [1,2,3,4,5,7]){
       const row = document.getElementById('shopRow'+r);
       if(!row) continue;
 
@@ -2862,7 +2874,7 @@ function reorderRow(rowId){
   }
 
   function bind(){
-    for(let r=1;r<=ROWS;r++){
+    for(const r of [1,2,3,4,5,7]){
       const scroller = document.getElementById('shopScroller'+r);
       const L = document.getElementById('srowLeft'+r);
       const R = document.getElementById('srowRight'+r);
@@ -2872,13 +2884,13 @@ function reorderRow(rowId){
       R.addEventListener('click', ()=> scroller.scrollBy({ left:  step(), behavior:'smooth' }));
       scroller.addEventListener('scroll', ()=> updateRow(r));
     }
-    window.addEventListener('resize', ()=> { for(let r=1;r<=ROWS;r++) updateRow(r); });
+    window.addEventListener('resize', ()=> { for(const r of [1,2,3,4,5,7]) updateRow(r); });
   }
 
   function run(){
     fillRows();
     bind();
-    for(let r=1;r<=ROWS;r++) updateRow(r);
+    for(const r of [1,2,3,4,5,7]) updateRow(r);
   }
   window.addEventListener('DOMContentLoaded', run);
 })();
@@ -4156,7 +4168,7 @@ if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded
 </script>
 <script defer="" src="/assets/js/auto-embed.instagram.js"></script>
 <script defer="" src="/assets/js/placeholder-sweeper.js"></script>
-<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20251006b"></script>
+<script defer="" src="/assets/js/thumbnail-loader.compat.min.js?v=20261127-sections22"></script>
 <!-- IGTC SIMPLE QNA AUTO-OPENER (Home) -->
 <style id="mobile-hide-row-arrows">
 /* Desktop은 기존 상태 유지, Mobile만 버튼 숨김 */
@@ -4560,7 +4572,7 @@ window.addEventListener("message",function(ev){
 
 })(window, document);
 </script>
-<script src="/assets/js/home-products-automap.v2.js?v=20260811b"></script>
+<script src="/assets/js/home-products-automap.v2.js?v=20261127-sections22"></script>
 <script src="/assets/js/home6-automap-extension.js?v=20261011-home-right-contained-v2"></script>
 <script id="news-arrow-final-fix-20260420">
 (function(){

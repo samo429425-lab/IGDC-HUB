@@ -88,6 +88,7 @@
       "sections": [
         "main1",
         "main2",
+        "home_7",
         "main3",
         "main4",
         "main5",
@@ -107,8 +108,9 @@
         "today",
         "popular",
         "sponsor",
-        "new",
         "special",
+        "distribution-footwear",
+        "new",
         "etc",
         "extra",
         "right_panel"
@@ -183,6 +185,7 @@
     "home": [
       "main1",
       "main2",
+      "home_7",
       "main3",
       "main4",
       "main5",
@@ -198,8 +201,9 @@
       "today",
       "popular",
       "sponsor",
-      "new",
       "special",
+      "distribution-footwear",
+      "new",
       "etc",
       "extra",
       "right_panel"
@@ -256,7 +260,8 @@
       "right_top": "우측 상",
       "right_mid": "우측 중",
       "right_bottom": "우측 하",
-      "main6": "웹툰·책·전자책"
+      "main6": "웹툰·책·전자책",
+      "home_7": "신발·아웃도어"
     },
     "network": {
       "right_panel": "우측"
@@ -269,7 +274,13 @@
       "special": "특별 상품",
       "etc": "기타 상품",
       "right_panel": "우측",
-      "extra": "기타·아웃도어·식품"
+      "extra": "기타·식품",
+      "distribution-footwear": "신발·아웃도어",
+      "distribution-sponsor": "뷰티",
+      "distribution-new": "소형가전",
+      "distribution-special": "의류·패션",
+      "distribution-others": "생필품·생활",
+      "distribution-extra": "기타·식품"
     },
     "social": {
       "social-maru": "social-maru",
@@ -6297,8 +6308,27 @@
           "트렌디 의류",
           "브랜드 패션",
           "란제리",
-          "아웃도어 의류",
           "스카프"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
+      },
+      "home|home_7": {
+        "intent": "footwear_outdoor_retail",
+        "categoryFamilies": [
+          "shoes",
+          "footwear",
+          "hiking_boots",
+          "outdoor_wear",
+          "outdoor"
+        ],
+        "searchbankKeywordsKo": [
+          "운동화",
+          "신발",
+          "등산화",
+          "등산복",
+          "아웃도어 재킷",
+          "트레킹 용품"
         ],
         "existingAssignmentImmutable": true,
         "reclassifyOnlyUndecided": true
@@ -6401,37 +6431,37 @@
         "reclassifyOnlyUndecided": true
       },
       "home|home_6": {
-                       "intent": "misc_daily_household_essentials",
-                       "priority": [
-                         "misc_daily_goods",
-                         "household_essentials",
-                         "living_supplies"
-                       ],
-                       "categoryFamilies": [
-                         "misc",
-                         "household",
-                         "daily_essentials",
-                         "living_supplies"
-                       ],
-                       "searchbankKeywordsKo": [
-                         "잡화",
-                         "생활잡화",
-                         "생필품",
-                         "생활용품",
-                         "생활소모품",
-                         "위생용품",
-                         "수납용품"
-                       ],
-                       "existingAssignmentImmutable": true,
-                       "reclassifyOnlyUndecided": true,
-                       "excludeCategoryFamilies": [
-                         "books",
-                         "ebooks",
-                         "webtoon",
-                         "digital_reading"
-                       ],
-                       "requiresVerifiedDirectProductUrl": true
-                     },
+        "intent": "misc_daily_household_essentials",
+        "priority": [
+          "misc_daily_goods",
+          "household_essentials",
+          "living_supplies"
+        ],
+        "categoryFamilies": [
+          "misc",
+          "household",
+          "daily_essentials",
+          "living_supplies"
+        ],
+        "searchbankKeywordsKo": [
+          "잡화",
+          "생활잡화",
+          "생필품",
+          "생활용품",
+          "생활소모품",
+          "위생용품",
+          "수납용품"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true,
+        "excludeCategoryFamilies": [
+          "books",
+          "ebooks",
+          "webtoon",
+          "digital_reading"
+        ],
+        "requiresVerifiedDirectProductUrl": true
+      },
       "home|home_right_top": {
         "intent": "health_knowledge_nutrition",
         "categoryFamilies": [
@@ -6565,6 +6595,44 @@
         "existingAssignmentImmutable": true,
         "reclassifyOnlyUndecided": true
       },
+      "distribution|distribution-special": {
+        "intent": "all_clothes_fashion",
+        "categoryFamilies": [
+          "fashion",
+          "apparel",
+          "lingerie",
+          "designer_brand",
+          "scarf"
+        ],
+        "searchbankKeywordsKo": [
+          "일반 의류",
+          "란제리",
+          "브랜드 의류",
+          "스카프"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
+      },
+      "distribution|distribution-footwear": {
+        "intent": "footwear_outdoor_retail",
+        "categoryFamilies": [
+          "shoes",
+          "footwear",
+          "hiking_boots",
+          "outdoor_wear",
+          "outdoor"
+        ],
+        "searchbankKeywordsKo": [
+          "운동화",
+          "신발",
+          "등산화",
+          "등산복",
+          "아웃도어 재킷",
+          "트레킹 용품"
+        ],
+        "existingAssignmentImmutable": true,
+        "reclassifyOnlyUndecided": true
+      },
       "distribution|distribution-new": {
         "intent": "consumer_electronics_all",
         "categoryFamilies": [
@@ -6584,26 +6652,6 @@
           "스피커",
           "USB",
           "충전기"
-        ],
-        "existingAssignmentImmutable": true,
-        "reclassifyOnlyUndecided": true
-      },
-      "distribution|distribution-special": {
-        "intent": "all_clothes_fashion",
-        "categoryFamilies": [
-          "fashion",
-          "apparel",
-          "lingerie",
-          "outdoor_wear",
-          "designer_brand",
-          "scarf"
-        ],
-        "searchbankKeywordsKo": [
-          "일반 의류",
-          "란제리",
-          "아웃도어 의류",
-          "브랜드 의류",
-          "스카프"
         ],
         "existingAssignmentImmutable": true,
         "reclassifyOnlyUndecided": true
@@ -6632,25 +6680,19 @@
         "reclassifyOnlyUndecided": true
       },
       "distribution|distribution-extra": {
-        "intent": "outdoor_and_packaged_food",
+        "intent": "other_packaged_food",
         "categoryFamilies": [
-          "outdoor",
-          "garden",
-          "shoes",
-          "hiking_boots",
+          "other",
           "ingredients",
           "farm",
           "seafood"
         ],
         "searchbankKeywordsKo": [
-          "정원",
-          "아웃도어",
-          "신발",
-          "등산화",
+          "기타 상품",
           "식재료",
           "농산물",
           "수산물",
-          "굴비 선물세트"
+          "포장 식품"
         ],
         "existingAssignmentImmutable": true,
         "reclassifyOnlyUndecided": true
@@ -6879,31 +6921,31 @@
           "requiresVerifiedDirectProductUrl": true
         },
         "home|home_6": {
-                         "intent": "misc_daily_household_essentials",
-                         "families": [
-                           "misc",
-                           "household",
-                           "daily_essentials",
-                           "living_supplies"
-                         ],
-                         "researchKeywordsKo": [
-                           "잡화",
-                           "생활잡화",
-                           "생필품",
-                           "생활용품",
-                           "생활소모품",
-                           "위생용품",
-                           "수납용품"
-                         ],
-                         "suggestionOnly": true,
-                         "requiresVerifiedDirectProductUrl": true,
-                         "excludedFamilies": [
-                           "books",
-                           "ebooks",
-                           "webtoon",
-                           "digital_reading"
-                         ]
-                       },
+          "intent": "misc_daily_household_essentials",
+          "families": [
+            "misc",
+            "household",
+            "daily_essentials",
+            "living_supplies"
+          ],
+          "researchKeywordsKo": [
+            "잡화",
+            "생활잡화",
+            "생필품",
+            "생활용품",
+            "생활소모품",
+            "위생용품",
+            "수납용품"
+          ],
+          "suggestionOnly": true,
+          "requiresVerifiedDirectProductUrl": true,
+          "excludedFamilies": [
+            "books",
+            "ebooks",
+            "webtoon",
+            "digital_reading"
+          ]
+        },
         "home|home_right_top": {
           "intent": "health_knowledge_nutrition",
           "families": [

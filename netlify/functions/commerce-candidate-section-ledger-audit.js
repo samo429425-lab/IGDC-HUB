@@ -10,8 +10,8 @@ const Authority=require("./commerce-candidate-admin-authority");
 const VERSION="igdc-section-ledger-reconcile-v1";
 const ROLES=new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const SECTIONS=new Set([
- "home|home_1","home|home_2","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",
- "distribution|distribution-recommend","distribution|distribution-trending","distribution|distribution-sponsor","distribution|distribution-new","distribution|distribution-special","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
+ "home|home_1","home|home_2","home|home_7","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",
+ "distribution|distribution-recommend","distribution|distribution-trending","distribution|distribution-sponsor","distribution|distribution-special","distribution|distribution-footwear","distribution|distribution-new","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
  "network|network-right","social|rightPanel","tour|tour"
 ]);
 const SOURCES=new Set(["country-product-ranking-review","commerce-candidate-review-api"]);

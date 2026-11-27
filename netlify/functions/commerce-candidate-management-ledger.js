@@ -166,8 +166,8 @@ async function scopedIndexedPage(country,region,params){
 // payload placement are BOTH read: a detached payload candidate is never
 // silently omitted from the administrator's selected section.
 const FRONT_SECTION_KEYS=new Set([
- "home|home_1","home|home_2","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",
- "distribution|distribution-recommend","distribution|distribution-trending","distribution|distribution-sponsor","distribution|distribution-new","distribution|distribution-special","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right","network|network-right","social|rightPanel","tour|tour"
+ "home|home_1","home|home_2","home|home_7","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",
+ "distribution|distribution-recommend","distribution|distribution-trending","distribution|distribution-sponsor","distribution|distribution-special","distribution|distribution-footwear","distribution|distribution-new","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right","network|network-right","social|rightPanel","tour|tour"
 ]);
 async function selectComplete(table,filter,columns,maxRows){
   const collected=[],pageSize=150,maximum=Math.max(pageSize,Number(maxRows)||2000);

@@ -9,8 +9,8 @@ const VERSION = "commerce-candidate-admin-authority-v1.6.0-canonical-candidate-a
 const WRITE_ROLES = new Set(["owner","admin","super_admin","site_manager","site_manager_director","director"]);
 const ALLOWED_SOURCE_REFS = new Set(["country-product-ranking-review","commerce-candidate-review-api"]);
 const SECTION_KEYS = new Set([
-  "home|home_1","home|home_2","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",
-  "distribution|distribution-recommend","distribution|distribution-trending","distribution|distribution-sponsor","distribution|distribution-new","distribution|distribution-special","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
+  "home|home_1","home|home_2","home|home_7","home|home_3","home|home_4","home|home_5","home|home_6","home|home_right_top","home|home_right_middle","home|home_right_bottom",
+  "distribution|distribution-recommend","distribution|distribution-trending","distribution|distribution-sponsor","distribution|distribution-special","distribution|distribution-footwear","distribution|distribution-new","distribution|distribution-others","distribution|distribution-extra","distribution|distribution-right",
   "network|network-right","social|rightPanel","tour|tour"
 ]);
 
@@ -56,7 +56,7 @@ async function removeScopeAssignments(rows,scope){
 }
 async function upsertAssignment(candidateId,scope,key,actor,source,oldRows){
   const split=splitKey(key),now=new Date().toISOString();
-  if(!split)throw Object.assign(new Error("20개 섹션 배치 키가 올바르지 않습니다."),{statusCode:400});
+  if(!split)throw Object.assign(new Error("22개 섹션 배치 키가 올바르지 않습니다."),{statusCode:400});
   const old=array(oldRows).find(row=>sameScope(row,scope)&&text(row.hub_key)===split.page&&text(row.slot_key)===split.section);
   const row={
     id:assignmentId(candidateId,scope,key),candidate_id:candidateId,hub_key:split.page,country_code:scope.country,region_code:scope.region,
@@ -167,7 +167,7 @@ async function applyOne(actor,candidateId,scope,decision,key,source,verifiedMeta
 
   if(decision==="slot_candidate"||decision==="sync_ai"){
     const target=placementKey(key||text(plain(payload.approvedPlacement||payload.placement).key)||((text(plain(payload.approvedPlacement||payload.placement).page)&&text(plain(payload.approvedPlacement||payload.placement).sectionKey||plain(payload.approvedPlacement||payload.placement).section))?text(plain(payload.approvedPlacement||payload.placement).page)+"|"+text(plain(payload.approvedPlacement||payload.placement).sectionKey||plain(payload.approvedPlacement||payload.placement).section):""));
-    if(!target)throw Object.assign(new Error("배치할 20개 섹션을 확인하세요."),{statusCode:400});
+    if(!target)throw Object.assign(new Error("배치할 22개 섹션을 확인하세요."),{statusCode:400});
     const split=splitKey(target),ai=(decision==="sync_ai"||source==="ai_automation");
     // Record the previous section before changing the private assignment. The
     // public output is still unchanged until the next verified Front Match.

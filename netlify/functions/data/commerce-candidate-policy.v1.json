@@ -448,7 +448,6 @@
           "트렌디 의류",
           "브랜드 패션",
           "란제리",
-          "아웃도어 의류",
           "스카프"
         ]
       },
@@ -590,7 +589,6 @@
         "keywordsKo": [
           "일반 의류",
           "란제리",
-          "아웃도어 의류",
           "브랜드 의류",
           "스카프"
         ]
@@ -609,16 +607,13 @@
         ]
       },
       "distribution|distribution-extra": {
-        "intent": "outdoor_and_packaged_food",
+        "intent": "other_packaged_food",
         "keywordsKo": [
-          "정원",
-          "아웃도어",
-          "신발",
-          "등산화",
+          "기타 상품",
           "식재료",
           "농산물",
           "수산물",
-          "굴비 선물세트"
+          "포장 식품"
         ]
       },
       "distribution|distribution-right": {
@@ -662,6 +657,28 @@
           "입장권",
           "교통",
           "예약권"
+        ]
+      },
+      "home|home_7": {
+        "intent": "footwear_outdoor_retail",
+        "keywordsKo": [
+          "운동화",
+          "신발",
+          "등산화",
+          "등산복",
+          "아웃도어 재킷",
+          "트레킹 용품"
+        ]
+      },
+      "distribution|distribution-footwear": {
+        "intent": "footwear_outdoor_retail",
+        "keywordsKo": [
+          "운동화",
+          "신발",
+          "등산화",
+          "등산복",
+          "아웃도어 재킷",
+          "트레킹 용품"
         ]
       }
     },

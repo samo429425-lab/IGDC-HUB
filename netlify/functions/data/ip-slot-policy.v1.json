@@ -154,6 +154,18 @@
         "requiredSlotProfiles": [
           "home-6-misc-daily-essentials"
         ]
+      },
+      "home_7": {
+        "strategyId": "home-footwear-outdoor",
+        "role": "footwear_outdoor_retail",
+        "allowedProductClasses": [
+          "physical_product",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "home-footwear-outdoor"
+        ]
       }
     },
     "distribution": {
@@ -232,7 +244,7 @@
       },
       "distribution-extra": {
         "strategyId": "distribution-extra",
-        "role": "other_outdoor_food_category_section",
+        "role": "other_packaged_food",
         "allowedProductClasses": [
           "physical_product",
           "verified_marketplace_offer",
@@ -252,6 +264,18 @@
         ],
         "requiredSlotProfiles": [
           "distribution-right-curated"
+        ]
+      },
+      "distribution-footwear": {
+        "strategyId": "distribution-footwear",
+        "role": "footwear_outdoor_retail",
+        "allowedProductClasses": [
+          "physical_product",
+          "verified_marketplace_offer",
+          "producer_cooperative_offer"
+        ],
+        "requiredSlotProfiles": [
+          "distribution-footwear"
         ]
       }
     },
