@@ -1,7 +1,7 @@
 "use strict";
 (function(root){
  function evaluate(e,d){if(!e)return [];const rows=[];const add=(id,status,code)=>rows.push({id,status,code});const n=x=>Number.isInteger(x)&&x>=0?x:0;
- const bs=d?.browser_collection_status||'not_tested';add('collection_browser_bridge',['connected','imported'].includes(bs)?'pass':['failed','timeout'].includes(bs)?'fail':bs==='not_connected'?'not_connected':['connecting','collecting'].includes(bs)?'warning':'not_tested',/^[a-z_]+$/.test(bs)?bs:'not_tested');
+ const bs=d?.browser_collection_status||'not_tested';add('collection_browser_bridge',['connected','imported'].includes(bs)?'pass':['failed','timeout'].includes(bs)?'fail':['not_connected','update_required'].includes(bs)?'not_connected':['checking','connecting','collecting','cancelling'].includes(bs)?'warning':'not_tested',/^[a-z_]+$/.test(bs)?bs:'not_tested');
  const attempted=!!(d?.external||d?.site_live||n(d?.complete_count));const gate=!!d?.site_blocker;
  add('collection_source_gate',e.source_ready?'pass':d?.base||attempted?'not_connected':'not_tested',e.source_ready?'approved_source_connected':!attempted&&!d?.base?'no_source_selected':e.source_permission_checked?'approval_not_resolved':'source_approval_required');
  const tries=n(d?.site_trace?.source_requests)+n(d?.detail_attempted);const replies=n(d?.site_pages)+Math.max(0,n(d?.detail_attempted)-n(d?.detail_failed));add('collection_source_request',tries?'pass':attempted&&gate?'not_connected':'not_tested',tries?'count_'+tries:gate?'blocked_before_request':'no_source_request');add('collection_source_response',replies>0?'pass':tries>0?'fail':'not_tested',replies>0?'count_'+replies:tries>0?'source_request_no_page':gate?'blocked_before_request':'no_source_request');
