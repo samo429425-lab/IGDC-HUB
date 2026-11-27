@@ -366,19 +366,12 @@ async function locationStatus(doc){
   return {ok:true,version:VERSION,mode:"country-region-ip-control",registry:{schema:registry.schema,version:registry.version,countryCount:countries.filter((row)=>row.code!=="UNSCOPED").length,regions:registry.regions,excludedCountryCodes:[]},countries,database:{countriesAvailable:settled[0].status==="fulfilled",availabilityAvailable:settled[1].status==="fulfilled",assignmentsAvailable:settled[2].status==="fulfilled"},policy:{countryRequired:true,regionOptional:true,regionFallback:"same-country-nationwide",crossCountryFallback:false,unresolvedGeo:"empty",unscopedCandidates:"hold-until-country-assigned",manualPinnedPrecedence:true}};
 }
 
-function readGeoObject(value){
-  const raw=text(value);if(!raw)return {};
-  for(const candidate of [raw,(()=>{try{return decodeURIComponent(raw);}catch(_e){return "";}})()]){try{const parsed=JSON.parse(candidate);if(isObject(parsed))return parsed;}catch(_e){}}
-  return {};
-}
+const RequestGeo = require("./lib/request-geo.v1");
 function geoProbe(event){
-  const headers={};for(const [key,value] of Object.entries(event&&event.headers||{}))headers[String(key).toLowerCase()]=value;
-  const geo=Object.assign({},plain(event&&event.geo),readGeoObject(headers["x-nf-geo"]));const countryObject=plain(geo.country);const subdivision=plain(geo.subdivision);
-  const rawDetected=text(first(countryObject.code,countryObject.alpha2,typeof geo.country==="string"?geo.country:"",geo.countryCode,geo.country_code,headers["cf-ipcountry"],headers["x-country"],headers["x-vercel-ip-country"],headers["x-nf-country"])).toUpperCase();
-  const detected=normalizeCountry(rawDetected);const excluded=detected==="KP";
+  const geo=RequestGeo.fromEvent(event),detected=geo.country,excluded=detected==="KP";
   const registry=countryRegistry();const row=!excluded&&registry.countries.find((item)=>normalizeCountry(item&&item.code)===detected);const country=row?detected:"";
-  const region=country?normalizeRegion(first(subdivision.code,subdivision.iso_code,typeof geo.subdivision==="string"?geo.subdivision:"",geo.subdivisionCode,geo.regionCode,geo.stateCode,geo.provinceCode,geo.region,geo.state,headers["x-region"],headers["x-nf-subdivision"],headers["x-nf-region"],headers["x-vercel-ip-country-region"]),country):"";
-  return {ok:true,version:VERSION,country:country||null,region:region||null,worldRegion:row&&row.regionGroup||null,resolved:!!country,excluded,detectedCountry:detected||rawDetected||null,scope:country+(region?"-"+region:""),policy:{exactRegionFirst:true,nationwideFallbackWithinSameCountry:true,crossCountryFallback:false,unresolvedGeo:"empty",excludedCountryCodes:[]}};
+  const region=country?geo.region:"";
+  return {ok:true,version:VERSION,geoVersion:geo.version,source:geo.source,country:country||null,region:region||null,worldRegion:row&&row.regionGroup||null,resolved:!!country,excluded,detectedCountry:detected||null,scope:country+(region?"-"+region:""),policy:{exactRegionFirst:true,nationwideFallbackWithinSameCountry:true,crossCountryFallback:false,unresolvedGeo:"empty",excludedCountryCodes:[]}};
 }
 
 function countBy(rows, selector){
@@ -646,7 +639,7 @@ exports.handler=async function(event){
       if(action==="locations")return json(200,await locationStatus({candidates:[]}));
       const probe=geoProbe(event);const requested=text(query.country).toUpperCase();
       const scopeCountry=requested||(probe.resolved?probe.country:"UNRESOLVED");
-      const scopeRegion=text(query.region)||(probe.resolved?(probe.region||"NATIONWIDE"):"");
+      const scopeRegion=text(query.region)||(requested?"NATIONWIDE":probe.resolved?(probe.region||"NATIONWIDE"):"");
       const dashboardLimit=Math.max(60,Math.min(200,Number(query.limit)||120));
       const stageLimit=action==="dashboard"?dashboardLimit:(action==="diagnostic"?250:(action==="summary"?250:5000));
       const doc=await scopedStage(process.cwd(),scopeCountry,scopeRegion,stageLimit);

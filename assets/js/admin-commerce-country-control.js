@@ -15,7 +15,7 @@
   var SECTION_REVENUE_RANK='/.netlify/functions/commerce-candidate-section-revenue-rank';
   var sectionRevenueView={},sectionRevenueBusy=false,sectionRevenueViewScope='',sectionRevenueViewMode='',sectionRevenuePreview=null,sectionRevenueIncompleteApply=null;
   var RUNTIME_DIAGNOSTIC='/.netlify/functions/igdc-runtime-diagnostic';
-  var GEO='/api/igdc-country-geo';
+  var GEO='/igdc-commerce-country-geo';
   var $=function(id){return document.getElementById(id);};
   var text=function(v){return String(v==null?'':v).trim();};
   var esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(ch){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch];});};
@@ -254,7 +254,7 @@
   };
 
   async function geoData(){
-    try{var res=await fetch(GEO,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}}),data=await res.json();if(res.ok&&data&&data.ok===true)return data;}catch(_e){}
+    try{var res=await fetch(GEO,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}}),data=await res.json();if(res.ok&&data&&data.ok===true&&data.policyScope==='commerce'&&(data.resolved||data.excluded))return data;}catch(_e){}
     try{return await api(CONTROL,'geo','GET',{});}catch(_e){return{ok:true,resolved:false,country:null,region:null,worldRegion:null,source:'unresolved'};}
   }
   async function staticRegistry(){

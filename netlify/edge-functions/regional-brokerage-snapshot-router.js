@@ -144,6 +144,7 @@ function cachedPublished(entry) {
   };
 }
 
+import { fromContext } from "./lib/request-geo.v1.mjs";
 function normalizedCountry(value) {
   const code = String(value || "").trim().toUpperCase();
   return /^[A-Z]{2}$/.test(code) ? code : "";
@@ -152,24 +153,6 @@ function normalizedRegion(value, country) {
   let code = String(value || "").trim().toUpperCase().replace(/[._/\s]+/g, "-").replace(/^-+|-+$/g, "");
   if (country && code.startsWith(country + "-")) code = code.slice(3);
   return /^[A-Z0-9][A-Z0-9-]{1,15}$/.test(code) ? code : "";
-}
-function countryCode(context) {
-  const geo = context && context.geo && typeof context.geo === "object" ? context.geo : {};
-  const country = geo.country && typeof geo.country === "object" ? geo.country : {};
-  for (const value of [country.code, country.alpha2, country.iso_code, geo.countryCode, geo.country_code]) {
-    const code = normalizedCountry(value);
-    if (code) return code;
-  }
-  return "";
-}
-function regionCode(context, country) {
-  const geo = context && context.geo && typeof context.geo === "object" ? context.geo : {};
-  const subdivision = geo.subdivision && typeof geo.subdivision === "object" ? geo.subdivision : {};
-  for (const value of [subdivision.code, subdivision.iso_code, subdivision.id, geo.subdivisionCode, geo.regionCode, geo.stateCode, geo.provinceCode]) {
-    const code = normalizedRegion(value, country);
-    if (code) return code;
-  }
-  return "";
 }
 function requestedFile(url) {
   const last = url.pathname.split("/").filter(Boolean).pop() || "";
@@ -546,11 +529,12 @@ export default async function canonicalIpSlotSnapshotRouter(request, context) {
   const url = new URL(request.url);
   const file = requestedFile(url);
   if (!file) return context.next();
-  const country = countryCode(context);
+  const geo = fromContext(context);
+  const country = geo.country;
   if (!country) return context.next(); // root document is a deliberate empty geo gate
   const manifest = await loadManifest(url);
   if (!manifest) return context.next();
-  const selected = matchingSnapshot(manifest, file, country, regionCode(context, country));
+  const selected = matchingSnapshot(manifest, file, country, geo.region);
   if (!selected) return context.next(); // never cross country or use a global fallback
 
   const cacheKey = verifiedCacheKey(url, selected, manifest);
@@ -616,6 +600,8 @@ export default async function canonicalIpSlotSnapshotRouter(request, context) {
     headers.set("X-IGDC-Snapshot-View", "full");
   }
   headers.set("Cache-Control", "private, no-store, max-age=0");
+  headers.set("Netlify-CDN-Cache-Control", "no-store");
+  headers.set("CDN-Cache-Control", "no-store");
   headers.set("Vary", "x-nf-geo, cf-ipcountry, x-country, x-region");
   headers.set("X-IGDC-Canonical-Release", String(manifest.canonicalReleaseId || ""));
   headers.set("X-IGDC-IP-Slot-Scope", selected.scope);

@@ -172,18 +172,12 @@ async function authoritativeFrontBridgeRecovery(candidateIdsInput,scope,targetRo
   return{ok:true,recoveredCandidateIds,blocked,checked:ids.length,source:"authoritative_candidate_row",candidateLedgerReadOnly:true};
 }
 
-function readGeoObject(value){const raw=text(value);if(!raw)return{};for(const candidate of [raw,(()=>{try{return decodeURIComponent(raw);}catch(_e){return"";}})()]){try{const parsed=JSON.parse(candidate);if(parsed&&typeof parsed==="object"&&!Array.isArray(parsed))return parsed;}catch(_e){}}return{};}
+const RequestGeo = require("./lib/request-geo.v1");
 function normalizeGeo(event){
-  const headers={};for(const [key,value] of Object.entries(event&&event.headers||{}))headers[String(key).toLowerCase()]=value;
-  const geo=Object.assign({},plain(event&&event.geo),readGeoObject(headers["x-nf-geo"])),countryObject=plain(geo.country),subdivision=plain(geo.subdivision);
-  const rawCountry=text(countryObject.code||countryObject.alpha2||(typeof geo.country==="string"?geo.country:"")||geo.countryCode||geo.country_code||headers["cf-ipcountry"]||headers["x-country"]||headers["x-vercel-ip-country"]||headers["x-nf-country"]).toUpperCase();
-  const excluded=rawCountry==="KP";
-  const detected=excluded?null:Automation.countryRow(rawCountry);
-  const country=detected?detected.code:"";
-  const rawRegion=subdivision.code||subdivision.iso_code||(typeof geo.subdivision==="string"?geo.subdivision:"")||geo.subdivisionCode||geo.regionCode||geo.stateCode||geo.provinceCode||geo.region||geo.state||headers["x-region"]||headers["x-nf-subdivision"]||headers["x-nf-region"]||headers["x-vercel-ip-country-region"]||"";
-  let region="";
-  if(country){const MarketSaleScope=require("./lib/market-sale-scope.v1");region=MarketSaleScope.normalizeRegion(rawRegion,country);}
-  return {ok:true,version:Automation.VERSION,country:country||null,region:region||null,worldRegion:detected&&detected.regionGroup||null,resolved:!!country,excluded:excluded,detectedCountry:rawCountry||null,policy:{exactRegionFirst:true,nationwideFallbackWithinSameCountry:true,crossCountryFallback:false,unresolvedGeo:"empty",manualPinnedPrecedence:true,trustBeforeRevenue:true,revenueTieBreakOnly:true}};
+  const geo=RequestGeo.fromEvent(event), rawCountry=geo.country, excluded=rawCountry==="KP";
+  const detected=excluded?null:Automation.countryRow(rawCountry),country=detected?detected.code:"";
+  const region=country?geo.region:"";
+  return {ok:true,version:Automation.VERSION,geoVersion:geo.version,source:geo.source,country:country||null,region:region||null,worldRegion:detected&&detected.regionGroup||null,resolved:!!country,excluded,detectedCountry:rawCountry||null,policy:{exactRegionFirst:true,nationwideFallbackWithinSameCountry:true,crossCountryFallback:false,unresolvedGeo:"empty",manualPinnedPrecedence:true,trustBeforeRevenue:true,revenueTieBreakOnly:true}};
 }
 
 function policyScopeFromInput(raw){

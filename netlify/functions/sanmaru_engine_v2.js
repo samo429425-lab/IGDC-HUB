@@ -2084,16 +2084,7 @@ function detectRuntimeRegion(event, lang, q){
   const qs = (event && event.queryStringParameters) || {};
   const forcedCountry = normalizeCountryCode(firstNonEmpty(qs.country, qs.region, qs.geo));
   if(forcedCountry) return forcedCountry;
-  const headerCountry = normalizeCountryCode(firstNonEmpty(
-    headers["x-country"], headers["X-Country"],
-    headers["cf-ipcountry"], headers["CF-IPCountry"],
-    headers["x-vercel-ip-country"], headers["X-Vercel-IP-Country"],
-    headers["cloudfront-viewer-country"], headers["CloudFront-Viewer-Country"],
-    headers["x-appengine-country"], headers["X-AppEngine-Country"],
-    headers["x-geo-country"], headers["X-Geo-Country"],
-    headers["x-client-country"], headers["X-Client-Country"],
-    headers["x-forwarded-country"], headers["X-Forwarded-Country"]
-  ));
+  const headerCountry = normalizeCountryCode(require("./lib/request-geo.v1").fromEvent(event).country);
   if(headerCountry) return headerCountry;
   const explicit = detectExplicitCountryFromQuery(queryText);
   if(explicit) return explicit;

@@ -1233,7 +1233,7 @@ function resolveGeoContext(params={}, queryIntent={}, ipGeo={}){
   // IP is a weak fallback only when neither explicit nor query-level geo exists.
   const allowIpCountry = !(explicitRegion || queryRegion) && !(explicitCountry || queryCountry);
   const country = explicitCountry || queryCountry || (allowIpCountry ? ipGeo.country : null) || null;
-  const region = canonicalRegionName(explicitRegion || queryRegion || countryToRegion(country) || ipGeo.region || null);
+  const region = canonicalRegionName(explicitRegion || queryRegion || countryToRegion(country) || (allowIpCountry ? ipGeo.region : null) || null);
   const state = params.state || params.province || params.geo_state || queryIntent.stateHint || (allowIpCountry ? ipGeo.state : null) || null;
   const city = params.city || params.geo_city || queryIntent.cityHint || (allowIpCountry ? ipGeo.city : null) || null;
   const locale = params.locale || COUNTRY_ALIASES[low(country)]?.locale || null;
@@ -1326,16 +1326,10 @@ function buildMarket(src, geo){
   return Object.keys(m).length ? m : undefined;
 }
 
+const RequestGeo = require("./lib/request-geo.v1");
 function ipGeoFromEvent(event){
-  const h = event?.headers || {};
-  const country = h["x-country"] || h["cf-ipcountry"] || h["x-vercel-ip-country"] || null;
-  const region = country ? countryToRegion(country) : null;
-  return {
-    country: country || null,
-    region,
-    state: h["x-region"] || h["x-vercel-ip-country-region"] || null,
-    city: h["x-city"] || h["x-vercel-ip-city"] || null
-  };
+  const geo = RequestGeo.fromEvent(event);
+  return {country:geo.country||null,region:geo.country?countryToRegion(geo.country):null,state:geo.region||null,city:geo.city||null};
 }
 
 function pickGeo(raw){

@@ -5,11 +5,8 @@ function jsonSafe(v){return JSON.stringify(v).replace(/</g,"\\u003c");}
 function lang(event){const q=event.queryStringParameters||{};const v=String(q.lang||"ko").toLowerCase();return /^[a-z]{2,3}(?:-[a-z]{2})?$/.test(v)?v:"ko";}
 function response(code,body,headers={}){return{statusCode:code,headers:{"content-type":"text/html; charset=utf-8","x-content-type-options":"nosniff","referrer-policy":"strict-origin-when-cross-origin",...headers},body};}
 function normalizeCountry(v){const s=String(v||"").trim().toUpperCase();return /^[A-Z]{2}$/.test(s)?s:"";}
-function geoCountry(event){
-  const h=event&&event.headers||{};
-  let nf={}; try{nf=JSON.parse(h["x-nf-geo"]||h["X-Nf-Geo"]||"{}");}catch(_e){}
-  const c=nf&&nf.country; return normalizeCountry((c&&typeof c==="object"?(c.code||c.alpha2):c)||h["cf-ipcountry"]||h["x-country"]||h["x-nf-country"]||h["x-vercel-ip-country"]||"");
-}
+const RequestGeo = require("./lib/request-geo.v1");
+function geoCountry(event){ return RequestGeo.fromEvent(event).country; }
 function parsePath(event){
   const q=event&&event.queryStringParameters||{};
   let suffix="";
@@ -75,5 +72,5 @@ exports.handler=async(event)=>{
   const visitorHint=!market&&visitorEligible?`<p class="market"><strong>현재 접속 국가:</strong> <a href="${esc(marketUrl(t.id,visitor))}">${esc(marketName(visitor,"ko"))} (${esc(visitor)}) 판매 정보 보기</a></p>`:"";
   const hiddenCountry=visitor?`<input type="hidden" name="country" value="${esc(visitor)}">`:"";
   const html=`<!doctype html><html lang="${esc(lang(event))}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(desc.slice(0,180))}"><meta name="robots" content="index,follow,max-image-preview:large"><link rel="canonical" href="${esc(canonical)}"><meta property="og:type" content="product"><meta name="twitter:card" content="${t.image?'summary_large_image':'summary'}"><meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc.slice(0,180))}"><meta property="og:url" content="${esc(canonical)}">${t.image?`<meta property="og:image" content="${esc(t.image)}">`:""}<script type="application/ld+json">${jsonSafe({"@context":"https://schema.org","@graph":graph})}</script><style>body{font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;margin:0;background:#f5f7fa;color:#162536}main{max-width:980px;margin:0 auto;padding:24px}a{color:#14569c}.card{background:#fff;border:1px solid #dde4eb;border-radius:14px;padding:22px}img{max-width:100%;max-height:420px;object-fit:contain}.search{display:flex;gap:8px;margin:0 0 18px}.search input[type=search]{flex:1;padding:11px 12px}.search button,.cta{display:inline-block;padding:11px 15px;border:0;border-radius:8px;background:#173f73;color:#fff;text-decoration:none}.meta{color:#556575}.notice,.market{font-size:13px;color:#617184}</style></head><body><main><form class="search" action="/search.html" method="get"><input type="search" name="q" value="${esc(t.title)}" aria-label="IGDC Search">${hiddenCountry}<button type="submit">IGDC 검색</button></form><article class="card"><p><a href="/distributionhub">IGDC Global Distribution Hub</a> · <a href="/.netlify/functions/public-commerce-search-index">Verified country markets</a></p><h1>${esc(t.title)}</h1>${t.image?`<p><img src="${esc(t.image)}" alt="${esc(t.title)}"></p>`:""}${desc?`<p>${esc(desc)}</p>`:""}${visitorHint}${details.length?`<p class="meta">${details.map(esc).join(" · ")}</p>`:""}${markets?`<p class="meta"><strong>검증된 판매 시장:</strong> ${markets}</p>`:""}<p><a class="cta" href="${esc(outboundUrl)}" rel="nofollow sponsored noopener">판매처 상세정보 확인</a></p><p class="notice">최종 가격·재고·배송·교환·환불 조건은 연결된 판매처에서 확인하십시오.</p></article>${relatedHtml}</main></body></html>`;
-  return response(200,html,{"cache-control":"public,max-age=300,s-maxage=900","x-igdc-search-registry":registry.hash,"vary":"Accept-Language"});
+  return response(200,html,{"cache-control":"private,no-store,max-age=0","netlify-cdn-cache-control":"no-store","cdn-cache-control":"no-store","x-igdc-search-registry":registry.hash,"vary":"Accept-Language"});
 };

@@ -373,7 +373,7 @@ function detectRuntimeRegion(event, lang, q){
     if(forcedCountry === 'US') return 'US';
 
     const headers = (event && event.headers) || {};
-    const xfCountry = safeString(headers['x-country'] || headers['cf-ipcountry'] || headers['x-vercel-ip-country'] || '').trim().toUpperCase();
+    const xfCountry = require('./lib/request-geo.v1').fromEvent(event).country;
     if(xfCountry === 'KR') return 'KR';
     if(xfCountry === 'US') return 'US';
 

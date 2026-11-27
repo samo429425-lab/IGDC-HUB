@@ -64,14 +64,7 @@ function headerMap(event){
   for(const [key, value] of Object.entries(event && event.headers || {})) out[String(key).toLowerCase()] = value;
   return out;
 }
-function readGeoObject(value){
-  const raw = text(value);
-  if(!raw) return {};
-  for(const candidate of [raw, (() => { try { return decodeURIComponent(raw); } catch(_error) { return ""; } })()]){
-    try { const parsed = JSON.parse(candidate); if(isObject(parsed)) return parsed; } catch(_error){}
-  }
-  return {};
-}
+const RequestGeo = require("./lib/request-geo.v1");
 let COUNTRY_CODE_CACHE = null;
 function supportedCountryCodes(){
   if(COUNTRY_CODE_CACHE) return COUNTRY_CODE_CACHE;
@@ -88,21 +81,9 @@ function supportedCountryCodes(){
   return COUNTRY_CODE_CACHE;
 }
 function geoScope(event){
-  const headers = headerMap(event);
-  const geo = Object.assign({}, isObject(event&&event.geo) ? event.geo : {}, readGeoObject(headers["x-nf-geo"]));
-  const countryObject = isObject(geo.country) ? geo.country : {};
-  const subdivision = isObject(geo.subdivision) ? geo.subdivision : {};
-  const rawDetected = text(first(
-    countryObject.code, countryObject.alpha2, typeof geo.country === "string" ? geo.country : "", geo.countryCode, geo.country_code,
-    headers["cf-ipcountry"], headers["x-country"], headers["x-vercel-ip-country"], headers["x-nf-country"]
-  )).toUpperCase();
-  const detected = MarketSaleScope.normalizeCountry(rawDetected);
-  if(!detected || detected === "KP" || !supportedCountryCodes().has(detected)) return { country:null, region:null, resolved:false, excluded:detected === "KP", detectedCountry:detected || rawDetected || null };
-  const region = MarketSaleScope.normalizeRegion(first(
-    subdivision.code, subdivision.iso_code, typeof geo.subdivision === "string" ? geo.subdivision : "", geo.subdivisionCode, geo.regionCode,
-    geo.stateCode, geo.provinceCode, geo.region, geo.state, headers["x-region"], headers["x-nf-subdivision"], headers["x-nf-region"], headers["x-vercel-ip-country-region"]
-  ), detected);
-  return { country:detected, region:region || "NATIONWIDE", resolved:true, excluded:false, detectedCountry:detected };
+  const geo=RequestGeo.fromEvent(event),detected=geo.country;
+  if(!detected || detected === "KP" || !supportedCountryCodes().has(detected)) return { country:null, region:null, resolved:false, excluded:detected === "KP", detectedCountry:detected || null, geoVersion:geo.version };
+  return { country:detected, region:geo.region || "NATIONWIDE", resolved:true, excluded:false, detectedCountry:detected, geoVersion:geo.version };
 }
 function nested(obj, parts){
   let current = obj;

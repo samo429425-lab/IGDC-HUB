@@ -1,27 +1,11 @@
 /**
  * IGDC administrator country/region detector.
- * Returns only the current request's coarse Netlify geo scope.
+ * Returns only the current request's coarse Netlify geo scope from context.geo.
  */
-export const config = { path: "/igdc-country-geo" };
+export const config = { path: ["/igdc-country-geo", "/igdc-commerce-country-geo"] };
 
-function text(value) {
-  return value == null ? "" : String(value).trim();
-}
-function countryCode(value) {
-  if (value && typeof value === "object") {
-    value = value.code || value.alpha2 || value.iso_code || value.countryCode || value.country_code || "";
-  }
-  const code = text(value).toUpperCase();
-  return /^[A-Z]{2}$/.test(code) ? code : "";
-}
-function regionCode(value, country) {
-  if (value && typeof value === "object") {
-    value = value.code || value.iso_code || value.id || value.subdivisionCode || value.regionCode || value.stateCode || value.provinceCode || "";
-  }
-  let code = text(value).toUpperCase().replace(/[._/\s]+/g, "-").replace(/^-+|-+$/g, "");
-  if (country && code.startsWith(country + "-")) code = code.slice(country.length + 1);
-  return /^[A-Z0-9][A-Z0-9-]{0,15}$/.test(code) ? code : "";
-}
+import { countryCode, fromContext, VERSION } from "./lib/request-geo.v1.mjs";
+const text = value => value == null ? "" : String(value).trim();
 
 function parseCountryList(value) {
   if (Array.isArray(value)) return value.map(countryCode).filter(Boolean);
@@ -52,18 +36,18 @@ function donationBlockedCountries() {
   return set;
 }
 
-export default async function handler(_request, context) {
-  const geo = context && context.geo && typeof context.geo === "object" ? context.geo : {};
-  const country = countryCode(geo.country || geo.countryCode || geo.country_code);
-  const excluded = !!country && donationBlockedCountries().has(country);
+export default async function handler(request, context) {
+  const geo = fromContext(context);
+  const country = geo.country;
+  const commerce = new URL(request.url).pathname === "/igdc-commerce-country-geo";
+  const excluded = !!country && (commerce ? country === "KP" : donationBlockedCountries().has(country));
   const resolvedCountry = excluded ? "" : country;
-  const region = resolvedCountry ? regionCode(
-    geo.subdivision || geo.subdivisionCode || geo.regionCode || geo.stateCode || geo.provinceCode || geo.region || geo.state,
-    resolvedCountry
-  ) : "";
+  const region = resolvedCountry ? geo.region : "";
   const payload = {
     ok: true,
     source: "netlify-edge-context-geo",
+    geoVersion: VERSION,
+    policyScope: commerce ? "commerce" : "donation",
     country: resolvedCountry || null,
     region: region || null,
     resolved: !!resolvedCountry,
@@ -75,6 +59,8 @@ export default async function handler(_request, context) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "private, no-store, max-age=0",
+      "Netlify-CDN-Cache-Control": "no-store",
+      "CDN-Cache-Control": "no-store",
       "x-content-type-options": "nosniff"
     }
   });

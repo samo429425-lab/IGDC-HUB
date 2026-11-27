@@ -190,45 +190,9 @@ function headerMap(event) {
   });
   return out;
 }
-function readGeoHeader(value) {
-  const raw = text(value);
-  if (!raw) return {};
-  for (const candidate of [
-    raw,
-    (() => {
-      try {
-        return decodeURIComponent(raw);
-      } catch (_e) {
-        return "";
-      }
-    })(),
-  ]) {
-    try {
-      const parsed = JSON.parse(candidate);
-      if (parsed && typeof parsed === "object") return parsed;
-    } catch (_e) {}
-  }
-  return {};
-}
+const RequestGeo = require("./request-geo.v1");
 function edgeCountry(event) {
-  const headers = headerMap(event);
-  const geo = Object.assign(
-    {},
-    plain(event && event.geo),
-    readGeoHeader(headers["x-nf-geo"]),
-  );
-  const country = plain(geo.country);
-  const raw = text(
-    country.code ||
-      country.alpha2 ||
-      (typeof geo.country === "string" ? geo.country : "") ||
-      geo.countryCode ||
-      geo.country_code ||
-      headers["cf-ipcountry"] ||
-      headers["x-country"] ||
-      headers["x-vercel-ip-country"] ||
-      headers["x-nf-country"],
-  ).toUpperCase();
+  const raw = RequestGeo.fromEvent(event).country;
   return countryRow(raw) ? raw : "";
 }
 function regionRow(value) {

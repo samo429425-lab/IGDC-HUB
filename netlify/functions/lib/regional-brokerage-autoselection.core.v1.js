@@ -71,19 +71,17 @@ function normalizeRegion(v, country){
 function normalizeCountryList(values){ return unique(asArray(values).map(normalizeCountry).filter(Boolean)); }
 function normalizeRegionList(values, country){ return unique(asArray(values).map(v=>normalizeRegion(v,country)).filter(Boolean)); }
 
+const RequestGeo = require("./request-geo.v1");
 function parseGeo(event, params){
-  const headers = (event && event.headers) || {};
-  const h={}; Object.keys(headers).forEach(k=>h[k.toLowerCase()]=headers[k]);
-  let nf={};
-  try{ nf=JSON.parse(h["x-nf-geo"] || "{}"); }catch(_e){}
   const requested=params&&typeof params==="object"?params:{};
   const adminSelected=String(requested.scopeAuthority||"").toLowerCase()==="administrator-selected"||requested.ignoreRequestGeo===true||requested.adminSelectedScope===true;
   const explicitCountry=normalizeCountry(first(requested.country,requested.targetCountry));
-  const country = adminSelected&&explicitCountry ? explicitCountry : normalizeCountry(first(nf.country, nf.country_code, h["x-country"], h["cf-ipcountry"], h["x-vercel-ip-country"], h["x-nf-country"], requested.country, requested.targetCountry));
+  const geo=RequestGeo.fromEvent(event);
+  const country=adminSelected?explicitCountry:(geo.country||explicitCountry);
   const explicitRegion=normalizeRegion(first(requested.region,requested.targetRegion),country);
-  const region = adminSelected ? explicitRegion : normalizeRegion(first(nf.subdivision, nf.region, nf.state, h["x-region"], h["x-vercel-ip-country-region"], h["x-nf-region"], requested.region, requested.targetRegion), country);
-  const city = adminSelected ? "" : text(first(nf.city, h["x-city"], h["x-nf-city"])).slice(0,80);
-  return { country: country || "GLOBAL", region, city, countryName: COUNTRY_NAMES[country] || country || "Global", source:adminSelected?"administrator-selected":"request-ip" };
+  const region=adminSelected?explicitRegion:(geo.country?geo.region:explicitRegion);
+  const city=adminSelected?"":geo.city;
+  return { country: country || "GLOBAL", region, city, countryName: COUNTRY_NAMES[country] || country || "Global", source:adminSelected?"administrator-selected":geo.country?"request-ip":explicitCountry?"explicit-request":"unresolved" };
 }
 
 function rootCandidates(){
