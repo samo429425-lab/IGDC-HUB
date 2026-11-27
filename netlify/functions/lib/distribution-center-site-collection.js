@@ -66,7 +66,7 @@ function parse(html,page,entry,q){const bs=blocks(html),links=linksFrom(html,bs,
 function visibleMarkup(html){return html.replace(/<!--[\s\S]*?-->|<(?:script|style|template|noscript)\b[^>]*>[\s\S]*?<\/(?:script|style|template|noscript)\s*>/gi,'');}
 function familyLinks(html,page,entry){
  if(entry.host!=='brand.nongshim.com'||!entry.pages.includes(page)||new URL(page).pathname!=='/all_product/index'||!entry.discoverDetails)return [];
- const out=new Set();for(const m of visibleMarkup(html).matchAll(/<a\b([^>]{0,4096})>([\s\S]{0,12000}?)<\/a\s*>/gi)){if(out.size>=40)break;if(!/\bVIEW\b/i.test(clean(m[2],500)))continue;const a=attributes(m[1]);try{const ref=address(new URL(a.href||'',page).href),u=new URL(ref);if(u.hostname!==entry.host||u.search||!/^\/[a-z0-9_-]+\/(?:main|product)\/index\/?$/i.test(u.pathname)||ref===page)continue;out.add(ref);}catch{}}
+ const out=new Set();for(const m of visibleMarkup(html).matchAll(/<a\b([^>]{0,4096})>([\s\S]{0,12000}?)<\/a\s*>/gi)){if(out.size>=40)break;const a=attributes(m[1]);const named=clean(a['aria-label']||a.title||m[2].replace(/<[^>]*>/g,' '),150);const imageAlt=[...m[2].matchAll(/<img\b[^>]{0,4096}>/gi)].map(x=>clean(attributes(x[0]).alt)).find(v=>v&&!/^(?:image|product|view|이미지|상품|제품)$/i.test(v));if(!/\bVIEW\b/i.test(clean(m[2],500))&&!imageAlt&&(!named||/^(?:view|더보기|상세보기|상품|제품)$/i.test(named)))continue;try{const ref=address(new URL(a.href||'',page).href),u=new URL(ref);if(u.hostname!==entry.host||u.search||!/^\/[a-z0-9_-]+\/(?:main|product)\/index\/?$/i.test(u.pathname)||ref===page)continue;out.add(ref);}catch{}}
  entry.evidenceFamily??=new Set();for(const ref of out)entry.evidenceFamily.add(ref);return [...out];
 }
 // Family pages can contain many variants without unique detail URLs. Show only explicit, matching
@@ -84,7 +84,7 @@ function listingCards(html,page,entry,q){
  html=visibleMarkup(html);const out=new Map(),ambiguous=new Set();let count=0;
  for(const m of html.matchAll(/<a\b([^>]{0,4096})>([\s\S]{0,12000}?)<\/a\s*>/gi)){
   if(++count>1500||out.size>=100)break;const a=attributes(m[1]);if(!a.href)continue;let ref;try{ref=allowed(entry,new URL(a.href,page).href,true);}catch{continue;}if(!ref||ref===page||ambiguous.has(ref))continue;
-  const imgs=[...m[2].matchAll(/<img\b[^>]{0,4096}>/gi)].map(x=>attributes(x[0]));if(imgs.length!==1)continue;const im=imgs[0],labelled=/\/kr\/ko(?:\/|$)/i.test(new URL(page).pathname)?capture.cardLabels(clean(entities(m[2]),10000)):null,title=labelled?.title||clean(im.alt||a.title||a['aria-label']);
+  const imgs=[...m[2].matchAll(/<img\b[^>]{0,4096}>/gi)].map(x=>attributes(x[0]));if(imgs.length!==1)continue;const im=imgs[0],labelled=capture.cardLabels(clean(entities(m[2]),10000)),title=labelled?.title||clean(im.alt||a.title||a['aria-label']);
   if(!title||/^(?:image|photo|product|view|상품|제품|이미지|자세히 보기|더보기)$/i.test(title)||/(?:로고|배너|logo|banner)/i.test(title))continue;
   const image=elementPhoto(im,page);if(!image)continue;
   const old=out.get(ref);if(old&&(old.title!==title||old.image_url!==image)){out.delete(ref);ambiguous.add(ref);continue;}
